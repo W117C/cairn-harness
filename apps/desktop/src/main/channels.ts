@@ -53,6 +53,8 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   evolveGlobalSetFrozen: "agent:evolve-global-set-frozen",
   // v49：恢复一条 dormant 全局经验（复核 ≥3 库证据；失败保持 dormant）。
   evolveGlobalActivate: "agent:evolve-global-activate",
+  // v52：读 LSP 状态（只读、不起进程、不写授权）。
+  lspStatus: "agent:lsp-status",
   orchestrationView: "agent:orchestration-view",
   orchestrationSubmit: "agent:orchestration-submit",
   orchestrationControl: "agent:orchestration-control",

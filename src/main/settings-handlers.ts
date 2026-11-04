@@ -29,10 +29,13 @@ export interface SettingsHostDeps {
   resolveProviderKind: () => Promise<ProviderKind>;
   /** M4a：scheduleConcurrencyCap 变更 → 调度器即时生效。 */
   onScheduleCapChange: (cap: number) => void;
+  /** 自动化保唤（2026-11-04）：keepAwake 变更 → 桌面主进程即时 start/stop powerSaveBlocker。 */
+  onKeepAwakeChange: (on: boolean) => void;
 }
 const UNWIRED: SettingsHostDeps = {
   resolveProviderKind: async () => "demo",
   onScheduleCapChange: () => {},
+  onKeepAwakeChange: () => {},
 };
 let host: SettingsHostDeps = UNWIRED;
 
@@ -100,6 +103,8 @@ export async function setSettings(patch: Partial<AppSettings>): Promise<AppSetti
   }
   // M4a：定时并发上限变更 → 调度器即时生效
   if (patch.scheduleConcurrencyCap !== undefined) host.onScheduleCapChange(next.scheduleConcurrencyCap);
+  // 自动化保唤：keepAwake 变更 → powerSaveBlocker 即时开/关（桌面主进程实现，headless 是 noop）
+  if (patch.keepAwake !== undefined) host.onKeepAwakeChange(next.keepAwake);
   return next;
 }
 

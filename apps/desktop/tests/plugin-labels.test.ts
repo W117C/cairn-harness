@@ -52,7 +52,7 @@ describe("插件类目词表", () => {
     const discover = read("../src/renderer/components/plugins/PluginDiscover.tsx");
     expect(discover).toContain("PLUGIN_CATEGORY_LABEL");
     expect(discover).not.toContain("const CATEGORY_LABEL");
-    const page = read("../src/renderer/components/AppPage.tsx");
+    const page = read("../src/renderer/components/PluginsPane.tsx");
     expect(page).toContain('import { categoryLabel } from "./plugins/labels"');
     expect(page).toContain('categoryLabel("agents")');
     expect(page).toContain('categoryLabel("hooks")');

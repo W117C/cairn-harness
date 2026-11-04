@@ -131,6 +131,8 @@ export interface ProviderEntryInput {
     maxOutputTokens?: number;
     price?: { inputPerMTok?: number; outputPerMTok?: number; cacheReadPerMTok?: number; cacheWritePerMTok?: number };
     reasoningEfforts?: readonly string[];
+    /** 首选思考档（缺省 off）。与 `reasoningEfforts` 同一条声明：能力表的 `thinking.default` 照抄它。 */
+    reasoningDefault?: string;
   }[];
 }
 

@@ -5,6 +5,7 @@ import { detectConflicts, type ExperienceEntry, type ExperienceKind } from "../.
 import { observationalStatsOf, type EpisodeRecord } from "../../agent/evolve/episode";
 import { retirementFindings } from "../../agent/evolve/retirement";
 import { activationBlockers } from "./activation";
+import { verifyGlobalEvidence, type GlobalEvidenceCheck } from "./globalize";
 import type { CandidateRecord } from "../../agent/evolve/candidates";
 import type { EpisodeSummary } from "./episode-store";
 import { loadEpisodesWithUserFeedback, summarizeEpisodes } from "./episode-store";
@@ -143,9 +144,18 @@ export async function buildEvolveReport(workspace: string, now: number = Date.no
       };
     })
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  // 全局作用域条目要过跨库核验才算"可激活"（核验话术与激活门同源，不各写一份）。
+  // 本地 playbook 里通常没有 `workspace:"*"` 条目，这一圈一般是空的。
+  const globalForActivation = playbook.entries.filter((entry) => entry.status !== "active" && entry.scope.workspace === "*");
+  const globalChecks = new Map<string, GlobalEvidenceCheck>();
+  await Promise.all(globalForActivation.map(async (entry) => {
+    globalChecks.set(entry.id, await verifyGlobalEvidence(entry.globalEvidence ?? []));
+  }));
   const activationCandidates = playbook.entries
     .filter((entry) => entry.status !== "active")
-    .filter((entry) => activationBlockers(entry, playbook.entries, now).length === 0)
+    .filter((entry) => activationBlockers(entry, playbook.entries, now, {
+      ...(globalChecks.get(entry.id) !== undefined ? { globalCheck: globalChecks.get(entry.id) } : {}),
+    }).length === 0)
     .map((entry) => ({
       id: entry.id,
       kind: entry.kind,

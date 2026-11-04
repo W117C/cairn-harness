@@ -8,7 +8,7 @@ const repo = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, im
 
 describe("plugin marketplace catalog wiring", () => {
   it("keeps the read-only catalog channel at protocol v51", () => {
-    expect(IPC_PROTOCOL_VERSION).toBe(51);
+    expect(IPC_PROTOCOL_VERSION).toBe(52);
     expect(INVOKE_CHANNELS.marketplaceCatalog).toBe("agent:marketplace-catalog");
     expect(repo("../../../src/main/ipc-protocol.ts")).toContain(
       'marketplaceCatalog(refresh?: "never" | "auto" | "force"): Promise<MarketplaceCatalogReadout>',

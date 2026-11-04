@@ -15,7 +15,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { readAppSurface } from "./helpers/app-surface";
 
-const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/PaneDock.tsx", import.meta.url)), "utf8");
+// 2026-11-03：变更窗格本体已从 PaneDock 抽至 ChangesPane.tsx（行帽拆分批），判卷锚跟着走。
+const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/ChangesPane.tsx", import.meta.url)), "utf8");
 const css = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
 
 describe("变更窗格 · 分栏审阅器", () => {

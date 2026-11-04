@@ -65,16 +65,13 @@ async function main() {
   await waitFor(() => js('!!document.querySelector(".composer-card textarea")'), 'composer');
   await waitFor(() => js('document.querySelector(".mp-trigger")?.textContent.includes("演示")'), 'demo provider settings');
   await waitFor(() => js('!document.getElementById("boot") || getComputedStyle(document.getElementById("boot")).visibility === "hidden"'), 'startup overlay dismissed');
-  // 第 812 页：demo provider 必须在空屏与页脚都说「演示模式」，不许冒充「服务正常」。
+  // 演示模式仍由标题栏明确标注；页脚只留用户菜单。
   check('标题栏常驻「演示模式」胶囊（说明在 title 里）', await js(`(() => {
     const el = document.querySelector('.tb-demo');
     if (!el) return false;
     return el.textContent.includes('演示模式') && (el.getAttribute('title') ?? '').includes('预录剧本');
   })()`));
-  check('页脚状态点写「演示模式」且不是绿色可用态', await js(`(() => {
-    const el = document.querySelector('.provider-dot');
-    return el?.textContent.includes('演示模式') === true && el?.getAttribute('data-ok') === 'demo';
-  })()`));
+  check('页脚不显示服务状态，用户菜单名称可见', await js(`!document.querySelector('.provider-dot') && document.querySelector('.side-foot .avatar')?.textContent.includes('设置与偏好') === true`));
   check('首启直接进入工作界面，不显示设置检查、说明或开始使用按钮', await js(`!document.querySelector('.onboard') && !document.querySelector('.empty-sub') && ![...document.querySelectorAll('button')].some(el => el.textContent.trim() === '开始使用')`));
   check('首启输入框和模型入口可直接操作', await js(`!!document.querySelector('.composer-card textarea:not(:disabled)') && !!document.querySelector('.mp-trigger:not(:disabled)')`));
   check('旧的 onboarded=false 偏好无需改写即可使用', (await js('window.agent.getSettings()')).onboarded === false);

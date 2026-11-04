@@ -123,6 +123,8 @@ export const SCANNED_TEXT_PATHS: Partial<Record<AgentEvent["type"], readonly (re
   // 元数据补丁的**值**是人写的自由文本（会话标题、别名、标签……）⇒ 逐叶子扫。
   // `scanStringLeaves` 会递归进对象，所以 patch 里每个 value 都被扫到。
   session_meta_update: [["patch"]],
+  // todo_write 的清单正文来自**模型**（同 tool_call.args 一族）：items 里的 text 叶子逐个扫。
+  todo_updated: [["items"]],
 };
 
 /** 在**产出处**就已脱敏的事件（本表不参与扫描，判据只判「别再漏一处」）。 */

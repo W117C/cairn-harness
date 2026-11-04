@@ -4,7 +4,7 @@
 //
 // 判的是三件事：①可见语料（用户看得见的正文才进语料）；②按会话聚合（一个会话一条）；
 // ③**「没量到 ≠ 没有」**（三态在类型层面分开：ok / partial / unavailable）。
-import { mkdtemp, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -229,6 +229,35 @@ describe("会话全文检索 · 「没量到 ≠ 没有」", () => {
     expect(result.budgetExhaustedAt).toBe("sessions");
     expect(result.scannedSessions).toBe(1);
     expect(result.totalSessions).toBe(2);
+  });
+
+  it("字节预算恰好等于唯一会话字节数 ⇒ 完整读尽返回 ok 而非误报 partial", async () => {
+    const only = await writeSession("exact-budget", [
+      { type: "session_meta" },
+      { type: "user_message", content: "刚好装下的命中词" },
+    ]);
+    const exactBytes = (await stat(only)).size;
+    const result = await searchSessions({ root, query: "命中词", budgetBytes: exactBytes });
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") throw new Error("unreachable");
+    expect(result.scannedBytes).toBe(exactBytes);
+    expect(result.matches.map((m) => m.sessionId)).toEqual(["exact-budget"]);
+  });
+
+  it("权限不可读的会话文件（EACCES）不静默跳过 ⇒ 计入 unreadableSessions 并返回 partial", async () => {
+    if (process.getuid?.() === 0) return; // root 忽略 0o000
+    await writeSession("readable", [{ type: "session_meta" }, { type: "user_message", content: "命中词" }]);
+    const unreadable = await writeSession("locked", [{ type: "session_meta" }, { type: "user_message", content: "命中词" }]);
+    await chmod(unreadable, 0o000);
+    try {
+      const result = await searchSessions({ root, query: "命中词" });
+      expect(result.kind).toBe("partial");
+      if (result.kind !== "partial") throw new Error("unreachable");
+      expect(result.unreadableSessions).toBe(1);
+      expect(result.matches.map((m) => m.sessionId)).toEqual(["readable"]);
+    } finally {
+      await chmod(unreadable, 0o600).catch(() => undefined);
+    }
   });
 });
 

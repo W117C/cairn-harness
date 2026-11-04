@@ -27,6 +27,10 @@ export function QueueDock(props: {
   // 打断并发送 / 移出 / 编辑：都按目标会话的限定键读当前表，再交给纯函数改一条。
   const items = props.queue.current.get(runKey(props.activeWorkspace, props.activeId)) ?? [];
   const blocked = props.queueLoading || props.queueSaving === true;
+  // 「立即」的可用面（2026-11-04 截图形制：每行都摆「立即」）：运行中恒可（打断并发送）；
+  // 不运行 = 与「继续发送」同一套门（读取完成、无待派发、无待决卡）——门没过就禁用，不假装能点。
+  const resumeEligible = !blocked && !props.pendingSend && props.pendingClarify === null && props.pendingPlan === null;
+  const sendNowEnabled = props.running || resumeEligible;
   const editAt = (index: number, change: (list: QueuedSend[], at: number) => QueuedSend[]): boolean => {
     const sid = props.activeId;
     if (blocked) return false;
@@ -42,6 +46,7 @@ export function QueueDock(props: {
     <SendQueueStrip
       items={items}
       running={props.running}
+      sendNowEnabled={sendNowEnabled}
       disabled={blocked}
       saving={props.queueSaving}
       saveFailed={props.queueSaveFailed}
@@ -50,9 +55,11 @@ export function QueueDock(props: {
       }}
       onInterruptSend={(index) => {
         if (blocked) return;
-        /** 「打断并发送」：先把它提到队首，再打断本轮——收束在轮界，runOn 随即先派它。
-         *  打断走 cancelRunHeal：陈旧旗（main 无在跑）时摘旗并把这条当场派出去，不再是死点。 */
-        if (editAt(index, (list, at) => promoteQueued(list, at))) props.cancelRunHeal(props.activeId, props.activeWorkspace);
+        /** 「立即」：先把它提到队首，再派它——运行中打断本轮（cancelRunHeal：陈旧旗时摘旗
+         *  并把这条当场派出去，不再是死点）；不运行走「继续发送」同一条路（队列头即它）。 */
+        if (!editAt(index, (list, at) => promoteQueued(list, at))) return;
+        if (props.running) props.cancelRunHeal(props.activeId, props.activeWorkspace);
+        else if (resumeEligible) props.resumeQueueFor(props.activeId, props.activeWorkspace);
       }}
       onRemove={(index) => { editAt(index, (list, at) => dropQueued(list, at)); }}
       onEdit={(index, text) => { editAt(index, (list, at) => editQueued(list, at, text)); }}

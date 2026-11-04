@@ -9,6 +9,38 @@ import { ApprovalCard } from "../src/renderer/components/ApprovalCard";
 import { describeAsk, patchHeadline } from "../src/renderer/components/cards";
 import type { AskPayload } from "../../../src/main/ipc-protocol";
 
+/** 三张决策卡（审批/澄清/方案）的动作次序必须一致：拒绝在前、主按钮钉最右（2026-11-02）。 */
+describe("决策卡动作次序统一", () => {
+  /** 取 `card-actions` 之后到文件末尾的区域（动作行总在卡片最后，且没有同级 div 干扰）。 */
+  const actionsHtml = (file: string): string => {
+    const src = readFileSync(new URL(`../src/renderer/components/${file}`, import.meta.url), "utf8");
+    const at = src.indexOf('className="card-actions"');
+    expect(at, `${file} 的动作行`).toBeGreaterThan(-1);
+    return src.slice(at);
+  };
+  /** 主按钮（btn primary）必须排在 spacer 之后＝钉在最右。 */
+  const primaryAfterSpacer = (block: string): boolean =>
+    block.indexOf("spacer") > -1 && block.lastIndexOf("btn primary") > block.lastIndexOf("spacer");
+
+  it("审批卡：拒绝 / 总是允许 / 提示 → spacer → 允许·本次（主钮最右）", () => {
+    const block = actionsHtml("ApprovalCard.tsx");
+    expect(primaryAfterSpacer(block)).toBe(true);
+    expect(block.indexOf("拒绝")).toBeLessThan(block.indexOf("btn primary"));
+  });
+
+  it("澄清卡：提示 → spacer → 提交回答（主钮最右，与审批卡同序）", () => {
+    const block = actionsHtml("ClarifyCard.tsx");
+    expect(primaryAfterSpacer(block)).toBe(true);
+    expect(block.indexOf("consequence")).toBeLessThan(block.indexOf("spacer"));
+  });
+
+  it("方案卡：拒绝 → spacer → 提示 → 批准方案（主钮最右，与审批卡同序）", () => {
+    const block = actionsHtml("PlanCard.tsx");
+    expect(primaryAfterSpacer(block)).toBe(true);
+    expect(block.indexOf("拒绝")).toBeLessThan(block.indexOf("btn primary"));
+  });
+});
+
 const ask = (over: Partial<AskPayload>): AskPayload =>
   ({ askId: "a1", tool: "run_shell", args: {}, ...over }) as AskPayload;
 
@@ -188,6 +220,44 @@ describe("ApprovalCard SSR（重设计后）", () => {
     expect(css).not.toContain("\n.ghost {");
     expect(css).not.toContain("\n.suggest-ghost"); // 规则位清零（行首锚；注释里的历史说明不算）
     expect(css).toContain(".suggest-note {");
+  });
+});
+
+describe("项目外附件审批卡（2026-11-02）", () => {
+  it("describeAsk：标题说清是项目外附件，路径逐行上卡（不塞 JSON）", () => {
+    expect(describeAsk({ tool: "attachment", args: { paths: ["/Users/ze/Desktop/report.pdf", "/tmp/notes.txt"] } }))
+      .toEqual({
+        title: "读取项目外附件",
+        subject: "2 项",
+        body: "\"/Users/ze/Desktop/report.pdf\"\n\"/tmp/notes.txt\"",
+      });
+  });
+
+  it("describeAsk：混合附件只列需审批的非图片路径，并说明图片已自动放行", () => {
+    expect(
+      describeAsk({
+        tool: "attachment",
+        args: { paths: ["/tmp/notes.txt"], count: 1, autoApprovedImages: 2 },
+      }),
+    ).toEqual({
+      title: "读取项目外附件",
+      subject: "1 项 · 另有 2 张图片已自动放行",
+      body: "\"/tmp/notes.txt\"",
+    });
+  });
+
+  it("SSR：只给一次性允许——不摆「本会话此类 / 总是允许」的持久 scope", () => {
+    const html = renderToStaticMarkup(
+      <ApprovalCard
+        ask={ask({ tool: "attachment", args: { paths: ["/Users/ze/Desktop/report.pdf"] }, risk: "medium" })}
+        onDecide={() => undefined}
+      />,
+    );
+    expect(html).toContain("<h3>读取项目外附件</h3>");
+    expect(html).toContain("/Users/ze/Desktop/report.pdf");
+    expect(html).toContain("允许 · 本次");
+    expect(html).not.toContain("总是允许");
+    expect(html).not.toContain("本会话此类");
   });
 });
 

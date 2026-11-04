@@ -248,15 +248,16 @@ describe("工具描述也是模型可见文本（第 176 页）", () => {
       const m = f.name.slice("params[".length, f.name.indexOf("]."));
       perMode.set(m, (perMode.get(m) ?? 0) + 1);
     }
-    // 现读水位：只读档 21 份、三个可写档各 74 份（61→62 是 M2 的 apply_patch.patch；
+    // 现读水位：只读档 24 份、三个可写档各 77 份（61→62 是 M2 的 apply_patch.patch；
     // 16→17 / 62→63 是第 477 页给 read_file 加的 `paths`；17→18 / 63→64 是 2026-10-15 的 read_image.path；
     // 18→21 / 64→67 是 2026-10-16 的 render_image 三参数 path/atMs/width；
     // 67→74 是统一运行时的生命周期工具：send_agent 四参 + resume_agent 两参 + close_agent 一参
     // （list_agents 无参数）。只读档不给这族，故 21 不变）。
+    // 21→24 / 74→77 是 2026-11-04 的 todo_write（items/items.text/items.state 三份描述；全档可见）。
     // 这一格必须**精确**：只读到 183 的那一版（不递归）就是靠它露馅的；放宽成「≥ 某个数」之后
     // 「少走一族参数」仍然绿（规则 222）。改规格的人跟着改这一格。
-    expect(perMode.get("read-only"), "只读档参数描述面数（现读 21＝M2 那 16 份 + read_file.paths + read_image.path + render_image 三参）").toBe(21);
-    expect(perMode.get("default"), "缺省档参数描述面数（现读 74＝第 179 页两把写向模板 + apply_patch.patch + read_file.paths + read_image.path + render_image 三参 + 生命周期四把的 7 个参数）").toBe(74);
+    expect(perMode.get("read-only"), "只读档参数描述面数（现读 24＝21 + todo_write 三份）").toBe(24);
+    expect(perMode.get("default"), "缺省档参数描述面数（现读 77＝74 + todo_write 三份）").toBe(77);
     for (const m of ["guided", "auto", "full-access"]) {
       expect(perMode.get(m), `${m} 与 default 档的工具面同日同表，参数面数不该分叉`).toBe(perMode.get("default"));
     }
@@ -266,12 +267,16 @@ describe("工具描述也是模型可见文本（第 176 页）", () => {
       const tool = f.name.slice(pre.length).split(".")[0] as string;
       expect(tables[f.modes[0] as string] ?? [], `${f.name} 的工具名不在 ${f.modes[0]} 档的面上`).toContain(tool);
     }
-    // 递归的存在证人：现读有 8 份在**两层** properties 下（spawn_agent 的 supervise 子对象 × 四个可写档；
-    // full-access 与 auto 同面，故比旧读数 6 多两份）。
+    // 递归的存在证人：现读有 18 份在**两层** properties 下——spawn_agent 的 supervise 子对象
+    // × 四个可写档（8 份；full-access 与 auto 同面）+ 2026-11-04 todo_write 的 items 子对象
+    // （items.text / items.state × 五档 = 10 份）。
     // 只走顶层 properties 读到 183——所以「为什么要递归」有量出来的证人，不是假想需求（规则 243）。
     const nested = faces.filter((f) => (f.name.match(/\.properties\./gu) ?? []).length >= 2);
-    expect(nested.length, "两层嵌套下的参数描述面数为 0 ⇒ 这一族是靠递归读全的").toBe(8);
-    for (const f of nested) expect(f.name, `${f.name} 不在两层 properties 下，判据形状变了`).toContain("supervise");
+    expect(nested.length, "两层嵌套下的参数描述面数为 0 ⇒ 这一族是靠递归读全的").toBe(18);
+    const supervise = nested.filter((f) => f.name.includes("supervise"));
+    expect(supervise.length, "supervise 族仍是 8 份").toBe(8);
+    const todoNested = nested.filter((f) => f.name.includes("todo_write"));
+    expect(todoNested.length, "todo_write 的 items.text/items.state 两层族 × 五档 = 10 份").toBe(10);
     // 反向哨兵：这一族的文本里确实点到了工具名（现读 `glob`），否则「0 发现」可能只是尺瞎了（规则 242）。
     const named = new Set(faces.flatMap((f) => toolNameTokens(f.text, TOOL_NAMES, { namesOnly: true })));
     expect([...named], "参数描述里一个工具名都没认出来 ⇒ 取料可疑").toContain("glob");
@@ -309,7 +314,7 @@ describe("工具描述也是模型可见文本（第 176 页）", () => {
 
   it("参数说明覆盖：分母只数「有声明参数的工具」，名单与计数是现读水位", () => {
     const cov = paramProseCoverage();
-    expect(cov.length, "有参数的工具数（现读 25＝22＋生命周期三把 send_agent/resume_agent/close_agent；list_agents 与 verify／automation_list 无参数，不进分母）").toBe(25);
+    expect(cov.length, "有参数的工具数（现读 26＝25 + todo_write；list_agents 与 verify／automation_list 无参数，不进分母）").toBe(26);
     expect(cov.every((c: { declared: number }) => c.declared >= 1), "分母里混进无参数的工具＝覆盖率替形状报错").toBe(true);
     for (const c of cov) {
       expect(c.explained + c.missing.length, `${c.tool} 的 explained＋missing 必须等于声明数，少一格就是计数坏了`).toBe(c.declared);

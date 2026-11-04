@@ -131,14 +131,33 @@ function state(overrides: Partial<PluginsMarketplaceState> = {}): PluginsMarketp
 }
 
 describe("PluginsWorkspace", () => {
+  it("sidebar all overrides a category retained from the narrow-window filter", () => {
+    const html = renderToStaticMarkup(<PluginsWorkspace state={state({ category: "mcp" })} activeFilter="all" />);
+    expect(html).toContain("mcp-plugin");
+    expect(html).toContain("skills-plugin");
+  });
+
   it("renders the three real marketplace views without marketing chrome", () => {
     const html = renderToStaticMarkup(<PluginsWorkspace state={state()} />);
 
     expect(html).toContain("发现");
     expect(html).toContain("已安装");
-    expect(html).toContain("更新");
+    // 2026-11-02：措辞与左侧上下文栏/页头筛选统一为「可更新」（此前 tabs 只写「更新」）。
+    expect(html).toContain("可更新");
     expect(html).toContain("mcp-plugin");
     expect(html).not.toMatch(/下载量|评分|热门/u);
+  });
+
+  it("视图只有页内标签条一处入口：分类筛选不再改写视图", () => {
+    const src = readFileSync(
+      fileURLToPath(new URL("../src/renderer/components/plugins/PluginsWorkspace.tsx", import.meta.url)),
+      "utf8",
+    );
+    // 标签条直写视图状态，不吃筛选回调；筛选只碰分类 / 精选。
+    expect(src).toContain("onClick={() => { state.setView(id); }}");
+    expect(src).not.toContain("state.setView(id as \"discover\" | \"installed\" | \"updates\")");
+    // 旧视图 id 仍被兼容（命令面板 / 持久化筛选可能送来），但不参与筛选显示。
+    expect(src).toContain("normalizeView(props.activeFilter, state.view)");
   });
 
   it("keeps cache, corrupt, empty, and registry error states distinct", () => {
@@ -165,6 +184,11 @@ describe("PluginsWorkspace", () => {
         })}
       />,
     )).toContain("已安装列表读取失败");
+    // 2026-11-02：空态不只是一个标题，要说清下一步去哪（目录为空 / 无匹配 / 未安装）。
+    expect(renderToStaticMarkup(<PluginsWorkspace state={state({ catalog: liveCatalog([]) })} />)).toContain("先导入本地插件");
+    expect(renderToStaticMarkup(
+      <PluginsWorkspace state={state({ view: "installed", activeJob: null })} />,
+    )).toMatch(/到「发现」里挑一个|导入/);
   });
 
   it("shows operational rows and accessible icon actions on demand", () => {

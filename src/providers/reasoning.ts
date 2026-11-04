@@ -65,3 +65,54 @@ export function mapUpstreamEfforts(names: readonly string[]): ActiveReasoningEff
   // 按我们自己的顺序稳定输出（低→高），免得配置里的书写顺序影响展示
   return ACTIVE_REASONING_EFFORTS.filter((e) => out.includes(e));
 }
+
+/** 一个模型的思考声明：**支持哪些档**（四档里挑，空 = 不支持）+ **首选哪一档**。
+ *
+ *  为什么合成一处：「哪些名字算数」「首选档怎么定」此前要在配置校验、能力表、设置表单三处各判一次，
+ *  那就是三份会漂移的副本。这里规范化一次，三处都调它 —— 「默认值不另拄一份」这条纪律的实现。
+ *  · 认不出的档位名**不在这里判错**（原样放进 `unknown`）：配置层拿它出问题单，界面层直接忽略。
+ *  · 「off」写进档位列表里 ≡ 没写（它是「不发思考参数」，不是一档能力）；「空列表 = 不支持」照旧。 */
+export interface ThinkingDeclaration {
+  /** 规范化后的支持档（低→高、去重、不含 "off"）。空数组 = 该模型不支持思考。 */
+  levels: ActiveReasoningEffort[];
+  /** **生效**的首选档：声明里写了、且确实在 levels 里 ⇒ 用它；否则 "off"（不替用户开花钱的档）。 */
+  default: ThinkingEffort;
+  /** 声明里那个首选档映射后的值（没写 ⇒ 缺席）；调用方据此区分「没写」与「写了但不在支持集里」。 */
+  preferred?: ThinkingEffort;
+  /** 认不出的档位名（原样回传，去空白）。 */
+  unknown: string[];
+}
+
+/** 单个档位名 → 我们的档位名；"off" 单独认（它不是 EFFORT_ALIASES 里的成员）；认不出 ⇒ undefined。 */
+function mapLevelToken(raw: unknown): ActiveReasoningEffort | "off" | undefined {
+  if (typeof raw !== "string") return undefined;
+  const token = raw.trim().toLowerCase();
+  if (token === "") return undefined;
+  if (token === "off") return "off";
+  return EFFORT_ALIASES[token];
+}
+
+export function normalizeThinkingDeclaration(levels: readonly unknown[], preferred?: unknown): ThinkingDeclaration {
+  const unknown: string[] = [];
+  const seen = new Set<ActiveReasoningEffort>();
+  for (const raw of levels) {
+    const mapped = mapLevelToken(raw);
+    if (mapped === undefined) {
+      if (typeof raw === "string" && raw.trim() !== "") unknown.push(raw.trim());
+      continue;
+    }
+    if (mapped !== "off") seen.add(mapped);
+  }
+  const ordered = ACTIVE_REASONING_EFFORTS.filter((e) => seen.has(e));
+  const mappedPreferred = mapLevelToken(preferred);
+  if (mappedPreferred === undefined && typeof preferred === "string" && preferred.trim() !== "") unknown.push(preferred.trim());
+  // 首选档只在「声明了它、且它真在支持集里」时生效：写了 high 却只声明 [low] ⇒ 回 off，不偷偷发更大的档。
+  const effective: ThinkingEffort =
+    mappedPreferred !== undefined && mappedPreferred !== "off" && ordered.includes(mappedPreferred) ? mappedPreferred : "off";
+  return {
+    levels: ordered,
+    default: effective,
+    ...(mappedPreferred !== undefined ? { preferred: mappedPreferred } : {}),
+    unknown,
+  };
+}

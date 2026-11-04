@@ -9,11 +9,78 @@
 // 「能探测、存不进」事故的回归面（源码级哨兵在 render-structure.test 里钉着）。
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { suggestApiKeyEnv, suggestProviderId, type DiscoveredRow } from "../../../../../src/providers/provider-draft";
+import { ACTIVE_REASONING_EFFORTS, normalizeThinkingDeclaration } from "../../../../../src/providers/reasoning";
+import { STR } from "../strings";
 import { isLocalEndpointURL, selectAllRows } from "./provider-form";
 import { ModalSurface } from "./ModalSurface";
 import { Field, SettingsRow } from "./settings-ui";
 
 type Protocol = "openai" | "anthropic" | "gemini";
+
+/** 表单里**每个模型一条**的思考声明：支持哪些档（四档里挑，空 = 不支持）+ 首选哪一档。
+ *
+ *  为什么要有这一格（业主 2026-11-03：「让用户可以自己配置模型思考能力」）：门是照能力表开的，
+ *  能力表只认 `reasoningEfforts`；而自定义家（自建 / 中转 / 第三方）今天只有探测能给这个值 ——
+ *  `/models` 不自述档位的服务就永远是「不支持」，用户在界面上无处声明。这里把它变成可编辑的。 */
+export interface ThinkingDraft {
+  levels: string[];
+  default: string;
+}
+
+/** 声明草稿 → 存盘字段（纯函数）：档位留空 = 不写（= 不支持）；首选为「关」= 不写（缺席即关）。 */
+export function declarationPayload(draft: ThinkingDraft | undefined): { reasoningEfforts?: readonly string[]; reasoningDefault?: string } {
+  const decl = normalizeThinkingDeclaration(draft?.levels ?? [], draft?.default);
+  return {
+    ...(decl.levels.length > 0 ? { reasoningEfforts: decl.levels } : {}),
+    ...(decl.default !== "off" ? { reasoningDefault: decl.default } : {}),
+  };
+}
+
+/** 声明的初值（纯函数）：**已存配置优先**——用户手写的声明不许被一次「获取模型」覆盖掉，
+ *  没存过的才用探测值（上游 `/models` 自述）。两处都不给 ⇒ 空声明（= 不支持，界面整段禁用）。 */
+export function initialDeclarations(
+  rows: readonly Pick<DiscoveredRow, "id" | "reasoningEfforts">[],
+  saved?: readonly { id: string; reasoningEfforts?: readonly string[]; reasoningDefault?: string }[],
+): Record<string, ThinkingDraft> {
+  const out: Record<string, ThinkingDraft> = {};
+  for (const row of rows) {
+    const kept = saved?.find((m) => m.id === row.id);
+    const decl = normalizeThinkingDeclaration(
+      kept !== undefined ? kept.reasoningEfforts ?? [] : row.reasoningEfforts ?? [],
+      kept?.reasoningDefault,
+    );
+    out[row.id] = { levels: [...decl.levels], default: decl.default };
+  }
+  return out;
+}
+
+/** 勾选的行 + 各自的思考声明 → `providerSave` 的 models 载荷（纯函数；判卷钉在这里）。
+ *  声明就是**接线本身**：漏了它，界面上的勾选不会变成能力表里的档位。 */
+export function modelsFromPicker(
+  rows: readonly DiscoveredRow[],
+  selected: Record<string, boolean>,
+  thinking: Record<string, ThinkingDraft> = {},
+): { id: string; contextWindow?: number; maxOutputTokens?: number; price?: DiscoveredRow["price"]; reasoningEfforts?: readonly string[]; reasoningDefault?: string; inputModalities?: readonly string[] }[] {
+  return rows
+    .filter((row) => selected[row.id] === true)
+    .map((row) => ({
+      id: row.id,
+      ...(row.contextWindow !== undefined ? { contextWindow: row.contextWindow } : {}),
+      ...(row.maxOutputTokens !== undefined ? { maxOutputTokens: row.maxOutputTokens } : {}),
+      ...(row.price !== undefined ? { price: row.price } : {}),
+      // 声明由用户那格说了算（探测值只是它的初值）：空 = 明确「不支持」。
+      ...declarationPayload(thinking[row.id]),
+      ...(row.inputModalities !== undefined ? { inputModalities: [...row.inputModalities] } : {}),
+    }));
+}
+
+/** 档位短词 + 说明（唯一出处 = STR.modelPicker：菜单里的思考段与这里必须同一套词，不另抄一份）。 */
+const LEVEL_WORDS: Readonly<Record<string, { short: string; hint: string }>> = {
+  low: { short: STR.modelPicker.thinkLow, hint: STR.modelPicker.thinkLowHint },
+  medium: { short: STR.modelPicker.thinkMedium, hint: STR.modelPicker.thinkMediumHint },
+  high: { short: STR.modelPicker.thinkHigh, hint: STR.modelPicker.thinkHighHint },
+  max: { short: STR.modelPicker.thinkMax, hint: STR.modelPicker.thinkMaxHint },
+};
 
 interface DiscoverState {
   baseURL: string;
@@ -41,7 +108,10 @@ function rowMeta(row: DiscoveredRow): string {
 }
 
 /** 模型选择弹窗（拉取后自动弹出）：整行点选 + 全选/全不选；关闭由「完成」/遮罩收窗。
- *  选择结果写回表单 selected，保存流程（save 按 selected 过滤）单源不动。 */
+ *  选择结果写回表单 selected，保存流程（save 按 selected 过滤）单源不动。
+ *
+ *  2026-11-03：勾选的行下面多一条**思考声明**（四档勾选 + 首选档）——档位留空 = 该模型不支持思考，
+ *  它就照旧在模型菜单里整段禁用（fail-visible，不谎称可调）。 */
 export function ModelPickModal(props: {
   rows: readonly DiscoveredRow[];
   selected: Record<string, boolean>;
@@ -49,8 +119,19 @@ export function ModelPickModal(props: {
   onChange: (next: Record<string, boolean>) => void;
   onDone: () => void;
   returnFocusRef?: RefObject<HTMLElement | null>;
+  /** 每模型的思考声明（缺省 = 全空 = 不支持；旧调用面不受影响）。 */
+  thinking?: Record<string, ThinkingDraft>;
+  /** 声明改动（唯一出口；表单持有这份状态）。不给 = 只读展示。 */
+  onThinkingChange?: (id: string, next: ThinkingDraft) => void;
 }): React.JSX.Element {
   const picked = props.rows.filter((row) => props.selected[row.id] === true).length;
+  const toggleLevel = (rowId: string, level: string): void => {
+    const cur = props.thinking?.[rowId] ?? { levels: [], default: "off" };
+    const levels = cur.levels.includes(level) ? cur.levels.filter((l) => l !== level) : [...cur.levels, level];
+    // 勾掉首选那一档 ⇒ 首选跟着落回「关」（不许留一个不在支持集里的首选档）。
+    const next: ThinkingDraft = { levels, default: levels.includes(cur.default) ? cur.default : "off" };
+    props.onThinkingChange?.(rowId, next);
+  };
   return (
     <div className="cp-overlay" role="presentation" onClick={props.onDone}>
       <ModalSurface
@@ -69,19 +150,57 @@ export function ModelPickModal(props: {
         <div className="cp-modal-list">
           {props.rows.map((row) => {
             const on = props.selected[row.id] === true;
+            const draft = props.thinking?.[row.id] ?? { levels: [], default: "off" };
             return (
-              <button
-                key={row.id}
-                role="checkbox"
-                aria-checked={on}
-                className={"cp-row" + (on ? " on" : "")}
-                disabled={props.busy === true}
-                onClick={() => props.onChange({ ...props.selected, [row.id]: !on })}
-              >
-                <span className="cp-check" aria-hidden="true">{on ? "✓" : ""}</span>
-                <span className="nm mono-k">{row.id}</span>
-                <span className="sub">{rowMeta(row)}</span>
-              </button>
+              <div className="cp-model" key={row.id}>
+                <button
+                  role="checkbox"
+                  aria-checked={on}
+                  className={"cp-row" + (on ? " on" : "")}
+                  disabled={props.busy === true}
+                  onClick={() => props.onChange({ ...props.selected, [row.id]: !on })}
+                >
+                  <span className="cp-check" aria-hidden="true">{on ? "✓" : ""}</span>
+                  <span className="nm mono-k">{row.id}</span>
+                  <span className="sub">{rowMeta(row)}</span>
+                </button>
+                {/* 声明只在勾选的行上摆出来（没启用的模型不需要声明），且只在可编辑时摆。 */}
+                {on && props.onThinkingChange !== undefined && (
+                  <div className="cp-th" role="group" aria-label={`${row.id} 的思考档位`}>
+                    {ACTIVE_REASONING_EFFORTS.map((lv) => {
+                      const word = LEVEL_WORDS[lv];
+                      const pickedLevel = draft.levels.includes(lv);
+                      return (
+                        <button
+                          key={lv}
+                          type="button"
+                          className="cp-th-chip"
+                          aria-pressed={pickedLevel}
+                          title={word?.hint}
+                          disabled={props.busy === true}
+                          onClick={() => toggleLevel(row.id, lv)}
+                        >{word?.short ?? lv}</button>
+                      );
+                    })}
+                    <label className="cp-th-def">
+                      <span>首选</span>
+                      <select
+                        aria-label={`${row.id} 的首选思考档`}
+                        value={draft.default}
+                        disabled={props.busy === true}
+                        onChange={(e) => props.onThinkingChange?.(row.id, { levels: draft.levels, default: e.target.value })}
+                      >
+                        <option value="off">{STR.modelPicker.thinkOff}</option>
+                        {ACTIVE_REASONING_EFFORTS.filter((lv) => draft.levels.includes(lv)).map((lv) => (
+                          <option key={lv} value={lv}>{LEVEL_WORDS[lv]?.short ?? lv}</option>
+                        ))}
+                      </select>
+                    </label>
+                    {/* 空档位 = 不支持思考：明说，别让用户以为「勾了才有档」是显示问题。 */}
+                    {draft.levels.length === 0 && <span className="cp-th-note">未勾选档位 = 该模型不支持思考（选择器里整段禁用）</span>}
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
@@ -94,14 +213,26 @@ export function CustomProviderForm(props: {
   /** 保存成功后通知外层：设置页据此重拉 provider 清单，App 据此重拉模型面。 */
   onSaved?: () => void;
   /** 编辑模式（2026-10-24 业主：自定义供应商在右详情就地编辑）：预填已存配置，保存按同名覆盖。
-   *  null/缺席 = 新增模式（原行为）。 */
-  editing?: { id: string; label: string; protocol: string; baseURL: string; apiKeyEnv: string; modelIds: readonly string[] } | null;
+   *  null/缺席 = 新增模式（原行为）。
+   *  `models` 是每个模型已存的**思考声明**（2026-11-03）：有了它，改 key 再保存不会把用户手写的
+   *  `reasoningEfforts` / `reasoningDefault` 冲掉；缺席 = 按探测值回填（老载荷/CLI 路径）。 */
+  editing?: {
+    id: string;
+    label: string;
+    protocol: string;
+    baseURL: string;
+    apiKeyEnv: string;
+    modelIds: readonly string[];
+    models?: readonly { id: string; reasoningEfforts?: readonly string[]; reasoningDefault?: string }[];
+  } | null;
 }): React.JSX.Element {
   const [baseURL, setBaseURL] = useState("");
   const [protocol, setProtocol] = useState<Protocol>("openai");
   const [busy, setBusy] = useState(false);
   const [discovered, setDiscovered] = useState<DiscoverState | null>(null);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
+  /** 每个模型一条的思考声明（唯一出口 = 选择弹窗里的那条；保存时逐条落盘）。 */
+  const [thinking, setThinking] = useState<Record<string, ThinkingDraft>>({});
   const [pickerOpen, setPickerOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -142,6 +273,8 @@ export function CustomProviderForm(props: {
       const all: Record<string, boolean> = {};
       for (const row of r.rows) all[row.id] = savedIds === undefined ? true : savedIds.includes(row.id);
       setSelected(all);
+      // 思考声明的初值：已存的手写声明优先，其余用探测值（见 initialDeclarations）。
+      setThinking(initialDeclarations(r.rows, props.editing?.models));
       setPickerOpen(true); // 拉到清单直接弹选择窗，别让用户在表单里翻一整面墙
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -152,16 +285,8 @@ export function CustomProviderForm(props: {
 
   const save = useCallback(async () => {
     if (discovered === null) return;
-    const models = discovered.rows
-      .filter((row) => selected[row.id] === true)
-      .map((row) => ({
-        id: row.id,
-        ...(row.contextWindow !== undefined ? { contextWindow: row.contextWindow } : {}),
-        ...(row.maxOutputTokens !== undefined ? { maxOutputTokens: row.maxOutputTokens } : {}),
-        ...(row.price !== undefined ? { price: row.price } : {}),
-        ...(row.reasoningEfforts !== undefined ? { reasoningEfforts: [...row.reasoningEfforts] } : {}),
-        ...(row.inputModalities !== undefined ? { inputModalities: [...row.inputModalities] } : {}),
-      }));
+    // 载荷构造抽成纯函数（判卷钉在那里）：勾选 × 每个模型自己的思考声明 → models 数组。
+    const models = modelsFromPicker(discovered.rows, selected, thinking);
     if (models.length === 0) {
       setError("一条都没勾：至少选一个模型再存");
       return;
@@ -208,12 +333,13 @@ export function CustomProviderForm(props: {
       }
       setDiscovered(null);
       setSelected({});
+      setThinking({});
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
-  }, [discovered, selected, props]);
+  }, [discovered, selected, thinking, props]);
 
   const localHint = baseURL.trim() !== "" && isLocalEndpointURL(baseURL.trim());
   // 2026-10-16（模型/通道页重做）：行改 SettingsRow（220px 标签列，卡内距与其余卡一致）、
@@ -298,6 +424,8 @@ export function CustomProviderForm(props: {
               onChange={setSelected}
               onDone={() => setPickerOpen(false)}
               returnFocusRef={pickerButton}
+              thinking={thinking}
+              onThinkingChange={(id, next) => setThinking((cur) => ({ ...cur, [id]: next }))}
             />
           )}
         </>

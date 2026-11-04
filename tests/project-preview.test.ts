@@ -96,13 +96,17 @@ describe("单文件 HTML 直接预览（不需要 .cairn/project.json）", () =>
   // 行为变更（2026-10-16，ADR 0004 受控纳管）：从前这一支是「缺清单就拒」；
   // 现在没有清单的目录先过诊断——空目录归 unsupported，失败文案改为点出缺什么（入口页）
   // 与下一步，.cairn/project.json 不再是唯一的认路牌。
+  // 形状变更（2026-11-02 真机订正）：**依据不再拼进 message**——message 只说「发生了什么」，
+  // 依据（凭什么这么判）走 reasons[]，下一步走 hint。渲染层据此分行渲染（原因/依据/下一步）。
   it("空目录：spec 失败，诊断点出缺入口页与下一步", async () => {
     const dir = tmp();
     const rt = new PreviewRuntime();
     const snap = await rt.start(dir);
     expect(snap.status).toBe("failed");
     expect(snap.stage).toBe("spec");
-    expect(snap.message).toContain("index.html");
+    // 结论在 message，依据点名缺哪个入口页（两者分开走）
+    expect(snap.message).toBeTruthy();
+    expect(snap.reasons?.join("；")).toContain("index.html");
     expect(snap.hint).toBeTruthy();
   });
 });
@@ -341,7 +345,9 @@ describe("已有目录的受控纳管（没有 .cairn/project.json 也能进）"
     const runtime = new PreviewRuntime();
     const failed = await runtime.start(root);
     expect(failed).toMatchObject({ status: "failed", stage: "spec" });
-    expect(failed.message).toContain("home.html");
+    // 文件名是**依据**，走 reasons[]（2026-11-02 形状变更：不再拼进 message）
+    expect(failed.message).toContain("index.html");
+    expect(failed.reasons?.join("；")).toContain("home.html");
     expect(failed.hint).toContain("index.html");
   });
 });

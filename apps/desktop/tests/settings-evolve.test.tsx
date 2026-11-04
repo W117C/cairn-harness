@@ -143,6 +143,60 @@ describe("EvolvePanel", () => {
     expect(h).not.toContain('aria-label="转休眠');
   });
 
+  it("证据/经验：计数改成人读的行与小片；原始串只在「技术详情」折叠里（默认收起）", () => {
+    const h = html({ status: "ready", report });
+    // 一行一个短标签 + 一句白话（不是一串拼出来的计数）
+    // 2026-11-02：界面不再出现 Episode/worker/playbook 等英文术语（原始串仍在技术详情）。
+    expect(h).toContain("记录总数");
+    expect(h).toContain("结果分布");
+    expect(h).toContain("自校验");
+    expect(h).toContain("未知面");
+    expect(h).toContain("成本");
+    expect(h).toContain("计价");
+    expect(h).toContain("条目总数");
+    expect(h).toContain("需要处理");
+    expect(h).toContain("候选总数");
+    expect(h).toContain("容量");
+    // 让布局说话（2026-11-04）：行标签 + 计数小片已经自明，不再挂复述标签的小字与修饰徽章。
+    for (const s of ["只读快照", "每次运行留一条记录", "每条记录自带的校验结果", "缺的是哪一环", "各花了多少 token", "不折成成功", "记录值"]) {
+      expect(h, s).not.toContain(s);
+    }
+    // 计数小片：一格一个数
+    expect(h).toContain('class="sp-chip"');
+    expect(h).toContain('<span class="sp-chip-k">成功</span><span class="sp-chip-v">1</span>');
+    expect(h).toContain('<span class="sp-chip-k">失败</span><span class="sp-chip-v">0</span>');
+    expect(h).toContain('<span class="sp-chip-k">未分类</span><span class="sp-chip-v">1</span>');
+    // 折叠：默认收起（<details> 不带 open），原始串原样在里面
+    const tech = h.match(/<details class="sp-tech">[\s\S]*?<\/details>/);
+    expect(tech).not.toBeNull();
+    const block = tech?.[0] ?? "";
+    expect(block).toContain("技术详情");
+    expect(block).toContain("success 1 / failure 0 / unknown 1；verify green 1 / red 0 / none 1");
+    expect(block).toContain("judge 未测 2；verify 未跑 1；user 未测 2");
+    expect(block).toContain("主面 10 token；worker 0；可定价 0 / 不可定价 2");
+    expect(block).toContain("状态：active×1、candidate×1；类型：strategy×1、warning×1；冲突 0；过期 0；负证据 1；可激活 1（exp_0123456789abcdef）；坏行 0；拒单 0");
+    expect(block).toContain("状态：passed×1");
+    expect(block).toContain("playbook 200；实验 20；候选 200");
+    // 默认版面（折叠之外）不再出现原始串
+    const outside = h.replace(block, "");
+    expect(outside).not.toContain("success 1 / failure 0");
+    expect(outside).not.toContain("judge 未测 2；");
+    expect(outside).not.toContain("主面 10 token；");
+    expect(outside).not.toContain("状态：active×1");
+    expect(outside).not.toContain("状态：passed×1");
+    expect(outside).not.toContain("playbook 200；实验 20；候选 200");
+    // 折叠落在「证据」分区末尾：下一个分区之前
+    expect(h.indexOf("技术详情")).toBeGreaterThan(-1);
+    // 2026-11-02：分区名从「经验 playbook」改为「经验沉淀」（界面说人话；原始串仍在技术详情里）。
+    expect(h.indexOf("技术详情")).toBeLessThan(h.indexOf("经验沉淀"));
+    // 默认版面不许出现英文键（判分/自校验/用户反馈、状态与类型均已中文化）。
+    expect(outside).not.toContain("judge 未测");
+    expect(outside).not.toContain("candidate 2");
+    expect(outside).not.toContain("lesson 4");
+    // 分区线靠 .ss-content 包裹才生效（此前进化页少这一层 ⇒ 分区之间没有细线）
+    expect(h).toContain("ss-content");
+  });
+
   it("可激活候选：给了 onActivate 且未冻结才有激活按钮", () => {
     const unfrozen = { ...report, frozen: false };
     const withAction = html({ status: "ready", report: unfrozen }, { onActivate: () => undefined });

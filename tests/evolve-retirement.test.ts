@@ -74,7 +74,7 @@ describe("负证据 findings（纯函数）", () => {
     expect(retirementFindings([entry], 2_000, new Map([[ENTRY_ID, { trials: 4, successes: 0 }]]))).toEqual([]);
     expect(retirementFindings([entry], 2_000, new Map([[ENTRY_ID, { trials: 5, successes: 2 }]]))).toEqual([]);
     const shadow = { ...entry, status: "shadow" as const };
-    expect(retirementFindings([shadow], 2_000, stats).map((item) => item.reason)).not.toContain("negative");
+    expect(retirementFindings([shadow], 2_000, stats)).toEqual([]);
   });
 
   it("ops：negative ⇒ dormant；expired ⇒ retire；conflict ⇒ deprecate", () => {
@@ -111,7 +111,7 @@ describe("负证据 → dormant → 停止注入（真文件）", () => {
     }]);
 
     const dry = await runEvolveRetire([workspace]);
-    expect(dry.findings.map((item) => item.reason)).toContain("negative");
+    expect(dry.findings.map((item) => item.reason)).toEqual(["negative"]);
     expect((await loadPlaybook(workspace)).entries[0]!.status).toBe("active");
 
     const applied = await runEvolveRetire([workspace, "--apply"]);

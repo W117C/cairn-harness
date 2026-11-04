@@ -27,7 +27,7 @@ export type GitStatusResult = { ok: true; branch: string | null; dirtyFiles: num
 export async function gitStatus(workspace: string): Promise<GitStatusResult> {
   let porcelainOut: string;
   try {
-    porcelainOut = (await pexec("git", ["-C", workspace, "status", "--porcelain"], { timeout: 10_000 })).stdout;
+    porcelainOut = (await pexec("git", ["-c", "core.fsmonitor=false", "-C", workspace, "status", "--porcelain"], { timeout: 10_000 })).stdout;
   } catch (err) {
     const e = err as { code?: string | number; stderr?: string; message?: string };
     if (e.code === "ENOENT") return { ok: false, error: "未找到 git（检查 PATH）" };
@@ -37,7 +37,7 @@ export async function gitStatus(workspace: string): Promise<GitStatusResult> {
   }
   let branch: string | null = null;
   try {
-    const b = (await pexec("git", ["-C", workspace, "symbolic-ref", "--short", "HEAD"], { timeout: 5000 })).stdout.trim();
+    const b = (await pexec("git", ["-c", "core.fsmonitor=false", "-C", workspace, "symbolic-ref", "--short", "HEAD"], { timeout: 5000 })).stdout.trim();
     branch = b === "" ? null : b;
   } catch {
     branch = null; // detached HEAD 或读不到——如实报 null

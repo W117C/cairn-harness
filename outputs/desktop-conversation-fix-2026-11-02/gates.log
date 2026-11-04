@@ -1,0 +1,14 @@
+# CMD: node --import tsx scripts/typecheck.ts
+typecheck: tsc --noEmit 通过（0 条报错）✅
+EXIT=0
+
+# CMD: pnpm renderer-layer-check
+renderer-layer-check 红线：
+  [I4] apps/desktop/src/renderer/components/settings-sections.tsx:1 — 行数 1205 超过上限 1200
+[ELIFECYCLE] Command failed with exit code 1.
+
+# CMD: pnpm desktop-boundary-check
+$ node --import tsx scripts/desktop-boundary-check.ts
+desktop-boundary-check: 绿（src 无反向依赖、无 UI import）
+# CMD: pnpm --filter cairn-desktop run typecheck
+EXIT=0

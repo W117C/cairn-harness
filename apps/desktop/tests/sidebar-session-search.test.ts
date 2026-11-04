@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 import { filterSessions, matchSession } from "../src/renderer/sessions-view";
 
 const sidebarSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/Sidebar.tsx", import.meta.url)), "utf8");
+const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 
 const S = [
   { id: "s1", title: "修复登录页样式" },
@@ -50,6 +51,7 @@ describe("filterSessions 行为（侧栏搜索的地基）", () => {
 });
 
 describe("Sidebar 搜索接线", () => {
+  const filterMenuSrc = read("../src/renderer/components/SessionFilterMenu.tsx");
   it("真的调用 filterSessions（不再只是 re-export）", () => {
     expect(sidebarSrc).toContain("filterSessions(activeSessions");
     expect(sidebarSrc).toContain("filterSessions(archivedSessions");
@@ -59,12 +61,16 @@ describe("Sidebar 搜索接线", () => {
     expect(sidebarSrc).toMatch(/filterSessions\(activeSessions, \{ search: searchTerm, filter, running: props\.running \}\)/);
     expect(sidebarSrc).toMatch(/filterSessions\(archivedSessions, \{ search: searchTerm, filter, running: props\.running \}\)/);
     expect(sidebarSrc).not.toContain('filter: "all", running: props.running');
-    expect(sidebarSrc).toContain("DropdownMenu.RadioGroup");
-    expect(sidebarSrc).toContain("filterCounts.map");
+    // 2026-11-01：筛选菜单从 Radix DropdownMenu 换成仓库自己的 Popover 基座
+    // （Radix 2.2 的 popper 在侧栏里退成 position:static，浮层跑到左缘）。
+    expect(sidebarSrc).toContain("<SessionFilterMenu");
+    expect(filterMenuSrc).toContain('role="menuitemradio"');
+    expect(filterMenuSrc).toContain('role="menuitemcheckbox"');
+    expect(filterMenuSrc).toContain("filterCounts.map");
     expect(sidebarSrc).toContain("changeFilter");
     expect(sidebarSrc).toContain("SESSION_FILTER_KEY");
-    expect(sidebarSrc).toContain("SESSION_FILTER_NOTE");
-    expect(sidebarSrc).toContain("data-filter={f.id}");
+    expect(filterMenuSrc).toContain("SESSION_FILTER_NOTE");
+    expect(filterMenuSrc).toContain("data-filter={f.id}");
   });
 
   it("筛选无命中给专属空态 + 清除筛选，不谎报「还没有任务」", () => {

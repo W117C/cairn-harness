@@ -33,6 +33,28 @@ export interface PostRunReadingInput {
   reflectProviderFor?: (instruction: string) => Provider;
 }
 
+/** 在 fn 抛错时**先**落一次读数，再把原错抛出去；成功路径不动（收尾那次由调用方负责，不重复读）。
+ *
+ *  事故 `failed-run-still-ledgers`（outputs/task-carried-verify-2026-11-04/INCIDENTS.md）：
+ *  `maxSteps` 撞帽走的是 throw，`emitPostRunReadings` 在正常收尾路径上，于是**失败的跑一条账都没有**。
+ *  自进化面看到的全是幸存者——最该学习的样本恰好缺页。读数自己失败不许掩盖原错。
+ */
+export async function withPostRunReadingsOnThrow<T>(
+  fn: () => Promise<T>,
+  emit: () => Promise<void>,
+): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    try {
+      await emit();
+    } catch (readErr) {
+      console.warn("[post-run] 失败路径读数也失败（原错仍照抛）: " + (readErr instanceof Error ? readErr.message : String(readErr)));
+    }
+    throw err;
+  }
+}
+
 /** 收束时调一次。**任何一支失败都不抛**——它不参与这一场的结果。 */
 export async function emitPostRunReadings(input: PostRunReadingInput): Promise<void> {
   let allEvents: AgentEvent[] = [];

@@ -1,6 +1,6 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ChevronDown, FileDiff } from "lucide-react";
-import { PANE_META, PANE_OPENABLE, type PaneKind } from "../pane-registry";
+import { PANE_META, type PaneKind } from "../pane-registry";
 import { paneShortcutKeys } from "../pane-shortcuts";
 
 export interface WorkbenchToolsProps {
@@ -16,7 +16,17 @@ export interface WorkbenchToolsProps {
   onToggleFocusMode: () => void;
 }
 
-/** 工具只在需要时出现；改动是直接导航，已挂载的窗格也应切到前台。 */
+/** 工具只在需要时出现；改动是直接导航，已挂载的窗格也应切到前台。
+ *
+ *  2026-11-04 业主两件事：
+ *  ① 显示缺陷（截图：菜单被裁成一条灰边）——内容此前内联渲染在工具栏里，被 overflow:hidden
+ *     的祖先裁掉（DOM 里 220×351/9 项俱全、画面上没有）。修法 = 包 `DropdownMenu.Portal`
+ *     （PaneDock 的菜单包了所以没事）。
+ *  ② 「做的太复杂了，容纳的东西太多了」——菜单从 9 项砍到两段：窗格只留文件/终端/浏览器
+ *     （改动走顶栏「改动」钮），方案/任务/旁路窗格走右栏「＋」菜单与既有快捷键（⌘⇧P 等
+ *     判卷在 pane-shortcuts），这里不再复述一遍。 */
+const TOOL_PANES: readonly PaneKind[] = ["file", "terminal", "browser"];
+
 export function WorkbenchTools(props: WorkbenchToolsProps) {
   return <>
     {props.hasSession && <button
@@ -36,26 +46,28 @@ export function WorkbenchTools(props: WorkbenchToolsProps) {
           <span>工具</span><ChevronDown size={12} aria-hidden="true" />
         </button>
       </DropdownMenu.Trigger>
-      <DropdownMenu.Content className="pop-rd" data-workbench-menu="true" side="bottom" align="end" sideOffset={4}>
-        {props.hasSession && <>
-          {PANE_OPENABLE.filter(k => k !== "changes").map(kind => (
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content className="pop-rd" data-workbench-menu="true" side="bottom" align="end" sideOffset={4}>
+          {TOOL_PANES.map(kind => (
             <DropdownMenu.Item key={kind} className="menu-item" onSelect={() => props.onOpenPane(kind)}>
               <span>{props.paneTabs.includes(kind) ? "查看" : "打开"}{PANE_META[kind].label}窗格</span>
               <span className="sub">{paneShortcutKeys(kind)}</span>
             </DropdownMenu.Item>
           ))}
           <DropdownMenu.Separator className="menu-sep" />
-          <DropdownMenu.CheckboxItem className="menu-item" checked={props.inspectorOpen} onCheckedChange={props.onToggleInspector}>
-            <span>{props.inspectorOpen ? "收起右侧面板" : "显示右侧面板"}</span><span className="sub">⌘⌥I</span>
+          {props.hasSession && (
+            <DropdownMenu.CheckboxItem className="menu-item" checked={props.inspectorOpen} onCheckedChange={props.onToggleInspector}>
+              <span>{props.inspectorOpen ? "收起右侧面板" : "显示右侧面板"}</span><span className="sub">⌘⌥I</span>
+            </DropdownMenu.CheckboxItem>
+          )}
+          <DropdownMenu.CheckboxItem className="menu-item" aria-label="插件侧栏" aria-controls="mod-sidebar" checked={props.pluginSidebarOpen} onCheckedChange={props.onTogglePluginSidebar}>
+            <span>{props.pluginSidebarOpen ? "收起已加载插件" : "已加载插件"}</span><span className="sub">⌘⌥B</span>
           </DropdownMenu.CheckboxItem>
-        </>}
-        <DropdownMenu.CheckboxItem className="menu-item" aria-label="插件侧栏" aria-controls="mod-sidebar" checked={props.pluginSidebarOpen} onCheckedChange={props.onTogglePluginSidebar}>
-          <span>{props.pluginSidebarOpen ? "收起插件侧栏" : "打开插件侧栏"}</span><span className="sub">⌘⌥B</span>
-        </DropdownMenu.CheckboxItem>
-        <DropdownMenu.CheckboxItem className="menu-item" aria-label={props.focusMode ? "退出专注模式" : "进入专注模式"} checked={props.focusMode} onCheckedChange={props.onToggleFocusMode}>
-          <span>{props.focusMode ? "退出专注模式" : "进入专注模式"}</span><span className="sub">⌘⌥F</span>
-        </DropdownMenu.CheckboxItem>
-      </DropdownMenu.Content>
+          <DropdownMenu.CheckboxItem className="menu-item" aria-label={props.focusMode ? "退出专注模式" : "进入专注模式"} checked={props.focusMode} onCheckedChange={props.onToggleFocusMode}>
+            <span>{props.focusMode ? "退出专注模式" : "进入专注模式"}</span><span className="sub">⌘⌥F</span>
+          </DropdownMenu.CheckboxItem>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
     </DropdownMenu.Root>
   </>;
 }

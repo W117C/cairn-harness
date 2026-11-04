@@ -67,7 +67,7 @@ describe("离线配对评估", () => {
     });
     expect(result.status).toBe("unmeasurable");
     expect(result.decision).toBe("keep-old");
-    expect(result.reason).toContain("holdout");
+    expect(result.reason).toBe("没有 holdout 分片——search 上的改善可能是过拟合，不许晋升");
   });
 
   it("有不可测 run ⇒ unmeasurable，不折成失败", () => {
@@ -77,7 +77,7 @@ describe("离线配对评估", () => {
     const result = evaluateOffline({ tasks: holdout, baseline, candidate });
     expect(result.status).toBe("unmeasurable");
     expect(result.decision).toBe("keep-old");
-    expect(result.reason).toContain("不可测");
+    expect(result.reason).toBe("有 1 个任务不可测（缺 run 或 ok=null）：t0");
   });
 
   it("正确性不劣且成本显著更低 ⇒ passed / promote", () => {
@@ -88,7 +88,7 @@ describe("离线配对评估", () => {
     expect(result.status).toBe("passed");
     expect(result.decision).toBe("promote");
     expect(result.holdoutScores?.costUsd).toBe(25);
-    expect(result.reason).toContain("成本");
+    expect(result.reason).toMatch(/^正确性不劣；holdout 成本 25 ≤ 基线 50/u);
   });
 });
 

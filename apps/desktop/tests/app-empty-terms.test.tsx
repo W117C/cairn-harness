@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { AutomationPane, MemoryPane, PluginsPane, SkillsPane } from "../src/renderer/components/AppPage";
+import { readAppPageSurface } from "./helpers/app-surface";
 import { DIAGNOSTICS_TEXT } from "../src/renderer/components/settings-sections";
 
 const noop = (): void => undefined;
@@ -15,12 +16,15 @@ const MEM_EMPTY = {
 };
 
 describe("批 6：四页空状态（数据为 0 只显示 EmptyState，不摆统计卡）", () => {
+  // 2026-11-02：统计形态统一为 .ap-summary 一行摘要（自动化页的四张 .ap-stats 卡也换了）。
+  // 空态哨兵因此覆盖两种类名：旧卡片 .ap-stats 与摘要行 .ap-summary 都不许在场。
   it("记忆：「还没有记忆。Cairn 会在对话中记下项目约定和你的偏好。」+ 统计行不在场", () => {
     const h = renderToStaticMarkup(<MemoryPane snap={MEM_EMPTY} onError={noop} refresh={noop} />);
     expect(h).toContain("ss-empty");
     expect(h).toContain("还没有记忆");
     expect(h).toContain("Cairn 会在对话中记下项目约定和你的偏好");
     expect(h).not.toContain("ap-stats");
+    expect(h).not.toContain("ap-summary");
   });
 
   it("技能：「还没有技能。在输入框输入技能名即可调用。」+ 统计行不在场", () => {
@@ -29,14 +33,16 @@ describe("批 6：四页空状态（数据为 0 只显示 EmptyState，不摆统
     expect(h).toContain("还没有技能");
     expect(h).toContain("在输入框输入技能名即可调用");
     expect(h).not.toContain("ap-stats");
+    expect(h).not.toContain("ap-summary");
   });
 
-  it("自动化：「还没有定时任务」+ 主按钮「新建任务」；统计行/工具栏不在场", () => {
+  it("自动化（2026-11-04 工作流形制）：大卡「还没有定时任务」+ 胶囊「创建定时任务」；统计行/工具栏不在场", () => {
     const h = renderToStaticMarkup(<AutomationPane snap={SCHED_EMPTY} onError={noop} refresh={noop} />);
-    expect(h).toContain("ss-empty");
+    expect(h).toContain("at-hero-card");
     expect(h).toContain("还没有定时任务");
-    expect(h).toContain("新建任务");
+    expect(h).toContain("创建定时任务");
     expect(h).not.toContain("ap-stats");
+    expect(h).not.toContain("ap-summary");
     expect(h).not.toContain("ap-toolbar");
   });
 
@@ -64,7 +70,7 @@ describe("批 6：四页空状态（数据为 0 只显示 EmptyState，不摆统
 });
 
 describe("批 6：术语清理（正文说人话，工程词进诊断区）", () => {
-  const src = readFileSync(new URL("../src/renderer/components/AppPage.tsx", import.meta.url), "utf8");
+  const src = readAppPageSurface();
 
   it("正文不出现 journal 投影 / serveScheduler / expandSkillInvocation", () => {
     expect(src).not.toContain("journal 投影");

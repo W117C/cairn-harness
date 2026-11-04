@@ -31,7 +31,7 @@ export type PreferenceKey =
   | "routingBandit" | "routingCascade" | "actionFusion" | "promptCache"
   | "requestMetering" | "observationPack" | "evidenceReceipts" | "economicCompaction"
   | "impactAnalysis" | "autoVerify" | "autoVerifyRepair" | "planRequiredByDefault"
-  | "windowVibrancy" | "ctrlTabCycle" | "updateManifestUrl";
+  | "keepAwake" | "windowVibrancy" | "ctrlTabCycle" | "updateManifestUrl";
 
 export type PreferencePatch = Partial<Pick<AppSettings, PreferenceKey>>;
 
@@ -40,7 +40,7 @@ const BOOLEAN_KEYS = [
   "routingBandit", "routingCascade", "actionFusion", "promptCache",
   "requestMetering", "observationPack", "evidenceReceipts", "economicCompaction",
   "impactAnalysis", "autoVerify", "autoVerifyRepair", "planRequiredByDefault",
-  "windowVibrancy", "ctrlTabCycle",
+  "keepAwake", "windowVibrancy", "ctrlTabCycle",
 ] as const;
 
 const ENUM_KEYS = {

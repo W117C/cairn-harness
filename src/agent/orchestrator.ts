@@ -444,30 +444,46 @@ export class Orchestrator {
       }
       agentIds.push(id);
     }
-    // 竞速：等 agent_result 到达，judge 命中即早停（取消其余候选，返回胜者）
-    const deadline = Date.now() + this.raceDeadlineMs;
-    const winners: Array<Extract<AgentEvent, { type: "agent_result" }>> = [];
-    while (Date.now() < deadline) {
-      if (this.root.signal.aborted) break; // 审查 S2-8：主会话已取消就不再空转竞速轮（旧实现最坏再等满 120s）
-      const log = await replay(this.opts.logPath).catch(() => [] as AgentEvent[]);
-      for (const id of agentIds) {
-        const done = log.find(
-          (e: AgentEvent): e is Extract<AgentEvent, { type: "agent_result" }> =>
-            e.type === "agent_result" && e.agent_id === id && !winners.some((w) => w.agent_id === id),
-        );
-        if (done) {
-          winners.push(done);
-          if (judge(done)) {
-            for (const other of agentIds) if (other !== id) this.cancelAgent(other); // 早停：取消其余
-            return {
-              ok: true,
-              output: JSON.stringify({ race: true, picked: id, candidates: agentIds, early_stop: true }),
-            };
-          }
+    // 竞速：事件驱动等候选终态到达（复用 terminalWaiters，避免每 25ms 全量读盘解析 JSONL；
+    // 同时修复候选被取消时不落 agent_result 导致旧轮询空转满 120s 的隐患），judge 命中即早停。
+    if (!this.root.signal.aborted) {
+      const picked = await new Promise<string | null>((resolve) => {
+        let settled = 0;
+        let finished = false;
+        const done = (winner: string | null): void => {
+          if (finished) return;
+          finished = true;
+          clearTimeout(timer);
+          this.root.signal.removeEventListener("abort", onAbort);
+          resolve(winner);
+        };
+        const onAbort = (): void => done(null);
+        const timer = setTimeout(() => done(null), this.raceDeadlineMs);
+        timer.unref?.();
+        this.root.signal.addEventListener("abort", onAbort, { once: true });
+        if (agentIds.length === 0) {
+          done(null);
+          return;
         }
+        for (const id of agentIds) {
+          void this.acs.waitForAgentTerminal(id).then(({ result }) => {
+            if (finished) return;
+            settled += 1;
+            if (result !== null && judge(result)) {
+              done(id);
+              return;
+            }
+            if (settled >= agentIds.length) done(null);
+          });
+        }
+      });
+      if (picked !== null) {
+        for (const other of agentIds) if (other !== picked) this.cancelAgent(other); // 早停：取消其余
+        return {
+          ok: true,
+          output: JSON.stringify({ race: true, picked, candidates: agentIds, early_stop: true }),
+        };
       }
-      if (agentIds.length > 0 && winners.length >= agentIds.length) break; // 全收敛且无 judge 命中
-      await new Promise((resolve) => setTimeout(resolve, 25));
     }
     // 审查 S2-9：超时 / 全收敛无命中 / 主会话取消 —— 退出竞速前一律收杀未终态候选。
     // 旧实现直接 return 失败，被判负与未收敛的 worker 继续在后台跑（占并发预算、烧 token，
@@ -605,14 +621,19 @@ export class Orchestrator {
     //    在 routeDecision 非空时永不成立 → 无凭据也照派 worker，第一跳 401 才死
     //    （白烧一轮 + 占并发预算 + 留一条必败 worker 记录）。现在同样要求凭据。
     const routedSpec = !this.opts.modelFor && routeDecision ? resolveModel(effectiveModelTable(), routeDecision.picked) : null;
+    const fallbackSpec = !this.opts.modelFor && !routedSpec ? (this.opts.defaultModelSpec ?? null) : null;
+    const effectiveSpec = routedSpec ?? fallbackSpec;
     const model = this.opts.modelFor
       ? this.opts.modelFor(args)
       : routedSpec
         ? toWorkerModel(routedSpec, this.opts.promptCache === true ? { promptCache: true } : {})
-        : undefined;
+        : fallbackSpec
+          ? toWorkerModel(fallbackSpec, this.opts.promptCache === true ? { promptCache: true } : {})
+          : undefined;
     // 凭据按**选中的 provider** 判：旧实现硬编码 CAIRN_API_KEY ⇒ 只配 ANTHROPIC_API_KEY 时
     // 路由到 anthropic 档位会被判「无凭据」；反之只有 GLM key 时又放行一个必败 worker。
-    const routedProviderId = routedSpec?.provider ?? "glm";
+    // 未开路由时若有父会话 defaultModelSpec，同样按父会话 provider 核验凭据并复用该家传输面。
+    const routedProviderId = effectiveSpec?.provider ?? "glm";
     const routedEnvName = envKeyOf(routedProviderId);
     const hasRoutedCredential = routedEnvName !== null && process.env[routedEnvName] !== undefined;
     if (!model && !hasRoutedCredential) {
@@ -620,6 +641,9 @@ export class Orchestrator {
     }
     if (routeDecision && !this.opts.modelFor && !hasRoutedCredential) {
       return { ok: false, output: `spawn_agent: 路由路径需要 ${routedEnvName ?? "provider"} 凭据（无注入模型且无凭据；fail-closed 不造必败 worker）` };
+    }
+    if (fallbackSpec && !this.opts.modelFor && !hasRoutedCredential) {
+      return { ok: false, output: `spawn_agent: 无可用模型（无 ${routedEnvName ?? "provider"} 凭据且未接 modelFor；fail-closed 不造必败 worker）` };
     }
     // W3②「价格标签」：worker 的钱此前只喂 bandit（rewardBandit 里算完即丢），派工时模型看不到单价、
     // 收队时看不到花了多少、终态里也没有机器可读的花费。档位以路由决策为准；没路由时 worker 走

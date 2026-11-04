@@ -78,7 +78,8 @@ export const SHORTCUTS: readonly ShortcutSpec[] = [
   { id: "rename", keys: "F2", label: "重命名当前会话" },
   { id: "inspector", keys: "⌘⌥I", label: "检查器" },
   { id: "stop", keys: "⌘.", label: "停止生成" },
-  { id: "cycle-session", keys: "⌘⇧[ / ⌘⇧]", label: "切换会话" },
+  // 2026-11-02：与 SHORTCUT_GROUPS（防漂见证）统一键序；两表此前写法相反。
+  { id: "cycle-session", keys: "⌘⇧] / ⌘⇧[", label: "切换会话" },
   { id: "settings", keys: "⌘,", label: "设置" },
   { id: "send", keys: "⏎", label: "发送" },
   { id: "newline", keys: "⇧⏎", label: "换行" },

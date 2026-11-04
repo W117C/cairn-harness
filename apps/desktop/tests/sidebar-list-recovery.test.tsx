@@ -8,10 +8,10 @@ function html(overrides: Partial<ComponentProps<typeof Sidebar>>) {
   return renderToStaticMarkup(<Sidebar
     projects={[]} sessions={[]} activeId={null} activeWorkspace={null}
     running={new Set()} waitingIds={new Set()} outcomes={new Map()} providerOk={null}
-    theme="system" onThemeChange={noop} onOpen={noop} onNewTask={noop} onOpenPalette={noop}
+    onOpen={noop} onNewTask={noop} onOpenPalette={noop}
     onSwitchWorkspace={noop} onAddProject={async () => undefined} onCloneProject={async () => undefined}
     onOpenNewProjectDialog={noop} onUpdateProject={async () => undefined} onRelocateProject={async () => undefined}
-    onRemoveProject={async () => undefined} onRevealProject={noop} onOpenSettings={noop}
+    onRemoveProject={async () => undefined} onRevealProject={noop}
     onPickDirectory={async () => null} {...overrides}
   />);
 }

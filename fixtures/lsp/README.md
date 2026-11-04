@@ -12,4 +12,5 @@
   | `--incremental` | 声明 `change:2`，且只接受**带 range** 的 didChange，缺 range 就沉默丢掉 |
   | `--sync-none` | 声明 `change:0`：不接受 didChange（客户端必须关-开重送内容） |
   | `--symbol-no-location` | workspaceSymbol 只回名字不回 location（LSP 3.17 的合法形状） |
+  | `--no-workspace-symbol` | 不声明 `workspaceSymbolProvider` 且**不注册** handler（多服务器路由的靶子：这台不该被问） |
 - sample.ts — 单测靶文件（无实际代码语义，标记行即数据）。

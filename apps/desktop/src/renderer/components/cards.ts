@@ -102,6 +102,23 @@ export function describeAsk(ask: { tool?: string; args?: Record<string, unknown>
       ...(local !== undefined ? { body: local } : {}),
     };
   }
+  if (tool === "attachment") {
+    const paths = Array.isArray(args.paths)
+      ? args.paths.filter((p): p is string => typeof p === "string" && p !== "")
+      : [];
+    // 图片已自动放行，卡面只列还需要人点头的非图片路径；但「自动了几张」要说出来，
+    // 否则用户看到清单比拖进来的少，会怀疑附件丢了。
+    const autoImages = typeof args.autoApprovedImages === "number" && Number.isInteger(args.autoApprovedImages) && args.autoApprovedImages > 0
+      ? args.autoApprovedImages
+      : 0;
+    return {
+      title: "读取项目外附件",
+      ...(paths.length > 0
+        ? { subject: `${String(paths.length)} 项${autoImages > 0 ? ` · 另有 ${String(autoImages)} 张图片已自动放行` : ""}` }
+        : {}),
+      body: paths.length > 0 ? paths.map((p) => JSON.stringify(p)).join("\n") : JSON.stringify(args),
+    };
+  }
   if (tool === "remember") {
     if (args.trigger === "session_end_distill") {
       return { title: "写入全局记忆", subject: "会话沉淀：把本场要点写进跨项目记忆（影响你的所有项目）" };

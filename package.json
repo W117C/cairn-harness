@@ -82,6 +82,7 @@
     "external-bench": "node --import tsx scripts/external-bench.ts",
     "acp-server": "node --import tsx scripts/acp-server.ts",
     "a2a-server": "node --import tsx scripts/a2a-server.ts",
+    "lsp-status": "node --import tsx scripts/lsp-status.ts",
     "motion-policy-check": "node --import tsx scripts/motion-policy-check.ts"
   },
   "devDependencies": {

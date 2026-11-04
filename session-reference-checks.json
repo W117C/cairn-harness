@@ -1,0 +1,266 @@
+{
+  "checks": [
+    {
+      "name": "openSession 回传 SessionView 与父前缀",
+      "ok": true,
+      "detail": [
+        [
+          {
+            "workspace": "/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-ref-smoke-wEmgz5/A",
+            "sessionId": "parent",
+            "eventId": 1
+          },
+          true
+        ],
+        [
+          {
+            "workspace": "/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-ref-smoke-wEmgz5/A",
+            "sessionId": "parent",
+            "eventId": 2
+          },
+          true
+        ],
+        [
+          {
+            "workspace": "/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-ref-smoke-wEmgz5/A",
+            "sessionId": "parent",
+            "eventId": 3
+          },
+          true
+        ],
+        [
+          {
+            "workspace": "/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-ref-smoke-wEmgz5/A",
+            "sessionId": "parent",
+            "eventId": 4
+          },
+          true
+        ],
+        [
+          {
+            "workspace": "/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-ref-smoke-wEmgz5/A",
+            "sessionId": "child",
+            "eventId": 1
+          },
+          false
+        ],
+        [
+          {
+            "workspace": "/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-ref-smoke-wEmgz5/A",
+            "sessionId": "child",
+            "eventId": 2
+          },
+          false
+        ]
+      ]
+    },
+    {
+      "name": "父前缀保留物理行号（父第 1 行与子第 2 行各归各）",
+      "ok": true
+    },
+    {
+      "name": "产品分叉成功",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "id": "child-f1"
+      }
+    },
+    {
+      "name": "子日志初始只有一行血缘（不复制父事件）",
+      "ok": true,
+      "detail": [
+        "{\"type\":\"session_meta\",\"ts\":1793795452508,\"fork\":{\"from_session_path\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-ref-smoke-wEmgz5/A/.agent/sessions/parent.jsonl\",\"boundary_event_id\":4,\"from_session_id\":\"parent\"}}"
+      ]
+    },
+    {
+      "name": "分叉后父日志 sha 不变",
+      "ok": true
+    },
+    {
+      "name": "祖先正文可被搜索且带来源引用",
+      "ok": true,
+      "detail": {
+        "sessionId": "child",
+        "session": {
+          "workspace": "/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-ref-smoke-wEmgz5/A",
+          "sessionId": "child"
+        },
+        "title": "child",
+        "matchCount": 1,
+        "snippets": [
+          {
+            "kind": "assistant_message",
+            "keyword": "PARENT_ANSWER",
+            "excerpt": "PARENT_ANSWER",
+            "index": 1,
+            "ref": {
+              "workspace": "/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-ref-smoke-wEmgz5/A",
+              "sessionId": "parent",
+              "eventId": 4
+            }
+          }
+        ],
+        "bytes": 682,
+        "complete": true,
+        "badLines": 0
+      }
+    },
+    {
+      "name": "祖先行的反馈落子会话并可读回来源",
+      "ok": true,
+      "detail": {
+        "fb": {
+          "ok": true
+        },
+        "fbList": [
+          {
+            "sessionId": "child",
+            "eventId": 4,
+            "rating": "up",
+            "at": "2026-11-04T12:30:52.534Z",
+            "eventRef": {
+              "workspace": "/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-ref-smoke-wEmgz5/A",
+              "sessionId": "parent",
+              "eventId": 4
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "祖先行的置顶保留来源",
+      "ok": true,
+      "detail": {
+        "pin": {
+          "ok": true
+        },
+        "pins": [
+          {
+            "eventId": 4,
+            "eventRef": {
+              "workspace": "/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-ref-smoke-wEmgz5/A",
+              "sessionId": "parent",
+              "eventId": 4
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "祖先轮的文件回滚可执行",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "restored": [
+          "a.ts"
+        ],
+        "deleted": [],
+        "manual": [],
+        "failed": []
+      }
+    },
+    {
+      "name": "盘上文件回到覆盖前内容",
+      "ok": true,
+      "detail": "OLD\n"
+    },
+    {
+      "name": "显式回滚目标优先于窗口当前项目",
+      "ok": true
+    },
+    {
+      "name": "file_restored 落在子会话日志",
+      "ok": true,
+      "detail": "boundary_event_id\":4,\"from_session_id\":\"parent\"}}\n{\"type\":\"user_message\",\"content\":\"CHILD_LOCAL\"}\n{\"type\":\"file_restored\",\"path\":\"a.ts\",\"source_ref\":{\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-ref-smoke-wEmgz5/A\",\"sessionId\":\"parent\",\"eventId\":3},\"ts\":1793795452557}\n"
+    },
+    {
+      "name": "旧调用可按唯一会话找到文件归属",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "restored": [
+          "a.ts"
+        ],
+        "deleted": [],
+        "manual": [],
+        "failed": []
+      }
+    },
+    {
+      "name": "被指针依赖的父会话拒绝删除",
+      "ok": true,
+      "detail": {
+        "rejected": true,
+        "message": "Error: Error invoking remote method 'agent:sessions-delete': Error: 会话被指针分叉依赖，拒绝破坏性操作：parent ← child、child-f1（先处理叶子会话，不提供隐式级联）"
+      }
+    },
+    {
+      "name": "同名会话按 workspace 精确打开",
+      "ok": true
+    },
+    {
+      "name": "同名会话未指定工作区时拒绝单文件还原",
+      "ok": true,
+      "detail": {
+        "ok": false,
+        "error": "会话 id 在多个工作区同时存在（/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-ref-smoke-wEmgz5/A、/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-ref-smoke-wEmgz5/B），必须显式指定 workspace：same"
+      }
+    },
+    {
+      "name": "单文件还原只写指定工作区的文件和会话",
+      "ok": true,
+      "detail": {
+        "ok": true
+      }
+    },
+    {
+      "name": "会话不在指定工作区时拒绝单文件还原",
+      "ok": true,
+      "detail": {
+        "ok": false,
+        "error": "会话不存在：child"
+      }
+    },
+    {
+      "name": "旧单文件还原调用按唯一会话找到文件归属",
+      "ok": true,
+      "detail": {
+        "ok": true
+      }
+    },
+    {
+      "name": "同名会话的队列通过真实 IPC 按 workspace 读写",
+      "ok": true,
+      "detail": {
+        "setA": {
+          "ok": true
+        },
+        "setB": {
+          "ok": true
+        },
+        "readA": {
+          "items": [
+            {
+              "text": "A queue",
+              "attachments": []
+            }
+          ]
+        },
+        "readB": {
+          "items": [
+            {
+              "text": "B queue",
+              "attachments": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "父日志仍未变",
+      "ok": true
+    }
+  ],
+  "root": "/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-ref-smoke-wEmgz5"
+}

@@ -1,6 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 import { basename } from "node:path";
-import { assertRealContainment, resolveInWorkspace, type Tool, type ToolResult } from "./base.js";
+import { resolveReadTarget, type Tool, type ToolResult } from "./base.js";
 
 /** 识图工具：把工作区内的一张图片读成 data URL，作为多模态内容块进上下文。
  *
@@ -38,7 +38,7 @@ export const READ_IMAGE_DESCRIPTION =
   "读取工作区内的一张图片并放入上下文（识图）。" +
   "何时用：用户发了截图/设计稿/报错界面图片，或需要核对刚生成的可视化产物；" +
   "何时不用：要读源码、配置、日志等文本内容用 read_file；不要用它试探任意二进制文件。" +
-  "约束：只接受工作区内路径；单图 ≤ " + String(Math.floor(MAX_IMAGE_BYTES / 1024 / 1024)) + "MB；" +
+  "约束：接受工作区内路径，或本轮用户已批准的项目外附件路径；单图 ≤ " + String(Math.floor(MAX_IMAGE_BYTES / 1024 / 1024)) + "MB；" +
   "图片按 data URL 整体进上下文，一次别读太多张。";
 
 export const read_image: Tool = {
@@ -48,9 +48,10 @@ export const read_image: Tool = {
     if (typeof rel !== "string" || rel.trim() === "") {
       throw new Error("read_image: path 参数必须是非空字符串");
     }
-    const abs = resolveInWorkspace(ctx.workspace, rel.trim(), "read_image");
-    // 软链穿透：与 read_file/grep/glob 同一道闸（词法 resolve 挡不住「界内软链指向界外」）。
-    await assertRealContainment(ctx.workspace, abs, "read_image");
+    // 与 read_file 同一道读取目标解析：工作区内走 containment，项目外只认本轮已批准清单
+    // （realpath 比对，批准后把文件换成指向别处的软链也不会被跟随）。
+    const target = await resolveReadTarget(ctx.workspace, rel.trim(), "read_image", ctx.externalReadGrants);
+    const abs = target.abs;
     let st;
     try {
       st = await stat(abs);
@@ -80,7 +81,8 @@ export const read_image: Tool = {
       output: "[image] " + basename(rel) + "（" + mime + "，" + String(st.size) + " 字节）已作为图片内容块附上",
       images: [{ type: "image", dataUrl }],
       // 用户面引用（同 render_image）：图片只进模型上下文，聊天里是看不见的。
-      artifact: { kind: "image", path: rel.trim() },
+      // 项目外路径不属于工作区产物面，界面无法按 workspacePathAction 打开 ⇒ 不产 artifact。
+      ...(target.external ? {} : { artifact: { kind: "image", path: rel.trim() } }),
     };
   },
 };

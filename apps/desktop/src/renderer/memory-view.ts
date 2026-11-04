@@ -46,10 +46,28 @@ export function bodyLines(body: string): string[] {
     .filter((line) => line.trim() !== "");
 }
 
-/** 记忆导出 Markdown（第 824 页）：项目层/全局层分节，主题带类型、修改时间、大小与正文；
- *  空层给一句「本层暂无主题」，不导出空壳。纯函数，方便判卷与未来 CLI 复用。 */
 import type { MemorySnapshot } from "../../../../src/main/ipc-protocol";
 
+/** Keep scope groups stable while sorting their contents; never mutate a live snapshot. */
+export function memoryRows(snap: MemorySnapshot, query: string, filter: string, sortByName: boolean) {
+  const q = query.trim().toLowerCase();
+  return (["project", "global"] as const).flatMap((layer) => {
+    if (filter !== "all" && filter !== layer) return [];
+    return snap[layer].topics
+      .filter((t) => `${t.topic}\n${t.type}\n${t.body}`.toLowerCase().includes(q))
+      .map((topic) => ({ layer, topic }))
+      .sort((a, b) => {
+        const byName = a.topic.topic.localeCompare(b.topic.topic, "zh");
+        if (sortByName) return byName;
+        const aTime = Date.parse(a.topic.modified);
+        const bTime = Date.parse(b.topic.modified);
+        // Invalid dates stay visible at the end, without disturbing the valid dates.
+        return (Number.isNaN(bTime) ? -Infinity : bTime) - (Number.isNaN(aTime) ? -Infinity : aTime) || byName;
+      });
+  });
+}
+
+/** 记忆导出 Markdown：项目层/全局层分节，主题带类型、修改时间、大小与正文。 */
 export function memoryExportMarkdown(snap: MemorySnapshot, generatedAt = new Date().toISOString()): string {
   const lines: string[] = [
     "# Cairn 记忆导出",

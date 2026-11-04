@@ -1,0 +1,51 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/session-id-single.test.ts (4 tests | 2 failed) 48ms
+   ❯ 会话 id 引用判定只有一份（第 967 页） (4)
+     × sidecar 引用层：非空、≤80、无首尾空白/前导点/路径分隔符/控制字符 4ms
+     × IPC 门用同一份判据：坏 id 当场拒，不落成「会话不存在」 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/session-id-single.test.ts > 会话 id 引用判定只有一份（第 967 页） > sidecar 引用层：非空、≤80、无首尾空白/前导点/路径分隔符/控制字符
+AssertionError: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/session-id-single.test.ts:58:53
+     56|     }
+     57|     for (const bad of ["", "a".repeat(81), " a", "a ", ".hidden", "a/b…
+     58|       expect(isSessionId(bad), JSON.stringify(bad)).toBe(false);
+       |                                                     ^
+     59|     }
+     60|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/session-id-single.test.ts > 会话 id 引用判定只有一份（第 967 页） > IPC 门用同一份判据：坏 id 当场拒，不落成「会话不存在」
+AssertionError: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": expected '会话不存在: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…' to contain '会话名非法'
+
+Expected: "会话名非法"
+Received: "会话不存在: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+ ❯ tests/session-id-single.test.ts:77:49
+     75|       const result = await handleSessionPrefsSet({ sessionId: bad, pre…
+     76|       expect(result.ok, JSON.stringify(bad)).toBe(false);
+     77|       expect(result.error, JSON.stringify(bad)).toContain("会话名非法");
+       |                                                 ^
+     78|     }
+     79|     expect(await handleSessionPrefsSet({ sessionId: created.id, prefs:…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 2 passed (4)
+   Start at  20:20:43
+   Duration  745ms (transform 76%, import 17%, tests 7%)
+

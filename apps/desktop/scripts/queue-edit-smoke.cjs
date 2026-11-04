@@ -33,6 +33,7 @@ async function main() {
   const win = new BrowserWindow({
     width: 1440, height: 900, show: false,
     webPreferences: {
+      backgroundThrottling: false,
       preload: join(__dirname, "ui-gallery-preload.cjs"),
       additionalArguments: [
         "--cairn-api-members=" + JSON.stringify(members),
@@ -88,7 +89,7 @@ async function main() {
   const checks = [];
   const check = (name, ok, detail) => { checks.push({ name, ok, detail }); console.log(`${ok ? "PASS" : "FAIL"} ${name} ${JSON.stringify(detail ?? "")}`); };
 
-  await win.loadFile(join(__dirname, "../dist/index.html"));
+  await win.loadFile(process.env.CAIRN_RENDERER_ENTRY ?? join(__dirname, "../dist/index.html"));
   await waitFor("!!document.querySelector('.composer-card textarea')", "composer");
 
   // ① 挂住一轮 run，再排一条消息。
@@ -108,6 +109,10 @@ async function main() {
   check("运行中入队出现铅笔入口", queued.editButton && queued.text === "排队里的错字", queued);
 
   // ② 编辑并 Enter 提交（真实输入 + 真实按键）。
+  win.show();
+  win.focus();
+  win.webContents.focus();
+  await waitFor(`!!document.querySelector('.queue-item button[aria-label^="编辑排队项："]:not(:disabled)')`, "queue saved before edit");
   await js(`document.querySelector('.queue-item button[aria-label^="编辑排队项："]').click()`);
   await waitFor("!!document.querySelector('.q-edit') && document.activeElement === document.querySelector('.q-edit')", "edit input focused");
   const opened = await read(`const el = document.querySelector('.q-edit'); return { value: el.value, focused: document.activeElement === el };`);
@@ -152,6 +157,7 @@ async function main() {
   await waitFor("!!document.querySelector('.send-btn.queue')", "queue send button (second)");
   await js("document.querySelector('.send-btn.queue').click()");
   await waitFor("document.querySelectorAll('.queue-item').length === 2", "two queued");
+  await waitFor(`!!document.querySelector('.queue-item button[aria-label^="下移排队项："]:not(:disabled)')`, "queue saved before reorder");
   await js(`document.querySelector('.queue-item button[aria-label^="下移排队项："]').click()`);
   await waitFor(`[...document.querySelectorAll('.queue-item .q-text')].map((e) => e.textContent).join('|') === "第二条排队消息|排队里的正文已改好"`, "moved down");
   await waitFor(`(window.__cairnQueueSets().at(-1)?.entries?.map((e) => e.text) ?? []).join('|') === "第二条排队消息|排队里的正文已改好"`, "moved down persisted");
@@ -165,10 +171,34 @@ async function main() {
   const movedUp = await read(`return [...document.querySelectorAll('.queue-item .q-text')].map((e) => e.textContent);`);
   check("上移：回到原顺序", movedUp.join("|") === "排队里的正文已改好|第二条排队消息", movedUp);
 
+  // A long queue must scroll independently, leaving the editor/send action in the window.
+  for (let i = 3; i <= 8; i++) {
+    await fill(`第 ${i} 条：检查插件、记忆和侧栏的布局，并保留这段较长的任务说明以核对预览。`);
+    await waitFor(`!!document.querySelector('.send-btn.queue:not(:disabled)')`, "queue send enabled");
+    await js("document.querySelector('.send-btn.queue').click()");
+    await waitFor(`document.querySelectorAll('.queue-item').length === ${i}`, "long queue");
+  }
+  for (const [width, height] of [[1440, 900], [880, 640], [880, 480]]) {
+    win.setSize(width, height);
+    await pause(200);
+    const geometry = await read(`
+      const list = document.querySelector('.queue-items');
+      const editor = document.querySelector('.composer-card').getBoundingClientRect();
+      const action = document.querySelector('.send-btn.stop').getBoundingClientRect();
+      return { scrolling: list.scrollHeight > list.clientHeight, listHeight: list.clientHeight,
+        visible: editor.top >= 38 && editor.bottom <= innerHeight && action.bottom <= innerHeight,
+        width: innerWidth, scrollWidth: document.documentElement.scrollWidth };
+    `);
+    check(`long queue keeps composer visible at ${width}×${height}`, geometry.scrolling && geometry.visible && geometry.scrollWidth <= geometry.width, geometry);
+    writeFileSync(join(OUT, `03-long-queue-${width}-${height}.png`), (await win.webContents.capturePage()).toPNG());
+  }
+
   // ⑤ 清队列并放行本轮，收干净。
-  await js(`document.querySelector('.queue-item button[aria-label^="移出队列："]').click()`);
-  await waitFor("document.querySelectorAll('.queue-item').length === 1", "one left");
-  await js(`document.querySelector('.queue-item button[aria-label^="移出队列："]').click()`);
+  for (let count = 8; count > 0; count--) {
+    await waitFor(`!!document.querySelector('.queue-item button[aria-label^="移出队列："]:not(:disabled)')`, "queue saved before remove");
+    await js(`document.querySelector('.queue-item button[aria-label^="移出队列："]').click()`);
+    await waitFor(`document.querySelectorAll('.queue-item').length === ${count - 1}`, "remove queued item");
+  }
   await waitFor("document.querySelectorAll('.queue-item').length === 0", "queue cleared");
   await js("window.__cairnReleaseRun({ ok: true })");
   await waitFor("!document.querySelector('.send-btn.stop')", "run finished");

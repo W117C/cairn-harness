@@ -118,6 +118,8 @@ describe("mayHaveWrittenDisk：写向判据的唯一事实源", () => {
         "read_image",
         // 2026-10-16 渲染：起浏览器进程但截图落临时目录，不改本工作区的盘。
         "render_image",
+        // 2026-11-04 任务清单：只写会话日志（面板数据），不改任何盘 ⇒ 与 remember 同档。
+        "todo_write",
       ] as const;
       const names = Object.keys(TOOLS);
       const unclassified = names.filter(

@@ -49,13 +49,14 @@ export function PlanCard(props: {
         </>
       )}
       <div className="card-actions">
-        <button className="btn primary" onClick={() => props.onDecide(true, props.callId)}>批准方案</button>
+        {/* 2026-11-02：与审批卡同序——拒绝在前、主按钮钉最右（此前主钮在最左）。 */}
         <button className="btn secondary" onClick={() => props.onDecide(false, props.callId)}>拒绝</button>
         <span className="spacer" />
         <span className="consequence">
           {String(props.plan.files.length)} 个文件{verifyChips.length > 0 ? ` · 验证面 ${String(verifyChips.length)} 项` : ""}
           {" · 批准解除写禁；拒绝 = 写禁维持、模型须修订重提"}
         </span>
+        <button className="btn primary" onClick={() => props.onDecide(true, props.callId)}>批准方案</button>
       </div>
     </div>
   );

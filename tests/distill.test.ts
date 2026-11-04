@@ -363,3 +363,95 @@ describe("沉淀轮结局的 gate 留痕（X-distill：判定发生在 evaluate 
       .toEqual(new Set(["rejected", "approved", "auto-approved"]));
   });
 });
+
+/* 2026-11-04 真机：沉淀轮调 remember 做 replace 却没带 old_content（模型看不到主题正文），
+   工具按设计拒绝，用户只看到一条「remember 调用失败」。沉淀轮里 replace 不可能成立 ⇒ 降级 append。 */
+describe("runSessionEndDistill：remember 的 replace 防呆", () => {
+  async function log(): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), "distill-remember-"));
+    const p = join(dir, "session.jsonl");
+    await writeFile(p, JSON.stringify({ type: "user_message", content: "做点事" }) + "\n", "utf8");
+    return p;
+  }
+
+  function scripted(args: Record<string, unknown>): Provider {
+    return {
+      async *stream(): AsyncIterable<ModelOutput> {
+        yield { type: "tool_call", id: "r1", name: "remember", args };
+        yield { type: "assistant_message", content: "完成" };
+      },
+    };
+  }
+
+  function capture(): { tool: Tool; calls: Record<string, unknown>[] } {
+    const calls: Record<string, unknown>[] = [];
+    return {
+      calls,
+      tool: {
+        name: "remember",
+        async run(args) {
+          calls.push(args);
+          return { ok: true, output: "已写入 memory/worker-note.md（append）" };
+        },
+      },
+    };
+  }
+
+  async function run(args: Record<string, unknown>): Promise<{
+    out: Awaited<ReturnType<typeof runSessionEndDistill>>;
+    calls: Record<string, unknown>[];
+    results: AgentEvent[];
+  }> {
+    const cap = capture();
+    const emitted: AgentEvent[] = [];
+    const out = await runSessionEndDistill({
+      enabled: true,
+      logPath: await log(),
+      workspace: "/tmp",
+      provider: scripted(args),
+      rememberTool: cap.tool,
+      emit: async (e) => { emitted.push(e); },
+    });
+    return { out, calls: cap.calls, results: emitted.filter((e) => e.type === "tool_result") };
+  }
+
+  it("显式 op=replace 缺 old_content ⇒ 按 append 执行，并写明降级（不再落「调用失败」）", async () => {
+    const { out, calls, results } = await run({
+      scope: "project", kind: "memory", type: "feedback", topic: "worker-note", op: "replace", content: "修正后的内容",
+    });
+    expect(calls).toEqual([{
+      scope: "project", kind: "memory", type: "feedback", topic: "worker-note", op: "append", content: "修正后的内容",
+    }]);
+    expect(out).toMatchObject({ kind: "saved", writes: 1 });
+    expect(results[0]).toMatchObject({ ok: true, gate: { layer: "X-distill", verdict: "auto-approved" } });
+    const note = String((results[0] as { output?: string }).output);
+    expect(note).toContain("已按 append");
+    // 能力断言的证人（probe-promise-recall）：这句解释为什么沉淀轮不能 replace。
+    expect(note).toContain("沉淀轮读不到主题正文");
+  });
+
+  it("architecture/preference 的缺省 op 是 replace：缺 old_content 时同样降级", async () => {
+    const { calls } = await run({ scope: "project", kind: "preference", content: "以后用中文" });
+    expect(calls[0]?.op).toBe("append");
+  });
+
+  it("replace 带了 old_content ⇒ 原样执行，不误降级", async () => {
+    const { calls } = await run({
+      scope: "project", kind: "memory", type: "feedback", topic: "t", op: "replace", old_content: "旧正文", content: "新正文",
+    });
+    expect(calls[0]?.op).toBe("replace");
+    expect(calls[0]?.old_content).toBe("旧正文");
+  });
+
+  it("decision 是追加式日志：replace 连 old_content 都不改变降级结果", async () => {
+    const { calls } = await run({
+      scope: "project", kind: "decision", op: "replace", old_content: "旧决策", content: "新决策",
+    });
+    expect(calls[0]?.op).toBe("append");
+  });
+
+  it("指令明确告诉模型沉淀轮只追加", () => {
+    expect(DISTILL_INSTRUCTION).toContain("op=append");
+    expect(DISTILL_INSTRUCTION).toContain("old_content");
+  });
+});

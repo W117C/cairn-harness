@@ -31,6 +31,7 @@ async function main() {
     width: 1440, height: 900, show: false,
     webPreferences: {
       backgroundThrottling: false,
+      offscreen: true,
       preload: join(__dirname, "ui-gallery-preload.cjs"),
       additionalArguments: ["--cairn-api-members=" + JSON.stringify(members), "--cairn-protocol-version=" + version],
     },
@@ -55,7 +56,7 @@ async function main() {
     return true;
   };
 
-  await win.loadFile(join(__dirname, "../dist/index.html"));
+  await win.loadFile(process.env.CAIRN_RENDERER_ENTRY ?? join(__dirname, "../dist/index.html"));
   await pause(1400);
   await win.webContents.focus();
   win.webContents.sendInputEvent({ type: "keyDown", keyCode: ",", modifiers: ["meta"] });
@@ -79,6 +80,7 @@ async function main() {
       };
     })()`);
     results.push({ label, clicked, ...state });
+    writeFileSync(join(out, `section-${String(results.length).padStart(2, "0")}.png`), (await win.webContents.capturePage()).toPNG());
   }
   const broken = results.filter((r) => !r.clicked || r.boundary || r.renderError || r.textLen === 0);
   check("每个分区都能点开、正文非空、无渲染错误边界", broken.length === 0, broken);

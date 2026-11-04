@@ -9,6 +9,7 @@ import { STR } from "../strings";
 
 /** 权限档词表：label 短词（触发器与条目共用）、desc 一句人话说明、warn = 危险档标记。 */
 import { MODE_LABEL } from "../permission-labels";
+import { selectablePermissionMode, SELECTABLE_PERMISSION_MODES } from "../../../../../src/permissions/modes";
 export { MODE_LABEL } from "../permission-labels";
 
 /** 档位色点（P2-2 · brief 三节：只读=灰绿 / 默认=蓝灰 / 引导=黄 / 自动=红）。
@@ -30,7 +31,8 @@ const MODE_ICON: Record<PermissionMode, typeof Shield> = {
   "full-access": LockOpen, // 全解锁：本档没有审批卡（区别于自动档的 ShieldAlert）
 };
 
-const MODE_ORDER: readonly PermissionMode[] = ["read-only", "default", "guided", "auto", "full-access"];
+// 2026-11-03：选择面只列四档（引导并入智能审批）；顺序取核心事实源，不在这里再抄一份。
+const MODE_ORDER: readonly PermissionMode[] = SELECTABLE_PERMISSION_MODES;
 
 /** 色点展示件（触发器与菜单条目共用同一枚，几何/色值分主题由 tokens 定）。 */
 export function ModeDot(props: { mode: PermissionMode }): React.JSX.Element {
@@ -100,7 +102,7 @@ export function PermissionMenu(props: {
               </span>
               <span className="perm-desc">{info.desc}</span>
             </span>
-            {m === props.mode && <span className="check">✓</span>}
+            {m === selectablePermissionMode(props.mode) && <span className="check">✓</span>}
           </button>
         );
       })}

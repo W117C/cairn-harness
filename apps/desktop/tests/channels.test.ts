@@ -68,7 +68,8 @@ describe("通道名表完整性", () => {
     // v33：＋reportViewing（窗口在看哪个会话：完成通知的「不在看」判据）⇒ 124。
     // v34：＋doctor（桌面「运行诊断」：复用 CLI 检查核）⇒ 125。
     // v35：＋sessionPrefsSet（会话级模型/思考档持久化）⇒ 126。
-    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(139);
+    // v52：＋lspStatus（读 LSP 状态）⇒ 140。
+    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(140);
     const keys = Object.keys(INVOKE_CHANNELS) as (keyof typeof INVOKE_CHANNELS)[];
     expect(keys.length).toBeGreaterThan(0);
     for (const key of keys) expect(INVOKE_CHANNELS[key]).toBeTruthy();
@@ -293,6 +294,10 @@ describe("通道名表完整性", () => {
       "worktreeClean",
       // 2026-10-23（第 698 页）：worker 改动预览——diff_ref 只认 .agents/wt-*@hex。
       "worktreeDiff",
+      // v52：读 LSP 状态（第 996 页那份跨进程可读的运行态进桌面）。必须接真而不是白名单：
+      // 它是一屏只读事实（配了几台 / 实测支持什么 / 授权态），落进 fail-loud 就等于
+      // 用户一直在被审批卡问 lsp，却没有任何地方看得见 lsp。
+      "lspStatus",
     ];
     // ④ fail-loud 白名单（带理由的未接）：B3 修复后为空——39 条全部接真。要留白须在此
     //    逐条列名并注记理由，且 index.ts 的 UNWIRED_FAIL_LOUD 同步加键（下方断言钉死两者一致）。

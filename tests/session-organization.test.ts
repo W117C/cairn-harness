@@ -278,6 +278,21 @@ describe("CX-01 session/project organization handlers", () => {
     expect((await store().get()).currentSession).toBeNull();
   });
 
+  it("preserves legacy records and selection while a same-id session remains in another workspace", async () => {
+    const { id } = await handleSessionCreate("shared-id");
+    await handleSessionOpen(id);
+    await handleSessionSetPinned(id, true);
+    const otherRoot = join(root, "other", ".agent", "sessions");
+    await createSession(otherRoot, id);
+    await createSession(otherRoot, "next");
+
+    await expect(handleSessionDelete(id, otherRoot, [sessionsDir])).resolves.toEqual({ currentSession: "next" });
+    expect(await exists(pathOf(otherRoot, id))).toBe(false);
+    expect(await exists(pathOf(sessionsDir, id))).toBe(true);
+    expect(await requireSessionMetadata().find(id)).toMatchObject({ pinned: true });
+    expect((await store().get()).currentSession).toBe(id);
+  });
+
   it("restores the JSONL when metadata cleanup fails, so a corrupt sidecar cannot masquerade as a successful hard delete", async () => {
     await mkdir(sessionsDir, { recursive: true });
     await mkdir(metadataPath, { recursive: true });

@@ -18,6 +18,10 @@ import type { ChangeDiffPayload } from "../../../../../src/main/change-diff";
 import { eventRefKey, type EventRef } from "../../../../../src/events/session-ref";
 import { anchorKeyOf, type AnchoredEvent } from "../state/session-identity";
 import { TOOL_VERBS, toolVerb } from "../derived/tool-verbs";
+import { toolFailureReasonOf, toolFailureSummary } from "../derived/tool-failure";
+import { finalAnswerIndex, summarizeProcess } from "../derived/process-fold";
+import { ProcessFold } from "./ProcessFold";
+import { STR } from "../strings";
 import { Markdown } from "../markdown";
 import { relativeTime,type StreamRow } from "../projections";
 import { userMessageCopy } from "../transcript";
@@ -101,7 +105,7 @@ export function toolStatusOf(row: { pending?: boolean; interrupted?: boolean; ok
 /** 工具状态：未返回结果与失败分开，停转后不继续转圈或暗示成功。 */
 function ToolGlyph(props: { pending?: boolean; interrupted?: boolean; ok?: boolean }) {
   if (props.interrupted) return <span className="glyph interrupted" aria-label="未收到结果"><CircleDashed size={12} /></span>;
-  if (props.pending) return <span className="glyph pending" aria-label="执行中"><Loader2 size={12} /></span>;
+  if (props.pending) return <span className="glyph pending" aria-label="执行中"><CairnLoader /></span>;
   if (props.ok === false) return <span className="glyph failed" aria-label="失败"><AlertTriangle size={12} /></span>;
   if (props.ok !== true) return <span className="glyph unknown" aria-label="状态未知"><CircleDashed size={12} /></span>;
   return <span className="glyph ok" aria-label="完成"><Check size={12} /></span>;
@@ -244,6 +248,19 @@ function ToolCluster(props: { rows: Extract<StreamRow, { kind: "tool" }>[]; view
   const unknown = props.rows.filter((r) => toolStatusOf(r) === "unknown");
   const latest = pending.at(-1);
   const failure = failures.at(-1);
+  // 单次调用不再说「1 次工具调用」——那句话把真正有用的工具名/对象挤到省略号后面
+  // （2026-11-03 业主截图：一行只剩「1 次工具调用 执行中」）。一次调用直接用人话动词+对象当标题。
+  const single = props.rows.length === 1 && failures.length === 0 ? props.rows[0] : null;
+  const singleLabel = single === null
+    ? null
+    : `${toolVerb(single.tool) ?? single.tool}${single.summary.trim() === "" ? "" : " " + single.summary}`;
+  // 收起态的失败摘要 = **一行人话**（"web_fetch 未执行 · 审批等待超时"），不是机器面原文
+  // （2026-11-01 真机缺陷 1：原文是写给模型读的解释面，用户读不懂）。原文不丢：
+  // 展开体里仍是 <pre> 全文，收起态悬停（title）也能看到截断版。
+  const failureSummary = failure !== undefined ? toolFailureSummary(failure, STR.toolGroup) : "";
+  const failureTitle = failure !== undefined && failure.output !== undefined && failure.output !== ""
+    ? STR.toolGroup.failureDetailTip.replace("{raw}", truncateSummary(failure.output, 400))
+    : undefined;
   // 组总耗时（2026-10-31 · 业主「工具执行太丑」）：收起态给一个总时长，
   // 用户不必展开 3 行去心算。只累加两端都可信的调用（与单行 tDur 同一判据），不补零。
   const totalMs = props.rows.reduce((sum, r) => {
@@ -251,6 +268,8 @@ function ToolCluster(props: { rows: Extract<StreamRow, { kind: "tool" }>[]; view
     if (!Number.isFinite(r.ts) || !Number.isFinite(r.then) || r.then < r.ts) return sum;
     return sum + (r.then - r.ts);
   }, 0);
+  // 单次失败且认不出原因 ⇒ 摘要只是「{tool} 调用失败」：直接当标题，不再在下面复述第二遍。
+  const failureAsLabel = props.rows.length === 1 && failure !== undefined && toolFailureReasonOf(failure) === "generic";
   let groupOk: boolean | undefined;
   if (failures.length > 0) groupOk = false;
   else if (unknown.length === 0) groupOk = true;
@@ -261,16 +280,22 @@ function ToolCluster(props: { rows: Extract<StreamRow, { kind: "tool" }>[]; view
           <span className="tool-group-main">
             <ChevronRight className="chev" size={12} aria-hidden="true" />
             <ToolGlyph pending={latest !== undefined} interrupted={latest === undefined && interrupted.length > 0} ok={groupOk} />
-            <span className="tool-group-label">{props.rows.length} 次工具调用</span>
-            {latest !== undefined && <span className="tool-group-detail">执行中 · {toolVerb(latest.tool) ?? latest.tool} {latest.summary}</span>}
+            {/* 失败数与总数合成一句：此前「1 次工具调用 | 1 次失败」并排，读成两件事。 */}
+            <span className="tool-group-label" {...(failureAsLabel && failureTitle !== undefined ? { title: failureTitle } : {})}>
+              {failureAsLabel ? failureSummary : singleLabel ?? (failures.length > 0
+                ? (props.rows.length === failures.length
+                  ? `${String(failures.length)} 次工具失败`
+                  : `${String(failures.length)} 次工具失败（共 ${String(props.rows.length)} 次）`)
+                : `${String(props.rows.length)} 次工具调用`)}
+            </span>
+            {latest !== undefined && <span className="tool-group-detail">{singleLabel === null ? `执行中 · ${toolVerb(latest.tool) ?? latest.tool} ${latest.summary}` : "执行中"}</span>}
             {interrupted.length > 0 && <span className="tool-group-detail">{interrupted.length} 次未收到结果</span>}
             {unknown.length > 0 && <span className="tool-group-detail">{unknown.length} 次状态未知</span>}
-            {failures.length > 0 && <span className="tool-group-failure-count">{failures.length} 次失败</span>}
             {totalMs > 0 && <span className="tool-group-duration">{formatDuration(totalMs)}</span>}
           </span>
-          {failures.length > 0 && !open && failure?.output ? (
-            <span className="tool-group-failure">
-              <span className="tool-group-failure-detail">{truncateSummary(failure.output, 240)}</span>
+          {failures.length > 0 && !open && failure !== undefined && !failureAsLabel ? (
+            <span className="tool-group-failure" {...(failureTitle !== undefined ? { title: failureTitle } : {})}>
+              <span className="tool-group-failure-detail">{failureSummary}</span>
             </span>
           ) : null}
         </button>
@@ -658,8 +683,20 @@ export const Stream = memo(function Stream(props: {
     return null;
   })();
 
+  // 思考行节点（过程带的一部分；最终答复自己的思考行也会被折进过程带，故抽成一处）。
+  const thinkingNode = (r: Extract<StreamRow, { kind: "assistant" }>): React.ReactNode => (
+    <ThinkingLive
+      seq={r.seq}
+      thinking={r.thinking}
+      running={streaming && r.live === true && r.text === ""}
+      {...(view !== undefined ? { view } : {})}
+      {...(actions?.onCopyText !== undefined ? { onCopyText: actions.onCopyText } : {})}
+    />
+  );
+
   // 一组行 → 节点（与旧逐行循环同构：连续 tool 行收进同一簇；其余行打断簇）。
-  const renderGroup = (rows: readonly StreamRow[], canFold: boolean): Array<{ key: string; node: React.ReactNode }> => {
+  // skipThinkingSeq：那一行的思考行**不**在这里画（由过程带折叠接手，见 renderGroup）。
+  const renderRows = (rows: readonly StreamRow[], canFold: boolean, skipThinkingSeq?: number): Array<{ key: string; node: React.ReactNode }> => {
     const out: Array<{ key: string; node: React.ReactNode }> = [];
     let cluster: Extract<StreamRow, { kind: "tool" }>[] = [];
     const flush = () => {
@@ -695,18 +732,10 @@ export const Stream = memo(function Stream(props: {
         case "assistant": {
           flush();
           // live 行前挂一条思考行（有思考正文就渲染；正文来自 thinking_delta 桶）。
-          if (r.live || (r.thinking !== undefined && r.thinking !== "")) {
+          if (skipThinkingSeq !== r.seq && (r.live || (r.thinking !== undefined && r.thinking !== ""))) {
             out.push({
               key: `t${r.seq}`,
-              node: (
-                <ThinkingLive
-                  seq={r.seq}
-                  thinking={r.thinking}
-                  running={streaming && r.live === true && r.text === ""}
-                  {...(view !== undefined ? { view } : {})}
-                  {...(actions?.onCopyText !== undefined ? { onCopyText: actions.onCopyText } : {})}
-                />
-              ),
+              node: thinkingNode(r),
             });
           }
           // thinking-only 行（只想过没说，2026-10-24）：只画思考折叠行，不画空气泡。
@@ -754,8 +783,48 @@ export const Stream = memo(function Stream(props: {
     return out;
   };
 
+  /** 一组（轮）行 → 节点。**过程带折叠**（2026-11-02 业主截图）在这里发生：
+   *  这一轮的最终答复落地后，答复之前的一切（思考记录 / 工具调用 / 过程旁白）收成一行。
+   *  收拢只在这一轮**已经收束**时做（后面没有新一轮，或本会话已停转）——模型还在写的时候，
+   *  过程正在发生，不该被藏；也不在 thinking/verbose 档折（那两档的用途就是把过程摊开看）。 */
+  const renderGroup = (rows: readonly StreamRow[], canFold: boolean, closed: boolean): Array<{ key: string; node: React.ReactNode }> => {
+    const finalAt = view === "normal" && closed ? finalAnswerIndex(rows) : -1;
+    if (finalAt > 0) {
+      // 用户消息留在带外（用户说过的话不许被折进去）；折的是「用户问」之后、「最终答复」之前那几行。
+      const startAt = rows[0]?.kind === "user" ? 1 : 0;
+      const head = rows.slice(startAt, finalAt);
+      const finalRow = rows[finalAt]!;
+      // 过程带里只许有**过程行**（思考 / 工具 / 旁白）。用户自己说的话（轮中插话）与
+      // 错误行不折——用户说过的话不许在转录里消失，错误行也不该被藏进折叠体。
+      const foldable = head.every((r) => r.kind !== "user" && r.kind !== "error");
+      // 摘要连**最终答复自己的思考**一起数：那段思考是「答之前」的思考，不该单独占一行。
+      const summary = summarizeProcess(finalRow.kind === "assistant" ? [...head, finalRow] : head);
+      if (foldable && (summary.tools > 0 || summary.thinks > 0)) {
+        const headNodes = renderRows(head, canFold);
+        const finalThinking = finalRow.kind === "assistant" && finalRow.thinking !== undefined && finalRow.thinking !== ""
+          ? { key: `t${finalRow.seq}`, node: thinkingNode(finalRow) }
+          : null;
+        const bodyNodes = finalThinking === null ? headNodes : [...headNodes, finalThinking];
+        return [
+          ...renderRows(rows.slice(0, startAt), canFold),
+          {
+            key: `pf${keyOf("g", rows[0]!.seq)}`,
+            node: (
+              <ProcessFold summary={summary}>
+                {bodyNodes.map((n) => <Fragment key={n.key}>{n.node}</Fragment>)}
+              </ProcessFold>
+            ),
+          },
+          ...renderRows(rows.slice(finalAt), canFold, finalRow.kind === "assistant" ? finalRow.seq : undefined),
+        ];
+      }
+    }
+    return renderRows(rows, canFold);
+  };
+
   const out: Array<{ key: string; node: React.ReactNode }> = [];
-  for (const g of groups) {
+  const lastGroupIdx = groups.length - 1;
+  for (const [gi, g] of groups.entries()) {
     if (g.round !== null && folded?.has(g.round) === true) {
       const round = g.round;
       const u = g.rows[0];
@@ -781,7 +850,7 @@ export const Stream = memo(function Stream(props: {
       });
       continue;
     }
-    out.push(...renderGroup(g.rows, g.round !== null && canFoldRound(g.round, lastRound, streaming)));
+    out.push(...renderGroup(g.rows, g.round !== null && canFoldRound(g.round, lastRound, streaming), gi < lastGroupIdx || !streaming));
   }
   // 行数组经 Fragment 带上 key（out 条目本就持有稳定键；此前裸 map 丢键会刷 dev 警告）。
   // 生成中顶栏细进度条（P3-1）：sticky 贴顶不随滚动，running 态跑马灯（styles.css），

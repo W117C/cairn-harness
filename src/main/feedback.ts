@@ -11,6 +11,7 @@ import { dirname } from "node:path";
 import { writeFileAtomic } from "../atomic-write";
 import { eventRefKey, isEventRef } from "../events/session-ref";
 import type { EventRef } from "../events";
+import { isSessionId } from "./session-id";
 
 export type FeedbackRating = "up" | "down" | "none";
 
@@ -39,19 +40,7 @@ export interface ResolvedFeedback {
   eventRef?: EventRef;
 }
 
-const MAX_SESSION_ID_LENGTH = 80;
 const MAX_NOTE_LENGTH = 500;
-
-function isSessionId(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= MAX_SESSION_ID_LENGTH &&
-    value.trim() === value &&
-    !value.startsWith(".") &&
-    !/[\\/\u0000-\u001f\u007f]/.test(value)
-  );
-}
 
 function assertRating(value: unknown): asserts value is FeedbackRating {
   if (value !== "up" && value !== "down" && value !== "none") {

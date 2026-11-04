@@ -28,7 +28,7 @@ describe("memoryExportMarkdown", () => {
   });
 
   it("页面按钮真的走 exportMemory，不是只摆一个 chip", () => {
-    const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/AppPage.tsx", import.meta.url)), "utf8");
+    const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/MemoryPane.tsx", import.meta.url)), "utf8");
     expect(src).toContain("window.agent.exportMemory(memoryExportMarkdown(memory), \"cairn-memory.md\")");
     expect(src).toContain('导出记忆…');
   });

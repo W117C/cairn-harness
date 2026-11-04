@@ -11,7 +11,7 @@ const app = readAppSurface();
 describe("/compact 命令", () => {
   it("斜杠命令被拦截为 compact 调用，而不是发消息", () => {
     expect(app).toContain('text.trim() === "/compact"');
-    expect(app).toContain("void compact(sid).then((r) => {");
+    expect(app).toContain("void compact(sid, activeWorkspaceRef.current ?? undefined).then((r) => {");
   });
 
   it("协议与 wired 表把活动会话 id 传给主进程（不再落到 lastLogPath）", () => {

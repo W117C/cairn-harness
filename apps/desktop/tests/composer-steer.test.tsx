@@ -44,6 +44,7 @@ describe("运行中：插话与排队的两个入口不混", () => {
       activeId: "s1",
       providerInfo: null,
       pickerValue: null,
+      events: [],
       usage: { inputTokens: 0, outputTokens: 0, usageCount: 0, cacheReadTokens: 0, lastInputTokens: 0 },
       phaseLabel: "执行工具",
       phase: "tool" as const,

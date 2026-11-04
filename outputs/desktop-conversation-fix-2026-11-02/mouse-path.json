@@ -1,0 +1,441 @@
+{
+  "scenario": "card",
+  "fixtureArgs": [
+    "--cairn-audit-tail-fixture"
+  ],
+  "geometry": {
+    "card": {
+      "top": 622.09,
+      "bottom": 687.88,
+      "left": 523.5,
+      "right": 1189.5,
+      "w": 666,
+      "h": 65.79
+    },
+    "head": {
+      "top": 623.09,
+      "bottom": 686.88,
+      "left": 524.5,
+      "right": 1188.5,
+      "w": 664,
+      "h": 63.79
+    },
+    "footer": {
+      "top": 598.09,
+      "bottom": 628.09,
+      "left": 517.5,
+      "right": 1189.5,
+      "w": 672,
+      "h": 30
+    },
+    "row": {
+      "top": 149.09,
+      "bottom": 598.09,
+      "left": 495.5,
+      "right": 1189.5,
+      "w": 694,
+      "h": 449
+    },
+    "button": {
+      "top": 598.09,
+      "bottom": 628.09,
+      "left": 517.5,
+      "right": 547.5,
+      "w": 30,
+      "h": 30
+    },
+    "overlap_footerBottom_minus_cardTop": 6,
+    "overlap_footerBottom_minus_rowBottom": 30,
+    "buttonLabel": "复制这行输出",
+    "cardExpanded": "false",
+    "scrollTop": 65
+  },
+  "baselineParked": {
+    "rowHover": false,
+    "hoverCount": 0,
+    "footerPe": "none",
+    "actionsPe": "none",
+    "actionsOpacity": "0",
+    "buttonPe": "none",
+    "underPointer": "会话列表",
+    "underOwner": "sidenav",
+    "focused": null
+  },
+  "slideIntoRow": [
+    {
+      "step": 0,
+      "x": 150,
+      "y": 420,
+      "rowHover": false,
+      "hoverCount": 0,
+      "footerPe": "none",
+      "actionsPe": "none",
+      "actionsOpacity": "0",
+      "buttonPe": "none",
+      "underPointer": "会话列表",
+      "underOwner": "sidenav",
+      "focused": null
+    },
+    {
+      "step": 1,
+      "x": 231,
+      "y": 368,
+      "rowHover": false,
+      "hoverCount": 0,
+      "footerPe": "none",
+      "actionsPe": "none",
+      "actionsOpacity": "0",
+      "buttonPe": "none",
+      "underPointer": "会话列表",
+      "underOwner": "sidenav",
+      "focused": null
+    },
+    {
+      "step": 2,
+      "x": 311,
+      "y": 316,
+      "rowHover": false,
+      "hoverCount": 0,
+      "footerPe": "none",
+      "actionsPe": "none",
+      "actionsOpacity": "0",
+      "buttonPe": "none",
+      "underPointer": "stream",
+      "underOwner": "stream",
+      "focused": null
+    },
+    {
+      "step": 3,
+      "x": 392,
+      "y": 263,
+      "rowHover": false,
+      "hoverCount": 0,
+      "footerPe": "none",
+      "actionsPe": "none",
+      "actionsOpacity": "0",
+      "buttonPe": "none",
+      "underPointer": "stream",
+      "underOwner": "stream",
+      "focused": null
+    },
+    {
+      "step": 4,
+      "x": 473,
+      "y": 211,
+      "rowHover": false,
+      "hoverCount": 0,
+      "footerPe": "none",
+      "actionsPe": "none",
+      "actionsOpacity": "0",
+      "buttonPe": "none",
+      "underPointer": "reading",
+      "underOwner": "reading",
+      "focused": null
+    },
+    {
+      "step": 5,
+      "x": 554,
+      "y": 159,
+      "rowHover": true,
+      "hoverCount": 1,
+      "footerPe": "auto",
+      "actionsPe": "auto",
+      "actionsOpacity": "0.412046",
+      "buttonPe": "auto",
+      "underPointer": "md-h md-h2",
+      "underOwner": "row.assistant",
+      "focused": null
+    }
+  ],
+  "slideRowToBar": [
+    {
+      "step": 0,
+      "x": 554,
+      "y": 159,
+      "rowHover": true,
+      "hoverCount": 1,
+      "footerPe": "auto",
+      "actionsPe": "auto",
+      "actionsOpacity": "1",
+      "buttonPe": "auto",
+      "underPointer": "md-h md-h2",
+      "underOwner": "row.assistant",
+      "focused": null
+    },
+    {
+      "step": 1,
+      "x": 549,
+      "y": 250,
+      "rowHover": true,
+      "hoverCount": 1,
+      "footerPe": "auto",
+      "actionsPe": "auto",
+      "actionsOpacity": "1",
+      "buttonPe": "auto",
+      "underPointer": "LI",
+      "underOwner": "row.assistant",
+      "focused": null
+    },
+    {
+      "step": 2,
+      "x": 545,
+      "y": 341,
+      "rowHover": true,
+      "hoverCount": 1,
+      "footerPe": "auto",
+      "actionsPe": "auto",
+      "actionsOpacity": "1",
+      "buttonPe": "auto",
+      "underPointer": "lang",
+      "underOwner": "row.assistant",
+      "focused": null
+    },
+    {
+      "step": 3,
+      "x": 541,
+      "y": 431,
+      "rowHover": true,
+      "hoverCount": 1,
+      "footerPe": "auto",
+      "actionsPe": "auto",
+      "actionsOpacity": "1",
+      "buttonPe": "auto",
+      "underPointer": "CODE",
+      "underOwner": "row.assistant",
+      "focused": null
+    },
+    {
+      "step": 4,
+      "x": 537,
+      "y": 522,
+      "rowHover": true,
+      "hoverCount": 1,
+      "footerPe": "auto",
+      "actionsPe": "auto",
+      "actionsOpacity": "1",
+      "buttonPe": "auto",
+      "underPointer": "TD",
+      "underOwner": "row.assistant",
+      "focused": null
+    },
+    {
+      "step": 5,
+      "x": 533,
+      "y": 613,
+      "rowHover": true,
+      "hoverCount": 1,
+      "footerPe": "auto",
+      "actionsPe": "auto",
+      "actionsOpacity": "1",
+      "buttonPe": "auto",
+      "underPointer": "[object SVGAnimatedString]",
+      "underOwner": "assistant-footer",
+      "focused": null
+    }
+  ],
+  "geometryAtBar": {
+    "button": {
+      "top": 598.09,
+      "bottom": 628.09,
+      "left": 517.5,
+      "right": 547.5,
+      "w": 30,
+      "h": 30
+    },
+    "footer": {
+      "top": 598.09,
+      "bottom": 628.09,
+      "left": 517.5,
+      "right": 1189.5,
+      "w": 672,
+      "h": 30
+    },
+    "card": {
+      "top": 622.09,
+      "bottom": 687.88,
+      "left": 523.5,
+      "right": 1189.5,
+      "w": 666,
+      "h": 65.79
+    }
+  },
+  "clickOnBar": {
+    "intended": {
+      "x": 532.5,
+      "y": 613.09
+    },
+    "clicks": [
+      {
+        "x": 533,
+        "y": 613,
+        "label": "复制这行输出",
+        "inRowAction": true,
+        "inFooter": true,
+        "inCard": false,
+        "inToolcluster": false,
+        "chain": [
+          "[object SVGAnimatedString]",
+          "row-action",
+          "row-actions",
+          "assistant-footer",
+          "row assistant",
+          "reading"
+        ]
+      }
+    ],
+    "after": {
+      "rowHover": true,
+      "hoverCount": 1,
+      "footerPe": "auto",
+      "actionsPe": "auto",
+      "actionsOpacity": "1",
+      "buttonPe": "auto",
+      "underPointer": "md-body",
+      "underOwner": "row.assistant",
+      "focused": "复制这行输出"
+    }
+  },
+  "boundary_fromCardToBar": {
+    "from": {
+      "x": 584.5,
+      "y": 676.19
+    },
+    "to": {
+      "x": 532.5,
+      "y": 653.19
+    },
+    "trace": [
+      {
+        "step": 0,
+        "x": 585,
+        "y": 676,
+        "rowHover": false,
+        "hoverCount": 0,
+        "footerPe": "auto",
+        "actionsPe": "auto",
+        "actionsOpacity": "1",
+        "buttonPe": "auto",
+        "underPointer": "cf-t",
+        "underOwner": "changes-card",
+        "focused": "复制这行输出"
+      },
+      {
+        "step": 1,
+        "x": 576,
+        "y": 672,
+        "rowHover": false,
+        "hoverCount": 0,
+        "footerPe": "auto",
+        "actionsPe": "auto",
+        "actionsOpacity": "1",
+        "buttonPe": "auto",
+        "underPointer": "展开改动详情",
+        "underOwner": "changes-card",
+        "focused": "复制这行输出"
+      },
+      {
+        "step": 2,
+        "x": 567,
+        "y": 669,
+        "rowHover": false,
+        "hoverCount": 0,
+        "footerPe": "auto",
+        "actionsPe": "auto",
+        "actionsOpacity": "1",
+        "buttonPe": "auto",
+        "underPointer": "展开改动详情",
+        "underOwner": "changes-card",
+        "focused": "复制这行输出"
+      },
+      {
+        "step": 3,
+        "x": 559,
+        "y": 665,
+        "rowHover": true,
+        "hoverCount": 1,
+        "footerPe": "auto",
+        "actionsPe": "auto",
+        "actionsOpacity": "1",
+        "buttonPe": "auto",
+        "underPointer": "置顶这条输出",
+        "underOwner": "assistant-footer",
+        "focused": "复制这行输出"
+      },
+      {
+        "step": 4,
+        "x": 550,
+        "y": 661,
+        "rowHover": true,
+        "hoverCount": 1,
+        "footerPe": "auto",
+        "actionsPe": "auto",
+        "actionsOpacity": "1",
+        "buttonPe": "auto",
+        "underPointer": "row-actions",
+        "underOwner": "assistant-footer",
+        "focused": "复制这行输出"
+      },
+      {
+        "step": 5,
+        "x": 541,
+        "y": 657,
+        "rowHover": true,
+        "hoverCount": 1,
+        "footerPe": "auto",
+        "actionsPe": "auto",
+        "actionsOpacity": "1",
+        "buttonPe": "auto",
+        "underPointer": "复制这行输出",
+        "underOwner": "assistant-footer",
+        "focused": "复制这行输出"
+      },
+      {
+        "step": 6,
+        "x": 533,
+        "y": 653,
+        "rowHover": true,
+        "hoverCount": 1,
+        "footerPe": "auto",
+        "actionsPe": "auto",
+        "actionsOpacity": "1",
+        "buttonPe": "auto",
+        "underPointer": "[object SVGAnimatedString]",
+        "underOwner": "assistant-footer",
+        "focused": "复制这行输出"
+      }
+    ]
+  },
+  "boundary_clickAtBar": {
+    "clicks": [
+      {
+        "x": 533,
+        "y": 653,
+        "label": "复制这行输出",
+        "inRowAction": true,
+        "inFooter": true,
+        "inCard": false,
+        "inToolcluster": false,
+        "chain": [
+          "[object SVGAnimatedString]",
+          "row-action",
+          "row-actions",
+          "assistant-footer",
+          "row assistant",
+          "reading"
+        ]
+      }
+    ],
+    "after": {
+      "rowHover": true,
+      "hoverCount": 1,
+      "footerPe": "auto",
+      "actionsPe": "auto",
+      "actionsOpacity": "1",
+      "buttonPe": "auto",
+      "underPointer": "[object SVGAnimatedString]",
+      "underOwner": "assistant-footer",
+      "focused": "复制这行输出"
+    }
+  },
+  "errors": []
+}

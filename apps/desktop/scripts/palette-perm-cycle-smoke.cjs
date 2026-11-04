@@ -1,12 +1,13 @@
 // 命令面板「切换权限档」的真实 renderer 冒烟（2026-10-30，第 784 页）。
 //
 // 第 782 页把循环的**顺序**收回到核心档位表（`nextPermissionMode`），但那一批的边界写明：
-// 「命令面板点选这一动作未单独真机冒烟」。这里补上：真实 ⌘K → 输入 → ⏎ 五次，
+// 「命令面板点选这一动作未单独真机冒烟」。这里补上：真实 ⌘K → 输入 → ⏎ 四步走完一轮
+// （2026-11-03 起选择面四档：只读/需要审批/智能审批/完全允许；引导并入智能审批），
 // 判三面——
 //   1. setSettings 的补丁序列（应答侧真值，不是看源码）；
 //   2. 输入框旁权限 chip 的可见文案（用户看到的那一格）；
 //   3. 提示条回执（动作有没有被确认给用户）。
-// 分辨力：旧的四档循环会让 auto 直接跳回 read-only ⇒ 本脚本第 2 次动作必红。
+// 分辨力：任何一档漏进循环（如旧文档里的第五档 guided）⇒ 步数或档名当场对不上。
 //
 // 前置：pnpm --filter cairn-desktop build
 // 运行：env -u ELECTRON_RUN_AS_NODE pnpm --filter cairn-desktop exec electron scripts/palette-perm-cycle-smoke.cjs [输出目录]
@@ -112,15 +113,14 @@ async function main() {
 
   check("首屏是空态（提示条与权限 chip 都在这一屏）", await js(`!!document.querySelector('.composer-card .mode-dot')`), null);
   const initial = await chipText();
-  check("初始档来自设置（guided ⇒「引导」）", initial === "引导", initial);
+  check("初始档来自设置（default ⇒「需要审批」）", initial === "需要审批", initial);
 
-  // 五次动作：guided → auto → full-access → read-only → default → guided。
+  // 四次动作走完选择面一轮：default → auto → full-access → read-only → default。
   const EXPECTED = [
-    { mode: "auto", label: "自动", call: 1 },
-    { mode: "full-access", label: "完全允许", call: 2 }, // 旧四档循环在这一步落 read-only
+    { mode: "auto", label: "智能审批", call: 1 },
+    { mode: "full-access", label: "完全允许", call: 2 },
     { mode: "read-only", label: "只读", call: 3 },
-    { mode: "default", label: "默认", call: 4 },
-    { mode: "guided", label: "引导", call: 5 },
+    { mode: "default", label: "需要审批", call: 4 },
   ];
   let step = 0;
   for (const expected of EXPECTED) {
@@ -145,17 +145,17 @@ async function main() {
       notice,
     );
     if (expected.mode === "full-access") {
-      check("最松档的提示条带同一句风险说明（不是只报档名）", typeof notice === "string" && notice.includes("不再出任何审批卡"), notice);
+      check("最松档的提示条带同一句风险说明（不是只报档名）", typeof notice === "string" && notice.includes("什么都允许"), notice);
       await pause(250);
       writeFileSync(join(out, "01-full-access.png"), (await win.webContents.capturePage()).toPNG());
     }
   }
   const finalCalls = await modeCalls();
-  check("五次动作后补丁序列恰为五档一轮（没有多余写）", finalCalls.length === 5, finalCalls);
+  check("四次动作后补丁序列恰为四档一轮（没有多余写）", finalCalls.length === 4, finalCalls);
   check("回到起点：完整一轮后档位与初始一致", (await chipText()) === initial, await chipText());
 
-  // 设置页第五档（第 783 页的未验边界）：真开设置 → 真点「完全允许」单选项。
-  // 此前设置页只列四档：full-access 选不到，已存值全不选中。这里用真指针点，不用脚本 .click()。
+  // 设置页四档（2026-11-03 合并后的选择面）：真开设置 → 真点「完全允许」单选项。
+  // 这里用真指针点，不用脚本 .click()。
   const pointerOn = async (findExpr) => {
     const point = await js(`(() => {
       const el = ${findExpr};
@@ -178,9 +178,9 @@ async function main() {
   check("点到「权限与安全」分区", navClicked, null);
   await waitFor(() => js(`!!document.querySelector('.ss-opt-list[aria-label="权限档"]')`), "permission options");
   const radios = await js(`[...document.querySelectorAll('.ss-opt-list[aria-label="权限档"] .ss-opt')].map((el) => ({ title: el.querySelector('.ss-opt-title')?.textContent ?? '', checked: el.getAttribute('aria-checked'), danger: el.classList.contains('danger') }))`);
-  check("设置页列满五档（第五档不再缺席）", radios.length === 5 && radios.map((r) => r.title).join("|").includes("完全允许 · 不再出卡"), radios);
-  check("盘上档位 guided ⇒ 恰一枚选中在「引导」", radios.filter((r) => r.checked === "true").length === 1 && radios.find((r) => r.checked === "true")?.title?.startsWith("引导"), radios);
-  const fullRadioClicked = await pointerOn(`[...document.querySelectorAll('.ss-opt-list[aria-label="权限档"] .ss-opt')].find((el) => el.textContent.includes('完全允许 · 不再出卡'))`);
+  check("设置页列满四档（引导不再出现）", radios.length === 4 && radios.map((r) => r.title).join("|").includes("完全允许") && !radios.map((r) => r.title).join("|").includes("引导"), radios);
+  check("盘上档位 default ⇒ 恰一枚选中在「需要审批」", radios.filter((r) => r.checked === "true").length === 1 && radios.find((r) => r.checked === "true")?.title?.startsWith("需要审批"), radios);
+  const fullRadioClicked = await pointerOn(`[...document.querySelectorAll('.ss-opt-list[aria-label="权限档"] .ss-opt')].find((el) => el.textContent.includes('完全允许'))`);
   check("真指针点到「完全允许」单选项", fullRadioClicked, null);
   const settingsConfirm = await js(`!!document.querySelector('.confirm-card .cc-title')`);
   check("设置页危险档也先出确认闸", settingsConfirm, null);
@@ -192,7 +192,7 @@ async function main() {
   const afterClick = await js(`(() => {
     const list = document.querySelector('.ss-opt-list[aria-label="权限档"]');
     const opts = [...list.querySelectorAll('.ss-opt')];
-    const full = opts.find((el) => el.textContent.includes('完全允许 · 不再出卡'));
+    const full = opts.find((el) => el.textContent.includes('完全允许'));
     return {
       calls: window.__cairnSettingsCalls().filter((p) => typeof p.mode === 'string').slice(-1),
       checked: opts.filter((el) => el.getAttribute('aria-checked') === 'true').map((el) => el.querySelector('.ss-opt-title')?.textContent ?? ''),
@@ -201,17 +201,17 @@ async function main() {
     };
   })()`);
   check("点选后写入 mode=full-access", afterClick.calls.length === 1 && afterClick.calls[0].mode === "full-access", afterClick.calls);
-  check("点选后恰该档选中（不再出现「全不选中」）", afterClick.checked.length === 1 && afterClick.checked[0] === "完全允许 · 不再出卡", afterClick.checked);
+  check("点选后恰该档选中（不再出现「全不选中」）", afterClick.checked.length === 1 && afterClick.checked[0] === "完全允许", afterClick.checked);
   check("最松档在设置页带 danger 样式与「最松档」警示", afterClick.danger === true && afterClick.warn.includes("最松档"), afterClick);
   // 设置页 → 活状态：保存后 chip 必须跟着换档，并给出与档位菜单同口径的回执（「下一轮派活生效」）。
   const live = await js(`({ chip: document.querySelector('.composer-card .mode-dot')?.closest('button')?.innerText?.trim() ?? null, notice: document.querySelector('.notice-strip .msg')?.textContent ?? null })`);
   check("设置页保存后 composer chip 同步到「完全允许」", live.chip === "完全允许", live);
   check("设置页保存也给出权限档回执（—— 句式，与面板路径同口径）", typeof live.notice === "string" && live.notice.includes("权限档已切到「完全允许」——"), live.notice);
   writeFileSync(join(out, "02-settings-full-access.png"), (await win.webContents.capturePage()).toPNG());
-  await pointerOn(`[...document.querySelectorAll('.ss-opt-list[aria-label="权限档"] .ss-opt')].find((el) => el.textContent.includes('引导 · 按风险放行'))`);
+  await pointerOn(`[...document.querySelectorAll('.ss-opt-list[aria-label="权限档"] .ss-opt')].find((el) => el.textContent.includes('需要审批'))`);
   await pause(250);
   const restored = await js(`window.__cairnSettingsCalls().filter((p) => typeof p.mode === 'string').slice(-1)[0]?.mode ?? null`);
-  check("点回「引导」恢复测试前档位", restored === "guided", restored);
+  check("点回「需要审批」恢复测试前档位", restored === "default", restored);
 
   check("全程无渲染层控制台错误", errors.length === 0, errors);
 

@@ -30,14 +30,19 @@ describe("mod 侧栏", () => {
   it("Esc 优先关闭侧栏，且关闭时写回 localStorage", () => {
     const app = readAppSurface();
     expect(app).toContain("if (h.pluginSidebarOpen) { e.preventDefault(); h.closePluginSidebar(); return; }");
-    expect(app).toContain('localStorage.setItem("cairn.pluginSidebar", "0")');
+    // 2026-11-02 形状适配：关闭动作不再自己写盘，改由 `useChrome` 里一条 effect 统一按
+    // pluginSidebarOpen 写 "1"/"0"（state/chrome.ts:132，closePluginSidebar 只把状态置 false）。
+    // 本条钉的是「关掉要落盘、重启后不复活」，落盘位置从 close 处理器搬到真源那一条，
+    // 断言跟着搬；`localStorage.setItem("cairn.pluginSidebar", "0")` 那种内联写法已经不在了。
+    expect(app).toContain('localStorage.setItem("cairn.pluginSidebar", pluginSidebarOpen ? "1" : "0")');
+    expect(app).toContain("setPluginSidebarOpen(false)");
     expect(app).toContain('active.closest(".mod-sidebar")');
     expect(app).toContain("document.querySelector<HTMLElement>('[aria-label=\"工作台工具\"]')?.focus()");
   });
 
   it("命令行可「填入」到 Composer，不直接发送", () => {
     const app = readAppSurface();
-    const page = read("components", "AppPage.tsx");
+    const page = read("components", "PluginsPane.tsx");
     expect(app).toContain("const fillPluginCommand");
     expect(app).toContain("setInjectedText(`/${invoke.replace");
     expect(page).toContain("STR.pluginSurface.fill");

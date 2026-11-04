@@ -15,8 +15,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { activates } from "../src/renderer/components/a11y-activate";
 import { ThinkingLive } from "../src/renderer/components/Stream";
+import { readAppPageSurface } from "./helpers/app-surface";
 
-const appPage = readFileSync(fileURLToPath(new URL("../src/renderer/components/AppPage.tsx", import.meta.url)), "utf8");
+const appPage = readAppPageSurface();
 
 /** 逐条抽出 `role="button"` 的元素开标签，看它自己有没有 onKeyDown（跨行的开标签要摊平）。
  *  开标签 = 从最近的 "<div" 到该元素属性结束。属性里可能有 `=>`（onClick={() => …}），

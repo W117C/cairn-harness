@@ -28,6 +28,8 @@ async function main() {
   const win = new BrowserWindow({
     width: 1440, height: 900, show: false,
     webPreferences: {
+      backgroundThrottling: false,
+      offscreen: true,
       preload: join(__dirname, "ui-gallery-preload.cjs"),
       additionalArguments: ["--cairn-api-members=" + JSON.stringify(members), "--cairn-protocol-version=" + version],
     },
@@ -35,7 +37,7 @@ async function main() {
   const errors = [];
   win.webContents.on("console-message", (_e, level, message) => { if (level >= 2) errors.push(message); });
   await win.webContents.session.clearStorageData();
-  await win.loadFile(join(__dirname, "../dist/index.html"));
+  await win.loadFile(process.env.CAIRN_RENDERER_ENTRY ?? join(__dirname, "../dist/index.html"));
   await new Promise((r) => setTimeout(r, 1200));
   const js = (source) => win.webContents.executeJavaScript(source);
   const wait = (ms = 300) => new Promise((r) => setTimeout(r, ms));
@@ -74,8 +76,21 @@ async function main() {
     return { scrollLeft: Math.round(scroller.scrollLeft), scrollWidth: scroller.scrollWidth, clientWidth: scroller.clientWidth, tabLeft: Math.round(a.left), tabRight: Math.round(a.right), viewLeft: Math.round(s.left), viewRight: Math.round(s.right), label: activeTab.textContent.trim() };
   })()`);
   check("多标签溢出时激活标签自动滚进可视区", geometry !== null && geometry.scrollWidth > geometry.clientWidth && geometry.scrollLeft > 0 && geometry.tabLeft >= geometry.viewLeft - 1 && geometry.tabRight <= geometry.viewRight + 1, geometry);
+  // 2026-11-02 补一刀：溢出时左缘渐隐（mask）必须真的生效——此前只量了滚动位置，
+  // 截图里首标签仍被拦腰切开（mask 是否挂上没人验证过）。
+  const maskCheck = await js(`(() => {
+    const scroller = document.querySelector('.pane-nav-items');
+    const nav = document.querySelector('.pane-nav');
+    if (!scroller || !nav) return null;
+    const fade = getComputedStyle(nav, "::before");
+    return { scrolled: scroller.dataset.scrolled ?? null, fadeWidth: fade.width, fadeImage: fade.backgroundImage !== "none" ? fade.backgroundImage.slice(0, 40) : null };
+  })()`);
+  check("溢出标签条左缘有渐隐覆盖层（首标签淡出，不被拦腰切）", maskCheck !== null && maskCheck.scrolled === "true" && maskCheck.fadeImage !== null && parseFloat(maskCheck.fadeWidth) >= 20, maskCheck);
   const img = await win.webContents.capturePage();
   writeFileSync(join(out, "01-eight-panes-active-visible.png"), img.toPNG());
+  await js(`document.querySelector('[aria-label="切换到浏览器窗格"]').click()`); await wait();
+  writeFileSync(join(out, "02-browser.png"), (await win.webContents.capturePage()).toPNG());
+  await js(`document.querySelector('[aria-label="切换到插件窗格"]').click()`); await wait();
 
   // 用关闭钮关掉 active 的插件窗格：内容真的移除，其余 7 块仍在。
   await js(`document.querySelector('[aria-label="关闭插件窗格"]').focus()`);

@@ -1,13 +1,10 @@
 // 设计面·减法判卷（2026-10-22）：「简约」不是口号，得有能钉住的不变量。
 //
-// 这一批钉四件事（都是**减法**，不是加法）：
-//   ① 概览指标**不许**是带框表格——此前「gap:1px ＋ 容器底色画格线 ＋ 每格不透明底」
-//      把六个小卡拼成一张 Excel 表（暗色下尤其重）。现在只靠留白与字重分层。
-//   ② 概览里的数字**刚变过要闪一下**：概览是运行中盯着看的面，数字自己在变；
-//      此前只有「变了」这个事实、没有「刚刚变」的提示。
+// 钉住的不变量（都是**减法**，不是加法）：
 //   ③ 设置行的说明**独占整行**：此前被关在 220px 标题列里，中文句子折行、末行只剩一个字。
 //   ④ 错误正文**降到正文色**：失败的标记已经三重（红三角 / 「N 次失败」红字摘要 / 危险色重试钮），
 //      四行散文再整段用危险色是在阅读面里喊。
+//   ①② 概览指标/数字闪烁两条随检查器统计页一起撤下（2026-11-03 业主：右栏不装用量仪表）。
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -15,17 +12,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { SettingsRow } from "../src/renderer/components/settings-ui";
 
 const css = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
-const inspector = readFileSync(fileURLToPath(new URL("../src/renderer/components/Inspector.tsx", import.meta.url)), "utf8");
-const tokens = readFileSync(fileURLToPath(new URL("../src/renderer/tokens.css", import.meta.url)), "utf8");
-
-/** 一条规则里 animation 简写点名的 var(...)（动画简写里一个 var 就够：令牌自带时长与缓动）。 */
-const animationVars = (rule: string): string[] =>
-  [...rule.matchAll(/var\(--[a-z0-9-]+\)/g)].map((m) => m[0]);
-/** var(--x) → --x（去壳，要去令牌表里查它自己的定义）。 */
-const tokenName = (v: string): string => v.replace(/^var\((--[a-z0-9-]+)\)$/, "$1");
-/** 令牌自己的定义正文（tokens.css 里那一行）。 */
-const tokenBody = (name: string): string =>
-  tokens.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1] ?? "";
 
 /** 取一个选择器规则块的内容。 */
 function block(sel: string): string {
@@ -35,45 +21,6 @@ function block(sel: string): string {
 }
 
 describe("设计面·减法", () => {
-  it("① 概览指标不是带框表格（无外框、无格线、无每格底色）", () => {
-    const stats = block(".isp-ov-stats");
-    expect(stats).not.toContain("border:");
-    expect(stats).not.toContain("background:");
-    expect(stats).not.toMatch(/gap:\s*1px/); // 「1px 间隙 + 容器底色」＝画格线那套
-    const stat = block(".isp-ov-stat");
-    expect(stat).not.toContain("border:");
-    expect(stat).not.toContain("background:");
-    // 但仍然是两列的指标网格（结构靠留白与字重，不靠框）
-    expect(stats).toContain("grid-template-columns: 1fr 1fr");
-  });
-
-  it("② 概览数字刚变过要闪一下（值变 ⇒ 闪；不动标签、不位移）", () => {
-    expect(css).toContain("@keyframes isp-ov-flash");
-    expect(css).toMatch(/\.isp-ov-value-flash\s*{[^}]*animation:\s*isp-ov-flash/s);
-    // 动画只碰颜色：不许动位移/缩放（那会变成"跳动"，不是"提示"）
-    const key = css.slice(css.indexOf("@keyframes isp-ov-flash"));
-    expect(key.slice(0, key.indexOf("}"))).not.toContain("transform");
-    // 渲染面：数值走 StatValue（它才有"变了"的记忆），不是裸 dd
-    expect(inspector).toContain("function StatValue(");
-    expect(inspector).toContain("<StatValue value={value} />");
-    expect(inspector).not.toMatch(/<dd className="num">\{value\}<\/dd>/);
-  });
-
-  it("②b 承重：那条 animation 简写**要真成立**（两个缓动 ⇒ 整条不成立 ⇒ 类加了、动画没跑）", () => {
-    // 坑（2026-10-22 真机自查抓到的）：`--t-slow` 本身已经是「300ms ＋ 缓动」，
-    // 简写里再写一次缓动 ⇒ 展开成「300ms cubic-bezier(...) cubic-bezier(...)」
-    // ⇒ 第二个缓动落在 **delay 槽位**（那儿只收 <time>）⇒ **整条简写不成立**
-    // ⇒ 类加上了、动画一帧没跑（真机读计算样式：animationName="none"）。
-    // 而上面 ② 那条只钉「规则里**写着** animation: isp-ov-flash」⇒ 文本对、效果没有 ⇒ 判据空转。
-    const rule = block(".isp-ov-value-flash");
-    const vars = animationVars(rule);
-    expect(vars, "简写里只许一个 var(...)（那个令牌自带时长与缓动）").toHaveLength(1);
-    // 且那个令牌必须真的自带缓动，否则简写连 timing-function 都没有（那是不闪，不是简写不成立）。
-    expect(tokenBody(tokenName(vars[0]!)), `${vars[0]} 要自带时长与缓动`).toMatch(/var\(--ease-/);
-    // 反向：坏形状确实有两个 var（证明上面那条不是恒真）。
-    expect(animationVars("animation: isp-ov-flash var(--t-slow) var(--ease-out);")).toHaveLength(2);
-  });
-
   it("③ 设置行：标题/说明同列上下排（说明在 .ss-row-main 内），控件靠右垂直居中（2026-10-24 参照 ChatGPT 设置）", () => {
     const h = renderToStaticMarkup(
       <SettingsRow label="界面语言" desc="目前只有中文界面；英文界面尚未接入。">
@@ -118,19 +65,11 @@ describe("设计面·减法", () => {
     // 现在四处（助手行 / 思考带 / 工具簇 / 交付卡）统一读 `.reading` 上声明的那一条变量。
     expect(block(".tool-group-failure")).toContain("max-width: 72ch");
     const card = block(".changes-card");
-    expect(card).toMatch(/margin:\s*var\(--space-sm\)\s*var\(--cds-assistant-message-text-stop\)\s*var\(--space-sm\)\s*var\(--rail-gutter\)/);
+    // 2026-11-02 形状适配：顶距那一格从 --space-sm 改成 --turn-gap（署名条浮层必须落在
+    // 卡片之上，理由与读数记在 conversation-rail 判卷 ⑨）。本条钉的是**左轨与右缘**，
+    // 那两格逐字不动；顶距不是本条的意图，随产品口径更新。
+    expect(card).toMatch(/margin:\s*var\(--turn-gap\)\s*var\(--cds-assistant-message-text-stop\)\s*var\(--space-sm\)\s*var\(--rail-gutter\)/);
     expect(card).not.toContain("clamp(0px, (100% - 384px)");
-  });
-
-  it("⑤ 这一批不许把动效纪律破了（微反馈仍是 60ms 档）", () => {
-    // 缓动：规则**自己**带，或它点的那个令牌带（--t-slow 自带 var(--ease-out)——
-    // 简写里**不能**再写一遍：两个缓动会让整条简写不成立，见 ②b）。
-    const flashRule = block(".isp-ov-value-flash");
-    const easingSomewhere = /var\(--ease-/.test(flashRule)
-      || animationVars(flashRule).some((v) => /var\(--ease-/.test(tokenBody(tokenName(v))));
-    expect(easingSomewhere, "闪动要有缓动（规则自己带，或它点的令牌带）").toBe(true);
-    // 数字闪烁是**数据反馈**（不属 hover/按下微反馈族），用时长 token 表达，不写死毫秒
-    expect(css).not.toMatch(/isp-ov-value-flash\s*{[^}]*\d+ms/s);
   });
 
   it("⑥ 独立窗格窗口不渲染面板导航行（那里是死按钮，还叠成两行同样的字）", () => {
@@ -172,7 +111,9 @@ describe("次级说明不许替布局说话（2026-11-01 第 866 页 · 业主�
 
   it("行、分区和页面的 desc 不许复述标题", () => {
     const pairs = [...descs.matchAll(/(?:label|title)=\{?"([^"]{2,})"\s+desc=\{?"([^"]{2,})"/g)];
-    expect(pairs.length, "至少要真扫到成对的 label+desc，否则这条判卷是空转的").toBeGreaterThanOrEqual(8);
+    // 2026-11-04 本批撤掉 telemetryDesc（徽章「未收集」已经说完）⇒ 成对样本 8→7。
+    // 这是防空转的下限，不是产品断言；只准跟着 desc 总量一起调低，不许为了让红变绿加回来。
+    expect(pairs.length, "至少要真扫到成对的 label+desc，否则这条判卷是空转的").toBeGreaterThanOrEqual(7);
     const echoes = pairs.filter(([, label, desc]) => desc.includes(label.slice(0, 4))).map(([, l, d]) => `${l} → ${d}`);
     expect(echoes, "次级说明在复述行标签：" + echoes.join(" ｜ ")).toEqual([]);
   });

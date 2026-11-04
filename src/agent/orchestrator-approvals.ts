@@ -760,7 +760,7 @@ export class ApprovalsChainsSupervise {
    *  判据是 terminalResolved 而非 finished：finishInner 开头就置 finished=true，但 done 分支还要
    *  await git diff + 安全流水才挂 lastResult——落在窗口里读 finished 会返回「done + result 空」，
    *  sequencer 据此把绿证据环判成失败环（实测：级联因此白烧一档再误报整链 failed）。 */
-  private waitForAgentTerminal(agentId: string): Promise<{ status: string; result: Extract<AgentEvent, { type: "agent_result" }> | null }> {
+  waitForAgentTerminal(agentId: string): Promise<{ status: string; result: Extract<AgentEvent, { type: "agent_result" }> | null }> {
     const w = this.deps.workers.get(agentId);
     if (w && w.terminalResolved) {
       return Promise.resolve({ status: w.terminalStatus ?? "done", result: w.lastResult ?? null });

@@ -1,0 +1,21 @@
+{
+  "clicked": true,
+  "radios": [
+    {
+      "title": "只读",
+      "checked": "false"
+    },
+    {
+      "title": "需要审批",
+      "checked": "true"
+    },
+    {
+      "title": "智能审批",
+      "checked": "false"
+    },
+    {
+      "title": "完全允许",
+      "checked": "false"
+    }
+  ]
+}

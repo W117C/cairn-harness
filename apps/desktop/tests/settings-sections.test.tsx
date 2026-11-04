@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { readAppSurface } from "./helpers/app-surface";
 import {
   AboutSection,
+  AdvancedSection,
   GeneralSection,
   PermissionsSection,
   ProviderSection,
@@ -189,6 +190,8 @@ describe("批 6：模型与 Provider 三段", () => {
     expect((h.match(/当前通道/g) ?? []).length, "「当前通道」在同屏出现的次数").toBe(1);
     expect(h).toContain("ss-sec-hint");
     expect(h).toContain("下次发送生效");
+    // 2026-11-02：分区头走 providers 表的登记标签；默认夹具 label 就是 glm ⇒ 这里换
+    // 一份带人话名的夹具单独钉（见下方新例）。
     expect(h).not.toContain(">当前通道<");
   });
 
@@ -198,6 +201,55 @@ describe("批 6：模型与 Provider 三段", () => {
     expect(h).not.toContain("自定义接口");
     expect(h).toContain('<h2 class="ss-sec-title">能力</h2>');
     expect((h.match(/class="ss-sec"/g) ?? []).length).toBe(2);
+  });
+
+  it("花费/并发三个数字输入框在字段缺省时不显示字面 undefined（2026-11-02 真机）", () => {
+    // 直接渲染 AdvancedSection 的最小 props，把三个数值字段置为 undefined。
+    const html = renderToStaticMarkup(
+      <AdvancedSection
+        settings={{
+          autoMemory: true, impactAnalysis: false, promptCache: true, telemetry: false,
+          maxBudgetUsd: undefined as unknown as number,
+          budgetPricePerMTok: undefined as unknown as number,
+          scheduleConcurrencyCap: undefined as unknown as number,
+          subagentTools: true, autoVerify: true, autoVerifyRepair: false,
+          actionFusion: true, requestMetering: true, observationPack: true,
+          evidenceReceipts: false, economicCompaction: true,
+          routingBandit: false, routingCascade: false,
+        } as never}
+        onSaveKey={() => undefined}
+      />,
+    );
+    expect(html).not.toContain('value="undefined"');
+    expect(html).not.toContain('defaultValue="undefined"');
+  });
+
+  it("快捷键页渲染完整分组表（与 ⌘/ 弹层同源），不是 13 条精简版（2026-11-02）", () => {
+    const src = readFileSync(new URL("../src/renderer/components/settings-sections.tsx", import.meta.url), "utf8");
+    // 分组表由 SHORTCUT_GROUPS 驱动；核心键 SHORTCUTS 只承担 tooltip 取键。
+    expect(src).toContain("SHORTCUT_GROUPS.map");
+    expect(src).not.toContain("SHORTCUTS.map");
+    // 分组标题要出现在设置页（与弹层同一份标题族）。
+    expect(src).toContain("{g.title}");
+  });
+
+  it("关于页版本行：构建信息单独一行且可折行；冒烟状态说人话（2026-11-02 真机）", () => {
+    const src = readFileSync(new URL("../src/renderer/components/settings-sections.tsx", import.meta.url), "utf8");
+    const css = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
+    // 版本号与构建信息分两行（此前挤在一行，右侧被裁成「已过」）。
+    expect(src).toContain('className="ss-inline ss-version"');
+    expect(src).toContain('className="sp-dim ss-version-meta"');
+    expect(css).toMatch(/\.ss-version\s*\{[^}]*flex-direction:\s*column/s);
+    expect(css).toMatch(/\.ss-version-meta\s*\{[^}]*overflow-wrap:\s*anywhere/s);
+    // 非 passed 不许原文打印；统一读「未通过」。
+    expect(src).not.toContain('? "已过" : props.build.packagedSmoke');
+    expect(src).toContain('? "已通过" : "未通过"');
+  });
+
+  it("分区头的通道名走 providers 表的登记标签，不印机器 id（2026-11-02）", () => {
+    const h = provider({ providers: [{ id: "glm", label: "智谱 GLM", custom: false }] });
+    expect(h).toContain("智谱 GLM · 下次发送生效");
+    expect(h).not.toContain(">glm · 下次发送生效<");
   });
 
   it("当前通道行：provider 名 + 查看说明；检查连接（结果就地显示在这卡内）", () => {
@@ -317,18 +369,17 @@ describe("批 6：模型与 Provider 三段", () => {
   });
 });
 
-describe("批 6：权限与安全段（OptionCard 五档 + danger 自动/完全允许）", () => {
+describe("批 6：权限与安全段（OptionCard 四档 + danger 智能审批/完全允许）", () => {
   const perms = (over: Partial<AppSettings> = {}): string =>
     renderToStaticMarkup(<PermissionsSection settings={S(over)} onSave={noop} />);
 
-  it("五档 OptionCard（role=radio 恰五枚，含 full-access）；当前档恰一枚 on", () => {
+  it("四档 OptionCard（role=radio 恰四枚，含 full-access）；当前档恰一枚 on", () => {
     const h = perms({ mode: "guided" });
-    expect((h.match(/role="radio"/g) ?? []).length).toBe(5);
+    expect((h.match(/role="radio"/g) ?? []).length).toBe(4);
     expect((h.match(/ss-opt on( |")/g) ?? []).length).toBe(1);
-    for (const t of ["只读", "默认 · 逐次审批", "引导 · 按风险放行", "自动 · 低风险免批", "完全允许 · 不再出卡"]) expect(h).toContain(t);
-    // 已存值是第五档时也要有选中项（旧四档列表会让四个单选项全不选中）。
-    const full = perms({ mode: "full-access" });
-    expect((full.match(/ss-opt on( |")/g) ?? []).length).toBe(1);
+    for (const t of ["只读", "需要审批", "智能审批", "完全允许"]) expect(h).toContain(t);
+    // 旧 guided 配置落到「智能审批」那一格；已存值是最松档时也要有选中项。
+    expect((perms({ mode: "full-access" }).match(/ss-opt on( |")/g) ?? []).length).toBe(1);
   });
 
   it("「自动」= danger 档 + 警示行（不拿整行变色冒充）", () => {
@@ -337,19 +388,19 @@ describe("批 6：权限与安全段（OptionCard 五档 + danger 自动/完全�
     expect(h).toContain("ss-opt-warn");
     // 口径与 PermissionMenu 的 MODE_LABEL 同源：auto 免的是"逐笔问写"，不是"什么都不问"
     // （riskAskAt 仍是 high）。旧文案「全部放行」让用户以为切了就万事大吉 ⇒ 实测读成"切换没用"。
-    expect(h).toContain("高风险动作仍会出卡");
+    expect(h).toContain("低风险直接做，高风险出卡");
     expect(h).not.toContain("全部放行");
     // 最松档同样带警示：风险线 / critical 也不再询问（硬边界仍在文案里说明）。
     expect(h).toContain("最松档");
-    expect(h).toContain("方案门与禁止规则仍生效");
+    expect(h).toContain("出网与方案门也放行");
   });
 
-  it("方案门：开关 + 通俗文案「写文件前先提交方案，等我批准」；网络 = 只读说明行（无控件）", () => {
+  it("安全段：方案开关已撤（agent 自判，2026-11-03）；网络 = 只读说明行（无控件）", () => {
     const h = perms();
-    expect(h).toContain("写文件前先提交方案，等我批准");
+    expect(h).not.toContain("写文件前先提交方案，等我批准");
     expect(h).toContain("网络");
     expect(h).toContain("默认断网");
-    expect(h).toContain('<span class="ss-row-desc">出网需要逐次审批（一次性，不记忆）；沙箱在 macOS 走 Seatbelt。</span>');
+    expect(h).toContain('<span class="ss-row-desc">默认断网；除「完全允许」档外出网都要一次性批准（不记忆）。沙箱在 macOS 走 Seatbelt。</span>');
     expect(h).toContain('<span class="sp-tag">默认断网</span>');
     // 网络行不给按钮/开关（只读说明）——该行的 ctl 里不出现 button
     const netRowAt = h.indexOf("网络");
@@ -408,8 +459,8 @@ describe("批 6：样式哨兵（主题选项卡/段落样式）", () => {
     expect(styles).toMatch(/\.theme-opts\s*\{[^}]*flex-wrap:\s*wrap/s);
   });
 
-  it(".theme-opt = 纯文字药丸（2026-10-24 业主：色块撤下）；选中 = 强调描边 + 淡底", () => {
-    expect(styles).toMatch(/\.theme-opt\.on \{[^}]*accent-control[^}]*\}/);
+  it(".theme-opt = 纯文字药丸（2026-10-24 业主：色块撤下）；选中 = 品牌陶土描边 + 淡底（2026-11-01 业主裁决：控件蓝太扎眼）", () => {
+    expect(styles).toMatch(/\.theme-opt\.on \{[^}]*accent-brand[^}]*\}/);
     expect(styles).not.toContain(".theme-thumb");
   });
   it(".ss-banner 样式在（信息/警告两 tone）", () => {

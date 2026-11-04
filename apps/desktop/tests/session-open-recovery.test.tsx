@@ -14,6 +14,7 @@ describe("会话尚未完整读取时的写入保护", () => {
     const html = renderToStaticMarkup(<Composer
       disabled disabledReason="session" mode="default" activeId="s1" providerInfo={null} pickerValue={null}
       usage={{ inputTokens: 0, outputTokens: 0, usageCount: 0, cacheReadTokens: 0, lastInputTokens: 0 }}
+      events={[]}
       phaseLabel="" phase="idle" elapsedSec={0} steps={0} running={false} stopped={false}
       onSend={noop} onCancel={noop} onModeChange={noop} onModelChange={noop} onCompact={noop}
     />);

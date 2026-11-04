@@ -14,7 +14,7 @@ describe("相对时间活时钟", () => {
       "../src/renderer/components/Sidebar.tsx",
       "../src/renderer/components/Stream.tsx",
       "../src/renderer/components/TimelinePane.tsx",
-      "../src/renderer/components/AppPage.tsx",
+      "../src/renderer/components/MemoryPane.tsx",
       "../src/renderer/components/CommandPalette.tsx",
     ];
     for (const f of files) {

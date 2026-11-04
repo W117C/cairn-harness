@@ -1,3 +1,8 @@
+// 交付卡按 DSH 官方 ChangedFiles 卡的内容与逻辑（2026-11-03 业主「内容和逻辑也要一样」）：
+//   · 单文件：标题「已编辑 <文件名>」，不铺列表；块头给 +N/−M / 二进制 / 过大。
+//   · 多文件：标题「已编辑 N 个文件」，列表前 4 行，超过才出「全部 N 个文件」。
+//   · 每行只放路径 + 增删行数；块头/行在 Sidebar 打开本轮 review（Cairn 的「变更」窗格）。
+//   · 验证状态与四问清单不再进卡（DSH 卡没有这些格），保留在「变更」窗格。
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -5,7 +10,7 @@ import { ChangeSummaryCard } from "../src/renderer/components/ChangeSummaryCard"
 import type { TurnDelivery } from "../src/renderer/projections";
 import { readAppSurface } from "./helpers/app-surface";
 
-const failed: TurnDelivery = {
+const delivery: TurnDelivery = {
   round: 2,
   files: [
     { path: "src/a.ts", change: "modified", snapshotId: ".agent/snapshots/1--c1/a.ts" },
@@ -26,139 +31,116 @@ const failed: TurnDelivery = {
   nextAction: "修复失败项后重新运行验证",
 };
 
-describe("ChangeSummaryCard 交付摘要", () => {
-  it("固定呈现改动、验证、未验证、下一步四项，并保留文件与验证证据（展开态）", () => {
-    const html = renderToStaticMarkup(<ChangeSummaryCard delivery={failed} initialOpen />);
-    expect(html).toContain("已编辑 2 个文件");
-    expect(html).toContain("第 2 轮");
-    expect(html).toContain("验证失败"); // 第 944 页：与编排面同一套词
-    expect(html).toContain("改了什么");
-    expect(html).toContain("验证了什么");
-    expect(html).toContain("哪些未验证");
-    expect(html).toContain("下一步");
-    expect(html).toContain("2 个文件：src/a.ts、src/new.ts");
-    expect(html).toContain("修复失败项后重新运行验证");
-    expect(html).toContain("查看验证证据");
-    expect(html).toContain("pnpm test");
-    expect(html).toContain("2 tests failed");
-    expect(html).toContain("快照");
-  });
-});
+const many: TurnDelivery = {
+  ...delivery,
+  files: Array.from({ length: 6 }, (_, i) => ({ path: `src/f${String(i)}.ts`, change: "modified" as const })),
+};
 
-describe("交付卡收起态层级", () => {
-  it("整行可展开，改动统计与轮次退为次级信息，不再堆状态芯片", () => {
-    const html = renderToStaticMarkup(<ChangeSummaryCard delivery={failed} />);
-    expect(html).toMatch(/<button[^>]*class="changes-head"[^>]*aria-expanded="false"/);
-    expect(html).toContain('class="cf-heading"');
-    expect(html).toContain('class="cf-subtitle"');
-    expect(html).toContain('class="cf-round num">第 2 轮</span>');
-    expect(html).not.toContain('class="chip">第 2 轮</span>');
-    expect(html).not.toContain('<button type="button" class="changes-toggle');
-    const css = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
-    expect(css).toMatch(/\.cf-heading\s*{[^}]*flex:\s*1/s);
-    expect(css).toMatch(/\.cf-subtitle\s*{[^}]*font-weight:\s*var\(--fw-regular\)/s);
-  });
-});
-
-describe("交付卡展开态文件审阅", () => {
-  it("文件清单有独立分组与计数，路径和快照各自成列，操作区不再贴边", () => {
-    const html = renderToStaticMarkup(
-      <ChangeSummaryCard
-        delivery={failed}
-        initialOpen
-        actions={{ onOpenPreview: () => {}, onRevert: () => {}, onExport: () => {} }}
-      />,
-    );
-    expect(html).toContain('<section class="changes-files" aria-label="改动文件">');
-    expect(html).toContain('class="changes-files-head"');
-    expect(html).toContain('class="changes-files-count num">2</span>');
-    expect(html).toContain('class="ci-path"');
-    expect(html).toContain("已存快照");
-    expect(html).toContain('class="mini-btn primary delivery-action"');
-    expect(html).toContain('class="mini-btn delivery-action delivery-action-danger"');
-
-    const css = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
-    expect(css).toMatch(/\.ci-path\s*{[^}]*font-family:\s*var\(--mono\)[^}]*min-width:\s*0/s);
-    expect(css).toMatch(/\.delivery-actions\s*{[^}]*padding:\s*var\(--space-sm\) var\(--space-md\)[^}]*border-top:/s);
-    expect(css).toMatch(/\.delivery-action-danger\s*{[^}]*color:\s*hsl\(var\(--color-risk\)\)/s);
-  });
-});
-
-describe("交付卡默认收起（2026-10-18 业主截图批）", () => {
-  it("默认只留标题行与展开钮；四问清单/动作/文件明细都不渲染", () => {
-    const html = renderToStaticMarkup(<ChangeSummaryCard delivery={failed} />);
-    expect(html).toContain("已编辑 2 个文件");
-    expect(html).toContain("第 2 轮");
-    expect(html).toContain('aria-expanded="false"');
+describe("DSH 交付卡：单文件", () => {
+  it("标题「已编辑 <文件名>」，不铺列表；不出现轮次/验证/四问", () => {
+    const html = renderToStaticMarkup(<ChangeSummaryCard delivery={{ ...delivery, files: [delivery.files[0]!] }} />);
+    expect(html).toContain("已编辑 a.ts");
+    expect(html).not.toContain("已编辑 1 个文件");
+    expect(html).not.toContain("changes-list");
+    expect(html).not.toContain("第 2 轮");
+    expect(html).not.toContain("验证失败");
     expect(html).not.toContain("改了什么");
+    expect(html).not.toContain("哪些未验证");
+    expect(html).not.toContain("下一步");
+  });
+});
+
+describe("DSH 交付卡：多文件", () => {
+  it("标题「已编辑 N 个文件」，列表只有路径 + 行数格，没有轮次/验证芯片/四问", () => {
+    const html = renderToStaticMarkup(<ChangeSummaryCard delivery={delivery} />);
+    expect(html).toContain("已编辑 2 个文件");
+    expect(html).toContain('class="changes-list"');
+    expect(html).toContain('class="change-row"');
+    expect(html).toContain("src/a.ts");
+    expect(html).toContain("src/new.ts");
+    expect(html).toContain('class="change-row-counts"');
+    expect(html).not.toContain("第 2 轮");
+    expect(html).not.toContain("验证失败");
+    expect(html).not.toContain("改了什么");
+    expect(html).not.toContain("查看验证证据");
+    expect(html).not.toContain("已存快照");
+  });
+
+  it("超过 4 个只铺前 4 行，并出「全部 N 个文件」；不一次铺 6 行", () => {
+    const html = renderToStaticMarkup(<ChangeSummaryCard delivery={many} />);
+    expect(html).toContain("src/f0.ts");
+    expect(html).toContain("src/f3.ts");
+    expect(html).not.toContain("src/f4.ts");
+    expect(html).toContain("全部 6 个文件");
+    expect((html.match(/class="change-row"/g) ?? []).length).toBe(4);
+  });
+});
+
+describe("DSH 交付卡：没有 Cairn 专属动作行", () => {
+  it("DSH 卡只有块头 + 文件列表；打开预览/恢复/导出不在这张卡里", () => {
+    const html = renderToStaticMarkup(<ChangeSummaryCard delivery={delivery} />);
+    expect(html).toContain("changes-card");
     expect(html).not.toContain("打开预览");
-    expect(html).not.toContain('class="delivery-list"');
-    expect(html).toContain('data-open="false"');
+    expect(html).not.toContain("恢复上一版");
+    expect(html).not.toContain("导出项目");
+    expect(html).not.toContain("delivery-actions");
   });
 });
 
-describe("批 3：交付卡纵向清单（去四宫格）+ 空轮弱行撤下（文档阶段 3·对话页①）", () => {
-  const css = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
-  const appSrc = readAppSurface();
-
-  it("四格网格已废：卡内为纵向清单，样式层无 delivery-grid/cell 残留", () => {
-    const html = renderToStaticMarkup(<ChangeSummaryCard delivery={failed} initialOpen />);
-    expect(html).toContain('class="delivery-list"');
-    expect(html).not.toContain("delivery-grid");
-    expect(html).not.toContain("delivery-cell");
-    expect(css).toMatch(/\.delivery-list\s*{/);
-    expect(css).toMatch(/\.delivery-list\s*{[^}]*grid-template-columns:\s*max-content minmax\(0, 1fr\)/s);
-    expect(css).toMatch(/\.dg-v\s*{[^}]*font-size:\s*var\(--fs-caption-md\)/s);
-    expect(css).not.toMatch(/\.delivery-grid\s*{/);
-    expect(css).not.toMatch(/\.delivery-cell\s*{/);
-  });
-
-  it("空轮弱行已整体撤下（2026-10-24 业主）：代码与样式层零残留，App 仍经 deliveryTrail 出卡", () => {
-    expect(appSrc).toContain("deliveryTrail(");
-    expect(appSrc).not.toContain("formatEmptyTrailNote");
-    expect(appSrc).not.toContain('className="round-note"');
-    // 钉弱行特有格式（「第 N 轮 · 无文件改动」）；卡展开态的零文件明细「无文件改动」是另一处合法文案。
-    expect(appSrc).not.toContain("· 无文件改动");
-    expect(css).not.toMatch(/\.round-note\s*{/);
+describe("DSH 交付卡：空改动不出卡", () => {
+  it("files.length === 0 直接不渲染（不是一张只有「本轮交付」的空卡）", () => {
+    const html = renderToStaticMarkup(<ChangeSummaryCard delivery={{ ...delivery, files: [] }} />);
+    expect(html).toBe("");
   });
 });
 
-/** 卡头不重复报数（2026-11-01 第 913 页）：单一档时标题已经说了数字，副行再念一遍是同一句话两遍；
- *  而 change 缺席（投影明确不判定新建/修改）此前只进总数不进分解 ⇒ 全是 unknown 时副行是空的，
- *  标题却断言「已编辑」——投影不猜的东西被界面猜了一遍。 */
-describe("卡头：一档不重复、未判定档不失踪", () => {
-  const card = (files: TurnDelivery["files"]): string => renderToStaticMarkup(
-    <ChangeSummaryCard delivery={{ ...failed, files }} initialOpen={false} />,
-  );
-
-  it("全是修改 ⇒ 标题直接说「修改 N 个文件」，不再出现「已编辑」与第二个数", () => {
-    const h = card([{ path: "src/a.ts", change: "modified" }]);
-    expect(h).toContain("修改 1 个文件");
-    expect(h).not.toContain("已编辑");
-    expect((h.match(/class="cf-stats/g) ?? []).length, "单一档不该再挂分解块（那会把标题的数字念第二遍）").toBe(0);
-    expect(h).toContain("第 2 轮");
+describe("DSH 交付卡：壳与逻辑钉", () => {
+  it("60px 头部 + 40px 文件磁贴 + 13px 标题 + 悬停预览提示", () => {
+    const css = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
+    const head = css.match(/\.changes-head\s*\{[^}]*\}/s)?.[0] ?? "";
+    expect(head).toContain("min-height: 60px");
+    expect(head).toContain("padding: 8px 10px");
+    const tile = css.match(/\.cf-ico\s*\{[^}]*\}/s)?.[0] ?? "";
+    expect(tile).toContain("width: 40px");
+    expect(tile).toContain("height: 40px");
+    expect(tile).toContain("place-items: center");
+    expect(css).toMatch(/\.cf-t\s*\{[^}]*font-size:\s*13px/s);
+    expect(css).toMatch(/\.change-row\s*\{[^}]*min-height:\s*24px/s);
+    expect(css).toContain(".cf-preview-hint");
   });
 
-  it("含未判定（change 缺席）⇒ 走「变更」，不冒充「已编辑」", () => {
-    const h = card([
-      { path: "src/a.ts", change: "unknown" as TurnDelivery["files"][number]["change"] },
-      { path: "src/b.ts", change: "unknown" as TurnDelivery["files"][number]["change"] },
-    ]);
-    expect(h).toContain("变更 2 个文件");
-    expect(h).not.toContain("已编辑");
+  it("悬停 500ms 出 diff 预览（比卡窄 48px、最高 420px、无 hunk 头），Escape 关闭", () => {
+    const src = readFileSync(new URL("../src/renderer/components/ChangeSummaryCard.tsx", import.meta.url), "utf8");
+    expect(src).toContain("window.setTimeout(() => { setPreview(path); }, 500)");
+    expect(src).toContain('className="change-preview"');
+    expect(src).toContain('role="dialog"');
+    expect(src).toContain('if (e.key === "Escape")');
+    const css = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
+    const preview = css.match(/\.change-preview\s*\{[^}]*\}/s)?.[0] ?? "";
+    expect(preview).toContain("left: 24px");
+    expect(preview).toContain("right: 24px");
+    expect(preview).toContain("max-height: 420px");
   });
 
-  it("混合档才拆分解，且分解里的数相加等于标题的总数", () => {
-    const h = card([
-      { path: "src/a.ts", change: "modified" },
-      { path: "src/new.ts", change: "created" },
-      { path: "src/x.ts", change: "unknown" as TurnDelivery["files"][number]["change"] },
-    ]);
-    expect(h).toContain("已编辑 3 个文件");
-    expect(h).toContain("新建 1");
-    expect(h).toContain("修改 1");
-    expect(h).toContain("变更 1");
-    // 反向自证：三档都在，说明"未判定"不再失踪；分隔点恰好两枚。
-    expect((h.match(/class="cf-sep"/g) ?? []).length).toBe(2);
+  it("行/块头把目标文件送进变更窗格（DSH 行选中具体文件）", () => {
+    const pane = readFileSync(new URL("../src/renderer/components/ChangesPane.tsx", import.meta.url), "utf8");
+    const app = readAppSurface();
+    expect(pane).toContain("focus?: ChangesFocus");
+    expect(pane).toContain("setOpenRound(f.round)");
+    expect(pane).toContain("toggle(key, f.path, f.snapshotId)");
+    expect(app).toContain("setChangesFocus");
+    expect(app).toContain("changesFocusSeq.current += 1");
+  });
+
+  it("内容面不再引用验证词表/四问结构；行数由 useChangeStats 逐文件读 changeDiff", () => {
+    const src = readFileSync(new URL("../src/renderer/components/ChangeSummaryCard.tsx", import.meta.url), "utf8");
+    expect(src).toContain("useChangeStats(d.files)");
+    expect(src).not.toContain("verificationLabel");
+    expect(src).not.toContain("delivery-list");
+    expect(src).not.toContain("STATUS_CHIP");
+    expect(src).not.toContain("unverifiedFiles");
+    expect(src).not.toContain("nextAction");
+    const app = readAppSurface();
+    expect(app).toContain("onOpenChanges");
   });
 });

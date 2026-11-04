@@ -1,6 +1,5 @@
 // 演示模式标识判卷（2026-10-30 · 第 812 页）：
-// 默认 provider=demo 时，标题栏必须常驻「演示模式」胶囊（点开模型设置），页脚状态点不许把 demo
-// 冒充成绿色「服务正常」。两处都读 STR / 同一个 providerInfo.kind，不靠各写一份。
+// 默认 provider=demo 时，标题栏常驻「演示模式」胶囊（点开模型设置）；页脚没有服务状态标签。
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -16,11 +15,13 @@ describe("演示模式标识", () => {
     expect(toolbar).toContain("demo === true");
   });
 
-  it("WorkbenchView 只在 kind === demo 时传 demo；Sidebar 用「演示模式」而非「服务正常」", () => {
+  it("WorkbenchView 只在 kind === demo 时传 demo，页脚不重复显示服务状态", () => {
     const view = read("../src/renderer/panes/WorkbenchView.tsx");
     expect(view).toContain('demo: providerInfo?.kind === "demo"');
     const sidebar = read("../src/renderer/components/Sidebar.tsx");
-    expect(sidebar).toContain("STR.footer.providerDemo");
-    expect(sidebar).toContain('"demo"');
+    // 2026-11-03：页脚账号菜单搬进全局轨底部（AccountMenu）；侧栏不再有服务状态/账号入口。
+    expect(sidebar).not.toContain('className="provider-dot"');
+    expect(sidebar).not.toContain("side-foot");
+    expect(read("../src/renderer/components/AccountMenu.tsx")).toContain("STR.footer.accountTip");
   });
 });

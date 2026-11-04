@@ -62,6 +62,8 @@ export function OptionCard(props: {
   desc?: string;
   /** 危险档（如「自动 · 免审批」）：整体危险色 + 警示行。 */
   danger?: boolean;
+  /** 风险档位（2026-11-02）：normal / warn（黄）/ danger（红）。缺省沿用 danger 布尔。 */
+  tone?: "normal" | "warn" | "danger";
   /** 危险档的额外警示行（显示在说明下方）。 */
   warn?: string;
   onSelect: () => void;
@@ -71,7 +73,10 @@ export function OptionCard(props: {
       type="button"
       role="radio"
       aria-checked={props.checked}
-      className={"ss-opt" + (props.checked ? " on" : "") + (props.danger === true ? " danger" : "")}
+      className={"ss-opt"
+        + (props.checked ? " on" : "")
+        + (props.danger === true ? " danger" : "")
+        + (props.tone === undefined || props.tone === "normal" ? "" : ` tone-${props.tone}`)}
       onClick={props.onSelect}
     >
       <span className="ss-opt-dot" aria-hidden="true" />

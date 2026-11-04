@@ -167,6 +167,10 @@ describe("自动档经 session-provider 接到生产者（provider 是唯一发�
     const factor = calibrateFactor(session());
     const est = estimateContextTokens(projectContext(session()), {}, factor);
     const provider = createSessionProvider(logPath, {
+      // 工作区钉在这条用例自己的临时目录：缺省值 process.cwd() 会把仓库真实的
+      // `.agent/memory` 注进来，可用预算（est+4）随记忆增长而被吃掉，判据就会在
+      // 「压缩后没走到模型」这一步假红——那时断言的仍是 CAIRN_API_KEY，修法不是放宽预算。
+      workspace: dir,
       compaction: {
         // 自整定（同 compaction.test.ts 的接线用例）：可用 = est+4，ratio 0.5 → 必然触发，
         // 且压缩后的投影（tail ≤200 + 摘要）仍落在预算内 → 一路走到"要调模型"才因无 key 抛错。

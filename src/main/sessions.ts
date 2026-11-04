@@ -5,7 +5,7 @@
 import { mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, join, dirname } from "node:path";
 import type { AgentEvent } from "../events";
-import { createEventLog, replay } from "../events";
+import { createEventLog, invalidateEventLogHandle, replay } from "../events";
 import { tmpPathFor, writeFileAtomic } from "../atomic-write";
 import { parseRunAttachment, type RunAttachmentReference } from "./run-attachments";
 import type { SessionMetadataRecord, SessionMetadataRepository } from "./session-metadata";
@@ -14,6 +14,7 @@ import { sessionRunLockHeld } from "./session-lock";
 import { attachmentPrefixFor } from "../agent/prune";
 import { sessionPreferencesPath } from "./session-preferences";
 import { isRecord } from "../is-record";
+import { MAX_SESSION_ID_LENGTH } from "./session-id";
 
 /** 文件事实始终来自 JSONL；sidecar 字段只在确有 metadata 时合并，老会话不会被伪造成默认记录。 */
 export interface SessionInfo extends Partial<SessionMetadataRecord> {
@@ -216,7 +217,7 @@ export function sessionFileIsSession(name: string, head: string | null): boolean
  *  保留名不在此列——老档案里真有叫 pins 的会话时，读/续跑仍要能走。 */
 export function sessionIdProblem(name: string): string | null {
   if (typeof name !== "string" || name.length === 0) return "会话名不能为空";
-  if (name.length > 80) return "会话名最长 80 字";
+  if (name.length > MAX_SESSION_ID_LENGTH) return `会话名最长 ${String(MAX_SESSION_ID_LENGTH)} 字`;
   if (name.trim() !== name) return "会话名首尾不能有空白";
   if (/[/\\\u0000-\u001f.]/.test(name)) return "会话名不得含 / \\ . 或控制字符";
   return null;
@@ -581,6 +582,7 @@ async function renameSessionUnlocked(
       throw err;
     }
   }
+  await invalidateEventLogHandle(from).catch(() => undefined);
   await rename(from, to);
   // 没有活着的持有者才走到这里：旧路径上的残留锁是崩溃遗留，随改名清掉（新名从干净状态开始）。
   await rm(`${from}.lock`, { force: true }).catch(() => undefined);
@@ -660,6 +662,7 @@ async function deleteSessionUnlocked(
   await rm(`${source}.lock`, { force: true }).catch(() => undefined);
   const staged = tmpPathFor(source);
   const stagedSidecars: { source: string; staged: string }[] = [];
+  await invalidateEventLogHandle(source).catch(() => undefined);
   await rename(source, staged); // 先原子移出列表；清理失败可原名恢复
   try {
     for (const sidecarSource of [queuePath(root, id), sessionPreferencesPath(source)]) {

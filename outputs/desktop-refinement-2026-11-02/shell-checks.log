@@ -1,0 +1,53 @@
+PASS global rail is visible undefined
+PASS exactly one destination is current 1
+PASS chat is the startup destination {"items":[{"label":"对话","destination":"chat","current":"page"},{"label":"插件","destination":"plugins","current":null},{"label":"记忆","destination":"memory","current":null},{"label":"自动化","destination":"automation","current":null},{"label":"设置","destination":null,"current":null}],"currents":[{"label":"对话","destination":"chat","className":"app-rail-item"}]}
+PASS sidebar filter opens with ArrowDown and focuses its first item undefined
+PASS sidebar filter Escape returns focus to its trigger undefined
+PASS plugins destination is reachable undefined
+PASS plugins page is visible undefined
+PASS plugin view navigation appears once undefined
+PASS chat workspace stays mounted and hidden undefined
+PASS plugins becomes the only current destination {"items":[{"label":"对话","destination":"chat","current":null},{"label":"插件","destination":"plugins","current":"page"},{"label":"记忆","destination":"memory","current":null},{"label":"自动化","destination":"automation","current":null},{"label":"设置","destination":null,"current":null}],"currents":[{"label":"插件","destination":"plugins","className":"app-rail-item"}]}
+PASS 1440px rail, context, header, and actions do not overlap {"width":1440,"scrollWidth":1440,"rects":{"rail":{"left":0,"top":38,"right":48,"bottom":862,"width":48,"height":824},"context":{"left":48,"top":38,"right":248,"bottom":862,"width":200,"height":824},"page":{"left":248,"top":38,"right":1440,"bottom":862,"width":1192,"height":824},"title":{"left":336,"top":70,"right":383.28125,"bottom":100,"width":47.28125,"height":30},"actions":{"left":977,"top":70,"right":1352,"bottom":102,"width":375,"height":32}},"overlapping":[]}
+PASS plugin search accepts keyboard input undefined
+PASS plugin detail opens before destination switching undefined
+PASS memory search finds body content undefined
+PASS clearing memory search restores every topic undefined
+PASS light memory metadata and search placeholder meet 4.5:1 contrast {"metadata":7.731739048466311,"placeholder":7.731739048466311}
+PASS memory topic opens its own body and metadata undefined
+PASS visited plugin page stays mounted and inert behind memory undefined
+PASS memory owns its own scroll container 240
+PASS plugin search and detail survive a trip to memory undefined
+PASS memory scroll survives a trip to plugins undefined
+PASS all visited utility pages remain mounted while chat is active undefined
+PASS plugin search and detail survive a trip through chat undefined
+PASS memory scroll survives a trip through chat undefined
+PASS 880px memory destination is reachable undefined
+PASS 880px memory page is visible undefined
+PASS narrow layout swaps rail context for inline filter {"sidebar":"none","inline":"block","sidebarExists":true,"inlineExists":true}
+PASS 880px rail, header, and actions do not overlap {"width":880,"scrollWidth":880,"rects":{"rail":{"left":0,"top":38,"right":48,"bottom":640,"width":48,"height":602},"context":null,"page":{"left":48,"top":38,"right":880,"bottom":640,"width":832,"height":602},"title":{"left":72,"top":62,"right":119.28125,"bottom":92,"width":47.28125,"height":30},"actions":{"left":455,"top":62,"right":856,"bottom":94,"width":401,"height":32}},"overlapping":[]}
+PASS 1120px restores the destination context sidebar undefined
+PASS 1120px rail, context, header, and actions do not overlap {"width":1120,"scrollWidth":1120,"rects":{"rail":{"left":0,"top":38,"right":48,"bottom":720,"width":48,"height":682},"context":{"left":48,"top":38,"right":248,"bottom":720,"width":200,"height":682},"page":{"left":248,"top":38,"right":1120,"bottom":720,"width":872,"height":682},"title":{"left":280,"top":70,"right":327.28125,"bottom":100,"width":47.28125,"height":30},"actions":{"left":792,"top":70,"right":1088,"bottom":102,"width":296,"height":32}},"overlapping":[]}
+PASS automation destination is reachable undefined
+PASS automation page is visible undefined
+PASS dark theme reaches the renderer {"theme":"dark","bodyDark":true}
+PASS command palette opens from the real Meta+K input path undefined
+PASS command palette focuses its search field {"tag":"INPUT","className":"cp-input"}
+PASS command palette lists the page group undefined
+PASS command palette lists all four destinations undefined
+PASS real keyboard text filters the palette to memory "记忆"
+PASS keyboard destination selection opens memory {"items":[{"label":"对话","destination":"chat","current":null},{"label":"插件","destination":"plugins","current":null},{"label":"记忆","destination":"memory","current":"page"},{"label":"自动化","destination":"automation","current":null},{"label":"设置","destination":null,"current":null}],"currents":[{"label":"记忆","destination":"memory","className":"app-rail-item"}]}
+PASS palette selection transfers visible keyboard focus to the active rail item {"destination":"memory","label":"记忆","outlineStyle":"solid","outlineWidth":"2px","boxShadow":"color(srgb 0.988235 0.988235 0.984314) 0px 0px 0px 1px inset, color(srgb 0.164706 0.470588 0.839216) 0px 0px 0px 1px, rgb(205, 226, 251) 0px 0px 6px 1px"}
+PASS empty memory snapshot remains distinct from loading "记忆\n还没有记忆\nCairn 会在对话中记下项目约定和你的偏好。\n记忆设置…"
+PASS snapshot read failure is visible inside the memory page "记忆\n快照读取失败：夹具：快照读取失败"
+PASS automation operation target opens undefined
+PASS page operation failure is visible inside its destination "触发失败：夹具：触发失败"
+PASS page operation failure does not leak into chat undefined
+PASS destination retains its own operation failure undefined
+PASS destination error can be dismissed undefined
+PASS settings no longer contains durable destinations undefined
+PASS settings skills section is reachable undefined
+PASS settings skills keeps its filter visible without page context {"display":"block","inline":true}
+PASS renderer produced no console errors []
+evidence: /tmp/cairn-redesign-reviewed/shell
+isolated profile: /var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-agent-os-profile-PHGRGD

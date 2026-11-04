@@ -18,6 +18,7 @@ import type { ProviderInfo } from "../../../src/main/ipc-protocol";
 import { readAppSurface } from "./helpers/app-surface";
 
 const css = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
+const menuCss = readFileSync(fileURLToPath(new URL("../src/renderer/components/model-menu.css", import.meta.url)), "utf8");
 
 /** 一个只支持 ["off","medium"] 的模型（不声明支持时 levels 缺席）。 */
 function modelWithThinking(id: string, values: readonly ("off" | "low" | "medium" | "high")[], fallback: "off" | "low" | "medium" | "high") {
@@ -101,6 +102,19 @@ describe("菜单的思考段按**当前模型声明的档**出", () => {
     const html = render({ thinkingLevels: undefined, thinkingSupported: false });
     expect(html).toContain('data-e="high"');
     expect(html).toContain("disabled");
+    // 不支持 ⇒ 分段挂标记：CSS 据此撤掉「选中」的浮起高亮（ADR-0009：fail-visible）
+    expect(html).toContain('data-unsupported="true"');
+    const ok = render({ thinkingLevels: ["off", "medium"], thinkingSupported: true });
+    expect(ok).not.toContain('data-unsupported="true"');
+  });
+
+  it("不支持时只留一句明说：「这家没提供思考能力」收进折叠体（不摆三句话）", () => {
+    const html = render({ thinkingLevels: undefined, thinkingSupported: false });
+    const summary = html.slice(html.indexOf("<summary"), html.indexOf("</summary>"));
+    expect(summary).toContain("了解如何配置");
+    expect(summary).not.toContain("这家没提供思考能力");
+    expect(html.indexOf("这家没提供思考能力")).toBeGreaterThan(html.indexOf("</summary>"));
+    expect(html).toContain("当前模型不支持思考强度");
   });
 });
 
@@ -119,6 +133,14 @@ describe("芯片显示的是**当前档**（既有契约：显示的 = 发出去
     // 显示层不许偷换：芯片上写「· 思考 强」＝用户设的那一档＝真正发出去的那一档。
     // 归位由**状态更新**完成（下面的 effect / pick 两条路径），不是显示层换字。
     expect(html).toContain("· 思考 强");
+  });
+});
+
+describe("不支持态的视觉：分段留着，但不许装成能拧的选中控件", () => {
+  it("override 落在 model-menu.css（styles.css 的基线不动），选中态的高亮/浮起全撤", () => {
+    expect(menuCss).toMatch(/\.mp-pop \.th-row\[data-unsupported="true"\] button\[aria-pressed="true"\]\s*\{[^}]*background:\s*transparent[^}]*box-shadow:\s*none/s);
+    // 基线那条（styles.css）仍在原处：menu-unify 的判据靠它，组件层只做**限定范围**的覆盖
+    expect(css).toMatch(/\.th-row button\[aria-pressed="true"\]\s*\{[^}]*background:\s*hsl\(var\(--bg-elevated\)\)/s);
   });
 });
 

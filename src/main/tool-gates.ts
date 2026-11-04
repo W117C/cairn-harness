@@ -192,9 +192,10 @@ export function gatedTool(
       if (d.verdict === "deny") return denied(name, aMode, d.reason, { ...gateBase(d, aMode), verdict: "denied" });
       // 人工批准时人选的 scope（ask 分支才会赋值）——留痕要能回答「是谁放行的、放到哪一档」。
       let manualScope: AskScope | undefined;
-      // 网络放行的取用面：只有「问过且批了」的网络命令才走 allow 支。
-      // §11.4 红线：任何档位下「网络全开」都不是免批条件 ⇒ auto 档的 L4-pass 与无人值守都拿不到，
+      // 网络放行的取用面：默认只有「问过且批了」的网络命令才走 allow 支。
+      // §11.4 红线：非完全允许档下「网络全开」不是免批条件 ⇒ auto 档的 L4-pass 与无人值守都拿不到，
       // 判据挂在 verdict === "ask" → approved 这一条真实发生过的人工决议上，不挂在分类器上。
+      // 完全允许档（2026-11-03 业主裁决）没有卡可问，按档放行——见 networkProfileFor 的注释。
       const wantsNetwork = isNetworkCommandCall(name as ToolName, args);
       let humanApproved = false;
       if (d.verdict === "ask") {
@@ -275,8 +276,8 @@ export function gatedTool(
         const command = typeof args.command === "string" ? args.command : "";
         const mapped = mapSandboxTestCommandForWorkspace(command, ctx.workspace, MODEL_SHELL_TEST_ALIASES);
         // 缺省 deny：profile 里不写任何 network 规则 ⇒ 闭箱即全断网（sandbox:check ④ 钉着）。
-        // allow 支的取用条件全部住在 networkProfileFor（网络放行永不免批）。
-        const network = networkProfileFor({ wantsNetwork, asked: d.verdict === "ask", approved: humanApproved });
+        // allow 支的取用条件全部住在 networkProfileFor（完全允许档按档放行；其余档要问过且批了）。
+        const network = networkProfileFor({ wantsNetwork, asked: d.verdict === "ask", approved: humanApproved, mode: aMode });
         if (beforeExecute) {
           // runInSandbox has no cancellation input. Reuse its profile, but launch via the existing
           // run_shell process-group/cancellation path; approval above evaluated the original lint.

@@ -167,8 +167,106 @@ AgentApi，不跑真模型、不触发系统录屏权限）。
   打成 TypeError。符号 kind 名与 `symbolKind.valueSet` 一律从协议的 `SymbolKind` 枚举派生——手抄表
   是第二事实源，历史教训是它把 25 抄成了 `TypeParameter`（协议里 25 是 `Operator`）。
 
-判卷：`tests/lsp.test.ts` 的「能力协商」一节（含探针 `--caps-to` 落盘的真声明）；
-stub 的协商开关见 `fixtures/lsp/README.md`。
+- **路由与"没答上"是两件事**。`workspaceSymbol` 没有 path 可路由，所以它**必须逐台问**
+  （`Object.keys(cfg.servers)[0]` 那种"问排第一的"实现，在多语言仓库里让其余语言的符号静默缺席，
+  而模型看到的「无结果」是一个**错答案**——它会判定"这个符号不存在"）。合并结果每条标来源；
+  起不来/报错的服务器点名说出来；**一台能答的都没有**时 fail loud，不许退化成「无结果」。
+  信任门（pending/declined）不在这里降级成一行注脚——那台的 `ToolError` 原样上抛。
+
+- **状态是第三个面，不是查询的副产品**。`lspServerStatus(workspace)` 一份事实三面读（`lsp` 工具的
+  `operation:"servers"`、`scripts/lsp-status.ts`、以后的桌面）。两条口径写死在形状里：
+  **读状态绝不起进程**（`getLspClient` 是唯一 spawn 入口，状态面一次都不碰——否则评审 S1 那条
+  "默认不预热"从后门破掉，判卷用留痕脚本钉这条）；**没起过的服务器 `providers` 缺格而不是空数组**
+  （"还没验过"与"它什么都不支持"是两句话，写成后者模型就信了）。实测能力与 broken 原因存在模块级
+  （`adoptedCaps` / `brokenNotes`）而不是只挂在 client 上：进程一掉，那份答案也该还问得出来。
+  但它们是**进程内**事实：换进程读同一份工作区只会看到"没起过"。所以 `formatLspStatus` 的头行自己
+  把这条口径说在明处（配置与授权跨进程真，运行态不跨进程）；要把运行态也变成可读事实，得落盘并带
+  pid 存活判定——别用"读出来一堆没起过"当结论。
+
+判卷：`tests/lsp.test.ts` 的「能力协商」「workspaceSymbol 问全部服务器」「lspServerStatus：状态面」三节，
+加 `tests/lsp-status-cli.test.ts`（CLI 面）；stub 的协商开关见 `fixtures/lsp/README.md`。
+
+## ⑦ 进程外的状态：落点与三态（2026-11-02，第 996 页）
+
+第 995 页的状态面读的是**本进程内存**，所以换进程读同一份工作区只会看到"没起过"。把运行态抄到进程外时，
+两条让步会直接变成缺陷：
+
+- **状态文件不许落在工作区里**。落在 `<repo>/.agent/…` 意味着它被 clone 携带 ⇒ 一个仓库能自报
+  "语言服务器健康"，与 #58/S1 那条"仓库内容决定宿主执行什么"同源。落点照全局账那一族：
+  `CAIRN_LSP_HOME ?? ~/.config/cairn/lsp-runtime`，按工作区路径哈希分文件；**指进工作区就拒写**。
+  读的时候还要核对文件里写的 `workspace` 与当前一致——哈希撞了或树被搬走时，宁可可缺，不许串号。
+- **探活是三态，展示面不许压成布尔**。`src/process-liveness.ts` 只有 `ESRCH` 能证明已退出，
+  `EPERM` 算活着，其余 `unknown`。锁那边用 `!== "dead"`（多等无害）；展示面照搬就是把"判不出来"
+  报成"现值"，等于新造一盏假绿灯。三档分别是 `disk-alive / disk-stale / disk-unknown`，
+  陈旧与判不出来都要在文案里自称陈旧。
+- 记录里判活的是**写方 agent 进程的 pid**，不是语言服务器的 pid：本进程内存才是权威，进程一没了，
+  它留下的那份实测答案就只是"上次它说过"。
+- 写是尽力而为的旁路：失败只 `console.error` 一次，不进 agent 的关键路径，也不进模型上下文。
+
+判卷：`tests/lsp-runtime-state.test.ts`（九条，含"没有实测事实不落空文件""别的工作区的记录不当数"）。
+
+## ⑧ MCP 断线：要么自己回来，要么说清回不来（2026-11-02，第 999 页）
+
+`src/agent/plugins/mcp.ts` 的 transport `onclose` 此前只标失败并摘工具，注释写着"重连入口留位，本轮不自动
+重连"——于是 server 崩一次，它那批工具**整个会话**消失。现在它会自己重试（上限 `MAX_RECONNECTS = 2`）。三条
+口径别破：
+
+- **重连必须原样重放那一轮握手**：走 `connectOnce`，因此 `include/exclude` 裁剪与 `mcpGradeOf` 分级会重过一遍。
+  绕过它去"快速恢复连接"＝把当初被权限面摘掉的工具带回来。
+- **状态是三档不是两档**：`connected / reconnecting / failed`。「重连中」不是绿灯（它随时可能变"重连 2 次仍
+  失败"），也不是失败；压成任意一档面板就开始说假话。停手时原因必须留在 `error` 里。
+- **恢复要恢复到模型那一面**：`onServerDown` 摘工具，`onServerUp` 必须把工具放回注册表**并恢复崩溃前的激活集**
+  （`PluginRuntime` 记 `mcpActiveBeforeDown`）。只恢复连接不恢复激活态＝连接绿着而工具看不见，比不修更坏。
+  恢复走正常激活入口，超过工具帽就失败出声——重连不是走后门扩容。
+
+判卷：`tests/mcp-reconnect.test.ts`（manager 侧六条）＋ `tests/plugins-mcp.test.ts` 的"重连成功后工具要回到
+模型面"（运行时侧一条）。
+
+## ⑨ hook handler 的声明域＝执行域（2026-11-02，第 1000 页）
+
+`src/agent/plugins/types.ts` 的 `HookHandlerType` 写了五档（`command / http / mcp_tool / prompt / agent`），
+而 `src/agent/plugins/hooks.ts` 的 `run()` 只认 `command`，其余"本轮不支持，跳过 + 警告"。更糟的是
+`HookHandlerDef` 只有 `command`/`timeout` 两个字段——**http 档连 URL 都无处写**：作者写的 `url` 在 schema 层
+就被丢掉，钩子在运行时静默缺席。现在按类型判别，兑现的三档真跑，没兑现的两档装载期点名。四条口径别破：
+
+- **一份 payload 契约，三种传输**：`hookPayloadJson` 是唯一事实源；`hookStdinJson` 是它的 stdin 形态，
+  http 档的 POST 请求体是它的**同一份字节**。给 http 另起一套字段名，两个通道就会开始各说各话。
+- **折叠语义只有一套**：三档的结果一律折进同一个 `HookExecOutcome`（决策 `parseHookDecision`、上下文回注、
+  10k 帽与溢出落盘、非阻塞错误）。分档各写一遍必漂。**措辞按传输区分**是另一回事：把 HTTP 503 报成
+  「非零退出 503」、把请求中止报成「SIGKILL 强杀」，都是在把两种失败说成一种。
+- **闸放在闸的位置**：只读档拒 `http`（网络写同样是副作用）；`mcp_tool` 在只读档只放行标注了 `readOnly`
+  且非 `destructive` 的工具——与模型可见面 E6/E6b 同一条纪律。形态校验 `hookShapeRejection` 是装载期
+  （`discover.ts`）与执行期（`gateHook`）共用的同一个纯函数，不留第二份规则。
+- **裁剪是权限面，不是显示面**：`McpManager.callTool` 现在只认裁剪后的表，表外的名字直接拒。只在建表那一步
+  过滤＝任何绕过注册表的调用方（`mcp_tool` 钩子是第一个）都能点到用户明确关掉的那把工具。
+
+去重键也从 `handler.command` 换成了按类型分域的身份：非 command 档从前算出的是同一个 `undefined`，
+两条不同的 http 钩子里第二条被**静默吞掉**。
+
+判卷：`tests/plugins-hook-handlers.test.ts`（21 条）＋ `tests/mcp-bounds.test.ts` 的"表外工具调不动"一条；
+`src/agent/plugins/hooks.ts` 里未兑现的两档由装载期拒载负责出声，不再依赖运行时那行会被面板刷掉的警告。
+
+## ⑩ prompt 档：把判定交给模型时，纪律必须在接缝上（2026-11-02，第 1001 页）
+
+第 1000 页兑现了三档，`prompt` 仍空着。现在它也真跑：`src/agent/session-provider.ts` 的
+`createHookModelCall` 复用摘要器那条 `SessionTransport` 事件折法，但**transport 由装配层给**——
+`src/main/provider-assembly.ts` 的 `sessionModelTransport(selection, …)` 是全仓唯一"给一次模型调用取家/取档"
+的出口（`createProvider` 与钩子都从它取），绑定点在 `src/main/agent-runner.ts` 里 `modelSelection` 定死之后
+（`PluginRuntime.bindModelCall`，晚绑定：`load` 在那之前）。四条纪律：
+
+- **旁路不自己取料**：第 1001 页第一版把注入写在 `PluginRuntime.load` 处并自带 `streamGlm` +
+  `CAIRN_API_KEY` 门 ⇒ 用户配的是别家时，钩子要么被"没注入"拒掉，要么把判定发给一个他没在用的家。
+  家没配 key ⇒ `hookModelCallFor` 返回 null、不绑，钩子在闸上如实拒（不抛，不拖垮这一场 run）。
+- **一份 payload 契约**：送给模型的 user 内容仍是 `hookPayloadJson` 那份字节（stdin / http 体 / mcp args 展开源 / 模型 user 同源）。
+- **出站前过 `src/events/redact.ts` 那把唯一的密钥尺**：命中 critical（私钥块一类）**整条不出站**，不是"脱敏后照发"；
+  剥了几处必须进可见回执（`notes`），否则读者以为模型看到了原文。
+- **半份结论与空白回文都不许当好结论用**：`turn_truncated` 带 stop_reason 进 `notes`；空回文 = **失败**
+  （把"没内容"折成"模型没意见"等于钩子被静默放行）。
+
+`agent` 档（子代理型钩子）仍未兑现：装载期按「未兑现」拒载并点名。
+
+判卷：`tests/plugins-hook-prompt.test.ts`（16 条，其中 4 条直接量 `createHookModelCall` 那层接缝，用替身 transport，
+不碰网络也不碰 key）。
 
 ## Verification
 

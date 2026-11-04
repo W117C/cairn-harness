@@ -68,7 +68,7 @@ export const MUTATIONS = [
     src: "src/permissions/index.ts",
     test: "tests/plan-gate.test.ts",
     desc: "判据算得出「该拦」却没人用它 ⇒ 唯一有强制力的门只剩一句话，auto 档照样落盘",
-    apply: (s) => s.replace("  if (planBlocks()) return \"deny\";", ""),
+    apply: (s) => s.replace('  if (mode !== "full-access" && planBlocks()) return "deny";', ""),
     expectFail: "①未批准：write_file/run_shell 一律 deny（连 auto 档也拦）；只读与门工具不拦",
   },
   {
@@ -979,7 +979,9 @@ export const MUTATIONS = [
       "这两档 `writeAsk: true` 永远走不到 ⇒ 出网在两档里变成无声放行。这条钉的是「分级本身就是判据」，" +
       "不是「有没有接权限层」——接了但分级错了，形状上与没接一模一样",
     apply: (s) => s.replace('return { level: "high", reason: "出网取内容（外部不可信输入，SSRF 面）" };', 'return { level: "medium", reason: "出网取内容（外部不可信输入，SSRF 面）" };'),
-    expectFail: "四档逐档 verdict=ask",
+    // 2026-11-03：用例标题随四档合并改写（完全允许档已免卡），针脚跟着改；变异的杀点仍是
+    // 「只读/默认两档不再出卡」——它们的 riskAskAt 是 high，medium 够不着。
+    expectFail: "只读/需要审批/引导/智能审批逐档 verdict=ask",
   },
   {
     id: "webfetch-network-scope-memory-dropped",

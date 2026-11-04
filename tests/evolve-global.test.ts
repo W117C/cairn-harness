@@ -213,7 +213,7 @@ describe("全局晋升", () => {
     expect((await verifyGlobalEvidence(two.slice(0, 2))).ok).toBe(false);
     const missing = await verifyGlobalEvidence([...two.slice(0, 2), { workspace: two[2]!.workspace, episodeId: "ep_nope" }]);
     expect(missing.ok).toBe(false);
-    expect(missing.reason).toContain("不存在");
+    expect(missing.reason).toBe("证据 Episode 不存在：" + two[2]!.workspace + " · ep_nope");
 
     const three = await threeEvidence();
     const first = await globalizeExperience(source.workspace, source.entryId, three, { now: 2_000, apply: true });
@@ -361,7 +361,7 @@ describe("全局晋升", () => {
     expect(same.global.entries[0]).toMatchObject({
       trials: 5, successes: 0, evidenceTrials: 0, evidenceSuccesses: 0,
     });
-    expect(same.global.findings[0]?.detail).toContain("观测 0/5");
+    expect(same.global.findings[0]?.detail).toMatch(/^观测 0\/5（成功率 0% ≤ \d+%）——建议 dormant$/u);
     expect(same.global.findings[0]?.detail).not.toContain("0/10");
   });
 
@@ -375,7 +375,7 @@ describe("全局晋升", () => {
     await rm(evidence[0]!.workspace, { recursive: true, force: true });
     const revived = await reactivateGlobalExperience(source.entryId, { now: 4_000, apply: true });
     expect(revived.outcome).toBe("refused");
-    expect(revived.outcome === "refused" ? revived.reason : "").toContain("不存在");
+    expect(revived.outcome === "refused" ? revived.reason : "").toMatch(/^证据 Episode 不存在：/u);
     expect((await loadGlobalPlaybook()).entries[0]?.status).toBe("dormant");
   });
 });

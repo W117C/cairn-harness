@@ -72,7 +72,9 @@ export function useConversationNavigation(deps: ConversationNavigationDeps) {
     setFlashRound(round);
     requestAnimationFrame(() => requestAnimationFrame(() => {
       const el = streamEl?.querySelector(`[data-round-anchor="${String(round)}"]`);
-      (el instanceof HTMLElement ? (el.closest(".row") ?? el) : null)?.scrollIntoView({ behavior: scrollBehavior("smooth"), block: "start" });
+      // inline: "nearest" ——只定位纵向。默认的 inline:"nearest" 是 Chromium 的默认行为，
+      // 但一旦祖先可横向滚动，默认会把祖先也横向拖走（对话列左缘的字被拦腰切掉，2026-11-01 真机目验）。
+      (el instanceof HTMLElement ? (el.closest(".row") ?? el) : null)?.scrollIntoView({ behavior: scrollBehavior("smooth"), block: "start", inline: "nearest" });
     }));
   }, [activeId, streamEl]);
   // 闪光一跳一闪即走（不留常驻高亮）。
@@ -101,7 +103,7 @@ export function useConversationNavigation(deps: ConversationNavigationDeps) {
       const toggle = el?.closest(".toolcluster")?.querySelector<HTMLButtonElement>('.tool-group-toggle[aria-expanded="false"]');
       toggle?.click();
       requestAnimationFrame(() => {
-        (el instanceof HTMLElement ? el : null)?.scrollIntoView({ behavior: scrollBehavior("smooth"), block: "center" });
+        (el instanceof HTMLElement ? el : null)?.scrollIntoView({ behavior: scrollBehavior("smooth"), block: "center", inline: "nearest" });
       });
     }));
   }, [events, streamEl]);

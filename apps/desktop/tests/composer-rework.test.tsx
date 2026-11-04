@@ -23,6 +23,7 @@ const base = {
   activeId: "s1",
   providerInfo: null,
   pickerValue: null,
+  events: [],
   usage: { inputTokens: 0, outputTokens: 0, usageCount: 0, cacheReadTokens: 0, lastInputTokens: 0 },
   phaseLabel: "执行工具",
   phase: "tool" as const,
@@ -85,19 +86,20 @@ describe("P2-2 权限 chip（档位名 + 色点 data-mode）", () => {
     expect(chip).toContain('class="ctl-caret"');
   });
 
-  it("弹层五档：每档 data-mode + 色点 + 一句说明；当前档恰一枚对勾", () => {
+  it("弹层四档：每档 data-mode + 色点 + 一句说明；旧 guided 配置落到智能审批那一格", () => {
     const html = renderToStaticMarkup(<PermissionMenu mode="guided" onModeChange={() => undefined} onClose={() => undefined} />);
-    for (const m of ["read-only", "default", "guided", "auto", "full-access"] as const) {
+    for (const m of ["read-only", "default", "auto", "full-access"] as const) {
       expect(html).toContain(`data-mode="${m}"`);
     }
+    // 2026-11-03：引导并入智能审批，选择面不再出现 guided。
+    expect(html).not.toContain('data-mode="guided"');
     expect(html).toContain(STR.permissionModes.readOnlyDesc);
     expect(html).toContain(STR.permissionModes.defaultDesc);
-    expect(html).toContain(STR.permissionModes.guidedDesc);
     expect(html).toContain(STR.permissionModes.autoDesc);
     expect(html).toContain(STR.permissionModes.fullAccessDesc);
     expect((html.match(/class="check">✓</g) ?? []).length).toBe(1);
-    // 色点五枚全用 token（component 零字面色值）
-    expect((html.match(/class="mode-dot"/g) ?? []).length).toBe(5);
+    // 色点四枚全用 token（component 零字面色值）
+    expect((html.match(/class="mode-dot"/g) ?? []).length).toBe(4);
     expect(html).toContain(MODE_DOT.auto);
   });
 
@@ -177,7 +179,7 @@ describe("P2-2 模型+思考合并单面", () => {
       <ModelMenu options={OPTIONS} value="deepseek-chat" onPick={() => undefined} onThinkingChange={() => undefined} thinking="off" thinkingSupported running />,
     );
     expect(html).toContain(STR.modelPicker.runningNote);
-    expect((html.match(/<button[^>]*disabled=""/g) ?? []).length).toBe(3); // 模型两行 + 演示；五键不禁
+    expect((html.match(/<button[^>]*disabled=""/g) ?? []).length).toBe(2); // 两行真模型禁（演示 2026-11-01 起不再占一行）；五键不禁
   });
 
   it("无 onThinkingChange（旧消费者）：思考段不出现（零行为变化）", () => {

@@ -16,6 +16,8 @@ import type { TextSizeSetting, UiSizeSetting } from "../../../../../src/main/set
 // 渲染层只消费推送快照；文案在渲染层按 status 组合）。
 import type { PreviewSnapshot } from "../../../../../src/main/project-preview";
 import { initialInspectorOpen } from "../inspector-pref";
+import { previewFailureError } from "../preview-failure";
+import type { SurfaceError } from "../surface-error";
 import { lastOpenedPane, PANE_META, type PaneKind } from "../pane-registry";
 import { applyTheme, browserThemeEnv, type ThemePref } from "../theme";
 import { toast } from "../toast";
@@ -39,8 +41,8 @@ export const INSPECTOR_SIDEBAR_COLLAPSE_BELOW = 744;
 export const INSPECTOR_AUTO_OPEN_MIN = 1600;
 
 export interface ChromeDeps {
-  /** 错误条（预览启动失败等）。 */
-  setLastError: (message: string, sessionId?: string) => void;
+  /** 错误条（预览启动失败等）。载荷：一句话，或结构化的 SurfaceError（2026-11-02 真机订正）。 */
+  setLastError: (message: string | SurfaceError, sessionId?: string) => void;
   /** 提示条（导出回执等）。 */
   setLastNotice: (message: string, sessionId?: string) => void;
   /** 元素选择信号（⌘⇧S）——草稿簇持有，这里只推它。 */
@@ -121,8 +123,15 @@ export function useChrome(deps: ChromeDeps): ChromeState {
   // 侧栏折叠（渲染态，V1 不落 settings）。
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [pluginSidebarOpen, setPluginSidebarOpen] = useState<boolean>(() => {
-    try { return window.localStorage.getItem("cairn.pluginSidebar") === "1"; } catch { return false; }
+    try {
+      if (window.localStorage.getItem("cairn.pluginSidebar") === "1") return true;
+      const saved: unknown = JSON.parse(window.localStorage.getItem("cairn.panes.v1") ?? "[]");
+      return Array.isArray(saved) && saved.includes("plugins");
+    } catch { return false; }
   });
+  useEffect(() => {
+    try { window.localStorage.setItem("cairn.pluginSidebar", pluginSidebarOpen ? "1" : "0"); } catch { /* current session still works */ }
+  }, [pluginSidebarOpen]);
   const [pluginSidebarWidth, setPluginSidebarWidth] = useState<number>(() => {
     try {
       const n = Number(window.localStorage.getItem("cairn.pluginSidebarWidth"));
@@ -264,8 +273,8 @@ export function useChrome(deps: ChromeDeps): ChromeState {
   }, [sidebarCollapsed]);
   const revealInspectorRef = useRef<(() => void) | null>(null);
   revealInspectorRef.current = revealInspector; // 供上方 openPreview 绕开 TDZ 调用
-  // 超宽屏首次进入会话：用户从未显式开合过检查器 ⇒ 自动展开概览；
-  // 1440 级内屏保持专注两栏，避免概览在默认视野里抢走 360px。
+  // 超宽屏首次进入会话：用户从未显式开合过检查器 ⇒ 自动展开右栏；
+  // 1440 级内屏保持专注两栏，避免检查器在默认视野里抢走 360px。
   // 用户关过一次（storage="0"）就不再抢——默认值只在「没有偏好」时生效。
   useEffect(() => {
     if (activeId === null || inspectorAutoOpened.current) return;
@@ -283,17 +292,12 @@ export function useChrome(deps: ChromeDeps): ChromeState {
     try { window.localStorage.setItem("cairn.pluginSidebarWidth", String(next)); } catch { /* 存储不可用不阻拖动 */ }
   }, []);
   const togglePluginSidebar = useCallback((): void => {
-    setPluginSidebarOpen((open) => {
-      const next = !open;
-      try { window.localStorage.setItem("cairn.pluginSidebar", next ? "1" : "0"); } catch { /* 存储不可用不阻开关 */ }
-      return next;
-    });
+    setPluginSidebarOpen((open) => !open);
   }, []);
   const closePluginSidebar = useCallback((): void => {
     const active = document.activeElement;
     const fromSidebar = active instanceof HTMLElement && active.closest(".mod-sidebar") !== null;
     setPluginSidebarOpen(false);
-    try { window.localStorage.setItem("cairn.pluginSidebar", "0"); } catch { /* 存储不可用不阻关闭 */ }
     // 从侧栏内部关闭时把焦点还给标题栏入口；点外部关闭不抢焦点。
     if (fromSidebar) requestAnimationFrame(() => { document.querySelector<HTMLElement>('[aria-label="工作台工具"]')?.focus() });
   }, []);
@@ -443,7 +447,7 @@ export function useChrome(deps: ChromeDeps): ChromeState {
       const seen = new Set<string>();
       return list.filter((k): k is PaneKind => {
         // session 是「⌘+点击某个会话」的临时预览目标，目标本身不落盘；恢复一个空预览没有意义。
-        if (typeof k !== "string" || k === "session" || !valid.has(k) || seen.has(k)) return false;
+        if (typeof k !== "string" || k === "session" || k === "plugins" || !valid.has(k) || seen.has(k)) return false;
         seen.add(k);
         return true;
       });
@@ -462,18 +466,39 @@ export function useChrome(deps: ChromeDeps): ChromeState {
   // （那会让回调每次开合窗格都变，快捷键表跟着重建）。镜像 ref 是既有模式（activeIdRef 同用法）。
   const paneTabsRef = useRef<PaneKind[]>(paneTabs);
   paneTabsRef.current = paneTabs;
+  // 右栏退出语义（2026-11-03 业主）：窗格是「临时看一眼」的右栏占用——开窗格时若检查器本来
+  // 收着，说明整条右栏是**为窗格**才露出的；关掉最后一个窗格就该把右栏整个收回（⌘\ 的
+  // 「关闭最近窗格」同理），而不是落回检查器内容。检查器原本就开着的，关窗格仍回检查器。
+  const inspectorRevealedForPanes = useRef(false);
+  const collapseInspectorIfForPanes = useCallback((): void => {
+    if (!inspectorRevealedForPanes.current) return;
+    inspectorRevealedForPanes.current = false;
+    inspectorRef.current?.collapse();
+    setInspectorCollapsed(true);
+    try { window.localStorage.setItem("cairn.inspector.open.v1", "0"); } catch { /* 存不下则忽略 */ }
+  }, []);
   const notePaneOpened = useCallback((kind: PaneKind): void => {
     const cur = paneOpenOrder.current;
     if (!cur.includes(kind)) paneOpenOrder.current = [...cur, kind];
   }, []);
   const togglePane = useCallback((kind: PaneKind) => {
+    if (kind === "plugins") { togglePluginSidebar(); return; }
     const opening = !paneTabs.includes(kind);
+    if (opening) {
+      // 记下右栏是「本来开着」还是「为窗格才露出」：关窗格时据此决定收回整栏还是回检查器。
+      inspectorRevealedForPanes.current = (inspectorRef.current?.isCollapsed() ?? false) || inspectorRevealedForPanes.current;
+      notePaneOpened(kind);
+      revealInspector(); // 打开窗格 ⇒ 右栏可见；检查器内容由 data-panes-open 让位（2026-10-24）
+    } else if (paneTabs.length === 1 && paneTabs[0] === kind) {
+      collapseInspectorIfForPanes(); // 最后一个窗格关掉：右栏是借来的 ⇒ 归还 = 收回
+    }
     setPaneTabs((tabs) => (tabs.includes(kind) ? tabs.filter((k) => k !== kind) : [...tabs, kind]));
-    if (opening) { notePaneOpened(kind); revealInspector(); } // 打开窗格 ⇒ 右栏可见；检查器内容由 data-panes-open 让位（2026-10-24）
-  }, [paneTabs, notePaneOpened, revealInspector]);
+  }, [paneTabs, notePaneOpened, revealInspector, togglePluginSidebar, collapseInspectorIfForPanes]);
   const closePane = useCallback((kind: PaneKind) => {
+    const remaining = paneTabsRef.current.filter((k) => k !== kind);
     setPaneTabs((tabs) => tabs.filter((k) => k !== kind));
-  }, []);
+    if (remaining.length === 0) collapseInspectorIfForPanes();
+  }, [collapseInspectorIfForPanes]);
   /** ⌘\ 「关闭最近打开的窗格」（2026-10-18 修）：从 paneOpenOrder 里找最后一位仍在场的窗格。
    *  旧实现直接 slice(0,-1) 取数组尾项——数组顺序会被拖拽/⌥↑⌥↓ 重排，重排后关的就不再是
    *  「最近打开」的那个；且空窗格时 slice 仍是空数组、键却被 preventDefault 吞掉，按了没反应。
@@ -482,11 +507,19 @@ export function useChrome(deps: ChromeDeps): ChromeState {
   const closeLastPane = useCallback((): boolean => {
     const target = lastOpenedPane(paneTabsRef.current, paneOpenOrder.current);
     if (target === null) return false;
+    const remaining = paneTabsRef.current.filter((k) => k !== target);
     setPaneTabs((tabs) => tabs.filter((k) => k !== target));
+    if (remaining.length === 0) collapseInspectorIfForPanes();
     return true;
-  }, []);
+  }, [collapseInspectorIfForPanes]);
   /** 「＋」菜单/命令面板用：打开（幂等，不做 toggle）。 */
   const openPane = useCallback((kind: PaneKind): void => {
+    if (kind === "plugins") {
+      setPluginSidebarOpen(true);
+      return;
+    }
+    // 与 togglePane 开启分支同一笔账：开窗格前右栏若收着，这整条右栏就是为窗格借出的。
+    inspectorRevealedForPanes.current = (inspectorRef.current?.isCollapsed() ?? false) || inspectorRevealedForPanes.current;
     setPaneTabs((tabs) => (tabs.includes(kind) ? tabs : [...tabs, kind]));
     notePaneOpened(kind);
     revealInspector();
@@ -530,9 +563,9 @@ export function useChrome(deps: ChromeDeps): ChromeState {
     if (snapshot.status === "failed") {
       // 失败不开窗格（2026-10-18）：先开再失败会留下一个空白浏览器页，用户还得手动关；
       // 错误条已经说清原因与下一步，窗格只在真有东西可看时出现。
-      setLastError(
-        `预览失败（${snapshot.stage ?? "未知阶段"}）：${snapshot.message ?? ""}${snapshot.hint !== undefined ? `——${snapshot.hint}` : ""}`,
-      );
+      // 载荷走结构化（2026-11-02 真机订正）：原因 / 依据 / 下一步分三段，不再拍成一行，
+      // 阶段枚举也不直接印给用户（真机截图里那行「预览失败（spec）：…——…——…」就是这么来的）。
+      setLastError(previewFailureError(snapshot));
       return;
     }
     // 2026-10-24：reveal 保证右栏可见；栏内检查器内容让位（data-panes-open），浏览器窗格占满。

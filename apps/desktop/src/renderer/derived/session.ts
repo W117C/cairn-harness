@@ -27,12 +27,20 @@ import { isWorkerSubflowEvent } from "../../../../../src/agent/subflow";
  *    那条**不属于任何会话**，让它进来就等于让弹出窗回到"什么都收"的老毛病。
  *  · `session_titled` 是 push-only 的命名推送（第十八遍的既定口径），与窗格内容无关。
  */
-export function popoutEventBelongsTo(e: AgentEvent, sessionId: string | null): boolean {
+export function popoutEventBelongsTo(
+  e: AgentEvent,
+  sessionId: string | null,
+  workspace?: string | null,
+): boolean {
   if (sessionId === null) return false;
   if ((e as { type?: string }).type === "session_titled") return false;
   const sid = (e as { session_id?: string }).session_id;
-  if (sid === undefined) return false;
-  return sid === sessionId;
+  if (sid === undefined || sid !== sessionId) return false;
+  if (workspace !== undefined && workspace !== null && workspace !== "") {
+    const evWs = (e as { workspace?: string }).workspace;
+    if (evWs !== undefined && evWs !== "" && evWs !== workspace) return false;
+  }
+  return true;
 }
 
 /** 运行秒表读数：起点按**会话**存，读的时候只读**当前会话**那一格。

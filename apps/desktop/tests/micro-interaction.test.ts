@@ -47,7 +47,10 @@ const MICRO = [
   ".menu-item", ".cp-item", ".ss-row", ".session:hover", ".ss-opt", ".theme-opt", ".opt",
   ".tpl-card", ".start", ".err-retry", ".tool-head", ".avatar", ".side-new", ".sp-back",
   ".side-search", ".side-search-x", ".sp-nav-search", ".sp-nav-search-x",
-  ".sw", ".composer-card", ".provider-dot",
+  ".sw", ".composer-card",
+  // 2026-11-03：.provider-dot 已不再是可点元素（业主：一枚长得像状态栏的暗门）。
+  // 它退回只读事实位后没有 hover/按下反馈可谈，故移出微反馈族——不是放松判据：
+  // 「页脚不再多一道通往设置的门」这条由 pane-disclosure 的单入口判据接着钉。
   ".pane-handle", ".mod-sidebar-resize::after",
 ];
 

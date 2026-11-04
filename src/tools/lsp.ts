@@ -3,14 +3,17 @@
 // 懒启动、按 (root, serverID) 复用、in-flight 去重、失败进 broken 集合不再重试；
 // read_file 命中源码时后台预热（prefetchLsp，尽力而为零阻塞）。
 // 对外一律 1-based 行列，内部转 LSP 的 0-based。
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { statSync as stat } from "node:fs";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
+import { homedir } from "node:os";
 import { extname, join, relative, resolve, sep } from "node:path";
 import { projectAgentPath } from "../app-data";
-import { pathToFileURL } from "node:url";
+import { processLiveness, type ProcessLiveness } from "../process-liveness";
+import { writeFileAtomic } from "../atomic-write";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { killGroup, sanitizedEnv } from "./process.js";
 import { TrustStore, type TrustState } from "../agent/plugins/trust";
 import {
@@ -277,6 +280,12 @@ const broken = new Set<string>();
 /** restartOnCrash 的惰性重启次数（每 clientKey 一档；成功也不清零，防崩溃循环）。 */
 const restartCounts = new Map<string, number>();
 const pluginClientKeys = new Set<string>();
+/** 起过的服务器**实测**声明的能力（clientKey → capabilities）。存在模块级而不是只挂在 client 上：
+ *  client 一掉（崩溃 / 关闭 / 重启前）那份事实就查不到了，而状态面要说的正是"上一次它答过什么"。
+ *  只有 initialize 真回来过才有这一格——"没起过"与"起来了但什么都没声明"必须是两句话。 */
+const adoptedCaps = new Map<string, ServerCapabilities>();
+/** broken 的原因短语（与 `broken` 同进退）：没有它，状态面只能说"不可用"而说不出为什么。 */
+const brokenNotes = new Map<string, string>();
 
 /** 仅回收实际由插件启动的客户端；同名的宿主服务器不属于插件。 */
 export async function closePluginLspClients(root: string, ids: readonly string[]): Promise<void> {
@@ -287,6 +296,8 @@ export async function closePluginLspClients(root: string, ids: readonly string[]
     clients.delete(key);
     broken.delete(key);
     restartCounts.delete(key);
+    adoptedCaps.delete(key);
+    brokenNotes.delete(key);
     try {
       await (await pending)?.shutdown();
     } catch {
@@ -369,7 +380,7 @@ export const SYMBOL_KIND_NAMES: Record<number, string> = Object.fromEntries(
 );
 
 /** 六操作 ↔ 服务器能力声明的键。门控用它，出错的话术也用它（说清是"没声明"还是"没配上"）。 */
-export const OPERATION_PROVIDER: Record<LspOperation, string> = {
+export const OPERATION_PROVIDER: Record<LspQueryOperation, string> = {
   definition: "definitionProvider",
   references: "referencesProvider",
   hover: "hoverProvider",
@@ -452,7 +463,11 @@ export class LspClient {
     const fail = (reason: string) => {
       if (!this.stopping) {
         if (!broken.has(this.key)) broken.add(this.key);
+        // 原因留着：状态面要说"这台起不来，因为……"，只报"不可用"等于把线索丢掉。
+        brokenNotes.set(this.key, reason);
         clients.delete(this.key);
+        // 崩了也要让别的进程看得见（同上：不等、不抛）。
+        void persistLspRuntimeState(this.root);
       }
       this.stopping = true;
       this.rejectPending(new Error(reason));
@@ -520,15 +535,19 @@ export class LspClient {
     }
   }
 
-  /** `initialize` 回来后交给客户端的能力声明（见 `serverCaps` 注：为什么不能塞进构造参数）。 */
+  /** `initialize` 回来后交给客户端的能力声明（见 `serverCaps` 注：为什么不能塞进构造参数）。
+   *  同时抄一份进模块级 `adoptedCaps`——状态面读的正是"起过的那台实测答了什么"。 */
   adoptServerCapabilities(caps: ServerCapabilities): void {
     this.serverCaps = caps ?? {};
+    adoptedCaps.set(this.key, this.serverCaps);
+    // 自动抄一份出去（尽力而为、不等、不抛）：不自动就永远没有跨进程可见性。
+    void persistLspRuntimeState(this.root);
   }
 
   /** 这台服务器有没有声明这支能力。
    *  **`capabilities` 整个为空 = 它没报**（老服务器/半截实现）：这时不门控，照发请求——
    *  把能用的一支判死，比多拿一个错误更糟。报了别的键却没报这一支，才是明确的不支持。 */
-  providerDeclared(operation: LspOperation): boolean {
+  providerDeclared(operation: LspQueryOperation): boolean {
     const keys = Object.keys(this.serverCaps);
     if (keys.length === 0) return true;
     const declared = (this.serverCaps as Record<string, unknown>)[OPERATION_PROVIDER[operation]];
@@ -637,6 +656,9 @@ export async function getLspClient(root: string, cfg: LspConfig, serverId: strin
     if (server.restartOnCrash === true && restarts < LSP_MAX_RESTARTS) {
       restartCounts.set(key, restarts + 1);
       broken.delete(key);
+      // 重启是一次新的 initialize：旧进程的原因与旧答案都不该贴到新进程身上。
+      brokenNotes.delete(key);
+      adoptedCaps.delete(key);
     } else {
       throw new ToolError('lsp: 服务器 "' + serverId + '" 启动失败已标记不可用（broken），不再重试');
     }
@@ -762,6 +784,8 @@ export function killAllLspClientsSync(): void {
   clients.clear();
   broken.clear();
   restartCounts.clear();
+  adoptedCaps.clear();
+  brokenNotes.clear();
   pluginServers.clear();
   pluginClientKeys.clear();
 }
@@ -773,6 +797,8 @@ export async function closeAllLspClients(): Promise<void> {
   clients.clear();
   broken.clear();
   restartCounts.clear();
+  adoptedCaps.clear();
+  brokenNotes.clear();
   pluginServers.clear();
   pluginClientKeys.clear();
   for (const p of all) {
@@ -909,11 +935,20 @@ export function prefetchLsp(root: string, absPath: string, enabled = lspPrefetch
 
 // ---- lsp 工具：单工具六操作，对外 1-based 行列 ----
 
-const OPERATIONS = ["definition", "references", "hover", "documentSymbol", "workspaceSymbol", "implementation"] as const;
+const QUERY_OPERATIONS = ["definition", "references", "hover", "documentSymbol", "workspaceSymbol", "implementation"] as const;
+type LspQueryOperation = (typeof QUERY_OPERATIONS)[number];
+/** `servers` 不是查询而是状态面：它读运行时已掌握的事实，一个请求都不发、一个进程都不起。
+ *  单列进来是为了让模型有一条"先问支持什么再决定用哪支"的路，而不是逐支试错。 */
+const OPERATIONS = [...QUERY_OPERATIONS, "servers"] as const;
 type LspOperation = (typeof OPERATIONS)[number];
 
 function filePathFromUri(uri: string): string {
-  return uri.startsWith("file://") ? decodeURIComponent(uri.slice("file://".length)) : uri;
+  if (!uri.startsWith("file://")) return uri;
+  try {
+    return fileURLToPath(uri);
+  } catch {
+    return decodeURIComponent(uri.slice("file://".length));
+  }
 }
 
 function formatLocation(root: string, loc: Location): string {
@@ -1013,7 +1048,7 @@ export function capLspOutput(text: string): string {
 /** 服务器没声明这支能力 ⇒ 当场说清楚，别把请求发出去等一个错误。
  *  话术点名「未声明」而不是「失败」：前者告诉模型这是**这台服务器的边界**（换一支操作或退回
  *  grep/read_file），后者会被读成"这次没跑成，再跑一遍"。 */
-function requireProvider(client: LspClient, serverId: string, operation: LspOperation): void {
+function requireProvider(client: LspClient, serverId: string, operation: LspQueryOperation): void {
   if (client.providerDeclared(operation)) return;
   // 整句必须是**一支**模板：这句话的用途是让模型换路（不是重跑），
   // 而拼成多段字面量时判据只能读到「不支持」三字——挑不出可判的中文段，
@@ -1021,6 +1056,272 @@ function requireProvider(client: LspClient, serverId: string, operation: LspOper
   throw new ToolError(
     `lsp: 服务器 "${serverId}" 未声明 ${OPERATION_PROVIDER[operation]}，不支持 ${operation}（这是该服务器的能力边界，不是这次调用失败；同一文件改用 grep / read_file）`,
   );
+}
+
+/* ---- 状态面（第 995 页）：这台支持什么，从"试出来"变成"问出来" ----
+ * 三条纪律写在形状里：
+ * ① **读状态不起进程**。`getLspClient` 是唯一会 spawn 的入口，这里一次都不碰——状态面一旦变成
+ *    第二个起进程入口，评审 S1 那条"默认不预热"的纪律就从后门被破掉了（判卷用留痕脚本钉这条）。
+ * ② **"没起过"与"起来了但没声明"是两句话**。前者 `providers` 缺格（undefined），后者是空数组。
+ *    把没验过的写成"不支持"，模型就信了——这正是本仓反复出事的那类假结论。
+ * ③ 起不来的要说清为什么（`brokenNotes`），等授权的要说是授权（不是"坏"）。
+ */
+export type LspServerState = "not-started" | "running" | "broken";
+
+export interface LspServerStatusEntry {
+  id: string;
+  command: string;
+  extensions: string[];
+  origin: "host" | "plugin";
+  state: LspServerState;
+  /** 实测声明的 provider；**这台没起过时缺格**（不是空数组）。 */
+  providers?: string[];
+  /** 实测的文档同步方式（同样只在起过之后才有）。 */
+  sync?: LspSyncKind;
+  /** broken 的原因短语；起不来之外的情况没这一格。 */
+  note?: string;
+  /** 这条运行态的**出处**：本进程实测 / 盘上（写方进程活着 / 已不在 / 判不出来）。
+   *  没有运行态可说时缺格——"没起过"与"别的进程起过但那进程没了"是两句话。 */
+  source?: "in-process" | "disk-alive" | "disk-stale" | "disk-unknown";
+  /** 出处是盘上时：谁写的、什么时候写的（陈旧判定与展示都要用）。 */
+  writerPid?: number;
+  observedAt?: number;
+}
+
+export interface LspStatus {
+  enabled: boolean;
+  /** 配置文件那份内容指纹的信任态；没有配置文件 = not-configured。 */
+  trust: "trusted" | "pending" | "declined" | "not-configured";
+  servers: LspServerStatusEntry[];
+  /** `.agent/lsp.json` 读不出来／结构坏：整份状态不可信，原因写这里（空串＝没有这回事）。 */
+  configError: string;
+}
+
+/** 这台服务器实测答了哪几支 provider（顺序按六操作的固定名单，不按对象键序——同一份事实每次要说成同一句话）。 */
+function declaredProvidersOf(caps: ServerCapabilities): string[] {
+  return (Object.keys(OPERATION_PROVIDER) as LspQueryOperation[])
+    .map((op) => OPERATION_PROVIDER[op])
+    .filter((key) => caps[key as keyof ServerCapabilities] === true || typeof caps[key as keyof ServerCapabilities] === "object");
+}
+
+export async function lspServerStatus(
+  workspace: string,
+  deps: { liveness?: (pid: number) => ProcessLiveness } = {},
+): Promise<LspStatus> {
+  let cfg: LspConfig;
+  try {
+    cfg = loadLspConfig(workspace);
+  } catch (err) {
+    return {
+      enabled: false,
+      trust: "not-configured",
+      servers: [],
+      configError: err instanceof Error ? err.message : String(err),
+    };
+  }
+  const trust = cfg.enabled ? (await lspConfigTrustState(workspace)).state : "not-configured";
+  const pluginIds = new Set(pluginLspServerIds(workspace));
+  // 本进程没有的那部分事实，才去盘上找（本进程实测永远优先——它比任何记录都新）。
+  const disk = await readRuntimeRecords(workspace);
+  const livenessOf = deps.liveness ?? processLiveness;
+  const servers: LspServerStatusEntry[] = Object.entries(cfg.servers).map(([id, server]) => {
+    const key = clientKey(workspace, id);
+    const caps = adoptedCaps.get(key);
+    const isBroken = broken.has(key);
+    const entry: LspServerStatusEntry = {
+      id,
+      command: server.command,
+      extensions: [...server.extensions],
+      origin: pluginIds.has(id) ? "plugin" : "host",
+      state: isBroken ? "broken" : clients.has(key) ? "running" : "not-started",
+    };
+    if (caps !== undefined) {
+      entry.providers = declaredProvidersOf(caps);
+      entry.sync = syncKindOf(caps);
+      entry.source = "in-process";
+    } else {
+      const rec = disk.find((r) => r.serverId === id);
+      if (rec !== undefined) {
+        const live = livenessOf(rec.writerPid);
+        entry.source = live === "alive" ? "disk-alive" : live === "dead" ? "disk-stale" : "disk-unknown";
+        entry.providers = rec.providers;
+        entry.sync = rec.sync;
+        entry.writerPid = rec.writerPid;
+        entry.observedAt = rec.observedAt;
+        if (rec.note !== undefined) entry.note = rec.note;
+        if (entry.state === "not-started" && entry.source === "disk-alive") entry.state = "running";
+      }
+    }
+    if (isBroken) entry.note = brokenNotes.get(key) ?? "启动失败（原因未记录）";
+    return entry;
+  });
+  return { enabled: cfg.enabled, trust, servers, configError: "" };
+}
+
+const STATE_WORDS: Record<LspServerState, string> = {
+  "not-started": "没起过",
+  running: "在跑",
+  broken: "已标记不可用",
+};
+
+/** 给人和模型看的同一份口径（工具输出与 CLI 都读它——别在 UI 侧另写第二份措辞）。 */
+export function formatLspStatus(st: LspStatus): string {
+  if (st.configError !== "") {
+    return `lsp 状态：配置文件读不出来，下面这些一个字都不可信——${st.configError}`;
+  }
+  if (!st.enabled) {
+    return `lsp 状态：未启用（工作区没有 .agent/lsp.json，或它写着 "lsp": false）。要用的话在那里配 {"lsp": {"<服务器名>": {"command": …, "extensions": […]}}}。`;
+  }
+  const trustWord = st.trust === "trusted"
+    ? "已授权"
+    : st.trust === "declined"
+      ? "已拒绝授权（不起进程）"
+      : st.trust === "pending"
+        ? "未授权（首次见到这份配置，或内容改过；批了才起得来）"
+        : "不适用";
+  const head = `lsp 状态：已启用，${String(st.servers.length)} 台服务器；信任态：${trustWord}｜注意：「在跑 / 已标记不可用」是**当前进程**的事实，换一个进程读同一份工作区只会看到「没起过」（起没起、崩没崩不住在盘上）。`;
+  const lines = st.servers.map((s) => {
+    const provenance = s.source === undefined || s.source === "in-process"
+      ? "本进程实测"
+      : s.source === "disk-alive"
+        ? "pid " + String(s.writerPid) + " 实测（那进程还活着，记录是它写的）"
+        : s.source === "disk-stale"
+          ? "pid " + String(s.writerPid) + " 上次实测（那进程已不在＝陈旧记录，不当现值用）"
+          : "pid " + String(s.writerPid) + " 上次实测（那进程判不出来，不当现值用）";
+    const capNote = s.providers === undefined
+      ? "provider 没验过（这台还没起过，下面没有任何关于它支持什么的结论）"
+      : "实测 provider（" + provenance + "）：" + (s.providers.length > 0 ? s.providers.join(" / ") : "（一个都没声明）") + "；同步：" + s.sync;
+    return `- ${s.id}〔${s.origin === "plugin" ? "插件" : "宿主"}〕扩展 ${s.extensions.join(",") || "（无）"}｜命令 ${s.command}｜状态 ${STATE_WORDS[s.state]}｜${capNote}${s.note !== undefined ? "｜" + s.note : ""}`;
+  });
+  return [head, ...lines].join("\n");
+}
+
+/* ---- 运行态落盘（第 996 页）：状态不该只活在一个进程里 ----
+ * 上一批留了一条明说过的边界：`adoptedCaps / brokenNotes / clients` 是本进程内存，所以
+ * `pnpm lsp-status` 读任何工作区都只会看到「没起过」。这里把本进程掌握的运行态抄一份出去，
+ * 读时按**写方进程**存活分三档：现值 / 陈旧 / 判不出来。
+ *
+ * 三条不许让步的地方：
+ * ① **落点不在工作区**。状态文件写进仓库目录 = clone 携带 = 一个恶意仓库能自报"语言服务器健康"，
+ *    与 #58/S1 那条"仓库内容决定宿主执行什么"同源。缺省落用户级目录，按工作区哈希分文件；
+ *    `CAIRN_LSP_HOME` 指进工作区时**拒写**（判卷钉这条）。
+ * ② **探活判不出来就说判不出来**。`processLiveness` 是三态（只有 ESRCH 证明已退出，EPERM 算活着，
+ *    其余为 unknown）。既有那几处用 `!== "dead"` 是**抢占锁**的保守选择；照搬到展示面就成了假绿灯。
+ * ③ **写失败不动 agent**。这是尽力而为的一条旁路记录，不是临界区：失败只出声一次。
+ */
+export function lspRuntimeStateDir(): string {
+  return process.env.CAIRN_LSP_HOME ?? join(homedir(), ".config", "cairn", "lsp-runtime");
+}
+
+export function lspRuntimeStatePath(workspace: string): string {
+  const hash = createHash("sha256").update(resolve(workspace)).digest("hex").slice(0, 16);
+  return join(lspRuntimeStateDir(), hash + ".json");
+}
+
+export interface LspRuntimeRecord {
+  serverId: string;
+  command: string;
+  /** 那次 `initialize` 实测答的 provider（不是配置里写的）。 */
+  providers: string[];
+  sync: LspSyncKind;
+  /** broken 的原因；没崩就没有这一格。 */
+  note?: string;
+  observedAt: number;
+  /** 写这条记录的 **agent 进程** pid：现值/陈旧判的是它，不是语言服务器本身。 */
+  writerPid: number;
+}
+
+interface LspRuntimeFile {
+  /** 记录属于哪个工作区（绝对路径）。哈希撞了或树被搬走时靠它核对，宁可当没有也不串号。 */
+  workspace: string;
+  records: LspRuntimeRecord[];
+}
+
+export type LspPersistOutcome = "written" | "nothing" | "failed" | "refused-inside-workspace";
+
+const runtimeWriteWarned = new Set<string>();
+
+/** 本进程掌握的运行态（每台一条）。没有任何实测事实时返回空表 ⇒ 不落盘。 */
+function inProcessRuntimeRecords(workspace: string, cfg: LspConfig): LspRuntimeRecord[] {
+  const prefix = resolve(workspace) + "\u241F";
+  const out: LspRuntimeRecord[] = [];
+  for (const [key, caps] of adoptedCaps) {
+    if (!key.startsWith(prefix)) continue;
+    const serverId = key.slice(prefix.length);
+    const isBroken = broken.has(key);
+    if (!isBroken && !clients.has(key)) continue; // 客户端已经不在了：那条事实属于上一个进程
+    out.push({
+      serverId,
+      command: cfg.servers[serverId]?.command ?? "",
+      providers: declaredProvidersOf(caps),
+      sync: syncKindOf(caps),
+      ...(isBroken ? { note: brokenNotes.get(key) ?? "启动失败（原因未记录）" } : {}),
+      observedAt: Date.now(),
+      writerPid: process.pid,
+    });
+  }
+  return out;
+}
+
+/** 把本进程的运行态抄一份到用户级目录。尽力而为：失败不抛，只说一次。
+ *  **合并而不是整份覆盖**：同一个工作区可能被两个 agent 同时开着（桌面双窗口、CLI + 桌面）。
+ *  各写各的会把对方"活着的服务器"从状态面上抹掉——那一抹正是本批要消灭的"看不见"。
+ *  留谁：别的进程留下的记录，只有**写方进程还活着**才继续有效；已不在的就清掉（不留垃圾）。 */
+const runtimePersistChains = new Map<string, Promise<unknown>>();
+
+export async function persistLspRuntimeState(
+  workspace: string,
+  deps: { liveness?: (pid: number) => ProcessLiveness } = {},
+): Promise<LspPersistOutcome> {
+  const dir = lspRuntimeStateDir();
+  const wsAbs = resolve(workspace);
+  // ① 安全边界：状态目录落在工作区里就拒写（`CAIRN_LSP_HOME` 是宿主设的，不设防会被仓库带进来）
+  const dirAbs = resolve(dir);
+  if (dirAbs === wsAbs || dirAbs.startsWith(wsAbs + sep)) return "refused-inside-workspace";
+  const prev = runtimePersistChains.get(wsAbs) ?? Promise.resolve();
+  const run = prev.catch(() => undefined).then(async (): Promise<LspPersistOutcome> => {
+    let cfg: LspConfig;
+    try {
+      cfg = loadLspConfig(wsAbs);
+    } catch {
+      return "nothing"; // 配置坏：本来就没起过任何服务器，没什么可抄
+    }
+    const mine = inProcessRuntimeRecords(wsAbs, cfg);
+    if (mine.length === 0) return "nothing";
+    const livenessOf = deps.liveness ?? processLiveness;
+    const others = (await readRuntimeRecords(wsAbs)).filter(
+      (r) => r.writerPid !== process.pid && r.writerPid > 0 && livenessOf(r.writerPid) === "alive",
+    );
+    const merged = [...others.filter((o) => !mine.some((m) => m.serverId === o.serverId)), ...mine];
+    try {
+      await mkdir(dirAbs, { recursive: true });
+      await writeFileAtomic(lspRuntimeStatePath(wsAbs), JSON.stringify({ workspace: wsAbs, records: merged } satisfies LspRuntimeFile));
+      return "written";
+    } catch (err) {
+      if (!runtimeWriteWarned.has(wsAbs)) {
+        runtimeWriteWarned.add(wsAbs);
+        console.error("[lsp] 运行态落盘失败（不影响 agent 跑）：" + (err instanceof Error ? err.message : String(err)));
+      }
+      return "failed";
+    }
+  });
+  runtimePersistChains.set(wsAbs, run);
+  void run.finally(() => {
+    if (runtimePersistChains.get(wsAbs) === run) runtimePersistChains.delete(wsAbs);
+  });
+  return run;
+}
+
+/** 读盘上那份；不存在、坏 JSON、或写着别的工作区 ⇒ 什么都没有（宁缺勿串号）。 */
+async function readRuntimeRecords(workspace: string): Promise<LspRuntimeRecord[]> {
+  try {
+    const raw = await readFile(lspRuntimeStatePath(workspace), "utf8");
+    const parsed = JSON.parse(raw) as Partial<LspRuntimeFile>;
+    if (parsed.workspace !== resolve(workspace) || !Array.isArray(parsed.records)) return [];
+    return parsed.records.filter((r) => typeof r.serverId === "string" && Array.isArray(r.providers));
+  } catch {
+    return [];
+  }
 }
 
 export const lsp: Tool = {
@@ -1034,6 +1335,13 @@ export const lsp: Tool = {
     // 上面那句只保证"在名单里"，不帮 TS 收窄类型（`includes` 的断言形写法要 `op in` 才生效）：
     // 门控查表要的是 `LspOperation`，这里一次性收口，不在每个调用点各抄一遍断言。
     const op = operation as LspOperation;
+    // 状态面连"未启用"也要答（未启用本身就是要报的那件事），且它一个字也不碰 `getLspClient` ⇒ 不起进程。
+    if (op === "servers") {
+      const st = await lspServerStatus(ctx.workspace);
+      return { ok: true, output: capLspOutput(formatLspStatus(st)) };
+    }
+    // 走到这里 op 不可能是 "servers"（上面已返回）：查询族要用窄类型过门控查表。
+    const queryOp = op as LspQueryOperation;
     const cfg = loadLspConfig(ctx.workspace);
     if (!cfg.enabled) {
       throw new ToolError('lsp: 未启用——工作区 .agent/lsp.json 缺少 "lsp" 配置（或显式 false = 全局关闭）');
@@ -1041,16 +1349,54 @@ export const lsp: Tool = {
 
     if (operation === "workspaceSymbol") {
       const query = typeof args.symbol === "string" ? args.symbol : "";
-      const serverId = Object.keys(cfg.servers)[0];
-      if (!serverId) throw new ToolError("lsp: 未配置任何服务器");
-      const client = await getLspClient(ctx.workspace, cfg, serverId);
-      requireProvider(client, serverId, op);
-      const symbols = await client.request<(DocumentSymbol | SymbolInformation)[] | null>(WorkspaceSymbolRequest.method, { query });
-      // 与 documentSymbol 共用一份形状处理：workspaceSymbol 的条目可能是平铺（带 location）、
-      // 层级（带 selectionRange）或**只有名字**，三种都合法。此处曾另抄一个只认 location 的 mapper
-      // = 同一件事的第二个事实源，也是那条 TypeError 的产地。
-      const lines = symbolLines(ctx.workspace, symbols ?? []);
-      return { ok: true, output: capLspOutput(lines.length ? lines.join("\n") : "无结果") };
+      const ids = Object.keys(cfg.servers);
+      if (ids.length === 0) throw new ToolError("lsp: 未配置任何服务器");
+      // **逐台问**。这里没有 path 可以路由，旧实现取 `Object.keys(cfg.servers)[0]`——哪台在
+      // `.agent/lsp.json` 里排第一就只问哪台。多语言仓库（ts + py）里其余服务器的符号静默缺席，
+      // 而模型看到的「无结果」是一个**错答案**：它会据此判定"这个符号不存在"。
+      const acquired = await Promise.allSettled(ids.map((id) => getLspClient(ctx.workspace, cfg, id)));
+      // 信任门不降级成一行注脚：pending/declined 那台的 ToolError 原样上抛（授权是安全面，不是噪声）。
+      for (const r of acquired) {
+        if (r.status === "fulfilled") continue;
+        const reason = r.reason as Error;
+        if (reason instanceof ToolError && reason.message.startsWith("lsp: 已跳过")) throw reason;
+      }
+      const lines: string[] = [];
+      const misses: string[] = [];
+      let answeredCount = 0;
+      let undeclared = 0;
+      await Promise.all(ids.map(async (id, i) => {
+        const r = acquired[i];
+        if (r.status !== "fulfilled") {
+          misses.push(id + " 未答上：" + lspFailureReason(r.reason));
+          return;
+        }
+        if (!r.value.providerDeclared("workspaceSymbol")) {
+          undeclared++;
+          return; // 它明说不过问这活：不是失败，是边界（全这样才出声，见下）
+        }
+        try {
+          const symbols = await r.value.request<(DocumentSymbol | SymbolInformation)[] | null>(
+            WorkspaceSymbolRequest.method, { query },
+          );
+          answeredCount++;
+          // 每条带来源：跨语言的合并结果里，模型得知道是谁答的（同名符号在两台里含义可以不同）。
+          // 与 documentSymbol 共用一份形状处理：条目可能是平铺（带 location）、层级（带
+          // selectionRange）或**只有名字**，三种都合法。
+          for (const line of symbolLines(ctx.workspace, symbols ?? [])) lines.push(id + " " + line);
+        } catch (err) {
+          misses.push(id + " 未答上：" + lspFailureReason(err));
+        }
+      }));
+      if (answeredCount === 0) {
+        if (undeclared === ids.length) {
+          throw new ToolError(`lsp: 配置的 ${String(ids.length)} 台服务器都没声明 workspaceSymbolProvider，工作区符号查询没人能答（这是能力边界，不是"没有这个符号"；符号清单改用 grep）`);
+        }
+        throw new ToolError(`lsp: ${String(ids.length)} 台服务器全部没答上，这次工作区符号查询没有证据可给：${misses.join("；")}`);
+      }
+      // 有一台没答上就必须点名：「两台里有一台说话，另一台沉默」与「只配了一台」对模型是两回事。
+      const tail = misses.length > 0 ? "\n" + misses.join("\n") : "";
+      return { ok: true, output: capLspOutput((lines.length > 0 ? lines.join("\n") : "无结果") + tail) };
     }
 
     // 其余五操作都需要文件 + 位置
@@ -1065,7 +1411,7 @@ export const lsp: Tool = {
       throw new ToolError("lsp: 没有服务器处理扩展名 " + extname(abs) + "（检查 .agent/lsp.json 的 extensions）");
     }
     const client = await getLspClient(ctx.workspace, cfg, serverId);
-    requireProvider(client, serverId, op);
+    requireProvider(client, serverId, queryOp);
     await client.openFile(abs);
     const line = requirePos(args.line, "line", 1);
     const column = requirePos(args.column, "column", 1);

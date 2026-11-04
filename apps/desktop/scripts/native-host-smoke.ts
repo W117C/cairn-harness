@@ -77,11 +77,19 @@ async function main(): Promise<void> {
   host.open("background-popup",base,popup);
   const background=host.webContentsForAudit("background-popup");
   check("后台弹窗页面挂到调用窗口而非聚焦窗口",popup.contentView.children.some(v=>v instanceof WebContentsView&&v.webContents===background)&&mainWindow.contentView.children.length===0);
+  // 2026-11-04 多窗隔离：同一 tab id 在不同 BrowserWindow 里各建各的视图（entries 以 win.id+id 为键）。
+  // 旧断言「另一个窗口不能复用已有视图 ID」钉的是全局唯一，已被产品口径推翻；这里改钉**隔离**：
+  // 第二个窗口必须拿到不同的 webContents，不能复用 popup 那个。
   const foreignOwner=host.open("background-popup",base,mainWindow);
-  check("另一个窗口不能复用已有视图 ID",!foreignOwner.ok);
+  const mainView=host.webContentsForAudit("background-popup",mainWindow);
+  check("同 ID 跨窗口各自独立（不复用同一视图）",
+    foreignOwner.ok&&mainView!==null&&mainView!==background&&!mainView.isDestroyed(),
+    {ok:foreignOwner.ok,sameView:mainView===background});
   popup.destroy();
   await new Promise(r=>setTimeout(r,100));
-  check("宿主窗口销毁时释放视图及登记",background?.isDestroyed()===true&&host.webContentsForAudit("background-popup")===null);
+  // 只清 popup 那一份：popup 的视图必须释放，mainWindow 的同名视图必须还活着。
+  check("宿主窗口销毁时释放视图及登记",
+    background?.isDestroyed()===true&&host.webContentsForAudit("background-popup",popup)===null&&mainView?.isDestroyed()===false);
   const terminalEvents: TerminalPush[]=[];
   const terminal=new TerminalHost(e=>terminalEvents.push(e));
   const started=await terminal.start(profile,{...process.env,SHELL:"/bin/sh",ENV:"/dev/null"});

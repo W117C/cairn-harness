@@ -25,9 +25,20 @@ export interface PlanChannel {
   waitApproval(callId: string, opts?: GateWaitOptions): Promise<"approved" | "rejected">;
 }
 
+/** 本轮用户明确批准的项目外读取范围（来自 RunRequest attachments 的逐次审批）。
+ *  只由 `handleAgentRun` 在附件审批通过后注入；缺省 undefined = 项目外路径照旧一律拒绝。 */
+export interface ExternalReadGrant {
+  /** canonical real path（`validateRunAttachment` 的 realPath）。 */
+  path: string;
+  kind: "file" | "directory";
+}
+
 export interface ToolContext {
   /** 工具执行的工作区（绝对路径）。 */
   workspace: string;
+  /** 项目外附件的**本轮**读取白名单。只有这里的精确路径（目录则含整棵子树）能被
+   *  read_file / read_image 打开；不复制文件、不修改文件、不持久化。 */
+  externalReadGrants?: readonly ExternalReadGrant[];
   /** 事件旁路出口：门工具用它把 clarify_requested / plan_proposed 落进事件流。 */
   emit?: (e: AgentEvent) => void | Promise<void>;
   /** 原工具调用 id（门事件与 tool_result 挂回同一 id 用）。 */
@@ -94,7 +105,7 @@ export interface ToolResult {
 /** 本仓静态工具名的唯一事实源：联合类型与名字表同源（加一个工具只改这一行）。 */
 export const TOOL_NAMES = [
   "read_file", "write_file", "edit_file", "apply_patch", "run_shell", "grep", "glob", "lsp",
-  "clarify", "propose_plan", "verify", "read_image", "render_image",
+  "clarify", "propose_plan", "verify", "read_image", "render_image", "todo_write",
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];
@@ -196,6 +207,39 @@ export async function assertRealContainment(workspace: string, abs: string, labe
   if (relBack !== "" && (relBack.startsWith("..") || isAbsolute(relBack))) {
     throw new ToolError(`${label}: 路径经软链解析后越出 workspace 边界: ${abs}`);
   }
+}
+
+/** 读取目标解析：工作区内路径走原有 containment 闸；绝对路径只有在**本轮用户已批准**的
+ *  externalReadGrants 里才放行。项目外放行按 realpath 比对（防止批准后把文件换成指向别处的
+ *  软链）；目录 grant 覆盖整棵子树，但子项同样先 realpath 再比对，不跟随到界外。 */
+export async function resolveReadTarget(
+  workspace: string,
+  input: string,
+  label: string,
+  grants: readonly ExternalReadGrant[] | undefined,
+): Promise<{ abs: string; display: string; external: boolean }> {
+  if (isAbsolute(input)) {
+    if (grants === undefined || grants.length === 0) {
+      throw new ToolError(`${label}: 只允许 workspace 相对路径，收到绝对路径: ${input}`);
+    }
+    const lexical = resolve(input);
+    const real = await realpath(lexical).catch(() => null);
+    const candidate = real ?? lexical;
+    for (const grant of grants) {
+      const root = resolve(grant.path);
+      const hit = grant.kind === "file"
+        ? candidate === root
+        : (() => {
+            const rel = relative(root, candidate);
+            return rel === "" || (rel !== ".." && !rel.startsWith(".." + sep) && !isAbsolute(rel));
+          })();
+      if (hit) return { abs: candidate, display: input, external: true };
+    }
+    throw new ToolError(`${label}: 路径不在本轮已批准的项目外附件清单内: ${input}`);
+  }
+  const abs = resolveInWorkspace(workspace, input, label);
+  await assertRealContainment(workspace, abs, label);
+  return { abs, display: input, external: false };
 }
 
 // .agent/ 是系统区（审查 C-11：permissions.json 跨会话提权 / lsp.json 任意 command RCE 面 / plugins / memory）。

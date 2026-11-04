@@ -262,6 +262,14 @@ export class McpManager {
   private factory: McpClientFactory;
   /** server 崩溃时通知运行时摘掉它的工具（否则模型继续看到一组永远「未连接」的工具）。 */
   onServerDown?: (plugin: string, server: string) => void;
+  /** 自动重连成功后通知运行时**把工具放回去**（第 999 页）。没有这一半就会出现
+   *  「连接在跑、模型看不见工具」——那比不修更坏，因为状态面是绿的。 */
+  onServerUp?: (plugin: string, server: string, tools: McpToolInfo[]) => void;
+  /** 最后一次 connect 的入参：自动重连要能原样再走一遍 `connectOnce`（含 include/exclude 与 grade）。 */
+  private readonly retryable = new Map<string, { cfg: McpServerConfig; roots?: McpExpandRoots }>();
+  /** 已试过的重连次数（手工 connect 时清零；上限见 MCP_MAX_RECONNECTS）。 */
+  private readonly reconnects = new Map<string, number>();
+  private readonly reconnecting = new Set<string>();
   private readonly connectTimeoutMs: number;
   private readonly callTimeoutMs: number;
 
@@ -288,12 +296,69 @@ export class McpManager {
       if (!existing.error) return { ok: true, tools: existing.tools };
       this.connections.delete(k);
     }
+    // 手工/初次 connect：记下入参（自动重连要用）并把计数归零。
+    this.retryable.set(k, { cfg, ...(roots !== undefined ? { roots } : {}) });
+    this.reconnects.delete(k);
     const generation = this.generation;
     const attempt = this.connectOnce(plugin, server, cfg, roots, k, generation).finally(() => {
       if (this.inflight.get(k) === attempt) this.inflight.delete(k);
     });
     this.inflight.set(k, attempt);
     return attempt;
+  }
+
+  /** server 崩一次后自动重连的上限。有界是刻意的：无界重连会把一台真的没修好的 server
+   *  变成一直在背景里握手、状态永远"重连中"的噪声源（并且一直吃 CPU/进程表）。 */
+  private static readonly MAX_RECONNECTS = 2;
+
+  /** onclose 后由本层自己重连（第 999 页）。三条守卫一条都不能省：
+   *  退出中 / 代次已变 / 这一路正在手工关闭 ⇒ 一律不重连，否则迟到回调会把刚关掉的服务复活。 */
+  private scheduleReconnect(plugin: string, server: string, k: string, generation: number): void {
+    if (this.closing !== null || this.generation !== generation) return;
+    if (this.closingKeys.has(k)) return;
+    const params = this.retryable.get(k);
+    if (params === undefined) return; // 没有入参就没法原样重放这一轮握手
+    const already = this.reconnects.get(k) ?? 0;
+    if (already >= McpManager.MAX_RECONNECTS) return;
+    this.reconnecting.add(k);
+    void (async () => {
+      let attempts = already;
+      let lastReason = "";
+      while (attempts < McpManager.MAX_RECONNECTS) {
+        attempts += 1;
+        this.reconnects.set(k, attempts);
+        try {
+          const result = await this.connectOnce(plugin, server, params.cfg, params.roots, k, generation);
+          if (result.ok) {
+            this.reconnecting.delete(k);
+            // 工具回到运行时面才算真的修好；只改状态是半截修好。
+            this.onServerUp?.(plugin, server, result.tools);
+            return;
+          }
+          lastReason = result.error ?? "未知失败";
+        } catch (err) {
+          lastReason = err instanceof Error ? err.message : String(err);
+        }
+        if (this.closing !== null || this.generation !== generation || this.closingKeys.has(k)) {
+          this.reconnecting.delete(k);
+          return;
+        }
+      }
+      this.reconnecting.delete(k);
+      this.markReconnectFailed(k, plugin, server, lastReason, attempts);
+    })();
+  }
+
+  /** 停手时把原因留在状态上：只说"失败"等于让业主去猜是配置错了还是进程起不来。 */
+  private markReconnectFailed(k: string, plugin: string, server: string, reason: string, attempts: number): void {
+    const note = "重连 " + String(attempts) + " 次仍失败：" + reason;
+    const cur = this.connections.get(k);
+    if (cur !== undefined) {
+      this.connections.set(k, { ...cur, client: undefined as unknown as Client, error: note });
+      return;
+    }
+    // 连接记录已经没了（例如这一路被关过）：不凭空造一条状态，但原因仍要出声，不然只是静默失败。
+    try { console.error("[mcp] " + plugin + "/" + server + " " + note); } catch { /* 无 stderr */ }
   }
 
   private async connectOnce(
@@ -360,6 +425,8 @@ export class McpManager {
         if (cur === conn && !cur.error) {
           this.connections.set(k, { ...cur, client: undefined as unknown as Client, error: "MCP server 连接已断开（onclose）" });
           try { this.onServerDown?.(plugin, server); } catch { /* 摘工具失败不改变失败态 */ }
+          // 标完失败再试着回来：先摘工具是刻意的次序——重连成功前，模型不该看到一组点得动的工具。
+          this.scheduleReconnect(plugin, server, k, generation);
         }
       };
       this.connections.set(k, conn);
@@ -386,11 +453,17 @@ export class McpManager {
     }
   }
 
-  /** tools/call（bare 名回传 server 侧）。 */
+  /** tools/call（bare 名回传 server 侧）。
+   *  只认裁剪后那张表：`includeTools` / `excludeTools` 是在进注册表之前生效的，被裁掉的工具
+   *  连名字都不该存在。这一层不查，一条 `mcp_tool` 钩子（或任何直接调用方）就能点到用户明确关掉的那把——
+   *  裁剪是权限面，不是显示偏好，所以闸放在这里而不是放在调用方各自记得查。 */
   async callTool(plugin: string, server: string, tool: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<{ ok: boolean; output: string }> {
     const k = this.key(plugin, server);
     const conn = this.closing || this.closingKeys.has(k) ? undefined : this.connections.get(k);
     if (!conn || conn.error || !conn.client) return { ok: false, output: "MCP server 未连接: " + plugin + "/" + server };
+    if (!conn.tools.some((t) => t.name === tool)) {
+      return { ok: false, output: "MCP 工具不可调用（不在 include/exclude 裁剪后的表里）: " + plugin + "/" + server + "/" + tool };
+    }
     const label = `MCP tools/call ${plugin}/${server}/${tool}`;
     // 独立信号在请求结束时解除会话监听，避免稍后的取消再次通知已完成请求。
     const requestAbort = new AbortController();
@@ -433,9 +506,13 @@ export class McpManager {
     return [...this.connections.values()].map((c) => ({
       plugin: c.plugin,
       server: c.server,
-      state: c.error ? "failed" : "connected",
+      // 三档分开：在跑 / 重连中 / 已失败。「重连中」不是绿灯（它随时可能变成"重连 2 次仍失败"），
+      // 也不是失败（正在回来的路上）——压成任意一档都会让面板说假话。
+      state: this.reconnecting.has(this.key(c.plugin, c.server))
+        ? "reconnecting"
+        : c.error ? "failed" : "connected",
       tools: c.tools.map((t) => t.scopedName),
-      ...(c.error ? { error: c.error } : {}),
+      ...(c.error && !this.reconnecting.has(this.key(c.plugin, c.server)) ? { error: c.error } : {}),
     }));
   }
 

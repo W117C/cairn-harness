@@ -331,7 +331,10 @@ describe("MCP onclose 链式与 callTool 超时（S1-3 回归）", () => {
         const prev = transport.onclose; // 模拟 SDK：connect 内包装既有 onclose
         transport.onclose = () => { prev?.(); sdkHalfCalls++; };
       },
-      listTools: async () => ({ tools: [] }),
+      // 夹具修正（第 1000 页）：真 server 是先 listTools 报出 "hang"、模型才拿得到这个名字的。
+      // 从前这里返回空表却照样 callTool("hang")——callTool 现在按裁剪后的表拒调用，
+      // 空表等于「这把工具根本不存在」，测不到在途超时那条路径。
+      listTools: async () => ({ tools: [{ name: "hang", inputSchema: {} }] }),
       callTool: () => new Promise<never>(() => {}), // 永不 settle（server 已死）
       close: async () => {},
     } as unknown as Client;
@@ -340,10 +343,44 @@ describe("MCP onclose 链式与 callTool 超时（S1-3 回归）", () => {
     const inflight = mgr.callTool("p", "s", "hang", {});
     transport.onclose?.(); // 触发「server 进程死亡」
     expect(sdkHalfCalls).toBe(1); // 覆盖赋值会把它打成 0（回归点）
+    // E5 的本意是"崩了之后不许继续报 connected 僵尸态"。第 999 页起，那一刻的合法状态是
+    // **reconnecting**（正在回来）或 **failed**（回来失败）；旧断言写的是终态 failed，
+    // 而这份夹具的 factory 复用同一个 client ⇒ 重连会"成功"，终态 connected 是**真**恢复。
+    // 所以这里改成钉"崩溃那一刻"：反僵尸这条比原来更严，也放得下合法的重连。
+    const atCrash = mgr.statuses()[0]!.state;
+    expect(["reconnecting", "failed"]).toContain(atCrash);
     const res = await inflight;
     expect(res.ok).toBe(false);
     expect(res.output).toContain("超时");
-    expect(mgr.statuses()[0]!.state).toBe("failed"); // E5 本意仍成立
   }, 5000);
+});
+
+describe("第 999 页：重连成功后工具要回到模型面", () => {
+  it("崩溃前激活的那几把，重连后自己回来（连接绿了而工具看不见＝半截修好，比不修更坏）", async () => {
+    const rt = await PluginRuntime.load({
+      projectPluginsDir: fx("project"),
+      workspace: process.cwd(),
+      pluginDataRoot: join(TRUST_DIR, "data-reconnect"),
+      trustFile: join(TRUST_DIR, "trust-reconnect.json"),
+    });
+    await rt.trustDecide("echo-suite", true);
+    await rt.connectMcp();
+    const scopedEcho = scopedToolName("echo-suite", "stub", "echo");
+    const info = rt.mcpTools.get(scopedEcho);
+    expect(info).toBeDefined();
+    expect(rt.activateMcpTools("echo-suite/stub", ["echo"]).ok).toBe(true);
+    expect(rt.isMcpToolActive(scopedEcho)).toBe(true);
+
+    // 崩：manager 通知运行时摘面（这一步同时记下"崩前哪些是激活的"）
+    rt.mcp.onServerDown?.("echo-suite", "stub");
+    expect(rt.mcpTools.has(scopedEcho)).toBe(false);
+    expect(rt.isMcpToolActive(scopedEcho)).toBe(false);
+
+    // 自动重连成功：同一批工具回来，并且**激活集按原样恢复**
+    rt.mcp.onServerUp?.("echo-suite", "stub", [info!]);
+    expect(rt.mcpTools.has(scopedEcho)).toBe(true);
+    expect(rt.isMcpToolActive(scopedEcho)).toBe(true);
+    await rt.shutdown();
+  }, 15000);
 });
 

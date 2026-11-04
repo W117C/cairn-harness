@@ -68,6 +68,27 @@ describe("usage dashboard", () => {
     expect(failed).toContain("重试");
   });
 
+  it("让布局说话：页面/概览/趋势/页脚不挂复述性小字，时区与估算口径进 tooltip", () => {
+    const html = renderToStaticMarkup(<UsageDashboard data={data} refreshing={false} error={null} onRefresh={() => undefined} />);
+    // 2026-11-04 本批：标签与数字已经自明，下面这些第二遍解释撤出可见面。
+    for (const gone of [
+      "查看累计消耗，以及每天与各模型的使用情况。",
+      "模型上报的消耗记录",
+      "有日期的会话活动",
+      "按已登记工作区的原始日志统计",
+      "缓存读取单独展示，不重复计入输入 + 输出总量。",
+    ]) {
+      expect(html, gone).not.toContain(gone);
+    }
+    // 趋势卡的日期范围/时区从正文挪进标题的 title（可见面只留图与刻度）。
+    expect(html).toMatch(/title="[^"]+ · Asia\/Shanghai"/);
+    expect(html).not.toMatch(/>[^<]*· Asia\/Shanghai</);
+    // 页脚只留一句口径，不再复述统计范围与「记录数≠请求数」。
+    expect(html).toContain("Token 为模型上报值，含子代理。");
+    // 缓存读取的完整口径仍留在 SVG <title>（无障碍说明），只是不再常驻正文。
+    expect(html).toContain("缓存读取单独展示");
+  });
+
   it("does not turn sessions without usage or an older payload into measured zero", () => {
     const html = renderToStaticMarkup(<UsageDashboard data={{ ...data, totals: { ...data.totals, usageCount: 0 }, analytics: { ...data.analytics!, buckets: [], activity: [], sessionsWithUsage: 0, sessionsWithoutUsage: 2 } }} refreshing={false} error={null} onRefresh={() => undefined} />);
     expect(html).toContain("尚无用量记录");

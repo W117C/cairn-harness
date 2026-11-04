@@ -161,7 +161,7 @@ describe("具名墨色对（ink on its real background）", () => {
   });
 
   it("状态点按非文本 3:1 判：运行黄只许待在它真实的卡面上", () => {
-    // .wk-dot.running / .isp-ov-status / 横幅图标都是**点/图标**（WCAG 1.4.11 非文本 3:1）。
+    // .wk-dot.running / 横幅图标都是**点/图标**（WCAG 1.4.11 非文本 3:1）。
     for (const bg of ["bg-000", "bg-100"] as const) {
       expect(ratio(LIGHT["color-run"], LIGHT[bg]), `运行黄 on ${bg}`).toBeGreaterThanOrEqual(3);
     }
@@ -206,7 +206,8 @@ describe("运行黄的前景档（--color-run-ink）", () => {
       .map((m) => m[1].trim().replace(/\s+/g, " "));
     expect(offenders, "仍以原档作前景的规则（该走 --color-run-ink）：\n" + offenders.join("\n")).toEqual([]);
     const used = raw.match(/color:\s*hsl\(var\(--color-run-ink\)\)/g) ?? [];
-    expect(used.length, `前景档实际用法 ${used.length} 处`).toBeGreaterThanOrEqual(2);
+    // 2026-11-03 检查器统计页整页撤下（业主：右栏不装用量仪表）：前景档消费点从 2 降到 1（.wk-dot.running）。
+    expect(used.length, `前景档实际用法 ${used.length} 处`).toBeGreaterThanOrEqual(1);
   });
 
   it("圆点族仍用原档（小色块要鲜度），且只许这几处", () => {
@@ -216,10 +217,6 @@ describe("运行黄的前景档（--color-run-ink）", () => {
       .map((m) => m[1].trim().replace(/\s+/g, " "));
     expect(fills.sort()).toEqual([
       ".dot.running",
-      // chip 自己的 6% 淡染底（只把 chip 与卡面分开，不单独传意）
-      ".isp-ov-status[data-running=\"true\"]",
-      ".isp-ov-status[data-running=\"true\"] .isp-ov-status-dot",
-      ".provider-dot[data-ok=\"demo\"]::before",
       ".tb-demo-dot",
     ].sort());
   });

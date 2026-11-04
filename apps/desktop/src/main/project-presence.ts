@@ -38,3 +38,33 @@ export async function missingProjectPathError(
   if (await exists(path).catch(() => false)) return null;
   return `项目目录不存在（可能已被移动或删除）：${path}——在侧栏项目菜单里选「更改项目目录…」重新定位`;
 }
+
+/** 重新定位项目目录并同步 KernelHost 的工作区扫描面：
+ *  旧路径已不存在或无在跑会话时移除旧工作区，新路径立即并入 host（无需重启应用）。 */
+export async function relocateRegisteredProject<T extends ProjectPathLike>(
+  id: string,
+  nextPath: string,
+  registry: {
+    get(id: string): Promise<T>;
+    relocate(id: string, nextPath: string): Promise<T>;
+  },
+  workspaces: {
+    addWorkspace(ws: string): void;
+    removeWorkspace(ws: string): void;
+  },
+  keepPinnedWorkspace?: string,
+): Promise<T> {
+  const prev = await registry.get(id);
+  const updated = await registry.relocate(id, nextPath);
+  if (prev.path !== updated.path) {
+    if (prev.path !== keepPinnedWorkspace) {
+      try {
+        workspaces.removeWorkspace(prev.path);
+      } catch {
+        // 旧目录仍有在跑会话时保留直至收束，不阻断新路径生效
+      }
+    }
+    workspaces.addWorkspace(updated.path);
+  }
+  return updated;
+}

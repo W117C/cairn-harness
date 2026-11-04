@@ -14,6 +14,7 @@ import {
   type ExperienceStatus,
   type PlaybookOp,
 } from "../../agent/evolve/playbook";
+import { verifyGlobalEvidence, type GlobalEvidenceCheck } from "./globalize";
 import { appendPlaybookEvents, loadPlaybook, playbookPathFor } from "./playbook-store";
 import { isEvolveFrozen } from "./governance";
 
@@ -27,11 +28,14 @@ export interface ActivationBlock {
 
 const ACTIVATABLE: ReadonlySet<ExperienceStatus> = new Set(["candidate", "shadow", "dormant"]);
 
-/** 激活门（纯函数）：返回全部阻断理由；空数组 = 可激活。 */
+/** 激活门（仍是纯函数）：返回全部阻断理由；空数组 = 可激活。
+ *  `globalCheck` 由**调用方算好**传进来（`verifyGlobalEvidence` 要读别的工作区的账，纯函数不碰 IO）。
+ *  不传就是没验：全局条目继续 fail-closed，但说的是"这次没带核验"，不是"核验做不到"。 */
 export function activationBlockers(
   entry: ExperienceEntry,
   entries: readonly ExperienceEntry[],
   now: number,
+  opts: { globalCheck?: GlobalEvidenceCheck } = {},
 ): ActivationBlock[] {
   const out: ActivationBlock[] = [];
   if (!ACTIVATABLE.has(entry.status)) {
@@ -44,12 +48,19 @@ export function activationBlockers(
     out.push({ code: "no-evidence", detail: "没有 Episode 证据：active 条目必须可核验" });
   }
   // 设计 §4.5：`workspace:"*"` 只能由 owner 显式全局晋升，且需 ≥3 个 workspace 的证据。
-  // 跨 workspace 证据核验尚未实现 ⇒ fail-closed，不在本 workspace 的账上替全局背书。
+  // 这条门此前**无条件**拒绝，理由是"当前门无法跨库核验"——那是 stale 话术：跨库核验自第 911–912 页
+  // 就存在（`globalize.verifyGlobalEvidence`：≥3 个 workspace、Episode 真在、outcome 非 unknown）。
+  // 现在三种情形各说各话：没带核验结果（fail-closed 的**真实原因**是没人验，不是验不了）、
+  // 核验没过（用核验给出的实测理由）、核验过了（不再因全局作用域阻断；其余门一条不放过）。
   if (entry.scope.workspace === "*") {
-    out.push({
-      code: "global-scope",
-      detail: "全局作用域需要 ≥3 个 workspace 的证据与显式全局晋升；当前门无法跨库核验（fail-closed）",
-    });
+    if (opts.globalCheck === undefined) {
+      out.push({
+        code: "global-scope",
+        detail: "全局作用域需要 ≥3 个 workspace 的可测证据：这次调用没带跨库核验结果，门不替没验过的条目背书（fail-closed）",
+      });
+    } else if (!opts.globalCheck.ok) {
+      out.push({ code: "global-scope", detail: "全局作用的证据核验没过：" + opts.globalCheck.reason });
+    }
   }
   const causal = entry.confidence.causal;
   if (causal.trials <= 0 || causal.riskDiff === null) {
@@ -77,8 +88,7 @@ export type ActivationOutcome =
   | { outcome: "refused"; entry: ExperienceEntry; blockers: ActivationBlock[] }
   | { outcome: "frozen"; entry: ExperienceEntry };
 
-/** 人工把一条 active 经验转 dormant（负证据的出口；可经激活门再回来）。 */
-export type DormantOutcome =
+/** 人工把一条 active 经验转 dormant（负证据的出口；可经激活门再回来）。 */export type DormantOutcome =
   | { outcome: "dormant"; entry: ExperienceEntry; path: string }
   | { outcome: "dry-run"; entry: ExperienceEntry }
   | { outcome: "refused"; entry: ExperienceEntry; reason: string }
@@ -102,7 +112,17 @@ export async function activatePlaybookEntry(
   if (entry === undefined) throw new Error("经验不在 playbook 上：" + id);
   if (await isEvolveFrozen(workspace)) return { outcome: "frozen", entry };
   if (entry.status === "active") return { outcome: "already-active", entry };
-  const blockers = activationBlockers(entry, playbook.entries, now);
+  // 全局条目：先把各证据库读一遍核验，再把结论交给门（门自己保持纯函数，不碰 IO）。
+  // 本地作用域不做跨库读盘——那是白付的 IO。
+  const globalCheck = entry.scope.workspace === "*"
+    ? await verifyGlobalEvidence(entry.globalEvidence ?? [])
+    : undefined;
+  const blockers = activationBlockers(
+    entry,
+    playbook.entries,
+    now,
+    ...(globalCheck !== undefined ? [{ globalCheck }] : []),
+  );
   if (blockers.length > 0) return { outcome: "refused", entry, blockers };
   if (options.apply !== true) return { outcome: "dry-run", entry };
   const patch: PlaybookOp = {

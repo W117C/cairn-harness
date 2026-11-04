@@ -1,20 +1,81 @@
 // 进化分区（Cairn Evolve · P5 可见面）：报告只读；唯一动作是人工治理的冻结开关
 // （冻结写 STOP、解冻删 STOP——不注入、不晋升、不碰预算/候选）。
 // 纯展示组件与容器分离：EvolvePanel 可静态判卷；EvolveSection 只负责取报告、重试与落冻结动作。
+//
+// 2026-11-01 真机（业主截图）：证据/经验分区此前把计数拼成一长串英文标签
+// （"success 0 / failure 0 / unknown 834"），读不出「哪个数是多少」。
+// 现在是「人能读的表」：一行一个短标签 + 一句白话 + 若干计数小片；
+// 原始计数串原样收进分区末尾的「技术详情」折叠（默认收起，不占默认版面）。
 
 import { useState } from "react";
 import type { EvolveReport } from "../../../../../../src/main/ipc-protocol";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { Badge, Banner, SettingsRow, SettingsSection } from "../settings-ui";
 
+/** 经验状态/类型的人话标签（2026-11-02）：数据面仍是 active/candidate/lesson/pitfall，
+ *  界面只做呈现层映射；未登记的键原样显示，不编造。 */
+const STATUS_LABEL: Record<string, string> = {
+  active: "已生效",
+  candidate: "候选",
+  retired: "已退役",
+  rejected: "已拒绝",
+};
+const KIND_LABEL: Record<string, string> = {
+  lesson: "经验教训",
+  pitfall: "易错点",
+};
+const CANDIDATE_STATUS_LABEL: Record<string, string> = {
+  candidate: "待评估",
+  promoted: "已晋升",
+  rejected: "已拒绝",
+  passed: "已通过",
+};
+
 export type EvolvePanelState =
   | { status: "loading" }
   | { status: "error"; error: string }
   | { status: "ready"; report: EvolveReport };
 
+function countEntries(map: Record<string, number>): [string, number][] {
+  return Object.entries(map).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+}
+
 function counts(map: Record<string, number>): string {
-  const entries = Object.entries(map).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  const entries = countEntries(map);
   return entries.length === 0 ? "无" : entries.map(([key, value]) => key + "×" + String(value)).join("、");
+}
+
+/** 计数小片：给人读的一格一个数（标签 + 值）；CJK 词不许折行（CSS 保 nowrap）。 */
+function CountChips(props: { items: { key: string; value: number; unit?: string }[] }): React.JSX.Element {
+  return (
+    <span className="sp-chips">
+      {props.items.map((item) => (
+        <span className="sp-chip" key={item.key}>
+          <span className="sp-chip-k">{item.key}</span>
+          <span className="sp-chip-v">
+            {String(item.value)}{item.unit === undefined ? "" : " " + item.unit}
+          </span>
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/** 技术详情（原生 details，默认收起）：原始计数串原样留着备查，默认版面不出现。 */
+function TechDetails(props: { lines: { key: string; raw: string }[] }): React.JSX.Element {
+  return (
+    <details className="sp-tech">
+      <summary>技术详情</summary>
+      <div className="sp-tech-body">
+        {props.lines.map((line) => (
+          <div className="sp-tech-line" key={line.key}>
+            <span className="sp-tech-k">{line.key}</span>
+            <code className="sp-tech-v">{line.raw}</code>
+          </div>
+        ))}
+      </div>
+    </details>
+  );
 }
 
 function budgetSource(source: EvolveReport["budget"]["source"]): string {
@@ -55,32 +116,36 @@ export function EvolvePanel(props: {
   const { state } = props;
   return (
     <div className="ss-page">
-      <h1 className="ss-title">进化</h1>
-      {state.status === "loading" && <p className="sp-note" role="status">正在读取进化报告…</p>}
-      {state.status === "error" && (
-        <div className="sp-note err" role="alert">
-          <p>读取失败：{state.error.trim() || "未知原因"}</p>
-          <button type="button" className="mini-btn" onClick={props.onRetry}>重试</button>
-        </div>
-      )}
-      {state.status === "ready" && (
-        <EvolveReportBody
-          report={state.report}
-          {...(props.onSetFrozen !== undefined ? { onSetFrozen: props.onSetFrozen } : {})}
-          {...(props.frozenBusy === true ? { frozenBusy: true } : {})}
-          {...(props.onActivate !== undefined ? { onActivate: props.onActivate } : {})}
-          {...(props.activateBusyId !== undefined ? { activateBusyId: props.activateBusyId } : {})}
-          {...(props.onDormant !== undefined ? { onDormant: props.onDormant } : {})}
-          {...(props.dormantBusyId !== undefined ? { dormantBusyId: props.dormantBusyId } : {})}
-          {...(props.onRevokeGlobal !== undefined ? { onRevokeGlobal: props.onRevokeGlobal } : {})}
-          {...(props.globalBusyId !== undefined ? { globalBusyId: props.globalBusyId } : {})}
-          {...(props.onRestoreGlobal !== undefined ? { onRestoreGlobal: props.onRestoreGlobal } : {})}
-          {...(props.restoreBusyId !== undefined ? { restoreBusyId: props.restoreBusyId } : {})}
-          {...(props.onSetGlobalFrozen !== undefined ? { onSetGlobalFrozen: props.onSetGlobalFrozen } : {})}
-          {...(props.globalFrozenBusy === true ? { globalFrozenBusy: true } : {})}
-          {...(props.actionError !== undefined ? { actionError: props.actionError } : {})}
-        />
-      )}
+      {/* 头与内容列都跟其它设置分区同形（SettingsPage）：此前这里只有裸 h1，
+          少了 .ss-content ⇒ settings-refinement.css 的「分区之间一条细线」从不生效。 */}
+      <header className="ss-head"><h1 className="ss-title">进化</h1></header>
+      <div className="ss-content">
+        {state.status === "loading" && <p className="sp-note" role="status">正在读取进化报告…</p>}
+        {state.status === "error" && (
+          <div className="sp-note err" role="alert">
+            <p>读取失败：{state.error.trim() || "未知原因"}</p>
+            <button type="button" className="mini-btn" onClick={props.onRetry}>重试</button>
+          </div>
+        )}
+        {state.status === "ready" && (
+          <EvolveReportBody
+            report={state.report}
+            {...(props.onSetFrozen !== undefined ? { onSetFrozen: props.onSetFrozen } : {})}
+            {...(props.frozenBusy === true ? { frozenBusy: true } : {})}
+            {...(props.onActivate !== undefined ? { onActivate: props.onActivate } : {})}
+            {...(props.activateBusyId !== undefined ? { activateBusyId: props.activateBusyId } : {})}
+            {...(props.onDormant !== undefined ? { onDormant: props.onDormant } : {})}
+            {...(props.dormantBusyId !== undefined ? { dormantBusyId: props.dormantBusyId } : {})}
+            {...(props.onRevokeGlobal !== undefined ? { onRevokeGlobal: props.onRevokeGlobal } : {})}
+            {...(props.globalBusyId !== undefined ? { globalBusyId: props.globalBusyId } : {})}
+            {...(props.onRestoreGlobal !== undefined ? { onRestoreGlobal: props.onRestoreGlobal } : {})}
+            {...(props.restoreBusyId !== undefined ? { restoreBusyId: props.restoreBusyId } : {})}
+            {...(props.onSetGlobalFrozen !== undefined ? { onSetGlobalFrozen: props.onSetGlobalFrozen } : {})}
+            {...(props.globalFrozenBusy === true ? { globalFrozenBusy: true } : {})}
+            {...(props.actionError !== undefined ? { actionError: props.actionError } : {})}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -111,6 +176,33 @@ function EvolveReportBody(props: {
   const nextFrozen = !report.frozen;
   const episodes = report.episodes;
   const playbook = report.playbook;
+  // 原始计数串（2026-11-01）：原样搬进「技术详情」折叠，正文只给人读的那版。
+  const rawLines = [
+    {
+      key: "Episode",
+      raw: `success ${String(episodes.byOutcome.success)} / failure ${String(episodes.byOutcome.failure)} / unknown ${String(episodes.byOutcome.unknown)}；verify green ${String(episodes.byVerify.green)} / red ${String(episodes.byVerify.red)} / none ${String(episodes.byVerify.none)}`,
+    },
+    {
+      key: "未知面",
+      raw: `judge 未测 ${String(episodes.unknownReasons.judge)}；verify 未跑 ${String(episodes.unknownReasons.verify)}；user 未测 ${String(episodes.unknownReasons.user)}`,
+    },
+    {
+      key: "成本",
+      raw: `主面 ${String(episodes.cost.mainTokens)} token；worker ${String(episodes.cost.workerTokens)}；可定价 ${String(episodes.cost.pricedRuns)} / 不可定价 ${String(episodes.cost.unpricedRuns)}`,
+    },
+    {
+      key: "playbook",
+      raw: `状态：${counts(playbook.byStatus)}；类型：${counts(playbook.byKind)}；冲突 ${String(playbook.conflicts)}；过期 ${String(playbook.expired)}；负证据 ${String(playbook.negative)}；可激活 ${String(playbook.activatable.length)}${playbook.activatable.length === 0 ? "" : "（" + playbook.activatable.slice(0, 2).join("、") + (playbook.activatable.length > 2 ? " 等" : "") + "）"}；坏行 ${String(playbook.badLines)}；拒单 ${String(playbook.refusals)}`,
+    },
+    {
+      key: "候选",
+      raw: `状态：${counts(report.candidates.byStatus)}`,
+    },
+    {
+      key: "预算容量",
+      raw: `playbook ${String(report.budget.budget.maxPlaybookEntries)}；实验 ${String(report.budget.budget.maxExperiments)}；候选 ${String(report.budget.budget.maxCandidates)}`,
+    },
+  ];
   return (
     <>
       {report.frozen && (
@@ -119,37 +211,71 @@ function EvolveReportBody(props: {
         </Banner>
       )}
       {props.actionError !== undefined && <p className="sp-note err" role="alert">{props.actionError}</p>}
-      <SettingsSection title="证据" hint="只读快照">
-        <SettingsRow
-          label="Episode"
-          desc={`success ${String(episodes.byOutcome.success)} / failure ${String(episodes.byOutcome.failure)} / unknown ${String(episodes.byOutcome.unknown)}；verify green ${String(episodes.byVerify.green)} / red ${String(episodes.byVerify.red)} / none ${String(episodes.byVerify.none)}`}
-        >
+      <SettingsSection title="证据">
+        <SettingsRow label="记录总数">
           <Badge>{String(episodes.total)} 条</Badge>
         </SettingsRow>
-        <SettingsRow
-          label="未知面"
-          desc={`judge 未测 ${String(episodes.unknownReasons.judge)}；verify 未跑 ${String(episodes.unknownReasons.verify)}；user 未测 ${String(episodes.unknownReasons.user)}`}
-        >
-          <Badge tone="neutral">不折成成功</Badge>
+        <SettingsRow label="结果分布">
+          <CountChips items={[
+            { key: "成功", value: episodes.byOutcome.success },
+            { key: "失败", value: episodes.byOutcome.failure },
+            { key: "未分类", value: episodes.byOutcome.unknown },
+          ]} />
         </SettingsRow>
-        <SettingsRow
-          label="成本"
-          desc={`主面 ${String(episodes.cost.mainTokens)} token；worker ${String(episodes.cost.workerTokens)}；可定价 ${String(episodes.cost.pricedRuns)} / 不可定价 ${String(episodes.cost.unpricedRuns)}`}
-        >
-          <Badge tone="neutral">记录值</Badge>
+        <SettingsRow label="自校验">
+          <CountChips items={[
+            { key: "绿", value: episodes.byVerify.green },
+            { key: "红", value: episodes.byVerify.red },
+            { key: "无", value: episodes.byVerify.none },
+          ]} />
         </SettingsRow>
+        <SettingsRow label="未知面">
+          <CountChips items={[
+            // 2026-11-02：界面说人话（判分/自校验/用户反馈），原始 judge/verify/user 仍留在技术详情。
+            { key: "判分未测", value: episodes.unknownReasons.judge },
+            { key: "自校验未跑", value: episodes.unknownReasons.verify },
+            { key: "用户反馈未测", value: episodes.unknownReasons.user },
+          ]} />
+        </SettingsRow>
+        <SettingsRow label="成本">
+          <CountChips items={[
+            { key: "主面", value: episodes.cost.mainTokens, unit: "token" },
+            { key: "子代理", value: episodes.cost.workerTokens, unit: "token" },
+          ]} />
+        </SettingsRow>
+        <SettingsRow label="计价">
+          <CountChips items={[
+            { key: "可定价", value: episodes.cost.pricedRuns },
+            { key: "不可定价", value: episodes.cost.unpricedRuns },
+          ]} />
+        </SettingsRow>
+        <TechDetails lines={rawLines} />
       </SettingsSection>
 
-      <SettingsSection title="经验 playbook" hint="candidate 不注入">
-        <SettingsRow
-          label={`${String(playbook.total)} 条`}
-          desc={`状态：${counts(playbook.byStatus)}；类型：${counts(playbook.byKind)}；冲突 ${String(playbook.conflicts)}；过期 ${String(playbook.expired)}；负证据 ${String(playbook.negative)}；可激活 ${String(playbook.activatable.length)}${playbook.activatable.length === 0 ? "" : "（" + playbook.activatable.slice(0, 2).join("、") + (playbook.activatable.length > 2 ? " 等" : "") + "）"}；坏行 ${String(playbook.badLines)}；拒单 ${String(playbook.refusals)}`}
-        >
+      <SettingsSection title="经验沉淀" hint="候选不注入">
+        <SettingsRow label="条目总数">
+          <Badge>{String(playbook.total)} 条</Badge>
+        </SettingsRow>
+        <SettingsRow label="状态">
+          <CountChips items={countEntries(playbook.byStatus).map(([key, value]) => ({ key: STATUS_LABEL[key] ?? key, value }))} />
+        </SettingsRow>
+        <SettingsRow label="类型">
+          <CountChips items={countEntries(playbook.byKind).map(([key, value]) => ({ key: KIND_LABEL[key] ?? key, value }))} />
+        </SettingsRow>
+        <SettingsRow label="需要处理" desc="冲突、过期、负证据与过门可激活的条目。">
+          <CountChips items={[
+            { key: "冲突", value: playbook.conflicts },
+            { key: "过期", value: playbook.expired },
+            { key: "负证据", value: playbook.negative },
+            { key: "可激活", value: playbook.activatable.length },
+            { key: "坏行", value: playbook.badLines },
+            { key: "拒单", value: playbook.refusals },
+          ]} />
           <Badge tone={playbook.conflicts === 0 ? "ok" : "neutral"}>{playbook.conflicts === 0 ? "无冲突" : "有冲突"}</Badge>
         </SettingsRow>
       </SettingsSection>
 
-      <SettingsSection title="可激活经验" hint={report.frozen ? "冻结中" : "人工确认后写入 active"}>
+      <SettingsSection title="可激活经验" hint={report.frozen ? "冻结中" : "人工确认后生效"}>
         {report.activationCandidates.length === 0
           ? <p className="sp-note">没有过门候选（需要对照组实验证据）。</p>
           : report.activationCandidates.map((candidate) => (
@@ -158,7 +284,7 @@ function EvolveReportBody(props: {
               label={candidate.body.length > 80 ? candidate.body.slice(0, 80) + "…" : candidate.body}
             >
               <Badge tone="ok">
-                {candidate.kind} · Δ{candidate.riskDiff === null ? "—" : candidate.riskDiff.toFixed(2)}
+                {KIND_LABEL[candidate.kind] ?? candidate.kind} · 风险差 {candidate.riskDiff === null ? "—" : candidate.riskDiff.toFixed(2)}
                 {" · "}{String(candidate.trials)} 场 · 证据 {String(candidate.evidence)}
               </Badge>
               {props.onActivate !== undefined && !report.frozen && (
@@ -289,10 +415,11 @@ function EvolveReportBody(props: {
       </SettingsSection>
 
       <SettingsSection title="候选" hint="无 holdout 不晋升">
-        <SettingsRow
-          label={`${String(report.candidates.total)} 条`}
-          desc={`状态：${counts(report.candidates.byStatus)}`}
-        >
+        <SettingsRow label="候选总数">
+          <CountChips items={[
+            { key: "合计", value: report.candidates.total },
+            ...countEntries(report.candidates.byStatus).map(([key, value]) => ({ key: CANDIDATE_STATUS_LABEL[key] ?? key, value })),
+          ]} />
           <Badge tone="neutral">档案</Badge>
         </SettingsRow>
       </SettingsSection>
@@ -304,10 +431,12 @@ function EvolveReportBody(props: {
         >
           <Badge tone="neutral">每次装配</Badge>
         </SettingsRow>
-        <SettingsRow
-          label="容量"
-          desc={`playbook ${String(report.budget.budget.maxPlaybookEntries)}；实验 ${String(report.budget.budget.maxExperiments)}；候选 ${String(report.budget.budget.maxCandidates)}`}
-        >
+        <SettingsRow label="容量">
+          <CountChips items={[
+            { key: "经验容量", value: report.budget.budget.maxPlaybookEntries },
+            { key: "实验", value: report.budget.budget.maxExperiments },
+            { key: "候选", value: report.budget.budget.maxCandidates },
+          ]} />
           <Badge tone="neutral">上限</Badge>
         </SettingsRow>
         {report.budget.detail !== null && <p className="sp-note">{report.budget.detail}</p>}

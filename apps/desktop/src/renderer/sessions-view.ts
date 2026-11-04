@@ -14,6 +14,14 @@ export type SessionConfirmTarget = WorkspaceSession & { running?: boolean };
 /** 删除确认目标（保留旧名，形状与归档一致）。 */
 export type DeleteConfirmTarget = SessionConfirmTarget;
 
+export interface SessionEditContext {
+  originId: string;
+  originTitle: string;
+  forkId: string;
+  workspace: string | null;
+  round: number;
+}
+
 /** 按 id + workspace 定位会话。id 是分钟级时间戳，跨项目可撞名；给了 workspace 就必须
  *  两个都对上，**不退回**同名 id（退回 = 打开另一个项目的转录）。缺省 workspace 保持旧行为。 */
 export function findSessionByRef<T extends { id: string; workspace?: string }>(

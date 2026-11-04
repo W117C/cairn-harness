@@ -24,11 +24,6 @@ describe("文件改动词表", () => {
   });
 
   it("三处消费面都读同一份，且不再各自内联三元", () => {
-    const card = read("../src/renderer/components/ChangeSummaryCard.tsx");
-    expect(card).toContain('from "../derived/change-labels"');
-    expect(card).toContain("changeLabel(f.change)");
-    expect(card).not.toContain("const CHANGE_LABEL");
-
     const inspector = read("../src/renderer/components/Inspector.tsx");
     expect(inspector).toContain('from "../derived/change-labels"');
     expect(inspector).toContain("changeLabel(f.change)");
@@ -39,11 +34,15 @@ describe("文件改动词表", () => {
     expect(plan).toContain("planActionLabel(f.action)");
     expect(plan).not.toContain("const ACTION_LABEL");
 
+    // 变更窗格本体已抽至 ChangesPane.tsx（2026-11-03 锚随件走）；方案窗格仍在 PaneDock。
     const dock = read("../src/renderer/components/PaneDock.tsx");
     expect(dock).toContain('from "../derived/change-labels"');
-    expect(dock).toContain("changeLabel(f.change)");
     expect(dock).not.toContain('f.change === "created" ?');
     expect(dock).not.toContain('f.action === "create" ? "新建"');
     expect(dock).toContain("planActionLabel(f.action)");
+    const changes = read("../src/renderer/components/ChangesPane.tsx");
+    expect(changes).toContain('from "../derived/change-labels"');
+    expect(changes).toContain("changeLabel(f.change)");
+    expect(changes).not.toContain('f.change === "created" ?');
   });
 });

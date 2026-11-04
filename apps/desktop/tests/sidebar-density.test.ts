@@ -18,13 +18,16 @@ describe("侧栏密度：偏好解析", () => {
 
 describe("侧栏密度：接线与样式", () => {
   const sidebar = read("../src/renderer/components/Sidebar.tsx");
+  const filterMenu = read("../src/renderer/components/SessionFilterMenu.tsx");
   const css = read("../src/renderer/styles.css");
 
   it("Sidebar 读偏好、写 data-density，筛选菜单提供紧凑视图", () => {
     expect(sidebar).toContain('from "../state/sidebar-density"');
     expect(sidebar).toContain("data-density={density}");
     expect(sidebar).toContain("SIDEBAR_DENSITY_KEY");
-    expect(sidebar).toContain("紧凑视图（28px）");
+    // 文案走 STR.filter.compact（strings.test 禁止组件里写裸中文）。
+    expect(sidebar).toContain("<SessionFilterMenu");
+    expect(filterMenu).toContain("STR.filter.compact");
   });
 
   it("紧凑档：28px 行高 + 元信息浮到右侧只留钉形", () => {

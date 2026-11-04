@@ -100,7 +100,7 @@ const PROVIDER_INFO = {
 };
 
 const SETTINGS = {
-  mode: "guided", theme: "system", provider: "deepseek", model: "deepseek-chat",
+  mode: "default", theme: "system", provider: "deepseek", model: "deepseek-chat",
   telemetry: false, notifyOnComplete: true, planRequiredByDefault: false, autoMemory: true, subagentTools: true,
   impactAnalysis: false, autoVerify: true, actionFusion: true, promptCache: true,
   requestMetering: true, observationPack: true, evidenceReceipts: false, economicCompaction: true,
@@ -344,6 +344,18 @@ const stub = {
   evolveDormant: (id) => Promise.resolve({ ok: true, report: { ...EVOLVE_REPORT, frozen: cairnEvolveFrozen } }),
   evolveGlobalRevoke: (id) => Promise.resolve({ ok: true, report: { ...EVOLVE_REPORT, frozen: cairnEvolveFrozen } }),
   evolveGlobalActivate: (id) => Promise.resolve({ ok: true, report: { ...EVOLVE_REPORT, frozen: cairnEvolveFrozen } }),
+  // v52：LSP 状态面。桩里刻意把三档都摆出来（现值 / 陈旧 / 没起过），
+  // 这样面板落地时"陈旧被渲染成绿灯"这类问题在离屏自查里就看得见——第 892 页那次崩就是漏了补桩。
+  lspStatus: () => Promise.resolve({
+    enabled: true,
+    trust: "trusted",
+    configError: "",
+    servers: [
+      { id: "tsserver", command: "typescript-language-server", extensions: [".ts", ".tsx"], origin: "host", state: "running", source: "in-process", providers: ["definitionProvider", "hoverProvider", "referencesProvider", "documentSymbolProvider"], sync: "incremental" },
+      { id: "pyright", command: "pyright-langserver", extensions: [".py"], origin: "plugin", state: "not-started", source: "disk-stale", providers: ["definitionProvider"], sync: "full", writerPid: 4242, observedAt: 1730000000000 },
+      { id: "gopls", command: "gopls", extensions: [".go"], origin: "host", state: "not-started" },
+    ],
+  }),
   evolveGlobalSetFrozen: (frozen) => {
     cairnGlobalFrozen = frozen === true;
     return Promise.resolve({
@@ -920,6 +932,20 @@ const argOf = (prefix, fallback) => {
   const hit = process.argv.find((a) => a.startsWith(prefix));
   return hit ? hit.slice(prefix.length) : fallback;
 };
+// 交付卡按 DSH 口径要显示每个文件的 +N/−M；画廊没有真工作区，给逐文件的小 diff 桩。
+stub.changeDiff = (req) => new Promise((resolve) => {
+  setTimeout(() => {
+    const path = String(req?.path ?? "");
+    const add = (path.length % 4) + 1;
+    const del = path.length % 3;
+    const lines = [
+      ...Array.from({ length: del }, (_, i) => ({ kind: "del", text: `old ${String(i + 1)}`, oldNo: i + 1, newNo: null })),
+      { kind: "ctx", text: "ctx", oldNo: del + 1, newNo: del + 1 },
+      ...Array.from({ length: add }, (_, i) => ({ kind: "add", text: `new ${String(i + 1)}`, oldNo: null, newNo: del + 1 + i })),
+    ];
+    resolve({ ok: true, path, created: false, truncated: false, bytes: { before: 100, after: 100 }, hunks: [{ header: "@@ -1 +1 @@", lines }] });
+  }, 30);
+});
 const members = JSON.parse(argOf("--cairn-api-members=", "[]"));
 for (const { name, isArray } of members) {
   if (name in stub) continue;
@@ -1020,7 +1046,7 @@ if (process.argv.includes("--cairn-performance-fixture")) {
   const listeners = new Set();
   let finishRun;
   let liveText = "";
-  const calls = { runs: [], forks: [] };
+  const calls = { runs: [], forks: [], reverts: [] };
   const events = [];
   for (let i = 0; i < turns; i++) {
     events.push({ type: "user_message", content: `第 ${i+1} 轮：检查模块 ${i}`, ts: now - (turns-i)*60000 });
@@ -1032,9 +1058,13 @@ if (process.argv.includes("--cairn-performance-fixture")) {
   stub.openSession = reply({ events });
   stub.onEvent = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
   const emit = (e) => { for (const listener of listeners) listener({ ...e, session_id: "s1", ts: Date.now() }); };
-  stub.forkSession = (sessionId, round, keepWorkspace) => {
-    calls.forks.push({ sessionId, round, keepWorkspace });
-    return Promise.resolve({ ok: false, error: "夹具已记录回放请求" });
+  stub.forkSession = (sessionId, round, unique, workspace) => {
+    calls.forks.push({ sessionId, round, unique, workspace });
+    return Promise.resolve({ ok: false, error: "夹具已记录分叉请求" });
+  };
+  stub.revertTurn = (sessionId, round, workspace) => {
+    calls.reverts.push({ sessionId, round, workspace });
+    return Promise.resolve({ ok: true, restored: [], deleted: [], manual: [], failed: [] });
   };
   stub.run = (request) => new Promise((resolve) => {
     calls.runs.push(request);

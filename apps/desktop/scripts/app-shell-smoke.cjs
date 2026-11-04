@@ -154,7 +154,7 @@ async function main() {
     })),
   }))()`);
 
-  await win.loadFile(join(__dirname, "../dist/index.html"));
+  await win.loadFile(process.env.CAIRN_RENDERER_ENTRY ?? join(__dirname, "../dist/index.html"));
   await pause(500);
 
   check("global rail is visible", await isVisible('[aria-label="全局功能"]'));
@@ -162,8 +162,15 @@ async function main() {
   let rail = await railState();
   check("chat is the startup destination", rail.items.some((item) => item.destination === "chat" && item.current === "page"), rail);
 
+  await js(`document.querySelector('.side-filter-btn').focus()`);
+  await pressKey("Down");
+  check("sidebar filter opens with ArrowDown and focuses its first item", await js(`document.querySelector('.side-filter-menu.show') !== null && document.activeElement?.getAttribute('role') === 'menuitemradio'`));
+  await pressKey("Escape");
+  check("sidebar filter Escape returns focus to its trigger", await js(`!document.querySelector('.side-filter-menu.show') && document.activeElement?.classList.contains('side-filter-btn')`));
+
   check("plugins destination is reachable", await click('[data-destination="plugins"]'));
   check("plugins page is visible", await isVisible('.destination-page[aria-label="插件"]'));
+  check("plugin view navigation appears once", await js(`document.querySelectorAll('.plugin-tabs').length === 1 && ![...document.querySelectorAll('.page-context-item')].some((item) => ['发现', '已安装', '可更新'].includes(item.textContent.trim()))`));
   check("chat workspace stays mounted and hidden", await js(`(() => {
     const el = document.querySelector(".chat-workspace");
     return !!el && el.getAttribute("data-hidden") === "true" && getComputedStyle(el).visibility === "hidden";
@@ -186,6 +193,39 @@ async function main() {
   check("plugin detail opens before destination switching", await isVisible('.destination-page[aria-label="插件"] .plugin-detail'));
 
   await click('[data-destination="memory"]');
+  await js(`document.querySelector('input[aria-label="搜索记忆"]').focus()`);
+  await typeText("长期记忆条目 24");
+  check("memory search finds body content", await js(`document.querySelectorAll('.memory-list .ap-item').length === 1 && document.querySelector('.memory-list .nm')?.textContent === 'memory-24'`));
+  await js(`document.querySelector('input[aria-label="搜索记忆"]').select()`);
+  await pressKey("Backspace");
+  check("clearing memory search restores every topic", await js(`document.querySelectorAll('.memory-list .ap-item').length === 24`));
+  const contrast = await js(`(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 1;
+    const ctx = canvas.getContext('2d');
+    const luminance = (color) => {
+      ctx.fillStyle = color; ctx.fillRect(0, 0, 1, 1);
+      const rgb = [...ctx.getImageData(0, 0, 1, 1).data].slice(0, 3).map((c) => {
+        const value = c / 255;
+        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+      });
+      return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
+    };
+    const background = luminance(getComputedStyle(document.body).backgroundColor);
+    const ratio = (color) => {
+      const foreground = luminance(color);
+      return (Math.max(background, foreground) + 0.05) / (Math.min(background, foreground) + 0.05);
+    };
+    const meta = getComputedStyle(document.querySelector('.memory-list .sub')).color;
+    const placeholder = getComputedStyle(document.querySelector('input[aria-label="搜索记忆"]'), '::placeholder').color;
+    return { metadata: ratio(meta), placeholder: ratio(placeholder) };
+  })()`);
+  check("light memory metadata and search placeholder meet 4.5:1 contrast", contrast.metadata >= 4.5 && contrast.placeholder >= 4.5, contrast);
+  await shot("10-memory-list");
+  await click('.memory-list .ap-item');
+  check("memory topic opens its own body and metadata", await js(`document.querySelector('.ap-drawer-head .nm')?.textContent === 'memory-01' && document.querySelector('.ap-drawer-body')?.textContent.includes('长期记忆条目 1')`));
+  await shot("11-memory-detail");
+  await click('.ap-drawer-head button');
   check("visited plugin page stays mounted and inert behind memory", await js(`(() => {
     const page = document.querySelector('.destination-page[data-destination-page="plugins"]');
     return !!page && page.getAttribute("data-hidden") === "true" && page.hasAttribute("inert");

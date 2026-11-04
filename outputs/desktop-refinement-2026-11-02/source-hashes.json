@@ -1,0 +1,11 @@
+{
+  "apps/desktop/src/renderer/components/AppPage.tsx": "4b31ff4d783434955207d54961d69aa4ebd79e0953df79ac3a3e56b9b7f6e23d",
+  "apps/desktop/src/renderer/components/Composer.tsx": "e89e93b17a0fcbc61842f2b624d425455d6ce0fd5e1758b2807d0b6ed31d84e1",
+  "apps/desktop/src/renderer/components/Sidebar.tsx": "7567965d370d12af99d9b480930b8f65f44057b8b86a4827b224a28f73bedeaa",
+  "apps/desktop/src/renderer/components/SessionFilterMenu.tsx": "612429415a7cb783d8c1e208bf42ad4fe5d281b3140553597f638f082f1c0918",
+  "apps/desktop/src/renderer/components/SendQueueStrip.tsx": "633c86222c2c611bb9d480ffe38527e135eaa6276c1661db15870ea4d2bd0a4e",
+  "apps/desktop/src/renderer/components/model-menu.css": "1b1f9417b67c4e5e163e965ff5f73edcbe2fb16cde15ed5293f0ec682e8f6fd6",
+  "apps/desktop/src/renderer/components/plugins/PluginsWorkspace.tsx": "b73ff1c3f7217f2887516013db09f045721be270530a918a00ae8fe5814a9fd8",
+  "apps/desktop/src/renderer/memory-view.ts": "0ebd3ac029115f3995dd757fdecae25497d0ce8572139f76b4d62f45bf03614a",
+  "apps/desktop/src/renderer/styles.css": "6cb3dcea0213cbffb884054aa8c918137ca15ffc6aeb28d56f68d83bcb4b3b34"
+}

@@ -111,6 +111,9 @@ export interface AppSettings {
   /** plan 模式默认档：新对话是否默认武装「未批准方案即写禁」（composer 里的即时开关以此为初值）。
    *  缺省 false = 逐字同武装前（写禁只在模型自愿 propose_plan 后成立）。零 token 成本，只是谓词。 */
   planRequiredByDefault: boolean;
+  /** 自动化页的保唤开关（2026-11-04 业主截图那行）：运行会话期间阻止系统休眠。
+   *  缺省开；桌面主进程经 powerSaveBlocker('prevent-app-suspension') 落地，headless 无实现。 */
+  keepAwake: boolean;
   /** 实验：macOS 窗口材质（侧栏半透明）。默认关；改动需重启窗口才生效。
    *  未做视觉验收前不默认开，避免把原型当 Claude 对齐。 */
   windowVibrancy: boolean;
@@ -172,6 +175,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoVerify: true,
   autoVerifyRepair: false,
   planRequiredByDefault: false,
+  keepAwake: true,
   windowVibrancy: false,
   ctrlTabCycle: true,
   textSize: "md",
@@ -275,7 +279,8 @@ export function validateSettings(raw: unknown): AppSettings {
     // 缺省关的键才用 `=== true`（上面那条规矩的反面：默认关时严格真值才不会把 false 读成缺省）
     autoVerifyRepair: r.autoVerifyRepair === true,
     planRequiredByDefault: r.planRequiredByDefault === true,
-    // 缺省开的键走 `d.` 回退（promptCache 同族）：老 settings.json 无此键时保持「开」，不被静默关掉。
+    // 缺省开的键走 `d.` 回退（promptCache 同族）：老 settings.json 无此键时保持「唤醒」不被静默关掉。
+    keepAwake: typeof r.keepAwake === "boolean" ? r.keepAwake : d.keepAwake,
     windowVibrancy: r.windowVibrancy === true,
     ctrlTabCycle: typeof r.ctrlTabCycle === "boolean" ? r.ctrlTabCycle : d.ctrlTabCycle,
     // 2026-10-18 字号档：白名单外（含旧档案没这个键）回退 "md" = --rem-scale 1 = 与今天逐像素一致。

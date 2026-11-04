@@ -30,7 +30,7 @@ import type { MainModelSelection } from "./provider-runtime";
 import type { RoutingFlagOverrides } from "./routing-flags";
 import { runInSandbox, type SandboxStatus } from "./sandbox";
 import { mapSandboxTestCommandForWorkspace } from "./sandbox-test-command";
-import { requireSessionsDir } from "./session-handlers";
+import { requireSessionsDir, resolveSessionRoot } from "./session-handlers";
 import { pathOf } from "./sessions";
 import { store } from "./settings-handlers";
 import { currentWorkspace } from "./state-handlers";
@@ -43,7 +43,7 @@ export type OrchestratorExtras = (
   trust: { trustedRepo: boolean; verifyTrust: VerifyTrustResolver | null },
   over: RoutingFlagOverrides,
 ) => Promise<
-  Pick<OrchestratorOptions, "agentRoleFor" | "workerSummarizer" | "budget" | "routing" | "banditStatePath" | "promptCache" | "impactAnalysis" | "workerVerify" | "workerHooks">
+  Pick<OrchestratorOptions, "agentRoleFor" | "defaultModelSpec" | "workerSummarizer" | "budget" | "routing" | "banditStatePath" | "promptCache" | "impactAnalysis" | "workerVerify" | "workerAutoVerifyRepair" | "workerHooks">
 >;
 
 /** 装配根注入的活状态与策略口（唯一入口 `setSessionAssemblyDeps`）。 */
@@ -185,7 +185,15 @@ export async function ensureSessionOrchestrator(): Promise<Orchestrator | null> 
   if (existing) return existing;
   const sessionId = (await store().get()).currentSession;
   const logPath = sessionId ? pathOf(requireSessionsDir(), sessionId) : D().lastLogPath();
-  if (!logPath || !existsSync(logPath)) return null; // 宁可不建，也不给不存在的会话凭空开一条流
+  const resolvedRoot = sessionId ? await resolveSessionRoot(sessionId).catch(() => null) : null;
+  const effectiveLogPath = sessionId
+    ? (resolvedRoot && logPath ? pathOf(resolvedRoot, sessionId) : null)
+    : logPath;
+  if (!effectiveLogPath || !existsSync(effectiveLogPath)) return null; // 宁可不建，也不给不存在的会话凭空开一条流
+  return await buildRecoveredOrchestrator(effectiveLogPath);
+}
+
+async function buildRecoveredOrchestrator(logPath: string): Promise<Orchestrator> {
   const log = createEventLog(logPath);
   const workspace = await currentWorkspace();
   const orch = await buildSessionOrchestrator({

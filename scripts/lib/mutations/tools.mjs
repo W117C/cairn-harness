@@ -133,6 +133,212 @@ export const MUTATIONS = [
     apply: (s) => s.replace('      out.push(indent + s.name + " " + kindName + "（无位置）");', '      out.push(indent + s.name + " " + kindName + " " + formatLocation(root, (s as unknown as SymbolInformation).location));'),
     expectFail: "workspaceSymbol 允许「有名字没位置」的条目：不许一条坏形状带走整支工具",
   },
+  /* 下一批：workspaceSymbol 的路由。旧实现问 `Object.keys(cfg.servers)[0]`——多语言仓库里
+   * 其余服务器的符号静默缺席，而模型看到的「无结果」是一个错答案。 */
+  {
+    id: "lsp-workspace-symbol-first-server-only",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp.test.ts",
+    desc: "工作区符号查询退回「只问配置里排第一的那台」⇒ 其余语言的符号静默缺席",
+    apply: (s) => s.replace(
+      "const acquired = await Promise.allSettled(ids.map((id) => getLspClient(ctx.workspace, cfg, id)));",
+      "const acquired = await Promise.allSettled(ids.slice(0, 1).map((id) => getLspClient(ctx.workspace, cfg, id)));",
+    ),
+    expectFail: "两种语言各有一个符号 ⇒ 两台都要问，且每条结果标来源",
+  },
+  {
+    id: "lsp-workspace-symbol-result-unattributed",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp.test.ts",
+    desc: "合并结果不标来源 ⇒ 同名符号来自哪台语言服务器无从判断，跨语言结果被当成同一份真相",
+    apply: (s) => s.replace("for (const line of symbolLines(ctx.workspace, symbols ?? [])) lines.push(id + \" \" + line);", "for (const line of symbolLines(ctx.workspace, symbols ?? [])) lines.push(line);"),
+    expectFail: "两种语言各有一个符号 ⇒ 两台都要问，且每条结果标来源",
+  },
+  {
+    id: "lsp-workspace-symbol-silent-miss",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp.test.ts",
+    desc: "起不来的服务器不点名 ⇒ 「一台说话、一台沉默」与「只配了一台」在模型眼里成了同一件事",
+    apply: (s) => s.replace('misses.push(id + " 未答上：" + lspFailureReason(r.reason));', "void r.reason;"),
+    expectFail: "有一台起不来 ⇒ 点名它，别让「无结果」替它沉默",
+  },
+  {
+    id: "lsp-workspace-symbol-nobody-degrades-to-empty",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp.test.ts",
+    desc: "没有任何服务器能答时退化成「无结果」⇒ 把「没人能回答有没有」说成「没有这个符号」",
+    apply: (s) => s.replace("      if (answeredCount === 0) {", "      if (false) {"),
+    expectFail: "一台都没答上 ⇒ fail loud，不许退化成「无结果」",
+  },
+  /* 状态面（`lspServerStatus` / `formatLspStatus`）。这四条各钉一条纪律，缺一条就等于把
+   * "没验过"重新写成结论，或把状态面变成第二个起进程入口。 */
+  {
+    id: "lsp-status-unverified-rendered-as-none",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp.test.ts",
+    desc: "没起过的服务器也给出 provider 清单（空数组）⇒「还没验过」被说成「它什么都不支持」",
+    apply: (s) => s.replace(
+      "      const rec = disk.find((r) => r.serverId === id);",
+      '      const rec = disk.find((r) => r.serverId === id) ?? { serverId: id, command: server.command, providers: [], sync: "full", observedAt: 0, writerPid: 0 };',
+    ),
+    expectFail: "配了但没起过 ⇒ state 是 not-started，provider 这一格**缺着**而不是空数组",
+  },
+  {
+    id: "lsp-status-disabled-says-fine",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp.test.ts",
+    desc: "未启用时不说未启用 ⇒ 空清单被读成「配好了，只是没服务器」",
+    apply: (s) => s.replace(
+      "    return `lsp 状态：未启用（工作区没有 .agent/lsp.json，或它写着 \"lsp\": false）。要用的话在那里配 {\"lsp\": {\"<服务器名>\": {\"command\": …, \"extensions\": […]}}}。`;",
+      "    return \"lsp 状态：一切正常\";",
+    ),
+    expectFail: "没配 lsp.json ⇒ enabled:false 并且话说清楚（空清单不是「一切正常」）",
+  },
+  {
+    id: "lsp-status-broken-reason-dropped",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp.test.ts",
+    desc: "broken 的原因不落进状态 ⇒ 只说「不可用」而说不出为什么，模型与业主都无从下手",
+    apply: (s) => s.replace(
+      'if (isBroken) entry.note = brokenNotes.get(key) ?? "启动失败（原因未记录）";',
+      "if (isBroken) entry.note = \"\";",
+    ),
+    expectFail: "起不来 ⇒ 点名原因，别再谎报它能答",
+  },
+  {
+    id: "lsp-status-trust-not-read",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp.test.ts",
+    desc: "信任态写死成已授权 ⇒ 被信任门拦下的服务器在状态面上与正常服务器一模一样",
+    apply: (s) => s.replace(
+      'const trust = cfg.enabled ? (await lspConfigTrustState(workspace)).state : "not-configured";',
+      'const trust = cfg.enabled ? "trusted" : "not-configured";',
+    ),
+    expectFail: "等授权的那台 ⇒ 说「未授权」，而且**没起进程**",
+  },
+  {
+    id: "lsp-status-spawns-as-a-side-effect",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp.test.ts",
+    desc: "读状态顺手 getLspClient 一下 ⇒ 状态面成了第二个起进程入口，S1「默认不预热」那条纪律从后门破掉",
+    apply: (s) => s.replace(
+      'const trust = cfg.enabled ? (await lspConfigTrustState(workspace)).state : "not-configured";',
+      'const trust = cfg.enabled ? ((await getLspClient(workspace, cfg, Object.keys(cfg.servers)[0] ?? "x")).pid >= 0 ? "trusted" : "pending") : "not-configured";',
+    ),
+    expectFail: "配了但没起过 ⇒ state 是 not-started，provider 这一格**缺着**而不是空数组",
+  },
+  /* CLI 面（`scripts/lsp-status.ts`）：两面读同一份事实，坏参数不静默。 */
+  {
+    id: "lsp-status-cli-json-flag-ignored",
+    src: "scripts/lsp-status.ts",
+    test: "tests/lsp-status-cli.test.ts",
+    desc: "`--json` 被忽略 ⇒ 脚本与判卷拿不到同一个对象，只能去解析给人看的那段话",
+    apply: (s) => s.replace("return { status, text: json ? JSON.stringify(status, null, 2) : formatLspStatus(status) };", "return { status, text: formatLspStatus(status) };"),
+    expectFail: "--json 出的是同一份结构（脚本、模型与判卷读同一个对象）",
+  },
+  {
+    id: "lsp-status-cli-unknown-arg-swallowed",
+    src: "scripts/lsp-status.ts",
+    test: "tests/lsp-status-cli.test.ts",
+    desc: "不认识的参数被静默吞掉 ⇒ 打错开关的人拿到一份「看起来对」的状态，而他要的那档根本没生效",
+    apply: (s) => s.replace(
+      '    } else throw new Error("lsp-status: 不认识的参数 \\"" + String(a) + "\\"（可用：--workspace <dir> [--json]）");',
+      "    } else { void a; }",
+    ),
+    expectFail: "坏参数当场说，不静默收下（--workspace 后面没值 / 不认识的开关）",
+  },
+  {
+    id: "lsp-status-per-process-hint-dropped",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp.test.ts",
+    desc: "状态文案不说「这是当前进程的事实」⇒ 换进程读到一堆「没起过」被当成整个仓库没起来",
+    apply: (s) => s.replace("是**当前进程**的事实，换一个进程读同一份工作区只会看到「没起过」", "是本进程的看法"),
+    expectFail: "配了但没起过 ⇒ state 是 not-started，provider 这一格**缺着**而不是空数组",
+  },
+  /* 第 996 页：运行态落盘。这六条各钉一条让步就出事的边界——尤其 ②③：把"判不出来"猜成活的、
+   * 或把状态文件写进工作区，前者是新造一盏假绿灯，后者是仓库自报健康。 */
+  {
+    id: "lsp-runtime-stale-as-current",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp-runtime-state.test.ts",
+    desc: "写方进程已不在了，那条记录仍当现值报 ⇒ 陈旧答案被读成「这台现在支持这些」",
+    apply: (s) => s.replace(
+      'entry.source = live === "alive" ? "disk-alive" : live === "dead" ? "disk-stale" : "disk-unknown";',
+      'entry.source = "disk-alive";',
+    ),
+    expectFail: "写方进程已不在 ⇒ 这条必须自称陈旧，不许当现值报",
+  },
+  {
+    id: "lsp-runtime-unknown-guesses-alive",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp-runtime-state.test.ts",
+    desc: "探活返回 unknown 时猜成 alive ⇒ 三态被压回布尔，展示面拿到一盏没有依据的绿灯",
+    apply: (s) => s.replace(
+      "const live = livenessOf(rec.writerPid);",
+      'const live = livenessOf(rec.writerPid) === "unknown" ? "alive" : livenessOf(rec.writerPid);',
+    ),
+    expectFail: "探活判不出来 ⇒ 说「判不出来」，不许猜成活的了结（这一档就是假绿灯的入口）",
+  },
+  {
+    id: "lsp-runtime-state-escapes-into-workspace",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp-runtime-state.test.ts",
+    desc: "状态目录指进工作区也照写 ⇒ 文件被 clone 带走，一个仓库能自报「语言服务器健康」",
+    apply: (s) => s.replace(
+      'if (dirAbs === wsAbs || dirAbs.startsWith(wsAbs + sep)) return "refused-inside-workspace";',
+      'if (dirAbs === wsAbs && false) return "refused-inside-workspace";',
+    ),
+    expectFail: "落盘目录落在工作区里 ⇒ 一条都不写（clone 携带的状态＝仓库自报健康）",
+  },
+  {
+    id: "lsp-runtime-cross-workspace-guard-dropped",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp-runtime-state.test.ts",
+    desc: "读盘时不核对记录属于哪个工作区 ⇒ 哈希撞了或树被搬走时把别处的运行态安在本机头上",
+    apply: (s) => s.replace(
+      "if (parsed.workspace !== resolve(workspace) || !Array.isArray(parsed.records)) return [];",
+      "if (!Array.isArray(parsed.records)) return [];",
+    ),
+    expectFail: "盘上那条写着**别的工作区** ⇒ 一律不当数（哈希撞了或树被搬走时不许串号）",
+  },
+  {
+    id: "lsp-runtime-writes-empty-file",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp-runtime-state.test.ts",
+    desc: "没有任何实测事实也落一个空文件 ⇒ 下一次读出来是「这台什么都不支持」而不是「还没验过」",
+    apply: (s) => s.replace('if (mine.length === 0) return "nothing";', 'if (mine.length === 0 && false) return "nothing";'),
+    expectFail: "没有实测事实就不落空文件（空记录会被下一次读成「这台什么都不支持」）",
+  },
+  {
+    id: "lsp-runtime-never-persists-automatically",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp-runtime-state.test.ts",
+    desc: "起服务器时不自动抄出去 ⇒ 跨进程可见性等于零，第 996 页要修的那件事原地不动",
+    apply: (s) => s.replace("    // 自动抄一份出去（尽力而为、不等、不抛）：不自动就永远没有跨进程可见性。\n    void persistLspRuntimeState(this.root);", ""),
+    expectFail: "本进程实测时优先用自己的事实，且**自动**落盘（不自动就永远没有跨进程可见性）",
+  },
+  {
+    id: "lsp-runtime-clobbers-other-agents",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp-runtime-state.test.ts",
+    desc: "落盘时整份覆盖 ⇒ 同工作区另一个 agent 刚起的服务器从状态面上消失（后写的把先写的抹掉）",
+    apply: (s) => s.replace(
+      "const merged = [...others.filter((o) => !mine.some((m) => m.serverId === o.serverId)), ...mine];",
+      "const merged = mine;",
+    ),
+    expectFail: "别的活进程的记录被**合并**保留，不是整份覆盖",
+  },
+  {
+    id: "lsp-runtime-keeps-dead-records",
+    src: "src/tools/lsp.ts",
+    test: "tests/lsp-runtime-state.test.ts",
+    desc: "合并不问写方进程是否还在 ⇒ 陈旧记录越积越多，状态面把死进程的答案当现值端上来",
+    apply: (s) => s.replace(
+      "(r) => r.writerPid !== process.pid && r.writerPid > 0 && livenessOf(r.writerPid) === \"alive\",",
+      "(r) => r.writerPid !== process.pid && r.writerPid > 0,",
+    ),
+    expectFail: "写方已不在的那条被清掉（合并不是把垃圾永久留在盘上）",
+  },
   {
     id: "process-env-sanitize",
     src: "src/tools/process.ts",

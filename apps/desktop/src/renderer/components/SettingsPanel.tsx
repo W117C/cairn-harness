@@ -344,14 +344,15 @@ export function SettingsPanel(props: {
         <nav className="sp-nav" aria-label="设置分区">
           <div className="sp-nav-head">
             <div className="sp-nav-title">设置</div>
+            {/* 返回与标题同一行：此前标题、返回、搜索三层竖排，首屏被吃掉一截。 */}
+            <button className="sp-back" onClick={closeSettings} aria-label="关闭设置（Esc）">
+              <ChevronLeft size={13} aria-hidden="true" />
+              <span>返回</span>
+            </button>
           </div>
           {/* 返回必须在 ModalSurface 内部（2026-10-21 评审抓到的 Critical）：settings 打开时
               isolateOutside 会把 titlebar/shell 标成 inert，鼠标点不到工具栏上的返回。
               这里用面板内按钮；工具栏只负责 chrome（设置时不摆侧栏开关）。 */}
-          <button className="sp-back" onClick={closeSettings} aria-label="关闭设置（Esc）">
-            <ChevronLeft size={13} aria-hidden="true" />
-            <span>返回</span>
-          </button>
           {/* 分区搜索（2026-10-18 补）：此前九个分区只能靠肉眼扫——⌘K 是「跳到某分区」的导航，
               不是「在设置里找东西」。现在导航列顶部一行搜索，边打边收窄。
               口径诚实：匹配的是**分区名与同义词**（SECTION_KEYWORDS），不是每个开关的标签——

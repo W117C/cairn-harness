@@ -15,6 +15,7 @@ import {
   type ActivationOutcome,
 } from "../src/main/evolve/activation";
 import { loadPlaybook } from "../src/main/evolve/playbook-store";
+import { verifyGlobalEvidence } from "../src/main/evolve/globalize";
 
 export interface EvolveActivateOutput {
   workspace: string;
@@ -45,12 +46,18 @@ export async function runEvolveActivateList(args: readonly string[]): Promise<Ev
   const workspace = workspaceOf(args);
   const now = Date.now();
   const playbook = await loadPlaybook(workspace);
-  const entries = playbook.entries
+  const entries = await Promise.all(playbook.entries
     .filter((entry) => entry.status !== "active")
-    .map((entry) => {
-      const blockers = activationBlockers(entry, playbook.entries, now);
+    .map(async (entry) => {
+      // 全局条目先核验再问门（与激活门、报告同一份核验；本地条目不做跨库读盘）。
+      const globalCheck = entry.scope.workspace === "*"
+        ? await verifyGlobalEvidence(entry.globalEvidence ?? [])
+        : undefined;
+      const blockers = activationBlockers(entry, playbook.entries, now, {
+        ...(globalCheck !== undefined ? { globalCheck } : {}),
+      });
       return { id: entry.id, status: entry.status, activatable: blockers.length === 0, blockers };
-    });
+    }));
   return { workspace, entries };
 }
 

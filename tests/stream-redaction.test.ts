@@ -32,6 +32,11 @@ const SAMPLES: Record<string, { event: Record<string, unknown>; secrets: string[
   thinking_delta: { event: { type: "thinking_delta", callId: "c", text: T(S1) }, secrets: [S1] },
   tool_call: { event: { type: "tool_call", id: "t1", name: "write_file", args: { path: "a.ts", contents: T(S1) } }, secrets: [S1] },
   tool_result: { event: { type: "tool_result", callId: "t1", ok: true, output: T(S1) }, secrets: [S1] },
+  // todo_write 的清单正文是模型文本（同 tool_call.args 一族）：items 叶子逐个扫（scanStringLeaves 递归）。
+  todo_updated: {
+    event: { type: "todo_updated", callId: "c", items: [{ text: T(S1), state: "pending" }, { text: T(S2), state: "done" }] },
+    secrets: [S1, S2],
+  },
   verify_result: {
     event: { type: "verify_result", callId: "v", ok: false, attempt: 1, maxAttempts: 2, results: [{ command: T(S1), ok: false, output: T(S2) }] },
     secrets: [S1, S2],

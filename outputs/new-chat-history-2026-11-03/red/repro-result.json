@@ -1,0 +1,4333 @@
+{
+  "checks": [
+    {
+      "name": "① 上一对话已建立并高亮",
+      "ok": true,
+      "detail": {
+        "t": 1492,
+        "active": "会话 2026-11-03 11:06:05 #1",
+        "last": "{\"id\":\"会话 2026-11-03 11:06:05 #1\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+        "ids": [
+          "会话 2026-11-03 11:06:05 #1"
+        ],
+        "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+        "streamVisible": true,
+        "streamHiddenAncestor": false,
+        "emptyVisible": false,
+        "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+      }
+    },
+    {
+      "name": "① 旧对话经侧栏重开，历史视图已载入",
+      "ok": true
+    },
+    {
+      "name": "② 点「新建任务」回到空屏（无高亮项）",
+      "ok": true,
+      "detail": {
+        "t": 1736,
+        "active": null,
+        "last": null,
+        "ids": [
+          "会话 2026-11-03 11:06:05 #1"
+        ],
+        "stream": "",
+        "streamVisible": null,
+        "streamHiddenAncestor": null,
+        "emptyVisible": true,
+        "workspaceText": "上午好，今天想做点什么？\nworkspace\nTab\n默认\n方案\n演示\n—\n继续上次：这是上一个对话的内容\n解释这个项目的结构\n帮我把当前项目跑起来看看\n概览\nworkspace\n空闲\n还没有活动——对话开始后，用量、改动、计划与时间线会在"
+      }
+    },
+    {
+      "name": "③ 新会话首发后高亮 = 新会话",
+      "ok": true,
+      "detail": {
+        "final": {
+          "t": 7221,
+          "active": "会话 2026-11-03 11:06:06 #2",
+          "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+          "ids": [
+            "会话 2026-11-03 11:06:06 #2",
+            "会话 2026-11-03 11:06:05 #1"
+          ],
+          "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+          "streamVisible": true,
+          "streamHiddenAncestor": false,
+          "emptyVisible": false,
+          "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+        },
+        "first": {
+          "t": 1492,
+          "active": "会话 2026-11-03 11:06:05 #1",
+          "last": "{\"id\":\"会话 2026-11-03 11:06:05 #1\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+          "ids": [
+            "会话 2026-11-03 11:06:05 #1"
+          ],
+          "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+          "streamVisible": true,
+          "streamHiddenAncestor": false,
+          "emptyVisible": false,
+          "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+        }
+      }
+    },
+    {
+      "name": "③ 高亮序列里没有回到上一对话",
+      "ok": true,
+      "detail": {
+        "seq": [
+          {
+            "dtMs": 5,
+            "id": null
+          },
+          {
+            "dtMs": 52,
+            "id": "会话 2026-11-03 11:06:06 #2"
+          }
+        ],
+        "firstActive": "会话 2026-11-03 11:06:05 #1"
+      }
+    },
+    {
+      "name": "③ 落盘是两条独立会话",
+      "ok": true,
+      "detail": [
+        {
+          "id": "会话 2026-11-03 11:06:05 #1",
+          "lines": 2
+        },
+        {
+          "id": "会话 2026-11-03 11:06:06 #2",
+          "lines": 2
+        }
+      ]
+    },
+    {
+      "name": "③ 新对话主区显示自己的首条消息，不显示旧历史",
+      "ok": false,
+      "detail": {
+        "t": 7221,
+        "active": "会话 2026-11-03 11:06:06 #2",
+        "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+        "ids": [
+          "会话 2026-11-03 11:06:06 #2",
+          "会话 2026-11-03 11:06:05 #1"
+        ],
+        "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+        "streamVisible": true,
+        "streamHiddenAncestor": false,
+        "emptyVisible": false,
+        "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+      }
+    },
+    {
+      "name": "④ reload 后由启动恢复打开上一对话",
+      "ok": true,
+      "detail": {
+        "afterReload": {
+          "t": 1764,
+          "active": "会话 2026-11-03 11:06:05 #1",
+          "last": "{\"id\":\"会话 2026-11-03 11:06:05 #1\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+          "ids": [
+            "会话 2026-11-03 11:06:06 #2",
+            "会话 2026-11-03 11:06:05 #1"
+          ],
+          "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+          "streamVisible": true,
+          "streamHiddenAncestor": false,
+          "emptyVisible": false,
+          "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+        },
+        "firstActive": "会话 2026-11-03 11:06:05 #1",
+        "reloadAt": 1793675171848,
+        "interruptArm": false
+      }
+    },
+    {
+      "name": "④ 再点新建任务回空屏且清 key",
+      "ok": true,
+      "detail": {
+        "t": 1973,
+        "active": null,
+        "last": null,
+        "ids": [
+          "会话 2026-11-03 11:06:06 #2",
+          "会话 2026-11-03 11:06:05 #1"
+        ],
+        "stream": "",
+        "streamVisible": null,
+        "streamHiddenAncestor": null,
+        "emptyVisible": true,
+        "workspaceText": "早上好，今天想做点什么？\nworkspace\nTab\n默认\n方案\n演示\n—\n继续上次：新对话的第一句\n解释这个项目的结构\n帮我把当前项目跑起来看看\n概览\nworkspace\n空闲\n还没有活动——对话开始后，用量、改动、计划与时间线会在这里长"
+      }
+    },
+    {
+      "name": "④ reload 之后的新会话首发也不再跳回",
+      "ok": true,
+      "detail": {
+        "seq2": [
+          {
+            "dtMs": 5,
+            "id": null
+          },
+          {
+            "dtMs": 51,
+            "id": "会话 2026-11-03 11:06:13 #3"
+          }
+        ],
+        "final2": {
+          "t": 7817,
+          "active": "会话 2026-11-03 11:06:13 #3",
+          "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+          "ids": [
+            "会话 2026-11-03 11:06:13 #3",
+            "会话 2026-11-03 11:06:06 #2",
+            "会话 2026-11-03 11:06:05 #1"
+          ],
+          "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+          "streamVisible": true,
+          "streamHiddenAncestor": false,
+          "emptyVisible": false,
+          "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+        }
+      }
+    },
+    {
+      "name": "④ 恢复旧对话再新建，主区仍只显示新对话内容",
+      "ok": false,
+      "detail": {
+        "t": 7817,
+        "active": "会话 2026-11-03 11:06:13 #3",
+        "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+        "ids": [
+          "会话 2026-11-03 11:06:13 #3",
+          "会话 2026-11-03 11:06:06 #2",
+          "会话 2026-11-03 11:06:05 #1"
+        ],
+        "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+        "streamVisible": true,
+        "streamHiddenAncestor": false,
+        "emptyVisible": false,
+        "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+      }
+    },
+    {
+      "name": "真实渲染过程无控制台错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": [],
+  "first": {
+    "t": 1492,
+    "active": "会话 2026-11-03 11:06:05 #1",
+    "last": "{\"id\":\"会话 2026-11-03 11:06:05 #1\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+    "ids": [
+      "会话 2026-11-03 11:06:05 #1"
+    ],
+    "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+    "streamVisible": true,
+    "streamHiddenAncestor": false,
+    "emptyVisible": false,
+    "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+  },
+  "afterNew": {
+    "t": 1736,
+    "active": null,
+    "last": null,
+    "ids": [
+      "会话 2026-11-03 11:06:05 #1"
+    ],
+    "stream": "",
+    "streamVisible": null,
+    "streamHiddenAncestor": null,
+    "emptyVisible": true,
+    "workspaceText": "上午好，今天想做点什么？\nworkspace\nTab\n默认\n方案\n演示\n—\n继续上次：这是上一个对话的内容\n解释这个项目的结构\n帮我把当前项目跑起来看看\n概览\nworkspace\n空闲\n还没有活动——对话开始后，用量、改动、计划与时间线会在"
+  },
+  "marks": [
+    {
+      "dtMs": 5,
+      "t": 1749,
+      "active": null,
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\n思考中\n0s\n默认\n方案\n演示\n—\n概览\nworkspace\n运行中\n演示\n默认\n还没有活动——对话开始后，用量、改动、计划与时间线会在这里长出来。"
+    },
+    {
+      "dtMs": 52,
+      "t": 1790,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 93,
+      "t": 1831,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 135,
+      "t": 1873,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 176,
+      "t": 1914,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 217,
+      "t": 1956,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 259,
+      "t": 1997,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 300,
+      "t": 2038,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 342,
+      "t": 2080,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 383,
+      "t": 2121,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 424,
+      "t": 2162,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 466,
+      "t": 2204,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 507,
+      "t": 2245,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 549,
+      "t": 2287,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 590,
+      "t": 2328,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 632,
+      "t": 2370,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 673,
+      "t": 2411,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 714,
+      "t": 2452,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 756,
+      "t": 2494,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 797,
+      "t": 2535,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 839,
+      "t": 2577,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 880,
+      "t": 2618,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 921,
+      "t": 2659,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 962,
+      "t": 2700,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1004,
+      "t": 2742,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1045,
+      "t": 2784,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1087,
+      "t": 2825,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1129,
+      "t": 2867,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1170,
+      "t": 2908,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1212,
+      "t": 2950,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1253,
+      "t": 2991,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1295,
+      "t": 3033,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1336,
+      "t": 3074,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1377,
+      "t": 3115,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1418,
+      "t": 3157,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1460,
+      "t": 3198,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1502,
+      "t": 3240,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1543,
+      "t": 3281,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1585,
+      "t": 3323,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1626,
+      "t": 3364,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1668,
+      "t": 3406,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1709,
+      "t": 3447,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1751,
+      "t": 3489,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1792,
+      "t": 3530,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1834,
+      "t": 3572,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1875,
+      "t": 3613,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1916,
+      "t": 3655,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1958,
+      "t": 3696,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1999,
+      "t": 3738,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2041,
+      "t": 3779,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2082,
+      "t": 3821,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2124,
+      "t": 3862,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2165,
+      "t": 3903,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2206,
+      "t": 3944,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2247,
+      "t": 3985,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2289,
+      "t": 4027,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2330,
+      "t": 4068,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2372,
+      "t": 4110,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2412,
+      "t": 4150,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2454,
+      "t": 4192,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2495,
+      "t": 4233,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2537,
+      "t": 4275,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2577,
+      "t": 4316,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2619,
+      "t": 4357,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2660,
+      "t": 4399,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2702,
+      "t": 4440,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2743,
+      "t": 4482,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2785,
+      "t": 4523,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2826,
+      "t": 4564,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2868,
+      "t": 4606,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2909,
+      "t": 4647,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2951,
+      "t": 4689,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2992,
+      "t": 4731,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3034,
+      "t": 4772,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3075,
+      "t": 4813,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3117,
+      "t": 4855,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3158,
+      "t": 4897,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3200,
+      "t": 4938,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3242,
+      "t": 4980,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3283,
+      "t": 5021,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3325,
+      "t": 5063,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3366,
+      "t": 5104,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3408,
+      "t": 5146,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3449,
+      "t": 5187,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3491,
+      "t": 5229,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3532,
+      "t": 5270,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3573,
+      "t": 5312,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3615,
+      "t": 5353,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3656,
+      "t": 5395,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3698,
+      "t": 5436,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3739,
+      "t": 5478,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3781,
+      "t": 5519,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3822,
+      "t": 5560,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3864,
+      "t": 5602,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3905,
+      "t": 5644,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3947,
+      "t": 5685,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3988,
+      "t": 5727,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4030,
+      "t": 5768,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4071,
+      "t": 5810,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4112,
+      "t": 5850,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4154,
+      "t": 5892,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4195,
+      "t": 5933,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4237,
+      "t": 5975,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4278,
+      "t": 6016,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4319,
+      "t": 6057,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4361,
+      "t": 6099,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4402,
+      "t": 6140,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4444,
+      "t": 6182,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4486,
+      "t": 6224,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4527,
+      "t": 6265,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4569,
+      "t": 6307,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4610,
+      "t": 6348,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4652,
+      "t": 6390,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4693,
+      "t": 6431,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4735,
+      "t": 6473,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4776,
+      "t": 6514,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4818,
+      "t": 6556,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4859,
+      "t": 6597,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4900,
+      "t": 6638,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4941,
+      "t": 6679,
+      "active": "会话 2026-11-03 11:06:06 #2",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:06 #2\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    }
+  ],
+  "seq": [
+    {
+      "dtMs": 5,
+      "id": null
+    },
+    {
+      "dtMs": 52,
+      "id": "会话 2026-11-03 11:06:06 #2"
+    }
+  ],
+  "afterReload": {
+    "t": 1764,
+    "active": "会话 2026-11-03 11:06:05 #1",
+    "last": "{\"id\":\"会话 2026-11-03 11:06:05 #1\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+    "ids": [
+      "会话 2026-11-03 11:06:06 #2",
+      "会话 2026-11-03 11:06:05 #1"
+    ],
+    "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+    "streamVisible": true,
+    "streamHiddenAncestor": false,
+    "emptyVisible": false,
+    "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+  },
+  "marks2": [
+    {
+      "dtMs": 5,
+      "t": 1986,
+      "active": null,
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\n思考中\n0s\n默认\n方案\n演示\n—\n概览\nworkspace\n运行中\n演示\n默认\n还没有活动——对话开始后，用量、改动、计划与时间线会在这里长出来。"
+    },
+    {
+      "dtMs": 51,
+      "t": 2025,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\n思考中\n0s\n默认\n方案\n演示\n—\n概览\nworkspace\n运行中\n演示\n默认\n还没有活动——对话开始后，用量、改动、计划与时间线会在这里长出来。"
+    },
+    {
+      "dtMs": 91,
+      "t": 2066,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 133,
+      "t": 2108,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 174,
+      "t": 2149,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 216,
+      "t": 2191,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 257,
+      "t": 2232,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 299,
+      "t": 2274,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 341,
+      "t": 2315,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 382,
+      "t": 2357,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 424,
+      "t": 2398,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 465,
+      "t": 2440,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 506,
+      "t": 2480,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 547,
+      "t": 2522,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 589,
+      "t": 2563,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 630,
+      "t": 2605,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 672,
+      "t": 2646,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 713,
+      "t": 2688,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 755,
+      "t": 2729,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 796,
+      "t": 2771,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 838,
+      "t": 2812,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 879,
+      "t": 2854,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 921,
+      "t": 2895,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 962,
+      "t": 2937,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1004,
+      "t": 2978,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1045,
+      "t": 3020,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1087,
+      "t": 3062,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1129,
+      "t": 3103,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1170,
+      "t": 3145,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1212,
+      "t": 3186,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1253,
+      "t": 3228,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1295,
+      "t": 3270,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1336,
+      "t": 3311,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1377,
+      "t": 3352,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1418,
+      "t": 3393,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1459,
+      "t": 3433,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1500,
+      "t": 3475,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1542,
+      "t": 3517,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1583,
+      "t": 3558,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1625,
+      "t": 3600,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1667,
+      "t": 3641,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1708,
+      "t": 3683,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1750,
+      "t": 3724,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1792,
+      "t": 3766,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1833,
+      "t": 3808,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1875,
+      "t": 3850,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1916,
+      "t": 3891,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1958,
+      "t": 3933,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 1999,
+      "t": 3974,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2041,
+      "t": 4016,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2082,
+      "t": 4057,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2124,
+      "t": 4099,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2165,
+      "t": 4140,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2207,
+      "t": 4182,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2248,
+      "t": 4223,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2290,
+      "t": 4265,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2331,
+      "t": 4305,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2372,
+      "t": 4347,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2413,
+      "t": 4388,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2455,
+      "t": 4430,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2496,
+      "t": 4471,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2538,
+      "t": 4513,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2580,
+      "t": 4554,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2621,
+      "t": 4596,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2662,
+      "t": 4637,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2704,
+      "t": 4679,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2746,
+      "t": 4720,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2787,
+      "t": 4762,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2829,
+      "t": 4803,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2870,
+      "t": 4845,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2912,
+      "t": 4886,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2953,
+      "t": 4928,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 2995,
+      "t": 4969,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3036,
+      "t": 5011,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3077,
+      "t": 5051,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3118,
+      "t": 5093,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3159,
+      "t": 5134,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3200,
+      "t": 5175,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3242,
+      "t": 5217,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3283,
+      "t": 5258,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3325,
+      "t": 5300,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3366,
+      "t": 5341,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3408,
+      "t": 5382,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3449,
+      "t": 5424,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3491,
+      "t": 5465,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3532,
+      "t": 5507,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3573,
+      "t": 5548,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3615,
+      "t": 5590,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3656,
+      "t": 5630,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3697,
+      "t": 5672,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3739,
+      "t": 5713,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3780,
+      "t": 5755,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3822,
+      "t": 5796,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3862,
+      "t": 5837,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3904,
+      "t": 5879,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3946,
+      "t": 5921,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 3988,
+      "t": 5962,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4029,
+      "t": 6004,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4073,
+      "t": 6048,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4114,
+      "t": 6089,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4156,
+      "t": 6130,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4197,
+      "t": 6172,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4239,
+      "t": 6214,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4281,
+      "t": 6255,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4322,
+      "t": 6297,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4364,
+      "t": 6339,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4406,
+      "t": 6380,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4447,
+      "t": 6422,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4489,
+      "t": 6463,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4530,
+      "t": 6505,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4572,
+      "t": 6546,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4613,
+      "t": 6588,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4655,
+      "t": 6630,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4696,
+      "t": 6671,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4738,
+      "t": 6713,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4780,
+      "t": 6754,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4821,
+      "t": 6796,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4862,
+      "t": 6837,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4903,
+      "t": 6878,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4945,
+      "t": 6920,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 4987,
+      "t": 6962,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 5029,
+      "t": 7004,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 5071,
+      "t": 7047,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 5116,
+      "t": 7091,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 5159,
+      "t": 7134,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 5202,
+      "t": 7177,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 5245,
+      "t": 7220,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 5287,
+      "t": 7263,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 5330,
+      "t": 7306,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 5374,
+      "t": 7349,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 5416,
+      "t": 7391,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 5458,
+      "t": 7433,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 5501,
+      "t": 7476,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 5544,
+      "t": 7519,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 5586,
+      "t": 7561,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 5629,
+      "t": 7604,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 5672,
+      "t": 7647,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 5713,
+      "t": 7688,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 5755,
+      "t": 7730,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    },
+    {
+      "dtMs": 5800,
+      "t": 7775,
+      "active": "会话 2026-11-03 11:06:13 #3",
+      "last": "{\"id\":\"会话 2026-11-03 11:06:13 #3\",\"workspace\":\"/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-jump-z9FJ8v/workspace\"}",
+      "ids": [
+        "会话 2026-11-03 11:06:13 #3",
+        "会话 2026-11-03 11:06:06 #2",
+        "会话 2026-11-03 11:06:05 #1"
+      ],
+      "stream": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚",
+      "streamVisible": true,
+      "streamHiddenAncestor": false,
+      "emptyVisible": false,
+      "workspaceText": "这是上一个对话的内容\n刚刚\n\n已收到本轮消息。\n\n刚刚\nTab\n默认\n方案\n演示\n—\n概览\n时间线\nworkspace\n空闲\nToken 用量\n输入\n未返回\n输出\n未返回\n会话活动\n工具步数\n0\n对话轮数\n1\n文件改动\n0\n用量次数\n0\n演"
+    }
+  ],
+  "seq2": [
+    {
+      "dtMs": 5,
+      "id": null
+    },
+    {
+      "dtMs": 51,
+      "id": "会话 2026-11-03 11:06:13 #3"
+    }
+  ],
+  "finalTranscripts": [
+    {
+      "id": "会话 2026-11-03 11:06:05 #1",
+      "lines": 2
+    },
+    {
+      "id": "会话 2026-11-03 11:06:06 #2",
+      "lines": 2
+    }
+  ]
+}

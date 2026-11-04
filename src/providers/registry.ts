@@ -25,6 +25,9 @@ export interface ModelSpec {
   inputModalities?: readonly string[];
   /** 上游支持的推理档位（与 provider-config 的 reasoning 同源，进 capability 判定）。 */
   reasoningEfforts?: readonly string[];
+  /** 声明的首选思考档（必须在 `reasoningEfforts` 里）。缺席 = off：
+   *  声明了「支持哪些档」不等于替用户打开一档 —— 首选档要**单独声明**，capability 照抄它。 */
+  reasoningDefault?: ThinkingEffort;
 }
 
 /** Worker/main shared provider whitelist. deepseek 追加在尾：新增家不许静默改

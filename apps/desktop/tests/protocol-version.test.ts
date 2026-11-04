@@ -77,7 +77,8 @@ describe("协议版本握手接线（§3.5/§12）", () => {
     // v47 → v48：＋evolveGlobalSetFrozen（全局经验冻结开关；写/删全局 STOP）。
     // v48 → v49：＋evolveGlobalActivate（恢复 dormant 全局经验；复核 ≥3 库证据）。
     // v49 → v50：runCancel/runSteer 携带 workspace，目标校验拒绝不触发自动续发。
+    // v51 → v52：＋lspStatus（桌面读 LSP 状态；只读、不 spawn、不写授权）。
     // v50 → v51：RunResponse.accepted 区分接收前拒绝与执行失败。
-    expect(IPC_PROTOCOL_VERSION).toBe(51);
+    expect(IPC_PROTOCOL_VERSION).toBe(52);
   });
 });

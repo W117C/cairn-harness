@@ -23,6 +23,7 @@ function toolIcon(tool: string) {
   if (tool === "write_file" || tool === "edit_file" || tool === "apply_patch") return FileText;
   if (tool === "web_fetch") return Globe;
   if (tool === "remember") return BookOpen;
+  if (tool === "attachment") return FileText;
   if (tool.startsWith("automation_")) return Timer;
   return undefined;
 }
@@ -47,6 +48,9 @@ export function ApprovalCard(props: {
   }, [alwaysArmed]);
   const a = props.ask;
   const digest = describeAsk(a);
+  // 项目外附件是**本轮一次性**读取授权：不提供「本会话此类 / 总是允许」——
+  // 那两个按钮的语义是持久 scope，而附件 grant 按设计不落盘、不跨 run。
+  const oneShot = a.tool === "attachment";
   const chip = a.risk !== undefined ? RISK_CHIP[a.risk] : undefined;
   const dangerHead = a.risk === "high" || a.risk === "critical";
   const Icon = dangerHead ? AlertTriangle : toolIcon(a.tool);
@@ -103,7 +107,7 @@ export function ApprovalCard(props: {
         {/* 动作次序（2026-10-31，R1）：拒绝 / 总是允许 / 允许一次（主钮最右）。
             与 open-claude-ui McpToolDecisionCard 的三阶决议同序；危险动作不摆在主位。 */}
         <button className="btn secondary" onClick={() => props.onDecide(false)}>拒绝</button>
-        {!alwaysArmed ? (
+        {!oneShot && (!alwaysArmed ? (
           <button className="btn ghost" onClick={() => setAlwaysArmed(true)}>总是允许 <ChevronDown size={11} /></button>
         ) : (
           <>
@@ -111,9 +115,10 @@ export function ApprovalCard(props: {
             <button className="btn danger-text" onClick={() => props.onDecide(true, "always")}>确认 · 总是</button>
             <button className="btn ghost" onClick={() => setAlwaysArmed(false)}>取消</button>
           </>
-        )}
-        <span className="spacer" />
+        ))}
+        {/* 2026-11-02：提示贴在次要动作后面，不再夹在 spacer 与主按钮之间把两枚动作挤开。 */}
         <span className="consequence">Esc 不做决议</span>
+        <span className="spacer" />
         <button className="btn primary" onClick={() => props.onDecide(true)}>允许 · 本次</button>
       </div>
     </div>

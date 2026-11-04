@@ -1,12 +1,15 @@
-import { Brain, Clock3, MessageSquare, Puzzle, Settings2, type LucideIcon } from "lucide-react";
+import { Brain, Clock3, MessageSquare, Puzzle, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, type ReactNode } from "react";
 import type { AppDestination } from "../app-controls";
 import { APP_DESTINATIONS, APP_DESTINATION_LABEL } from "../navigation";
+import { AccountMenu, type AccountMenuProps } from "./AccountMenu";
 
 export interface AppRailProps {
   destination: AppDestination;
   onOpen: (destination: AppDestination) => void;
-  onSettings: () => void;
+  /** 2026-11-03 业主：账户/设置入口固定在本轨**底部**，图标是用户头像，不再是滑杆；
+   *  侧栏页脚不再有第二份（同一语义只留一个入口）。缺省 = 不渲染（纯导航轨的测试面）。 */
+  account?: AccountMenuProps;
   badges?: Partial<Record<AppDestination, number>>;
   /** Chat 上下文动作（收起侧栏时的快捷入口）。
    *  2026-10-31 去重：此前它是**第二条 48px 图标栏**，与全局轨并排 ⇒ 同屏两列图标、
@@ -62,15 +65,7 @@ export function AppRail(props: AppRailProps): React.JSX.Element {
           </div>
         )}
       </div>
-      <button
-        type="button"
-        className="app-rail-item app-rail-settings"
-        aria-label="设置"
-        title="设置"
-        onClick={props.onSettings}
-      >
-        <Settings2 size={17} aria-hidden="true" />
-      </button>
+      {props.account !== undefined && <AccountMenu {...props.account} />}
     </nav>
   );
 }

@@ -122,6 +122,48 @@ describe("好配置：解析通过并派生", () => {
   });
 });
 
+// 思考声明（2026-11-03）：档位与首选档都由用户自己写进 `models[]`，判错句同样要**原句证人**
+// （`tests/promise-recall-inventory.test.ts` 那把尺：欠证人帽 0 —— 每一句能力断言都得有判卷点它）。
+describe("思考声明：认不出的档位与越界的首选档都拒（不是静默丢）", () => {
+  it("档位写不在四档里 ⇒ 拒，并交出允许的取值清单", () => {
+    const ps = problemsOf(mutate((_f, _p, m) => {
+      m.reasoningEfforts = ["low", "turbo"];
+    }));
+    const hit = ps.find((p) => p.where.endsWith(".reasoningEfforts"));
+    expect(hit?.kind).toBe("model");
+    expect(hit?.message).toContain("认不出的思考档位");
+    expect(hit?.message).toContain("只认下列取值");
+  });
+
+  it("首选档不在声明的档位里 ⇒ 拒（静默落回 off 等于用户写的字一点效果都没有）", () => {
+    const ps = problemsOf(mutate((_f, _p, m) => {
+      m.reasoningEfforts = ["low"];
+      m.reasoningDefault = "high";
+    }));
+    const hit = ps.find((p) => p.where.endsWith(".reasoningDefault"));
+    expect(hit?.kind).toBe("model");
+    expect(hit?.message).toContain("必须是所声明的档位之一");
+  });
+
+  it("首选档写了个不存在的档名 ⇒ 同样拒，且位置指到那个框（不是笼统指模型）", () => {
+    const ps = problemsOf(mutate((_f, _p, m) => {
+      m.reasoningDefault = "turbo";
+    }));
+    const hit = ps.find((p) => p.where.endsWith(".reasoningDefault"));
+    expect(hit?.kind).toBe("model");
+    expect(hit?.message).toContain("认不出的思考档位");
+  });
+
+  it("没声明档位却写了首选档 ⇒ 拒，并说清首选档以档位声明为前提", () => {
+    const ps = problemsOf(mutate((_f, _p, m) => {
+      delete m.reasoningEfforts;
+      m.reasoningDefault = "high";
+    }));
+    const hit = ps.find((p) => p.where.endsWith(".reasoningDefault"));
+    expect(hit?.message).toContain("只有在声明了");
+  });
+});
+
 describe("三条安全线：判错，而不是提示", () => {
   it("http 且不是本地地址 ⇒ 拒（只许 https）", () => {
     const raw = mutate((_f, p) => {

@@ -214,7 +214,7 @@ describe("plugin marketplace verified cache", () => {
       stale: true,
       fetchedAt: "2026-10-29T12:00:01.000Z",
     });
-    expect(readout.note).toContain("过期");
+    expect(readout.note).toMatch(/(?:刷新返回的目录已过期|使用已过期的已验证缓存)/u);
   });
 
   it("does not replace a fresher verified cache with an expired network catalog", async () => {
@@ -237,7 +237,7 @@ describe("plugin marketplace verified cache", () => {
       stale: false,
     });
     expect(readout.catalog?.revision).toBe("fresh-cache");
-    expect(readout.note).toContain("过期");
+    expect(readout.note).toMatch(/(?:刷新返回的目录已过期|使用已过期的已验证缓存)/u);
   });
 
   it("uses a fresh cache for auto refresh without touching the network", async () => {
@@ -250,7 +250,7 @@ describe("plugin marketplace verified cache", () => {
       store(dir, fetchImpl),
     );
     expect(readout).toMatchObject({ status: "ready", origin: "cache", stale: false });
-    expect(readout.note).toContain("未刷新");
+    expect(readout.note).toBe("缓存仍新鲜，未刷新");
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
@@ -284,7 +284,7 @@ describe("plugin marketplace verified cache", () => {
       store(dir, noFetch()),
     );
     expect(stale).toMatchObject({ status: "ready", origin: "cache", stale: true });
-    expect(stale.note).toContain("过期");
+    expect(stale.note).toMatch(/(?:刷新返回的目录已过期|使用已过期的已验证缓存)/u);
   });
 
   it("does not replace a verified cache with a redirect or tampered response", async () => {
@@ -299,7 +299,7 @@ describe("plugin marketplace verified cache", () => {
       })),
     );
     expect(redirected.origin).toBe("cache");
-    expect(redirected.note).toContain("重定向");
+    expect(redirected.note).toBe("刷新失败：插件市场目录返回重定向 302（不跟随）");
 
     const tamperedEnvelope = { ...envelope(), signature: Buffer.alloc(64, 7).toString("base64") };
     const tampered = await loadPluginMarketplaceCatalog(
@@ -318,6 +318,18 @@ describe("plugin marketplace verified cache", () => {
     expect(cached.catalog?.revision).toBe("cached.revision");
   });
 
+  it("rejects an unsupported cache schema and reports the cause", async () => {
+    const dir = scratch();
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(cachePath(dir), JSON.stringify({ schemaVersion: 2 }), "utf8");
+    const result = await loadPluginMarketplaceCatalog(
+      { refresh: "never" }, source(), store(dir, noFetch()),
+    );
+    expect(result.status).toBe("unavailable");
+    expect(result.catalog).toBeNull();
+    expect(result.note).toContain("不支持当前缓存结构版本");
+  });
+
   it("reports cache corruption and lets a later verified refresh recover", async () => {
     const dir = scratch();
     mkdirSync(dir, { recursive: true });
@@ -328,7 +340,7 @@ describe("plugin marketplace verified cache", () => {
       store(dir, noFetch()),
     );
     expect(corrupt.status).toBe("unavailable");
-    expect(corrupt.note).toContain("缓存");
+    expect(corrupt.note).toMatch(/^本地缓存损坏：/u);
 
     const recovered = await loadPluginMarketplaceCatalog(
       { refresh: "force" },
@@ -369,7 +381,7 @@ describe("plugin marketplace verified cache", () => {
       store(scratch(), async () => new Response("x".repeat(768 * 1024 + 1))),
     );
     expect(oversized.status).toBe("unavailable");
-    expect(oversized.note).toContain("上限");
+    expect(oversized.note).toMatch(/(?:本地缓存超过 \d+ 字节上限|超过 \d+ 字节上限)/u);
 
     const missing = await loadPluginMarketplaceCatalog(
       { refresh: "auto" },
@@ -377,7 +389,7 @@ describe("plugin marketplace verified cache", () => {
       store(scratch(), noFetch()),
     );
     expect(missing.status).toBe("unavailable");
-    expect(missing.note).toContain("未配置");
+    expect(missing.note).toBe("插件市场目录未配置（缺少 CAIRN_PLUGIN_MARKETPLACE_URL）");
   });
 
   it("cancels an undeclared oversized response stream before buffering the full body", async () => {
@@ -405,7 +417,7 @@ describe("plugin marketplace verified cache", () => {
     );
 
     expect(readout.status).toBe("unavailable");
-    expect(readout.note).toContain("上限");
+    expect(readout.note).toMatch(/(?:本地缓存超过 \d+ 字节上限|超过 \d+ 字节上限)/u);
     expect(pulls).toBeLessThan(5);
     expect(cancels).toBe(1);
   });

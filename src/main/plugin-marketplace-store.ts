@@ -162,7 +162,7 @@ function readCache(dir: string, keys: readonly MarketplacePublicKey[]): ReadCach
       throw new Error("缓存必须是对象");
     }
     const record = parsed as Record<string, unknown>;
-    if (record.schemaVersion !== 1) throw new Error("缓存 schemaVersion 不支持");
+    if (record.schemaVersion !== 1) throw new Error("不支持当前缓存结构版本");
     if (typeof record.fetchedAt !== "string") throw new Error("缓存缺少 fetchedAt");
     const fetchedAtMillis = Date.parse(record.fetchedAt);
     if (!Number.isFinite(fetchedAtMillis)) throw new Error("缓存 fetchedAt 非法");

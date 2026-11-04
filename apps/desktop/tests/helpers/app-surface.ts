@@ -84,3 +84,21 @@ export function readAppShell(): string {
   );
   return files.map((rel) => readFileSync(join(RENDERER_DIR, rel), "utf8")).join("\n");
 }
+
+const APP_PAGE_FILES = new Set([
+  "components/AppPage.tsx",
+  "components/app-page-chrome.tsx",
+  "components/PluginsPane.tsx",
+  "components/AutomationPane.tsx",
+  "components/SkillsPane.tsx",
+  "components/MemoryPane.tsx",
+  "components/WorktreesPane.tsx",
+]);
+
+/** 应用页表面 = AppPage.tsx 编排宿主 + 拆出的各面板与共享壳件（覆盖拆分前 AppPage.tsx 的完整范围）。 */
+export function readAppPageSurface(): string {
+  const files = appSurfaceFiles().filter(
+    (rel) => APP_PAGE_FILES.has(rel) || rel.startsWith("components/plugins/"),
+  );
+  return files.map((rel) => readFileSync(join(RENDERER_DIR, rel), "utf8")).join("\n");
+}

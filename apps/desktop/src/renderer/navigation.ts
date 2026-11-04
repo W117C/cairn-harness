@@ -21,9 +21,10 @@ export const APP_DESTINATION_LABEL: Record<AppDestination, string> = {
 
 export const PAGE_CONTEXT_ITEMS = {
   plugins: [
-    { id: "discover", label: "发现" },
-    { id: "installed", label: "已安装" },
-    { id: "updates", label: "可更新" },
+    // 2026-11-02：这一栏此前把「视图」（发现/已安装/可更新）与「分类」（技能/命令…）
+    // 混成十条一串，而那三个视图在页内标签条里已经有了 ⇒ 同一件事两处入口。
+    // 现在这一栏只做**分类筛选**：视图归页内标签条，两个语义各一处。
+    { id: "all", label: "全部能力" },
     { id: "favorites", label: "精选" },
     { id: "skills", label: "技能" },
     { id: "commands", label: "命令" },
@@ -34,7 +35,7 @@ export const PAGE_CONTEXT_ITEMS = {
   ],
   automation: [
     { id: "all", label: "全部" },
-    { id: "on", label: "运行中" },
+    { id: "on", label: "已启用" },
     { id: "off", label: "已暂停" },
   ],
   skills: [],

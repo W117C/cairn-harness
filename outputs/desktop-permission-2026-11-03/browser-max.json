@@ -1,0 +1,81 @@
+{
+  "opened": true,
+  "before": {
+    "left": 1080,
+    "top": 38,
+    "width": 360,
+    "height": 826,
+    "maximized": "false"
+  },
+  "clicked": true,
+  "after": {
+    "window": {
+      "width": 1440,
+      "height": 864
+    },
+    "workbench": {
+      "left": 304,
+      "top": 38,
+      "width": 1136,
+      "height": 826
+    },
+    "view": {
+      "left": 324,
+      "top": 173,
+      "width": 1096,
+      "height": 671
+    },
+    "maximized": "true",
+    "restoreButton": true
+  },
+  "menuPoint": {
+    "x": 1406,
+    "y": 150
+  },
+  "menuHit": "<circle cx=\"12\" cy=\"12\" r=\"1\"></circle>",
+  "menuOpened": true,
+  "menu": [
+    {
+      "cls": "pop down side-filter-menu",
+      "text": "全部1运行中0已置顶0已归档0定时任务0紧凑视图（28px）",
+      "w": 0,
+      "h": 0,
+      "top": 0
+    },
+    {
+      "cls": "pop up",
+      "text": "添加引用上传文件…系统选择器 · 可多选添加文件夹…目录内文",
+      "w": 0,
+      "h": 0,
+      "top": 0
+    },
+    {
+      "cls": "pop up",
+      "text": "",
+      "w": 0,
+      "h": 0,
+      "top": 0
+    },
+    {
+      "cls": "pop up meter-pop",
+      "text": "本会话用量输入0输出0缓存读—轮数0步数0上下文已用暂无数据",
+      "w": 0,
+      "h": 0,
+      "top": 0
+    },
+    {
+      "cls": "pop-rd",
+      "text": "保留 cookies（登录态）✓清除浏览数据…已授权站点（0",
+      "w": 294,
+      "h": 250,
+      "top": 168
+    }
+  ],
+  "restored": true,
+  "afterRestore": {
+    "left": 1080,
+    "top": 38,
+    "width": 360,
+    "maximized": "false"
+  }
+}

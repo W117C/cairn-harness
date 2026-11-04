@@ -141,12 +141,16 @@ describe("web_fetch 出网判据（纯函数，零网络）", () => {
   });
 });
 
-describe("web_fetch 权限：四档都问（出网永不免批）", () => {
+describe("web_fetch 权限：前四档都问；完全允许档免卡（2026-11-03 业主裁决）", () => {
   // 只断言"某一档问了"会被"一律 deny"伪造成绿，所以逐档点名，且断言的是 verdict 不是"被拒了"。
-  it("read-only / default / guided / auto 四档逐档 verdict=ask", () => {
+  it("只读/需要审批/引导/智能审批逐档 verdict=ask；完全允许 approve", () => {
     for (const m of PERMISSION_MODES) {
       const d = evaluate("web_fetch" as ToolName, { url: "https://example.com/" }, newAutonomySession(m));
-      expect(d.verdict, `档位 ${m} 漏问了`).toBe("ask");
+      if (m === "full-access") {
+        expect(d.verdict, "完全允许档出网仍被拦（与业主裁决相反）").toBe("approve");
+      } else {
+        expect(d.verdict, `档位 ${m} 漏问了`).toBe("ask");
+      }
     }
   });
 

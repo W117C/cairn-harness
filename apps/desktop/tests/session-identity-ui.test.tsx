@@ -10,12 +10,12 @@ const projects = ["A", "B"].map((name) => ({
 const props: SidebarProps = {
   projects, sessions: projects.map((p) => ({ id: "same", title: p.name, workspace: p.path, mtimeMs: 0, lines: 1 })),
   activeId: "same", activeWorkspace: "/tmp/A", running: new Set(), waitingIds: new Set(), outcomes: new Map(),
-  providerOk: null, theme: "system", onThemeChange: noop,
+  providerOk: null,
   onOpen: noop, onNewTask: noop, onOpenPalette: noop, onSwitchWorkspace: noop,
   onAddProject: async () => undefined, onCloneProject: async () => undefined,
   onOpenNewProjectDialog: noop, onUpdateProject: async () => undefined, onRelocateProject: async () => undefined,
   onRemoveProject: async () => undefined, onRevealProject: noop,
-  onOpenSettings: noop, onPickDirectory: async () => null,
+  onPickDirectory: async () => null,
 };
 const rows = (activeWorkspace: string): string[] => [...renderToStaticMarkup(
   <Sidebar {...props} activeWorkspace={activeWorkspace} />,

@@ -111,21 +111,39 @@ describe("回底钮挂载竞态（阶段 2 真机复检抓到并修复）", () =
   });
 });
 
-describe("回到底部 = 居中浮钮（业主 10.07 裁：正中间；v3-lite「回到最新」margin:0 auto 同口径）", () => {
+describe("回到底部 = 右缘气沟浮钮（2026-11-01 真机订正：居中锚压在助手正文那一行上）", () => {
   const css = read("../src/renderer/styles.css");
   const app = readAppSurface();
-  it("圆形图标钮：水平居中定位 + 淡入动画", () => {
+  it("圆形图标钮：锚在阅读列右缘之外的气沟 + 淡入动画", () => {
     expect(css).toMatch(/\.jump-latest\s*{[^}]*border-radius:\s*var\(--radius-pill\)/s);
-    // 居中 = left:50% + translateX(-50%)（宽窗下不再贴右缘孤悬——旧 right 锚已废）。
-    expect(css).toMatch(/\.jump-latest\s*{[^}]*left:\s*50%/s);
-    expect(css).toMatch(/\.jump-latest\s*{[^}]*transform:\s*translateX\(-50%\)/s);
-    expect(css).not.toMatch(/\.jump-latest\s*{[^}]*right:/s);
+    // 锚点 = 50% − 阅读列半宽 + 间隙（阅读列窄于视口时退化为贴右缘）；仍贴着对话区，但不压字。
+    expect(css).toMatch(/\.jump-latest\s*{[^}]*right:\s*calc\(50% - min\(var\(--reading\), 100%\) \/ 2 \+ var\(--space-sm\)\)/s);
+    expect(css).toMatch(/\.jump-latest\s*{[^}]*bottom:\s*var\(--space-md\)/s);
+    expect(css).toMatch(/\.jump-latest\s*{[^}]*z-index:\s*4/s);
+    // 旧居中锚（left:50% + translateX(-50%)）已废：它与阅读列同一条中轴，正文必然被盖。
+    expect(css).not.toMatch(/\.jump-latest\s*{[^}]*left:\s*50%/s);
+    expect(css).not.toMatch(/\.jump-latest\s*{[^}]*transform:/s);
     expect(css).toMatch(/@keyframes fade-in/);
     expect(css).toMatch(/\.jump-latest\s*{[^}]*animation:\s*fade-in/s);
   });
   it("App：文字形态清零、aria-label 在位（图标钮的可读名）", () => {
     expect(app).toContain('aria-label="回到底部"');
     expect(app).not.toContain("<span>回到底部</span>");
+  });
+});
+
+describe("回底钮显隐 = 视口下面还有内容（2026-11-01 真机缺陷 2）", () => {
+  const app = readAppSurface();
+  const hook = read("../src/renderer/useStickyScroll.ts");
+  it("贴底判定：内容装得下 ⇒ 仍在底部（浮钮不亮）；下面有内容 ⇒ 不贴底（浮钮亮）", () => {
+    expect(isNearBottom({ scrollTop: 0, scrollHeight: 400, clientHeight: 500 })).toBe(true);   // 内容不足一屏
+    expect(isNearBottom({ scrollTop: 0, scrollHeight: 900, clientHeight: 500 })).toBe(false);  // 下面还有 400px
+    expect(isNearBottom({ scrollTop: 400, scrollHeight: 900, clientHeight: 500 })).toBe(true);  // 贴底
+  });
+  it("接线：浮钮挂在 !stick.stuck 上；用户输入按真实位置重判，不许再「碰一下就置 false」", () => {
+    expect(app).toContain("{!stick.stuck && (");
+    expect(app).not.toMatch(/setStuck\(false\)/);
+    expect(hook).toContain("pinned.current = isNearBottom(el);");
   });
 });
 
@@ -142,13 +160,18 @@ describe("工具行折叠态信息量（2026-10-17：去掉重复的绝对时间
   });
 });
 
-describe("失败摘要可读（2026-10-21 设计重做）", () => {
+describe("失败摘要可读（2026-10-21 设计重做；2026-11-01 收起卡改说人话）", () => {
   const css = read("../src/renderer/styles.css");
   const stream = read("../src/renderer/components/Stream.tsx");
   it("失败摘要独占一行并换行，不截成 80 字单行省略", () => {
     expect(css).toMatch(/\.tool-group-failure\s*{[^}]*flex:\s*1 1 100%/s);
     expect(css).toMatch(/\.tool-group-failure\s*{[^}]*white-space:\s*normal/s);
-    expect(stream).toContain("truncateSummary(failure.output, 240)");
+    // 2026-11-01：收起卡那一行换成人话摘要（机器面原文是写给模型读的解释面，用户读不懂）。
+    expect(stream).toContain("toolFailureSummary(failure, STR.toolGroup)");
+    expect(stream).not.toContain("truncateSummary(failure.output, 240)");
     expect(stream).not.toContain("truncateSummary(failure.output, 80)");
+    // 原文不丢：悬停提示（title）里给截断版；展开体里另有全文。
+    expect(stream).toContain("STR.toolGroup.failureDetailTip");
+    expect(stream).toContain("truncateSummary(failure.output, 400)");
   });
 });

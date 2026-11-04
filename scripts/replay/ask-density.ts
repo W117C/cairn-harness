@@ -40,6 +40,7 @@ export const ARMS: readonly { mode: PermissionMode; sandbox: boolean | null }[] 
   { mode: "guided", sandbox: null },
   { mode: "auto", sandbox: null },
   { mode: "auto", sandbox: false },
+  { mode: "full-access", sandbox: null },
 ];
 
 function main(): void {

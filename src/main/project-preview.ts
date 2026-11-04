@@ -227,6 +227,10 @@ export interface PreviewSnapshot {
   stage?: PreviewFailureStage;
   message?: string;
   hint?: string;
+  /** 判定依据（逐条）。**与 message 分开走**：message 是一句「发生了什么」，
+   *  reasons 是「凭什么这么判」的证据条——拍平成一行就分不清哪句是结论、哪句是证据、
+   *  哪句是用户该做的事（渲染层据此分行渲染，见 derived/preview-failure.ts）。 */
+  reasons?: string[];
   /** stopped 的来路：user = 用户停的；exit = 应用退出回收。 */
   reason?: "user" | "exit";
 }
@@ -331,8 +335,9 @@ export class PreviewRuntime {
     this.onChange?.(snapshot);
   }
 
-  private fail(entry: Entry, stage: PreviewFailureStage, message: string, hint: string): PreviewSnapshot {
+  private fail(entry: Entry, stage: PreviewFailureStage, message: string, hint: string, reasons?: string[]): PreviewSnapshot {
     const snapshot: PreviewSnapshot = { projectPath: entry.root, status: "failed", stage, message, hint };
+    if (reasons !== undefined && reasons.length > 0) snapshot.reasons = reasons;
     this.emit(entry, snapshot);
     return snapshot;
   }
@@ -375,11 +380,16 @@ export class PreviewRuntime {
     } else {
       const diagnosis = diagnoseProjectDirectory(root);
       if (diagnosis.verdict !== "supported" || diagnosis.runKind === null) {
+        // 三件不同的事分开走（2026-11-02 真机订正）：summary 是「发生了什么」、
+        // reasons 是「凭什么这么判」、hint 是「你该做什么」。此前把 reasons 拼进 message
+        // （「summary——reasons；reasons」），再由渲染层拼成一行 ⇒ 用户读到的是一句
+        // 分不清成分的长句：看不出哪句是结论、哪句是证据、哪句是要做的事。
         return this.fail(
           entry,
           "spec",
-          `${diagnosis.summary}——${diagnosis.reasons.join("；")}`,
+          diagnosis.summary,
           diagnosis.hint ?? "换个目录，或从模板新建一个项目。",
+          diagnosis.reasons,
         );
       }
       kind = diagnosis.runKind;

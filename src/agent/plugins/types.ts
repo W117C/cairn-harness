@@ -19,16 +19,55 @@ export type HookEventName =
   | "Stop"
   | "SessionEnd";
 
-/** handler 类型枚举：V1 只做 command；其余收下（schema 层）但运行跳过 + 警告。 */
+/** handler 类型：`command` / `http` / `mcp_tool` / `prompt` 四档已兑现；`agent` 声明了但运行侧
+ *  还没接（装载期按「未兑现」拒载 + 警告点名，不再等运行时一行警告）。
+ *  形态按 type 判别——从前 `command` 是全类型必填字段，于是 http 档**连 URL 都无处写**：
+ *  作者写的 `url` 被 schema 丢掉，钩子在运行时静默缺席。 */
 export type HookHandlerType = "command" | "http" | "mcp_tool" | "prompt" | "agent";
 
-export interface HookHandlerDef {
-  type: HookHandlerType;
-  /** shell form（string，经 shell 执行）或 exec form（string[]，直接 spawn，不经 shell）。 */
-  command: string | string[];
-  /** 秒；缺省 600（UserPromptSubmit 降 30）。 */
+/** 秒；缺省 600（UserPromptSubmit 降 30）。三档兑现中的 handler 共用这一份超时纪律。 */
+interface HookHandlerTiming {
   timeout?: number;
 }
+
+export interface CommandHookHandler extends HookHandlerTiming {
+  type: "command";
+  /** shell form（string，经 shell 执行）或 exec form（string[]，直接 spawn，不经 shell）。 */
+  command: string | string[];
+}
+
+export interface HttpHookHandler extends HookHandlerTiming {
+  type: "http";
+  /** 只接受 http(s)：`file:` / `data:` 之类会把它变成一条新的本地读取通道，那不是钩子的职权。 */
+  url: string;
+  /** 头值允许 `${user_config.*}`（含 sensitive——Authorization 头就是它的用途）；
+   *  回执与日志只回声模板，不回声展开后的值。 */
+  headers?: Record<string, string>;
+}
+
+export interface McpToolHookHandler extends HookHandlerTiming {
+  type: "mcp_tool";
+  /** 只能打**本插件**声明的那台 server；且必须在裁剪后的工具表里（见 `McpManager.callTool`）。 */
+  server: string;
+  tool: string;
+  /** 字符串值里的 `${path}` 按 hook payload 展开（与 command 档的 stdin 同一份契约）；
+   *  取不到值 ⇒ 这条钩子不跑并点名路径，绝不把字面 `${tool_input.x}` 当参数送给 server。 */
+  args?: Record<string, unknown>;
+}
+
+export interface PromptHookHandler extends HookHandlerTiming {
+  type: "prompt";
+  /** 给模型的指令（进 system）。值里的 `${path}` 按 hook payload 展开——与 mcp_tool 档同一套
+   *  展开与「取不到就点名」纪律。 */
+  prompt: string;
+}
+
+/** 尚未兑现的档：没有可写的载荷字段，装载期即拒（枚举留着是为了如实点名）。 */
+export interface UnhonoredHookHandler extends HookHandlerTiming {
+  type: "agent";
+}
+
+export type HookHandlerDef = CommandHookHandler | HttpHookHandler | McpToolHookHandler | PromptHookHandler | UnhonoredHookHandler;
 
 export interface HookMatcherDef {
   /** 工具名 matcher（Pre/PostToolUse 系）；缺省 = 匹配全部。 */
@@ -197,8 +236,10 @@ export interface LoadedHookDef {
   /** §9.5 的 `if`（从 HookMatcherDef 带到执行面；同组 handler 共享一条过滤）。 */
   if?: string;
   handler: HookHandlerDef;
-  /** ${user_config.*} 禁入 shell-form hook：违规条目装载即拒绝（loaded=false + warning）。 */
+  /** ${user_config.*} 禁入 shell-form hook / handler 形态与类型不符：违规条目装载即拒绝（loaded=false + warning）。 */
   loaded: boolean;
+  /** 拒载原因（`loaded=false` 时给警告面用）。缺省 = 沿用 shell-form 那条旧文案。 */
+  rejectReason?: string;
 }
 
 /** 这一次扫描**实际**吃了哪几顶根（`null` = 这一顶没给，不是「给了空目录」）。
@@ -242,7 +283,9 @@ export interface PluginsManifest {
 export interface McpServerStatus {
   plugin: string;
   server: string;
-  state: "connected" | "failed" | "untrusted" | "disabled";
+  /** `reconnecting` 是**独立一档**，不许折进 connected：面板上"在跑"与"崩了在试第 2 次"
+   *  是两件事，混起来就是让业主以为服务好好的。 */
+  state: "connected" | "failed" | "reconnecting" | "untrusted" | "disabled";
   tools: string[];
   error?: string;
 }

@@ -30,6 +30,17 @@ if (!process.env.M2E_FOREIGN_SOURCES) process.env.M2E_FOREIGN_SOURCES = "off";
 if (!process.env.CAIRN_EVOLVE_HOME) process.env.CAIRN_EVOLVE_HOME = join(tmpdir(), "dsh-evolve-home");
 mkdirSync(process.env.CAIRN_EVOLVE_HOME, { recursive: true });
 
+// LSP 运行态落盘（第 996 页）默认在 `~/.config/cairn/lsp-runtime`；客户端一起来就会写它。
+// 同一道隔离纪律：判卷不许写真人的家目录，也不许让结果取决于那台机器上残留了什么记录。
+if (!process.env.CAIRN_LSP_HOME) process.env.CAIRN_LSP_HOME = join(tmpdir(), "dsh-lsp-runtime-home");
+mkdirSync(process.env.CAIRN_LSP_HOME, { recursive: true });
+
+// 全局记忆与全局权限规则根同样隔离到临时目录，防止开发机家目录残留记忆挤压紧预算判卷（如 PreCompact +5 token 预算）。
+if (!process.env.M2D_MEMORY_HOME) process.env.M2D_MEMORY_HOME = join(tmpdir(), "dsh-memory-home");
+mkdirSync(process.env.M2D_MEMORY_HOME, { recursive: true });
+if (!process.env.DSH_APPDATA) process.env.DSH_APPDATA = join(tmpdir(), "dsh-appdata-home");
+mkdirSync(process.env.DSH_APPDATA, { recursive: true });
+
 // 只跑根 tests/ 下的用例；fixtures/todo-app 是独立靶子，由它目录里的 pnpm test 负责。
 export default defineConfig({
   test: {

@@ -1,0 +1,869 @@
+{
+  "dist": {
+    "built": 3909
+  },
+  "injection": ".changes-card { margin-top: 8px !important; }",
+  "fixture": {
+    "rowCount": 1,
+    "prevSiblingOfCard": "row assistant",
+    "cardParent": "reading",
+    "lastReadingChild": "changes-card"
+  },
+  "before": {
+    "rowHovered": 1,
+    "fixture": {
+      "rowCount": 1,
+      "prevSiblingOfCard": "row assistant",
+      "cardParent": "reading",
+      "lastReadingChild": "changes-card"
+    },
+    "cardTop": 622.09,
+    "cardBottom": 687.88,
+    "card": {
+      "top": 622.09,
+      "bottom": 687.88,
+      "left": 523.5,
+      "right": 1189.5,
+      "w": 666,
+      "h": 65.79
+    },
+    "cardLeft": 523.5,
+    "cardMarginTop": "8px",
+    "cardMargin": "8px 56px 8px 28px",
+    "turnGapResolved": "calc(1.5rem * 1)",
+    "footer": {
+      "top": 614.09,
+      "bottom": 644.09,
+      "left": 517.5,
+      "right": 1189.5,
+      "w": 672,
+      "h": 30
+    },
+    "footerHeight": 30,
+    "footerTopCss": "449px",
+    "footerPointer": "auto",
+    "footerZ": "1",
+    "cardZ": "auto",
+    "actionsOpacity": "1",
+    "actionsPointer": "auto",
+    "head": {
+      "top": 623.09,
+      "bottom": 686.88,
+      "left": 524.5,
+      "right": 1188.5,
+      "w": 664,
+      "h": 63.79
+    },
+    "buttons": [
+      {
+        "label": "复制这行输出",
+        "button": {
+          "top": 614.09,
+          "bottom": 644.09,
+          "left": 517.5,
+          "right": 547.5,
+          "w": 30,
+          "h": 30
+        },
+        "glyph": {
+          "top": 623.09,
+          "bottom": 635.09,
+          "left": 526.5,
+          "right": 538.5,
+          "w": 12,
+          "h": 12
+        },
+        "glyphBelowCardTop": true,
+        "buttonBelowCardTop": true
+      },
+      {
+        "label": "置顶这条输出",
+        "button": {
+          "top": 614.09,
+          "bottom": 644.09,
+          "left": 553.5,
+          "right": 583.5,
+          "w": 30,
+          "h": 30
+        },
+        "glyph": {
+          "top": 623.09,
+          "bottom": 635.09,
+          "left": 562.5,
+          "right": 574.5,
+          "w": 12,
+          "h": 12
+        },
+        "glyphBelowCardTop": true,
+        "buttonBelowCardTop": true
+      },
+      {
+        "label": "撤回第 1 轮的文件改动",
+        "button": {
+          "top": 614.09,
+          "bottom": 644.09,
+          "left": 589.5,
+          "right": 619.5,
+          "w": 30,
+          "h": 30
+        },
+        "glyph": {
+          "top": 623.09,
+          "bottom": 635.09,
+          "left": 598.5,
+          "right": 610.5,
+          "w": 12,
+          "h": 12
+        },
+        "glyphBelowCardTop": true,
+        "buttonBelowCardTop": true
+      },
+      {
+        "label": "从第 1 轮分叉新会话",
+        "button": {
+          "top": 614.09,
+          "bottom": 644.09,
+          "left": 625.5,
+          "right": 655.5,
+          "w": 30,
+          "h": 30
+        },
+        "glyph": {
+          "top": 623.09,
+          "bottom": 635.09,
+          "left": 634.5,
+          "right": 646.5,
+          "w": 12,
+          "h": 12
+        },
+        "glyphBelowCardTop": true,
+        "buttonBelowCardTop": true
+      },
+      {
+        "label": "赞这条输出",
+        "button": {
+          "top": 614.09,
+          "bottom": 644.09,
+          "left": 661.5,
+          "right": 691.5,
+          "w": 30,
+          "h": 30
+        },
+        "glyph": {
+          "top": 623.09,
+          "bottom": 635.09,
+          "left": 670.5,
+          "right": 682.5,
+          "w": 12,
+          "h": 12
+        },
+        "glyphBelowCardTop": true,
+        "buttonBelowCardTop": true
+      },
+      {
+        "label": "踩这条输出",
+        "button": {
+          "top": 614.09,
+          "bottom": 644.09,
+          "left": 697.5,
+          "right": 727.5,
+          "w": 30,
+          "h": 30
+        },
+        "glyph": {
+          "top": 623.09,
+          "bottom": 635.09,
+          "left": 706.5,
+          "right": 718.5,
+          "w": 12,
+          "h": 12
+        },
+        "glyphBelowCardTop": true,
+        "buttonBelowCardTop": true
+      }
+    ],
+    "glyphMinTop": 623.09,
+    "glyphMaxBottom": 635.09,
+    "allGlyphsAboveCardTop": false,
+    "glyphToCardTopGap": -13,
+    "overlapFooterBottomMinusCardTop": 22,
+    "overlapButtonsBottomMinusCardTop": 22,
+    "bandAtHeadLeft60": [
+      {
+        "dy": 2,
+        "hit": "row-actions"
+      },
+      {
+        "dy": 6,
+        "hit": "row-actions"
+      },
+      {
+        "dy": 10,
+        "hit": "row-actions"
+      },
+      {
+        "dy": 14,
+        "hit": "row-actions"
+      },
+      {
+        "dy": 18,
+        "hit": "row-actions"
+      },
+      {
+        "dy": 21,
+        "hit": "row-actions"
+      }
+    ]
+  },
+  "after": {
+    "rowHovered": 1,
+    "fixture": {
+      "rowCount": 1,
+      "prevSiblingOfCard": "row assistant",
+      "cardParent": "reading",
+      "lastReadingChild": "changes-card"
+    },
+    "cardTop": 622.09,
+    "cardBottom": 687.88,
+    "card": {
+      "top": 622.09,
+      "bottom": 687.88,
+      "left": 523.5,
+      "right": 1189.5,
+      "w": 666,
+      "h": 65.79
+    },
+    "cardLeft": 523.5,
+    "cardMarginTop": "24px",
+    "cardMargin": "24px 56px 8px 28px",
+    "turnGapResolved": "calc(1.5rem * 1)",
+    "footer": {
+      "top": 598.09,
+      "bottom": 628.09,
+      "left": 517.5,
+      "right": 1189.5,
+      "w": 672,
+      "h": 30
+    },
+    "footerHeight": 30,
+    "footerTopCss": "449px",
+    "footerPointer": "auto",
+    "footerZ": "1",
+    "cardZ": "auto",
+    "actionsOpacity": "1",
+    "actionsPointer": "auto",
+    "head": {
+      "top": 623.09,
+      "bottom": 686.88,
+      "left": 524.5,
+      "right": 1188.5,
+      "w": 664,
+      "h": 63.79
+    },
+    "buttons": [
+      {
+        "label": "复制这行输出",
+        "button": {
+          "top": 598.09,
+          "bottom": 628.09,
+          "left": 517.5,
+          "right": 547.5,
+          "w": 30,
+          "h": 30
+        },
+        "glyph": {
+          "top": 607.09,
+          "bottom": 619.09,
+          "left": 526.5,
+          "right": 538.5,
+          "w": 12,
+          "h": 12
+        },
+        "glyphBelowCardTop": false,
+        "buttonBelowCardTop": true
+      },
+      {
+        "label": "置顶这条输出",
+        "button": {
+          "top": 598.09,
+          "bottom": 628.09,
+          "left": 553.5,
+          "right": 583.5,
+          "w": 30,
+          "h": 30
+        },
+        "glyph": {
+          "top": 607.09,
+          "bottom": 619.09,
+          "left": 562.5,
+          "right": 574.5,
+          "w": 12,
+          "h": 12
+        },
+        "glyphBelowCardTop": false,
+        "buttonBelowCardTop": true
+      },
+      {
+        "label": "撤回第 1 轮的文件改动",
+        "button": {
+          "top": 598.09,
+          "bottom": 628.09,
+          "left": 589.5,
+          "right": 619.5,
+          "w": 30,
+          "h": 30
+        },
+        "glyph": {
+          "top": 607.09,
+          "bottom": 619.09,
+          "left": 598.5,
+          "right": 610.5,
+          "w": 12,
+          "h": 12
+        },
+        "glyphBelowCardTop": false,
+        "buttonBelowCardTop": true
+      },
+      {
+        "label": "从第 1 轮分叉新会话",
+        "button": {
+          "top": 598.09,
+          "bottom": 628.09,
+          "left": 625.5,
+          "right": 655.5,
+          "w": 30,
+          "h": 30
+        },
+        "glyph": {
+          "top": 607.09,
+          "bottom": 619.09,
+          "left": 634.5,
+          "right": 646.5,
+          "w": 12,
+          "h": 12
+        },
+        "glyphBelowCardTop": false,
+        "buttonBelowCardTop": true
+      },
+      {
+        "label": "赞这条输出",
+        "button": {
+          "top": 598.09,
+          "bottom": 628.09,
+          "left": 661.5,
+          "right": 691.5,
+          "w": 30,
+          "h": 30
+        },
+        "glyph": {
+          "top": 607.09,
+          "bottom": 619.09,
+          "left": 670.5,
+          "right": 682.5,
+          "w": 12,
+          "h": 12
+        },
+        "glyphBelowCardTop": false,
+        "buttonBelowCardTop": true
+      },
+      {
+        "label": "踩这条输出",
+        "button": {
+          "top": 598.09,
+          "bottom": 628.09,
+          "left": 697.5,
+          "right": 727.5,
+          "w": 30,
+          "h": 30
+        },
+        "glyph": {
+          "top": 607.09,
+          "bottom": 619.09,
+          "left": 706.5,
+          "right": 718.5,
+          "w": 12,
+          "h": 12
+        },
+        "glyphBelowCardTop": false,
+        "buttonBelowCardTop": true
+      }
+    ],
+    "glyphMinTop": 607.09,
+    "glyphMaxBottom": 619.09,
+    "allGlyphsAboveCardTop": true,
+    "glyphToCardTopGap": 3,
+    "overlapFooterBottomMinusCardTop": 6,
+    "overlapButtonsBottomMinusCardTop": 6,
+    "bandAtHeadLeft60": [
+      {
+        "dy": 2,
+        "hit": "row-actions"
+      },
+      {
+        "dy": 6,
+        "hit": "展开改动详情"
+      },
+      {
+        "dy": 10,
+        "hit": "cf-t"
+      },
+      {
+        "dy": 14,
+        "hit": "cf-t"
+      },
+      {
+        "dy": 18,
+        "hit": "cf-t"
+      },
+      {
+        "dy": 21,
+        "hit": "cf-t"
+      }
+    ]
+  },
+  "beforeAgain": {
+    "rowHovered": 1,
+    "fixture": {
+      "rowCount": 1,
+      "prevSiblingOfCard": "row assistant",
+      "cardParent": "reading",
+      "lastReadingChild": "changes-card"
+    },
+    "cardTop": 622.09,
+    "cardBottom": 687.88,
+    "card": {
+      "top": 622.09,
+      "bottom": 687.88,
+      "left": 523.5,
+      "right": 1189.5,
+      "w": 666,
+      "h": 65.79
+    },
+    "cardLeft": 523.5,
+    "cardMarginTop": "8px",
+    "cardMargin": "8px 56px 8px 28px",
+    "turnGapResolved": "calc(1.5rem * 1)",
+    "footer": {
+      "top": 614.09,
+      "bottom": 644.09,
+      "left": 517.5,
+      "right": 1189.5,
+      "w": 672,
+      "h": 30
+    },
+    "footerHeight": 30,
+    "footerTopCss": "449px",
+    "footerPointer": "auto",
+    "footerZ": "1",
+    "cardZ": "auto",
+    "actionsOpacity": "1",
+    "actionsPointer": "auto",
+    "head": {
+      "top": 623.09,
+      "bottom": 686.88,
+      "left": 524.5,
+      "right": 1188.5,
+      "w": 664,
+      "h": 63.79
+    },
+    "buttons": [
+      {
+        "label": "复制这行输出",
+        "button": {
+          "top": 614.09,
+          "bottom": 644.09,
+          "left": 517.5,
+          "right": 547.5,
+          "w": 30,
+          "h": 30
+        },
+        "glyph": {
+          "top": 623.09,
+          "bottom": 635.09,
+          "left": 526.5,
+          "right": 538.5,
+          "w": 12,
+          "h": 12
+        },
+        "glyphBelowCardTop": true,
+        "buttonBelowCardTop": true
+      },
+      {
+        "label": "置顶这条输出",
+        "button": {
+          "top": 614.09,
+          "bottom": 644.09,
+          "left": 553.5,
+          "right": 583.5,
+          "w": 30,
+          "h": 30
+        },
+        "glyph": {
+          "top": 623.09,
+          "bottom": 635.09,
+          "left": 562.5,
+          "right": 574.5,
+          "w": 12,
+          "h": 12
+        },
+        "glyphBelowCardTop": true,
+        "buttonBelowCardTop": true
+      },
+      {
+        "label": "撤回第 1 轮的文件改动",
+        "button": {
+          "top": 614.09,
+          "bottom": 644.09,
+          "left": 589.5,
+          "right": 619.5,
+          "w": 30,
+          "h": 30
+        },
+        "glyph": {
+          "top": 623.09,
+          "bottom": 635.09,
+          "left": 598.5,
+          "right": 610.5,
+          "w": 12,
+          "h": 12
+        },
+        "glyphBelowCardTop": true,
+        "buttonBelowCardTop": true
+      },
+      {
+        "label": "从第 1 轮分叉新会话",
+        "button": {
+          "top": 614.09,
+          "bottom": 644.09,
+          "left": 625.5,
+          "right": 655.5,
+          "w": 30,
+          "h": 30
+        },
+        "glyph": {
+          "top": 623.09,
+          "bottom": 635.09,
+          "left": 634.5,
+          "right": 646.5,
+          "w": 12,
+          "h": 12
+        },
+        "glyphBelowCardTop": true,
+        "buttonBelowCardTop": true
+      },
+      {
+        "label": "赞这条输出",
+        "button": {
+          "top": 614.09,
+          "bottom": 644.09,
+          "left": 661.5,
+          "right": 691.5,
+          "w": 30,
+          "h": 30
+        },
+        "glyph": {
+          "top": 623.09,
+          "bottom": 635.09,
+          "left": 670.5,
+          "right": 682.5,
+          "w": 12,
+          "h": 12
+        },
+        "glyphBelowCardTop": true,
+        "buttonBelowCardTop": true
+      },
+      {
+        "label": "踩这条输出",
+        "button": {
+          "top": 614.09,
+          "bottom": 644.09,
+          "left": 697.5,
+          "right": 727.5,
+          "w": 30,
+          "h": 30
+        },
+        "glyph": {
+          "top": 623.09,
+          "bottom": 635.09,
+          "left": 706.5,
+          "right": 718.5,
+          "w": 12,
+          "h": 12
+        },
+        "glyphBelowCardTop": true,
+        "buttonBelowCardTop": true
+      }
+    ],
+    "glyphMinTop": 623.09,
+    "glyphMaxBottom": 635.09,
+    "allGlyphsAboveCardTop": false,
+    "glyphToCardTopGap": -13,
+    "overlapFooterBottomMinusCardTop": 22,
+    "overlapButtonsBottomMinusCardTop": 22,
+    "bandAtHeadLeft60": [
+      {
+        "dy": 2,
+        "hit": "row-actions"
+      },
+      {
+        "dy": 6,
+        "hit": "row-actions"
+      },
+      {
+        "dy": 10,
+        "hit": "row-actions"
+      },
+      {
+        "dy": 14,
+        "hit": "row-actions"
+      },
+      {
+        "dy": 18,
+        "hit": "row-actions"
+      },
+      {
+        "dy": 21,
+        "hit": "row-actions"
+      }
+    ]
+  },
+  "afterOnBand": {
+    "rowHovered": 1,
+    "fixture": {
+      "rowCount": 1,
+      "prevSiblingOfCard": "row assistant",
+      "cardParent": "reading",
+      "lastReadingChild": "changes-card"
+    },
+    "cardTop": 622.09,
+    "cardBottom": 687.88,
+    "card": {
+      "top": 622.09,
+      "bottom": 687.88,
+      "left": 523.5,
+      "right": 1189.5,
+      "w": 666,
+      "h": 65.79
+    },
+    "cardLeft": 523.5,
+    "cardMarginTop": "24px",
+    "cardMargin": "24px 56px 8px 28px",
+    "turnGapResolved": "calc(1.5rem * 1)",
+    "footer": {
+      "top": 598.09,
+      "bottom": 628.09,
+      "left": 517.5,
+      "right": 1189.5,
+      "w": 672,
+      "h": 30
+    },
+    "footerHeight": 30,
+    "footerTopCss": "449px",
+    "footerPointer": "auto",
+    "footerZ": "1",
+    "cardZ": "auto",
+    "actionsOpacity": "1",
+    "actionsPointer": "auto",
+    "head": {
+      "top": 623.09,
+      "bottom": 686.88,
+      "left": 524.5,
+      "right": 1188.5,
+      "w": 664,
+      "h": 63.79
+    },
+    "buttons": [
+      {
+        "label": "复制这行输出",
+        "button": {
+          "top": 598.09,
+          "bottom": 628.09,
+          "left": 517.5,
+          "right": 547.5,
+          "w": 30,
+          "h": 30
+        },
+        "glyph": {
+          "top": 607.09,
+          "bottom": 619.09,
+          "left": 526.5,
+          "right": 538.5,
+          "w": 12,
+          "h": 12
+        },
+        "glyphBelowCardTop": false,
+        "buttonBelowCardTop": true
+      },
+      {
+        "label": "置顶这条输出",
+        "button": {
+          "top": 598.09,
+          "bottom": 628.09,
+          "left": 553.5,
+          "right": 583.5,
+          "w": 30,
+          "h": 30
+        },
+        "glyph": {
+          "top": 607.09,
+          "bottom": 619.09,
+          "left": 562.5,
+          "right": 574.5,
+          "w": 12,
+          "h": 12
+        },
+        "glyphBelowCardTop": false,
+        "buttonBelowCardTop": true
+      },
+      {
+        "label": "撤回第 1 轮的文件改动",
+        "button": {
+          "top": 598.09,
+          "bottom": 628.09,
+          "left": 589.5,
+          "right": 619.5,
+          "w": 30,
+          "h": 30
+        },
+        "glyph": {
+          "top": 607.09,
+          "bottom": 619.09,
+          "left": 598.5,
+          "right": 610.5,
+          "w": 12,
+          "h": 12
+        },
+        "glyphBelowCardTop": false,
+        "buttonBelowCardTop": true
+      },
+      {
+        "label": "从第 1 轮分叉新会话",
+        "button": {
+          "top": 598.09,
+          "bottom": 628.09,
+          "left": 625.5,
+          "right": 655.5,
+          "w": 30,
+          "h": 30
+        },
+        "glyph": {
+          "top": 607.09,
+          "bottom": 619.09,
+          "left": 634.5,
+          "right": 646.5,
+          "w": 12,
+          "h": 12
+        },
+        "glyphBelowCardTop": false,
+        "buttonBelowCardTop": true
+      },
+      {
+        "label": "赞这条输出",
+        "button": {
+          "top": 598.09,
+          "bottom": 628.09,
+          "left": 661.5,
+          "right": 691.5,
+          "w": 30,
+          "h": 30
+        },
+        "glyph": {
+          "top": 607.09,
+          "bottom": 619.09,
+          "left": 670.5,
+          "right": 682.5,
+          "w": 12,
+          "h": 12
+        },
+        "glyphBelowCardTop": false,
+        "buttonBelowCardTop": true
+      },
+      {
+        "label": "踩这条输出",
+        "button": {
+          "top": 598.09,
+          "bottom": 628.09,
+          "left": 697.5,
+          "right": 727.5,
+          "w": 30,
+          "h": 30
+        },
+        "glyph": {
+          "top": 607.09,
+          "bottom": 619.09,
+          "left": 706.5,
+          "right": 718.5,
+          "w": 12,
+          "h": 12
+        },
+        "glyphBelowCardTop": false,
+        "buttonBelowCardTop": true
+      }
+    ],
+    "glyphMinTop": 607.09,
+    "glyphMaxBottom": 619.09,
+    "allGlyphsAboveCardTop": true,
+    "glyphToCardTopGap": 3,
+    "overlapFooterBottomMinusCardTop": 6,
+    "overlapButtonsBottomMinusCardTop": 6,
+    "bandAtHeadLeft60": [
+      {
+        "dy": 2,
+        "hit": "row-actions"
+      },
+      {
+        "dy": 6,
+        "hit": "展开改动详情"
+      },
+      {
+        "dy": 10,
+        "hit": "cf-t"
+      },
+      {
+        "dy": 14,
+        "hit": "cf-t"
+      },
+      {
+        "dy": 18,
+        "hit": "cf-t"
+      },
+      {
+        "dy": 21,
+        "hit": "cf-t"
+      }
+    ]
+  },
+  "errors": [],
+  "deltas": {
+    "cardMarginTop": [
+      "8px",
+      "24px"
+    ],
+    "overlap": [
+      22,
+      6
+    ],
+    "allGlyphsAboveCardTop": [
+      false,
+      true
+    ],
+    "glyphToCardTopGap": [
+      -13,
+      3
+    ],
+    "cardTop": [
+      622.09,
+      622.09
+    ],
+    "footer": [
+      [
+        614.09,
+        644.09
+      ],
+      [
+        598.09,
+        628.09
+      ]
+    ]
+  }
+}

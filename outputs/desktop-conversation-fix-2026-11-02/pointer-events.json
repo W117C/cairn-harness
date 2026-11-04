@@ -1,0 +1,383 @@
+{
+  "scenario": "card",
+  "fixtureArgs": [
+    "--cairn-audit-tail-fixture"
+  ],
+  "dist": 3909,
+  "parked": {
+    "rowHovered": 0,
+    "rowFocusWithin": 0,
+    "footerPe": "none",
+    "actionsPe": "none",
+    "buttonPe": "none",
+    "footerOpacity": "1",
+    "actionsOpacity": "0",
+    "focused": "BODY",
+    "card": {
+      "top": 622.09,
+      "bottom": 687.88,
+      "left": 523.5,
+      "right": 1189.5,
+      "h": 65.79
+    },
+    "head": {
+      "top": 623.09,
+      "bottom": 686.88,
+      "left": 524.5,
+      "right": 1188.5,
+      "h": 63.79
+    },
+    "footer": {
+      "top": 598.09,
+      "bottom": 628.09,
+      "left": 517.5,
+      "right": 1189.5,
+      "h": 30
+    },
+    "toolcluster": null,
+    "cardExpanded": "false",
+    "toggleExpanded": null,
+    "overlapFooterBottomMinusCardTop": 6,
+    "overlapFooterBottomMinusToolclusterTop": null
+  },
+  "cardHeadTop5Click": {
+    "point": {
+      "x": 585,
+      "y": 628
+    },
+    "before": {
+      "expanded": "false",
+      "hit": "展开改动详情"
+    },
+    "after": {
+      "expanded": "true",
+      "hit": "收起改动详情"
+    },
+    "clicks": [
+      {
+        "x": 585,
+        "y": 628,
+        "target": "展开改动详情"
+      }
+    ]
+  },
+  "collapse": {
+    "inRowBody": {
+      "x": 554,
+      "y": 157
+    },
+    "cardHeadTop5": {
+      "x": 585,
+      "y": 628
+    },
+    "copyButton": {
+      "x": 533,
+      "y": 613
+    },
+    "copyButtonUpper": {
+      "x": 533,
+      "y": 604
+    },
+    "copyLabel": "复制这行输出",
+    "cardExpanded": "false",
+    "rowRect": {
+      "top": 149.09,
+      "bottom": 598.09
+    },
+    "buttonRect": {
+      "top": 598.09,
+      "bottom": 628.09
+    }
+  },
+  "hoverPoints": {
+    "inRowBody": {
+      "x": 554,
+      "y": 157
+    },
+    "copyButton": {
+      "x": 533,
+      "y": 613
+    },
+    "copyLabel": "复制这行输出",
+    "rowRect": {
+      "top": 149.09,
+      "bottom": 598.09
+    },
+    "buttonRect": {
+      "top": 598.09,
+      "bottom": 628.09
+    }
+  },
+  "hoverOnRowBody": {
+    "rowHovered": 1,
+    "rowFocusWithin": 0,
+    "footerPe": "auto",
+    "actionsPe": "auto",
+    "buttonPe": "auto",
+    "footerOpacity": "1",
+    "actionsOpacity": "1",
+    "focused": "展开改动详情",
+    "card": {
+      "top": 622.09,
+      "bottom": 687.88,
+      "left": 523.5,
+      "right": 1189.5,
+      "h": 65.79
+    },
+    "head": {
+      "top": 623.09,
+      "bottom": 686.88,
+      "left": 524.5,
+      "right": 1188.5,
+      "h": 63.79
+    },
+    "footer": {
+      "top": 598.09,
+      "bottom": 628.09,
+      "left": 517.5,
+      "right": 1189.5,
+      "h": 30
+    },
+    "toolcluster": null,
+    "cardExpanded": "false",
+    "toggleExpanded": null,
+    "overlapFooterBottomMinusCardTop": 6,
+    "overlapFooterBottomMinusToolclusterTop": null
+  },
+  "hoverOnCopy": {
+    "rowHovered": 1,
+    "rowFocusWithin": 0,
+    "footerPe": "auto",
+    "actionsPe": "auto",
+    "buttonPe": "auto",
+    "footerOpacity": "1",
+    "actionsOpacity": "1",
+    "focused": "展开改动详情",
+    "card": {
+      "top": 622.09,
+      "bottom": 687.88,
+      "left": 523.5,
+      "right": 1189.5,
+      "h": 65.79
+    },
+    "head": {
+      "top": 623.09,
+      "bottom": 686.88,
+      "left": 524.5,
+      "right": 1188.5,
+      "h": 63.79
+    },
+    "footer": {
+      "top": 598.09,
+      "bottom": 628.09,
+      "left": 517.5,
+      "right": 1189.5,
+      "h": 30
+    },
+    "toolcluster": null,
+    "cardExpanded": "false",
+    "toggleExpanded": null,
+    "overlapFooterBottomMinusCardTop": 6,
+    "overlapFooterBottomMinusToolclusterTop": null
+  },
+  "copyClick": {
+    "label": "复制这行输出",
+    "clicks": [
+      {
+        "x": 533,
+        "y": 613,
+        "target": "[object SVGAnimatedString]"
+      }
+    ],
+    "state": {
+      "rowHovered": 1,
+      "rowFocusWithin": 1,
+      "footerPe": "auto",
+      "actionsPe": "auto",
+      "buttonPe": "auto",
+      "footerOpacity": "1",
+      "actionsOpacity": "1",
+      "focused": "复制这行输出",
+      "card": {
+        "top": 662.19,
+        "bottom": 727.98,
+        "left": 523.5,
+        "right": 1189.5,
+        "h": 65.79
+      },
+      "head": {
+        "top": 663.19,
+        "bottom": 726.98,
+        "left": 524.5,
+        "right": 1188.5,
+        "h": 63.79
+      },
+      "footer": {
+        "top": 638.19,
+        "bottom": 668.19,
+        "left": 517.5,
+        "right": 1189.5,
+        "h": 30
+      },
+      "toolcluster": null,
+      "cardExpanded": "false",
+      "toggleExpanded": null,
+      "overlapFooterBottomMinusCardTop": 6,
+      "overlapFooterBottomMinusToolclusterTop": null
+    }
+  },
+  "directToButtonUpper": {
+    "rowHovered": 1,
+    "rowFocusWithin": 1,
+    "footerPe": "auto",
+    "actionsPe": "auto",
+    "buttonPe": "auto",
+    "footerOpacity": "1",
+    "actionsOpacity": "1",
+    "focused": "复制这行输出",
+    "card": {
+      "top": 662.19,
+      "bottom": 727.98,
+      "left": 523.5,
+      "right": 1189.5,
+      "h": 65.79
+    },
+    "head": {
+      "top": 663.19,
+      "bottom": 726.98,
+      "left": 524.5,
+      "right": 1188.5,
+      "h": 63.79
+    },
+    "footer": {
+      "top": 638.19,
+      "bottom": 668.19,
+      "left": 517.5,
+      "right": 1189.5,
+      "h": 30
+    },
+    "toolcluster": null,
+    "cardExpanded": "false",
+    "toggleExpanded": null,
+    "overlapFooterBottomMinusCardTop": 6,
+    "overlapFooterBottomMinusToolclusterTop": null
+  },
+  "directToButtonUpperClick": {
+    "clicks": [
+      {
+        "x": 533,
+        "y": 644,
+        "target": "复制这行输出"
+      }
+    ],
+    "state": {
+      "rowHovered": 1,
+      "rowFocusWithin": 1,
+      "footerPe": "auto",
+      "actionsPe": "auto",
+      "buttonPe": "auto",
+      "footerOpacity": "1",
+      "actionsOpacity": "1",
+      "focused": "复制这行输出",
+      "card": {
+        "top": 662.19,
+        "bottom": 727.98,
+        "left": 523.5,
+        "right": 1189.5,
+        "h": 65.79
+      },
+      "head": {
+        "top": 663.19,
+        "bottom": 726.98,
+        "left": 524.5,
+        "right": 1188.5,
+        "h": 63.79
+      },
+      "footer": {
+        "top": 638.19,
+        "bottom": 668.19,
+        "left": 517.5,
+        "right": 1189.5,
+        "h": 30
+      },
+      "toolcluster": null,
+      "cardExpanded": "false",
+      "toggleExpanded": null,
+      "overlapFooterBottomMinusCardTop": 6,
+      "overlapFooterBottomMinusToolclusterTop": null
+    }
+  },
+  "beforeFocus": {
+    "rowHovered": 0,
+    "rowFocusWithin": 1,
+    "footerPe": "auto",
+    "actionsPe": "auto",
+    "buttonPe": "auto",
+    "footerOpacity": "1",
+    "actionsOpacity": "1",
+    "focused": "复制这行输出",
+    "card": {
+      "top": 662.19,
+      "bottom": 727.98,
+      "left": 523.5,
+      "right": 1189.5,
+      "h": 65.79
+    },
+    "head": {
+      "top": 663.19,
+      "bottom": 726.98,
+      "left": 524.5,
+      "right": 1188.5,
+      "h": 63.79
+    },
+    "footer": {
+      "top": 638.19,
+      "bottom": 668.19,
+      "left": 517.5,
+      "right": 1189.5,
+      "h": 30
+    },
+    "toolcluster": null,
+    "cardExpanded": "false",
+    "toggleExpanded": null,
+    "overlapFooterBottomMinusCardTop": 6,
+    "overlapFooterBottomMinusToolclusterTop": null
+  },
+  "afterFocus": {
+    "rowHovered": 0,
+    "rowFocusWithin": 1,
+    "footerPe": "auto",
+    "actionsPe": "auto",
+    "buttonPe": "auto",
+    "footerOpacity": "1",
+    "actionsOpacity": "1",
+    "focused": "复制这行输出",
+    "card": {
+      "top": 662.19,
+      "bottom": 727.98,
+      "left": 523.5,
+      "right": 1189.5,
+      "h": 65.79
+    },
+    "head": {
+      "top": 663.19,
+      "bottom": 726.98,
+      "left": 524.5,
+      "right": 1188.5,
+      "h": 63.79
+    },
+    "footer": {
+      "top": 638.19,
+      "bottom": 668.19,
+      "left": 517.5,
+      "right": 1189.5,
+      "h": 30
+    },
+    "toolcluster": null,
+    "cardExpanded": "false",
+    "toggleExpanded": null,
+    "overlapFooterBottomMinusCardTop": 6,
+    "overlapFooterBottomMinusToolclusterTop": null
+  },
+  "errors": []
+}

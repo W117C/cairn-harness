@@ -22,7 +22,7 @@ export const DISTILL_INSTRUCTION = [
   "[系统操作·会话结束沉淀检查] 本任务是跨会话记忆沉淀，不是用户对话；请按以下纪律检查本轮会话是否有值得写入长期记忆的内容：",
   "1. 四类型：user（用户角色/偏好）、feedback（用户纠正）、project（代码/git 推导不出的进行中事项）、reference（外部信息源位置）。",
   "2. skip 纪律：能从代码/git 历史推导的内容不入记忆；任务进度/计划不是记忆（那是事件流与 plan 卡）。",
-  "3. 写入只经 remember 工具（scope=project 写项目层、scope=global 写用户全局；kind=memory 必带 type 与 topic）。",
+  "3. 写入只经 remember 工具（scope=project 写项目层、scope=global 写用户全局；kind=memory 必带 type 与 topic）。已有主题只追加（op=append）：沉淀轮读不到主题正文，replace 缺 old_content 会被工具拒绝。",
   "4. 禁止把密钥/API key/凭据写入记忆。",
   "5. 没有值得沉淀的内容就只回答「无」三个字，不要调用工具。",
 ].join("\n");
@@ -243,6 +243,21 @@ export function isTrivialSession(events: readonly AgentEvent[]): boolean {
   return users === 1 && hasAssistant && chars < 800 && !MEMORY_CUE.test(userText);
 }
 
+/** 沉淀轮只有 remember 一支工具，模型拿不到「已有主题正文」——它若请求 replace 却带不上
+ *  old_content，工具必然拒绝。2026-11-04 真机：worker-note 的一次 replace 少 old_content，
+ *  整条沉淀只留下一条「remember 调用失败」的回执，记忆本身没写成。
+ *  ⇒ 这里把「不可能成立的 replace」降级为 append：不覆盖任何旧内容，也不让整轮白跑；
+ *  回执里写明降级，审计面仍看得到模型原本请求的是 replace。 */
+function downgradeUnsafeRememberReplace(raw: Record<string, unknown>): { args: Record<string, unknown>; downgraded: boolean } {
+  const kind = raw.kind;
+  const hasOldContent = typeof raw.old_content === "string" && raw.old_content !== "";
+  // decision 是追加式日志（工具明确拒绝 replace）；其余 kind 的缺省 op 也可能是 replace。
+  const wantsReplace = raw.op === "replace"
+    || (raw.op === undefined && (kind === "architecture" || kind === "preference"));
+  if (!wantsReplace || (hasOldContent && kind !== "decision")) return { args: raw, downgraded: false };
+  return { args: { ...raw, op: "append" }, downgraded: true };
+}
+
 export async function runSessionEndDistill(opts: DistillOptions): Promise<DistillOutcome> {
   if (!opts.enabled) return { kind: "disabled" };
   // 模型之前还有确定性的记忆/草稿写入；取消检查必须覆盖这些副作用。
@@ -377,9 +392,13 @@ export async function runSessionEndDistill(opts: DistillOptions): Promise<Distil
         continue;
       }
       try {
-        const r = await opts.rememberTool.run(out.args, ctx);
+        const effective = downgradeUnsafeRememberReplace(out.args);
+        const r = await opts.rememberTool.run(effective.args, ctx);
         if (r.ok) writes += 1;
-        await opts.emit({ type: "tool_result", callId: out.id, ok: r.ok, output: r.output, gate });
+        const output = effective.downgraded
+          ? "[distill] replace 缺 old_content（沉淀轮读不到主题正文），已按 append 追加，未覆盖旧内容。\n" + r.output
+          : r.output;
+        await opts.emit({ type: "tool_result", callId: out.id, ok: r.ok, output, gate });
       } catch (err) {
         await opts.emit({ type: "tool_result", callId: out.id, ok: false, output: err instanceof Error ? err.message : String(err), gate });
       }

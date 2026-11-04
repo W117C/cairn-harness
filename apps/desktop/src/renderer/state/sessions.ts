@@ -9,13 +9,12 @@
 // 回主页后要重开 ⇒ openSession）。
 import { useCallback, useRef } from "react";
 import type { AgentEvent } from "../../../../../src/main/ipc-protocol";
-import type { DeleteConfirmTarget, SessionConfirmTarget, WorkspaceSession } from "../sessions-view";
+import type { SessionView } from "../../../../../src/events";
+import { findSessionByRef, type DeleteConfirmTarget, type SessionConfirmTarget, type WorkspaceSession } from "../sessions-view";
 import { STR } from "../strings";
 import { toast } from "../toast";
 import { runKey } from "./session-identity";
 import { deleteSessionWaitingForRun, type SessionDeleteResult } from "./session-delete";
-
-const endSessionDelete = (id: string): Promise<SessionDeleteResult> => window.agent.deleteSession(id);
 
 /** 删除前的停止：不续队列（会话都要没了）；读应答返回是否真停住——false = 本窗口运行旗陈旧。 */
 async function stopRunForDelete(id: string, workspace: string | null): Promise<boolean> {
@@ -43,6 +42,7 @@ export interface SessionOpsDeps {
   draftRemapSeq: React.MutableRefObject<number>;
   /** 回主页：清事件流、清队列读回闸。 */
   setEvents: React.Dispatch<React.SetStateAction<AgentEvent[]>>;
+  setSessionView: React.Dispatch<React.SetStateAction<SessionView | null>>;
   setQueueLoading: React.Dispatch<React.SetStateAction<boolean>>;
   /** 开会话竞态闸（回主页要让后来的回包作废）。 */
   openSeq: React.MutableRefObject<number>;
@@ -81,7 +81,7 @@ export interface SessionOpsState {
 export function useSessionOps(deps: SessionOpsDeps): SessionOpsState {
   const {
     activeId, activeIdRef, sessions, refreshSessions, activate, openSession,
-    setLastError, setLastNotice, setDraftRemap, draftRemapSeq, setEvents, setQueueLoading,
+    setLastError, setLastNotice, setDraftRemap, draftRemapSeq, setEvents, setSessionView, setQueueLoading,
     openSeq, activeWorkspaceRef, touchWorkspace, runningSet, setArchiveConfirm, setDeleteConfirm,
   } = deps;
 
@@ -92,6 +92,8 @@ export function useSessionOps(deps: SessionOpsDeps): SessionOpsState {
     setQueueLoading(false);
     activate(null);
     setEvents([]);
+    // 历史视图也含旧正文；只清本地事件会让首发后的新会话仍投影出旧内容。
+    setSessionView(null);
     // 新任务默认落在当前项目（activeWorkspace）：这也是一次「用它」（最近打开序）。
     touchWorkspace(activeWorkspaceRef.current);
   }, [activate, touchWorkspace]);
@@ -156,13 +158,13 @@ export function useSessionOps(deps: SessionOpsDeps): SessionOpsState {
    *  只切 activeId 会把上一个会话的流留在屏上（显示与会话错位）；openSession = 切 + 载转录 + 载队列。 */
   const forkSessionFromMenu = useCallback(async (s: WorkspaceSession) => {
     try {
-      const r = await window.agent.forkSession(s.id, 0, true);
+      const r = await window.agent.forkSession(s.id, 0, true, s.workspace);
       if (r.ok !== true || r.id === undefined) {
         setLastError(`分叉失败：${r.error ?? "未知原因"}`, s.id);
         return;
       }
       void refreshSessions();
-      openSession(r.id);
+      openSession(r.id, s.workspace);
     } catch (err) {
       setLastError(`分叉失败：${err instanceof Error ? err.message : String(err)}`, s.id);
     }
@@ -233,6 +235,8 @@ export function useSessionOps(deps: SessionOpsDeps): SessionOpsState {
   const doDeleteSession = useCallback(async (id: string, target?: WorkspaceSession) => {
     const workspace = target?.workspace ?? (activeIdRef.current === id ? activeWorkspaceRef.current : null);
     const key = runKey(workspace, id);
+    const endSessionDelete = (sessionId: string): Promise<SessionDeleteResult> =>
+      window.agent.deleteSession(sessionId, workspace ?? undefined);
     let wasRunning = runningSet.current.has(key);
     if (wasRunning && !(await stopRunForDelete(id, workspace))) {
       runningSet.current.delete(key); // 主进程没有活动 run：陈旧旗先摘，不把「已停」当事实
@@ -242,15 +246,16 @@ export function useSessionOps(deps: SessionOpsDeps): SessionOpsState {
       // 只有本窗口确实发起过停止才等锁释放；没停就忙 = 别的进程在跑，立即如实报错。
       const res = wasRunning ? await deleteSessionWaitingForRun(endSessionDelete, id) : await endSessionDelete(id);
       runningSet.current.delete(key);
-      if (activeIdRef.current === id) {
-        if (res.currentSession === null) newSession();
-        else openSession(res.currentSession);
+      if (activeIdRef.current === id && activeWorkspaceRef.current === workspace) {
+        const next = res.currentSession === null ? undefined : findSessionByRef(sessions, res.currentSession, workspace ?? undefined);
+        if (next === undefined || next.id === id) newSession();
+        else openSession(next.id, next.workspace);
       }
       void refreshSessions();
     } catch (err) {
       setLastError(`删除失败：${err instanceof Error ? err.message : String(err)}`);
     }
-  }, [activeIdRef, activeWorkspaceRef, openSession, newSession, refreshSessions, runningSet, setLastError]);
+  }, [activeIdRef, activeWorkspaceRef, openSession, newSession, refreshSessions, runningSet, sessions, setLastError]);
 
   return {
     newSession,

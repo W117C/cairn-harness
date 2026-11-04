@@ -8,6 +8,8 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
 const styles = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
+const filterCss = readFileSync(new URL("../src/renderer/components/sidebar-filter.css", import.meta.url), "utf8");
+const filterMenuSource = readFileSync(new URL("../src/renderer/components/SessionFilterMenu.tsx", import.meta.url), "utf8");
 function block(sel: string): string {
   const i = styles.indexOf(`\n${sel} {`);
   expect(i, sel).toBeGreaterThan(-1);
@@ -15,17 +17,31 @@ function block(sel: string): string {
 }
 
 describe("#71 侧栏选中态（唯一 + 强调条 + hover 瞬时清除）", () => {
+  it("筛选浮层挂在漏斗按钮的锚点上（Radix popper 在这里退成 static）", () => {
+    // 真机回归（2026-11-01）：Radix Content 在侧栏里退成 position:static，菜单跑到
+    // 左缘 x=87 盖住项目名。契约：仓库自己的 Popover 基座 + `right:0` 贴按钮右缘。
+    expect(filterMenuSource).toContain('<div className="side-filter-wrap" ref={boxRef}>');
+    expect(filterMenuSource).toContain("<Popover");
+    expect(filterMenuSource).toContain('className="side-filter-menu"');
+    // 2026-11-02 审查补漏：自绘菜单必须自己承担方向键导航（Radix 原本提供，换实现后曾丢失）。
+    expect(filterMenuSource).toContain("useMenuKeyboard(open, setOpen, boxRef)");
+    expect(filterMenuSource).toContain("onMenuKeys(event)");
+    expect(filterCss).toContain(".side-filter-wrap { position: relative");
+    expect(filterCss).toContain(".side-filter-menu.down { top: calc(100% + 6px); left: auto; right: 0; }");
+    expect(filterCss).toContain("width: 196px");
+  });
   it("选中行只靠淡底 + 字重分层，不再挂品牌色左条（暗色下会被读成警示轨）", () => {
     expect(styles).not.toMatch(/\.session\.active::before\s*\{/);
     expect(block(".session.active")).toContain("var(--alpha-selected)");
   });
 
-  it("新任务是实心 pill：走 --btn-primary-* 令牌（暗色自动 elevated），不是白底描边", () => {
+  it("新任务使用轻量描边，保留 pill 轮廓与 hover 反馈", () => {
     const rule = block(".side-new");
-    expect(rule).toContain("var(--btn-primary-bg)");
-    expect(rule).toContain("var(--btn-primary-fg)");
+    expect(rule).toContain("background: transparent");
+    expect(rule).toContain("hsl(var(--text-100))");
+    expect(rule).toContain("1px solid var(--hairline)");
     expect(rule).toContain("var(--radius-pill)");
-    expect(rule).not.toContain("var(--hairline-strong)");
+    expect(block(".side-new:hover")).toContain("var(--alpha-hover)");
   });
 
   it("选中行保持既有淡底刻度，标题字重与项目间距承担层级", () => {
@@ -43,28 +59,25 @@ describe("#71 侧栏选中态（唯一 + 强调条 + hover 瞬时清除）", () 
     expect(styles).not.toContain('.group[data-active="true"] .g-folder');
   });
 
-  it("设置入口唯一：收在头像菜单里，页脚不再另开一处（业主 2026-10-20 改口径）", () => {
-    // 不变量没变：**同一个语义只许一处入口**（批 #128 同款：主页叠两个同名项目 chip）。
-    // 变的是这一处在哪：2026-10-20 业主令「点击头像展示设置/外观/用量统计」⇒
-    // 页脚那枚常驻「⚙ 设置」撤掉，设置入口收进头像菜单。
-    const sidebar = readFileSync(new URL("../src/renderer/components/Sidebar.tsx", import.meta.url), "utf8");
-    // 侧栏里有两处 Radix Content（会话行菜单 + 头像菜单）⇒ 用 pop-account 反查定位头像那一处。
-    const accAt = sidebar.indexOf("pop-account");
+  it("设置入口唯一：收在全局轨底部的头像菜单里（2026-11-03 业主改口径）", () => {
+    // 不变量没变：**同一个语义只许一处入口**。2026-11-03 业主令「设置和偏好挪到左边底下，
+    // 和插件他们是一个边框，底部图标是用户头像」⇒ 页脚整块撤掉，入口搬到 AccountMenu。
+    const account = readFileSync(new URL("../src/renderer/components/AccountMenu.tsx", import.meta.url), "utf8");
+    const accAt = account.indexOf("pop-account");
     expect(accAt).toBeGreaterThan(-1);
-    const dropStart = sidebar.lastIndexOf("<DropdownMenu.Content", accAt);
+    const dropStart = account.lastIndexOf("<DropdownMenu.Content", accAt);
     expect(dropStart).toBeGreaterThan(-1);
-    const drop = sidebar.slice(dropStart, sidebar.indexOf("</DropdownMenu.Content>", dropStart));
+    const drop = account.slice(dropStart, account.indexOf("</DropdownMenu.Content>", dropStart));
     expect(drop).toContain("STR.footer.about");
-    // 头像菜单里就是设置入口（唯一那处）+ 外观 + 用量统计
     expect(drop).toContain("STR.footer.settings");
     expect(drop).toContain("STR.footer.appearance");
     expect(drop).toContain("STR.footer.usage");
     expect(drop).toContain("props.onOpenSettings()");
-    // 菜单比通用浮层窄（不然贴着窗口左缘开——侧栏最窄 200px，220 宽的菜单会被裁）
     expect(drop).toContain("pop-account");
-    // 页脚不再另开一个设置钮 ⇒ 不存在第二个入口
+    // 侧栏不再有页脚入口，也没有第二个设置钮
+    const sidebar = readFileSync(new URL("../src/renderer/components/Sidebar.tsx", import.meta.url), "utf8");
+    expect(sidebar).not.toContain("side-foot");
     expect(sidebar).not.toContain('className="foot-settings"');
-    // 样式层也撤净（否则留一条没人用的死规则，读者会以为页脚仍有设置钮）
     const styles = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
     expect(styles).not.toMatch(/\.foot-settings\s*\{/);
   });

@@ -15,6 +15,7 @@ const base = {
   activeId: "s1",
   providerInfo: null,
   pickerValue: null,
+  events: [],
   usage: { inputTokens: 0, outputTokens: 0, usageCount: 0, cacheReadTokens: 0, lastInputTokens: 0 },
   phaseLabel: "执行工具",
   phase: "tool" as const,
@@ -28,14 +29,21 @@ const base = {
 };
 
 describe("Composer 运行中可沟通（C-18 / C-22）", () => {
-  it("运行中：输入可用，空输入只留打断钮（不摆禁用灰钟），占位不写排队提示", () => {
+  it("运行中使用明确的停止方块，保留停止按钮语义", () => {
+    const html = renderToStaticMarkup(<Composer {...base} running stopped={false} />);
+    const stop = html.match(/<button class="send-btn stop"[\s\S]*?<\/button>/)?.[0] ?? "";
+    expect(stop).toContain(`aria-label="${STR.composer.stopAria}"`);
+    expect(stop).toContain("lucide-square");
+    expect(stop).not.toContain("lucide-loader");
+  });
+
+  it("运行中：输入可用，空输入只留打断钮（不摆禁用灰钟），占位明说排队（2026-11-04 截图新裁）", () => {
     const html = renderToStaticMarkup(<Composer {...base} running disabled={false} stopped={false} />);
     const ta = /<textarea[^>]*>/.exec(html)?.[0] ?? "";
     expect(ta).not.toBe("");
     expect(ta).not.toContain("disabled");
-    // v7.1：运行中占位与空闲同款（业主裁撤「运行中 · 回车排队…」提示）；P2 重做后文案走 STR。
-    expect(ta).toContain(STR.composer.placeholder);
-    expect(ta).not.toContain("排队");
+    // 2026-11-04 业主截图：运行中占位 = 「继续输入以排队后续修改」（撤销 v7.1 的「不摆常驻提示」裁）。
+    expect(ta).toContain(STR.composer.queuePlaceholder);
     // 空输入：加入队列钮不出现；停止钮在位。
     expect(html).not.toContain(`aria-label="${STR.composer.queueAria}"`);
     expect(html).toContain(`aria-label="${STR.composer.stopAria}"`);
@@ -82,22 +90,23 @@ describe("SendQueueStrip（队列条）", () => {
     expect(renderToStaticMarkup(<SendQueueStrip items={[]} running onInterruptSend={() => undefined} onRemove={() => undefined} />)).toBe("");
   });
 
-  it("运行中：每条可移除、可打断并发送；引用数显在场", () => {
+  it("运行中：每行 = 立即 + 移出；附件行给文件名本体；头部不摆（占位句已说明状态）", () => {
     const html = renderToStaticMarkup(
-      <SendQueueStrip items={items} running onInterruptSend={() => undefined} onRemove={() => undefined} />,
+      <SendQueueStrip items={items} running sendNowEnabled onInterruptSend={() => undefined} onRemove={() => undefined} />,
     );
     expect(html).toContain("先跑一遍测试");
-    expect(html).toContain("1 引用");
-    expect(html).toContain("本轮结束后自动发送");
-    expect(html.match(/打断并发送/g)?.length).toBe(2);
+    expect(html).toContain("a.md");
+    expect(html).not.toContain("queue-head");
+    expect(html.match(/立即发送：/g)?.length).toBe(2);
     expect(html).toContain('aria-label="移出队列：先跑一遍测试"');
   });
 
-  it("不在运行中：不渲染「打断并发送」（队列只剩移除操作）", () => {
+  it("不在运行中：头部带「等待恢复发送」；「立即」默认禁用（门面由 QueueDock 递入）", () => {
     const html = renderToStaticMarkup(
       <SendQueueStrip items={items} running={false} onInterruptSend={() => undefined} onRemove={() => undefined} />,
     );
-    expect(html).not.toContain("打断并发送");
+    expect(html).toContain("等待恢复发送");
+    expect(html).toMatch(/class="q-sendnow" disabled/);
     expect(html).toContain('aria-label="移出队列：然后把 README 改了"');
   });
 

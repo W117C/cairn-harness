@@ -18,8 +18,9 @@ import { isPermissionMode as workerIsPermissionMode, clampTier } from "../src/ag
 const ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
 
 describe("档位集合只有一个事实源", () => {
-  it("下一档循环走满五档（第五档 full-access 不许被 UI 的四档抄本漏掉）", () => {
-    expect(PERMISSION_MODES.map(nextPermissionMode)).toEqual(["default", "guided", "auto", "full-access", "read-only"]);
+  it("下一档循环走满选择面的四档（2026-11-03 起 guided 只是旧值，不再是循环的一站）", () => {
+    expect(PERMISSION_MODES.map(nextPermissionMode)).toEqual(["default", "auto", "auto", "full-access", "read-only"]);
+    expect(nextPermissionMode("guided"), "旧 guided 先落到合并后的智能审批").toBe("auto");
     expect(nextPermissionMode("weird" as PermissionMode), "未知值从第一档开始").toBe("read-only");
   });
 

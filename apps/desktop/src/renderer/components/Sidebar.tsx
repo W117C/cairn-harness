@@ -6,19 +6,16 @@
 //     双击标题重命名（开态全选 + 视口回串首）；hover ⋯ 五项菜单（置顶/重命名/分叉/归档/删除，对齐原型序）；
 //   组内分段：置顶段恒前（不摆标签），其余按时间（今天/昨天/过去7天/更早）带桶标签；
 //   底部「添加项目」四入口（打开文件夹…/新建项目…/从 Git 仓库克隆…/最近打开）；
-//   页脚 48px：模型服务状态点（绿=可用，红=不可用，点击直达「模型与 Provider」分区）+ 头像。
-//     头像是侧栏的「账户/外观/用量」枢纽（2026-10-20 批 130）：点开有 外观（主题三选一）/
-//     用量统计（当前会话 + 全部会话双口径，批 131）/ 设置 / 关于与更新。**页脚不再常驻「⚙ 设置」钮**——
-//     同一个语义两处入口是本仓反复要治的病（批 #128 同款）。
+//   2026-11-03：页脚用户菜单整体下架——设置/外观/用量/关于搬到全局左轨底部的头像入口
+//     （components/AccountMenu.tsx），侧栏只保留会话上下文。
 // 文案一律走 STR（strings.ts——源文扫描判卷钉死）；图标 = lucide（ADR 0003）；会话行菜单 = Radix。
 import { useCallback, useEffect, useRef, useState } from "react";
 import { readMotionPref, setMotionPref, type MotionPref } from "../state/motion-pref";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Archive, Check, ChevronRight, CircleUser, Filter, Folder, GitBranch, Loader2, MoreHorizontal, Pencil, Pin, Plus, Search, X } from "lucide-react";
+import { Archive, Check, ChevronRight, Filter, Folder, GitBranch, Loader2, MoreHorizontal, Pencil, Pin, Plus, Search, X } from "lucide-react";
 import type { ProjectRecord } from "../../../../../src/main/ipc-protocol";
 import { relativeTime } from "../projections";
 import { keysOf } from "../shortcuts";
-import { useAvailableUpdate } from "../state/update-notice";
 import { filterSessions, groupByWorkspace, projectLabelFor, projectMenuItems, projectSections, sessionStatus, sessionTime, splitArchived, workspaceLabel, OTHER_WORKSPACE, SESSION_FILTERS, SESSION_FILTER_NOTE, type SessionFilterId, type TimeBucket, type WorkspaceSession } from "../sessions-view";
 import { draftKeyFor } from "../drafts";
 import { sessionKeyOf } from "../state/session-identity";
@@ -29,18 +26,10 @@ import { STR } from "../strings";
 import { isCompositionEnter } from "../ime";
 import { CairnMark } from "./CairnMark";
 import { useNow } from "../useNow";
-import type { ThemePref } from "../theme";
 import { ModalSurface } from "./ModalSurface";
 import { AddProjectMenu } from "./AddProjectMenu";
+import { SessionFilterMenu } from "./SessionFilterMenu";
 import "./sidebar-filter.css";
-
-/** 头像菜单的「外观」三档（2026-10-20 批 130）。与设置页 GeneralSection 的 THEME_OPTIONS
- *  同三档同措辞——**同一个语义两处措辞不许各写一份**（这里直接引用 STR.footer 的文案）。 */
-const THEME_CHOICES: readonly { id: ThemePref; label: string }[] = [
-  { id: "system", label: STR.footer.themeSystem },
-  { id: "light", label: STR.footer.themeLight },
-  { id: "dark", label: STR.footer.themeDark },
-];
 
 /** 会话筛选（2026-10-25）：词表/纯函数在 sessions-view.ts，侧栏此前硬编码 filter:"all"。
  *  选择持久化；筛选变化后展开全部项目组，避免命中项藏在旧折叠状态里（搜索用的是同一原则）。 */
@@ -532,25 +521,11 @@ export interface SidebarProps {
   onSessionWorktree?: (kind: "create" | "merge" | "discard", s: WorkspaceSession) => void;
   onDeleteSession?: (s: WorkspaceSession) => void;
   onForkSession?: (s: WorkspaceSession) => void;
-  onOpenSettings: () => void;
-  onOpenAbout?: () => void;
-  /** 有新版本时优先打开「关于与更新」；缺省回落到 onOpenSettings。 */
-  onOpenUpdateSettings?: () => void;
-  onOpenUsage?: () => void;
-  /** 状态点：直接进「模型与 Provider」分区（它就是为修模型服务而存在的入口，
-   *  笼统地开设置页等于让用户自己找那一格）。 */
-  onOpenProviderSettings?: () => void;
-  /** 当前主题（头像菜单「外观」子菜单打勾用）。 */
-  theme: ThemePref;
-  /** 切主题（子菜单点选即生效）。 */
-  onThemeChange: (t: ThemePref) => void;
   /** 系统目录选择（「打开文件夹…」「选择克隆位置」「项目设置·更改」共用）。 */
   onPickDirectory: () => Promise<string | null>;
 }
 
 export function Sidebar(props: SidebarProps): React.JSX.Element {
-  // 全局可用更新：notice 随会话走，头像上的点不随会话走（第 811 页）。
-  const update = useAvailableUpdate();
   // 置顶段拖排（2026-10-31）：顺序是视图偏好，落 localStorage，不改会话 metadata。
   const pinnedOrder = usePinnedOrder();
   // 减弱动效偏好（窗口级，落 localStorage；见 state/motion-pref.ts）。
@@ -721,7 +696,7 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
           <span className="side-brand">{STR.app.brand}</span>
         </div>
         <div className="side-actions">
-          <button className="btn-primary side-new" title={withKeys(STR.sidebar.newTaskTip, "new-session")} onClick={props.onNewTask}>
+          <button className="side-new" title={withKeys(STR.sidebar.newTaskTip, "new-session")} onClick={props.onNewTask}>
             <Plus size={13} aria-hidden="true" />
             <span className="side-new-label">{STR.sidebar.newTask}</span>
             {keysOf("new-session") !== null && <kbd className="side-new-keys">{keysOf("new-session")}</kbd>}
@@ -748,41 +723,13 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
         >
           <Search size={14} />
         </button>
-        {/* 会话筛选：词表/纯函数早就存在，此前入口为零。菜单用 Radix RadioGroup（键盘/外点/读屏免费）。 */}
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger asChild>
-            <button
-              className="iconbtn side-filter-btn"
-              data-active={filter !== "all"}
-              aria-label={`${STR.filter.title}：${filterInfo.label}`}
-              title={`${STR.filter.title}：${filterInfo.label}`}
-            >
-              <Filter size={14} />
-            </button>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Portal>
-            <DropdownMenu.Content className="pop-rd side-filter-menu" aria-label={STR.filter.title} align="end" sideOffset={8} collisionPadding={12}>
-              <DropdownMenu.RadioGroup value={filter} onValueChange={(value) => { if (isSessionFilter(value)) changeFilter(value); }}>
-                {filterCounts.map((f) => (
-                  <DropdownMenu.RadioItem key={f.id} value={f.id} data-filter={f.id} className="menu-item" aria-label={`${f.label}（${String(f.count)}）`} title={f.id === "running" ? SESSION_FILTER_NOTE : undefined}>
-                    <span className="side-filter-label">{f.label}</span>
-                    <span className="sub num">{f.count}</span>
-                    <span className="side-filter-check" aria-hidden="true"><DropdownMenu.ItemIndicator><Check size={13} /></DropdownMenu.ItemIndicator></span>
-                  </DropdownMenu.RadioItem>
-                ))}
-              </DropdownMenu.RadioGroup>
-              <DropdownMenu.Separator className="menu-sep" />
-              <DropdownMenu.CheckboxItem
-                className="menu-item"
-                checked={density === "compact"}
-                onCheckedChange={(checked) => { changeDensity(checked === true ? "compact" : "comfortable"); }}
-              >
-                <span className="side-filter-label">紧凑视图（28px）</span>
-                <span className="side-filter-check" aria-hidden="true"><DropdownMenu.ItemIndicator><Check size={13} /></DropdownMenu.ItemIndicator></span>
-              </DropdownMenu.CheckboxItem>
-            </DropdownMenu.Content>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
+        <SessionFilterMenu
+          filter={filter}
+          filterCounts={filterCounts}
+          density={density}
+          onChangeFilter={changeFilter}
+          onChangeDensity={changeDensity}
+        />
         </div>
       </div>
 
@@ -987,7 +934,7 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
                     const bucketCollapsed = bucketKey !== null && !searchOpen && collapsed.has(bucketKey);
                     return (
                       <div key={sec.kind === "pinned" ? "pinned" : sec.bucket} className="sess-section">
-                        {/* 置顶段不摆标签（钉形图标已自证）；时间桶标签 = 折叠开关（带枚数与朝向） */}
+                        {/* 置顶段不摆标签（钉形图标已自证）；时间桶标签 = 折叠开关（朝向；枚数只在收起时出现——展开时行本身就是枚数） */}
                         {sec.kind === "time" && (
                           <button
                             className="s-bucket"
@@ -996,7 +943,7 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
                             onClick={() => { if (bucketKey !== null) toggleGroup(bucketKey); }}
                           >
                             <span>{BUCKET_LABEL[sec.bucket]}</span>
-                            <span className="s-bucket-count">{sec.sessions.length}</span>
+                            {bucketCollapsed && <span className="s-bucket-count">{sec.sessions.length}</span>}
                             <ChevronRight size={10} className="s-bucket-chev" aria-hidden="true" />
                           </button>
                         )}
@@ -1040,99 +987,7 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
         />
       </nav>
 
-      {/* 页脚 48px：模型服务状态点 + 头像。
-          **页脚不再常驻「设置」按钮**（2026-10-20 批 130）：设置入口收进头像菜单——
-          同一个语义两处入口是本仓反复要治的病（批 #128 同类：主页叠两个同名项目 chip）。
-          状态点仍在页脚常驻：它是「模型服务可用/不可用」的常驻事实位，不是设置入口的重复。 */}
-      <footer className="side-foot">
-        <button
-          className="provider-dot"
-          data-ok={props.providerDemo === true ? "demo" : props.providerOk === null ? "unknown" : props.providerOk ? "ok" : "bad"}
-          aria-label={props.providerDemo === true ? STR.footer.providerDemo : props.providerOk === null ? STR.footer.providerUnknown : props.providerOk ? STR.footer.providerOk : STR.footer.providerBad}
-          title={props.providerDemo === true ? STR.footer.providerDemo : props.providerOk === null ? STR.footer.providerUnknown : props.providerOk ? STR.footer.providerOk : STR.footer.providerBad}
-          onClick={props.onOpenProviderSettings ?? props.onOpenSettings}
-        >
-          <span className="provider-label">
-            {props.providerDemo === true ? STR.footer.providerDemo : props.providerOk === null ? STR.footer.providerShortUnknown : props.providerOk ? STR.footer.providerShortOk : STR.footer.providerShortBad}
-          </span>
-        </button>
-        <div className="foot-avatar-wrap">
-          <DropdownMenu.Root>
-            <DropdownMenu.Trigger asChild>
-              <button
-                className="avatar"
-                aria-label={STR.footer.accountTip}
-                title={update !== null ? `${STR.sidebar.updateAvailableTitle} ${update.version}` : STR.footer.accountTip}
-                data-update={update !== null ? "true" : undefined}
-              >
-                <CircleUser size={17} aria-hidden="true" />
-              </button>
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Content
-              className="pop-rd pop-account"
-              side="top"
-              align="end"
-              sideOffset={6}
-              collisionPadding={10}
-            >
-              {update !== null && (
-                <>
-                  <DropdownMenu.Item
-                    className="menu-item"
-                    onSelect={() => { (props.onOpenUpdateSettings ?? props.onOpenSettings)(); }}
-                  >
-                    <span>{STR.sidebar.updateMenuItem} {update.version}</span>
-                    <span className="menu-dot" aria-hidden="true" />
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Separator className="menu-sep" />
-                </>
-              )}
-              {/* 外观：主题三选一（子菜单，当前项打勾）。给的是快捷切换，
-                  完整的外观面（主题 + 文字大小 + 界面密度）在设置页「通用」分区。 */}
-              <DropdownMenu.Sub>
-                <DropdownMenu.SubTrigger className="menu-item">
-                  <span>{STR.footer.appearance}</span>
-                </DropdownMenu.SubTrigger>
-                <DropdownMenu.SubContent className="pop-rd" sideOffset={2}>
-                  {THEME_CHOICES.map((t) => (
-                    <DropdownMenu.Item key={t.id} className="menu-item" onSelect={() => { props.onThemeChange(t.id); }}>
-                      <span>{t.label}</span>
-                      {props.theme === t.id && <span className="check" aria-hidden="true">✓</span>}
-                    </DropdownMenu.Item>
-                  ))}
-                  {/* 减弱动效（2026-10-28 第 758 页 · 对标 Claude 的 `data-reduce-motion` 根属性）：
-                      应用内也能强制减弱动效——不只看系统设置。落位见 state/motion-pref.ts。 */}
-                  <DropdownMenu.Item
-                    className="menu-item"
-                    title={STR.footer.reduceMotionTip}
-                    onSelect={() => { setMotionPref(motionPref === "reduced" ? "system" : "reduced"); setMotionPrefState(motionPref === "reduced" ? "system" : "reduced"); }}
-                  >
-                    <span>{STR.footer.reduceMotion}</span>
-                    {motionPref === "reduced" && <span className="check" aria-hidden="true">✓</span>}
-                  </DropdownMenu.Item>
-                </DropdownMenu.SubContent>
-              </DropdownMenu.Sub>
-              {/* 用量入口直达设置中的完整统计页。 */}
-              <DropdownMenu.Item className="menu-item" onSelect={() => { (props.onOpenUsage ?? props.onOpenSettings)(); }}>
-                <span>{STR.footer.usage}</span>
-              </DropdownMenu.Item>
-              <DropdownMenu.Separator className="menu-sep" />
-              <DropdownMenu.Item
-                className="menu-item"
-                title={withKeys(STR.footer.settingsTip, "settings")}
-                onSelect={() => { props.onOpenSettings(); }}
-              >
-                <span>{STR.footer.settings}</span>
-                {/* 键位从 SHORTCUTS 表取（不手抄——哨兵判卷盯的就是这个） */}
-                {keysOf("settings") !== null && <span className="sub">{keysOf("settings")}</span>}
-              </DropdownMenu.Item>
-              {props.onOpenAbout !== undefined && (
-                <DropdownMenu.Item className="menu-item" onSelect={() => { props.onOpenAbout?.(); }}>{STR.footer.about}</DropdownMenu.Item>
-              )}
-            </DropdownMenu.Content>
-          </DropdownMenu.Root>
-        </div>
-      </footer>
+
 
       {ctxMenu !== null && (
         <ProjectContextMenu

@@ -1,0 +1,9 @@
+{
+  "apps/desktop/src/renderer/components/Sidebar.tsx": "830c5c2d2d202837cf6fffd7346a639976133f5db173ef7e3fb4f3d33c86d355",
+  "apps/desktop/src/renderer/styles.css": "0bd30fef221928f0be94f4dd6466253fb68799cb17639d1702de7c14b46845c3",
+  "apps/desktop/tests/workbench-sidebar.test.tsx": "de8c424160c04e784dff5f5de6a3b611d48bbf1fbbaca2e3b644d7e11e0dbb04",
+  "apps/desktop/tests/render-structure.test.tsx": "6c392398e6a3124abe26c18f4be861261b962f53552be2b265cf2374505e3d1b",
+  "apps/desktop/tests/demo-banner.test.tsx": "6819e1194f19e27ba4bfe0d54185b1f0796eba6053a092f90b7d9806a8a25ed4",
+  "apps/desktop/tests/contrast-gate.test.ts": "60a2cbb226407f5600331596bbaf5bca9c606df95827f6a5d1f0ef70b5a3ef03",
+  "apps/desktop/scripts/session-continuity-smoke.cjs": "ac79d3eed3ea08d9bb643ba5969d8c0e5165e0f8407ea8e4e9c3dc53fdc28631"
+}

@@ -1,6 +1,7 @@
 // 派生层·流面（纯投影）：事件流 → 对话行（user/assistant/tool/error）。
 // I3 契约：只吃 AgentEvent[]，只吐值；不读时钟、不取随机、不做 IO、不留模块级可变态。
 import type { AgentEvent } from "../../../../../src/main/ipc-protocol";
+import type { GateVerdict } from "../../../../../src/permissions/autonomy";
 import { isMainSessionTerminalEvent, isWorkerSubflowEvent, userVisibleText } from "./session";
 
 // v2 行面：ts 为事件真值时间戳（毫秒）的透传——新事件恒有值（core 落盘统一盖戳、live=盘），
@@ -25,7 +26,11 @@ export type StreamRow =
       then?: number
       /** 产物引用（本次调用交付给用户的东西）。从前聊天里只有文字回执 ⇒ 用户看不到 agent
        *  刚渲染的图，也拿不到"刚写的那份 HTML"的直接入口，只能自己去仓库里翻。 */
-      artifact?: { kind: "image" | "html" | "svg" | "text"; path: string; note?: string } }
+      artifact?: { kind: "image" | "html" | "svg" | "text"; path: string; note?: string }
+      /** 权限判定留痕的结果（tool_result.gate.verdict，2026-11-01）：门拦下的一次调用，
+       *  「为什么没执行」的人话摘要据此判（见 derived/tool-failure.ts）。
+       *  缺席 = 这次调用没有判定留痕（老日志 / 非门路径）——**不编值**。 */
+      gateVerdict?: GateVerdict }
   | { kind: "error"; text: string; ts?: number; seq: number };
 
 type ToolRow = Extract<StreamRow, { kind: "tool" }>;
@@ -240,6 +245,9 @@ export function projectStream(events: readonly AgentEvent[], running: boolean = 
           }
           if (e.ts !== undefined) row.then = e.ts; // P3-1：耗时的落地端（ts→then 一段）
           if (typeof e.snapshotId === "string" && e.snapshotId !== "") row.snapshotId = e.snapshotId;
+          // 权限判定留痕（2026-11-01）：门拦下的工具要在收起卡上说清「为什么没执行」——
+          // 判定结果带着走，行面才不必再从机器面原文里猜（缺席 = 没留痕，不编值）。
+          if (e.gate !== undefined) row.gateVerdict = e.gate.verdict;
           // 只认**成功**的产物：失败的那一笔没有可看的东西（写盘被拒 / 渲染超时）。
           if (e.ok && e.artifact !== undefined) row.artifact = e.artifact;
         }

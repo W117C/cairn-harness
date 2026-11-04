@@ -1,20 +1,22 @@
 /* Settings keeps the workbench palette; spacing and alignment carry its hierarchy. */
 .sp-page .sp-shell { grid-template-columns: 208px minmax(0, 1fr); }
 .sp-page .sp-nav { background: hsl(var(--bg-200)); padding: 20px 12px 16px; gap: 3px; }
-.sp-page .sp-nav-head { padding: 0 10px 12px; }
+.sp-page .sp-nav-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px 10px 10px; }
 .sp-page .sp-nav-title { font-size: var(--fs-body-lg); }
-.sp-page .sp-back { margin-left: 4px; margin-bottom: 12px; }
+.sp-page .sp-back { margin: 0; }
 .sp-page .sp-nav-search { height: 32px; margin-bottom: 8px; padding: 0 8px; }
 .sp-page .sp-nav-item { min-height: 34px; height: auto; padding: 7px 10px; font-size: var(--fs-body-sm); text-align: left; }
 .sp-page .sp-nav-group + .sp-nav-group { margin-top: 12px; }
 .sp-page .sp-nav-label { padding: 4px 10px 6px; }
-.sp-page .sp-body { padding: 30px 36px 48px; }
-.sp-page .sp-body > .ss-page { max-width: 760px; margin: 0 auto; width: 100%; }
+.sp-page .sp-body { padding: 34px 48px 56px; }
+/* 2026-11-02：760px 上限在 1440 宽的窗口里留下整屏右侧空白，且标题比页面标题轻。
+   放宽到 880px（仍留出可读行长），标题抬到与页面标题同一档。 */
+.sp-page .sp-body > .ss-page { max-width: 880px; margin: 0 auto; width: 100%; }
 .sp-page .ss-head { margin-bottom: 28px; }
 .sp-page .ss-head > .ss-title {
   margin: 0;
   font-family: inherit;
-  font-size: 22px;
+  font-size: 26px;
   font-weight: var(--fw-semibold);
   letter-spacing: -0.02em;
   line-height: 1.35;
@@ -23,7 +25,8 @@
 .sp-page .ss-content { gap: 0; }
 .sp-page .ss-sec { gap: 10px; }
 .sp-page .ss-content > .ss-sec + .ss-sec { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--hairline); }
-.sp-page .ss-sec-head { padding: 0; flex-wrap: wrap; gap: 6px 12px; color: hsl(var(--text-000)); }
+/* 分区头与内容之间一条细线：头不再浮在一片空白上（读作「标题 + 分隔线」而不是一个洞）。 */
+.sp-page .ss-sec-head { padding: 0 0 10px; flex-wrap: wrap; gap: 6px 12px; color: hsl(var(--text-000)); border-bottom: 1px solid var(--hairline); }
 .sp-page .ss-sec-head > .ss-sec-title {
   font-family: inherit;
   font-size: var(--fs-body-md);
@@ -34,25 +37,49 @@
 .sp-page .ss-sec-hint { font-size: var(--fs-caption-sm); color: hsl(var(--text-200)); }
 .sp-page .ss-sec-hint::before { content: none; }
 .sp-page .ss-card { border: 0; border-radius: 0; background: transparent; padding: 0; overflow: visible; }
+/* 2026-11-01 真机（进化页）：控件列此前是 1.5fr，比文字列还宽 ⇒ 徽章被推到天边，
+   文字与值之间空出一大片。值列改为 auto（贴着内容走），控件列不再拉满。 */
 .sp-page .ss-row {
-  grid-template-columns: minmax(150px, 1fr) minmax(0, 1.5fr);
+  grid-template-columns: minmax(150px, 1fr) auto;
   align-items: center;
   gap: 24px;
-  min-height: 60px;
-  padding: 14px 0;
+  min-height: 52px;
+  padding: 10px 0;
   border-top: 1px solid var(--hairline);
 }
 .sp-page .ss-row:first-child { border-top: 0; }
 .sp-page .ss-row-main { gap: 5px; }
 .sp-page .ss-row-label { font-size: var(--fs-body-sm); }
 .sp-page .ss-row-desc { max-width: 64ch; font-size: var(--fs-caption-sm); color: hsl(var(--text-200)); line-height: 1.65; }
-.sp-page .ss-row-ctl { width: 100%; max-width: none; justify-content: flex-end; }
+.sp-page .ss-row-ctl { width: auto; max-width: none; justify-content: flex-end; }
 .sp-page .ss-inline { max-width: 100%; }
 .sp-page .ss-static, .sp-page .ss-flabel { color: hsl(var(--text-200)); }
 .sp-page .theme-opts { gap: 4px; }
 .sp-page .theme-opt { gap: 6px; min-height: 32px; padding: 4px 10px; border-radius: var(--radius-field); white-space: nowrap; }
 .sp-page .ts-thumb { width: 14px; height: 20px; border: 0; border-radius: 0; font-weight: var(--fw-medium); }
 .sp-page .sp-tag { font-family: inherit; }
+
+/* 计数小片（2026-11-01 进化页）：一格一个数，标签与值成对；CJK 词不许折行。 */
+.sp-page .sp-chips { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; max-width: 100%; }
+.sp-page .sp-chip {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  padding: 2px 8px; border-radius: var(--radius-xs);
+  border: 1px solid var(--hairline);
+  background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover));
+  font-size: var(--fs-caption-sm); color: hsl(var(--text-200));
+  white-space: nowrap;
+}
+.sp-page .sp-chip-v { font-family: var(--mono); color: hsl(var(--text-000)); font-variant-numeric: tabular-nums; }
+
+/* 技术详情（原生 details，默认收起）：原始计数串备查区，不占默认版面。 */
+.sp-page .sp-tech { margin-top: 14px; }
+.sp-page .sp-tech > summary { list-style: none; cursor: pointer; font-size: var(--fs-caption-xs); color: hsl(var(--accent-control-text)); }
+.sp-page .sp-tech > summary::-webkit-details-marker { display: none; }
+.sp-page .sp-tech[open] > summary { margin-bottom: 8px; }
+.sp-page .sp-tech-body { display: flex; flex-direction: column; gap: 6px; }
+.sp-page .sp-tech-line { display: flex; gap: 10px; align-items: baseline; }
+.sp-page .sp-tech-k { flex: none; font-size: var(--fs-caption-xs); color: hsl(var(--text-400)); }
+.sp-page .sp-tech-v { font-family: var(--mono); font-size: var(--fs-caption-xs); color: hsl(var(--text-200)); line-height: 1.6; overflow-wrap: anywhere; }
 
 .sp-page .ss-card > .ss-row:has(+ .pv-split) { padding-top: 0; padding-bottom: 18px; min-height: 0; }
 .sp-page .pv-split { grid-template-columns: 164px minmax(0, 1fr); gap: 24px; padding-top: 20px; border-top: 1px solid var(--hairline); }

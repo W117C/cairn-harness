@@ -1,7 +1,9 @@
 import { runKey } from "../state/session-identity";
+import type { RevertTurnTarget } from "../state/message-actions";
 import type { SendOutcome } from "../state/run-queue";
 import { composerThinking, thinkingChangeTarget } from "../state/thinking-selection";
 import { applySessionModelPick, saveSessionPrefs } from "../state/session-prefs";
+import { useMemo } from "react";
 import type { Dispatch,MutableRefObject,PointerEvent,SetStateAction } from "react";
 import type { GoalTrace } from "../../../../../src/agent/goal-trace";
 import type { ClarifyQuestion,PlanProposal } from "../../../../../src/events";
@@ -14,7 +16,7 @@ import { renderAppToolbar } from "./AppToolbar";
 import { ArrowDown,Check,ChevronDown,Folder,FolderPlus,GitBranch,X } from "lucide-react";
 import { CairnMark } from "../components/CairnMark";
 import { menuNavIndex } from "../components/popover-keys";
-import { lazy,Suspense,useEffect,useState } from "react";
+import { lazy,Suspense,useEffect,useRef,useState } from "react";
 import { useUpdateNotice } from "../state/update-notice";
 import { Group,Panel,Separator,type PanelImperativeHandle } from "react-resizable-panels";
 import type { AgentEvent,AskPayload,PermissionMode,ProjectDiagnosis,ProjectRecord,ProviderInfo,RunAttachmentReference,SuggestNextResult } from "../../../../../src/main/ipc-protocol";
@@ -24,10 +26,12 @@ import type { AppDestination,SectionId } from "../app-controls";
 import { AddProjectMenu } from "../components/AddProjectMenu";
 import { ApprovalCard } from "../components/ApprovalCard";
 import { ChangeSummaryCard } from "../components/ChangeSummaryCard";
+import type { ChangesFocus } from "../components/ChangesPane";
 import { ClarifyCard } from "../components/ClarifyCard";
 import type { PaletteAction } from "../components/CommandPalette";
 import { Composer } from "../components/Composer";
 import { ErrorStrip } from "../components/ErrorStrip";
+import { NoticeStrip } from "../components/NoticeStrip";
 import { SessionLoadNotice } from "../components/SessionLoadNotice";
 import { FindBar,type FindBarHandle } from "../components/FindBar";
 import { ImportDiagnosisCard } from "../components/ImportDiagnosisCard";
@@ -42,6 +46,7 @@ import { Popover } from "../components/Popover";
 import { ProviderBanner } from "../components/ProviderBanner";
 import { QuickStarts } from "../components/QuickStarts";
 import { QueueDock } from "./QueueDock";
+import { todoProjection } from "../derived/todo";
 import { SessionLogDialog } from "../components/SessionLogDialog";
 import type { StreamActions } from "../components/Stream";
 import { TitleBar } from "../components/TitleBar";
@@ -49,7 +54,8 @@ import { movePane,type PaneKind } from "../components/panes";
 import { destinationForSection,PAGE_CONTEXT_ITEMS,pageForDestination } from "../navigation";
 import { greetingFor,type QuickStartInput } from "../quick-starts";
 import type { QueuedSend } from "../send-queue";
-import type { DeleteConfirmTarget, SessionConfirmTarget, WorkspaceSession } from "../sessions-view";
+import type { SurfaceError } from "../surface-error";
+import type { DeleteConfirmTarget, SessionConfirmTarget, SessionEditContext, WorkspaceSession } from "../sessions-view";
 import { SHORTCUT_GROUPS } from "../shortcuts";
 import type { SlashSkill } from "../slash";
 import { STR } from "../strings";
@@ -60,6 +66,7 @@ import { ConfirmScrims } from "./ConfirmScrims";
 import type { PermissionConfirmApi } from "../state/use-permission-confirm";
 import { DestinationWorkspace } from "./DestinationWorkspace";
 import { WorkbenchSidebar } from "./WorkbenchSidebar";
+import type { PickedElementSignal } from "../picked-element";
 const PaneDock = lazy(() => import("../components/PaneDock").then((m) => ({ default: m.PaneDock })));
 const AppPageBody = lazy(() => import("../components/AppPage").then((m) => ({ default: m.AppPageBody })));
 const CommandPalette = lazy(() => import("../components/CommandPalette").then((m) => ({ default: m.CommandPalette })));
@@ -159,7 +166,8 @@ interface WorkbenchViewDeps {
   findOpen: boolean;
   streamEl: HTMLDivElement | null;
   closeFind: () => void;
-  lastError: string | null;
+  /** 错误条载荷：一句话，或结构化的 SurfaceError（原因/依据/下一步，2026-11-02 真机订正）。 */
+  lastError: string | SurfaceError | null;
   clearLastError: () => void;
   setLogTarget: Dispatch<SetStateAction<string | null>>;
   lastNotice: string | null;
@@ -204,10 +212,10 @@ interface WorkbenchViewDeps {
   pendingClarify: { callId: string; questions: ClarifyQuestion[]; } | null;
   pendingPlan: { callId: string; plan: PlanProposal; } | null;
   composerZoneRef: MutableRefObject<HTMLDivElement | null>;
-  editCtx: { originId: string; originTitle: string; forkId: string; round: number; } | null;
+  editCtx: SessionEditContext | null;
   events: AgentEvent[];
   sendQueue: MutableRefObject<Map<string, QueuedSend[]>>;
-  setEditCtx: (v: { originId: string; originTitle: string; forkId: string; round: number; } | null) => void;
+  setEditCtx: (v: SessionEditContext | null) => void;
   setDraftRemap: (v: { from: string; to: string; seq: number; } | undefined) => void;
   draftRemapSeq: MutableRefObject<number>;
   refreshSessions: () => Promise<void>;
@@ -226,9 +234,6 @@ interface WorkbenchViewDeps {
   skills: readonly SlashSkill[];
   composerLock: ComposerLockReason | null;
   mode: PermissionMode;
-  /** 当前 Plan 模式（默认来自 settings，Composer「方案」开关按轮覆盖）。 */
-  planRequired: boolean;
-  onPlanRequiredChange: (next: boolean) => void;
   stopped: boolean;
   usage: { inputTokens: number; outputTokens: number; usageCount: number; cacheReadTokens: number; lastInputTokens: number; };
   phaseLabel: string;
@@ -259,7 +264,7 @@ interface WorkbenchViewDeps {
   composerMenuSignal: { kind: "model" | "perm" | "effort"; seq: number; } | null;
   onSuggestNext: () => Promise<SuggestNextResult>;
   injectedAttachment: { path: string; kind: "file" | "directory"; seq: number; } | undefined;
-  injectedAppend: { text: string; seq: number; } | undefined;
+  injectedElement: PickedElementSignal | undefined;
   injectText: (text: string) => void;
   inspectorRef: MutableRefObject<PanelImperativeHandle | null>;
   inspectorDefault: number;
@@ -284,9 +289,9 @@ interface WorkbenchViewDeps {
   viewToast: string | null;
   cheatOpen: boolean;
   closeCheat: () => void;
-  revertConfirm: number | null;
-  setRevertConfirm: Dispatch<SetStateAction<number | null>>;
-  doRevertTurn: (round: number) => void;
+  revertConfirm: RevertTurnTarget | null;
+  setRevertConfirm: Dispatch<SetStateAction<RevertTurnTarget | null>>;
+  doRevertTurn: (target: RevertTurnTarget) => void;
   projectRemoveConfirm: ProjectRecord | null;
   setProjectRemoveConfirm: Dispatch<SetStateAction<ProjectRecord | null>>;
   doRemoveProject: (p: ProjectRecord) => Promise<void>;
@@ -326,7 +331,9 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
   // ⌘+点击侧栏会话：右侧预览目标（可继续发送；seq 允许连续预览同一会话）。
   const [sessionPreview, setSessionPreview] = useState<{ id: string; workspace?: string; title: string; seq: number } | null>(null);
   const [paneTarget, setPaneTarget] = useState<{ kind: PaneKind; seq: number } | null>(null);
-  const { activeWorkspace, projects, pickerValue, providerInfo, settingsOpen, destination, pageFilter, openDestination, setPageFilter, activeId, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, togglePane, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode, sidebarCollapsed, toggleSidebar, newSession, handleOpenPalette, openPane, setSettingsSection, setSettingsOpen, sidebarWidth, runningSet, waitingIdSet, draftIds, outcomes, registryNotice, retryProjects, sessionsLoaded, sessionsLoadError, sessionsLoadErrorDetail, retrySessions, providerOk, openSession, setActiveWorkspace, activeWorkspaceRef, touchWorkspace, handleAddProject, handleCloneProject, setNewProjectOpen, handleUpdateProject, handleRelocateProject, handleRemoveProject, handleRevealProject, pinSessionById, forkSessionFromMenu, requestArchiveSession, openSessionInCli, setWtDiscard, sessionWorktreeOp, requestDeleteSession, themePref, changeTheme, usageStats, startSidebarDrag, persistSidebarWidth, sidebarWidthRef, mainGroupRef, showEmpty, findRef, findOpen, streamEl, closeFind, lastError, clearLastError, setLogTarget, lastNotice, clearLastNotice, importDiagnosis, setImportDiagnosis, chipRef, chipOpen, openChipPopover, emptyData, chipQuery, setChipQuery, chipRecent, chipList, closeChip, setLastError, setStreamEl, stick, streamRows, rowRefs, inheritedSeqs, viewMode, runningActive, foldedRounds, flashRound, streamActions, deliveryTrailItems, deliveryExpandedFor, openPreview, exportActiveProject, lastDeliveryRound, handleRevertTurn, setDeliveryExpandedFor, outlineCurrent, jumpToRound, unfoldAllTurns, foldAllTurns, askForActive, setMode, setLastNotice, pendingClarify, pendingPlan, composerZoneRef, editCtx, events, sendQueue, setEditCtx, setDraftRemap, draftRemapSeq, refreshSessions, setQueueFor, cancelRunHeal, resumeQueueFor, sendTo, queueLoading, pendingSend, skills, composerLock, mode, planRequired, onPlanRequiredChange, stopped, usage, phaseLabel, phase, elapsedSec, steps, runSteps, chosenCtx, recentRefsBySession, noteRecentRef, promptHistory, noteDraft, injectedText, injectedTextSeq, draftRemap, draftRestore, sendWithGoal, configuredProviders, thinkingBySession, pendingThinking, setPendingThinking, force, selections, refreshProviderInfo, compactNow, composerMenuSignal, onSuggestNext, injectedAttachment, injectedAppend, injectText, inspectorRef, inspectorDefault, setInspectorCollapsed, inspectorSaveTimer, inspectorColRef, jumpToEvent, handleRestoreSnapshot, toggleInspector, attachFromPane, pickSignal, handlePickResult, preview, closePane, send, setPaneTabs, pluginSidebarWidth, setPluginSidebarWidthPersist, closePluginSidebar, fillPluginCommand, viewToast, cheatOpen, closeCheat, revertConfirm, setRevertConfirm, doRevertTurn, permissionGuard, projectRemoveConfirm, setProjectRemoveConfirm, doRemoveProject, archiveConfirm, setArchiveConfirm, doArchiveSession, deleteConfirm, setDeleteConfirm, doDeleteSession, wtDiscard, paletteOpen, setPaletteOpen, focusComposer, handlePaletteAction, startBarRename, logTarget, settingsSection, refreshProviderKeys, setThemePref, setTextSize, setUiSize, setCtrlTabCycle, dragOverApp, newProjectOpen, templates, handleCreateFromDialog } = deps;
+  const [changesFocus, setChangesFocus] = useState<ChangesFocus | null>(null);
+  const changesFocusSeq = useRef(0);
+  const { activeWorkspace, projects, pickerValue, providerInfo, settingsOpen, destination, pageFilter, openDestination, setPageFilter, activeId, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, togglePane, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode, sidebarCollapsed, toggleSidebar, newSession, handleOpenPalette, openPane, setSettingsSection, setSettingsOpen, sidebarWidth, runningSet, waitingIdSet, draftIds, outcomes, registryNotice, retryProjects, sessionsLoaded, sessionsLoadError, sessionsLoadErrorDetail, retrySessions, providerOk, openSession, setActiveWorkspace, activeWorkspaceRef, touchWorkspace, handleAddProject, handleCloneProject, setNewProjectOpen, handleUpdateProject, handleRelocateProject, handleRemoveProject, handleRevealProject, pinSessionById, forkSessionFromMenu, requestArchiveSession, openSessionInCli, setWtDiscard, sessionWorktreeOp, requestDeleteSession, themePref, changeTheme, usageStats, startSidebarDrag, persistSidebarWidth, sidebarWidthRef, mainGroupRef, showEmpty, findRef, findOpen, streamEl, closeFind, lastError, clearLastError, setLogTarget, lastNotice, clearLastNotice, importDiagnosis, setImportDiagnosis, chipRef, chipOpen, openChipPopover, emptyData, chipQuery, setChipQuery, chipRecent, chipList, closeChip, setLastError, setStreamEl, stick, streamRows, rowRefs, inheritedSeqs, viewMode, runningActive, foldedRounds, flashRound, streamActions, deliveryTrailItems, deliveryExpandedFor, openPreview, setDeliveryExpandedFor, outlineCurrent, jumpToRound, unfoldAllTurns, foldAllTurns, askForActive, setMode, setLastNotice, pendingClarify, pendingPlan, composerZoneRef, editCtx, events, sendQueue, setEditCtx, setDraftRemap, draftRemapSeq, refreshSessions, setQueueFor, cancelRunHeal, resumeQueueFor, sendTo, queueLoading, pendingSend, skills, composerLock, mode, stopped, usage, phaseLabel, phase, elapsedSec, steps, runSteps, chosenCtx, recentRefsBySession, noteRecentRef, promptHistory, noteDraft, injectedText, injectedTextSeq, draftRemap, draftRestore, sendWithGoal, configuredProviders, thinkingBySession, pendingThinking, setPendingThinking, force, selections, refreshProviderInfo, compactNow, composerMenuSignal, onSuggestNext, injectedAttachment, injectedElement, injectText, inspectorRef, inspectorDefault, setInspectorCollapsed, inspectorSaveTimer, inspectorColRef, jumpToEvent, handleRestoreSnapshot, toggleInspector, attachFromPane, pickSignal, handlePickResult, preview, closePane, send, setPaneTabs, pluginSidebarWidth, setPluginSidebarWidthPersist, closePluginSidebar, fillPluginCommand, viewToast, cheatOpen, closeCheat, revertConfirm, setRevertConfirm, doRevertTurn, permissionGuard, projectRemoveConfirm, setProjectRemoveConfirm, doRemoveProject, archiveConfirm, setArchiveConfirm, doArchiveSession, deleteConfirm, setDeleteConfirm, doDeleteSession, wtDiscard, paletteOpen, setPaletteOpen, focusComposer, handlePaletteAction, startBarRename, logTarget, settingsSection, refreshProviderKeys, setThemePref, setTextSize, setUiSize, setCtrlTabCycle, dragOverApp, newProjectOpen, templates, handleCreateFromDialog } = deps;
   // 启动时轻量检查更新：有更新源才查，24h 一次，有可用版本才出 notice。
   useUpdateNotice(setLastNotice);
   const { inspectorCollapsed } = deps;
@@ -372,9 +379,9 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
   // 搬到这里——同一语义只留一处，输入区回到纯粹的写作面。
   const activeProjectLabel = activeWorkspace === null ? null
     : (projects.find((p) => p.path === activeWorkspace)?.name ?? activeWorkspace.slice(activeWorkspace.lastIndexOf("/") + 1));
-  // 概览模型 chip：没有 provider 也没有显式选择时**不摆**，不拿「演示」冒充未知通道。
-  const inspectorModelLabel = pickerValue ?? (providerInfo === null ? undefined : providerInfo.kind === "demo" ? STR.modelPicker.demo : providerInfo.model);
-  const { toolbarContext, toolbarCenter, toolbarAside, toolbarRight } = renderAppToolbar({ settingsOpen: settingsOpen || destination !== "chat", activeId, activeWorkspace, activeProjectLabel, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, onOpenPane: openToolbarPane, inspectorOpen: !inspectorCollapsed, onToggleInspector: toggleInspector, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode, demo: providerInfo?.kind === "demo", onOpenProviderSettings: () => { setSettingsSection("provider"); setSettingsOpen(true); } });
+  // 工作状态面板（2026-11-04 截图右上角）：todo_write 清单投影 + 运行读数（阶段/耗时/步数）。
+  const workTodos = useMemo(() => todoProjection(events), [events]);
+  const { toolbarContext, toolbarCenter, toolbarAside, toolbarRight } = renderAppToolbar({ settingsOpen: settingsOpen || destination !== "chat", activeId, activeWorkspace, activeProjectLabel, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, onOpenPane: openToolbarPane, inspectorOpen: !inspectorCollapsed, onToggleInspector: toggleInspector, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode, demo: providerInfo?.kind === "demo", onOpenProviderSettings: () => { setSettingsSection("provider"); setSettingsOpen(true); }, running: runningActive, phaseLabel, elapsedSec, steps, todos: workTodos });
 
     return (
     <div className="app" data-sidebar={sidebarCollapsed ? "collapsed" : "expanded"}>
@@ -448,13 +455,6 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
             },
             onDeleteSession: requestDeleteSession,
             onPickDirectory: () => window.agent.pickDirectory(),
-            onOpenSettings: () => { setSettingsSection(undefined); setSettingsOpen(true); },
-            onOpenAbout: () => { setSettingsSection("about"); setSettingsOpen(true); },
-            onOpenUpdateSettings: () => { setSettingsSection("about"); setSettingsOpen(true); },
-            onOpenProviderSettings: () => { setSettingsSection("provider"); setSettingsOpen(true); },
-            theme: themePref,
-            onThemeChange: changeTheme,
-            onOpenUsage: () => { setSettingsSection("usage"); setSettingsOpen(true); },
           }}
           badges={pluginUpdateCount > 0 ? { plugins: pluginUpdateCount } : {}}
           pageItems={pageItems}
@@ -462,6 +462,14 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
           onFilter={setPageFilter}
           onOpenDestination={openDestination}
           onSettings={() => { setSettingsSection(undefined); setSettingsOpen(true); }}
+          account={{
+            onOpenSettings: () => { setSettingsSection(undefined); setSettingsOpen(true); },
+            onOpenAbout: () => { setSettingsSection("about"); setSettingsOpen(true); },
+            onOpenUpdateSettings: () => { setSettingsSection("about"); setSettingsOpen(true); },
+            onOpenUsage: () => { setSettingsSection("usage"); setSettingsOpen(true); },
+            theme: themePref,
+            onThemeChange: changeTheme,
+          }}
           onNewTask={newSession}
           onSearch={handleOpenPalette}
           onFiles={() => openPane("file")}
@@ -483,6 +491,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                 workspace={activeWorkspace}
                 mutationBlocked={runningActive}
                 onPluginUpdateCount={(count) => { setPluginUpdateCount(count); }}
+                onOpenSection={(id) => { setSettingsSection(id); setSettingsOpen(true); }}
                 {...(next === destination ? { filter: pageFilter, onFilter: setPageFilter } : {})}
               />
             </Suspense>
@@ -513,12 +522,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                   {...(activeId !== null ? { onViewLog: () => { setLogTarget(activeId); } } : {})}
                 />
               )}
-                {lastNotice !== null && (
-                  <div className="notice-strip" role="status">
-                    <span className="msg">{lastNotice}</span>
-                    <button className="btn-ghost" aria-label="关闭提示" onClick={clearLastNotice}>×</button>
-                  </div>
-                )}
+                {lastNotice !== null && <NoticeStrip message={lastNotice} onDismiss={clearLastNotice} />}
                 {/* 未配置模型服务的空屏横幅（2026-10-18）：发送前就说清楚，别等错误行。 */}
                 {providerOk === false && (
                   <ProviderBanner onOpenSettings={() => { setSettingsSection("provider"); setSettingsOpen(true); }} />
@@ -644,12 +648,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
           ) : (
             <div className="zone-stream">
               {lastError !== null && <ErrorStrip message={lastError} onDismiss={clearLastError} />}
-              {lastNotice !== null && (
-                <div className="notice-strip" role="status">
-                  <span className="msg">{lastNotice}</span>
-                  <button className="btn-ghost" aria-label="关闭提示" onClick={clearLastNotice}>×</button>
-                </div>
-              )}
+              {lastNotice !== null && <NoticeStrip message={lastNotice} onDismiss={clearLastNotice} />}
               {importDiagnosis !== null && (
                 <ImportDiagnosisCard
                   name={importDiagnosis.name}
@@ -690,15 +689,13 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                       <ChangeSummaryCard
                         key={`d${String(item.delivery.round)}`}
                         delivery={item.delivery}
-                        {...(activeWorkspace !== null
-                          ? {
-                              actions: {
-                                onOpenPreview: () => void openPreview(activeWorkspace),
-                                onExport: () => void exportActiveProject(activeWorkspace),
-                                ...(item.delivery.round === lastDeliveryRound ? { onRevert: () => handleRevertTurn(item.delivery.round) } : {}),
-                              },
-                            }
-                          : {})}
+                        // DSH ChangedFiles 的「块头/行打开本轮 review」= Cairn 的「变更」窗格。
+                        onOpenChanges={(path) => {
+                          changesFocusSeq.current += 1;
+                          const file = item.delivery.files.find((f) => f.path === path);
+                          setChangesFocus({ round: item.delivery.round, path, snapshotId: file?.snapshotId, seq: changesFocusSeq.current });
+                          openToolbarPane("changes");
+                        }}
                       />
                     );
                     return (
@@ -795,21 +792,21 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
             )}
           </div>
           <div className="zone-composer" ref={composerZoneRef}>
-            {editCtx !== null && activeId === editCtx.forkId && (
+            {editCtx !== null && activeId === editCtx.forkId && activeWorkspace === editCtx.workspace && (
               <div className="notice-strip" role="status">
                 <span className="msg">正在新分支里编辑第 {editCtx.round} 轮消息；原会话「{editCtx.originTitle}」不动。</span>
                 <button
                   className="btn-ghost"
                   onClick={() => {
                     const ctx = editCtx;
-                    if (ctx === null) return;
+                    if (ctx === null || activeWorkspaceRef.current !== ctx.workspace) return;
                     // 2026-10-20 真机：旧实现只 activate(originId)，只换标题不载入原会话转录——
                     // 回到原会话后屏上是空流（rows=0）。必须走 openSession 重新载入。
                     const emptyBranch = activeIdRef.current === ctx.forkId
                       && events.length === 0
                       && (sendQueue.current.get(runKey(activeWorkspace, ctx.forkId))?.length ?? 0) === 0;
                     setEditCtx(null);
-                    openSession(ctx.originId);
+                    openSession(ctx.originId, ctx.workspace ?? undefined);
                     // 第 1 轮编辑建的空分支：回到原会话即无内容，顺手清掉，别留 0 字节会话。
                     // 删除与 openSession 谁先落都收敛到 origin（openSession 会写 currentSession）。
                     if (emptyBranch) {
@@ -819,7 +816,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                       // 走**既有的草稿搬家通道**（draftRemap）：Composer 那侧是草稿桶的**唯一写手**，
                       // 另起一条直写 localStorage 的路会被它的内存桶盖回去（等于没搬）。
                       setDraftRemap({ from: ctx.forkId, to: ctx.originId, seq: ++draftRemapSeq.current });
-                      void window.agent.deleteSession(ctx.forkId).then(() => { void refreshSessions(); }, (err: unknown) => {
+                      void window.agent.deleteSession(ctx.forkId, ctx.workspace ?? undefined).then(() => { void refreshSessions(); }, (err: unknown) => {
                         setLastError(`空分支清理失败：${err instanceof Error ? err.message : String(err)}`, ctx.originId);
                       });
                     }
@@ -841,14 +838,13 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
               disabled={composerLock !== null}
               {...(composerLock !== null ? { disabledReason: composerLock } : {})}
               mode={mode}
-              planRequired={planRequired}
-              onPlanRequiredChange={onPlanRequiredChange}
               running={runningActive}
               stopped={stopped}
               activeId={activeId}
               providerInfo={providerInfo}
               pickerValue={pickerValue}
               usage={usage}
+              events={events}
               phaseLabel={phaseLabel}
               phase={phase}
               elapsedSec={elapsedSec}
@@ -908,7 +904,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
               menuSignal={composerMenuSignal}
               onSuggestNext={onSuggestNext}
               injectedAttachment={injectedAttachment}
-              injectedAppend={injectedAppend}
+              injectedElement={injectedElement}
             />
           </div>
           {showEmpty && (
@@ -966,10 +962,6 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                 onOpenPane={openPane}
                 onRestore={handleRestoreSnapshot}
                 onClose={toggleInspector}
-                {...(activeWorkspace !== null ? { workspacePath: activeWorkspace } : {})}
-                {...(activeId !== null && inspectorModelLabel !== undefined && inspectorModelLabel !== "" ? { modelLabel: inspectorModelLabel } : {})}
-                {...(activeId !== null ? { modeLabel: MODE_LABEL[mode].label } : {})}
-                running={runningActive}
               />
               {paneTabs.length > 0 && (
                 <div className="pane-dock-zone">
@@ -977,6 +969,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                     <PaneDock
                       tabs={paneTabs}
                       {...(paneTarget !== null ? { paneTarget } : {})}
+                      {...(changesFocus !== null ? { changesFocus } : {})}
                       events={events}
                       sessionId={activeId}
                       workspace={activeWorkspace}
@@ -1096,7 +1089,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
             activeSessionId={activeId}
             onSessionAction={(action, id) => {
               setPaletteOpen(false);
-              const target = sessions.find((s) => s.id === id);
+              const target = sessions.find((s) => s.id === id && s.workspace === activeWorkspace);
               if (target === undefined) { toast.error("会话已不存在"); return; }
               if (action === "rename") startBarRename();
               else if (action === "archive") requestArchiveSession(target, target.archived !== true);

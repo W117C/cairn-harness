@@ -8,9 +8,9 @@ import {
 } from "./discover";
 import { defaultForeignSources, type ForeignSource } from "./foreign";
 import { TrustStore, pluginFingerprint, pluginFingerprintEx } from "./trust";
-import { HookEngine } from "./hooks";
+import { HookEngine, type HookModelCallFn } from "./hooks";
 import {
-  McpManager, capMcpDescription, mcpServerKey,
+  McpManager, capMcpDescription, mcpServerKey, scopedToolName,
   MCP_ACTIVE_SERVER_LIMIT, MCP_ACTIVE_TOOL_LIMIT, MCP_CATALOG_DESC_CHAR_LIMIT,
   type McpToolInfo, type McpServerSummary, type McpToolSummary,
 } from "./mcp";
@@ -64,7 +64,14 @@ export {
 export { parseFrontmatter, fmString } from "./frontmatter";
 export { discoverPlugins, activeHooks, pendingPlugins } from "./discover";
 export { TrustStore, pluginFingerprint } from "./trust";
-export { HookEngine, hookEnv, pluginOptionEnv, parseHookDecision, mergeDecision, parseHookIf, hookIfMatches, HOOK_OUTPUT_CAP, HOOK_CONTEXT_TOTAL_CHAR_LIMIT, HOOK_REASON_CHAR_LIMIT, HOOK_TIMEOUT_DEFAULT, HOOK_TIMEOUT_USER_PROMPT, type HookEngineOptions } from "./hooks";
+export { HookEngine, hookEnv, pluginOptionEnv, parseHookDecision, mergeDecision, parseHookIf, hookIfMatches,
+  hookStdinJson, hookPayloadJson, hookShapeRejection, hookUrlAllowed, expandHookTemplate, dedupKey,
+  HOOK_OUTPUT_CAP, HOOK_CONTEXT_TOTAL_CHAR_LIMIT, HOOK_REASON_CHAR_LIMIT, HOOK_TIMEOUT_MAX,
+  HOOK_TIMEOUT_DEFAULT, HOOK_TIMEOUT_USER_PROMPT, HOOK_TIMEOUT_SESSION_END,
+  type HookEngineOptions, type HookFetchFn, type HookFetchResult, type HookMcpCallFn,
+  type HookModelCallFn, type HookModelResult,
+  type HookExecFn, type HookExecOutcome, type HookPayload, type HookRunResult,
+} from "./hooks";
 export {
   McpManager, expandMcpConfig, scopedToolName, parseScopedToolName, mcpServerKey,
   MCP_ACTIVE_SERVER_LIMIT, MCP_ACTIVE_TOOL_LIMIT, MCP_CATALOG_DESC_CHAR_LIMIT,
@@ -260,8 +267,14 @@ export class PluginRuntime {
   private activeMcpServers = new Set<string>();
   /** 按工具激活的 scoped 名集（大 server 的逃生口）。整台激活的 server 不重复记在这里。 */
   private activeMcpTools = new Set<string>();
+  /** 崩溃前这个 server 哪些工具在激活集里：自动重连成功后按原样放回去。
+   *  不记这份，重连回来只是一堆"未激活"的工具——连接绿了，模型那边还是少工具。 */
+  private mcpActiveBeforeDown = new Map<string, string[]>();
   /** 本轮已注册进 LSP 运行时的插件服务器 id（带插件前缀）；shutdown 按这张表摘干净。 */
   private lspServerIds: string[] = [];
+  /** prompt 档钩子的模型面（晚绑定，见 `bindModelCall`）。`reload` 会换掉引擎实例，
+   *  所以这份要记在运行时上、换完再贴回去——绑过一次就永久生效这件事不该依赖实例身份。 */
+  private hookModelCall: HookModelCallFn | null = null;
   /** §9.5 userConfig 的读侧（一个受信插件一份）。三条激活面（hook / MCP / LSP）都从这里取值。 */
   private userConfigs: Map<string, PluginUserConfigRead> = new Map();
   /** §9.3 权限联动的持有面：本 run 内被激活过的 skill/command 申报的工具改动。
@@ -282,16 +295,41 @@ export class PluginRuntime {
       pluginDataRoot: opts.pluginDataRoot,
       ...(opts.mode ? { mode: opts.mode } : {}),
       ...(opts.sessionId ? { sessionId: opts.sessionId } : {}),
-      // exec form 的 ${user_config.*} 展开与 PLUGIN_OPTION_* 取值共用这一份解析结果。
+      // mcp_tool 档的钩子走这一个口子：与模型可见的工具调用共享连接态、include/exclude 裁剪、
+      // 超时与取消纪律。钩子不另开一条 MCP 通道（两条通道必漂，且第二条没有闸）。
+      mcpCall: (plugin, server, tool, args) => this.mcp.callTool(plugin, server, tool, args),
+      mcpToolGrade: (plugin, server, tool) =>
+        this.mcpTools.get(scopedToolName(plugin, server, tool))?.grade,
+      // §9.5 userConfig 的取值面：exec form 的 ${user_config.*} 展开与 PLUGIN_OPTION_* 共用这一份解析结果。
       userConfigValues: (plugin) => this.userConfigs.get(plugin)?.values ?? {},
       userConfigSensitive: (plugin) => this.userConfigs.get(plugin)?.sensitive ?? [],
     });
     this.mcp = new McpManager();
     // server 崩溃 ⇒ 立即摘掉它的工具（旧实现只标 failed，模型仍看到一组永远「未连接」的工具）。
     this.mcp.onServerDown = (plugin, server) => {
+      const key = mcpServerKey(plugin, server);
+      const wasActive = [...this.activeMcpTools].filter((scoped) => {
+        const info = this.mcpTools.get(scoped);
+        return info !== undefined && info.plugin === plugin && info.server === server;
+      });
+      if (wasActive.length > 0) this.mcpActiveBeforeDown.set(key, wasActive);
       this.clearActiveForServer(plugin, server);
       for (const [name, info] of this.mcpTools) {
         if (info.plugin === plugin && info.server === server) this.mcpTools.delete(name);
+      }
+    };
+    // 第 999 页：manager 自己重连成功后，工具必须回到模型看得见的那张表上。
+    this.mcp.onServerUp = (plugin, server, tools) => {
+      const key = mcpServerKey(plugin, server);
+      for (const t of tools) this.mcpTools.set(t.scopedName, { ...t, plugin, server });
+      const wasActive = this.mcpActiveBeforeDown.get(key) ?? [];
+      this.mcpActiveBeforeDown.delete(key);
+      if (wasActive.length === 0) return;
+      // 走正常激活入口（帽、校验都在里面）：超限就退回"连接已恢复但工具未激活"，
+      // 不偷偷绕过帽——那等于把重连变成一条走后门的扩容路。
+      const res = this.activateMcpTools(key, wasActive);
+      if (!res.ok) {
+        try { console.error("[mcp] " + key + " 重连后恢复激活集失败：" + (res.error ?? "")); } catch { /* 无 stderr */ }
       }
     };
   }
@@ -450,6 +488,8 @@ export class PluginRuntime {
       reloaded.manifest.plugins.find((current) => current.name === plugin.name)?.trust !== "trusted");
     this.manifest = reloaded.manifest;
     this.hooks = reloaded.hooks;
+    // 晚绑定的模型面跟着引擎实例走：reload 换实例，不换绑定关系。
+    if (this.hookModelCall !== null) this.hooks.bindModelCall(this.hookModelCall);
     this.userConfigs = reloaded.userConfigs;
     const cleanups: Promise<void>[] = [];
     for (const plugin of inactive) {
@@ -676,6 +716,15 @@ export class PluginRuntime {
     if (!hit) return { ok: false, error: "该 server 没有这个工具: " + name };
     if (!this.activeMcpTools.delete(hit.scopedName)) return { ok: false, error: "未激活: " + hit.scopedName };
     return { ok: true };
+  }
+
+  /** §9.6 prompt 档钩子的模型面：**全仓唯一的绑定点**。
+   *  会话拨哪一档要等 provider 装配出来（`agent-runner` 里 `modelSelection` 定死之后、loop 起之前），
+   *  而 `PluginRuntime.load` 在那之前 ⇒ 只能晚绑。第 1001 页把它写在 load 处，等于让旁路自己认
+   *  legacy GLM 那一档——家与档位都不跟配置面走。绑不上（家没配 key）就留空，钩子在闸上如实拒。 */
+  bindModelCall(call: HookModelCallFn): void {
+    this.hookModelCall = call;
+    this.hooks.bindModelCall(call);
   }
 
   /** §9.8 的第三个激活面：把受信插件的 `.lsp.json` 注册进 LSP 运行时。

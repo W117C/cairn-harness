@@ -22,7 +22,16 @@
   gap: 4px 16px;
   margin: 0 0 0 -6px;
   z-index: 1;
+  /* 2026-11-02（业主截图续）：**盒子自己**也得遵守裁决 4 的「隐藏态不吃指针」。
+     此前只给里面的 .row-actions 与 .meta 写了 pointer-events，容器一直 auto ⇒
+     这条 672×30 的隐形横带压在下一段最上面 6px 上：实测点在交付卡表头上（head.top+5）
+     被它吃掉（aria-expanded false→false，什么都没发生），点工具簇顶边同理。
+     默认 none、悬停/聚焦这一行才 auto——与内层同一条口径；悬停态下指针从行体移到条上
+     仍然是同一个 hover 链（绝对定位的子元素属于祖先的 :hover），所以条本身照样点得到。 */
+  pointer-events: none;
 }
+.row.assistant:hover > .assistant-footer,
+.row.assistant:focus-within > .assistant-footer { pointer-events: auto; }
 .row.assistant .assistant-footer > .meta { margin-left: auto; opacity: 0; }
 .row.assistant:hover .assistant-footer > .meta,
 .row.assistant:focus-within .assistant-footer > .meta { opacity: 1; }
@@ -71,23 +80,30 @@
 .toolcluster .tool-group-main > .glyph.failed,
 .toolcluster .tool-head > .glyph.failed { background: hsl(var(--color-risk) / 10%); color: hsl(var(--color-risk)); }
 .toolcluster .tool-group-main > .glyph.pending,
-.toolcluster .tool-head > .glyph.pending { background: hsl(var(--accent-brand) / 10%); color: hsl(var(--accent-brand-ink)); }
+.toolcluster .tool-head > .glyph.pending {
+  /* 2026-11-03：pending 底从品牌陶土橙改成中性墨色 5%——原先 20px 的橙底圆角方块
+     在浅色主题里像一枚独立 app 图标，把「执行中」这三个字压成配角。 */
+  background: hsl(var(--text-000) / 5%);
+  color: hsl(var(--accent-brand-ink));
+}
+/* 执行中的字形与思考行同一枚 CairnLoader（7 格逐格点亮），不再用 lucide Loader2 的缺口圆弧：
+   同一屏里两套加载语言（C 弧 vs 逐格灯）会让人以为是两种状态。 */
+.toolcluster .glyph.pending .cairn-loader { width: 12px; height: 12px; }
 .toolcluster .tool:not(.open) .tname { display: none; }
 .toolcluster .tool-head .tsum { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .toolcluster .tool-head .tdur { margin-left: 2px; font-variant-numeric: tabular-nums; color: hsl(var(--text-400)); }
 .toolcluster .tool-group-failure {
-  /* 失败摘要是「一条需要被看见的过程记录」，不是状态栏：给一块极淡的危险色底，
-     让它在 16px 正文与 13px 过程行之间自成一层；仍不用彩色左条（craft floor）。
-     2026-10-31：从通栏色块收成与正文同宽的卡片，左缘对齐工具名——不再横贯整个阅读面。 */
+  /* 失败摘要（2026-11-02 再收一档）：此前一块 6% 危险色底 + 8px 内距的小卡，
+     单行摘要读起来像一张孤立卡片。改为无底、无框的纯文字副行：
+     失败标记（组摘要里的红三角）仍在，这行只是它的一句话。截断纪律不变：
+     clamp 在内层纯文字盒上（见 styles.css 的 .tool-group-failure-detail）。 */
   flex: 0 1 auto;
   align-self: flex-start;
   width: fit-content;
-  margin: 2px 0 2px 30px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: hsl(var(--color-risk) / 6%);
+  margin: 2px 0 2px 31px;
   line-height: 1.6;
-  text-wrap: pretty;
+  /* 不加 text-wrap: pretty：它与 styles.css 上的 -webkit-line-clamp: 2 是坏组合——
+     省略号照打，但 Chromium 的孤行调整会把第三行漏出来渲染，卡底拦腰切字（2026-11-01 真机目验）。 */
 }
 .toolcluster .tool-group-failure-count { margin-left: 6px; font-weight: var(--fw-medium); }
 .toolcluster .tool-group-duration { margin-left: auto; font-size: var(--fs-caption-xs); color: hsl(var(--text-400)); font-variant-numeric: tabular-nums; }
@@ -205,8 +221,8 @@
   background: transparent; color: hsl(var(--accent-brand-ink));
 }
 .row.think .think-main { flex: none; }
-.row.think .think-label { flex: none; color: hsl(var(--text-300)); white-space: nowrap; }
-.row.think[data-running="true"] .think-label { color: hsl(var(--text-200)); }
+.row.think .think-label { flex: none; color: hsl(var(--text-000) / 72%); white-space: nowrap; }
+.row.think[data-running="true"] .think-label { color: hsl(var(--text-000) / 88%); }
 /* 收起态：标题之后接一段单行摘要（此前整段隐藏，只剩「思考记录」三个字，像没加载完）。 */
 .row.think .think-preview {
   display: block;
@@ -225,8 +241,10 @@
   margin: 2px 8px 2px 13px;
   padding: 0 0 0 10px;
   /* 2026-11-01 真机：外层的这条 border-left 与 .think-body-inner 的竖线并排成两根线。
-     只保留内层那一根（内容与线的关系由 inner 的 padding 决定）。 */
-  color: hsl(var(--text-300));
+     只保留内层那一根（内容与线的关系由 inner 的 padding 决定）。
+     2026-11-03 业主「颜色有问题」：正文由 secondary 提到 primary@86%，与 styles.css 的
+     .think-body-inner 同一口径（两处都有这条 color，改一处不改另一处就会漂）。 */
+  color: hsl(var(--text-000) / 86%);
   cursor: text;
 }
 .row.think .think-body[hidden] { display: none; }
@@ -239,7 +257,7 @@
 .row.think:hover .thinking-actions,
 .row.think:focus-within .thinking-actions { opacity: 1; }
 .row.think .think-text { white-space: normal; }
-.row.think .think-text .md-body { color: hsl(var(--text-300)); font-size: var(--fs-caption-md); line-height: 1.75; }
+.row.think .think-text .md-body { color: hsl(var(--text-000) / 86%); font-size: var(--fs-caption-md); line-height: 1.75; }
 .row.think .think-text .md-body > :first-child { margin-top: 0; }
 .row.think .think-text .md-body > :last-child { margin-bottom: 0; }
 
@@ -271,3 +289,34 @@
 .row.think[data-running] + .toolcluster,
 .toolcluster + .row.think[data-running],
 .toolcluster + .toolcluster { margin-top: 4px; }
+
+/* ── 过程带折叠行（2026-11-02 业主截图）────────────────────────────
+   一轮里排着 5 条思考记录 + 4 簇工具调用，最后才是那句答复——答复才是用户要读的，
+   前面那几行把它埋了。每一行各自是折着的，但**行数还在**：折了不等于少了。
+   ⇒ 折叠的单位改成「一轮的过程带」：最终答复落地后，答复之前的一切收成一行，
+     点开恢复原样（里面还是原来那些行）。
+
+   形态沿用过程带既有的语法（左轨 + 图标 + 标题 + 细项），不新造一套：
+   思考行是「▸ 脑标 思考记录」、工具簇是「▸ 状态字形 N 次工具调用」，
+   这一行是它们两个的上一层。 */
+.process-fold {
+  display: flex; flex-direction: column; gap: 2px;
+  margin: var(--turn-gap) var(--cds-assistant-message-text-stop) 0 var(--rail-gutter);
+  min-width: 0;
+}
+.process-fold-toggle {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  /* 左内距归零：带里的图标落在**轨**上（同工具簇的口径），不许缩进去一格。 */
+  padding: 5px 8px 5px 0; border-radius: var(--radius-sm);
+  color: hsl(var(--text-300)); font-size: var(--fs-caption-md); text-align: left;
+}
+.process-fold-toggle:hover { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover)); }
+.process-fold-toggle .chev { flex: none; color: hsl(var(--text-400)); transition: transform var(--t-fast); }
+.process-fold-toggle[aria-expanded="true"] .chev { transform: rotate(90deg); }
+.process-fold-icon { flex: none; color: hsl(var(--text-400)); }
+.process-fold-label { flex: none; color: hsl(var(--text-300)); font-weight: var(--fw-medium); }
+.process-fold-detail { min-width: 0; overflow: hidden; color: hsl(var(--text-400)); text-overflow: ellipsis; white-space: nowrap; }
+.process-fold-failure { flex: none; color: hsl(var(--color-risk)); }
+.process-fold-body { display: flex; flex-direction: column; gap: 4px; }
+.process-fold-body[hidden] { display: none; }
+.process-fold-toggle + .process-fold-body { margin: 4px 0 6px 14px; }

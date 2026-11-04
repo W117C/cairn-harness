@@ -57,20 +57,19 @@ describe("批 5：权限菜单（图标 + 两行 + 危险标签 + 自动二次�
       <PermissionMenu mode={mode} onModeChange={() => undefined} onClose={() => undefined} />,
     );
 
-  it("五档每项：图标（perm-ico×5）+ 标题 + 副标题两行；无旧 risk-dot", () => {
+  it("四档每项：图标（perm-ico×4）+ 标题 + 副标题两行；无旧 risk-dot", () => {
     const h = html();
-    for (const s of ["只读", "默认", "引导", "自动", "完全允许"]) expect(h).toContain(s);
-    // auto 那行的副标题口径 2026-10-16 改过：旧文案「全部放行（出网仍审批）」是名不副实的
-    // （MODE_POLICY 里 auto 是 writeAsk:false 而 riskAskAt:"high"，高风险动作照样送审），
-    // 业主据此判「切换没用」。现在判的是"它真的做什么"。
-    for (const d of ["写工具一律拒", "写/跑逐次审批出卡", "低风险自动、高风险出卡", "低风险免批；高风险仍出卡", "不再出任何审批卡"]) {
+    // 2026-11-03 业主：引导与自动文案重叠 ⇒ 合并成「智能审批」，选择面只留四档。
+    for (const s of ["只读", "需要审批", "智能审批", "完全允许"]) expect(h).toContain(s);
+    for (const d of ["写工具一律拒", "写/跑逐次审批出卡", "按风险自动放行：低风险直接做，高风险再出卡", "什么都允许：出网、方案门与禁止规则都放行"]) {
       expect(h).toContain(d);
     }
     // 反向钉：那句谎话不许回来
     expect(h).not.toContain("全部放行");
-    expect((h.match(/class="perm-ico/g) ?? []).length).toBe(5);
-    expect((h.match(/class="perm-text"/g) ?? []).length).toBe(5);
-    for (const m of ["read-only", "default", "guided", "auto", "full-access"]) expect(h).toContain(`data-mode="${m}"`);
+    expect((h.match(/class="perm-ico/g) ?? []).length).toBe(4);
+    expect((h.match(/class="perm-text"/g) ?? []).length).toBe(4);
+    for (const m of ["read-only", "default", "auto", "full-access"]) expect(h).toContain(`data-mode="${m}"`);
+    expect(h).not.toContain('data-mode="guided"');
     expect(h).not.toContain("risk-dot");
   });
 
@@ -81,13 +80,13 @@ describe("批 5：权限菜单（图标 + 两行 + 危险标签 + 自动二次�
     expect(h).toContain('class="tag-warn"');
   });
 
-  it("选中态 = 右侧对勾恰一枚（当前档所在行）", () => {
+  it("选中态 = 右侧对勾恰一枚（当前档所在行；旧 guided 落到智能审批行）", () => {
     expect((html("guided").match(/class="check"/g) ?? []).length).toBe(1);
     const h = html("guided");
-    const guidedAt = h.indexOf('data-mode="guided"');
     const autoAt = h.indexOf('data-mode="auto"');
-    expect(h.indexOf('class="check"')).toBeGreaterThan(guidedAt);
-    expect(h.indexOf('class="check"')).toBeLessThan(autoAt);
+    const fullAt = h.indexOf('data-mode="full-access"');
+    expect(h.indexOf('class="check"')).toBeGreaterThan(autoAt);
+    expect(h.indexOf('class="check"')).toBeLessThan(fullAt);
   });
 
   it("二次确认：点危险档先置 confirming（未确认不动权限），确认后才调 onModeChange + 关菜单", () => {
@@ -105,8 +104,8 @@ describe("批 5：权限菜单（图标 + 两行 + 危险标签 + 自动二次�
 
   it("确认卡文案：标题 + 危险说明 +〔取消 / 确认切换（danger）〕", () => {
     const h = renderToStaticMarkup(<PermissionConfirm mode="auto" onCancel={() => undefined} onConfirm={() => undefined} />);
-    expect(h).toContain("切到「自动」权限档？");
-    expect(h).toContain("不再逐次出卡");
+    expect(h).toContain("切到「智能审批」权限档？");
+    expect(h).toContain("不再逐笔出卡");
     expect(h).toContain("出网仍要审批");
     expect(h).toContain("取消");
     expect(h).toContain("确认切换");

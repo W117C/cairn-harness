@@ -46,8 +46,6 @@ function sidebarHtml(sessions: Parameters<typeof Sidebar>[0]["sessions"]): strin
       waitingIds={new Set<string>()}
       outcomes={new Map<string, "ok" | "failed">()}
       providerOk={null}
-      theme="system"
-      onThemeChange={() => undefined}
       onOpen={() => undefined}
       onNewTask={() => undefined}
       onOpenPalette={() => undefined}
@@ -59,7 +57,6 @@ function sidebarHtml(sessions: Parameters<typeof Sidebar>[0]["sessions"]): strin
       onRelocateProject={async () => undefined}
       onRemoveProject={async () => undefined}
       onRevealProject={() => undefined}
-      onOpenSettings={() => undefined}
       onPickDirectory={() => Promise.resolve(null)}
     />,
   );

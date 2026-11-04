@@ -10,6 +10,9 @@
 //   （App 以 callback ref 把元素放进 state）：元素一出现 effect 即重跑，监听即接。
 // 2026-10-16（P3-1 滚动记忆真机竞态）：新增 restoreTo(记忆位)——会话切回的实例落点：instant 落位
 //   后按真实位置重判 pinned/stuck（不在底部即解除粘底），跟底观察器（RO）不再把回场视口拽回底部。
+// 2026-11-01（真机缺陷 2：回底钮在底部也亮）：stuck 的口径从「用户碰过视口」改成「视口下面还有没有内容」——
+//   onUserInput 不再无条件置 false（碰一下 ≠ 离开底部；内容不足一屏时根本滚不动），
+//   跟底观察器在不跟底的那条路上也重判（下面一多内容，浮钮就出现）。图钉（pinned）仍按位置判。
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const NEAR_BOTTOM_PX = 40;
@@ -23,7 +26,9 @@ export function isNearBottom(m: { scrollTop: number; scrollHeight: number; clien
 }
 
 export interface StickyScroll {
-  /** true = 视口贴底（此时不显示浮钮）。 */
+  /** true = 视口贴底（此时不显示浮钮）。
+   *  **按真实位置判**（2026-11-01 真机缺陷 2）：视口下面还有内容才不贴底；
+   *  旧口径记的是「用户碰过视口」（任何一次 wheel/touch 都置 false）⇒ 已经在最底下也亮浮钮。 */
   stuck: boolean;
   /** true = 视口在顶部（滚离顶部后顶栏渐隐显形）。 */
   atTop: boolean;
@@ -84,11 +89,14 @@ export function useStickyScroll(el: HTMLDivElement | null): StickyScroll {
       setStuck(pinned.current);
       setAtTop(el.scrollTop <= AT_TOP_PX);
     };
-    // 用户刚主动滚/按键 ⇒ 立即释放图钉并记时；跟底观察器在冷却窗内不抢视口。
+    // 用户刚主动滚/按键 ⇒ 记时；**视口按真实位置重判**（2026-11-01 真机缺陷 2）：
+    // 旧口径无条件把 stuck 置成 false ⇒ 任何一次触碰都点亮回底钮，哪怕视口根本没离开底部
+    // （业主原话：「我已经在最底下的对话了，还会显示这个按键」）。
+    // 图钉同样按位置判：仍在底部就继续跟底；离开底部才解除粘底（冷却窗内不抢视口）。
     const onUserInput = (): void => {
       lastUserInputAt.current = performance.now();
-      pinned.current = false;
-      setStuck(false);
+      pinned.current = isNearBottom(el);
+      setStuck(pinned.current);
     };
     // 只在滚动容器本体上的按下算「用户要滚」（点正文里的按钮/选字不该弹回底钮）。
     const onPress = (e: MouseEvent): void => {
@@ -117,10 +125,15 @@ export function useStickyScroll(el: HTMLDivElement | null): StickyScroll {
     const content = el.firstElementChild;
     if (!content) return;
     const follow = () => {
+      // 内容长高 ⇒ 下面可能多出一截 ⇒ 先按**真实位置**重判浮钮（2026-11-01）：
+      // ① 不跟底（用户已离开底部）② 冷却窗内不跟（刚动过视口）——这两种情况下面确有内容，
+      // 回底钮就该亮；跟底的那条路随后由滚动落点重判（下面没有 ⇒ 不亮）。
+      setStuck(isNearBottom(el));
       if (!pinned.current) return;
       // 用户刚动过视口：150ms 内不跟（防止流式追加把刚滚上去的视口抢回来）。
       if (performance.now() - lastUserInputAt.current <= USER_SCROLL_COOLDOWN_MS) return;
       el.scrollTo({ top: el.scrollHeight, behavior: "instant" });
+      setStuck(true);
     };
     const ro = new ResizeObserver(follow);
     ro.observe(content);

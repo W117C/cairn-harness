@@ -146,9 +146,9 @@ export function publicAllowed(rows: readonly UrlReading[]): WfVerdict {
 
 export interface TierReading { mode: string; verdict: string; layer: string; risk: string }
 
-/** 判据三：出网**四档逐档点名都问**。只判"某一档问了"会被"只有一档在问"伪造成绿；
- *  而 `L4-network` 那条出口长在 `if (!policy.writeAsk)` 里面，read-only / default 两档
- *  `writeAsk: true` ⇒ **那两档永远走不到它**。所以这里同时钉 layer=风险层与 risk=high。 */
+/** 判据三：前四档（read-only / default / guided / auto）出网**逐档点名都问**（L4-risk + high），
+ *  完全允许档（full-access，2026-11-03 业主裁决）按档位短路面放行（approve + L3-mode + high）。
+ *  只判"某一档问了"会被"只有一档在问"伪造成绿；同时钉 layer 与 risk，防止风险级被降级后靠巧合混过。 */
 export function tiersAllAsk(rows: readonly TierReading[]): WfVerdict {
   const byMode = new Map(rows.map((r) => [r.mode, r]));
   const missing: string[] = [];
@@ -156,14 +156,17 @@ export function tiersAllAsk(rows: readonly TierReading[]): WfVerdict {
   for (const m of PERMISSION_MODES) {
     const r = byMode.get(m);
     if (r === undefined) { missing.push(m + "(没读到)"); continue; }
+    if (m === "full-access") {
+      if (r.verdict !== "approve") missing.push(m + "(" + r.verdict + "≠approve)");
+      if (r.layer !== "L3-mode" || r.risk !== "high") wrongLayer.push(m + "(" + r.layer + "/" + r.risk + ")");
+      continue;
+    }
     if (r.verdict !== "ask") missing.push(m + "(" + r.verdict + ")");
-    // full-access 的出网仍走一次性批准，但出口层是专门的 L4-network（§11.4 红线的落点）；
-    // 其余四档走 L4-risk。两层都必须是 ask + high，不许任何一档被降成 L4-pass。
-    if ((r.layer !== "L4-risk" && r.layer !== "L4-network") || r.risk !== "high") wrongLayer.push(m + "(" + r.layer + "/" + r.risk + ")");
+    if (r.layer !== "L4-risk" || r.risk !== "high") wrongLayer.push(m + "(" + r.layer + "/" + r.risk + ")");
   }
   return {
     ok: missing.length === 0 && wrongLayer.length === 0,
-    detail: `五档 read-only/default/guided/auto/full-access：没问的 ${String(missing.length)}` +
+    detail: `五档 read-only/default/guided/auto（问）+ full-access（按档放行）：verdict 失配 ${String(missing.length)}` +
       (missing.length ? "[" + missing.join(",") + "]" : "") +
       `、出口/风险级不对的 ${String(wrongLayer.length)}${wrongLayer.length ? "[" + wrongLayer.join(",") + "]" : ""}`,
   };
@@ -296,10 +299,8 @@ async function runRules(): Promise<WfRule[]> {
       v: publicAllowed(publics),
     },
     {
-      id: "WF3-出网五档逐档点名都问，且出口是风险层",
-      why: "出网永不免批是本仓既有立场（run_shell 跑 curl 在 auto 档也会被问）。" +
-        "而 L4-network 那条出口长在 if (!policy.writeAsk) 里，read-only / default 两档 writeAsk: true，" +
-        "**那两档永远走不到它** ⇒ 只钉 verdict 不够，得同时钉 layer 与 risk。",
+      id: "WF3-前四档逐档点名都问（L4-risk/high），完全允许档按档放行（L3-mode/high）",
+      why: "非完全允许档出网永不免批（run_shell 跑 curl 在 auto 档也会被问）；完全允许档（2026-11-03 业主裁决）按档位短路面放行，但静态风险级仍须标为 high，同时钉 verdict、layer 与 risk 防止漏问或误拦。",
       v: tiersAllAsk(tiers),
     },
     {
@@ -345,9 +346,34 @@ export function runWfSelfTest(): { caught: string[]; missed: string[] } {
     { id: "WF1 语料被清空（0 条也判绿 ⇒ 这条判据没有分辨力）", saysRed: () => !blockersRejected([]).ok },
     { id: "WF2 一张一律拒的判据", saysRed: () => !publicAllowed([good]).ok },
     { id: "WF2 正例语料被清空", saysRed: () => !publicAllowed([]).ok },
-    { id: "WF3 漏一档（只读档没问）", saysRed: () => !tiersAllAsk([{ mode: "read-only", verdict: "allow", layer: "L4-pass", risk: "none" }]).ok },
-    { id: "WF3 只钉 verdict 时的形态：出口是 L4-pass（说明钉 layer 是必要的）", saysRed: () => !tiersAllAsk([{ mode: "auto", verdict: "ask", layer: "L4-pass", risk: "high" }]).ok },
-    { id: "WF3 只钉 layer 时的形态：风险被降到 medium（只读/默认两档的 riskAskAt 就是 high，这样会漏问）", saysRed: () => !tiersAllAsk([{ mode: "default", verdict: "ask", layer: "L4-risk", risk: "medium" }]).ok },
+    { id: "WF3 漏一档（只读档没问）", saysRed: () => !tiersAllAsk([
+      { mode: "read-only", verdict: "allow", layer: "L4-pass", risk: "none" },
+      { mode: "default", verdict: "ask", layer: "L4-risk", risk: "high" },
+      { mode: "guided", verdict: "ask", layer: "L4-risk", risk: "high" },
+      { mode: "auto", verdict: "ask", layer: "L4-risk", risk: "high" },
+      { mode: "full-access", verdict: "approve", layer: "L3-mode", risk: "high" },
+    ]).ok },
+    { id: "WF3 只钉 verdict 时的形态：出口是 L4-pass（说明钉 layer 是必要的）", saysRed: () => !tiersAllAsk([
+      { mode: "read-only", verdict: "ask", layer: "L4-risk", risk: "high" },
+      { mode: "default", verdict: "ask", layer: "L4-risk", risk: "high" },
+      { mode: "guided", verdict: "ask", layer: "L4-risk", risk: "high" },
+      { mode: "auto", verdict: "ask", layer: "L4-pass", risk: "high" },
+      { mode: "full-access", verdict: "approve", layer: "L3-mode", risk: "high" },
+    ]).ok },
+    { id: "WF3 只钉 layer 时的形态：风险被降到 medium（只读/默认两档的 riskAskAt 就是 high，这样会漏问）", saysRed: () => !tiersAllAsk([
+      { mode: "read-only", verdict: "ask", layer: "L4-risk", risk: "high" },
+      { mode: "default", verdict: "ask", layer: "L4-risk", risk: "medium" },
+      { mode: "guided", verdict: "ask", layer: "L4-risk", risk: "high" },
+      { mode: "auto", verdict: "ask", layer: "L4-risk", risk: "high" },
+      { mode: "full-access", verdict: "approve", layer: "L3-mode", risk: "high" },
+    ]).ok },
+    { id: "WF3 完全允许档丢了静态风险标记或退回 ask", saysRed: () => !tiersAllAsk([
+      { mode: "read-only", verdict: "ask", layer: "L4-risk", risk: "high" },
+      { mode: "default", verdict: "ask", layer: "L4-risk", risk: "high" },
+      { mode: "guided", verdict: "ask", layer: "L4-risk", risk: "high" },
+      { mode: "auto", verdict: "ask", layer: "L4-risk", risk: "high" },
+      { mode: "full-access", verdict: "approve", layer: "L3-mode", risk: "none" },
+    ]).ok },
     { id: "WF4 302 跳私网放行了", saysRed: () => !redirectRevalidated({ rejected: false, output: "", fetches: 2 }).ok },
     { id: "WF4 判据拒了却仍然发第二跳", saysRed: () => !redirectRevalidated({ rejected: true, output: "127.0.0.1", fetches: 2 }).ok },
     { id: "WF4 报错里没说是哪条", saysRed: () => !redirectRevalidated({ rejected: true, output: "web_fetch 失败: 被拒", fetches: 1 }).ok },

@@ -6,15 +6,14 @@
 //   空态诚实：无数据即说明（不摆空壳）；价格不可知显式写"价格不可知"（不当 0）。
 // 数据面全部来自 panes.ts 纯投影 + turnDelivery（既有）+ changeDiff（v4 通道，懒加载）。
 import { isCompositionEnter } from "../ime";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import "@xterm/xterm/css/xterm.css";
 import "./pane-tabs.css";
-import { AlertTriangle, Check, ChevronRight, Crosshair, ExternalLink, Loader2, MoreHorizontal, Plus, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, Check, ChevronRight, Crosshair, ExternalLink, Loader2, Maximize2, Minimize2, MoreHorizontal, Plus, RotateCw, X } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import type { AgentEvent } from "../../../../../src/events";
 import { turnDelivery } from "../projections";
-import { changeLabel, planActionLabel } from "../derived/change-labels";
-import { diffCount, useLazyChangeDiff } from "../change-diff-state";
+import { planActionLabel } from "../derived/change-labels";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { clipDiff, parseUnifiedPatch } from "../diff-patch";
 import { ModalSurface } from "./ModalSurface";
@@ -23,12 +22,16 @@ import { toast } from "../toast";
 import { DiffView } from "./DiffView";
 import { FilePane } from "./FilePane";
 import { PluginSurface } from "./PluginSurface";
+import { BrowserHome } from "./BrowserHome";
+import { useMaximizedLeft } from "./use-maximized-left";
+import { pickedElementLabel } from "../picked-element";
+import { WORKBENCH_PANES } from "../pane-registry";
 import { SessionPreviewPane,type PreviewSendOutcome } from "./SessionPreviewPane";
 import { SidechatPane } from "./SidechatPane";
 import { OrchestrationPane } from "./OrchestrationPane";
 import { PathMenu } from "./PathMenu";
-import { changedFileCount, composeReviewMessage, PANE_META, PANE_OPENABLE, paneTabTargetForKey, projectPlans, projectWorkers, reorderTarget, sitePermissionFor, workerCardAction, type PaneKind, type WorkerPaneItem } from "./panes";
-
+import { ChangesPane, type ChangesFocus } from "./ChangesPane";
+import { changedFileCount, PANE_META, PANE_OPENABLE, paneTabTargetForKey, projectPlans, projectWorkers, reorderTarget, sitePermissionFor, workerCardAction, type PaneKind, type WorkerPaneItem } from "./panes";
 // PaneKind / PANE_META 的唯一事实源在 panes.ts（独立窗口路由同用）；此处 re-export 保接口。
 export { PANE_META, PANE_OPENABLE, type PaneKind } from "./panes";
 
@@ -63,6 +66,10 @@ function BrowserPane(props: {
   pickSignal?: number;
   /** 选中结果回调（文进输入框；App 侧拼装）。 */
   onPickResult?: (r: { selector: string; snippet: string; url: string }) => void;
+  onOpenPane?: (kind: PaneKind) => void;
+  /** 放大态：窗格从右栏铺到整个工作区（盖住对话），由 PaneDock 持有状态。 */
+  maximized?: boolean;
+  onToggleMaximize?: () => void;
 }): React.JSX.Element {
   const baseRef = useRef(`bp-${Math.random().toString(36).slice(2, 10)}`);
   const base = baseRef.current;
@@ -79,6 +86,9 @@ function BrowserPane(props: {
   const [allowedHosts, setAllowedHosts] = useState<readonly string[]>([]);
   // 清除浏览数据前确认（2026-10-18）：菜单项带「…」却当场执行，且不可撤销——先问一句。
   const [confirmClear, setConfirmClear] = useState(false);
+  // 原生 WebContentsView 永远盖在 DOM 之上（见 boundsSync 注释）⇒ 浏览器菜单展开期间必须
+  // 把视图收成零矩形，否则菜单只剩工具栏下方那一小条（2026-11-03 业主截图）。
+  const [menuOpen, setMenuOpen] = useState(false);
   const [keepCookies, setKeepCookies] = useState<boolean>(() => {
     try { return window.localStorage.getItem(BROWSER_KEEP_COOKIES_KEY) !== "0"; } catch { return true; }
   });
@@ -126,7 +136,16 @@ function BrowserPane(props: {
 
   // 视图创建/导航统一入口：创建后立即同步一次矩形（新建的原生视图默认不在容器位）。
   const openIn = (viewId: string, url: string): void => {
-    void window.agent.browserOpen(viewId, url).then(() => { requestAnimationFrame(() => { boundsSync(); }); }, () => undefined);
+    setNotice(null);
+    void window.agent.browserOpen(viewId, url).then((result) => {
+      if (!result.ok) {
+        if (activeViewRef.current === viewId) setNotice(`打开失败：${result.error ?? "无法加载网页，请检查地址后重试"}`);
+        return;
+      }
+      requestAnimationFrame(() => { boundsSync(); });
+    }, (err: unknown) => {
+      if (activeViewRef.current === viewId) setNotice(`打开失败：${err instanceof Error ? err.message : String(err)}`);
+    });
   };
 
   // 开窗即就绪（2026-10-18）：⌘⇧B 打开浏览器窗格后，光标应已经在地址栏——否则用户还得先点一下。
@@ -166,11 +185,20 @@ function BrowserPane(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.active]);
 
+  // 菜单展开/收起：展开时收起原生视图给 DOM 菜单让位；收起时按容器矩形放回。
+  // hideAllViews/boundsSync 都是 latest-ref 读取，effect 只跟 menuOpen 走。
+  useEffect(() => {
+    if (menuOpen) hideAllViews();
+    else boundsSync();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menuOpen]);
+
   // 选中结果处理（两条来路共用：browserPickElement 直返、页内 ⌘⇧S 经 browserState.pick 回程）。
   const handlePickResult = (r: BpPickResult): void => {
     setPicking(false);
     if (r.ok && r.selector !== undefined) {
-      setNotice(`已选中：${r.selector}`);
+      // 2026-11-03：状态行也只报短标签（完整选择器/HTML 在输入区的 chip 里，发送时自动带上）。
+      setNotice(`已选中页面元素：${pickedElementLabel(r.selector, r.snippet ?? "")}`);
       props.onPickResult?.({ selector: r.selector, snippet: r.snippet ?? "", url: r.url ?? "" });
     } else {
       setNotice(r.error ?? "选择元素失败");
@@ -212,7 +240,7 @@ function BrowserPane(props: {
 
   const doPick = (): void => {
     const vid = activeViewRef.current;
-    if (vid === null) { setNotice("先打开一个网页，再选择元素"); return; }
+    if (vid === null || tabStatesRef.current[activeKeyRef.current] === undefined) { setNotice("先打开一个网页，再选择元素"); return; }
     if (picking) return;
     setPicking(true);
     setNotice("在页面上点选元素（Esc 取消）…");
@@ -343,9 +371,9 @@ function BrowserPane(props: {
         </button>
       </div>
       <div className="bp-toolbar">
-        <button className="iconbtn sm" aria-label="后退" disabled={actState?.canGoBack !== true} onClick={() => nav("back")}>←</button>
-        <button className="iconbtn sm" aria-label="前进" disabled={actState?.canGoForward !== true} onClick={() => nav("forward")}>→</button>
-        <button className="iconbtn sm" aria-label="刷新" onClick={() => nav("reload")}>⟳</button>
+        <button className="iconbtn sm" aria-label="后退" disabled={actState?.canGoBack !== true} onClick={() => nav("back")}><ArrowLeft size={14} /></button>
+        <button className="iconbtn sm" aria-label="前进" disabled={actState?.canGoForward !== true} onClick={() => nav("forward")}><ArrowRight size={14} /></button>
+        <button className="iconbtn sm" aria-label="刷新" disabled={actState === null} onClick={() => nav("reload")}><RotateCw size={14} /></button>
         <input
           ref={addrRef}
           className="bp-url"
@@ -361,11 +389,23 @@ function BrowserPane(props: {
           data-on={picking}
           aria-label="选择页面元素"
           title="选择页面元素（⌘⇧S）"
+          disabled={actState === null}
           onClick={doPick}
         >
           <Crosshair size={13} />
         </button>
-        <DropdownMenu.Root>
+        {props.onToggleMaximize !== undefined && (
+          <button
+            className="iconbtn sm"
+            data-on={props.maximized === true}
+            aria-label={props.maximized === true ? "还原浏览器窗格" : "放大浏览器窗格"}
+            title={props.maximized === true ? "还原（Esc）" : "放大：铺满工作区并盖住对话"}
+            onClick={props.onToggleMaximize}
+          >
+            {props.maximized === true ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+          </button>
+        )}
+        <DropdownMenu.Root onOpenChange={setMenuOpen}>
           <DropdownMenu.Trigger asChild>
             <button className="iconbtn sm" aria-label="浏览器菜单" title="浏览器菜单"><MoreHorizontal size={13} /></button>
           </DropdownMenu.Trigger>
@@ -449,7 +489,9 @@ function BrowserPane(props: {
       {actState !== null && (actState.title !== "" || actState.loading) && (
         <div className="bp-status">{actState.loading ? "加载中…" : actState.title}</div>
       )}
-      <div className="bp-view" ref={containerRef} aria-label="网页视图（原生视图叠放区）" />
+      <div className="bp-view" ref={containerRef} aria-label="网页视图（原生视图叠放区）">
+        {actState === null && <BrowserHome onFocusAddress={() => addrRef.current?.focus()} {...(props.onOpenPane !== undefined ? { onOpenPane: props.onOpenPane } : {})} />}
+      </div>
     </div>
   );
 }
@@ -578,161 +620,6 @@ function TerminalPane(): React.JSX.Element {
         </div>
       )}
       <div className="term-host" ref={hostRef} aria-label="终端会话" />
-    </div>
-  );
-}
-
-/** 变更窗格（diff 审阅面）：按轮列改动清单与验证凭据；点文件行懒加载逐 hunk diff（v4 通道）；
- *  行级评注（蓝本 §3.6）：多处评论汇总为一条消息，⌘Enter 一次性提交（复用 send → 新一轮）。 */
-function ChangesPane(props: {
-  events: readonly AgentEvent[];
-  onReview?: (text: string) => void;
-  onPathMenu?: (rel: string, kind: "file" | "directory", x: number, y: number) => void;
-}): React.JSX.Element {
-  const turns = turnDelivery(props.events).filter((t) => t.files.length > 0);
-  // 展开位（一次一个文件）；diff 懒加载与请求守卫收口在 change-diff-state.ts
-  //（与 Inspector 同一实现；点开才要数据，不预取整会话的全部差异）。
-  const { openKey, diff, toggle } = useLazyChangeDiff();
-  // 每轮一张卡，但默认只展开最新一轮（2026-10-18 与交付卡同一批：23 轮全展开会把检查器塞满）。
-  const [openRound, setOpenRound] = useState<number | null>(() => (turns.length > 0 ? turns[turns.length - 1]!.round : null));
-  // 行级评注（行键 `<path>|<line>` → 文本）；提交后清空。
-  const [comments, setComments] = useState<ReadonlyMap<string, string>>(new Map());
-  const submitReview = (): void => {
-    if (comments.size === 0 || props.onReview === undefined) return;
-    props.onReview(composeReviewMessage(comments));
-    setComments(new Map());
-  };
-  if (turns.length === 0) {
-    return <div className="pane-empty">本会话还没有文件改动。<br />agent 写盘后会在这里按轮列出。</div>;
-  }
-  const verifyWord = (status: string): string =>
-    status === "verified" ? "验证通过"
-    : status === "failed" ? "验证失败"
-    : status === "stale" ? "验证已过期"
-    : status === "absent" ? "未验证"
-    : "无需验证";
-  const verifyCls = (status: string): string =>
-    status === "verified" ? "ok" : status === "failed" ? "bad" : status === "absent" ? "warn" : "dim";
-  // 分栏审阅器的选中项：openKey 就是选中态（与懒加载守卫同源 ⇒ 只在选中后才取差异，不预取）。
-  const selected = (() => {
-    if (openKey === null) return null;
-    for (const t of turns) {
-      for (const f of t.files) {
-        if (`${String(t.round)}:${f.path}` === openKey) return { turn: t, file: f };
-      }
-    }
-    return null;
-  })();
-  return (
-    <div
-      className="changes-pane review-split"
-      onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submitReview(); } }}
-    >
-      {comments.size > 0 && props.onReview !== undefined && (
-        <div className="review-bar" role="status">
-          <span className="rb-count num">{String(comments.size)} 条评注待提交</span>
-          <button className="mini-btn primary" onClick={submitReview}>提交评论（⌘Enter）</button>
-          <button className="mini-btn" onClick={() => setComments(new Map())}>清除</button>
-        </div>
-      )}
-      <div className="review-cols">
-        {/* 左栏：改动文件（按轮折叠的手风琴不动——它仍管「不把 23 轮全摊开」） */}
-        <div className="pane-list review-files">
-          {turns.map((t) => (
-            <section className="pane-card" key={t.round}>
-              <div className="pane-card-head">
-                <span className="pc-title">第 {String(t.round)} 轮</span>
-                <span className="chip">{String(t.files.length)} 个文件</span>
-                <span className={"chip " + verifyCls(t.verification.status)}>{verifyWord(t.verification.status)}</span>
-                <button
-                  type="button"
-                  className={"pane-card-toggle" + (openRound === t.round ? " on" : "")}
-                  aria-expanded={openRound === t.round}
-                  aria-label={openRound === t.round ? "收起这一轮的改动" : "展开这一轮的改动"}
-                  onClick={() => { setOpenRound(openRound === t.round ? null : t.round); }}
-                ><ChevronRight size={11} /></button>
-              </div>
-              {openRound === t.round && (
-              <>
-              <ul className="changes-list">
-                {t.files.map((f) => {
-                  const key = `${String(t.round)}:${f.path}`;
-                  const open = openKey === key;
-                  return (
-                    <li className="change-item-wrap" key={`${f.path}:${f.change}`}>
-                      <button
-                        className={"change-item" + (open ? " open" : "")}
-                        aria-expanded={open}
-                        onClick={() => toggle(key, f.path, f.snapshotId)}
-                        onContextMenu={(e) => { e.preventDefault(); props.onPathMenu?.(f.path, "file", e.clientX, e.clientY); }}
-                      >
-                        <span className="chev" aria-hidden="true"><ChevronRight size={10} /></span>
-                        <span className={"act " + f.change}>
-                          {changeLabel(f.change)}
-                        </span>
-                        <span className="path">{f.path}</span>
-                        {f.snapshotId !== undefined && (
-                          <span className="snap" title="覆盖前快照已保留（.agent/snapshots）">快照</span>
-                        )}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-              {t.unverifiedFiles.length > 0 && (
-                <div className="consequence">未验证：{t.unverifiedFiles.join("、")}</div>
-              )}
-              {t.nextAction !== "" && <div className="consequence">→ {t.nextAction}</div>}
-              </>
-              )}
-            </section>
-          ))}
-        </div>
-        {/* 右栏：选中文件的差异（Codex / Claude 的改审阅就是「文件列表在左、差异在右」） */}
-        <div className="review-diff">
-          {selected === null ? (
-            <div className="pane-empty">左边选一个文件，这里看它改了什么。<br />选中之前不预取差异——点开才读快照与当前文件。</div>
-          ) : (
-            <>
-              <div className="review-diff-head">
-                <span className={"act " + selected.file.change}>
-                  {changeLabel(selected.file.change)}
-                </span>
-                <span className="path">{selected.file.path}</span>
-                {!diff.loading && diff.payload !== null && diff.payload.ok && (
-                  <span className="change-diff-stat num">{`+${String(diffCount(diff.payload.hunks).add)} −${String(diffCount(diff.payload.hunks).del)}`}</span>
-                )}
-              </div>
-              {diff.loading && <div className="pane-empty">正在读快照与当前文件…</div>}
-              {!diff.loading && diff.payload !== null && (
-                diff.payload.ok
-                  ? (
-                    <DiffView
-                      hunks={diff.payload.hunks}
-                      truncated={diff.payload.truncated}
-                      {...(props.onReview !== undefined
-                        ? {
-                            comment: {
-                              comments,
-                              keyPrefix: `${selected.file.path}|`,
-                              onComment: (lineKey: string, text: string) => {
-                                setComments((prev) => {
-                                  const next = new Map(prev);
-                                  if (text === "") next.delete(lineKey); else next.set(lineKey, text);
-                                  return next;
-                                });
-                              },
-                            },
-                          }
-                        : {})}
-                    />
-                  )
-                  : <div className="ap-notice err" role="alert">{diff.payload.error}</div>
-              )}
-            </>
-          )}
-        </div>
-      </div>
     </div>
   );
 }
@@ -900,6 +787,8 @@ export function PaneDock(props: {
    *  且和窗格自己的标题行叠成两行同样的字（真机截图：弹出窗里两行「终端」）。
    *  ⇒ 独立窗格窗口不渲染那一行。 */
   inPopout?: boolean;
+  /** 交付卡点行：打开变更窗格并选中该轮该文件（seq 递增触发一次）。 */
+  changesFocus?: ChangesFocus;
   /** 命令面板快速打开：文件路径 + 递增序号；PaneDock 激活文件标签，FilePane 展开并预览。 */
   fileTarget?: { path: string; seq: number };
   /** 顶栏工具的显式导航；已挂载的目标也要切到前台，不靠 toggle 卸载重建。 */
@@ -925,11 +814,32 @@ export function PaneDock(props: {
   onPickResult?: (r: { selector: string; snippet: string; url: string }) => void;
 }): React.JSX.Element {
   const [focusedPane, setFocusedPane] = useState<PaneKind | null>(null);
+  // 浏览器放大（2026-11-03 业主）：只对 browser 生效，铺满工作区并盖住对话；切走自动还原。
+  const [maximized, setMaximized] = useState(false);
+  // 放大层的左边界 = 中间对话列的左缘（业主：只盖对话、保留左栏）；量法收在 hook 里。
+  const { maxLeft, sync: measureMaxLeft } = useMaximizedLeft(maximized);
+  const toggleMaximize = (): void => {
+    if (!maximized) measureMaxLeft();
+    setMaximized((v) => !v);
+  };
   // 单窗格模式（2026-10-24 业主）：侧栏一次只显示一个窗格、占满整列；标签页即窗格切换。
   // 激活窗格 = 手动点选的那个（仍开着时），否则最新打开的一个——新开窗格自动露出。
   const active = focusedPane !== null && props.tabs.includes(focusedPane)
     ? focusedPane
     : props.tabs[props.tabs.length - 1] ?? null;
+  useEffect(() => {
+    if (active !== "browser" && maximized) setMaximized(false);
+  }, [active, maximized]);
+  // Esc 还原：放大后焦点在网页原生视图里，渲染层收不到按键 ⇒ 同时在 browser 工具栏留还原钮；
+  // 这里兜住「焦点还在 DOM」的那一半（地址栏/工具栏）。
+  useEffect(() => {
+    if (!maximized) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") { e.preventDefault(); setMaximized(false); }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => { window.removeEventListener("keydown", onKey, true); };
+  }, [maximized]);
   const previousTabs = useRef(props.tabs);
   const navRef = useRef<HTMLElement | null>(null);
   const navItemsRef = useRef<HTMLDivElement | null>(null);
@@ -955,6 +865,20 @@ export function PaneDock(props: {
     });
     return () => window.cancelAnimationFrame(raf);
   }, [active, tabsSig]);
+  // 标签条横向溢出时，左缘那枚标签会被**拦腰切开**（仓库证据：.tmp/sweep/pane-tabs-smoke.out
+  // 01-eight-panes-active-visible.png，激活标签在末尾 ⇒ scrollLeft>0 ⇒ 首个「变更」只剩半个字）。
+  // 切是躲不掉的（8 个标签塞不进 320px 的列），但可以不让它「被切」：给标签条加一层左右渐隐
+  // （mask），溢出部分淡出而不是断在字中间。没溢出时不加 mask（第一个标签不被无故淡化）。
+  useEffect(() => {
+    const scroller = navItemsRef.current;
+    if (scroller === null) return;
+    const sync = (): void => {
+      scroller.dataset.scrolled = scroller.scrollLeft > 0 ? "true" : "false";
+    };
+    sync();
+    scroller.addEventListener("scroll", sync, { passive: true });
+    return () => scroller.removeEventListener("scroll", sync);
+  }, [tabsSig]);
   const closePane = (kind: PaneKind): void => {
     props.onClose(kind);
     // 关闭按钮卸载后将焦点交给剩余窗格，避免键盘用户掉回文档起点。
@@ -992,7 +916,7 @@ export function PaneDock(props: {
     );
   }
   return (
-    <div className="pane-workbench">
+    <div className="pane-workbench" data-maximized={maximized ? "true" : "false"} style={maximized ? ({ "--pane-max-left": `${maxLeft}px` } as CSSProperties) : undefined}>
     {/* 面板导航行只对「多窗格同屏」有意义：独立窗格窗口里它是死按钮（见 inPopout 注释）。 */}
     {props.inPopout !== true && (
     <nav className="pane-nav" aria-label="面板导航" ref={navRef}>
@@ -1040,7 +964,7 @@ export function PaneDock(props: {
       {props.onOpen !== undefined && <DropdownMenu.Root>
         <DropdownMenu.Trigger asChild><button className="iconbtn sm" aria-label="添加面板" title="添加面板"><Plus size={15} /></button></DropdownMenu.Trigger>
         <DropdownMenu.Portal><DropdownMenu.Content className="pop-rd" sideOffset={5} align="end">
-          {PANE_OPENABLE.map((kind) => <DropdownMenu.Item key={kind} className="menu-item"
+          {WORKBENCH_PANES.map((kind) => <DropdownMenu.Item key={kind} className="menu-item"
             onSelect={() => { if (!props.tabs.includes(kind)) props.onOpen?.(kind); setFocusedPane(kind); }}>
             <span>{PANE_META[kind].label}</span>{props.tabs.includes(kind) && <Check size={12} />}
           </DropdownMenu.Item>)}
@@ -1066,6 +990,7 @@ export function PaneDock(props: {
                 <ChangesPane
                   events={props.events}
                   {...(props.onReview !== undefined ? { onReview: props.onReview } : {})}
+                  {...(props.changesFocus !== undefined ? { focus: props.changesFocus } : {})}
                   onPathMenu={openPathMenu}
                 />
               )}
@@ -1081,6 +1006,9 @@ export function PaneDock(props: {
               {kind === "browser" && (
                 <BrowserPane
                   active={kind === active}
+                  maximized={maximized && kind === active}
+                  onToggleMaximize={toggleMaximize}
+                  {...(props.onOpen !== undefined ? { onOpenPane: (target: PaneKind) => { props.onOpen?.(target); setFocusedPane(target); } } : {})}
                   {...(props.browserUrl !== undefined ? { initialUrl: props.browserUrl } : {})}
                   {...(props.pickSignal !== undefined ? { pickSignal: props.pickSignal } : {})}
                   {...(props.onPickResult !== undefined ? { onPickResult: props.onPickResult } : {})}

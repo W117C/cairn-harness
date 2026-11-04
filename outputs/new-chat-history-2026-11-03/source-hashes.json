@@ -1,0 +1,6 @@
+{
+  "apps/desktop/src/renderer/state/sessions.ts": "160e9e14bc532957fb0e11d8842ec3f663f5666da2c1ef8a5684d558eb6c0ef6",
+  "apps/desktop/src/renderer/state/workbench.ts": "ced2cda35622f560c6da60795a9a9dbeb30208062c76f5f198852d4b5d2d66d0",
+  "apps/desktop/tests/session-cycle-target.test.tsx": "7448c13aed112aedb30c51b2189e51c6f6bd900a0e9e4cc2860791e312764534",
+  "apps/desktop/scripts/repro-new-session-jump.cjs": "722bfc9cc5ecf1f6ea4f1d7fe8ad4d6e712ed2c87a5192e00a98838e6da648f8"
+}

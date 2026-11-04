@@ -6,7 +6,7 @@
 
 ## L1（已落地，零打扰）：`.github/workflows/verify.yml`
 
-- **覆盖**：`pnpm install --frozen-lockfile` → `pnpm typecheck` → `pnpm test`（全量判卷）→
+- **覆盖**：`pnpm install --frozen-lockfile` → `pnpm typecheck` → `pnpm test:capped`（全量判卷，2 workers）→
   **快门面** `pnpm gates --only=…`（= `CERT_GATES` 那 25 道，唯一定义在 `scripts/gate-manifest.ts`，
   逐道点名在 workflow 里；10-02 起不再减门，见下一节）。
 - **工具链版本钉在一处**（第 475 页）：`package.json` 的 `packageManager` 与 workflow 里的
@@ -15,12 +15,17 @@
   在两处解释成两种配置，CI 上直接 `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH`。
 - **触发**：`push` / `pull_request` / `workflow_dispatch`（手动）。
 - **本地零影响**：不装钩子、不改任何本地行为；只有推上去才跑。
+- **运行时**：Node 24，与当前开发/打包环境同大版本。冻结的 bench 逐名规格是在该版本的
+  缺省 spec reporter 下生成的；Node 22 缺省 TAP 对含换行的名称转义不同，不能混作同一份输出。
+- **历史引用归档**：checkout 后恢复 `archive/git-citation-records-2026-11-01.pack` 中的原始
+  commit 对象，仅供台账检查引用身份。旧链的缺失祖先与树未恢复，范围见同名说明文件。
 - **本地复现一模一样的一串**（首次跑通前，CI 里的任何结论都以下面这串的实测为准；首次远端运行现已完成）：
 
   ```sh
+  git unpack-objects < archive/git-citation-records-2026-11-01.pack
   pnpm install --frozen-lockfile
   pnpm typecheck
-  pnpm test
+  pnpm test:capped
   # 2026-10-12：cert face 23 → 25（买进 e2e 与 desktop-test，理由见 scripts/gate-manifest.ts 的 CERT_GATES 买入注）
   pnpm gates --only=no-progress-check,prune-check,fork-check,compaction-check,docs-check,memory-check,head-import-check,autonomy-check,sandbox:check,security-check,provider:check,routing-check,model-surface-check,prefix-churn-check,prompt-surface-check,replay-determinism-check,cost-per-progress-check,web-fetch-check,gym-check,evidence-typecheck-check,gate-check,mutate-needles-check,repo-hygiene-check,e2e,desktop-test
   ```

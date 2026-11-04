@@ -1,0 +1,447 @@
+{
+  "checks": [
+    {
+      "name": "dark-1440 empty automation is closed",
+      "ok": true
+    },
+    {
+      "name": "dark-1440 form replaces empty state",
+      "ok": true
+    },
+    {
+      "name": "dark-1440 consistent form controls",
+      "ok": true,
+      "detail": {
+        "width": 640,
+        "heights": [
+          36,
+          36,
+          36,
+          36
+        ],
+        "weekdays": 7,
+        "time": "09:00"
+      }
+    },
+    {
+      "name": "dark-1440 form fits window",
+      "ok": true,
+      "detail": {
+        "document": false,
+        "page": false,
+        "controls": 0
+      }
+    },
+    {
+      "name": "dark-1440 create preserves schedule contract",
+      "ok": true,
+      "detail": {
+        "definition": {
+          "name": "每日项目巡检",
+          "prompt": "检查工作区的测试结果和未提交改动，整理一份简短报告。",
+          "schedule": {
+            "kind": "weekly",
+            "weekdays": [
+              1
+            ],
+            "time": "09:00"
+          },
+          "permissionTier": "read-only"
+        },
+        "enabled": true
+      }
+    },
+    {
+      "name": "dark-1440 memory detail opens",
+      "ok": true
+    },
+    {
+      "name": "dark-1440 memory fits window",
+      "ok": true,
+      "detail": {
+        "document": false,
+        "page": false,
+        "controls": 0
+      }
+    },
+    {
+      "name": "dark-1440 stop icon is static square",
+      "ok": true,
+      "detail": {
+        "square": true,
+        "animation": "none",
+        "foreground": "color(srgb 0.0823529 0.0823529 0.0823529)",
+        "background": "color(srgb 0.941176 0.937255 0.92549)"
+      }
+    },
+    {
+      "name": "dark-1440 stop reaches cancellation",
+      "ok": true
+    },
+    {
+      "name": "dark-1440 free answer fills available width",
+      "ok": true,
+      "detail": {
+        "width": 724,
+        "available": 724,
+        "height": 72,
+        "shadow": "none"
+      }
+    },
+    {
+      "name": "dark-1440 multiline answer submits verbatim",
+      "ok": true,
+      "detail": {
+        "callId": "feedback-clarify",
+        "answers": {
+          "你希望报告关注哪些内容？": "测试与未提交改动\n并说明下一步"
+        }
+      }
+    },
+    {
+      "name": "dark-1440 palette focus is integrated",
+      "ok": true,
+      "detail": {
+        "shadow": "none",
+        "inputHeight": 46,
+        "rowHeight": 46,
+        "active": true
+      }
+    },
+    {
+      "name": "real renderer dismisses error after 6.5 seconds",
+      "ok": true
+    },
+    {
+      "name": "light-1440 empty automation is closed",
+      "ok": true
+    },
+    {
+      "name": "light-1440 form replaces empty state",
+      "ok": true
+    },
+    {
+      "name": "light-1440 consistent form controls",
+      "ok": true,
+      "detail": {
+        "width": 640,
+        "heights": [
+          36,
+          36,
+          36,
+          36
+        ],
+        "weekdays": 7,
+        "time": "09:00"
+      }
+    },
+    {
+      "name": "light-1440 form fits window",
+      "ok": true,
+      "detail": {
+        "document": false,
+        "page": false,
+        "controls": 0
+      }
+    },
+    {
+      "name": "light-1440 create preserves schedule contract",
+      "ok": true,
+      "detail": {
+        "definition": {
+          "name": "每日项目巡检",
+          "prompt": "检查工作区的测试结果和未提交改动，整理一份简短报告。",
+          "schedule": {
+            "kind": "weekly",
+            "weekdays": [
+              1
+            ],
+            "time": "09:00"
+          },
+          "permissionTier": "read-only"
+        },
+        "enabled": true
+      }
+    },
+    {
+      "name": "light-1440 memory detail opens",
+      "ok": true
+    },
+    {
+      "name": "light-1440 memory fits window",
+      "ok": true,
+      "detail": {
+        "document": false,
+        "page": false,
+        "controls": 0
+      }
+    },
+    {
+      "name": "light-1440 stop icon is static square",
+      "ok": true,
+      "detail": {
+        "square": true,
+        "animation": "none",
+        "foreground": "color(srgb 0.988235 0.988235 0.984314)",
+        "background": "color(srgb 0.0431373 0.0431373 0.0431373)"
+      }
+    },
+    {
+      "name": "light-1440 stop reaches cancellation",
+      "ok": true
+    },
+    {
+      "name": "light-1440 free answer fills available width",
+      "ok": true,
+      "detail": {
+        "width": 724,
+        "available": 724,
+        "height": 72,
+        "shadow": "none"
+      }
+    },
+    {
+      "name": "light-1440 multiline answer submits verbatim",
+      "ok": true,
+      "detail": {
+        "callId": "feedback-clarify",
+        "answers": {
+          "你希望报告关注哪些内容？": "测试与未提交改动\n并说明下一步"
+        }
+      }
+    },
+    {
+      "name": "light-1440 palette focus is integrated",
+      "ok": true,
+      "detail": {
+        "shadow": "none",
+        "inputHeight": 46,
+        "rowHeight": 46,
+        "active": true
+      }
+    },
+    {
+      "name": "dark-900 empty automation is closed",
+      "ok": true
+    },
+    {
+      "name": "dark-900 form replaces empty state",
+      "ok": true
+    },
+    {
+      "name": "dark-900 consistent form controls",
+      "ok": true,
+      "detail": {
+        "width": 640,
+        "heights": [
+          36,
+          36,
+          36,
+          36
+        ],
+        "weekdays": 7,
+        "time": "09:00"
+      }
+    },
+    {
+      "name": "dark-900 form fits window",
+      "ok": true,
+      "detail": {
+        "document": false,
+        "page": false,
+        "controls": 0
+      }
+    },
+    {
+      "name": "dark-900 create preserves schedule contract",
+      "ok": true,
+      "detail": {
+        "definition": {
+          "name": "每日项目巡检",
+          "prompt": "检查工作区的测试结果和未提交改动，整理一份简短报告。",
+          "schedule": {
+            "kind": "weekly",
+            "weekdays": [
+              1
+            ],
+            "time": "09:00"
+          },
+          "permissionTier": "read-only"
+        },
+        "enabled": true
+      }
+    },
+    {
+      "name": "dark-900 memory detail opens",
+      "ok": true
+    },
+    {
+      "name": "dark-900 memory fits window",
+      "ok": true,
+      "detail": {
+        "document": false,
+        "page": false,
+        "controls": 0
+      }
+    },
+    {
+      "name": "dark-900 stop icon is static square",
+      "ok": true,
+      "detail": {
+        "square": true,
+        "animation": "none",
+        "foreground": "color(srgb 0.0823529 0.0823529 0.0823529)",
+        "background": "color(srgb 0.941176 0.937255 0.92549)"
+      }
+    },
+    {
+      "name": "dark-900 stop reaches cancellation",
+      "ok": true
+    },
+    {
+      "name": "dark-900 free answer fills available width",
+      "ok": true,
+      "detail": {
+        "width": 535,
+        "available": 535,
+        "height": 72,
+        "shadow": "none"
+      }
+    },
+    {
+      "name": "dark-900 multiline answer submits verbatim",
+      "ok": true,
+      "detail": {
+        "callId": "feedback-clarify",
+        "answers": {
+          "你希望报告关注哪些内容？": "测试与未提交改动\n并说明下一步"
+        }
+      }
+    },
+    {
+      "name": "dark-900 palette focus is integrated",
+      "ok": true,
+      "detail": {
+        "shadow": "none",
+        "inputHeight": 46,
+        "rowHeight": 46,
+        "active": true
+      }
+    },
+    {
+      "name": "light-900 empty automation is closed",
+      "ok": true
+    },
+    {
+      "name": "light-900 form replaces empty state",
+      "ok": true
+    },
+    {
+      "name": "light-900 consistent form controls",
+      "ok": true,
+      "detail": {
+        "width": 640,
+        "heights": [
+          36,
+          36,
+          36,
+          36
+        ],
+        "weekdays": 7,
+        "time": "09:00"
+      }
+    },
+    {
+      "name": "light-900 form fits window",
+      "ok": true,
+      "detail": {
+        "document": false,
+        "page": false,
+        "controls": 0
+      }
+    },
+    {
+      "name": "light-900 create preserves schedule contract",
+      "ok": true,
+      "detail": {
+        "definition": {
+          "name": "每日项目巡检",
+          "prompt": "检查工作区的测试结果和未提交改动，整理一份简短报告。",
+          "schedule": {
+            "kind": "weekly",
+            "weekdays": [
+              1
+            ],
+            "time": "09:00"
+          },
+          "permissionTier": "read-only"
+        },
+        "enabled": true
+      }
+    },
+    {
+      "name": "light-900 memory detail opens",
+      "ok": true
+    },
+    {
+      "name": "light-900 memory fits window",
+      "ok": true,
+      "detail": {
+        "document": false,
+        "page": false,
+        "controls": 0
+      }
+    },
+    {
+      "name": "light-900 stop icon is static square",
+      "ok": true,
+      "detail": {
+        "square": true,
+        "animation": "none",
+        "foreground": "color(srgb 0.988235 0.988235 0.984314)",
+        "background": "color(srgb 0.0431373 0.0431373 0.0431373)"
+      }
+    },
+    {
+      "name": "light-900 stop reaches cancellation",
+      "ok": true
+    },
+    {
+      "name": "light-900 free answer fills available width",
+      "ok": true,
+      "detail": {
+        "width": 535,
+        "available": 535,
+        "height": 72,
+        "shadow": "none"
+      }
+    },
+    {
+      "name": "light-900 multiline answer submits verbatim",
+      "ok": true,
+      "detail": {
+        "callId": "feedback-clarify",
+        "answers": {
+          "你希望报告关注哪些内容？": "测试与未提交改动\n并说明下一步"
+        }
+      }
+    },
+    {
+      "name": "light-900 palette focus is integrated",
+      "ok": true,
+      "detail": {
+        "shadow": "none",
+        "inputHeight": 46,
+        "rowHeight": 46,
+        "active": true
+      }
+    },
+    {
+      "name": "no renderer errors",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": [],
+  "scope": "Current working-tree production renderer with isolated synthetic AgentApi; no real providers or user data"
+}

@@ -2,7 +2,8 @@
 //   GeneralSection      外观（主题 3 选项卡带小预览图）/ 语言 / 快捷键（Ctrl+Tab）
 //   ProviderSection     当前通道与密钥 / 联网搜索（状态点 + 一句话 + 去配置 + 查看详情折叠）/
 //                       自定义接口 / 识图能力（2026-10-16 v12 导入诊断批补的第四卡）
-//   PermissionsSection  五档 OptionCard（auto / full-access = danger + 警示行）/ 方案门 / 网络只读行
+//   PermissionsSection  四档 OptionCard（auto / full-access = danger + 警示行）/ 网络只读行
+//                       （方案开关 2026-11-03 撤下：是否先出方案由 agent 自判，不再由用户武装）
 //   AboutSection        版本 / 更新 / 诊断信息折叠区（术语收容所）
 // 纯函数资产（panelPatch / providerStatusLabel(由 providerStatusParts 拼回) / searchCapabilityLabel /
 // SEARCH_CONFIG_HINT / defaultKeyProvider / PANEL_PROVIDER_KINDS / providerNeedsKey）随迁至本文件——
@@ -16,22 +17,25 @@ import type { LicenseState } from "../../../../../src/main/license";
 import type { BuildInfo } from "../../../../../src/main/build-info";
 import type { DoctorReport } from "../../../../../src/main/doctor";
 import type { AppSettings, PermissionMode } from "../../../../../src/main/ipc-protocol";
+import { selectablePermissionMode } from "../../../../../src/permissions/modes";
 import type { TextSizeSetting, UiSizeSetting } from "../../../../../src/main/settings";
 import { Badge, Banner, Field, OptionCard, SettingsSection, SettingsRow, StatusDot } from "./settings-ui";
 import { Switch } from "./Switch";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { permissionConfirmCopy } from "./PermissionMenu";
 import { CustomProviderForm } from "./CustomProviderForm";
-import { SHORTCUTS } from "../shortcuts";
+import { SHORTCUT_GROUPS } from "../shortcuts";
 import { doctorReportText, doctorRows, doctorTarget, doctorVerdictText, type DoctorKeyStatus, type DoctorRow } from "./settings/doctor-view";
+import { LspStatusRow } from "./settings/LspStatusRow";
 import { STR } from "../strings";
 import type { SectionId } from "../app-controls";
 import { isCompositionEnter } from "../ime";
 
-/** patch 白名单：UI 只放行这六键，不透传任意 patch。
+/** patch 白名单：UI 只放行这五键，不透传任意 patch。
  *  locale 进白名单修的是实测缺陷：下拉框选了 English、后端也白名单放行，但 panelPatch 把它丢了
- *  ⇒ 显示"已保存"而选项没落库（同族形态：视图说成功、事实没发生）。 */
-export const PANEL_PATCH_KEYS = ["provider", "model", "mode", "theme", "planRequiredByDefault", "locale"] as const;
+ *  ⇒ 显示"已保存"而选项没落库（同族形态：视图说成功、事实没发生）。
+ *  方案默认值键出列（2026-11-03 业主）：方案模式不再由用户武装，agent 自判。 */
+export const PANEL_PATCH_KEYS = ["provider", "model", "mode", "theme", "locale"] as const;
 
 export function panelPatch(patch: Record<string, unknown>): Partial<AppSettings> {
   const out: Partial<AppSettings> = {};
@@ -310,6 +314,8 @@ export function ProviderSection(props: {
   onOpenSearch: () => void;
 }): React.JSX.Element {
   const provider = props.settings?.provider ?? "—";
+  // 分区头给人话名字（DeepSeek），不印配置里的机器 id（deepseek）；未登记才回落原值。
+  const providerLabel = props.providers.find((p) => p.id === provider)?.label ?? provider;
   const statusParts = providerStatusParts(props.status);
   // 换选中的供应商即清空 key 输入框：输入框里残留的是**上一个通道**的半截输入，留着必出错。
   useEffect(() => {
@@ -333,7 +339,8 @@ export function ProviderSection(props: {
       {/* 摘要进分区头（第 892 页）：分区名已经写着「当前通道与密钥」，下面第一行又贴一次
           「当前通道」⇒ 同一屏两处同词，而那一行的全部内容就是一枚值 + 六个字。
           现在值与生效时机挂在分区标题右侧，读到的顺序不变（先结论、再列表/表单）。 */}
-      <SettingsSection title="当前通道与密钥" hint={<><span className="sp-tag">{provider}</span>下次发送生效</>}>
+      {/* 分区头只留结论：当前通道与其生效时机放一句人话，不再把名词、标签、短句挤成三截。 */}
+      <SettingsSection title="当前通道与密钥" hint={`${providerLabel} · 下次发送生效`}>
         {/* 供应商管理（2026-10-24 参照 Codex 供应商页）：左列表（状态点=已存 key）选通道，
             右侧详情 = 该通道的密钥表单（标签在上、字段整行）。换选中即清空 key 输入框。 */}
         <div className="pv-split">
@@ -472,15 +479,13 @@ export function ProviderSection(props: {
 
 export const MODE_OPTIONS: readonly { id: PermissionMode; label: string; desc: string; warn?: string }[] = [
   { id: "read-only", label: "只读", desc: "写工具一律拒" },
-  { id: "default", label: "默认 · 逐次审批", desc: "每次写 / 跑都出卡" },
-  { id: "guided", label: "引导 · 按风险放行", desc: "低风险自动、高风险出卡" },
-  // 与 PermissionMenu 的 MODE_LABEL 同一口径：auto 免的是"逐笔问写"，不是"什么都不问"
-  // （riskAskAt 仍是 high）。旧文案「全部放行」让用户以为切了就万事大吉，
-  // 而沙箱降级时写向仍会出卡 ⇒ 实测读成"切换没用"。
-  { id: "auto", label: "自动 · 低风险免批", desc: "高风险动作仍会出卡", warn: "不设逐笔防线——确认后果再开。" },
-  // 第五档（2026-10-24 业主）：最松档。设置页此前只列四档 ⇒ 用芯片切到 full-access 后，
-  // 这里四个单选项全不选中，且用户从设置页永远选不到它（2026-10-30 实测）。
-  { id: "full-access", label: "完全允许 · 不再出卡", desc: "出网仍一次性批准；方案门与禁止规则仍生效", warn: "最松档——风险线与 critical 也不再询问。确认你在受信任的仓库里。" },
+  { id: "default", label: "需要审批", desc: "每次写 / 跑都出卡" },
+  // 2026-11-03 业主：引导与自动两档文案重叠，合并成一个「智能审批」入口（持久化 id 仍是 auto）。
+  // 它免的是"逐笔问写"，不是"什么都不问"：风险 ≥ high 的动作照样出卡。
+  { id: "auto", label: "智能审批", desc: "低风险直接做，高风险出卡", warn: "不设逐笔防线——确认后果再开。" },
+  // 2026-11-03 业主：完全允许 = 什么都允许。除评测判卷文件的冻结闸外，出网、方案门、
+  // 禁止规则与风险线都不再拦（旧文案说"出网仍一次性批准"已作废）。
+  { id: "full-access", label: "完全允许", desc: "不再出任何审批卡，出网与方案门也放行", warn: "最松档——风险线与 critical 也不再询问。确认你在受信任的仓库里。" },
 ];
 
 export function PermissionsSection(props: {
@@ -503,10 +508,13 @@ export function PermissionsSection(props: {
           {MODE_OPTIONS.map((m) => (
             <OptionCard
               key={m.id}
-              checked={props.settings.mode === m.id}
+              checked={selectablePermissionMode(props.settings.mode) === m.id}
               title={m.label}
               desc={m.desc}
               {...(m.warn !== undefined ? { danger: true, warn: m.warn } : {})}
+              // 2026-11-02 真机：五档里「自动」和「完全允许」此前同样红描边，风险梯度读不出。
+              // 自动 = 警告级（黄），完全允许 = 危险级（红），与权限菜单的档位色点口径一致。
+              tone={m.id === "auto" ? "warn" : m.id === "full-access" ? "danger" : "normal"}
               onSelect={() => { requestMode(m.id); }}
             />
           ))}
@@ -524,16 +532,9 @@ export function PermissionsSection(props: {
       )}
 
       <SettingsSection title="安全">
-        <SettingsRow label="写文件前先提交方案，等我批准" desc="输入框旁的「方案」开关可按轮覆盖。">
-          <Switch
-            label="写文件前先提交方案，等我批准"
-            checked={props.settings.planRequiredByDefault}
-            onChange={(next) => props.onSave({ planRequiredByDefault: next })}
-            onText="开"
-            offText="关"
-          />
-        </SettingsRow>
-        <SettingsRow label="网络" desc="出网需要逐次审批（一次性，不记忆）；沙箱在 macOS 走 Seatbelt。">
+        {/* 方案模式（2026-11-03 业主）：是否先出方案由 agent 自判（提示词自判面 + 方案门写禁），
+            这里不再有用户开关；设置存档里方案默认值的旧键只为读旧档兼容而保留。 */}
+        <SettingsRow label="网络" desc="默认断网；除「完全允许」档外出网都要一次性批准（不记忆）。沙箱在 macOS 走 Seatbelt。">
           <span className="sp-tag">默认断网</span>
         </SettingsRow>
       </SettingsSection>
@@ -612,7 +613,7 @@ export function AdvancedSection(props: {
             <Field width="sm">
               <input
                 aria-label={STR.advanced.maxBudgetUsd}
-                defaultValue={String(s.maxBudgetUsd)}
+                defaultValue={typeof s.maxBudgetUsd === "number" && Number.isFinite(s.maxBudgetUsd) ? String(s.maxBudgetUsd) : "0"}
                 inputMode="decimal"
                 onKeyDown={(e) => { if (e.key === "Enter" && !isCompositionEnter(e, null)) { e.preventDefault(); e.currentTarget.blur(); } }}
                 onBlur={(e) => {
@@ -629,9 +630,13 @@ export function AdvancedSection(props: {
         <SettingsRow label={STR.advanced.budgetPrice} desc={STR.advanced.budgetPriceDesc}>
           <div className="ss-inline">
             <Field width="sm">
+              {/* 2026-11-02 真机：字段缺省时 `String(undefined)` 把字面 "undefined" 填进了输入框。
+                  先判空再转串（0 是合法值，不能被省略）。 */}
               <input
                 aria-label={STR.advanced.budgetPrice}
-                defaultValue={String(s.budgetPricePerMTok)}
+                defaultValue={typeof s.budgetPricePerMTok === "number" && Number.isFinite(s.budgetPricePerMTok)
+                  ? String(s.budgetPricePerMTok)
+                  : "0"}
                 inputMode="decimal"
                 onKeyDown={(e) => { if (e.key === "Enter" && !isCompositionEnter(e, null)) { e.preventDefault(); e.currentTarget.blur(); } }}
                 onBlur={(e) => {
@@ -648,14 +653,11 @@ export function AdvancedSection(props: {
       </SettingsSection>
 
       <SettingsSection title={STR.advanced.privacyTitle}>
-        <SettingsRow label={STR.advanced.telemetry} desc={STR.advanced.telemetryDesc}>
-          <Switch
-            label={STR.advanced.telemetry}
-            checked={s.telemetry}
-            onChange={(next) => props.onSaveKey("telemetry", next)}
-            onText="开"
-            offText="关"
-          />
+        <SettingsRow label={STR.advanced.telemetry}>
+          {/* 2026-11-02：Badge 的正文是 children（settings-ui.tsx:135），不是 text 属性。
+              写成 text 时那个 prop 被丢掉 ⇒ 胶囊渲染成一片空白，判卷 settings-advanced-section
+              第 57 条要的「未收集」在 DOM 里根本不存在（该条一直红）。 */}
+          <Badge>未收集</Badge>
         </SettingsRow>
       </SettingsSection>
 
@@ -691,13 +693,17 @@ export function AdvancedSection(props: {
         </SettingsRow>
       </SettingsSection>
 
+      <SettingsSection title={STR.advanced.lspTitle}>
+        <LspStatusRow />
+      </SettingsSection>
+
       <SettingsSection title={STR.advanced.scheduleTitle}>
         <SettingsRow label={STR.advanced.scheduleCap} desc={STR.advanced.scheduleCapDesc}>
           <div className="ss-inline">
             <Field width="sm">
               <input
                 aria-label={STR.advanced.scheduleCap}
-                defaultValue={String(s.scheduleConcurrencyCap)}
+                defaultValue={typeof s.scheduleConcurrencyCap === "number" && Number.isFinite(s.scheduleConcurrencyCap) ? String(s.scheduleConcurrencyCap) : "1"}
                 inputMode="numeric"
                 onKeyDown={(e) => { if (e.key === "Enter" && !isCompositionEnter(e, null)) { e.preventDefault(); e.currentTarget.blur(); } }}
                 onBlur={(e) => {
@@ -993,11 +999,13 @@ export function AboutSection(props: {
   return (
     <SettingsSection title="版本与更新">
       <SettingsRow label="版本">
-        <div className="ss-inline">
+        {/* 2026-11-02 真机：版本 + 构建时间 + 签名 + 冒烟 + commit 全挤在一行，右侧被裁成「已过」。
+            版本号单独一行，构建信息另起一行允许折行。 */}
+        <div className="ss-inline ss-version">
           <span className="sp-tag">{props.version ?? "—"}</span>
           {props.build !== undefined && props.build !== null && (
-            <span className="sp-dim" role="status">
-              构建于 {props.build.createdAt.slice(0, 10)} · {props.build.signature} · 冒烟 {props.build.packagedSmoke === "passed" ? "已过" : props.build.packagedSmoke}
+            <span className="sp-dim ss-version-meta" role="status">
+              构建于 {props.build.createdAt.slice(0, 10)} · 签名 {props.build.signature} · 打包冒烟 {props.build.packagedSmoke === "passed" ? "已通过" : "未通过"}
               {props.build.sourceCommit !== undefined && <> · {props.build.sourceCommit.slice(0, 8)}{props.build.sourceDirty ? "（含未提交修改）" : ""}</>}
             </span>
           )}
@@ -1014,7 +1022,9 @@ export function AboutSection(props: {
         </div>
       </SettingsRow>
       <SettingsRow label="更新">
-        <button className="mini-btn ghost" onClick={props.onCheckUpdate}>检查更新</button>
+        {/* 2026-11-02：此前是 ghost 变体（透明底、无描边），读作一行文字而不是按钮。
+            它是这个分区的主操作，回到默认描边按钮。 */}
+        <button type="button" className="mini-btn" onClick={props.onCheckUpdate}>检查更新</button>
         {props.updateMsg !== null && <span className="sp-dim">{props.updateMsg}</span>}
       </SettingsRow>
       {/* 更新源（2026-10-18 补）：此前这个字段只能改 settings.json，界面上是死胡同——
@@ -1139,15 +1149,23 @@ export function AboutSection(props: {
  *  完整速查（含窗格/视图键）按 ⌘/ 弹层。 */
 export function ShortcutsSection(): React.JSX.Element {
   return (
+    /* 2026-11-02：此前只列 13 条核心键，但 ⌘/ 弹层有 40+ 条（含窗格/视图/查找族）——
+       同一件事两份数据，设置页成了精简版。现在直接渲染完整分组表（SHORTCUT_GROUPS，
+       与 ⌘/ 弹层同一事实源）；核心键仍由 SHORTCUTS 承担 tooltip 取键。 */
     <SettingsSection title="按键一览" hint="完整速查表按 ⌘/ 随时调出">
-      <div className="kx-list">
-        {SHORTCUTS.map((s) => (
-          <div className="kx-row" key={s.id}>
-            <kbd className="kx-keys">{s.keys}</kbd>
-            <span className="kx-what">{s.label}</span>
+      {SHORTCUT_GROUPS.map((g) => (
+        <div key={g.title}>
+          <h2 className="ss-sec-title kx-group-title">{g.title}</h2>
+          <div className="kx-list">
+            {g.rows.map((row) => (
+              <div className="kx-row" key={`${g.title}:${row.keys}:${row.what}`}>
+                <kbd className="kx-keys">{row.keys}</kbd>
+                <span className="kx-what">{row.what}</span>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
+      ))}
     </SettingsSection>
   );
 }

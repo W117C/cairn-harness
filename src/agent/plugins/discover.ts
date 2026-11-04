@@ -14,7 +14,7 @@ import {
 } from "./content";
 import { scanForeignSource, type ForeignSource } from "./foreign";
 import { parsePluginManifest, parseHooksFile, detectJsEntry, PluginLoadError } from "./manifest";
-import { parseHookIf } from "./hooks";
+import { hookShapeRejection, parseHookIf } from "./hooks";
 import { LSP_SERVER_FIELDS } from "./types";
 import type {
   DiscoveredPlugin, LooseSkill, PluginScanRoots, PluginScope, PluginsManifest,
@@ -166,14 +166,20 @@ export async function inspectPluginDirectory(root: string): Promise<DiscoveredPl
   return await loadContainer(root, "user", "pending");
 }
 
-/** 事件表 → 扁平 hook 定义列表；${user_config.*} 禁入 shell-form hook（loaded=false，调用方产警告）。 */
+/** 事件表 → 扁平 hook 定义列表。两类装载期即拒（loaded=false + 原因，调用方产警告）：
+ *  ① ${user_config.*} 禁入 shell-form hook；② handler 形态与类型不相称
+ *  （http 没 URL、mcp_tool 缺 server/tool、prompt/agent 尚未兑现）。
+ *  第 ② 类从前一路收到运行时才由 `run()` 记一行 skipped 警告——面板刷掉之后就没人知道自己写的钩子
+ *  从来没发过请求；形态错误在装载期说清，才是对作者负责。 */
 function flattenHooks(plugin: string, pluginRoot: string, hooks: Partial<Record<HookEventName, HookMatcherDef[]>>): LoadedHookDef[] {
   const out: LoadedHookDef[] = [];
   for (const [event, matchers] of Object.entries(hooks)) {
     for (const m of matchers ?? []) {
       for (const handler of m.hooks ?? []) {
-        const shellForm = typeof handler.command === "string";
+        const shellForm = handler.type === "command" && typeof handler.command === "string";
         const banned = shellForm && (handler.command as string).includes("${user_config.");
+        const shape = hookShapeRejection(handler);
+        const reason = banned ? "${user_config.*} 禁入 shell-form hook" : shape;
         out.push({
           plugin,
           pluginRoot,
@@ -181,7 +187,8 @@ function flattenHooks(plugin: string, pluginRoot: string, hooks: Partial<Record<
           ...(m.matcher !== undefined ? { matcher: m.matcher } : {}),
           ...(m.if !== undefined ? { if: m.if } : {}),
           handler,
-          loaded: !banned,
+          loaded: reason === null,
+          ...(reason === null ? {} : { rejectReason: reason }),
         });
       }
     }

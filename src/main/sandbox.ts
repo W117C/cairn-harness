@@ -7,6 +7,7 @@ import { realpathSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import type { PermissionMode } from "../permissions";
 import { type ToolResult } from "../tools/base";
 import { createOutputRing } from "../tools/output-ring";
 import { killGroup, sanitizedEnv, spawnTracked } from "../tools/process";
@@ -85,13 +86,25 @@ export const NETWORK_DENIED_NOTE =
  *  抽成纯函数的理由：auto 档的 L4-pass 与无人值守 fail-closed 都必须落在这张真值表里，
  *  而不是散在调用方的 if 里——散着写就会出现「分类器命中即放行」那种旁路。
  *
+ *  **完全允许档（2026-11-03 业主裁决）是唯一例外**：那一档没有审批卡可问，用户选它时
+ *  已经一次性授权了「什么都允许」；此处按档位放行，否则 evaluate 说 approve、沙箱却
+ *  仍然断网，形成「门说行、执行说不行」的两套口径。其余档位的红线不放松。
+ *
  *  覆盖面提醒（改这张表时必须一起看）：这里的 `wantsNetwork` 只管**子进程**那条路
  *  （沙箱 profile 拦的是 shell 的网络）。非 shell 工具在主进程里发包，profile 拦不到，
  *  所以 `web_fetch`（抓网页）走的是另一条同口径的路——权限层 `staticRisk` 给 `high`，
- *  四档都在 `L4-risk` 出口被问，且 `isNetworkCommandCall` 把它钉成一次性 scope
+ *  非完全允许档都在 `L4-risk` 出口被问，且 `isNetworkCommandCall` 把它钉成一次性 scope
  *  （不落「总是允许」规则）。两处是同一句红线，**各自都要在**；这里这一处只说明它管不到工具面。 */
-export function networkProfileFor(input: { wantsNetwork: boolean; asked: boolean; approved: boolean }): "allow" | "deny" {
-  return input.wantsNetwork && input.asked && input.approved ? "allow" : "deny";
+export function networkProfileFor(input: {
+  wantsNetwork: boolean;
+  asked: boolean;
+  approved: boolean;
+  /** 当前权限档；只有 full-access 走「按档放行」那一支。缺省 undefined = 旧语义（必须问过且批了）。 */
+  mode?: PermissionMode;
+}): "allow" | "deny" {
+  if (!input.wantsNetwork) return "deny";
+  if (input.mode === "full-access") return "allow";
+  return input.asked && input.approved ? "allow" : "deny";
 }
 
 /** 给已定形的结果补断网提示：`run_shell` 直连路径（融合分支）用；

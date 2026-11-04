@@ -24,6 +24,10 @@ jobs:
           # 缺省 fetch-depth:1 让它们全部读成「不可达」⇒ 13 条假红。
           # 代价：多拉约 128MB 历史。对一条 1639 笔提交的私有仓，这是判据正确性的对价。
           fetch-depth: 0
+      # 旧开发链的祖先与部分树对象已损坏，无法作为分支推送。这里只恢复台账引用的
+      # 原始 commit 对象（原 SHA 不变），供 D-5 查身份；不宣称恢复了整条历史或代码快照。
+      - name: restore archived citation objects
+        run: git unpack-objects < archive/git-citation-records-2026-11-01.pack
       - uses: pnpm/action-setup@v4
         # 第 475 页：**这一格刻意不写 `with: version:`**——版本只住在 package.json 的 `packageManager`
         # 里（现读 `pnpm@11.21.0`），action 自己会去读它。两处同时写会被 action 直接判红
@@ -34,13 +38,15 @@ jobs:
         # `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH`。
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          # bench 逐名规格在 Node 24 生成；22 缺省 TAP、24 缺省 spec，含换行的名称不同。
+          # 与当前开发/打包运行时对齐，不改冻结靶子或逐名规格。
+          node-version: "24"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: typecheck
         run: pnpm typecheck
       - name: full test suite
-        run: pnpm test
+        run: pnpm test:capped
       - name: desktop tests
         run: pnpm --filter cairn-desktop test
       # 快门面 = CERT_GATES 那 25 道，逐字点名（`pnpm gates` 不加参数跑的是 GATES 全集，比认证面慢、面也不同）。

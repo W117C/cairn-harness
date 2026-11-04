@@ -181,7 +181,7 @@ describe("实验 → 因果置信度 → 激活 → 基线注入", () => {
     const injection = await prepareEvolutionInjection({
       workspace, sessionId: "after", taskContent: "修复 parser 的报错", now: 5_000,
     });
-    expect(injection.note).toContain("passing controlled experiment");
+    expect(injection.note).toContain(patched.body);
   });
 
   it("没有因果证据时 --apply 也拒绝，状态保持 candidate", async () => {

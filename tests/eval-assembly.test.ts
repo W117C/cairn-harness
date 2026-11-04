@@ -42,8 +42,9 @@ describe("装配表：产品缺省开的键必须逐枚表态", () => {
   it("真缺省确实投影出行：少一行就是缺省翻了而这里没人管", () => {
     expect(PLAIN.length).toBeGreaterThanOrEqual(4);
     // ctrlTabCycle = v7 全量补全批新开的缺省键（纯渲染层；表里记 not-applicable）。
+    // keepAwake = 2026-11-04 自动化保唤开关（Electron 主进程面；同记 not-applicable）。
     expect(PLAIN.map((r) => r.key)).toEqual([
-      "autoMemory", "autoVerify", "ctrlTabCycle", "impactAnalysis", "notifyOnComplete", "promptCache", "subagentTools",
+      "autoMemory", "autoVerify", "ctrlTabCycle", "impactAnalysis", "keepAwake", "notifyOnComplete", "promptCache", "subagentTools",
     ]);
   });
 

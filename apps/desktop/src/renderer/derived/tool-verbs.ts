@@ -53,6 +53,8 @@ export const TOOL_VERBS: Readonly<Record<string, string>> = {
   obs_recall: "回看",
   diagnose: "诊断",
   read_image: "读图",
+  // 任务清单（2026-11-04 工作状态面板「进程」的数据源）：摘要走 ownSubject（items 无 command/path）。
+  todo_write: "记清单",
 };
 export function toolVerb(tool: string): string | null {
   return TOOL_VERBS[tool] ?? null;

@@ -3,10 +3,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  formatAttachmentContext,
+  isImageRunAttachment,
   parseRunAttachment,
   validateRunAttachment,
   validateRunAttachments,
 } from "../src/main/run-attachments";
+
+/** 最小合法 1×1 PNG（与 tests/read-image.test.ts 同一份字节）。 */
+const PNG_1X1 = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==",
+  "base64",
+);
 
 const roots: string[] = [];
 async function tempRoot(): Promise<string> {
@@ -64,6 +72,50 @@ describe("run attachment boundary", () => {
     if (!result.ok) return;
     expect(result.value.withinWorkspace).toBe(false);
     expect(result.value.requiresExternalApproval).toBe(true);
+  });
+
+  it("auto-approves only real outside images (magic number, never the extension)", async () => {
+    const root = await tempRoot();
+    const outside = await tempRoot();
+    await writeFile(join(outside, "shot.png"), PNG_1X1);
+    await writeFile(join(outside, "notes.txt"), "plain text");
+    await writeFile(join(outside, "fake.png"), "not an image");
+    await mkdir(join(outside, "folder"));
+    const validated = await validateRunAttachments(
+      [
+        { path: join(outside, "shot.png"), kind: "file", explicit: true },
+        { path: join(outside, "notes.txt"), kind: "file", explicit: true },
+        { path: join(outside, "fake.png"), kind: "file", explicit: true },
+        { path: join(outside, "folder"), kind: "directory", explicit: true },
+      ],
+      root,
+    );
+    expect(validated.ok).toBe(true);
+    if (!validated.ok) return;
+    const [image, text, fake, directory] = validated.value;
+    expect(await isImageRunAttachment(image!)).toBe(true);
+    expect(await isImageRunAttachment(text!)).toBe(false);
+    expect(await isImageRunAttachment(fake!)).toBe(false);
+    expect(await isImageRunAttachment(directory!)).toBe(false);
+  });
+
+  it("keeps an external path hidden until the run-time approval is recorded", async () => {
+    const root = await tempRoot();
+    const outside = await tempRoot();
+    const file = join(outside, "note.txt");
+    await writeFile(file, "note");
+    const validated = await validateRunAttachments([{ path: file, kind: "file", explicit: true }], root);
+    expect(validated.ok).toBe(true);
+    if (!validated.ok) return;
+
+    const hidden = formatAttachmentContext(validated.value, root) ?? "";
+    expect(hidden).toContain("[未批准的本地引用]");
+    expect(hidden).not.toContain(outside);
+
+    const approved = validated.value.map((attachment) => ({ ...attachment, externalApproved: true }));
+    const shown = formatAttachmentContext(approved, root) ?? "";
+    expect(shown).toContain(JSON.stringify(join(await realPath(outside), "note.txt")));
+    expect(shown).toContain("一次性读取批准");
   });
 
   it("rejects a kind mismatch and missing paths", async () => {

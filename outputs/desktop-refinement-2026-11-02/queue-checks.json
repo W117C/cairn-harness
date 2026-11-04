@@ -1,0 +1,115 @@
+{
+  "checks": [
+    {
+      "name": "运行中入队出现铅笔入口",
+      "ok": true,
+      "detail": {
+        "text": "排队里的错字",
+        "editButton": true,
+        "run": "s2"
+      }
+    },
+    {
+      "name": "编辑框带原正文并获焦",
+      "ok": true,
+      "detail": {
+        "value": "排队里的错字",
+        "focused": true
+      }
+    },
+    {
+      "name": "Enter 提交：条面与落盘载荷都是新正文",
+      "ok": true,
+      "detail": {
+        "text": "排队里的正文已改好",
+        "lastSet": {
+          "sessionId": "s2",
+          "entries": [
+            {
+              "text": "排队里的正文已改好",
+              "attachments": []
+            }
+          ],
+          "workspace": "/tmp/demo-ws"
+        }
+      }
+    },
+    {
+      "name": "Esc 取消：正文保持上次提交值，草稿未落盘",
+      "ok": true,
+      "detail": {
+        "text": "排队里的正文已改好",
+        "sets": 2
+      }
+    },
+    {
+      "name": "Esc 只取消编辑：本轮仍在跑、队列条目还在",
+      "ok": true,
+      "detail": {
+        "runs": 1,
+        "stop": true
+      }
+    },
+    {
+      "name": "下移：条面与落盘载荷同序",
+      "ok": true,
+      "detail": {
+        "order": [
+          "第二条排队消息",
+          "排队里的正文已改好"
+        ],
+        "last": [
+          "第二条排队消息",
+          "排队里的正文已改好"
+        ]
+      }
+    },
+    {
+      "name": "上移：回到原顺序",
+      "ok": true,
+      "detail": [
+        "排队里的正文已改好",
+        "第二条排队消息"
+      ]
+    },
+    {
+      "name": "long queue keeps composer visible at 1440×900",
+      "ok": true,
+      "detail": {
+        "scrolling": true,
+        "listHeight": 192,
+        "visible": true,
+        "width": 1440,
+        "scrollWidth": 1440
+      }
+    },
+    {
+      "name": "long queue keeps composer visible at 880×640",
+      "ok": true,
+      "detail": {
+        "scrolling": true,
+        "listHeight": 158,
+        "visible": true,
+        "width": 880,
+        "scrollWidth": 880
+      }
+    },
+    {
+      "name": "long queue keeps composer visible at 880×480",
+      "ok": true,
+      "detail": {
+        "scrolling": true,
+        "listHeight": 116,
+        "visible": true,
+        "width": 880,
+        "scrollWidth": 880
+      }
+    },
+    {
+      "name": "真实渲染无控制台错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "consoleErrors": []
+}

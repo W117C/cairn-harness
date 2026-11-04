@@ -1,0 +1,36 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn
+
+ ❯ tests/session-id-single.test.ts (4 tests | 1 failed | 3 skipped) 38ms
+   ❯ 会话 id 引用判定只有一份（第 967 页） (4)
+     × 源码里只剩共享实现一处定义，sidecar 与 IPC 都 import 同一份 38ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/session-id-single.test.ts > 会话 id 引用判定只有一份（第 967 页） > 源码里只剩共享实现一处定义，sidecar 与 IPC 都 import 同一份
+AssertionError: expected [ 'src/main/feedback.ts' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "src/main/feedback.ts",
++ ]
+
+ ❯ tests/session-id-single.test.ts:94:23
+     92|     }
+     93|
+     94|     expect(offenders).toEqual([]);
+       |                       ^
+     95|     expect(missing).toEqual([]);
+     96|     expect(read("src/main/sessions.ts")).toContain('from "./session-id…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 skipped (4)
+   Start at  20:20:49
+   Duration  743ms (transform 78%, import 16%, tests 6%)
+

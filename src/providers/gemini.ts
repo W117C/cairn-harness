@@ -241,9 +241,16 @@ export async function* streamGemini(
         let done = false;
         while (!done) {
           const read = await reader.read();
-          if (read.done) break;
-          est.guard.bump(); // 有分片 → 续期（只有完全静默才会到点）
-          buf += decoder.decode(read.value, { stream: true });
+          if (read.done) {
+            done = true;
+            const tail = decoder.decode();
+            if (tail) buf += tail;
+            if (buf.trim() !== "") buf += "\n";
+            else break;
+          } else {
+            est.guard.bump(); // 有分片 → 续期（只有完全静默才会到点）
+            buf += decoder.decode(read.value, { stream: true });
+          }
           let nl: number;
           while ((nl = buf.indexOf("\n")) >= 0) {
             const line = buf.slice(0, nl).trim();

@@ -17,15 +17,14 @@ describe("验证状态词表", () => {
     expect(VERIFICATION_NOT_REQUIRED).toBe("无需验证");
   });
 
-  it("两个消费面都读同一份，且不再各自写表", () => {
+  it("编排面读同一份；交付卡按 DSH 不再承担验证状态，也不另写一套词", () => {
     const orchestration = read("../src/renderer/derived/orchestration.ts");
     expect(orchestration).toContain('from "./verification-labels"');
     expect(orchestration).toContain("verificationLabel(evidence)");
     expect(orchestration).not.toContain("EVIDENCE_LABEL");
 
     const card = read("../src/renderer/components/ChangeSummaryCard.tsx");
-    expect(card).toContain('from "../derived/verification-labels"');
-    expect(card).toContain("verificationLabel(status)");
+    expect(card).not.toContain("verificationLabel");
     expect(card).not.toContain("STATUS_LABEL");
     expect(card).not.toContain("验证未过");
   });

@@ -203,9 +203,12 @@ export function turnDelivery(events: readonly AgentEvent[]): TurnDelivery[] {
  *  已于 2026-10-24 按业主反馈整体撤下——空轮不再产出任何内容，序列里只剩卡。 */
 export type DeliveryTrailItem = { kind: "card"; delivery: TurnDelivery };
 
-/** 交付卡流尾序列：按轮序只铺「有交付的卡」，轮与轮之间的空轮不占位。 */
+/** 交付卡流尾序列：按轮序只铺「有改动的卡」，轮与轮之间的空轮不占位。
+ *  DSH 口径（2026-11-03）：没有 changed files 的轮不出卡——空轮不该留一张只有标题的空壳。 */
 export function deliveryTrail(deliveries: readonly TurnDelivery[]): DeliveryTrailItem[] {
-  return deliveries.map((delivery) => ({ kind: "card" as const, delivery }));
+  return deliveries
+    .filter((delivery) => delivery.files.length > 0)
+    .map((delivery) => ({ kind: "card" as const, delivery }));
 }
 
 export function turnChanges(events: readonly AgentEvent[]): Array<{

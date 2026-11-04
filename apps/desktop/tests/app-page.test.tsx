@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { AppPageBody, AutomationPane, PAGE_META, PAGE_ORDER, buildSchedule, scheduleLabel } from "../src/renderer/components/AppPage";
+import { readAppPageSurface } from "./helpers/app-surface";
 import { WorktreesPane } from "../src/renderer/components/WorktreesPane";
 import { readAppSurface } from "./helpers/app-surface";
 
@@ -52,6 +53,26 @@ describe("页体并入设置（v7.1 业主裁）：AppPageBody + 事实源", () 
     expect(PAGE_ORDER.map((p) => PAGE_META[p].label)).toEqual(["插件", "自动化任务", "技能中心", "记忆系统", "工作树"]);
   });
 
+  it("记忆页给出去处：沉淀开关在设置·高级，记忆页有直达入口（不给就不摆）", () => {
+    const src = readAppPageSurface();
+    // 入口由宿主注入：给了 onOpenSection 才渲染按钮（空态与有数据态各一处）。
+    expect(src).toContain("onOpenMemorySettings?: () => void");
+    expect(src).toContain("onOpenSection?.(\"advanced\")");
+    expect(src).toMatch(/props\.onOpenMemorySettings !== undefined\s*\?\s*\{ action: <button/);
+    // 反向：宿主不注入 onOpenSection 时，页体不许凭空摆出这个按钮（属性用 spread 条件注入）。
+    expect(src).toContain('{...(props.onOpenSection !== undefined ? { onOpenMemorySettings');
+  });
+
+  it("记忆列表按层分组：只在「全部」下出组头（单层筛选不重复那行）", () => {
+    const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/MemoryPane.tsx", import.meta.url)), "utf8");
+    const css = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
+    // 组头由层别变化驱动，筛选到单层时 grouped=false ⇒ 一节组头都不出。
+    expect(src).toContain('const grouped = filter === "all";');
+    expect(src).toContain('{grouped && (index === 0 || sorted[index - 1]?.layer !== r.layer) && (');
+    expect(src).toContain('className="ap-group-label"');
+    expect(css).toContain(".ap-group-label {");
+  });
+
   it("工作树页：孤儿逐条列出 + 清理按钮；空态不摆假列表", () => {
     const html = renderToStaticMarkup(<WorktreesPane snap={{ workspace: "/tmp/ws", orphans: ["worker-3"], details: [{ name: "worker-3", dirty: true }] }} onError={() => undefined} refresh={() => undefined} />);
     expect(html).toContain("wt-worker-3");
@@ -64,6 +85,13 @@ describe("页体并入设置（v7.1 业主裁）：AppPageBody + 事实源", () 
     expect(empty).toContain("没有遗留的工作树");
   });
 
+  it("工作树未解析（无可用工作区）时给说明与出路，不是一行状态字（2026-11-02 真机）", () => {
+    const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/AppPage.tsx", import.meta.url)), "utf8");
+    expect(src).not.toContain('stateFrame("工作区未解析（无可用工作区）")');
+    expect(src).toContain("还没有可分析的工作区");
+    expect(src).toMatch(/还没有可分析的工作区[\s\S]{0,400}先在侧栏打开一个文件夹/);
+  });
+
   it("SSR 首帧：页体带 aria-label 与诚实占位（快照未到时说明，不摆空壳内容）", () => {
     const html = renderToStaticMarkup(<AppPageBody page="automation" />);
     expect(html).toContain('aria-label="自动化任务"');
@@ -74,7 +102,7 @@ describe("页体并入设置（v7.1 业主裁）：AppPageBody + 事实源", () 
 });
 
 describe("记忆页重做（2026-10-16 业主裁 · D/E/F · 源码哨兵）", () => {
-  const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/AppPage.tsx", import.meta.url)), "utf8");
+  const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/MemoryPane.tsx", import.meta.url)), "utf8");
 
   it("D：抽屉顺序 = 主题正文 → 索引 → 待批外部引用 → 删除（底置、描边红小按钮 + 二次确认）", () => {
     let last = -1;
@@ -106,22 +134,25 @@ describe("记忆页重做（2026-10-16 业主裁 · D/E/F · 源码哨兵）", (
     expect(src).toContain("subTitle={fullTime(selected.modified)}");
   });
 
-  it("H：列表行顺序 = 名称 / 元信息 / 类型标签（标签钉右；省略交给 .ap-item 的 CSS 契约）", () => {
+  it("H：列表行顺序 = 名称 / 元信息（层别徽标下架，层别只从左侧筛选读）", () => {
     const rowAt = src.indexOf('<span className="nm">{r.topic.topic}</span>');
     const subAt = src.indexOf('<span className="sub" title={fullTime(r.topic.modified)}>');
-    const tagAt = src.indexOf('<span className="sp-tag">{r.layer === "project" ? "项目层" : "全局层"}</span>');
     expect(rowAt).toBeGreaterThan(-1);
     expect(subAt).toBeGreaterThan(rowAt);
-    expect(tagAt).toBeGreaterThan(subAt);
+    expect(src).not.toContain('className="sp-tag">{r.layer === "project"');
   });
 
   it("G/H/E 样式哨兵：统计等分整行、名称可省略、标签不缩、索引行渲染样式在", () => {
     const css = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
-    // G：按实际枚数等分（原 repeat(4,1fr) 写死四轨 ⇒ 3 枚时右空一轨）
-    expect(css).toContain(".ap-stats { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--space-sm); }");
+    // 2026-11-02：自动化页四张统计卡也换成摘要行后，.ap-stats 一族已无调用者 ⇒ 死规则删掉。
+    // 反向钉：统计卡类名不许再出现在样式表与页体里（两个页面必须同一形态）。
+    expect(css).not.toContain(".ap-stats {");
+    expect(css).not.toMatch(/\.ap-stat\s*\{/);
+    expect(src).not.toContain("function Stats(");
+    expect(src).not.toContain('className="ap-stats"');
+    expect(css).toContain(".ap-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-md); }");
     // H：名称单行省略 + 标签不缩
     expect(css).toMatch(/\.ap-item \.nm \{[^}]*text-overflow: ellipsis/);
-    expect(css).toMatch(/\.ap-item \.sp-tag \{ flex: none; \}/);
     // E：索引逐行卡内样式在
     expect(css).toContain(".ap-index-line");
     expect(css).toContain(".ap-drawer-foot");

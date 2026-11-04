@@ -1,0 +1,21 @@
+.browser-home {
+  min-height: 220px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px 16px;
+  color: hsl(var(--text-300));
+  text-align: center;
+}
+.browser-home h2 { margin: 0; font-size: var(--fs-body-md); font-weight: var(--fw-medium); color: hsl(var(--text-100)); text-wrap: balance; }
+.browser-home-tools { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; padding-top: 8px; }
+.browser-home-tools button { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 12px; border-radius: var(--radius-sm); font-size: var(--fs-body-sm); }
+.browser-home-tools button:hover { background: hsl(var(--bg-200)); color: hsl(var(--text-100)); }
+.browser-home-tools button > svg:last-child { color: hsl(var(--text-300)); }
+.browser-pane .bp-toolbar { flex-wrap: wrap; gap: 3px; padding: 4px 0 8px; }
+.browser-pane .bp-url { flex: 1 1 100px; height: 30px; font-size: var(--fs-caption-sm); }
+.browser-pane .bp-toolbar .iconbtn { min-width: 28px; min-height: 28px; }
+.browser-pane .bp-view { overflow: auto; border-color: var(--hairline); }

@@ -3,6 +3,10 @@ import type { PageFilterItem } from "../navigation";
 
 export interface PageFrameProps {
   title: string;
+  /** 标题的暗色尾缀（2026-11-04 自动化页「自动化 工作流」双色调形制）；缺省不渲染。 */
+  titleAccent?: string;
+  /** 标题下的一句副标题（暗色说明行）；缺省不渲染。 */
+  subtitle?: string;
   search?: {
     label: string;
     value: string;
@@ -24,7 +28,11 @@ export function PageFrame(props: PageFrameProps): React.JSX.Element {
   return (
     <section className="page-frame">
       <header className="page-frame-head">
-        <h1 className="page-frame-title">{props.title}</h1>
+        <h1 className="page-frame-title">
+          {props.title}
+          {props.titleAccent !== undefined && <span className="page-frame-title-accent"> {props.titleAccent}</span>}
+        </h1>
+        {props.subtitle !== undefined && <p className="page-frame-subtitle">{props.subtitle}</p>}
         <div className="page-frame-actions">
           {props.actions}
           {props.search !== undefined && (

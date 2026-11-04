@@ -42,8 +42,6 @@ function sidebarHtml(sessions: readonly WorkspaceSession[], projects: readonly P
       waitingIds={new Set<string>()}
       outcomes={new Map<string, "ok" | "failed">()}
       providerOk={null}
-      theme="system"
-      onThemeChange={() => undefined}
       onOpen={() => undefined}
       onNewTask={() => undefined}
       onOpenPalette={() => undefined}
@@ -55,7 +53,6 @@ function sidebarHtml(sessions: readonly WorkspaceSession[], projects: readonly P
       onRelocateProject={async () => undefined}
       onRemoveProject={async () => undefined}
       onRevealProject={() => undefined}
-      onOpenSettings={() => undefined}
       onPickDirectory={() => Promise.resolve(null)}
       onAssignSessionProject={() => undefined}
     />,

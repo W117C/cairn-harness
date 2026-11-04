@@ -7,7 +7,7 @@
 //  · 第二十四遍业主裁 A②「Tab 想下一条」：建议只在按 Tab 时出手；空框空闲右侧一枚 Tab 键帽。
 // P2 契约（plan 2026-10-16）：
 //  · ＋菜单四项（上传文件…/添加文件夹…/粘贴截图（⌘V）/引用最近文件）——**零路径手输**（旧手输入口清退）；
-//  · 附件 chip = 图标 + 文件名 + 大小（拿不到不显）+ 项目外小盾牌（tooltip 说审批）；点击 = 项目内 open、
+//  · 附件 chip = 图标 + 文件名 + 大小（拿不到不显）+ 项目外小盾牌（tooltip 说边界策略）；点击 = 项目内 open、
 //    项目外 revealInFinder（路径只进 tooltip）；删除钮保留；
 //  · ⌘V 粘贴：clipboardData.files 非空才 preventDefault（文本粘贴不劫持）→ pathForFile 或 saveTempFile；
 //  · @ 引用走 workspaceSearch（debounce 120ms、扁平列表带面包屑、目录=定范围再搜、选中文件=清 token 落 chip）；
@@ -19,8 +19,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "../toast";
 import { relInWorkspace } from "../workspace-rel";
 import type { PermissionMode, ProviderInfo, RunAttachmentReference, SuggestNextResult } from "../../../../../src/main/ipc-protocol";
+import type { AgentEvent } from "../../../../../src/events";
 import type { RunPhase } from "../projections";
-import { ArrowUp, ChevronDown, ChevronRight, Clock, FileText, Folder, Image as ImageIcon, ListChecks, Loader2, Plus, Shield, X } from "lucide-react";
+import { ArrowUp, ChevronDown, ChevronRight, Clock, FileText, Folder, Image as ImageIcon, Plus, Shield, Square, X } from "lucide-react";
 import { classifyDrop } from "../sessions-view";
 import { ModelPicker, THINKING_LEVELS } from "./ModelPicker";
 import { UsageMeter } from "./UsageMeter";
@@ -33,6 +34,8 @@ import { formatBytes } from "../derived/format-bytes";
 import { STR } from "../strings";
 import { slashItems, slashMatches, type SlashSkill } from "../slash";
 import { DRAFTS_KEY, HOME_DRAFT_KEY, draftKeyFor, sessionIdOfDraftKey } from "../drafts";
+import { pickedElementContext, type PickedElement, type PickedElementSignal } from "../picked-element";
+import { ElementPill } from "./ElementPill";
 import "./composer-plan.css";
 import type { ComposerLockReason } from "../send-queue";
 
@@ -128,15 +131,14 @@ export function Composer(props: {
    *  缺省（旧调用面）沿用 disabled+running 的旧推断。 */
   disabledReason?: ComposerLockReason;
   mode: PermissionMode;
-  /** v23 Plan 模式：默认来自设置，Composer 的「方案」开关按轮覆盖。缺省不摆按钮（旧调用面）。 */
-  planRequired?: boolean;
-  onPlanRequiredChange?: (next: boolean) => void;
   running: boolean;
   stopped: boolean;
   activeId: string | null;
   providerInfo: ProviderInfo | null;
   pickerValue: string | null;
   usage: { inputTokens: number; outputTokens: number; usageCount: number; cacheReadTokens: number; lastInputTokens: number };
+  /** 事件流（用量浮层的上下文分解读它；WorkbenchView 直传，Composer 只转发）。 */
+  events: readonly AgentEvent[];
   phaseLabel: string;
   /** 运行相位（App 投影）：状态条的数据源。 */
   phase: RunPhase;
@@ -166,8 +168,8 @@ export function Composer(props: {
   promptHistory?: readonly string[];
   /** v7 附件注入（§2.3 路径右键「附为上下文」）：seq 递增触发一次 append；与 injectedText 同式。 */
   injectedAttachment?: { path: string; kind: "file" | "directory"; seq: number };
-  /** v7 文本追加注入（元素选择结果等）：seq 递增触发一次 append 到草稿尾（不覆盖——与覆盖式 injectedText 分工）。 */
-  injectedAppend?: { text: string; seq: number };
+  /** v7 元素选择结果：seq 递增触发一次；只入一枚可整枚移除的 chip，不把整段选择器/HTML 塞进草稿。 */
+  injectedElement?: PickedElementSignal;
   /** 第三个参数 `forceQueue`：**只入队、不插话**。
    *  为什么需要它：运行中的回车现在默认插话到本轮（第 9 点），但「加入队列」那颗钮点下去
    *  必须**真的排队**——按钮写着「加入队列」却把话插进当前轮，按钮就在说谎。
@@ -205,6 +207,8 @@ export function Composer(props: {
   const [text, setText] = useState("");
   // 附件引用（RunRequest.attachments）：chip 列表 + ＋弹层；发送后清空。
   const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
+  // 元素选择（2026-11-03）：输入区只摆短 chip；完整选择器/HTML 留在这里，发送时拼到消息前。
+  const [pickedElements, setPickedElements] = useState<PickedElement[]>([]);
   // 每会话草稿（2026-10-18 真机抓到的串稿）：Composer 常驻不随会话重挂，旧实现切会话时
   // 把 A 的草稿原样带到 B（还会把 B 的草稿写回 A）。按会话键分桶：切走存、切回取；
   // 发送时删键（否则发完再切回又把它捞回来）。键带工作区（draftKeyFor）：两个已登记工作区里
@@ -213,6 +217,7 @@ export function Composer(props: {
   const draftsRef = useRef<Map<string, string>>(storedDrafts());
   // 附件 chip 与草稿同病（切会话会带着别人选的附件去发）：同一把键分桶。
   const attachByKey = useRef(new Map<string, AttachmentItem[]>());
+  const elementsByKey = useRef(new Map<string, PickedElement[]>());
   // 旧裸 id 桶的懒迁移：旧版落盘的键是裸会话 id；读到引用键的空桶时把同 id 的旧桶搬过来
   // （一次性的，搬完删旧键，之后快照只写新键）。旧裸键本身无法区分工作区，先到先得。
   const takeDraft = (key: string): string | undefined => {
@@ -245,9 +250,11 @@ export function Composer(props: {
   if (draftKeyRef.current !== draftKey) {
     draftsRef.current.set(draftKeyRef.current, text); // 渲染期调整（guard 后 setState 同组件合法）：先于 injectedText 效果
     attachByKey.current.set(draftKeyRef.current, attachments);
+    elementsByKey.current.set(draftKeyRef.current, pickedElements);
     draftKeyRef.current = draftKey;
     setText(takeDraft(draftKey) ?? "");
     setAttachments(takeAttach(draftKey) ?? []);
+    setPickedElements(elementsByKey.current.get(draftKey) ?? []);
   }
   // 旧会话历史回填：本地桶还没有这个会话时，用投影行填一次（之后以本地发送栈为准）。
   useEffect(() => {
@@ -325,6 +332,9 @@ export function Composer(props: {
     const movedAttach = attachByKey.current.get(fromKey);
     if (movedAttach !== undefined && !attachByKey.current.has(toKey)) attachByKey.current.set(toKey, movedAttach);
     attachByKey.current.delete(fromKey);
+    const movedElements = elementsByKey.current.get(fromKey);
+    if (movedElements !== undefined && !elementsByKey.current.has(toKey)) elementsByKey.current.set(toKey, movedElements);
+    elementsByKey.current.delete(fromKey);
     if (draftKeyRef.current === toKey && moved !== undefined) setText((cur) => (cur === "" ? moved : cur));
     if (draftKeyRef.current === toKey && movedAttach !== undefined) {
       setAttachments((cur) => (cur.length === 0 ? movedAttach : cur));
@@ -378,15 +388,15 @@ export function Composer(props: {
     setAttachments((prev) => (prev.some((x) => x.path === a.path) ? prev : [...prev, { path: a.path, kind: a.kind, explicit: true }]));
     if (a.kind === "file") props.onReferenceAdded?.(a.path);
   }, [props.injectedAttachment]);
-  // v7 文本追加注入（元素选择）：seq 变化 append 一次到草稿尾（不覆盖已写的字）；聚焦待编辑。
-  const lastInjectedAppend = useRef(0);
+  // v7 元素选择：seq 变化入一枚 chip（同一元素重复选也允许再入；完整载荷不进草稿）。
+  const lastInjectedElement = useRef(0);
   useEffect(() => {
-    const a = props.injectedAppend;
-    if (a === undefined || a.seq === lastInjectedAppend.current) return;
-    lastInjectedAppend.current = a.seq;
-    setText((prev) => (prev.trim() === "" ? a.text : `${prev}\n${a.text}`));
+    const a = props.injectedElement;
+    if (a === undefined || a.seq === lastInjectedElement.current) return;
+    lastInjectedElement.current = a.seq;
+    setPickedElements((prev) => [...prev, { selector: a.selector, snippet: a.snippet, url: a.url, label: a.label }]);
     requestAnimationFrame(() => { taRef.current?.focus(); });
-  }, [props.injectedAppend]);
+  }, [props.injectedElement]);
   // 拖放引用（蓝本 §3.1）：高亮态 + 全局 drop 拦截在 App（防拖出窗口导致整窗导航）。
   const [dragging, setDragging] = useState(false);
   const wsPath = props.workspacePath ?? null;
@@ -604,8 +614,13 @@ export function Composer(props: {
   // interrupt=true（⌘/Ctrl+Enter）时先入队再打断本轮——收束在轮界，队列随即派发（App 侧语义）。
   const submit = (opts?: { interrupt?: boolean; forceQueue?: boolean }) => {
     if (!canSend) return;
-    props.onSend(text.trim(), stripRenderFields(attachments), opts?.forceQueue);
-    const sent = text.trim();
+    // 元素选择：完整选择器/HTML 只在这里拼到消息前，输入框里从头到尾只有一枚短 chip。
+    // 用户删掉 chip = 这次不带元素上下文；不存在「删了半行选择器，发出去的是半截」的中间态。
+    const context = pickedElementContext(pickedElements);
+    const typed = text.trim();
+    const outgoing = context === "" ? typed : typed === "" ? context : `${context}\n\n${typed}`;
+    props.onSend(outgoing, stripRenderFields(attachments), opts?.forceQueue);
+    const sent = typed;
     if (sent !== "") {
       const hist = historyRef.current.get(draftKeyRef.current) ?? [];
       historyRef.current.set(draftKeyRef.current, [sent, ...hist].slice(0, 50));
@@ -615,7 +630,9 @@ export function Composer(props: {
     setText("");
     draftsRef.current.delete(draftKeyRef.current);
     attachByKey.current.delete(draftKeyRef.current);
+    elementsByKey.current.delete(draftKeyRef.current);
     setAttachments([]);
+    setPickedElements([]);
     setMention(null);
     setSuggestNote(null);
     setRecentOpen(false);
@@ -799,8 +816,11 @@ export function Composer(props: {
           </div>
         )}
         {/* 附件 chips（P2-3）：图标 + 文件名 + 大小（拿不到不显）+ 项目外盾牌；点击=打开/定位；路径只进 tooltip */}
-        {attachments.length > 0 && (
+        {(attachments.length > 0 || pickedElements.length > 0) && (
           <div className="attach-strip show">
+            {pickedElements.map((e, i) => (
+              <ElementPill key={`${e.selector}:${String(i)}`} element={e} onRemove={() => { setPickedElements((prev) => prev.filter((_, j) => j !== i)); }} />
+            ))}
             {attachments.map((a, i) => (
               <span key={`${a.path}:${String(i)}`} className="attach-chip">
                 <button
@@ -852,7 +872,8 @@ export function Composer(props: {
               : disabled && props.running ? STR.composer.placeholderGate
               : disabled ? STR.composer.placeholderCreating
               : props.stopped ? STR.composer.placeholderStopped
-              : STR.composer.placeholder                            // 运行中也用这条：排队语义不摆常驻提示（业主裁）
+              : props.running ? STR.composer.queuePlaceholder // 排队语义明说（2026-11-04 业主截图，撤销旧「不摆常驻提示」裁）
+              : STR.composer.placeholder
             }
             aria-label={STR.composer.inputAria}
             onChange={(e) => {
@@ -997,6 +1018,7 @@ export function Composer(props: {
             <button
               className="attach-btn"
               title={STR.composer.attachTitle}
+              aria-label={STR.composer.attachTitle}
               aria-haspopup="menu"
               aria-expanded={menu === "attach"}
               disabled={disabled}
@@ -1093,22 +1115,9 @@ export function Composer(props: {
               )}
             </Popover>
           </div>
-          {/* v23 Plan 模式一等入口：与权限档同排的开关；按轮覆盖 settings 默认，不写回设置。 */}
-          {props.onPlanRequiredChange !== undefined && (
-            <button
-              type="button"
-              className="ctl plan-ctl"
-              data-on={props.planRequired === true}
-              aria-pressed={props.planRequired === true}
-              aria-label={STR.composer.planAria}
-              title={props.planRequired === true ? STR.composer.planOnTip : STR.composer.planOffTip}
-              disabled={disabled}
-              onClick={() => { props.onPlanRequiredChange?.(props.planRequired !== true); }}
-            >
-              <ListChecks size={13} aria-hidden="true" />
-              <span>{STR.composer.planLabel}</span>
-            </button>
-          )}
+          {/* 是否先出方案由 agent 自判（2026-11-03 业主）：提示词自判面 + propose_plan + 方案门写禁，
+              用户不再手动开「方案」。方案批准卡与方案窗格不受影响——agent 提交方案后仍走那一套。 */}
+          <span className="spacer" />
           <ModelPicker
             // 切会话重挂（2026-10-18）：模型菜单是 Composer 之外的局部开合状态，不重挂的话
             // 会悬在新会话上（真机：@/附件/权限菜单已收，模型搜索框还开着）。
@@ -1136,13 +1145,13 @@ export function Composer(props: {
             open={overlayLayer === "model"}
             onOpenChange={setModelOpen}
           />
-          <span className="spacer" />
           {/* 用量环（v3-lite .ring：环心带上下文百分数；环钉在发送/中断钮左侧——原型 .bar 列序
               模型芯片弹性、ctxRing 与 send 贴右。「模型选择器旁」§3.5 语义随同一控件行保持）。 */}
           <UsageMeter
             usage={props.usage}
             steps={props.steps}
             {...(props.ctxWindow !== undefined ? { ctxWindow: props.ctxWindow } : {})}
+            events={props.events}
             open={menu === "meter"}
             onOpenChange={setMeterOpen}
             onCompact={props.onCompact}
@@ -1160,8 +1169,7 @@ export function Composer(props: {
           )}
           {props.running ? (
             <button className="send-btn stop" aria-label={STR.composer.stopAria} title={STR.composer.stopTitle} onClick={props.onCancel}>
-              {/* 批 4：转圈内嵌——加载中的转圈放进发送按钮里（变停止钮），不单独出现。 */}
-              <Loader2 size={13} />
+              <Square size={12} fill="currentColor" aria-hidden="true" />
             </button>
           ) : (
             <button className="send-btn" aria-label={STR.composer.sendAria} title={STR.composer.sendTitle} disabled={!canSend} onClick={() => { submit(); }}>

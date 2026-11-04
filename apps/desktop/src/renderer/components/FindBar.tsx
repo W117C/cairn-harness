@@ -53,7 +53,8 @@ export function foldedHitSeqs(rows: readonly StreamRow[], folded: ReadonlySet<nu
 }
 
 function flash(el: HTMLElement): void {
-  el.scrollIntoView({ block: "center", behavior: scrollBehavior("smooth") });
+  // inline: "nearest" ——只定位纵向，不许把祖先（对话列）横向拖走。
+  el.scrollIntoView({ block: "center", behavior: scrollBehavior("smooth"), inline: "nearest" });
   const row = el.closest(".row");
   if (!(row instanceof HTMLElement)) return;
   row.classList.remove("find-hit");

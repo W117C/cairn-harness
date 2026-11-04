@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,9 +7,16 @@ import { validateRunRequestEnvelope } from "../src/main/run-request";
 import { initSettingsStore, setSettings } from "../src/main/settings-handlers";
 import { handleSessionCreate, initSessionsDir } from "../src/main/session-handlers";
 import { pathOf } from "../src/main/sessions";
-import { handleAgentRun } from "../src/main/agent-runner";
+import { handleAgentDecide, handleAgentRun, setAppHooks, waitForSessionTailWork } from "../src/main/agent-runner";
+import type { AskPayload } from "../src/main/ipc-protocol";
 import { PROVIDER_ENV_KEYS } from "../src/providers/env-keys";
 import { DEFAULT_MODEL_TABLE, type ModelSpec } from "../src/providers/registry";
+
+/** 最小合法 1×1 PNG（magic number 完整）。 */
+const PNG_1X1 = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==",
+  "base64",
+);
 
 const ROUTES = [
   {
@@ -148,6 +155,176 @@ describe("RunRequest boundary", () => {
       await rm(outside, { recursive: true, force: true });
     }
   });
+
+  it("runs with an outside-workspace image without any approval ask", async () => {
+    const outside = await mkdtemp(join(tmpdir(), "dsh-outside-image-"));
+    try {
+      vi.stubEnv(PROVIDER_ENV_KEYS.glm, "test-key-never-logged");
+      await setSettings({ provider: "glm", model: "glm-standard", autoMemory: false });
+      const file = join(outside, "shot.png");
+      await writeFile(file, PNG_1X1);
+      const asks: AskPayload[] = [];
+      setAppHooks({
+        onAsk: (payload) => {
+          asks.push(payload);
+          handleAgentDecide(payload.askId, false);
+        },
+      });
+      try {
+        const { calls } = await installRoute(ROUTES[0]);
+        // 无 session ⇒ 若仍走审批会落到 unattended 门并立即失败；跑通即证明没有询问。
+        const response = await handleAgentRun(
+          {
+            message: "look at it",
+            mode: "read-only",
+            model: "glm-standard",
+            attachments: [{ path: file, kind: "file", explicit: true }],
+          },
+          { workspace: root, logPath: join(root, "outside-image.jsonl") },
+        );
+        expect(response, response.error).toMatchObject({ ok: true, attachmentCount: 1 });
+        expect(asks).toHaveLength(0);
+        expect(calls).toHaveLength(1);
+        expect(JSON.stringify(calls[0]?.body)).toContain(await realpath(file));
+      } finally {
+        setAppHooks({ onAsk: undefined });
+      }
+    } finally {
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("asks only for the non-image paths in a mixed outside bundle", async () => {
+    const outside = await mkdtemp(join(tmpdir(), "dsh-outside-mixed-"));
+    try {
+      vi.stubEnv(PROVIDER_ENV_KEYS.glm, "test-key-never-logged");
+      await setSettings({ provider: "glm", model: "glm-standard", autoMemory: false });
+      const image = join(outside, "shot.png");
+      const note = join(outside, "note.txt");
+      await writeFile(image, PNG_1X1);
+      await writeFile(note, "approved mixed content", "utf8");
+      const created = await handleSessionCreate("outside-mixed");
+      const logPath = pathOf(sessionsDir, created.id);
+      const asks: AskPayload[] = [];
+      setAppHooks({
+        onAsk: (payload) => {
+          asks.push(payload);
+          expect(handleAgentDecide(payload.askId, true)).toBe(true);
+        },
+      });
+      try {
+        const { calls } = await installRoute(ROUTES[0]);
+        const response = await handleAgentRun(
+          {
+            message: "read both",
+            mode: "read-only",
+            model: "glm-standard",
+            sessionId: created.id,
+            attachments: [
+              { path: image, kind: "file", explicit: true },
+              { path: note, kind: "file", explicit: true },
+            ],
+          },
+          { workspace: root, logPath },
+        );
+        expect(response, response.error).toMatchObject({ ok: true, attachmentCount: 2 });
+        expect(asks).toHaveLength(1);
+        expect(asks[0]?.args).toMatchObject({
+          paths: [await realpath(note)],
+          count: 1,
+          autoApprovedImages: 1,
+        });
+        const body = JSON.stringify(calls[0]?.body);
+        expect(body).toContain(await realpath(image));
+        expect(body).toContain(await realpath(note));
+      } finally {
+        setAppHooks({ onAsk: undefined });
+      }
+    } finally {
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("asks once for an outside attachment and passes the approved canonical path to the run", async () => {
+    const outside = await mkdtemp(join(tmpdir(), "dsh-outside-approved-"));
+    try {
+      const route = ROUTES[0];
+      vi.stubEnv(PROVIDER_ENV_KEYS.glm, "test-key-never-logged");
+      await setSettings({ provider: "glm", model: "glm-standard", autoMemory: false });
+      const file = join(outside, "note.txt");
+      await writeFile(file, "approved outside content", "utf8");
+      const created = await handleSessionCreate("outside-approved");
+      const logPath = pathOf(sessionsDir, created.id);
+      const asks: AskPayload[] = [];
+      setAppHooks({
+        onAsk: (payload) => {
+          asks.push(payload);
+          expect(handleAgentDecide(payload.askId, true)).toBe(true);
+        },
+      });
+      try {
+        const { calls } = await installRoute(route);
+        const response = await handleAgentRun(
+          {
+            message: "read it",
+            mode: "read-only",
+            model: "glm-standard",
+            sessionId: created.id,
+            attachments: [{ path: file, kind: "file", explicit: true }],
+          },
+          { workspace: root, logPath },
+        );
+        expect(response).toMatchObject({ ok: true, attachmentCount: 1 });
+        expect(asks).toHaveLength(1);
+        expect(asks[0]?.tool).toBe("attachment");
+        expect(asks[0]?.args).toMatchObject({ paths: [await realpath(file)] });
+        expect(calls).toHaveLength(1);
+        expect(JSON.stringify(calls[0]?.body)).toContain(await realpath(file));
+      } finally {
+        setAppHooks({ onAsk: undefined });
+      }
+    } finally {
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("stops before the run when the user rejects the outside attachment", async () => {
+    const outside = await mkdtemp(join(tmpdir(), "dsh-outside-rejected-"));
+    try {
+      const file = join(outside, "note.txt");
+      await writeFile(file, "rejected outside content", "utf8");
+      const created = await handleSessionCreate("outside-rejected");
+      const logPath = pathOf(sessionsDir, created.id);
+      const asks: AskPayload[] = [];
+      setAppHooks({
+        onAsk: (payload) => {
+          asks.push(payload);
+          expect(handleAgentDecide(payload.askId, false)).toBe(true);
+        },
+      });
+      try {
+        const response = await handleAgentRun(
+          {
+            message: "read it",
+            mode: "read-only",
+            model: "glm-standard",
+            sessionId: created.id,
+            attachments: [{ path: file, kind: "file", explicit: true }],
+          },
+          { workspace: root, logPath },
+        );
+        expect(response).toMatchObject({ ok: false, error: expect.stringMatching(/审批.*已拒绝/) });
+        expect(response.error).not.toContain(outside);
+        expect(asks).toHaveLength(1);
+        // 用户轮不得进日志：拒绝发生在装配之前，重放应为空。
+        expect(await replay(logPath)).toEqual([]);
+      } finally {
+        setAppHooks({ onAsk: undefined });
+      }
+    } finally {
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
 });
 
 describe.each(ROUTES)("$provider missing-key behavior", (route) => {
@@ -211,6 +388,8 @@ describe("non-session transport reuse", () => {
       { workspace: root, logPath: join(root, "distill-route.jsonl") },
     );
     expect(response.ok, response.error).toBe(true);
+    // 沉淀轮已转后台（2026-11-04「输出完了界面还在转」）：断言前等尾工落完。
+    await waitForSessionTailWork(join(root, "distill-route.jsonl"));
     expect(calls.length).toBeGreaterThanOrEqual(2);
     expect(calls.every((call) => call.url === route.url && call.body.model === "gpt-4o")).toBe(true);
   });

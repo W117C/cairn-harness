@@ -1,6 +1,6 @@
 import { open, readFile, readdir, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { assertRealContainment, resolveInWorkspace, ToolError, type Tool, type ToolContext, type ToolResult } from "./base.js";
+import { resolveReadTarget, ToolError, type Tool, type ToolContext, type ToolResult } from "./base.js";
 import { byteCapNotice, clipLine } from "./cap-notice.js";
 import { headWithinBytes, utf8PrefixEnd } from "./output-ring.js";
 import { prefetchLsp } from "./lsp.js";
@@ -72,8 +72,9 @@ async function nearNameSuggestions(workspace: string, rel: string): Promise<stri
  *  都住在这只函数里。「一次多份」复用它，而不是把同一套帽与提示抄第二遍（规则 122）。
  *  读不到/拒读一律 `ToolError` 抛出——批量那一侧负责决定「一份失败算不算整批失败」。 */
 async function readOne(ctx: ToolContext, rel: string, offsetRaw: unknown, limitRaw: unknown): Promise<string> {
-  const abs = resolveInWorkspace(ctx.workspace, rel, "read_file");
-  await assertRealContainment(ctx.workspace, abs, "read_file");
+  const target = await resolveReadTarget(ctx.workspace, rel, "read_file", ctx.externalReadGrants);
+  const abs = target.abs;
+  const display = target.display;
 
   // 目录路径：列条目（目录读不了内容，但列条目是有用的输出）。
   const st = await stat(abs).catch(() => null);
@@ -90,7 +91,7 @@ async function readOne(ctx: ToolContext, rel: string, offsetRaw: unknown, limitR
       used += Buffer.byteLength(line, "utf8") + 1;
     }
     const truncated = shown.length < sorted.length;
-    return rel + "/（目录，" + entries.length + " 项）\n" + shown.join("\n")
+    return display + "/（目录，" + entries.length + " 项）\n" + shown.join("\n")
       + (truncated ? "\n[truncated] 仅列前 " + String(shown.length) + " 项（共 " + String(entries.length) + " 项）" : "");
   }
 
@@ -102,19 +103,21 @@ async function readOne(ctx: ToolContext, rel: string, offsetRaw: unknown, limitR
   try {
     buf = oversized ? await readPrefix(abs, LARGE_FILE_PREFIX_BYTES) : await readFile(abs);
   } catch {
-    const suggestions = await nearNameSuggestions(ctx.workspace, rel);
+    // 近名建议只对工作区相对路径有意义：项目外批准清单里没有「同目录候选」这层语义。
+    const suggestions = target.external ? [] : await nearNameSuggestions(ctx.workspace, rel);
     const hint = suggestions.length ? "（近名建议: " + suggestions.join(", ") + "）" : "";
-    throw new ToolError("read_file: 文件不存在或不可读: " + rel + hint);
+    throw new ToolError("read_file: 文件不存在或不可读: " + display + hint);
   }
   if (looksBinary(buf)) {
-    throw new ToolError("read_file: 疑似二进制文件，拒绝按文本读取: " + rel);
+    throw new ToolError("read_file: 疑似二进制文件，拒绝按文本读取: " + display);
   }
   // #56：oversized 那一刀按**字节数**切，末尾正落在码位中间时 `toString("utf8")` 会解码出一个 U+FFFD，
   // 而这个字符会跟着 offset 一路交给模型（实测：读到前缀末尾那一行时含半个字符）。非 oversized 读到的是
   // 整份文件，边界由文件自己给，不用退。
   const content = oversized ? buf.subarray(0, utf8PrefixEnd(buf)).toString("utf8") : buf.toString("utf8");
-  // M2a：read 命中源码 → 后台预热 LSP（尽力而为，零阻塞、零异常冒泡）
-  prefetchLsp(ctx.workspace, abs);
+  // M2a：read 命中源码 → 后台预热 LSP（尽力而为、零阻塞、零异常冒泡）。
+  // 项目外一次性批准不在仓库索引面里，不往 LSP 塞界外路径。
+  if (!target.external) prefetchLsp(ctx.workspace, abs);
   const allLines = content.split("\n");
   // 若因行尾换行 split 出的最后一个空串不算一行
   const hasTrailingNewline = allLines.length > 0 && allLines[allLines.length - 1] === "";

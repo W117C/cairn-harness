@@ -223,7 +223,7 @@ export const MUTATIONS = [
     desc: "自动化页退回整份 getState ⇒ scheduleSnapshot 又成零消费通道：主进程接得通、UI 没人调，"
       + "而人口普查守卫会把这条当场点名（第 642 页 createProject/cardAction 的同一形状）",
     apply: (s) => s.replace("window.agent.scheduleSnapshot()", "window.agent.getState()"),
-    expectFail: "122 条通道全部有消费者；例外只有带理由的 allowlist",
+    expectFail: "invoke 通道均有消费者或明确的兼容保留原因",
   },
   {
     id: "worker-card-action-cardtype-drift",

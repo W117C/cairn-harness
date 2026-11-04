@@ -104,6 +104,26 @@ describe("McpManager 接线（描述与结果都过界）", () => {
     expect(listed.tools.map((t) => t.name)).toEqual(["a"]);
   });
 
+  it("裁剪是权限面不是显示面：被裁掉的工具名在 callTool 这一层同样调不动", async () => {
+    // 从前只有进表那一步查 include/exclude，callTool 直接按 bare 名打 server。
+    // 于是任何绕过注册表的调用方（第 1000 页的 mcp_tool 钩子就是第一个）都能点到用户明确关掉的那把。
+    const transport = { onclose: undefined as (() => void) | undefined, close: async () => {} } as unknown as Transport;
+    let hit = "";
+    const client = {
+      connect: async () => {},
+      listTools: async () => ({ tools: [{ name: "a", inputSchema: {} }, { name: "c", inputSchema: {} }] }),
+      callTool: async (req: { name: string }) => { hit = req.name; return { content: [] }; },
+      close: async () => {},
+    } as unknown as Client;
+    const mgr = new McpManager(async () => ({ client, transport }), 500, 500);
+    await mgr.connect("p", "s", { command: "x", excludeTools: ["c"] });
+    const denied = await mgr.callTool("p", "s", "c", {});
+    expect(denied.ok).toBe(false);
+    expect(denied.output).toContain("裁剪");
+    expect(hit).toBe(""); // 请求根本没发出去：拒绝不是「发了再看 server 怎么说」
+    expect((await mgr.callTool("p", "s", "a", {})).ok).toBe(true); // 表内的照常
+  });
+
   it("未超限的描述与结果逐字不变（零回归）", async () => {
     const { client } = stubClient("plain result", "short desc");
     const mgr = new McpManager(async () => ({ client, transport: {} as Transport }), 500, 500);

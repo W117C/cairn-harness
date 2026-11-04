@@ -13,8 +13,7 @@ import { dirname } from "node:path";
 import { writeFileAtomic } from "../atomic-write";
 import { eventRefKey, isEventRef } from "../events/session-ref";
 import type { EventRef } from "../events";
-
-const MAX_SESSION_ID_LENGTH = 80;
+import { isSessionId } from "./session-id";
 
 export interface PinRecord {
   /** 会话 id（与 JSONL 文件名同源）。 */
@@ -27,17 +26,6 @@ export interface PinRecord {
   at: string;
   /** 指针分叉：置顶指向来源事件（可为祖先行）；旧记录没有 ⇒ eventId 是 owner 自己的行号。 */
   eventRef?: EventRef;
-}
-
-function isSessionId(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= MAX_SESSION_ID_LENGTH &&
-    value.trim() === value &&
-    !value.startsWith(".") &&
-    !/[\\/\u0000-\u001f\u007f]/.test(value)
-  );
 }
 
 function assertEventId(value: unknown): asserts value is number {

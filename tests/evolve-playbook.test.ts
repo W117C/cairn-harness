@@ -83,12 +83,12 @@ describe("Playbook 生命周期", () => {
     expect(applyPlaybookEvents([add(entry)]).entries).toHaveLength(1);
     const duplicate = applyPlaybookEvents([add(entry), add(entry)]);
     expect(duplicate.refusals).toHaveLength(1);
-    expect(duplicate.refusals[0]!.reason).toContain("已存在");
+    expect(duplicate.refusals[0]!.reason).toBe("同 id 已存在（版本不可变，修改走 patch）");
 
     const noEvidence = make({ status: "active" });
     const refused = applyPlaybookEvents([add(noEvidence)]);
     expect(refused.entries).toHaveLength(0);
-    expect(refused.refusals[0]!.reason).toContain("证据");
+    expect(refused.refusals[0]!.reason).toBe("active 必须有至少一条 Episode 证据");
   });
 
   it("patch 只接受有界 body 增量", () => {

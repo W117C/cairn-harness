@@ -54,8 +54,10 @@ describe("Playbook 存储", () => {
     loaded = await loadPlaybook(workspace);
     expect(loaded.entries).toHaveLength(2);
     expect(loaded.refusals).toHaveLength(2);
-    expect(loaded.refusals.map((item) => item.reason).join("\n")).toContain("已存在");
-    expect(loaded.refusals.map((item) => item.reason).join("\n")).toContain("证据");
+    expect(loaded.refusals.map((item) => item.reason)).toEqual([
+      "同 id 已存在（版本不可变，修改走 patch）",
+      "active 必须有至少一条 Episode 证据",
+    ]);
   });
 
   it("从 evolution.json / lessons / workflows 迁移为 candidate，且幂等", async () => {

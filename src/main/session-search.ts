@@ -332,8 +332,10 @@ export async function searchSessions(opts: SessionSearchOptions): Promise<Sessio
     const path = join(opts.root, name);
     try {
       if (!(await isSessionLogAt(path))) continue;
-    } catch {
-      continue; // 首行都读不到：这条既扫不了，也不该被记成会话
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") continue;
+      // EACCES/EPERM 等非 ENOENT 错误：保留进候选，由 scanSessionFile 计入 unreadableSessions，
+      // 绝不把不可读会话静默跳过并谎报 kind:"ok"。
     }
     let mtimeMs = 0;
     try {
@@ -448,7 +450,9 @@ async function scanSessionFile(path: string, maxBytes: number, ref: SessionRef):
     for (;;) {
       const remaining = maxBytes - bytes;
       if (remaining <= 0) {
-        truncated = true; // 预算用尽（宁可说「可能还有」，也不假装读完）
+        const probe = Buffer.allocUnsafe(1);
+        const { bytesRead: moreBytes } = await fh.read(probe, 0, 1, position);
+        if (moreBytes > 0) truncated = true; // 预算用尽且后续确有未读字节（刚好读尽 EOF 时不算截断）
         break;
       }
       const want = Math.min(READ_CHUNK_BYTES, remaining);

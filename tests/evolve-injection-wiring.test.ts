@@ -191,7 +191,7 @@ it("观测账进入下一次注入的排序标签", async () => {
   const second = await prepareEvolutionInjection({
     workspace: ws, sessionId: "obs-next", taskContent: "修解析器", now: Date.now() + 10,
   });
-  expect(second.note).toContain("观测 2/2");
+  expect(second.note).toMatch(/\[strategy｜观测 2\/2\]/u);
 });
 
 it("任务没点路径时 on-path 经验不注入", async () => {

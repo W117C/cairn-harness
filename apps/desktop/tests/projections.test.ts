@@ -505,8 +505,9 @@ describe("deliveryTrail（批 3：只出卡，空轮不占位）", () => {
   it("尾部连续空轮同样不占位（流尾只剩最新卡）", () => {
     expect(shape(deliveryTrail([card(1)]))).toEqual(["c1"]);
   });
-  it("无交付=空序列", () => {
+  it("无交付=空序列；没有 changed files 的轮也不出空壳卡（DSH 口径）", () => {
     expect(deliveryTrail([])).toEqual([]);
+    expect(deliveryTrail([{ ...card(2), files: [] }])).toEqual([]);
   });
 });
 

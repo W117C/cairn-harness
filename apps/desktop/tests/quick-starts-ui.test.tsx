@@ -26,15 +26,17 @@ describe("QuickStarts（空屏建议行 SSR）", () => {
     expect(h).not.toContain('class="pill"');
   });
 
-  it("快捷动作是发丝线行列表：每个图标仍是扫描锚点，整行热区，hover 才露箭头", () => {
+  it("快捷动作是行列表（无通栏分隔线，2026-11-01 业主裁决）：图标是扫描锚点，整行热区，hover 才露箭头", () => {
     const h = renderToStaticMarkup(<QuickStarts items={["理解项目", "运行项目", "制定计划"]} firstRunSub={null} onPick={() => undefined} />);
     expect((h.match(/class="start-icon"/g) ?? []).length).toBe(3);
     // 2026-10-28 第 735 页：建议是**一条阅读序列**，不是三张等权卡片；2 列网格会留出第四格空洞。
     expect(css).toMatch(/\.starts\s*{[^}]*display:\s*flex/s);
     expect(css).toMatch(/\.starts\s*{[^}]*flex-direction:\s*column/s);
     expect(css).toMatch(/\.start\s*{[^}]*grid-template-columns:\s*22px minmax\(0, 1fr\) 16px/s);
-    expect(css).toMatch(/\.start\s*{[^}]*border-bottom:\s*1px solid var\(--hairline\)/s);
-    expect(css).not.toMatch(/\.start\s*{[^}]*border-radius:\s*var\(--radius-md\)/s);
+    // 2026-11-01：通栏 hairline 分隔撤下（横线跨满列宽像表格）；悬停底纹给圆角。
+    expect(css).not.toMatch(/\.starts\s*{[^}]*border-top/s);
+    expect(css).not.toMatch(/\.start\s*{[^}]*border-bottom/s);
+    expect(css).toMatch(/\.start\s*{[^}]*border-radius:\s*var\(--radius-sm\)/s);
     expect(css).toContain(".start:hover .start-go");
     expect(css).toContain("@media (max-width: 620px)");
     expect(css).toContain("@keyframes rise-in");

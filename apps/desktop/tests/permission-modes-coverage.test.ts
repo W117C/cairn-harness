@@ -6,20 +6,23 @@
 //
 // 判据：`MODE_OPTIONS` 的 id 集合必须**恰好等于** `MODE_LABEL` 的键集合（不多不少、不重复）。
 import { describe, expect, it } from "vitest";
+import { SELECTABLE_PERMISSION_MODES } from "../../../src/permissions/modes";
 import { MODE_LABEL } from "../src/renderer/permission-labels";
 import { MODE_OPTIONS } from "../src/renderer/components/settings-sections";
 
 describe("设置页档位与词表逐个对上（第 950 页）", () => {
   it("不多不少：id 集合相等", () => {
     const listed = MODE_OPTIONS.map((m) => m.id).sort();
-    const vocab = (Object.keys(MODE_LABEL) as string[]).sort();
+    const vocab = [...SELECTABLE_PERMISSION_MODES].sort();
     expect(listed).toEqual(vocab);
   });
 
   it("不重复：每个档位在设置页只出现一次", () => {
     const ids = MODE_OPTIONS.map((m) => m.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(ids.length).toBeGreaterThanOrEqual(5); // 少于五档说明表被删空了，不是"通过"
+    expect(ids).toEqual(["read-only", "default", "auto", "full-access"]);
+    expect(MODE_OPTIONS.map((m) => m.label)).toEqual(["只读", "需要审批", "智能审批", "完全允许"]);
+    expect(MODE_LABEL.guided.label).toBe("智能审批");
   });
 
   it("每一项都有人话标题与说明（空串不许混过去）", () => {

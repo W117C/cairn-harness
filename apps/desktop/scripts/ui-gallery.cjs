@@ -22,7 +22,8 @@ const { createHash } = require("node:crypto");
 
 // 首启夹具单独留证，验证旧的 onboarded=false 配置也直接进入正常工作界面。
 const FIRST_RUN = process.env.GALLERY_FIRST_RUN === "1";
-const OUT = FIRST_RUN ? "/tmp/cairn-gallery-first-run" : "/tmp/cairn-gallery";
+const OUT = process.env.CAIRN_UI_OUTPUT ?? (FIRST_RUN ? "/tmp/cairn-gallery-first-run" : "/tmp/cairn-gallery");
+const rendererEntry = process.env.CAIRN_RENDERER_ENTRY ?? join(__dirname, "..", "dist", "index.html");
 mkdirSync(OUT, { recursive: true });
 
 // 桩的兜底名单从**真接口**推导（src/main/ipc-protocol.ts 的 AgentApi 成员），
@@ -95,6 +96,8 @@ async function main() {
   const win = new BrowserWindow({
     width: 1440, height: 900, show: false,
     webPreferences: {
+      backgroundThrottling: false,
+      offscreen: true,
       preload: join(__dirname, "ui-gallery-preload.cjs"),
       additionalArguments: apiArgs,
     },
@@ -116,7 +119,7 @@ async function main() {
   if (process.env.GALLERY_KEEP_STORAGE !== "1") {
     await win.webContents.session.clearStorageData();
   }
-  await win.loadFile(join(__dirname, "..", "dist", "index.html"));
+  await win.loadFile(rendererEntry);
   // 页面级错误收集：只报 "reading 'kind'" 不知道是谁读的 —— 装一个 error/unhandledrejection
   // 收集器，把栈留下来（渲染层抛错时控制台那行只有打包后的行号，没有可读的名字）。
   await win.webContents.executeJavaScript(`
@@ -230,6 +233,31 @@ async function main() {
   // 模型菜单（搜索 + 分组 + 徽标 + 管理入口）
   await js(`document.querySelector(".mp-trigger")?.click()`);
   await shot("02-model-menu.png", 400);
+  const longModel = await js(`(() => {
+    const menu = document.querySelector('.mp-pop');
+    const name = menu?.querySelector('[aria-selected="true"] .mi-name');
+    if (!name) return { ok: false, reason: 'no selected model' };
+    const original = name.textContent;
+    try {
+      name.textContent = '一个很长的自定义模型名称 / organization / model-with-long-context-and-vision';
+      const row = name.parentElement;
+      const meta = row.querySelector('.sub').getBoundingClientRect();
+      const label = name.getBoundingClientRect();
+      const bounds = menu.getBoundingClientRect();
+      return { ok: menu.scrollWidth <= menu.clientWidth && label.right <= meta.left && meta.right <= bounds.right,
+        truncated: name.scrollWidth > name.clientWidth, menuWidth: menu.clientWidth,
+        nameClient: name.clientWidth, nameScroll: name.scrollWidth, display: getComputedStyle(name).display,
+        rowDisplay: getComputedStyle(row).display, label: { left: label.left, right: label.right }, meta: { left: meta.left, right: meta.right } };
+    } finally { name.textContent = original; }
+  })()`);
+  console.log('[gallery] 长模型名布局自查:', JSON.stringify(longModel));
+  if (!longModel.ok || !longModel.truncated) throw new Error('长模型名挤压了上下文信息');
+  const quietRow = await js(`(() => {
+    const row = document.querySelector('.mp-pop [role="option"][aria-selected="false"][data-highlighted="false"]');
+    return row ? getComputedStyle(row).backgroundColor : null;
+  })()`);
+  console.log('[gallery] 非高亮模型行背景:', quietRow);
+  if (quietRow !== 'rgba(0, 0, 0, 0)') throw new Error('未高亮的模型行仍带高亮背景');
   // 自查：模型列表被弹层高度挤窄时，**不许出现「组头露着、组里一行都看不见」**——
   // 那读起来就是一个空分组（本仓既有裁决：空态按可见条目数说话）。
   // 量法：逐个分组比较「头在列表可视区内」与「至少一行在可视区内」，两者同真即破。
@@ -313,6 +341,41 @@ async function main() {
     return JSON.stringify({ chain, markColor: mark ? getComputedStyle(mark).color : null });
   })()`);
   console.log("[gallery] 失败正文配色自查:", errorProbe);
+  // 工具调用行（第 914 页，对标业主给的参照）：展开工具簇，量两件事——
+  // ① 行头不再并排写机器名（run_shell）与中文动词；② 命令单独一排 `$ …`，`$` 不参与选中。
+  await js(`document.querySelector(".tool-group-toggle")?.click()`);
+  // 簇展开 ≠ 单行展开：每行自己还有一个 open 态（`.tool-head` 是那一行的开关）。
+  await js(`(() => {
+    const head = [...document.querySelectorAll('.row.tool .tool-head')].find((b) => (b.textContent || "").includes("pnpm test"));
+    head?.click();
+    return !!head;
+  })()`);
+  const toolRowProbe = await js(`(() => {
+    const heads = [...document.querySelectorAll('.row.tool .tool-head')].map((b) => b.textContent.trim().replace(/\\s+/g, ' '));
+    const cmd = document.querySelector('.tool-cmd-line');
+    const prompt = document.querySelector('.tool-cmd-prompt');
+    return JSON.stringify({
+      heads,
+      leaked: heads.filter((t) => /\\b(run_shell|read_file|edit_file|web_fetch)\\b/.test(t)),
+      cmd: cmd ? cmd.textContent : null,
+      cmdFont: cmd ? getComputedStyle(cmd).fontFamily.split(",")[0] : null,
+      promptText: prompt ? prompt.textContent : null,
+      promptSelectable: prompt ? getComputedStyle(prompt).userSelect : null,
+      // 点单行会不会把整组一起收掉（交互自查）：簇的 data-open 必须仍是 true。
+      clusterOpen: document.querySelector('.toolcluster')?.getAttribute('data-open') ?? null,
+    });
+  })()`);
+  await shot("20-tool-expanded.png", 300);
+  console.log("[gallery] 工具行形制自查:", toolRowProbe);
+  {
+    const t = JSON.parse(toolRowProbe);
+    if (t.leaked.length > 0) throw new Error("工具行头仍在泄露机器名：" + t.leaked.join(" | "));
+    if (t.cmd === null || !String(t.cmd).includes("pnpm test")) {
+      throw new Error("展开区没有单独一排命令行：" + toolRowProbe);
+    }
+    if (t.promptSelectable !== "none") throw new Error("`$` 提示符会跟着命令一起被选中（复制会带出 $）：" + toolRowProbe);
+  }
+
   // 交付卡卡头自查（第 913 页）：标题说了「N 个文件」，副行就不该再把同一个数念一遍；
   // 而 change 缺席（投影不判定新建/修改）必须算进分解，不能只进总数却写「已编辑」。
   const cardProbe = await js(`(() => {
@@ -343,7 +406,7 @@ async function main() {
     width: 900, height: 640, show: false,
     webPreferences: { preload: join(__dirname, "ui-gallery-preload.cjs"), additionalArguments: apiArgs },
   });
-  await pop.loadFile(join(__dirname, "..", "dist", "index.html"), { hash: "pane=file" });
+  await pop.loadFile(rendererEntry, { hash: "pane=file" });
   await new Promise((r) => setTimeout(r, 900));
   const popImg = await pop.webContents.capturePage();
   require("node:fs").writeFileSync(join(OUT, "14-popout-pane.png"), popImg.toPNG());
@@ -582,7 +645,8 @@ async function main() {
   await js(pointerClick('document.querySelector(".side-filter-btn")'));
   await shot("18-side-filter.png", 500);
   const filterProbe = await js(`(() => {
-    const items = [...document.querySelectorAll('.pop-rd .menu-item, .filter-pop .menu-item, [role="menuitem"]')];
+    const menu = document.querySelector('.side-filter-menu.show');
+    const items = menu ? [...menu.querySelectorAll('.menu-item')] : [];
     return JSON.stringify({
       open: items.length,
       labels: items.slice(0, 8).map((b) => b.textContent.trim().replace(/\\s+/g, ' ')),
@@ -592,6 +656,7 @@ async function main() {
     });
   })()`);
   console.log("[gallery] 侧栏筛选面板自查:", filterProbe);
+  if (JSON.parse(filterProbe).open === 0) throw new Error("侧栏筛选菜单没有打开");
   await js(clickOutside);
   await new Promise((r) => setTimeout(r, 250));
 

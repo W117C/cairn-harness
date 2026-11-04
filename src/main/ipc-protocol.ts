@@ -18,6 +18,7 @@ import type { ListDirPayload, ReadTextPayload } from "./workspace-fs";
 import type { SessionMetadataRecord } from "./session-metadata";
 import type { RunAttachmentReference } from "./run-attachments";
 import type { SessionQueueEntry } from "./sessions";
+import type { LspStatus } from "../tools/lsp";
 import type { ThinkingEffort } from "../providers/capabilities";
 import type { ProviderInfo } from "./provider-runtime";
 import type { CapabilityReadout } from "./doctor";
@@ -122,8 +123,9 @@ export type { SearchProvider } from "../tools/web-search";
  *  v48 = 全局经验冻结开关（evolveGlobalSetFrozen；写/删全局 STOP，与 workspace STOP 分开）。
  *  v49 = 恢复全局经验（evolveGlobalActivate；dormant → active，复核 ≥3 库证据）。
  *  v50 = 会话运行控制携带 workspace；目标校验拒绝带 code，不触发陈旧旗自动续发。
- *  v51 = RunResponse.accepted 区分未接收的请求和已接收后的执行失败，供队列安全恢复。 */
-export const IPC_PROTOCOL_VERSION = 51;
+ *  v51 = RunResponse.accepted 区分未接收的请求和已接收后的执行失败，供队列安全恢复。
+ *  v52 = 读 LSP 状态（lspStatus；第 996 页那份跨进程可读的运行态第一次进桌面——只读、不起进程、不改授权）。 */
+export const IPC_PROTOCOL_VERSION = 52;
 
 /** 密钥只允许写入；读取面只报告状态，不回传明文。端点为空时 Brave/Tavily 使用官方地址。 */
 export interface SearchSettingsInput {
@@ -259,7 +261,13 @@ export interface ProviderSaveRequest {
     contextWindow?: number;
     maxOutputTokens?: number;
     price?: { inputPerMTok?: number; outputPerMTok?: number; cacheReadPerMTok?: number; cacheWritePerMTok?: number };
-    reasoningEfforts?: string[];
+    /** 声明这一档是**只读**的：渲染层那边它来自逐模型的声明的派生（`readonly string[]`），
+     *  主进程这头 `provider-setup.ts` 收的也是 `readonly string[]`。协议中间这一格写成可变数组时，
+     *  「渲染层 → 协议」那一步 TS2322（readonly 不能赋给可变），桌面 tsc 与打包都会红。 */
+    reasoningEfforts?: readonly string[];
+    /** 首选思考档（必须在 `reasoningEfforts` 里，或 "off"/缺席）。
+     *  2026-11-03：用户自己声明某模型「支持哪些思考档、首选哪一档」——逐模型一条，与 provider 配置同一层。 */
+    reasoningDefault?: string;
   }[];
   /** 有值就顺手存进 safeStorage（加密落盘，明文不落）。 */
   keyValue?: string;
@@ -536,6 +544,10 @@ export interface AgentApi {
   evolveGlobalSetFrozen(frozen: boolean): Promise<EvolveReport>;
   /** v49：恢复一条 dormant 全局经验（复核 ≥3 库证据；失败保持 dormant）。 */
   evolveGlobalActivate(id: string): Promise<EvolveActivateResult>;
+  /** v52：读当前工作区的 LSP 状态（配了几台 / 实测支持哪几支 / 哪台起不来 / 授权态）。
+   *  只读：这条通道**不会**启动任何语言服务器（`lspServerStatus` 一次都不碰起进程入口），
+   *  也不写授权——授权仍走审批卡那一面。三档运行态（现值 / 陈旧 / 判不出来）由主进程算好送上。 */
+  lspStatus(): Promise<LspStatus>;
   orchestrationView(address: OrchestrationAddress): Promise<OrchestrationResponse>;
   orchestrationSubmit(request: OrchestrationSubmitRequest): Promise<OrchestrationResponse>;
   orchestrationControl(request: OrchestrationControlRequest): Promise<OrchestrationResponse>;
@@ -657,7 +669,7 @@ export interface AgentApi {
    *  撤销本身可再撤销；快照与路径配对校验与 changeDiff 完全同口径（越界即拒、防串文件）。
    *  成功后向该会话的事件流落一条 `file_restored`（sessionId 给了才落）——
    *  否则改动面还当这个文件没撤（行上仍写"修改"、徽标仍数着它、交付卡仍说"改动已验证"）。 */
-  snapshotRestore(req: { path: string; snapshotId: string; sessionId?: string }): Promise<{ ok: boolean; error?: string }>;
+  snapshotRestore(req: { path: string; snapshotId: string; sessionId?: string; workspace?: string }): Promise<{ ok: boolean; error?: string }>;
   /** v11：在 Finder 中显示某绝对路径（项目右键菜单 / 项目外附件 chip 的落点）。只显示不打开。 */
   revealInFinder(path: string): Promise<{ ok: boolean; error?: string }>;
   /** 附件图片缩略图（2026-10-18 desktop 扩展）：仅图片扩展名、≤25MB；返回 40px PNG data URL。 */
@@ -769,11 +781,22 @@ export interface AgentApi {
   /** 把一家写进工作区 `.agent/providers.json`（按 id upsert，别的家原样保留）；
    *  给了 `keyValue` 就顺手存进 safeStorage（存失败则整件事失败，不写半个配置）。 */
   providerSave(req: ProviderSaveRequest): Promise<ProviderSaveResult>;
-  /** 已装自定义供应商的预填数据（编辑模式）：DerivedCustomProvider 的界面投影（不含 key 明文）。 */
+  /** 已装自定义供应商的预填数据（编辑模式）：DerivedCustomProvider 的界面投影（不含 key 明文）。
+   *  `models` 带每个模型的思考声明：编辑时表单要回填「支持哪些档 / 首选哪一档」（缺了它，
+   *  用户改个 key 再保存就会把自己手写的声明悄悄冲掉）。 */
   providerCustomList(): Promise<{
     ok: boolean;
     error?: string;
-    entries: readonly { id: string; label: string; protocol: string; baseURL: string; apiKeyEnv: string; modelIds: readonly string[] }[];
+    entries: readonly {
+      id: string;
+      label: string;
+      protocol: string;
+      baseURL: string;
+      apiKeyEnv: string;
+      modelIds: readonly string[];
+      /** 每模型的思考声明（`reasoningEfforts` 空 = 不支持；`reasoningDefault` 缺席 = off）。 */
+      models?: readonly { id: string; reasoningEfforts?: readonly string[]; reasoningDefault?: string }[];
+    }[];
   }>;
   /** M4b §2.3：轻量更新检查（未配置 / 网络失败 / 已最新 / 有新版 全显式态）。 */
   checkUpdate(): Promise<UpdateCheckResult>;

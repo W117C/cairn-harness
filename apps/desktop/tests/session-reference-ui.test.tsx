@@ -2,7 +2,11 @@
 //   ① 视图 + 实时增量合并：显示序不等于物理行号，父/子同号各留各的；
 //   ② 实时事件的物理行号从快照的本地水位往后推；
 //   ③ Stream 按 eventRefKey 做 DOM 键，并给祖先行挂来源标记；
-//   ④ 会话键：有可信 workspace 才是 ref 键，没有就不生成裸 id 键。
+//   ④ 会话键：有可信 workspace 才是 ref 键，没有就不生成裸 id 键；
+//   ⑤ 来源标记落在助手行的正文列（20px 标列会把它折成一字一行）。
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { AgentEvent, EventRef, SessionView } from "../../../src/events";
@@ -15,6 +19,45 @@ import { Stream } from "../src/renderer/components/Stream";
 const user = (content: string): AgentEvent => ({ type: "user_message", content });
 const assistant = (content: string): AgentEvent => ({ type: "assistant_message", content });
 const W = "/tmp/ws";
+const RENDERER_DIR = fileURLToPath(new URL("../src/renderer", import.meta.url));
+
+/** 渲染层 CSS 面：全部 .css（排除 vendor/node_modules）。来源标记的规则可以搬家，
+ *  判卷只认「这条规则在应用面里存在」，不把它钉死在某个文件。 */
+function readCssFace(): string {
+  const out: string[] = [];
+  const walk = (dir: string): void => {
+    for (const name of readdirSync(dir).sort()) {
+      if (name === "vendor" || name === "node_modules" || name === "dist" || name === "dist-electron") continue;
+      const full = join(dir, name);
+      if (statSync(full).isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (name.endsWith(".css")) out.push(readFileSync(full, "utf8"));
+    }
+  };
+  walk(RENDERER_DIR);
+  return out.join("\n");
+}
+
+const styles = readCssFace();
+
+/** 取一个选择器规则体（{…}）；选择器不存在返回 ""。 */
+function ruleOf(source: string, selector: string): string {
+  const at = source.indexOf(selector);
+  if (at === -1) return "";
+  const open = source.indexOf("{", at);
+  if (open === -1) return "";
+  let depth = 0;
+  for (let i = open; i < source.length; i++) {
+    if (source[i] === "{") depth += 1;
+    else if (source[i] === "}") {
+      depth -= 1;
+      if (depth === 0) return source.slice(open, i + 1);
+    }
+  }
+  return "";
+}
 
 function view(): SessionView {
   return {
@@ -64,6 +107,17 @@ describe("Stream：DOM 键与来源标记", () => {
     expect(html).toContain("来自 parent");
     expect(html.match(/来自 parent/g)).toHaveLength(2); // 父用户行 + 父助手行
     expect(html).not.toContain("来自 child");
+  });
+
+  it("来源标记落在助手行的正文列，不许被 20px 标列折成竖排", () => {
+    // 助手行是「20px 标列 + 正文列」的网格；来源标记作为流内子元素会被自动排进第一列，
+    // 20px 宽只够一个汉字 ⇒ 2026-11-04 真机上「来自会话 …」一字一行。让选择器不存在即红。
+    const rule = ruleOf(styles, ".row.assistant > .row-source {");
+    expect(rule).not.toBe("");
+    expect(rule).toContain("grid-column: 2");
+    // 长会话 id 必须收在一行里，不许把行高撑成多行。
+    expect(ruleOf(styles, ".row-source {")).toContain("text-overflow: ellipsis");
+    expect(ruleOf(styles, ".row-source {")).toContain("white-space: nowrap");
   });
 });
 

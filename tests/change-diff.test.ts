@@ -119,6 +119,30 @@ describe("readChangeDiff（真临时目录）", () => {
     if (!r.ok) expect(r.error).toContain("当前文件不存在");
   });
 
+  it("文件已删但有快照原件 ⇒ 「全删除」差异（交付卡给 −N，不再落「—」）", async () => {
+    const ws = await makeWorkspace();
+    const snapshotId = `${SNAPSHOT_ROOT}/123--c1/gone.ts`;
+    await mkdir(join(ws, SNAPSHOT_ROOT, "123--c1"), { recursive: true });
+    await writeFile(join(ws, snapshotId), "line1\nline2\nline3\n");
+    const r = await readChangeDiff(ws, "gone.ts", snapshotId);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.created).toBe(false);
+    expect(r.truncated).toBe(false);
+    expect(r.hunks).toHaveLength(1);
+    expect(r.hunks[0]!.lines.length).toBe(3);
+    expect(r.hunks[0]!.lines.every((l) => l.kind === "del")).toBe(true);
+    expect(r.hunks[0]!.lines.every((l) => l.newNo === null)).toBe(true);
+    expect(r.bytes.after).toBe(0);
+  });
+
+  it("文件已删且无快照 ⇒ 仍拒（没有原件就不冒充差异）", async () => {
+    const ws = await makeWorkspace();
+    const r = await readChangeDiff(ws, "gone-no-snapshot.ts");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toContain("当前文件不存在");
+  });
+
   it("超字节帽 ⇒ truncated=true（不假装完整）", async () => {
     const ws = await makeWorkspace();
     const big = "x".repeat(MAX_SIDE_BYTES + 1024) + "\n";

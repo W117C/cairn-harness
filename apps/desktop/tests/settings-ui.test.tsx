@@ -61,16 +61,21 @@ describe("批 6：设置页公共组件（SSR 结构）", () => {
     expect(h).toContain('<h2 class="ss-sec-title">外观</h2>');
   });
 
-  it("快捷键速查：双列键帽+说明，13 行；窄窗一列", () => {
+  it("快捷键速查：完整分组双列表（36 行）；窄窗一列", () => {
     const h = renderToStaticMarkup(<ShortcutsSection />);
     expect(h).toContain('class="kx-list"');
     expect(h).toContain('<kbd class="kx-keys">⌘N</kbd>');
-    expect(h).toContain('class="kx-what">新任务');
-    expect((h.match(/class="kx-row"/g) ?? []).length).toBe(13);
+    // 2026-11-02：13 条精简版升级为与 ⌘/ 弹层同源的完整分组表（会话 13 / 窗格 10 / 视图 13）。
+    expect(h).toContain('class="kx-what">新会话（回到主页）');
+    expect((h.match(/class="kx-row"/g) ?? []).length).toBe(36);
+    expect(h).toContain('class="ss-sec-title kx-group-title">会话');
+    expect(h).toContain('class="ss-sec-title kx-group-title">窗格');
+    expect(h).toContain('class="ss-sec-title kx-group-title">视图与输入');
     expect(h).toContain("完整速查表");
     const list = block(styles, ".kx-list");
     expect(list).toContain("repeat(2, minmax(0, 1fr))");
-    expect(block(styles, ".kx-row")).toContain("grid-template-columns: 108px minmax(0, 1fr)");
+    // 2026-11-02：键帽列改内容自适应（固定 108px 会裁长键位）。
+    expect(block(styles, ".kx-row")).toContain("grid-template-columns: minmax(56px, max-content) minmax(0, 1fr)");
     expect(block(styles, ".kx-keys")).toContain("font-family: var(--mono)");
     expect(styles).toContain("@media (max-width: 760px)");
   });
@@ -148,15 +153,17 @@ describe("批 6：设置页公共组件（SSR 结构）", () => {
 });
 
 describe("批 6：设置页公共组件（CSS 口径哨兵）", () => {
-  it("设置页加载局部样式：紧凑无衬线标题，760px 内容列与全宽滚动容器", () => {
+  it("设置页加载局部样式：无衬线标题、宽内容列与全宽滚动容器", () => {
     expect(readAppSurface().includes('import "./settings-refinement.css"')).toBe(true);
     const t = block(refinement, ".sp-page .ss-head > .ss-title");
     expect(t).toContain("font-family: inherit");
-    expect(t).toContain("font-size: 22px");
+    // 2026-11-02：标题从 22px 抬到 26px（此前比插件/记忆页标题轻一档）。
+    expect(t).toContain("font-size: 26px");
     expect(t).toContain("font-weight: var(--fw-semibold)");
     expect(t).toContain("letter-spacing: -0.02em");
     const page = block(refinement, ".sp-page .sp-body > .ss-page");
-    expect(page).toContain("max-width: 760px");
+    // 2026-11-02：760 → 880（1440 宽窗口右侧不再空一整片）。
+    expect(page).toContain("max-width: 880px");
     expect(page).toContain("margin: 0 auto");
     expect(block(refinement, ".sp-page .sp-body")).not.toContain("max-width");
   });
@@ -170,19 +177,41 @@ describe("批 6：设置页公共组件（CSS 口径哨兵）", () => {
     expect(card).toContain("border: 0");
     expect(card).toContain("border-radius: 0");
     expect(card).toContain("background: transparent");
+    // 分区之间的细线（靠 .ss-content 包裹才生效）
     expect(block(refinement, ".sp-page .ss-content > .ss-sec + .ss-sec")).toContain("border-top: 1px solid var(--hairline)");
+    // 2026-11-01 真机（进化页）：分区头与内容之间要有一条细线——头不再浮在一片空白上
+    // （读作「标题 + 分隔线」，不是一个洞）。
+    const head = block(refinement, ".sp-page .ss-sec-head");
+    expect(head).toContain("border-bottom: 1px solid var(--hairline)");
+    expect(head).toContain("padding: 0 0 10px");
   });
 
   it("表单标签稳定占一列，控件可收缩；窄内容列回落单列防止挤成碎字", () => {
     const row = block(refinement, ".sp-page .ss-row");
-    expect(row).toContain("grid-template-columns: minmax(150px, 1fr) minmax(0, 1.5fr)");
+    // 2026-11-01 真机（进化页）：值列此前是 1.5fr（比文字列还宽）⇒ 徽章被推到天边，
+    // 文字与值之间空出一大片。值列改为 auto（贴着内容走）。
+    expect(row).toContain("grid-template-columns: minmax(150px, 1fr) auto");
+    expect(row).not.toContain("1.5fr");
     expect(row).toContain("align-items: center");
-    expect(row).toContain("min-height: 60px");
-    expect(block(refinement, ".sp-page .ss-row-ctl")).toContain("justify-content: flex-end");
+    // 2026-11-02：60 → 52（与插件/记忆页的密度对齐）。
+    expect(row).toContain("min-height: 52px");
+    const ctl = block(refinement, ".sp-page .ss-row-ctl");
+    expect(ctl).toContain("justify-content: flex-end");
+    expect(ctl).toContain("width: auto");
+    expect(ctl).not.toContain("width: 100%");
     expect(refinement).toMatch(/@container \(max-width: 560px\)[\s\S]*\.sp-page \.ss-row \{ grid-template-columns: minmax\(0, 1fr\)/);
     expect(refinement).toMatch(/@container \(max-width: 560px\)[\s\S]*\.sp-page \.ss-row-ctl \{ justify-content: flex-start/);
     expect(block(refinement, ".sp-page .pv-detail .ss-frow .ss-field")).toContain("min-width: 0");
     expect(refinement).toContain('.sp-page .pv-split { grid-template-columns: minmax(0, 1fr);');
+  });
+
+  it("计数小片：一格一个数，CJK 词不许折行（进化页真机）", () => {
+    expect(block(refinement, ".sp-page .sp-chips")).toContain("flex-wrap: wrap");
+    const chip = block(refinement, ".sp-page .sp-chip");
+    expect(chip).toContain("white-space: nowrap");
+    expect(chip).toContain("display: inline-flex");
+    expect(refinement).toContain(".sp-page .sp-tech > summary");
+    expect(refinement).toContain(".sp-page .sp-tech-body");
   });
 
   it(".ss-opt 选中 = 强调描边 + 淡底；danger 档 = 危险色描边（不铺大红底）", () => {

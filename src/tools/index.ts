@@ -11,6 +11,7 @@ import { glob } from "./glob.js";
 import { lsp } from "./lsp.js";
 import { clarify } from "./clarify.js";
 import { propose_plan } from "./propose_plan.js";
+import { todo_write } from "./todo_write.js";
 
 export * from "./base.js";
 
@@ -29,4 +30,5 @@ export const TOOLS: Record<Exclude<Tool["name"], "verify">, Tool> = {
   lsp,
   clarify,
   propose_plan,
+  todo_write,
 };

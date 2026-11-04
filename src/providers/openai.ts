@@ -352,11 +352,19 @@ export async function* streamOpenAI(
       let finishReason2: string | null | undefined;
       let retryError: unknown;
       try {
-        while (!finished2) {
+        let eof2 = false;
+        while (!finished2 && !eof2) {
           const { done, value } = await reader2.read();
-          if (done) break;
-          est.guard.bump();
-          buf2 += decoder.decode(value, { stream: true });
+          if (done) {
+            eof2 = true;
+            const tail = decoder.decode();
+            if (tail) buf2 += tail;
+            if (buf2.trim() !== "") buf2 += "\n";
+            else break;
+          } else {
+            est.guard.bump();
+            buf2 += decoder.decode(value, { stream: true });
+          }
           let nl: number;
           while ((nl = buf2.indexOf("\n")) >= 0) {
             const line = buf2.slice(0, nl).trim();

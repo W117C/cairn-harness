@@ -79,6 +79,9 @@ const GOLDEN: Readonly<Record<string, Golden>> = {
   clarify: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
   propose_plan: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
   verify: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  // todo_write（2026-11-04 工作状态面板）：无用户数据副作用（只写会话日志）⇒ 与 clarify 同族，
+  // 五档全部放行不出卡；只读档同样在面（清单是过程数据，不是写盘）。
+  todo_write: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
   wait_for_agents: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
   cancel_agents: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
   send_agent: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
@@ -118,10 +121,10 @@ const GOLDEN: Readonly<Record<string, Golden>> = {
   // diagnose 同属合并期（zcode 的 M3 诊断工具 `0b37ad2`）：执行进程、写入缓存/产物 ⇒ 计写向，
   // 逐字同形于上面四个。与 web_search 一并补，是因为「缺口一次列全」比一次撞一个便宜。
   diagnose: ["deny/L0-hard", "ask/L3-mode", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
-  // web_search：出网 ⇒ 四档一律走风险线送审，逐字同形于 web_fetch。非交互四档全放行。
-  web_search: ["ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "ask/L4-network"],
-  // 出网：四档一律走风险线送审（web_fetch 的既有判定，与本笔无关但一并钉住防漂移）。
-  web_fetch: ["ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "ask/L4-network"],
+  // web_search：出网 ⇒ 前四档走风险线送审；完全允许档（2026-11-03 业主：什么都允许）免卡。
+  web_search: ["ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "approve/L3-mode"],
+  // 出网：web_fetch 与 web_search 同形；完全允许档按档放行（旧口径"出网永不免批"作废）。
+  web_fetch: ["ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "approve/L3-mode"],
 };
 
 describe("M7 · 工具名登记册", () => {
@@ -168,8 +171,8 @@ describe("M7 · 工具名登记册", () => {
   });
 
   it("C · 新守卫确实开火：未登记工具名在四档下都要审批（改前是四档全 approve）", () => {
-    // full-access 是业主明确的「不再有任何审批卡」档（modes.ts 注释）；它的例外是出网红线，
-    // 由下一条用例单独钉，不能拿它给整档开脱。
+    // full-access 是业主明确的「不再有任何审批卡」档（modes.ts 注释）；2026-11-03 起
+    // 连出网也免卡（下一条用例钉住），未登记工具同样走短路面。
     const ASKING = PERMISSION_MODES.filter((mode) => mode !== "full-access");
     for (const name of ["brand_new_write_tool", "ghost_tool", "totally_made_up"]) {
       for (const mode of ASKING) {
@@ -182,10 +185,14 @@ describe("M7 · 工具名登记册", () => {
     }
   });
 
-  it("C2 · full-access 也拆不掉出网红线：web_fetch / web_search 仍然逐次批准", () => {
+  it("C2 · 2026-11-03 业主裁决：full-access 连出网也不再出卡（其余四档仍逐次批准）", () => {
     for (const name of ["web_fetch", "web_search"]) {
       const d = evaluate(asTool(name), {}, session("full-access"));
-      expect(`${d.verdict}/${d.layer}`, `${name} @ full-access 出网仍要批`).toBe("ask/L4-network");
+      expect(`${d.verdict}/${d.layer}`, `${name} @ full-access 应免卡`).toBe("approve/L3-mode");
+      for (const mode of PERMISSION_MODES.filter((m) => m !== "full-access")) {
+        const asked = evaluate(asTool(name), {}, session(mode));
+        expect(`${asked.verdict}/${asked.layer}`, `${name} @ ${mode} 出网仍要批`).toMatch(/^ask\/L4-(risk|network)$/);
+      }
     }
   });
 

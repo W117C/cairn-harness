@@ -2,8 +2,11 @@
 // 把这条用户消息的原文放回输入框；用户改完再发；原会话保留（可从行菜单删除）。
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it, vi } from "vitest";
 import { readAppSurface } from "./helpers/app-surface";
+import { useMessageActions } from "../src/renderer/state/message-actions";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 
@@ -20,9 +23,45 @@ describe("撤回（编辑并重发）", () => {
     const app = readAppSurface();
     expect(app).toContain("const handleEditUser = useCallback((round: number, text: string): void => {");
     expect(app).toContain("cancelRunHealRef.current?.(sid);");
-    expect(app).toContain("window.agent.forkSession(sid, round - 1, true)");
-    expect(app).toContain("window.agent.createSession(activeWorkspaceRef.current ?? undefined)");
+    expect(app).toContain("window.agent.forkSession(sid, round - 1, true, workspace ?? undefined)");
+    expect(app).toContain("window.agent.createSession(workspace ?? undefined)");
     expect(app).toContain("setInjectedText(text);");
     expect(app).toContain("onEditRound: handleEditUser");
+  });
+
+  it("编辑工作区 B 的同名会话时，分叉、标题和编辑状态都属于 B", async () => {
+    const forkSession = vi.fn(async () => ({ ok: true, id: "fork" }));
+    const openSession = vi.fn();
+    const setEditCtx = vi.fn();
+    const injectText = vi.fn();
+    const noop = () => undefined;
+    let actions!: ReturnType<typeof useMessageActions>;
+    function Probe() {
+      actions = useMessageActions({
+        activeIdRef: { current: "same" },
+        activeWorkspaceRef: { current: "/b" },
+        eventsRef: { current: [] },
+        sessions: [
+          { id: "same", workspace: "/a", title: "A", lines: 2, mtimeMs: 1 },
+          { id: "same", workspace: "/b", title: "B", lines: 2, mtimeMs: 2 },
+        ],
+        refreshSessions: async () => undefined, openSession, cancelRunHealRef: { current: null },
+        injectText, setEditCtx, setLastError: noop, setEvents: noop,
+      });
+      return null;
+    }
+    vi.stubGlobal("window", { agent: { forkSession } });
+    try {
+      renderToStaticMarkup(createElement(Probe));
+      actions.handleEditUser(2, "原消息");
+      await vi.waitFor(() => expect(openSession).toHaveBeenCalledExactlyOnceWith("fork", "/b"));
+      expect(forkSession).toHaveBeenCalledExactlyOnceWith("same", 1, true, "/b");
+      expect(injectText).toHaveBeenCalledExactlyOnceWith("原消息");
+      expect(setEditCtx).toHaveBeenCalledExactlyOnceWith({
+        originId: "same", originTitle: "B", forkId: "fork", workspace: "/b", round: 2,
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

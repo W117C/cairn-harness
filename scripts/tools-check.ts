@@ -7,13 +7,22 @@
 //   - lsp 段补齐三项（此前只验「未启用报错」）：借 fixtures/lsp/stub-server.mjs 真跑 documentSymbol
 //     触发输出上限 + 截断提示，并核对相对路径输出；
 //   - 结语按**实际覆盖**打印（工具 × 三项的逐格勾选），不再打印与覆盖不符的笼统结论。
+import { mkdirSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+// 隔离 LSP 运行态落盘目录：避免门禁向宿主真实 ~/.config/cairn/lsp-runtime 写入或在受限沙箱下报 EPERM。
+if (!process.env.CAIRN_LSP_HOME) process.env.CAIRN_LSP_HOME = join(tmpdir(), "dsh-tools-check-lsp-home");
+mkdirSync(process.env.CAIRN_LSP_HOME, { recursive: true });
+
 import { TOOLS } from "../src/tools";
+import { ToolError } from "../src/tools/base";
 import { edit_file } from "../src/tools/edit_file";
 import { closeAllLspClients, lsp, setLspTrustedRepos } from "../src/tools/lsp";
+import { todo_write } from "../src/tools/todo_write";
+import type { AgentEvent } from "../src/events";
 import type { ToolContext } from "../src/tools";
 
 let failures = 0;
@@ -52,9 +61,8 @@ function assertNoAbsPath(output: string, ws: string): boolean {
 console.log("== 工具注册表 ==");
 const names = Object.keys(TOOLS).sort();
 console.log("  注册工具:", names.join(", "));
-// M2 起 10 个；2026-10-15 加 read_image（识图，静态注册表同 read_file 的准入口径）⇒ 11。
-// M2 起 10 个；2026-10-15 加 read_image（识图）；2026-10-16 加 render_image（渲染 HTML/SVG 成 PNG）⇒ 12。
-check("注册表含 12 个工具", names.length === 12, "实际 " + String(names.length));
+// M2 起 10 个；2026-10-15 加 read_image（识图）；2026-10-16 加 render_image（渲染 HTML/SVG 成 PNG）；2026-11-04 加 todo_write（工作状态面板清单）⇒ 13。
+check("注册表含 13 个工具", names.length === 13, "实际 " + String(names.length));
 
 console.log("\n== grep ==");
 {
@@ -272,9 +280,41 @@ console.log("\n== lsp（三项补齐：输出上限 / 截断提示 / 相对路�
   await rm(ws, { recursive: true, force: true });
 }
 
+console.log("\n== todo_write ==");
+{
+  const { ws, ctx } = await makeWs();
+  const emitted: AgentEvent[] = [];
+  const wiredCtx: ToolContext = { ...ctx, callId: "c-todo-1", emit: async (e) => { emitted.push(e); } };
+  let unWiredThrew = false;
+  try {
+    await todo_write.run({ items: [{ text: "检查门禁", state: "pending" }] }, ctx);
+  } catch (err) {
+    unWiredThrew = err instanceof ToolError;
+  }
+  check("未接线 emit/callId fail-closed 报错", unWiredThrew);
+  let overItemsThrew = false;
+  try {
+    const twentyOne = Array.from({ length: 21 }, (_, i) => ({ text: "项 " + String(i), state: "pending" }));
+    await todo_write.run({ items: twentyOne }, wiredCtx);
+  } catch (err) {
+    overItemsThrew = err instanceof ToolError;
+  }
+  check("① 入参上界：超过 20 项 fail-loud 拒收（不静默截断）", overItemsThrew);
+  na("todo_write ① 输出上限", "入参硬卡 ≤20 项 × ≤200 字，回执长度结构性有界（≤4.2KB），不存在无界输出面");
+  na("todo_write ② 截断提示", "同上：超限直接抛 ToolError 拒收而非截断，无需截断提示");
+  const okRes = await todo_write.run(
+    { items: [{ text: "对齐门禁", state: "done" }, { text: "拆分模块", state: "pending" }] },
+    wiredCtx,
+  );
+  const noAbs = okRes.ok && emitted.length === 1 && emitted[0]?.type === "todo_updated" && assertNoAbsPath(okRes.output, ws);
+  check("③ 相对路径与事件落流：回执含完成进度且无绝对路径", noAbs, "首行：" + okRes.output.split("\n")[0]);
+  mark("todo_write", 2, noAbs ? "✅" : "❌");
+  await rm(ws, { recursive: true, force: true });
+}
+
 console.log("");
 console.log("== 三项清单覆盖（按实际覆盖打印，结语与断言一一对应）==");
-const order = ["grep", "glob", "read_file", "edit_file", "lsp"];
+const order = ["grep", "glob", "read_file", "edit_file", "lsp", "todo_write"];
 let asserted = 0;
 for (const t of order) {
   const c = COVERAGE.get(t);
@@ -293,5 +333,5 @@ if (failures > 0) {
   process.exit(1);
 }
 console.log(
-  "✅ tools-check 全部通过：grep/glob/read_file/lsp 四工具三项全绿；edit_file ①② 显式 n/a（输出有界），③ 相对路径绿。",
+  "✅ tools-check 全部通过：grep/glob/read_file/lsp 四工具三项全绿；edit_file/todo_write ①② 显式 n/a（结构性有界），③ 相对路径绿。",
 );

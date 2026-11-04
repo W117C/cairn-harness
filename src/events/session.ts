@@ -33,6 +33,7 @@ export function unfinishedIndexes(events: readonly AgentEvent[]): Set<number> {
     switch (event.type) {
       case "tool_call": family = "tool"; id = event.id; opens = true; break;
       case "clarify_requested": family = "tool"; id = event.callId; opens = true; break;
+      case "todo_updated": family = "tool"; id = event.callId; opens = true; break;
       case "tool_result": family = "tool"; id = event.callId; opens = false; break;
       case "plan_proposed": family = "plan"; id = event.callId; opens = true; break;
       case "plan_approved": family = "plan"; id = event.callId; opens = false; break;

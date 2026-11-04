@@ -42,7 +42,10 @@ function writeSession(workspace, id, events) {
 // A 工作区：parent（含一次写 a.ts 的轮）+ 指针子会话；B 工作区：同名会话用于归属隔离。
 const snapshotId = `${join(workspaceA, '.agent', 'snapshots', '1--c1', 'a.ts')}`;
 mkdirSync(join(workspaceA, '.agent', 'snapshots', '1--c1'), { recursive: true });
+mkdirSync(join(workspaceB, '.agent', 'snapshots', '1--c1'), { recursive: true });
 writeFileSync(join(workspaceA, 'a.ts'), 'NEW\n');
+writeFileSync(join(workspaceB, 'a.ts'), 'NEW\n');
+writeFileSync(join(workspaceB, '.agent', 'snapshots', '1--c1', 'a.ts'), 'B_OLD\n');
 writeFileSync(snapshotId, 'OLD\n');
 const parentPath = writeSession(workspaceA, 'parent', [
   { type: 'user_message', content: 'PARENT_ROUND_ONE' },
@@ -56,6 +59,7 @@ const childPath = writeSession(workspaceA, 'child', [
   { type: 'session_meta', fork: { from_session_path: parentPath, boundary_event_id: 4, from_session_id: 'parent' } },
   { type: 'user_message', content: 'CHILD_LOCAL' },
 ]);
+writeSession(workspaceA, 'same', [{ type: 'user_message', content: 'A_ONLY' }]);
 writeSession(workspaceB, 'same', [{ type: 'user_message', content: 'B_ONLY' }]);
 void childPath;
 void workspaceB;
@@ -106,19 +110,57 @@ async function main() {
   check('祖先行的置顶保留来源', pin.ok === true && pins.some((p) => p.eventRef?.sessionId === 'parent' && p.eventRef?.eventId === 4), { pin, pins });
 
   // ⑤ 祖先轮的文件回滚：a.ts 回到 OLD，留痕写子会话
+  await call(`window.agent.setWorkspaceContext(${JSON.stringify(workspaceB)})`);
   const reverted = await call(`window.agent.revertTurn("child", 1, ${JSON.stringify(workspaceA)})`);
   check('祖先轮的文件回滚可执行', reverted.ok === true, reverted);
   check('盘上文件回到覆盖前内容', readFileSync(join(workspaceA, 'a.ts'), 'utf8') === 'OLD\n', readFileSync(join(workspaceA, 'a.ts'), 'utf8'));
+  check('显式回滚目标优先于窗口当前项目', readFileSync(join(workspaceB, 'a.ts'), 'utf8') === 'NEW\n');
   const childEvents = readFileSync(childPath, 'utf8');
   check('file_restored 落在子会话日志', childEvents.includes('file_restored') && childEvents.includes('"source_ref"'), childEvents.slice(-300));
+  writeFileSync(join(workspaceA, 'a.ts'), 'NEW\n');
+  const legacyRevert = await call('window.agent.revertTurn("child", 1)');
+  check('旧调用可按唯一会话找到文件归属', legacyRevert.restored?.includes('a.ts') === true &&
+    readFileSync(join(workspaceA, 'a.ts'), 'utf8') === 'OLD\n' &&
+    readFileSync(join(workspaceB, 'a.ts'), 'utf8') === 'NEW\n', legacyRevert);
 
   // ⑥ 父依赖拒绝破坏性操作
   const del = await call(`window.agent.deleteSession("parent", ${JSON.stringify(workspaceA)}).then((r)=>({rejected:false,r}), (e)=>({rejected:true,message:String(e)}))`);
   check('被指针依赖的父会话拒绝删除', del.rejected === true && String(del.message).includes('指针分叉依赖'), del);
 
-  // ⑦ 两个同名会话互不串（B 另有 same 会话）
+  // ⑦ 两个工作区的同名会话各自打开、读写队列。
   const sameB = await call(`window.agent.openSession("same",${JSON.stringify(workspaceB)})`);
   check('同名会话按 workspace 精确打开', sameB.session?.workspace === workspaceB && sameB.events.some((e) => e.content === 'B_ONLY'));
+  const restoreRequest = { path: 'a.ts', snapshotId: '.agent/snapshots/1--c1/a.ts', sessionId: 'same' };
+  writeFileSync(join(workspaceA, 'a.ts'), 'NEW\n');
+  const ambiguousRestore = await call(`window.agent.snapshotRestore(${JSON.stringify(restoreRequest)})`);
+  check('同名会话未指定工作区时拒绝单文件还原', ambiguousRestore.ok === false &&
+    readFileSync(join(workspaceA, 'a.ts'), 'utf8') === 'NEW\n' && readFileSync(join(workspaceB, 'a.ts'), 'utf8') === 'NEW\n', ambiguousRestore);
+  writeFileSync(join(workspaceB, 'a.ts'), 'NEW\n');
+  const restored = await call(`window.agent.snapshotRestore(${JSON.stringify({ ...restoreRequest, workspace: workspaceA })})`);
+  check('单文件还原只写指定工作区的文件和会话', restored.ok === true &&
+    readFileSync(join(workspaceA, 'a.ts'), 'utf8') === 'OLD\n' && readFileSync(join(workspaceB, 'a.ts'), 'utf8') === 'NEW\n' &&
+    readFileSync(join(workspaceA, '.agent', 'sessions', 'same.jsonl'), 'utf8').includes('file_restored') &&
+    !readFileSync(join(workspaceB, '.agent', 'sessions', 'same.jsonl'), 'utf8').includes('file_restored'), restored);
+  writeFileSync(join(workspaceA, 'a.ts'), 'NEW\n');
+  const wrongRootRestore = await call(`window.agent.snapshotRestore(${JSON.stringify({ ...restoreRequest, sessionId: 'child', workspace: workspaceB })})`);
+  check('会话不在指定工作区时拒绝单文件还原', wrongRootRestore.ok === false &&
+    readFileSync(join(workspaceB, 'a.ts'), 'utf8') === 'NEW\n', wrongRootRestore);
+  const legacyRestore = await call(`window.agent.snapshotRestore(${JSON.stringify({ ...restoreRequest, sessionId: 'child' })})`);
+  check('旧单文件还原调用按唯一会话找到文件归属', legacyRestore.ok === true &&
+    readFileSync(join(workspaceA, 'a.ts'), 'utf8') === 'OLD\n' && readFileSync(join(workspaceB, 'a.ts'), 'utf8') === 'NEW\n', legacyRestore);
+  const queue = await call(`(async () => {
+    try {
+      const a = ${JSON.stringify(workspaceA)}, b = ${JSON.stringify(workspaceB)};
+      const setA = await window.agent.queueSet("same", [{ text: "A queue", attachments: [] }], a);
+      const setB = await window.agent.queueSet("same", [{ text: "B queue", attachments: [] }], b);
+      const readA = await window.agent.queueGet("same", a);
+      const readB = await window.agent.queueGet("same", b);
+      return { setA, setB, readA, readB };
+    } catch (error) { return { error: String(error) }; }
+  })()`);
+  check('同名会话的队列通过真实 IPC 按 workspace 读写', queue.setA?.ok === true && queue.setB?.ok === true &&
+    queue.readA?.items.map((item) => item.text).join() === 'A queue' &&
+    queue.readB?.items.map((item) => item.text).join() === 'B queue', queue);
   check('父日志仍未变', sha(parentPath) === parentBefore);
   save();
   cleanup();

@@ -5,7 +5,7 @@ import { AppRail } from "../src/renderer/components/AppRail";
 describe("AppRail", () => {
   it("is a labelled navigation rail with one current destination", () => {
     const html = renderToStaticMarkup(
-      <AppRail destination="memory" onOpen={() => undefined} onSettings={() => undefined} badges={{ memory: 3 }} />,
+      <AppRail destination="memory" onOpen={() => undefined} account={{ onOpenSettings: () => undefined }} badges={{ memory: 3 }} />,
     );
     expect(html).toContain('aria-label="全局功能"');
     expect(html).toContain('aria-current="page"');

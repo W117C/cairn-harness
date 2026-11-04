@@ -11,7 +11,8 @@ import type { DiffHunkView, DiffLineView } from "../../../src/main/change-diff";
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 const state = read("../src/renderer/change-diff-state.ts");
 const inspector = read("../src/renderer/components/Inspector.tsx");
-const dock = read("../src/renderer/components/PaneDock.tsx");
+// 2026-11-03：变更窗格本体已从 PaneDock 抽至 ChangesPane.tsx，判卷锚跟着走。
+const changesPane = read("../src/renderer/components/ChangesPane.tsx");
 const css = read("../src/renderer/styles.css");
 
 const line = (kind: DiffLineView["kind"]): DiffLineView => ({
@@ -42,9 +43,9 @@ describe("双面接线（唯一实现）", () => {
   it("Inspector 与变更窗格都走 useLazyChangeDiff；都不再自己调 changeDiff", () => {
     expect(state).toContain("export function useLazyChangeDiff");
     expect(inspector).toContain("useLazyChangeDiff()");
-    expect(dock).toContain("useLazyChangeDiff()");
+    expect(changesPane).toContain("useLazyChangeDiff()");
     expect(inspector).not.toContain(".changeDiff(");
-    expect(dock).not.toContain(".changeDiff(");
+    expect(changesPane).not.toContain(".changeDiff(");
   });
 
   it("序号守卫真的接在响应回写处；折叠/撤销会 ++ 作废在飞响应", () => {
@@ -56,7 +57,7 @@ describe("双面接线（唯一实现）", () => {
   });
 
   it("变更窗格的展开区也有 +n −m（与 Inspector 同一把尺），样式同源", () => {
-    expect(dock).toContain('className="change-diff-stat num"');
+    expect(changesPane).toContain('className="change-diff-stat num"');
     expect(css).toContain(".isp-diff-stat, .change-diff-stat {");
   });
 });

@@ -5,7 +5,7 @@
 //   · autoMemory（默认 true）——每轮结束自动把结论写进记忆层，UI 关不掉；
 //   · impactAnalysis / promptCache（默认 true）——影响成本与行为，不可见；
 //   · maxBudgetUsd / budgetPricePerMTok（默认 0=关）——花费闸，没有入口；
-//   · telemetry（默认 false）——没有开关也没有披露；
+//   · telemetry 当前没有收集实现，只披露真实状态；
 //   · updateManifestUrl——**界面死胡同**：关于页永远显示「未配置更新源」，用户没地方填。
 //
 // 两条实现纪律（本判卷钉住）：
@@ -19,10 +19,13 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AdvancedSection, parseBudgetField, parseCapField } from "../src/renderer/components/settings-sections";
+import { lspSummary } from "../src/renderer/components/settings/LspStatusRow";
+import type { LspServerStatusEntry } from "../../../src/tools/lsp";
 import { DEFAULT_SETTINGS } from "../../../src/main/settings";
 import { SECTIONS } from "../src/renderer/components/settings-nav";
 
 const sectionsSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/settings-sections.tsx", import.meta.url)), "utf8");
+const lspSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/settings/LspStatusRow.tsx", import.meta.url)), "utf8");
 const panelSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/SettingsPanel.tsx", import.meta.url)), "utf8");
 
 describe("parseBudgetField（界面侧先拦，别让后端静默回退）", () => {
@@ -54,8 +57,16 @@ describe("parseBudgetField（界面侧先拦，别让后端静默回退）", () 
 });
 
 describe("高级段的字段真的接上了", () => {
+  it("未实现的遥测能力只披露状态，不提供无效开关", () => {
+    const html = renderToStaticMarkup(<AdvancedSection settings={{ ...DEFAULT_SETTINGS, telemetry: true }} onSaveKey={() => undefined} />);
+    expect(html).toContain("未收集");
+    // 徽章「未收集」已经说完了，行下不再复述一句「当前版本不收集使用统计」（2026-11-04）。
+    expect(html).not.toContain("不收集使用统计");
+    expect(html).not.toContain('aria-label="允许匿名使用统计"');
+    expect(html).not.toContain('aria-label="匿名使用统计"');
+  });
   it("各字段都有控件（记忆/成本/隐私 + 验证与子代理 + 定时并发）", () => {
-    for (const key of ["autoMemory", "impactAnalysis", "promptCache", "telemetry", "subagentTools", "autoVerify", "autoVerifyRepair"]) {
+    for (const key of ["autoMemory", "impactAnalysis", "promptCache", "subagentTools", "autoVerify", "autoVerifyRepair"]) {
       expect(sectionsSrc, `${key} 缺控件`).toContain(`props.onSaveKey("${key}", next)`);
     }
     expect(sectionsSrc).toContain('props.onSaveKey("maxBudgetUsd", r.value)');
@@ -96,11 +107,43 @@ describe("高级段的字段真的接上了", () => {
     expect(panelSrc).toContain("onClick={closeSettings}");
   });
 
-  it("走单键直调，不动 panelPatch 白名单（那份判卷钉死六键）", () => {
+  it("走单键直调，不动 panelPatch 白名单（那份判卷钉死五键）", () => {
     expect(panelSrc).toContain("const saveSettingKey = async");
     expect(panelSrc).toContain("window.agent.setSettings({ [key]: value })");
-    // 反向：白名单没有被顺手扩掉
-    expect(sectionsSrc).toContain('export const PANEL_PATCH_KEYS = ["provider", "model", "mode", "theme", "planRequiredByDefault", "locale"] as const;');
+    // 反向：白名单没有被顺手扩掉（planRequiredByDefault 2026-11-03 出列：方案模式由 agent 自判）
+    expect(sectionsSrc).toContain('export const PANEL_PATCH_KEYS = ["provider", "model", "mode", "theme", "locale"] as const;');
+  });
+});
+
+describe("语言服务器状态进桌面（协议 v52 的 lspStatus）", () => {
+  // 这条通道此前「主进程接了、渲染层零调用点」——invoke-consumer-census 一直红，
+  // 红的原因正是判卷要防的那件事：功能齐全但 UI 不可达。状态进「高级」段后它有了真消费者。
+  it("渲染层真的读那条通道，不是另写一份口径", () => {
+    // 状态行单独一个文件（settings-sections.tsx 已顶到 1200 行帽），断言跟着读那一份。
+    expect(lspSrc).toContain("window.agent.lspStatus()");
+    expect(lspSrc).toContain("<Badge>{lspSummary(lsp)}</Badge>");
+    // 高级段真的把它挂上了（否则行做出来没人渲染 = 又一处不可达）。
+    expect(sectionsSrc).toContain("<LspStatusRow />");
+  });
+
+  it("三种「没有可看的读数」分开说，不许糊成一个「无」", () => {
+    // 还没读到 / 读失败 / 没配置是三件事：第三种用户自己能去配，前两种不是他的话。
+    expect(lspSummary(null)).toBe("读取中…");
+    expect(lspSummary("unreadable")).toBe("读数失败");
+    expect(lspSummary({ enabled: false, trust: "not-configured", servers: [], configError: "" })).toBe("未配置");
+    expect(lspSummary({ enabled: true, trust: "trusted", servers: [], configError: "坏掉的 JSON" })).toBe("配置读不出");
+  });
+
+  it("台数与信任态都上屏（授权态是用户唯一能自己去改的那一格）", () => {
+    const entry = (id: string, state: LspServerStatusEntry["state"]): LspServerStatusEntry => ({
+      id, command: `x-${id}`, extensions: [".ts"], origin: "host", state,
+    });
+    const st = (trust: "trusted" | "pending" | "declined") => ({
+      enabled: true, trust, servers: [entry("a", "running"), entry("b", "not-started")], configError: "",
+    });
+    expect(lspSummary(st("trusted"))).toBe("2 台 · 已授权");
+    expect(lspSummary(st("pending"))).toBe("2 台 · 待授权");
+    expect(lspSummary(st("declined"))).toBe("2 台 · 已拒绝授权");
   });
 });
 

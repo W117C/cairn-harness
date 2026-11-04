@@ -32,11 +32,12 @@ import { nextPermissionMode } from "../permission-labels";
 import { usePermissionConfirm } from "./use-permission-confirm";
 import { countRunSteps,countToolSteps,deliveryTrail,formatRevertNotice,mergeSessionSnapshot,projectStream,turnDelivery,usageAggregate,usageSummary } from "../projections";
 import { type QuickStartInput } from "../quick-starts";
+import type { SurfaceError } from "../surface-error";
 import { composerLockReason,fromSessionQueueEntries,type QueuedSend } from "../send-queue";
 import type { DeleteConfirmTarget, SessionConfirmTarget, WorkspaceSession } from "../sessions-view";
 import { findSessionByRef } from "../sessions-view";
 import type { SlashSkill } from "../slash";
-import { turnSummaries } from "../stream-model";
+import { truncateSummary, turnSummaries } from "../stream-model";
 import { STR } from "../strings";
 import { buildSuggestContext } from "../suggest";
 import { type ThemePref } from "../theme";
@@ -49,7 +50,7 @@ import { relInWorkspace } from "../workspace-rel";
 import { useChrome } from "./chrome";
 import { useWorkbenchDestination } from "./app-destination";
 import { useComposerDrafts } from "./drafts";
-import { useMessageActions } from "./message-actions";
+import { useMessageActions, type RevertTurnTarget } from "./message-actions";
 import { useSessionOps } from "./sessions";
 import { useSessionList } from "./session-list";
 
@@ -74,7 +75,7 @@ export function useWorkbenchModel() {
   const { sessions, sessionsLoaded, sessionsLoadError, sessionsLoadErrorDetail, sessionsRefreshing, refreshSessions, retrySessions } = useSessionList();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [events, setEvents] = useState<AgentEvent[]>([]);
-  // 来源视图（指针分叉）：openSession 回包里的 SessionView；没分叉的会话为 null（渲染走原路径）。
+  // 打开会话返回的历史视图（含分叉来源）；新对话尚无快照时为 null。
   const [sessionView, setSessionView] = useState<SessionView | null>(null);
   const eventsRef = useRef(events);
   useLayoutEffect(() => { eventsRef.current = events; }, [events]);
@@ -158,8 +159,10 @@ export function useWorkbenchModel() {
   /** 打开会话期间到达的 live 事件先落这里，读盘快照回来后再合并（见 mergeSessionSnapshot）。 */
   const openPending = useRef<{ id: string; events: AgentEvent[] } | null>(null);
   // M3-4/M4-4 会话键控错误条。
-  const [sessionErrors, setSessionErrors] = useState<ReadonlyMap<string, string>>(new Map());
-  const setLastError = useCallback((message: string, sessionId?: string) => {
+  // 载荷有两种（2026-11-02 真机订正）：一句话，或结构化的 SurfaceError（原因/依据/下一步）。
+  // 结构化那一种是为了别把三件不同的事拍成一行——渲染层据此分行排。
+  const [sessionErrors, setSessionErrors] = useState<ReadonlyMap<string, string | SurfaceError>>(new Map());
+  const setLastError = useCallback((message: string | SurfaceError, sessionId?: string) => {
     setSessionErrors((prev) => new Map(prev).set(sessionId ?? activeIdRef.current ?? "", message));
   }, []);
   const clearLastError = useCallback(() => {
@@ -172,18 +175,6 @@ export function useWorkbenchModel() {
     });
   }, []);
   const { feedback, feedbackBusy, onFeedback: handleFeedback, pinnedEventIds, pinBusy, annotationPending, onPin: handlePin } = useMessageAnnotations(activeId, setLastError);
-  const doRevertTurn = useCallback((round: number) => {
-    const sid = activeIdRef.current;
-    if (sid === null) return;
-    void window.agent.revertTurn(sid, round).then((r) => {
-      if (!r.ok) { setLastError(r.error ?? "回滚失败", sid); return; }
-      setLastNotice(formatRevertNotice(round, r), sid);
-    }, (err: unknown) => {
-      setLastError(`回滚失败：${err instanceof Error ? err.message : String(err)}`, sid);
-    });
-  }, [setLastError]);
-  /** 回滚前先过产品自绘确认卡（2026-10-17：原生 window.confirm 换掉——系统弹窗与界面语言不一致）。 */
-  const handleRevertTurn = useCallback((round: number) => { setRevertConfirm(round); }, []);
   /** 打开用户消息附件（2026-10-18）：只接受当前工作区内的路径；外部引用一律明说打不开，
    *  不让 workspacePathAction 在 main 侧静默拒绝成一个没人看见的 no-op。 */
   const openAttachment = useCallback((path: string): void => {
@@ -232,7 +223,7 @@ export function useWorkbenchModel() {
     editCtx, editCtxRef, setEditCtx,
     injectedAttachment, attachFromPane,
     pickSignal, setPickSignal,
-    injectedAppend, handlePickResult,
+    injectedElement, handlePickResult,
     composerMenuSignal, openComposerMenu,
   } = useComposerDrafts({ setLastError, setLastNotice });
 
@@ -264,17 +255,9 @@ export function useWorkbenchModel() {
   // 用户在运行中切档后排队消息仍按旧档执行（与「下一条消息起生效」的文案相反）。
   const modeRef = useRef(mode);
   modeRef.current = mode;
-  // Plan 模式（v23）：settings.planRequiredByDefault 是默认；Composer 的「方案」开关按轮覆盖。
-  // override=null ⇒ RunRequest 不带字段，主进程继续按设置默认判；显式 true/false ⇒ 覆盖。
-  const [planDefault, setPlanDefault] = useState(false);
-  const [planOverride, setPlanOverride] = useState<boolean | null>(null);
-  const planRequired = planOverride ?? planDefault;
-  const planOverrideRef = useRef<boolean | null>(null);
-  planOverrideRef.current = planOverride;
-  const changePlanRequired = useCallback((next: boolean): void => {
-    setPlanOverride(next);
-    setLastNotice(next ? STR.composer.planOnNotice : STR.composer.planOffNotice);
-  }, [setLastNotice]);
+  // Plan 模式（2026-11-03 业主口径）：是否先出方案由 **agent 自己判断**（系统提示词纪律 2 的
+  // 自判面 + propose_plan 工具 + 方案门写禁）。用户不再手动武装——渲染层不再发 planRequired，
+  // RunRequest 的字段与主进程的方案门机制保留（协议兼容；CLI/判卷仍可用）。
   // P3-3 命令面板（⌘K / 侧栏搜索钮）。
   const [paletteOpen, setPaletteOpen] = useState(false);
   // 会话日志查看器（批 132）：错误条 / 命令面板共用；只存 id，标题在渲染时从 sessions 派生。
@@ -311,7 +294,27 @@ export function useWorkbenchModel() {
   // §3.7 · G4 丢弃隔离工作区闸：未提交改动会一并消失，必问。
   const [wtDiscard, setWtDiscard] = useState<WorkspaceSession | null>(null);
   // 2026-10-17：回滚轮次 / 移除项目改走产品自绘确认卡（原生 confirm 与界面语言不一致）。
-  const [revertConfirm, setRevertConfirm] = useState<number | null>(null);
+  const [revertConfirm, setRevertConfirm] = useState<RevertTurnTarget | null>(null);
+  const doRevertTurn = useCallback(({ sessionId, workspace, round }: RevertTurnTarget) => {
+    const isViewingTarget = () => activeIdRef.current === sessionId && activeWorkspaceRef.current === workspace;
+    const showError = (message: string) => {
+      if (isViewingTarget()) setLastError(message, sessionId);
+      else toast.error(message);
+    };
+    void window.agent.revertTurn(sessionId, round, workspace ?? undefined).then((r) => {
+      if (!r.ok) { showError(r.error ?? "回滚失败"); return; }
+      const notice = formatRevertNotice(round, r);
+      if (isViewingTarget()) setLastNotice(notice, sessionId);
+      else toast(notice);
+    }, (err: unknown) => {
+      showError(`回滚失败：${err instanceof Error ? err.message : String(err)}`);
+    });
+  }, [setLastError, setLastNotice]);
+  /** 回滚前先过产品自绘确认卡（2026-10-17：原生 window.confirm 换掉——系统弹窗与界面语言不一致）。 */
+  const handleRevertTurn = useCallback((round: number) => {
+    const sessionId = activeIdRef.current;
+    if (sessionId !== null) setRevertConfirm({ sessionId, workspace: activeWorkspaceRef.current, round });
+  }, []);
   const [projectRemoveConfirm, setProjectRemoveConfirm] = useState<ProjectRecord | null>(null);
   // 改名**绑定到发起时那条会话**（2026-10-20 独立评审追出，MEDIUM）：
   // 旧形状只存"正在编辑的文本"，提交时用**当前**的 activeId ⇒
@@ -340,7 +343,6 @@ export function useWorkbenchModel() {
       setCtrlTabCycle(s.ctrlTabCycle);
       setTextSize(s.textSize);
       setUiSize(s.uiSize);
-      setPlanDefault(s.planRequiredByDefault === true);
     }).catch(() => undefined);
   }, []);
   // v6 模板目录：入口下拉的数据面（拉不到 = 空表，入口禁用而不是摆一个点不动的按钮）。
@@ -568,7 +570,7 @@ export function useWorkbenchModel() {
     doArchiveSession, requestArchiveSession, requestDeleteSession, doDeleteSession,
   } = useSessionOps({
     activeId, activeIdRef, sessions, refreshSessions, activate, openSession,
-    setLastError, setLastNotice, setDraftRemap, draftRemapSeq, setEvents, setQueueLoading,
+    setLastError, setLastNotice, setDraftRemap, draftRemapSeq, setEvents, setSessionView, setQueueLoading,
     openSeq, activeWorkspaceRef, touchWorkspace, runningSet, setArchiveConfirm, setDeleteConfirm,
   });
   // 消息级动作簇（Phase 2 · 批 2.3）：分叉 / 撤回（编辑并重发）/ 朗读 / 压缩 / 目标动作 / 快照还原。
@@ -756,7 +758,7 @@ export function useWorkbenchModel() {
   // ---- v2.17 运行中可沟通：按会话发送队列 ----
   // 队列语义全在 send-queue.ts（本文件只存表与接线）；表是 Map<sessionId, 队列>，
   // 这样后台会话的排队不因切换会话而丢失，自动派发也只认原会话。
-  const { queueSaving, queueSaveFailed, setQueueFor, send, sendTo, sendWithGoal, handleRetryLast, resumeQueue, resumeQueueFor, cancelRunHeal } = useRunQueue({ setQueueLocal, queueWrites, queueDirty, setLastError, sendQueue, setStoppedIds, runningSet, lastDeltaAt, runGen, runStartBySession, force, thinkingBySession, pendingThinking, modeRef, planRequiredRef: planOverrideRef, selections, activeId, editCtxRef, setEditCtx, askById, setLastNotice, queueSeq, setPendingSend, activeWorkspace, setActiveWorkspace, activate, refreshSessions, setDraftRestore, draftRestoreSeq, compactNow, activeIdRef, eventsRef });
+  const { queueSaving, queueSaveFailed, setQueueFor, send, sendTo, sendWithGoal, handleRetryLast, resumeQueue, resumeQueueFor, cancelRunHeal } = useRunQueue({ setQueueLocal, queueWrites, queueDirty, setLastError, sendQueue, setStoppedIds, runningSet, lastDeltaAt, runGen, runStartBySession, force, thinkingBySession, pendingThinking, modeRef, selections, activeId, editCtxRef, setEditCtx, askById, setLastNotice, queueSeq, setPendingSend, activeWorkspace, setActiveWorkspace, activate, refreshSessions, setDraftRestore, draftRestoreSeq, compactNow, activeIdRef, eventsRef });
   cancelRunHealRef.current = cancelRunHeal; // 撤回（编辑）晚绑
     const { lastError, lastNotice, runningActive, modelWaiting, pendingClarify, pendingPlan, askForActive, phase, stopped, phaseLabel, chosen, pickerValue } = useRunReadings({ sessionErrors, activeId, sessionNotices, runningSet, setElapsedSec, runStartBySession, events, askBySid, stoppedIds, lastDeltaAt, selections, providerInfo, activeWorkspace });
   useSessionPrefsHydration({ sessions, selections, thinking: thinkingBySession, force });
@@ -815,6 +817,16 @@ export function useWorkbenchModel() {
   }, [streamRows, chosen]);
   // 目录数据（v7.2）：用户轮列表（round + 首句）；≥2 轮才出目录入口（1 轮没有可跳的目标）。
   const outlineTurns = useMemo(() => turnSummaries(streamRows), [streamRows]);
+  // 置顶消息进对话目录（2026-11-04 补全「只是做了个外观」）：pin 此前只落 sidecar、大纲零呈现。
+  // 锚 = assistant 行 eventId（Stream 行面自带 eventId+round+text），映射零猜测。
+  const pinnedTurns = useMemo(() => {
+    if (pinnedEventIds.size === 0) return [];
+    return streamRows.flatMap((r) => (
+      r.kind === "assistant" && pinnedEventIds.has(`#${String(r.eventId)}`)
+        ? [{ round: r.round, text: truncateSummary(r.text) }]
+        : []
+    ));
+  }, [streamRows, pinnedEventIds]);
   const hasThinking = useMemo(
     () => streamRows.some((r) => r.kind === "assistant" && r.thinking !== undefined && r.thinking !== ""),
     [streamRows],
@@ -1084,8 +1096,6 @@ export function useWorkbenchModel() {
     composerLock,
     mode,
     permissionGuard,
-    planRequired,
-    onPlanRequiredChange: changePlanRequired,
     stopped,
     usage,
     phaseLabel,
@@ -1114,7 +1124,7 @@ export function useWorkbenchModel() {
     composerMenuSignal,
     onSuggestNext,
     injectedAttachment,
-    injectedAppend,
+    injectedElement,
     injectText,
     inspectorCollapsed,
     inspectorRef,

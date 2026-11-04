@@ -1,0 +1,275 @@
+{
+  "checks": [
+    {
+      "name": "light-1440 status badge removed",
+      "ok": true
+    },
+    {
+      "name": "light-1440 one readable wide user entry",
+      "ok": true,
+      "detail": {
+        "label": "设置与偏好",
+        "width": 238.5,
+        "height": 40,
+        "left": 56,
+        "footerLeft": 48,
+        "footerWidth": 254.5,
+        "buttons": 1,
+        "right": 294.5,
+        "viewport": 1440
+      }
+    },
+    {
+      "name": "light-1440 no nested blue focus ring",
+      "ok": true,
+      "detail": {
+        "shadow": "none",
+        "outline": "0px",
+        "active": true,
+        "border": "color(srgb 0.321569 0.317647 0.305882)",
+        "height": 26
+      }
+    },
+    {
+      "name": "light-1440 search filters real list",
+      "ok": true
+    },
+    {
+      "name": "light-1440 first Escape clears query",
+      "ok": true
+    },
+    {
+      "name": "light-1440 second Escape closes and restores focus",
+      "ok": true
+    },
+    {
+      "name": "light-1440 user menu opens above and fits window",
+      "ok": true,
+      "detail": {
+        "text": "外观亮用量统计设置⌘,关于与更新",
+        "left": 56.00615692138672,
+        "right": 231.99382781982422,
+        "bottom": 810.4846801757812,
+        "triggerTop": 816.5,
+        "settingsEntries": 1
+      }
+    },
+    {
+      "name": "light-1440 user menu preserves actions",
+      "ok": true
+    },
+    {
+      "name": "light-1440 menu Escape returns focus",
+      "ok": true
+    },
+    {
+      "name": "light-1440 settings action opens settings",
+      "ok": true
+    },
+    {
+      "name": "dark-1440 status badge removed",
+      "ok": true
+    },
+    {
+      "name": "dark-1440 one readable wide user entry",
+      "ok": true,
+      "detail": {
+        "label": "设置与偏好",
+        "width": 239,
+        "height": 40,
+        "left": 56,
+        "footerLeft": 48,
+        "footerWidth": 255,
+        "buttons": 1,
+        "right": 295,
+        "viewport": 1440
+      }
+    },
+    {
+      "name": "dark-1440 no nested blue focus ring",
+      "ok": true,
+      "detail": {
+        "shadow": "none",
+        "outline": "0px",
+        "active": true,
+        "border": "color(srgb 0.764706 0.760784 0.717647)",
+        "height": 26
+      }
+    },
+    {
+      "name": "dark-1440 search filters real list",
+      "ok": true
+    },
+    {
+      "name": "dark-1440 first Escape clears query",
+      "ok": true
+    },
+    {
+      "name": "dark-1440 second Escape closes and restores focus",
+      "ok": true
+    },
+    {
+      "name": "dark-1440 user menu opens above and fits window",
+      "ok": true,
+      "detail": {
+        "text": "外观暗用量统计设置⌘,关于与更新",
+        "left": 56.00090026855469,
+        "right": 231.9990997314453,
+        "bottom": 811.4977416992188,
+        "triggerTop": 817.5,
+        "settingsEntries": 1
+      }
+    },
+    {
+      "name": "dark-1440 user menu preserves actions",
+      "ok": true
+    },
+    {
+      "name": "dark-1440 menu Escape returns focus",
+      "ok": true
+    },
+    {
+      "name": "dark-1440 settings action opens settings",
+      "ok": true
+    },
+    {
+      "name": "light-900 status badge removed",
+      "ok": true
+    },
+    {
+      "name": "light-900 one readable wide user entry",
+      "ok": true,
+      "detail": {
+        "label": "设置与偏好",
+        "width": 238.5,
+        "height": 40,
+        "left": 56,
+        "footerLeft": 48,
+        "footerWidth": 254.5,
+        "buttons": 1,
+        "right": 294.5,
+        "viewport": 900
+      }
+    },
+    {
+      "name": "light-900 no nested blue focus ring",
+      "ok": true,
+      "detail": {
+        "shadow": "none",
+        "outline": "0px",
+        "active": true,
+        "border": "color(srgb 0.321569 0.317647 0.305882)",
+        "height": 26
+      }
+    },
+    {
+      "name": "light-900 search filters real list",
+      "ok": true
+    },
+    {
+      "name": "light-900 first Escape clears query",
+      "ok": true
+    },
+    {
+      "name": "light-900 second Escape closes and restores focus",
+      "ok": true
+    },
+    {
+      "name": "light-900 user menu opens above and fits window",
+      "ok": true,
+      "detail": {
+        "text": "外观亮用量统计设置⌘,关于与更新",
+        "left": 56.00707244873047,
+        "right": 231.99291229248047,
+        "bottom": 811.482421875,
+        "triggerTop": 817.5,
+        "settingsEntries": 1
+      }
+    },
+    {
+      "name": "light-900 user menu preserves actions",
+      "ok": true
+    },
+    {
+      "name": "light-900 menu Escape returns focus",
+      "ok": true
+    },
+    {
+      "name": "light-900 settings action opens settings",
+      "ok": true
+    },
+    {
+      "name": "dark-900 status badge removed",
+      "ok": true
+    },
+    {
+      "name": "dark-900 one readable wide user entry",
+      "ok": true,
+      "detail": {
+        "label": "设置与偏好",
+        "width": 239,
+        "height": 40,
+        "left": 56,
+        "footerLeft": 48,
+        "footerWidth": 255,
+        "buttons": 1,
+        "right": 295,
+        "viewport": 900
+      }
+    },
+    {
+      "name": "dark-900 no nested blue focus ring",
+      "ok": true,
+      "detail": {
+        "shadow": "none",
+        "outline": "0px",
+        "active": true,
+        "border": "color(srgb 0.764706 0.760784 0.717647)",
+        "height": 26
+      }
+    },
+    {
+      "name": "dark-900 search filters real list",
+      "ok": true
+    },
+    {
+      "name": "dark-900 first Escape clears query",
+      "ok": true
+    },
+    {
+      "name": "dark-900 second Escape closes and restores focus",
+      "ok": true
+    },
+    {
+      "name": "dark-900 user menu opens above and fits window",
+      "ok": true,
+      "detail": {
+        "text": "外观暗用量统计设置⌘,关于与更新",
+        "left": 56.00706481933594,
+        "right": 231.99293518066406,
+        "bottom": 811.482421875,
+        "triggerTop": 817.5,
+        "settingsEntries": 1
+      }
+    },
+    {
+      "name": "dark-900 user menu preserves actions",
+      "ok": true
+    },
+    {
+      "name": "dark-900 menu Escape returns focus",
+      "ok": true
+    },
+    {
+      "name": "dark-900 settings action opens settings",
+      "ok": true
+    },
+    {
+      "name": "no renderer errors",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": [],
+  "scope": "Current working-tree renderer; isolated synthetic AgentApi"
+}

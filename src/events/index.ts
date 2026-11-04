@@ -8,7 +8,7 @@ export type {
   PromoteOrigin, SkillInvocationMeta, GoalTurnOrigin, UserMessageOrigin, UserMessageAttachment,
   UserMessageEvent, AssistantMessageEvent, AssistantDeltaEvent, ThinkingDeltaEvent,
   ToolCallEvent, ToolBlockReason, HarnessHoldReason, ToolResultEvent,
-  UsageEvent, SessionMetaEvent, SessionEvolutionStamp,
+  UsageEvent, SessionMetaEvent, SessionEvolutionStamp, VerifyDeclaration,
   ClarifyQuestion, ClarifyAnswerMap, ClarifyRequestedEvent,
   PlanFileChange, PlanProposal, PlanProposedEvent, PlanApprovedEvent,
   VerifyCause, VerifyCommandResult, VerifyResultEvent,
@@ -23,6 +23,7 @@ export type {
   RunErrorEvent,
   GoalSetEvent, GoalStoppedEvent, GoalPausedEvent, GoalResumedEvent,
   TurnTruncatedEvent, TurnStopMissingEvent, SurfaceAccountEvent,
+  TodoItem, TodoUpdatedEvent,
   AgentEvent,
 } from "./types";
 export { AGENT_PERMISSION_MODES, HARNESS_HOLD_PROSE_TOKEN, HARNESS_HOLD_REASONS, isNumericCompaction, isReferencedCompaction, numericCompactionIds, numericCompactionOffset, TOOL_BLOCK_REASONS, isEnvVerifyCause } from "./types";

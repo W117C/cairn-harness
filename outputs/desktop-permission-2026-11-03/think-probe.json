@@ -1,0 +1,17 @@
+{
+  "clicked": true,
+  "probe": {
+    "color": "color(srgb 0.0431373 0.0431373 0.0431373 / 0.86)",
+    "fontSize": "13px",
+    "lineHeight": "22.75px",
+    "opacity": "1",
+    "liColor": null,
+    "rowColor": "rgb(11, 11, 11)",
+    "rowOpacity": "1",
+    "bg": "rgb(252, 252, 251)",
+    "text": "先查 RunOverrides 现有形态，再决定是落盘还是运行面取值……",
+    "theme": "light",
+    "mode": "light",
+    "dark": ""
+  }
+}

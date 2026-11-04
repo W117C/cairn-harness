@@ -47,9 +47,10 @@ describe("全局可用更新 store", () => {
   });
 
   it("Sidebar 使用同一个 store 并给出菜单说明（不是只写 notice）", () => {
-    const sidebar = readFileSync(fileURLToPath(new URL("../src/renderer/components/Sidebar.tsx", import.meta.url)), "utf8");
-    expect(sidebar).toContain("useAvailableUpdate()");
-    expect(sidebar).toContain("STR.sidebar.updateMenuItem");
-    expect(sidebar).toContain('data-update={update !== null ? "true" : undefined}');
+    // 2026-11-03：头像菜单搬到全局轨底部（AccountMenu），更新红点跟着走。
+    const account = readFileSync(fileURLToPath(new URL("../src/renderer/components/AccountMenu.tsx", import.meta.url)), "utf8");
+    expect(account).toContain("useAvailableUpdate()");
+    expect(account).toContain("STR.sidebar.updateMenuItem");
+    expect(account).toContain('data-update={update !== null ? "true" : undefined}');
   });
 });

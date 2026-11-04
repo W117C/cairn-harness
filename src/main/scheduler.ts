@@ -14,6 +14,7 @@
 import { mkdir, open, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { writeFileAtomic } from "../atomic-write";
+import { processLiveness } from "../process-liveness";
 import type { PermissionMode } from "../permissions/modes";
 import { Cron } from "croner";
 import type { AgentEvent } from "../events";
@@ -654,7 +655,9 @@ export class Scheduler {
     this.journalByTask.clear();
     this.sessionIdByKey.clear();
     for (const e of entries) this.addJournalEntry(e);
-    for (const [key, sid] of sidecar) this.sessionIdByKey.set(key, sid);
+    for (const [key, sid] of sidecar) {
+      if (this.journalKeys.has(key) || this.inflight.has(key)) this.sessionIdByKey.set(key, sid);
+    }
   }
 
   /** 手动 tick（验收注入；生产由 interval 驱动）。startup=true = 启动 tick（补跑闸生效）。 */
@@ -758,7 +761,7 @@ export class Scheduler {
       // 跨进程互斥：同根多实例（桌面 app + cairn --serve）各自内存表 + append-only journal
       // 仍有「双方都读到未决、都 append」的窗口。刷新只能缩小窗口，锁才关掉它。
       const locked = await this.withCrossProcessLock(() => this.admitOccurrence(def, dueAt, kind, report));
-      if (!locked) report.duplicates += 1; // 对方进程正在决定这一拍：本次让路，不重复触发
+      if (locked === false) report.duplicates += 1; // 对方进程正在决定这一拍：本次让路，不重复触发
     };
     const next = this.admissionMutex.then(run, run);
     // IO 失败仍释放锁；原始拒绝交还调用者，journal 的已决水位不回滚。
@@ -791,9 +794,13 @@ export class Scheduler {
     };
     const first = await tryOnce();
     if (first !== false) return first;
-    // 陈旧锁（崩溃留下的）：超过 2 分钟视为无主，清掉重试一次。
+    // 陈旧锁（崩溃留下的）：核对持有者 PID 是否存活，避免误删仍在准入的慢进程锁，同时在持有者已死时立即回收。
+    const pidRaw = await readFile(lockPath, "utf8").catch(() => "");
+    const holderPid = Number.parseInt(pidRaw.trim(), 10);
+    const liveness = Number.isInteger(holderPid) && holderPid > 0 ? processLiveness(holderPid) : "unknown";
+    if (liveness === "alive") return false;
     const st = await stat(lockPath).catch(() => null);
-    if (st !== null && Date.now() - st.mtimeMs > 120_000) {
+    if (liveness === "dead" || (st !== null && this.clock() - st.mtimeMs > 120_000)) {
       await rm(lockPath, { force: true }).catch(() => undefined);
       const retry = await tryOnce();
       return retry;
@@ -1108,7 +1115,8 @@ export class Scheduler {
         }
         const mem = this.completions.get(e.occurrence_key);
         if (mem) {
-          history.push({ task_id: taskId, task_name: name, occurrence_key: e.occurrence_key, due_at: e.due_at, decision: e.decision, session_id: e.session_id, state: mem.status, ...(mem.reason !== undefined ? { reason: mem.reason } : {}), at: e.at });
+          const sid = e.session_id ?? this.findSessionIdByKey(e.occurrence_key);
+          history.push({ task_id: taskId, task_name: name, occurrence_key: e.occurrence_key, due_at: e.due_at, decision: e.decision, ...(sid ? { session_id: sid } : {}), state: mem.status, ...(mem.reason !== undefined ? { reason: mem.reason } : {}), at: e.at });
           continue;
         }
         // 跨重启：读会话终态（automation_completed）；无终态记录 = interrupted（V1 不自动重试，§12.3.4）

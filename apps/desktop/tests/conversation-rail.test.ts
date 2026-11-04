@@ -128,6 +128,12 @@ describe("对话轨道（第 754 页）", () => {
     // 署名条同理（它现在是浮层，会盖在下一段上面）。
     expect(styles).toContain(".row.assistant > .meta, .row.user > .meta { pointer-events: none; }");
     expect(styles).toContain(".row.user:hover > .meta, .row.user:focus-within > .meta { pointer-events: auto; }");
+    // 2026-11-02：**容器自己**那一层此前漏了——只写了里面的 .row-actions 与 .meta，
+    // 而 `.assistant-footer` 这个 672×30 的绝对定位盒子一直 pointer-events: auto
+    // ⇒ 它压在下一段最上面的 6px 上，把那 6px 的点击吃掉（实测：点在交付卡表头上
+    // 什么都没发生）。内层 none 而外层 auto 等于没写，所以这一条钉容器。
+    expect(ruleOf(processCss, ".row.assistant > .assistant-footer {")).toContain("pointer-events: none");
+    expect(processCss).toContain(".row.assistant:hover > .assistant-footer,\n.row.assistant:focus-within > .assistant-footer { pointer-events: auto; }");
   });
 
   it("⑤ 不许有装饰性竖线：轴线已整条撤掉（业主在真机上一眼否掉）", () => {
@@ -190,5 +196,17 @@ describe("对话轨道（第 754 页）", () => {
     expect(formulas.length, `fluid stop 公式只许一处，实际 ${formulas.length} 处`).toBe(1);
     // ③ 反向自证：正文自己不再吃 padding-right（否则行 + 正文两份留白，列会再窄 56px）。
     expect(ruleOf(styles, ".row.assistant .t {")).not.toContain("padding-right");
+  });
+
+  it("⑨ 交付卡让开署名条浮层：操作条探进卡片不许超过 6px（2026-11-02 业主截图）", () => {
+    // 署名条是浮层（裁决 3），挂在助手行下边缘之外，盒高 = `.row .row-action` 的 height。
+    // 交付卡原本只留 --space-sm(8px)：悬停这一行就看见整排操作图标骑在卡片表头里
+    // （实测进 22px），图标读起来像卡片自己的工具条。顶距回到**一档**后图标全部落在卡片之上，
+    // 浮层的盒子最多压到卡边 6px——与它压在别的段上时同一口径。
+    // 判据钉数值关系，不钉某一次写的字面量：卡片回到 --space-sm、或操作条再长高，都会红。
+    const card = ruleOf(styles, ".changes-card {");
+    expect(card).toContain("margin: var(--turn-gap) var(--cds-assistant-message-text-stop)");
+    const barH = pxIn(ruleOf(processCss, ".row .row-action {"), "height");
+    expect(barH - tokenPx("turn-gap")).toBeLessThanOrEqual(6);
   });
 });

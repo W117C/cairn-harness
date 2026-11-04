@@ -8,6 +8,7 @@
 // 事件由 props 给出（onConfirm/onClose），组件自己不含任何状态。
 import type { ProjectRecord } from "../../../../../src/main/ipc-protocol";
 import type { DeleteConfirmTarget, SessionConfirmTarget, WorkspaceSession } from "../sessions-view";
+import type { RevertTurnTarget } from "../state/message-actions";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { permissionConfirmCopy } from "../components/PermissionMenu";
 import type { PermissionConfirmApi } from "../state/use-permission-confirm";
@@ -15,10 +16,10 @@ import { ModalSurface } from "../components/ModalSurface";
 import { STR } from "../strings";
 
 export interface ConfirmScrimsProps {
-  /** 回滚轮次确认（round 号码；null = 不在场）。 */
-  revertConfirm: number | null;
-  setRevertConfirm: (v: number | null) => void;
-  doRevertTurn: (round: number) => void;
+  /** 回滚目标在打开确认卡时绑定。 */
+  revertConfirm: RevertTurnTarget | null;
+  setRevertConfirm: (v: RevertTurnTarget | null) => void;
+  doRevertTurn: (target: RevertTurnTarget) => void;
   /** 移除项目确认。 */
   projectRemoveConfirm: ProjectRecord | null;
   setProjectRemoveConfirm: (v: ProjectRecord | null) => void;
@@ -64,12 +65,12 @@ export function ConfirmScrims(props: ConfirmScrimsProps) {
       {/* 回滚轮次 / 移除项目的确认卡（2026-10-17：原生 confirm → 产品自绘）。 */}
       {revertConfirm !== null && (
         <ConfirmDialog
-          title={`还原第 ${String(revertConfirm)} 轮的改动？`}
+          title={`还原第 ${String(revertConfirm.round)} 轮的改动？`}
           note={"本轮新建的文件会删除；本轮之后又被改过的文件不会动，会列进「需手动处理」。"}
           confirmLabel="还原"
           danger
           onClose={() => setRevertConfirm(null)}
-          onConfirm={() => { const round = revertConfirm; setRevertConfirm(null); doRevertTurn(round); }}
+          onConfirm={() => { setRevertConfirm(null); doRevertTurn(revertConfirm); }}
         />
       )}
       {projectRemoveConfirm !== null && (

@@ -73,6 +73,10 @@ export const BENCH_KNOBS: Readonly<Record<string, BenchDeclaration>> = {
     face: "not-applicable",
     why: "桌面壳的完成通知开关（Notification 只在 Electron 主进程发）；基准是 CLI 跑器，没有系统通知面——开关只影响桌面壳",
   },
+  keepAwake: {
+    face: "not-applicable",
+    why: "桌面壳的保唤开关（powerSaveBlocker 只在 Electron 主进程，kernel-host 注入缝）；基准是 CLI 跑器，没有电源管理面——开关只影响桌面壳",
+  },
 };
 
 /** 跑器可以按命令行**改口**的键（只有真接了的才许改口，见 `assemblyOverrides` 与 loop-eval 的三枚旗标）。 */

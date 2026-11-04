@@ -143,7 +143,7 @@ export function shouldCompact(estimate: number, config: CompactionConfig): Compa
 export interface AtomicUnit { lo: number; hi: number; ids: number[] }
 
 /** 按 callId 链接的事件并成单元：tool_call↔tool_result / clarify_requested / plan_proposed↔plan_approved /
- *  verify_result 同 callId 归一组；区间重叠再合并；不在任何区间的事件是单例。 */
+ *  todo_updated / verify_result 同（agent 域 + callId）归一组；区间重叠再合并；不在任何区间的事件是单例。 */
 export function atomicUnits(events: AgentEvent[]): AtomicUnit[] {
   const groups = new Map<string, number[]>();
   const nativeByCall = new Map<string, string>();
@@ -153,25 +153,27 @@ export function atomicUnits(events: AgentEvent[]): AtomicUnit[] {
   };
   events.forEach((e, i) => {
     const id = eventIdAt(i);
-    if (e.type === "user_message" || e.type === "usage") nativeByCall.clear();
+    const domain = hasWorkerAttribution(e) ? (e as { agent_id: string }).agent_id + ":" : "";
+    if (!domain && (e.type === "user_message" || e.type === "usage")) nativeByCall.clear();
     if (e.type === "thinking_delta" && e.reasoning) {
-      nativeByCall.set(e.callId, e.reasoning.id);
-      group("r:" + e.reasoning.id, id);
-    } else if (e.type === "assistant_delta" && nativeByCall.has(e.callId)) {
-      group("r:" + nativeByCall.get(e.callId)!, id);
+      nativeByCall.set(domain + e.callId, e.reasoning.id);
+      group("r:" + domain + e.reasoning.id, id);
+    } else if (e.type === "assistant_delta" && nativeByCall.has(domain + e.callId)) {
+      group("r:" + domain + nativeByCall.get(domain + e.callId)!, id);
     } else if (e.type === "tool_call" && e.reasoningId) {
-      group("r:" + e.reasoningId, id);
+      group("r:" + domain + e.reasoningId, id);
     }
     let key: string | null = null;
-    if (e.type === "tool_call") key = "c:" + e.id;
+    if (e.type === "tool_call") key = "c:" + domain + e.id;
     else if (
       e.type === "tool_result" ||
       e.type === "clarify_requested" ||
       e.type === "plan_proposed" ||
       e.type === "plan_approved" ||
+      e.type === "todo_updated" ||
       e.type === "verify_result"
     ) {
-      key = "c:" + e.callId;
+      key = "c:" + domain + e.callId;
     }
     if (!key) return;
     group(key, id);
@@ -230,18 +232,23 @@ export function keepFirstSet(events: AgentEvent[]): Set<number> {
   let lastPlanApproved = -1;
   let lastGoalSet = -1;
   let lastGoalStopped = -1;
+  let lastTodoUpdated = -1;
   events.forEach((e, i) => {
     const id = eventIdAt(i);
+    const fromWorker = hasWorkerAttribution(e);
+    if (fromWorker) return;
     if (e.type === "user_message") seeds.add(id); // 用户轮次全部受护（用户目标 + 中途补充）
     else if (e.type === "plan_proposed") lastPlanProposed = id;
     else if (e.type === "plan_approved") lastPlanApproved = id;
     else if (e.type === "goal_set") lastGoalSet = id;
     else if (e.type === "goal_stopped") lastGoalStopped = id;
+    else if (e.type === "todo_updated") lastTodoUpdated = id;
   });
   if (lastPlanProposed > 0) seeds.add(lastPlanProposed);
   if (lastPlanApproved > 0) seeds.add(lastPlanApproved);
   if (lastGoalSet > 0) seeds.add(lastGoalSet);
   if (lastGoalStopped > 0) seeds.add(lastGoalStopped);
+  if (lastTodoUpdated > 0) seeds.add(lastTodoUpdated);
   const units = atomicUnits(events);
   const out = new Set<number>();
   // A4（审查根因 5）：units 按 lo 升序互不重叠——二分定位代替每 seed 全量 find。
@@ -931,18 +938,18 @@ export class CompactionCoordinator {
   /** Build a candidate without changing failure counters or firing PreCompact. */
   async predict(
     events: AgentEvent[],
-    options: Pick<RunCompactionArgs, "overhead" | "signal" | "view"> & { config?: Partial<CompactionConfig> } = {},
+    opts: Pick<RunCompactionArgs, "overhead" | "signal" | "view"> & { config?: Partial<CompactionConfig> } = {},
   ): Promise<CompactionOutcome | null> {
     if (this.summarizerDisabled || !this.summarizer) return null;
     return await runCompaction({
       events,
-      ...(options.view !== undefined ? { view: options.view } : {}),
+      ...(opts.view !== undefined ? { view: opts.view } : {}),
       trigger: "auto",
       reason: "threshold",
       summarizer: this.summarizer,
-      config: options.config ? { ...this.config, ...options.config } : this.config,
-      overhead: options.overhead,
-      signal: options.signal,
+      config: opts.config ? { ...this.config, ...opts.config } : this.config,
+      overhead: opts.overhead,
+      signal: opts.signal,
       prediction: true,
     });
   }

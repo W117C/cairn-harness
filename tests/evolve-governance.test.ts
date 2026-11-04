@@ -122,7 +122,7 @@ describe("Evolve 治理面", () => {
     await createCandidate(workspace, candidate);
     const promotion = await promoteCandidateToSema(workspace, candidate.id);
     expect(promotion.outcome).toBe("refused");
-    expect(promotion.outcome === "refused" ? promotion.reason : "").toContain("冻结");
+    expect(promotion.outcome === "refused" ? promotion.reason : "").toBe("STOP 冻结中：不晋升、不写 staging");
 
     const skills = await seedSkillCandidates(workspace);
     expect(skills.frozen).toBe(true);

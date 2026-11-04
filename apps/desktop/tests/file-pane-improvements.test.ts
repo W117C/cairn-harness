@@ -67,10 +67,13 @@ describe("预览列空态走窗格共用语法", () => {
 
   it("只读事实说一句：空态讲一次，打开后由 .fp-readonly 常驻标承担", () => {
     // 空态里出现「只读」一次；预览头部那枚常驻标也还在（两处不同时在场）。
-    const emptyNote = src.match(/className="pane-empty">([\s\S]*?)<\/div>/)?.[1] ?? "";
+    // 2026-11-03：锚定到 FilePane 本体——app-surface 里第一个 .pane-empty 已变成 ChangesPane 的
+    //（变更窗格抽出批），整面正则会抓错对象。
+    const filePane = readFileSync(join(__dirname, "..", "src", "renderer", "components", "FilePane.tsx"), "utf8");
+    const emptyNote = filePane.match(/className="pane-empty">([\s\S]*?)<\/div>/)?.[1] ?? "";
     expect(emptyNote.includes("只读")).toBe(true);
     expect(src).toContain('<span className="fp-readonly">只读</span>');
-    expect((src.match(/预览只读/g) ?? []).length).toBe(1);
+    expect((filePane.match(/预览只读/g) ?? []).length).toBe(1);
   });
 
   it("居中规则只在空态命中，且不许把首行顶出可滚范围", () => {

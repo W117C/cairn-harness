@@ -12,6 +12,7 @@ import {
   InitializedNotification,
   DidOpenTextDocumentNotification,
   DidChangeTextDocumentNotification,
+  DidChangeWatchedFilesNotification,
   DidCloseTextDocumentNotification,
   PublishDiagnosticsNotification,
   DefinitionRequest,
@@ -23,7 +24,8 @@ import {
   ShutdownRequest,
   ExitNotification,
 } from "vscode-languageserver-protocol/node";
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, appendFileSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 const ARGS = process.argv.slice(2);
 const SLOW_INIT = ARGS.includes("--slow-init");
@@ -46,6 +48,13 @@ const SYNC_NONE = ARGS.includes("--sync-none");
 // LSP 3.17 的 workspaceSymbol 条目**允许没有 location**（服务器只知道名字）。真服务器会这么回
 // （未索引的依赖符号就是这样），客户端不能假设每条都带位置。
 const SYMBOL_NO_LOCATION = ARGS.includes("--symbol-no-location");
+// 不声明 workspaceSymbolProvider（**也不注册** handler）：多服务器场景里"这台不参与工作区符号查询"。
+const NO_WORKSPACE_SYMBOL = ARGS.includes("--no-workspace-symbol");
+
+// --watched-to=<file>：订阅 workspace/didChangeWatchedFiles，并把每条事件**当索引用**——
+// 出现/变更的文件从盘上重读进索引，删除的移出索引。这就是 gopls / rust-analyzer / pyright 这类
+// 带项目索引的服务器实际做的事：客户端不发这条通知，它们就永远不知道 agent 刚新建了哪个文件。
+const WATCHED_TO = ARGS.find((a) => a.startsWith("--watched-to="))?.slice("--watched-to=".length);
 
 
 
@@ -116,10 +125,10 @@ conn.onRequest(InitializeRequest.type, async (params) => {
     definitionProvider: true,
     referencesProvider: true,
     documentSymbolProvider: true,
-    workspaceSymbolProvider: true,
     implementationProvider: true,
   };
   if (!NO_HOVER) capabilities.hoverProvider = true;
+  if (!NO_WORKSPACE_SYMBOL) capabilities.workspaceSymbolProvider = true;
   return { capabilities };
 });
 conn.onNotification(InitializedNotification.type, () => {});
@@ -143,6 +152,24 @@ conn.onNotification(DidCloseTextDocumentNotification.type, (p) => {
   docs.delete(p.textDocument.uri);
   conn.sendNotification(PublishDiagnosticsNotification.type, { uri: p.textDocument.uri, diagnostics: [] });
 });
+
+if (WATCHED_TO !== undefined) {
+  conn.onNotification(DidChangeWatchedFilesNotification.type, (p) => {
+    for (const c of p.changes) {
+      appendFileSync(WATCHED_TO, JSON.stringify({ uri: c.uri, type: c.type }) + "\n", "utf8");
+      // type: 1=Created 2=Changed 3=Deleted（FileChangeType）。服务器按它更新自己的索引。
+      if (c.type === 3) {
+        docs.delete(c.uri);
+        continue;
+      }
+      try {
+        docs.set(c.uri, readFileSync(fileURLToPath(c.uri), "utf8"));
+      } catch {
+        docs.delete(c.uri); // 盘上没有就当它不在了
+      }
+    }
+  });
+}
 
 /** 按 LSP 的 0-based 行列做区间替换（utf-16 计数与 JS string 一致）。 */
 function offsetAt(text, line, character) {
@@ -217,22 +244,24 @@ conn.onRequest(DocumentSymbolRequest.type, (p) => {
     children: [],
   }));
 });
-conn.onRequest(WorkspaceSymbolRequest.type, (p) => {
-  const query = (p.query ?? "").toLowerCase();
-  const out = [];
-  for (const [uri, text] of docs) {
-    for (const m of findMarkers(text, "SYM")) {
-      if (m.sym.toLowerCase().includes(query)) {
-        out.push(
-          SYMBOL_NO_LOCATION
-            ? { name: m.sym, kind: 12, containerName: "top" }
-            : { name: m.sym, kind: 12, location: markerRange(uri, m) },
-        );
+if (!NO_WORKSPACE_SYMBOL) {
+  conn.onRequest(WorkspaceSymbolRequest.type, (p) => {
+    const query = (p.query ?? "").toLowerCase();
+    const out = [];
+    for (const [uri, text] of docs) {
+      for (const m of findMarkers(text, "SYM")) {
+        if (m.sym.toLowerCase().includes(query)) {
+          out.push(
+            SYMBOL_NO_LOCATION
+              ? { name: m.sym, kind: 12, containerName: "top" }
+              : { name: m.sym, kind: 12, location: markerRange(uri, m) },
+          );
+        }
       }
     }
-  }
-  return out;
-});
+    return out;
+  });
+}
 
 conn.onRequest(ShutdownRequest.type, () => null);
 conn.onNotification(ExitNotification.type, () => {

@@ -27,6 +27,8 @@ import { ClarifyGate, PlanGate } from "../agent/gates";
 // 而本文件下面还有两处在用）。所以写成"先 import 再 export"，两条都在。
 import { BASE_SYSTEM, systemPromptFor } from "../agent/system-prompt";
 import { classifyVerifyFailure, createVerifyHook, defaultExec, withVerifyCauseNote, type ExecFn } from "../agent/verify";
+import { resolveVerifyConfig } from "../agent/verify-plan";
+import type { VerifyDeclaration } from "../events";
 import { createActionFusion } from "../agent/action-fusion";
 import { SolpiRuntime, privateSessionDirectory, removePrivateSessionData, observationRecallSpec, solpiEnabled, type SolpiFlags } from "../agent/solpi-runtime";
 import { createUsageAttributor } from "../agent/usage-attribution";
@@ -52,7 +54,7 @@ import { GOAL_TURN_CAP_MAX, goalReminder, goalStopDecision, goalWindowSpend, par
 // 收束后的三支观测读数（目标漂移 / cost-per-progress / 自进化）2026-10-17 搬去
 // `./post-run-readings.ts`：判据仍住在各自的纯模块（goal-drift / cost-per-progress / evolution），
 // 那边只做「读事件流 → 问它 → 印一行」，不新增事件类型。
-import { emitPostRunReadings } from "./post-run-readings";
+import { emitPostRunReadings, withPostRunReadingsOnThrow } from "./post-run-readings";
 // 自进化闭环的**装配侧**：下一轮装配时读回策略补丁并注进 system prompt（让「上一轮的经验」真正
 // 回流到下一轮的决策，而不是只记笔记）。落盘那一半随收尾读数搬去 post-run-readings。
 import { evolutionPromptNote, evolutionRoutingBias, COMPRESS_EARLY_RATIO } from "../agent/evolution";
@@ -93,7 +95,7 @@ export {
   SANDBOX_TEST_ALIASES,
   workspaceDeclaresVitest,
 };
-import { validateRunAttachments, type ValidatedRunAttachment } from "./run-attachments";
+import { isImageRunAttachment, validateRunAttachments, type ValidatedRunAttachment } from "./run-attachments";
 import {
   providerKindFromEnv,
   preferCheapSelection,
@@ -142,7 +144,7 @@ import {
 // settings/BYOK/license/更新面 → ./settings-handlers；会话列表与崩溃恢复 → ./session-handlers；
 // 记忆快照与删除 → ./memory-handlers；「最近一次 run 的工作区」单一事实源 → ./runner-workspace。
 import { setSettingsHostDeps, store } from "./settings-handlers";
-import { getSessionsDir, requireSessionsDir } from "./session-handlers";
+import { getSessionsDir, requireSessionsDir, resolveSessionRoot } from "./session-handlers";
 import { acquireSessionRunLock, type SessionRunLock } from "./session-lock";
 // 会话/编排器装配面（唯一构造口 + 崩溃恢复兜底 + 扩展接线 + worker shell 出口）2026-10-17 搬去
 // `./session-assembly.ts`（结构债审查报告 #2 的第三缝）。`workerShellRunnerFor` 是导出 API
@@ -180,13 +182,15 @@ export { scriptedMainModelPath };
 // provider 装配面（`resolveProviderKind` + `createProvider`）2026-10-17 搬去 `./provider-assembly.ts`
 // （结构债审查报告 #2 的第二缝）。`resolveProviderKind` 是导出 API（`settings-handlers` 与桌面层
 // `kernel-host` 都按原路径 import），故同样「先 import 再 export」。
-import { resolveProviderKind, createProvider } from "./provider-assembly";
+import { resolveProviderKind, createProvider, hookModelCallFor, sessionSummarizerFor } from "./provider-assembly";
 export { resolveProviderKind };
 
-// settings 面不反向依赖本模块（避免装配根 ↔ 轻模块成环）：它需要本模块的两处按回调注入。
+// settings 面不反向依赖本模块（避免装配根 ↔ 轻模块成环）：它需要本模块的三处按回调注入。
 setSettingsHostDeps({
   resolveProviderKind: () => resolveProviderKind(),
   onScheduleCapChange: (cap) => updateScheduleCap(cap),
+  // headless（CLI/判卷）没有保唤实现：noop。桌面壳在 kernel-host 注入 powerSaveBlocker。
+  onKeepAwakeChange: () => {},
 });
 
 // M4a 调度器接线同理（实现住 ./scheduler-runtime）：它需要本模块的四处活状态，按回调注入。
@@ -270,6 +274,8 @@ interface Session {
   autonomy: ReturnType<typeof newAutonomySession>;
   /** M1e：会话模式（sessionId 在场 = append 到既有会话，不 rm 日志；headless 脚本 = 旧行为）。 */
   sessionId?: string;
+  /** 本场 run 的实际事件日志路径（多根项目文件夹会话不在单例 sessionsDir 下，refine_goal 等须读真路径）。 */
+  logPath?: string;
   actionFusion?: ReturnType<typeof createActionFusion>;
 }
 // 单窗口单任务：UI 串行发 run；ipc:check 亦串行。会话状态仅存活于一次 runAgent。
@@ -434,18 +440,23 @@ async function orchestratorExtras(
   trust: { trustedRepo: boolean; verifyTrust: VerifyTrustResolver | null } = { trustedRepo: false, verifyTrust: null },
   over: RoutingFlagOverrides = {},
 ): Promise<
-  Pick<OrchestratorOptions, "agentRoleFor" | "workerSummarizer" | "budget" | "routing" | "banditStatePath" | "promptCache" | "impactAnalysis" | "workerVerify" | "workerAutoVerifyRepair" | "workerHooks">
+  Pick<OrchestratorOptions, "agentRoleFor" | "defaultModelSpec" | "workerSummarizer" | "budget" | "routing" | "banditStatePath" | "promptCache" | "impactAnalysis" | "workerVerify" | "workerAutoVerifyRepair" | "workerHooks">
 > {
   const s = await store().get();
   // M5b 路由开关的取值面：runtime override（CLI `--bandit/--cascade` 一族）优先，缺席回落到 settings。
   // 合并只在 `resolveRoutingFlags` 一处（纯函数、可单测）——判卷喂它就是喂生产路径本身。
   const routing = resolveRoutingFlags(over, s);
+  const resolvedModel = runModel ?? resolveRunModel(s);
+  const workerSummarizer = resolvedModel.kind !== "demo"
+    ? sessionSummarizerFor(resolvedModel)
+    : (process.env.CAIRN_API_KEY ? createSessionSummarizer() : undefined);
   return {
     agentRoleFor: (invoke: string) => currentPluginRuntime()?.findAgentRole(invoke) ?? null,
     // §9.10「worker 继承主会话插件启用集」：worker 的工具调用过同一套钩子，视图按 worker 档降权限。
     // 闭包取 currentPluginRuntime()（本函数在装载前就被展开，装载完成后才真正被调）。
     workerHooks: (mode: "read" | "write") => currentPluginRuntime()?.hooks.forWorkerMode(mode) ?? null,
-    ...(process.env.CAIRN_API_KEY ? { workerSummarizer: createSessionSummarizer() } : {}),
+    ...(resolvedModel.kind !== "demo" && scriptedMainModelPath() === null ? { defaultModelSpec: resolvedModel.spec } : {}),
+    ...(workerSummarizer ? { workerSummarizer } : {}),
     // 会话成本底线（§4.4.8）：maxUsd = 0 ⇒ 整闸不接（缺省零行为）。单价留给价表兜底，
     // 所以这里必须把**当前真拨的那个模型**一起递下去——只递 maxUsd 会让闸在最常见配置下估不出价，
     // 而递设置盘字段会在「留空」与「per-run 指定档位」两种合法配置下和实付分叉（`budgetPriceKeyOf`）。
@@ -520,8 +531,8 @@ export async function handleCompact(
 ): Promise<{ ok: boolean; error?: string; cardPayload?: Record<string, unknown> }> {
   let logPath: string | null;
   if (over.sessionId !== undefined) {
-    const dir = over.sessionsRoot ?? requireSessionsDir();
-    if (!(await sessionExists(dir, over.sessionId))) return { ok: false, error: "会话不存在，未压缩" };
+    const dir = over.sessionsRoot ?? await resolveSessionRoot(over.sessionId);
+    if (dir === null || !(await sessionExists(dir, over.sessionId))) return { ok: false, error: "会话不存在，未压缩" };
     logPath = pathOf(dir, over.sessionId);
   } else {
     logPath = lastLogPath;
@@ -529,12 +540,16 @@ export async function handleCompact(
   if (!logPath) return { ok: false, error: "无会话日志（先跑一轮会话再 /compact）" };
   if (isSessionLogBusy(logPath)) return { ok: false, error: "该会话正在运行，先停止再压缩" };
   const log = createEventLog(logPath);
-  const res = await compactSessionLog(
-    logPath,
-    async (e) => { await log.append(e); hooks.onEvent?.(e); },
-    currentPluginRuntime()?.hooks,
-  );
-  return { ok: res.ok, error: res.error, cardPayload: res.cardPayload };
+  try {
+    const res = await compactSessionLog(
+      logPath,
+      async (e) => { await log.append(e); hooks.onEvent?.(e); },
+      currentPluginRuntime()?.hooks,
+    );
+    return { ok: res.ok, error: res.error, cardPayload: res.cardPayload };
+  } finally {
+    await log.close?.();
+  }
 }
 
 let installed = false;
@@ -754,7 +769,8 @@ function injectOmitFaceTools(): void {
     (TOOLS as unknown as Record<string, Tool>).refine_goal = createRefineGoalTool(async () => {
       const s = currentSession();
       if (!s?.sessionId) return null;
-      const events = await replay(pathOf(requireSessionsDir(), s.sessionId)).catch(() => [] as AgentEvent[]);
+      const targetLog = s.logPath ?? pathOf(requireSessionsDir(), s.sessionId);
+      const events = await replay(targetLog).catch(() => [] as AgentEvent[]);
       const view = projectGoal(events);
       if (!view) return null;
       return {
@@ -825,6 +841,8 @@ export interface RunOptions extends SolpiFlags, ImpactOptions {
   /** 能力 5 收束闸：写过盘但模型没自调 verify 时，收束前补一拍验证并把红字落进事件流。
    *  缺省**开**（同族是 `impactAnalysis` / `promptCache`）；一拍 = 真跑一遍 lint/test。 */
   autoVerify?: boolean;
+  /** 任务自带判据（spec 2026-11-04）：给了就按它判，不给仍读仓库配置。 */
+  verifyDeclaration?: VerifyDeclaration;
   /** M5b 路由开关 runtime override（CLI `--bandit/--cascade` 一族；同 actionFusion / autoVerify
    *  口径：settings 开闸另议）。字段缺席 = 用 `RunOverrides` 里同名的两枚分别覆盖，最终由
    *  `resolveRoutingFlags` 与 settings 合。缺省缺席 ⇒ 与这两枚旗标存在前逐字同形。 */
@@ -998,53 +1016,76 @@ export async function installTimeAutomationFace(workspace: string, explicit: boo
   return installed ? installedAutomation : automationArmedOnce;
 }
 
-/** 进程级「自动记忆」判据：**首次读到的值定终身**，之后不再重读。
- *
- *  为什么必须缓存（2026-09-30 实测踩到）：settings 能在同一进程里变（`setSettings` 是 IPC/测试
- *  的正常用法），而执行面 `TOOLS` 只装一次。不缓存的话第二场 run 按新值算出一个不同的 omit 名单，
- *  装/摘守卫当场抛——`tests/main-run-routing.test.ts` 与 `tests/session-tools.test.ts` 五条
- *  正是这么红的（第一场记忆关、第二场记忆开）。那就是守卫在正确工作：**它拦住的是一次真实的
- *  「两面要分家」**，只是分家的原因在我这边（按 per-run 状态去算进程级的量）。
- *  口径与 settings 自己的读法一致：缺省 true（见 settings.ts 的 `autoMemory: true`）。 */
-let memoizedAutoMemory: boolean | null = null;
-async function installTimeAutoMemory(): Promise<boolean> {
-  if (memoizedAutoMemory === null) {
-    memoizedAutoMemory = await store().get().then((s) => s.autoMemory).catch(() => true);
+/** 逐场读取可选工具开关（autoMemory / subagentTools）：
+ *  `installAppTools` 对 goal/memory/subagents 执行面已是单调并集（`installedX ||= wantX`，按需补注入），
+ *  而规格面 `faceArgs.omitTools` 逐场按当前真实设置收窄（`规格面 ⊆ 执行面`），
+ *  不再需要进程级首次冻结或共享可变 Set——用户在设置页切换开关后下一场 run 即可即时生效，且并发 run 互不串写。 */
+async function readRunToolSwitches(): Promise<{ autoMemory: boolean; subagentTools: boolean }> {
+  try {
+    const s = await store().get();
+    return { autoMemory: s.autoMemory, subagentTools: s.subagentTools };
+  } catch {
+    return { autoMemory: true, subagentTools: true };
   }
-  return memoizedAutoMemory;
 }
 
-/** 子代理三件套的进程级判据：同 autoMemory 的口径（首次读到的值定终身）。
- *  为什么也要缓存：它同样来自能在同一进程里变的 settings，而执行面只装一次——
- *  不缓存就会撞上装/摘守卫（那守卫拦的是真问题，见上一个函数的注释）。缺省 true。 */
-let memoizedSubagents: boolean | null = null;
-async function installTimeSubagents(): Promise<boolean> {
-  if (memoizedSubagents === null) {
-    memoizedSubagents = await store().get().then((s) => s.subagentTools).catch(() => true);
-  }
-  return memoizedSubagents;
+function computeOmitTools(want: { goal: boolean; memory: boolean; lsp: boolean; subagents: boolean }): string[] {
+  const omit: string[] = [];
+  if (!want.goal) omit.push("refine_goal");
+  if (!want.memory) omit.push("remember");
+  if (!want.lsp) omit.push("lsp");
+  if (!want.subagents) omit.push(...OPTIONAL_TOOL_NAMES.subagentTools);
+  return omit;
 }
 
-/** 进程级「哪些可选工具真的用不着」：**只累积、不回退**。
- *  某一场需要某把工具 ⇒ 它永久留在名单外（不再摘）；
- *  只有从来没有哪一场需要，才真的摘掉。这样执行面第一次装出来的那份就永远是最终形态，
- *  后续每场的规格面 ⊆ 执行面，不会出现「模型看得见却调不到」。 */
-const omittedForever = new Set<string>();
-function installTimeOmitTools(want: { goal: boolean; memory: boolean; lsp: boolean; subagents: boolean }): string[] {
-  if (want.goal) omittedForever.delete("refine_goal");
-  else omittedForever.add("refine_goal");
-  if (want.memory) omittedForever.delete("remember");
-  else omittedForever.add("remember");
-  if (want.lsp) omittedForever.delete("lsp");
-  else omittedForever.add("lsp");
-  // 子代理工具族同进同退：任一在场就恢复整族（判据以 spawn_agent 为代表，
-  // 因为执行面那边读的就是它；`wantSubagents` 也是同一个谓词）。
-  for (const n of OPTIONAL_TOOL_NAMES.subagentTools) {
-    if (want.subagents) omittedForever.delete(n);
-    else omittedForever.add(n);
-  }
-  return [...omittedForever];
+// ---- 会话尾工（2026-11-04 业主「输出完了界面还在转」）----
+// run 的收尾沉淀（runSessionEndDistill）不再阻塞 run 结束：答案落完、loop 收束，run 对用户
+// 就该结束；沉淀是后台记账，慢通道（实测 agnes 网关这一问 10–13s）不该把它吊在 spinner 上。
+// 管线自带迟到写语义（parentFinished 后的 append 经 eventQueue 串行化、按需重开日志，worker 同款）；
+// 这里补的是**同日志并发写**的防：下一场 run 在入口**让位**——中止上一场未完的尾工再动笔
+// （沉淀每轮都重读整份转录，被中止的那次由后继轮完整覆盖，零损失；最后一轮无人抢，完整跑完）。
+// 键 = logPath（同一份会话日志一个工位）；任务内部自带 try/catch，链上再兜一层保证 settle。
+interface SessionTailEntry {
+  chained: Promise<void>;
+  abort: (reason?: unknown) => void;
 }
+const pendingSessionTailWork = new Map<string, SessionTailEntry>();
+
+/** 登记一场 run 的尾工；同 logPath 的多场按序链（下一场 run 入口让位的是这条链）。 */
+export function registerSessionTailWork(logPath: string, task: Promise<void>, abort: (reason?: unknown) => void): void {
+  const prev = pendingSessionTailWork.get(logPath);
+  const chained = prev !== undefined ? prev.chained.catch(() => undefined).then(() => task) : task;
+  pendingSessionTailWork.set(logPath, { chained, abort });
+  void chained.catch(() => undefined).then(() => {
+    if (pendingSessionTailWork.get(logPath)?.chained === chained) pendingSessionTailWork.delete(logPath);
+  });
+}
+
+/** 下一场 run 动笔前调：中止同日志上未完的尾工（让位），等它 settle 再写。
+ *  **绝不 reject**；120s 硬上限只是注册表被谁卡死时的保险丝——中止后尾工自身的
+ *  signal 检查会尽快收束（distill 全程 throwIfAborted，fail-closed）。 */
+export async function awaitSessionTailWork(logPath: string): Promise<void> {
+  const entry = pendingSessionTailWork.get(logPath);
+  if (entry === undefined) return;
+  entry.abort(new Error("会话尾工让位：下一场 run 开始（未完的沉淀检查由后继轮覆盖，无损失）"));
+  await settleSessionTailWork(logPath);
+}
+
+/** 被动等尾工落完（不催不中止）：判卷断言沉淀副作用前用这一口。同样绝不 reject、同样有 120s 帽。 */
+export async function waitForSessionTailWork(logPath: string): Promise<void> {
+  await settleSessionTailWork(logPath);
+}
+
+async function settleSessionTailWork(logPath: string): Promise<void> {
+  const entry = pendingSessionTailWork.get(logPath);
+  if (entry === undefined) return;
+  const cap = new Promise<void>((resolve) => {
+    const t = setTimeout(resolve, 120_000);
+    (t as { unref?: () => void }).unref?.();
+  });
+  await Promise.race([entry.chained.catch(() => undefined), cap]);
+}
+
 export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
   // 能力没开的可选工具：从模型可见面摘掉说明书（见 OPTIONAL_TOOL_NAMES）。
   // 判据取**这一场 run 的真实状态**，不是 settings 里的意图：
@@ -1052,34 +1093,26 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
   //  · remember 只在自动记忆开着时才有消费者。
   // 执行面是进程级的（installAppTools 只让第一个调用赢），所以这里算出来的值必须每场一致——
   // 异值由 installAppTools 的守卫当场拒，不给「模型看得见却调不到」留缝。
-  const memoOn = await installTimeAutoMemory();
+  const toolSwitches = await readRunToolSwitches();
+  const memoOn = toolSwitches.autoMemory;
   // lsp 也按「这个工作区到底配没配」判：`.agent/lsp.json` 缺省 = 全局关闭，
   // 而关着时该工具**必然抛**「未启用」（lsp.ts:602）⇒ 挂在模型面上只有成本（186 tok/轮）。
   // 判据读的是**盘上配置**而不是「用户想不想用」——配了就自动回来，不需要额外开关。
   const lspOn = lspConfigured(opts.workspace);
-  // **执行面只让第一个调用赢**，所以送进去的开关必须第一次就是定稿：
-  // 后续几场若算出不同的值（工作区换了、设置改了、目标武装了），执行面保持不变而规格面按新值
-  // 重算 ⇒ 模型看得见却调不到（本仓点名的失败形状）。所以执行面吃的是**累积**判据：
-  // 只要这个进程里**任何一场**需要某把工具，它就留着；只有从来没有哪一场需要，才真的摘。
   // 定时五件同一条纪律：判据是**盘上事实 + 进程级单调**（见 installTimeAutomationFace），算完
   // 写回 `opts.automationTools` 这**一个**字段——下面那句（执行面）与 faceArgs（规格面）读的都是
   // 它，两面同源。写成第三把局部开关就会有人只翻一头（tests/automation-tool-surface.test.ts
   // 那支钉的正是"两面吃同一个字段"）。摘掉省的是实测 2,482 字符/轮（每轮固定面约 21.6%）。
-  // 位置有讲究：放在 installTimeOmitTools/installAppTools **之前**——那两句之间不许插 await，
+  // 位置有讲究：放在 computeOmitTools/installAppTools **之前**——那两句之间不许插 await，
   // 否则并发两场首跑会在"算出 omit 名单"与"喂给执行面"之间让出事件循环（守卫会撞自己的车）。
   opts.automationTools = await installTimeAutomationFace(opts.workspace, opts.automationTools);
-  // ⚠️ 极性（2026-10-06 接管笔翻正，P1 9e9323e6 落库时三参写反）：installTimeOmitTools 的 want
-  // 语义是「这场**需要**它」（需要 ⇒ 从 omit 名单删除 ⇒ 执行面/规格面都挂）。P1 原稿
-  // `goal: goalArmed !== true / memory: !memoOn / lsp: !lspOn` 传的是「该摘吗」，与函数语义相反，
-  // 净效果 = autoMemory **开着**反而没有 remember（M2d 的手写记忆入口对缺省用户整条死路）、
-  // 武装目标反而没有 refine_goal、配了 lsp 反而摘——恰好与上面三行注释各自相反。
-  // 自洽（规格/执行同一份名单）所以判卷全绿、P1 的实测省幅也真发生了，只是省错了人群。
-  // 翻正后由 installAppTools 的 omit 并集守卫兜面变化（automation 旗仍严判，见该处注释）。
-  const omitTools = installTimeOmitTools({
+  // ⚠️ 极性（2026-10-06 接管笔翻正）：computeOmitTools 的 want 语义是「这场**需要**它」
+  // （需要 ⇒ 不进 omit 名单 ⇒ 执行面按需单调补注入、规格面当场挂载）。
+  const omitTools = computeOmitTools({
     goal: opts.goalArmed === true,
     memory: memoOn,
     lsp: lspOn,
-    subagents: await installTimeSubagents(),
+    subagents: toolSwitches.subagentTools,
   });
   installAppTools({ automation: opts.automationTools, ...(omitTools.length > 0 ? { omitTools } : {}) });
   // H2（A-2）：无人值守 run 的等人门上限——定时触发的 clarify/plan 挂起 60s 后 fail-closed。
@@ -1090,8 +1123,9 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     join(opts.workspace, ".agent", "permissions.json"),
     globalPermissionsPath(),
   );
-  // 先拒绝占用，再改写交互态；到 liveRunPaths.add 之间必须保持同步。
+  // 先拒绝占用，再改写交互态；到 liveRunPaths.add 之间必须保持同步（无 await 缝隙，消除 TOCTOU）。
   if (isSessionLogBusy(opts.logPath)) throw new Error("session already running or being deleted");
+  markSessionRunLive(opts.logPath);
   // H3（D-2 RunScope）：交互面全局只由交互 run 写入；unattended run 的会话态只活在 scope 里，
   // 结束时不再把全局 session 置 null（旧实现会话间相互覆写/假死布防的根源）。
   const interactive = opts.unattended !== true;
@@ -1101,6 +1135,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     sandbox: opts.sandbox ?? null,
     emit: null,
     sessionId: opts.sessionId,
+    logPath: opts.logPath,
     ...(opts.actionFusion === true ? {
       actionFusion: createActionFusion((command, ctx, guard) =>
         gatedTool("run_shell", run_shell, guard).run({ command }, ctx)),
@@ -1121,11 +1156,11 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
   const runScope: RunScope = { session: sessionObj, orchestrator: null, agentRuntime: null };
   runScopeALS.enterWith(runScope); // 本 run 整条异步链（loop await / 门等待 / 工具执行）都在 scope 内
   // P1（审查）：plan 门状态随 run 隔离——并发 run 互不污染（permissions ALS）。
-  // planRequired = 用户武装的 plan 模式：置位者只有 RunRequest/settings，模型侧无入口（否则又退回自愿）。
+  // planRequired = run 级武装的 plan 模式（2026-11-03 起 UI 不再武装，agent 自判是否先出方案；
+  // 该位保留给协议深链/判卷——置位者只有 RunRequest/settings，模型侧无入口，否则又退回自愿）。
   enterPlanRunScope(opts.planRequired === true);
   // M2e：本 run 注入统一注册表的插件工具名（会话结束摘除，零残留）；声明在 try 外防 finally TDZ
   let injectedToolNames: string[] = [];
-  markSessionRunLive(opts.logPath);
   let log: EventLog | undefined;
   let solpi: SolpiRuntime | undefined;
   let parentFinished = false;
@@ -1138,6 +1173,9 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
   // 而收束读数在 finally 之后调——所以闭包在 try 内赋值、在 try 外消费（同 mainUsageModel 的形状）。
   let reflectProviderFor: ((instruction: string) => Provider) | undefined;
   try {
+    // 上一场（同日志）的尾工（收尾沉淀）若还在写，先在已占位状态下等它让位收束再动笔——同一份 JSONL 不并发写。
+    // 绝不 reject（见 awaitSessionTailWork），且放在 try 内保证任何后续分支必经 finally 解锁。
+    await awaitSessionTailWork(opts.logPath);
     // M1e 会话模式：sessionId 在场 = 会话列表里的既有会话，append（JSONL 即会话，重放无损）；
     // 无 sessionId = 旧行为（每轮新日志，e2e/ipc-check 等脚本路径字节不变）。
     if (!opts.sessionId) await rm(opts.logPath, { force: true });
@@ -1310,6 +1348,14 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     }
     const resolvedRunModel = opts.modelSelection ?? resolveRunModel(providerSettings);
     const modelSelection = evolutionBias.preferredTier === "cheap" ? preferCheapSelection(resolvedRunModel) : resolvedRunModel;
+    // §9.6 prompt 档钩子的模型面：**绑到刚定下来的这一档**（同家同档同凭证）。
+    // 第 1001 页把它绑在 `PluginRuntime.load` 那处（在 modelSelection 之前），于是旁路只能自认
+    // legacy GLM 缺省——用户配的是别家时，钩子要么被判成"没注入"，要么把判定发给一个没在用的家。
+    // 拨不出去（家没配 key / demo 通道）就留空：钩子在闸上如实拒，不拖垮这一场 run。
+    if (rt !== null) {
+      const hookCall = hookModelCallFor(modelSelection);
+      if (hookCall !== null) rt.bindModelCall(hookCall);
+    }
     // 反思位闭包在这里才齐料（modelSelection / pipeline / promptText 都已定）。
     reflectProviderFor = (instruction) => createProvider(promptText, BASE_SYSTEM, modelSelection, {
       logPath: opts.logPath,
@@ -1445,8 +1491,19 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       paths: extractTaskPaths(promptText, { workspace: opts.workspace }),
     });
     evolutionNote += evolution.note;
-    await runLoop({
+    await withPostRunReadingsOnThrow(
+      async () =>
+        runLoop({
       ...(impactHook ? { impact: impactHook } : {}),
+      // 项目外附件只在 handleAgentRun 里过审批；批准后把精确路径作为**本轮**读取白名单
+      // 透传给 read_file/read_image。缺省没有这一格 ⇒ 项目外照旧 fail-closed。
+      ...(opts.attachments !== undefined && opts.attachments.some((attachment) => attachment.externalApproved === true)
+        ? {
+            externalReadGrants: opts.attachments
+              .filter((attachment) => attachment.externalApproved === true)
+              .map((attachment) => ({ path: attachment.realPath, kind: attachment.kind })),
+          }
+        : {}),
       ...(opts.autoVerify === true ? { autoVerify: true } : {}),
       // 返修那一环只在收束闸开着时才有意义（它接的是拍红之后的一步），所以不单独成一支形状：
       // 两个都开才传，避免"闸关着却许诺返修"这种读起来矛盾的配置。
@@ -1488,7 +1545,10 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     // 所以覆盖表的键必须都留在同一行，别为了排版拆成 helper（拆了它就一个都认不出）。
     tools: { ...TOOLS, search_history: historySearchTool, ...(webFetchOverride !== undefined ? { web_fetch: gatedTool("web_fetch", webFetchOverride) } : {}), ...(recall ? { obs_recall: recall } : {}), ...(impactTool ? { impact_query: impactTool } : {}), ...(diagnoseTool ? { diagnose: gatedTool("diagnose", diagnoseTool) } : {}), ...(searchTool ? { web_search: gatedTool("web_search", searchTool, undefined, searchCardExtra(opts.workspace)) } : {}) },
       workspace: opts.workspace,
-      mode: "auto", // 冻结 loop 对 ask 一律拒绝；真实门在 gatedTool（复用 checkPermission）
+      // 除完全允许档外仍冻结 auto：loop 这一层只当方案门守卫（ask 一律拒绝，真实档位门在 gatedTool）。
+      // full-access 必须把档位传下来：checkPermission 从 2026-11-03 起对该档跳过方案门，
+      // 传 auto 会让「完全允许」在未批 plan 时被 loop 提前拒掉（门说放行、执行层却没跑到）。
+      mode: opts.mode === "full-access" ? "full-access" : "auto",
       signal,
       userMessage: promptText,
       ...(opts.attachments !== undefined && opts.attachments.length > 0
@@ -1520,12 +1580,24 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       },
       verify: createVerifyHook(opts.workspace, {
         exec: verifyExec(opts.sandbox ?? null),
+        // 任务声明优先（spec 2026-11-04）：解析一次交给钩子；不给就去仓库里读（逐字旧行为）。
+        ...(opts.verifyDeclaration === undefined
+          ? {}
+          : { resolved: await resolveVerifyConfig(opts.workspace, opts.verifyDeclaration) }),
         trustedRepo: opts.trustedRepo ?? false, // 调用方断言那一层优先；缺省 false 不等于「永远 false」——
         trustResolver: verifyTrust, // 生产那一半：查信任表，查不到经审批卡问人（S3，2026-10-05 接线）
       }),
       experienceNudge: evolution.nudge,
       ...(rt ? { hooks: rt.hooks } : {}),
-    });
+        }),
+      // 失败路径（maxSteps 撞帽等）也要留一条账：见 INCIDENTS.md 事故 2。
+      () =>
+        emitPostRunReadings({
+          logPath: opts.logPath,
+          workspace: opts.workspace,
+          ...(opts.sessionId === undefined ? {} : { sessionId: opts.sessionId }),
+        }),
+    );
     // M2e：Stop（一轮 agent 收束）——fire-and-forget，失败只告警。
     // exit 2 的「再多要一轮」语义未裁，所以回执整体丢弃（任务 #32）；SessionEnd 不在这儿，
     // 见 finally：会话终止含异常/中断路径，挂在 try 尾上就等于「崩了的会话没有收尾钩子」。
@@ -1598,59 +1670,79 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     }
     // M2d 双轨②：会话结束自动沉淀（设置页可关默认开；read-only 档不触发）。
     // 写入即事件：remember 的 tool_call/tool_result 照常落事件流；脚本型 provider 剧本耗尽后产出为空 = 判无。
+    // 2026-11-04 业主「输出完了界面还在转」：沉淀轮**不再阻塞 run 收束**——它在 loop 结束后
+    // 转后台执行（管线 parentFinished 后的迟到 append 自带串行与重开语义），run 的 IPC 在此
+    // 即刻收束；下一场 run 在入口经 awaitSessionTailWork **让位**（中止未完的尾工再动笔，
+    // 沉淀每轮重读整份转录 ⇒ 被中止的那次由后继轮完整覆盖，零损失）。
     try {
       const autoMemory = (await store().get()).autoMemory;
-      // 沉淀轮的 provider 要与主会话**用同一份前缀**（2026-09-30 实测的账）：
-      // 旧写法只传 `(promptText, undefined, modelSelection)`，于是 provider 没有 system、
-      // 没有 requestFace ⇒ 发出去的请求与主会话**在很靠前的地方就分叉**，
-      // 前缀缓存一次也命中不了。实测读数：沉淀轮 input 4,417 tok、cacheRead **181**（几乎全价），
-      // 占整场会话总输入的 7.4%——而它是每一场会话都要付一次的钱。
-      // 传进同一份 sessionOptions 之后，system（BASE_SYSTEM）、工具面（requestFace）、
-      // promptCache 开关三者与主会话逐字一致，前缀才可能命中。
-      const outcome = await runSessionEndDistill({
-        enabled: autoMemory && opts.mode !== "read-only" && opts.unattended !== true,
-        logPath: opts.logPath,
-        workspace: opts.workspace,
-        // 指令走惰性构造口：distill 内部算好指令（含失败轨迹摘要）再建 provider，
-        // 经 `ephemeralUserTurn` 送到**请求末尾**——既不落日志（否则下一轮当用户发言重放），
-        // 又真能到达模型（真 provider 忽略传入的 messages，只认事件日志）。
-        providerFor: (instruction) => createProvider(promptText, BASE_SYSTEM, modelSelection, {
-          logPath: opts.logPath,
-          workspace: opts.workspace,
-          emit: pipeline,
-          promptCache: providerSettings.promptCache,
-          requestFace: () => sessionToolFace(rt, faceArgs),
-          ephemeralUserTurn: instruction,
-        }),
-        // 脚本化通道（M0A_MOCK_DELTA 之外的暗卷路径）仍要一份 provider：它读 messages 入参，
-        // 与 providerFor 二选一——`providerFor` 优先，这条只是不破坏既有脚本路径。
-        provider: createProvider(promptText, BASE_SYSTEM, modelSelection, {
-          logPath: opts.logPath,
-          workspace: opts.workspace,
-          emit: pipeline,
-          promptCache: providerSettings.promptCache,
-          requestFace: () => sessionToolFace(rt, faceArgs),
-        }),
-        signal,
-        rememberTool: remember, // 未加门的工具本体：项目层免批 / 全局层合并审批即本轮权限门（见 mergedApproval）
-        emit: pipeline,
-        ...(opts.askGate
-          ? {
-              // 分层审批（第十一遍业主裁决）：项目层免批直写（只影响当前项目、写入即事件、面板可删）；
-              // 全局层跨项目回注 ⇒ 一轮至多一张合并审批卡（distill.ts 只对 scope=global 调用本口——
-              // 项目层写入根本不经过这里，headless 无 askGate 时全局层保持 fail-closed 拒绝）。
-              mergedApproval: async () => {
-                const r = await opts.askGate!.request(
-                  "remember",
-                  { trigger: "session_end_distill", scope: "global" },
-                  { reason: "会话结束自动沉淀：全局记忆写入（跨项目回注；合并审批一次，拒绝=本轮全局写入全部不写）", risk: "low", signal },
-                );
-                return r.outcome === "approved";
-              },
-            }
-          : {}),
-      });
-      if (outcome.kind !== "disabled") console.log("[memory] 会话结束沉淀:", JSON.stringify(outcome));
+      // 尾工自己的取消通道：run 的 signal 中止（用户停止）时随行，下一场 run 让位时也走这里
+      // （不能直接 abort run 的 signal——那是调用方的）。
+      const tailAbort = new AbortController();
+      if (signal !== undefined) {
+        if (signal.aborted) tailAbort.abort(signal.reason);
+        else signal.addEventListener("abort", () => tailAbort.abort(signal.reason), { once: true });
+      }
+      registerSessionTailWork(opts.logPath, (async (): Promise<void> => {
+        // 沉淀轮的 provider 要与主会话**用同一份前缀**（2026-09-30 实测的账）：
+        // 旧写法只传 `(promptText, undefined, modelSelection)`，于是 provider 没有 system、
+        // 没有 requestFace ⇒ 发出去的请求与主会话**在很靠前的地方就分叉**，
+        // 前缀缓存一次也命中不了。实测读数：沉淀轮 input 4,417 tok、cacheRead **181**（几乎全价），
+        // 占整场会话总输入的 7.4%——而它是每一场会话都要付一次的钱。
+        // 传进同一份 sessionOptions 之后，system（BASE_SYSTEM）、工具面（requestFace）、
+        // promptCache 开关三者与主会话逐字一致，前缀才可能命中。
+        try {
+          const outcome = await runSessionEndDistill({
+            enabled: autoMemory && opts.mode !== "read-only" && opts.unattended !== true,
+            logPath: opts.logPath,
+            workspace: opts.workspace,
+            // 指令走惰性构造口：distill 内部算好指令（含失败轨迹摘要）再建 provider，
+            // 经 `ephemeralUserTurn` 送到**请求末尾**——既不落日志（否则下一轮当用户发言重放），
+            // 又真能到达模型（真 provider 忽略传入的 messages，只认事件日志）。
+            providerFor: (instruction) => createProvider(promptText, BASE_SYSTEM, modelSelection, {
+              logPath: opts.logPath,
+              workspace: opts.workspace,
+              emit: pipeline,
+              promptCache: providerSettings.promptCache,
+              requestFace: () => sessionToolFace(rt, faceArgs),
+              ephemeralUserTurn: instruction,
+            }),
+            // 脚本化通道（M0A_MOCK_DELTA 之外的暗卷路径）仍要一份 provider：它读 messages 入参，
+            // 与 providerFor 二选一——`providerFor` 优先，这条只是不破坏既有脚本路径。
+            provider: createProvider(promptText, BASE_SYSTEM, modelSelection, {
+              logPath: opts.logPath,
+              workspace: opts.workspace,
+              emit: pipeline,
+              promptCache: providerSettings.promptCache,
+              requestFace: () => sessionToolFace(rt, faceArgs),
+            }),
+            signal: tailAbort.signal, // 尾工专用通道：run 停止/下一场让位都经它收束（fail-closed）
+            rememberTool: remember, // 未加门的工具本体：项目层免批 / 全局层合并审批即本轮权限门（见 mergedApproval）
+            emit: pipeline,
+            ...(opts.askGate
+              ? {
+                  // 分层审批（第十一遍业主裁决）：项目层免批直写（只影响当前项目、写入即事件、面板可删）；
+                  // 全局层跨项目回注 ⇒ 一轮至多一张合并审批卡（distill.ts 只对 scope=global 调用本口——
+                  // 项目层写入根本不经过这里，headless 无 askGate 时全局层保持 fail-closed 拒绝）。
+                  mergedApproval: async () => {
+                    // 完全允许档（2026-11-03 业主）：本档没有审批卡——全局记忆写入也不问人。
+                    // 其余档仍走下面这张合并卡（跨项目回注是模型控制的文本，值得人点一次头）。
+                    if (opts.mode === "full-access") return true;
+                    const r = await opts.askGate!.request(
+                      "remember",
+                      { trigger: "session_end_distill", scope: "global" },
+                      { reason: "会话结束自动沉淀：全局记忆写入（跨项目回注；合并审批一次，拒绝=本轮全局写入全部不写）", risk: "low", signal },
+                    );
+                    return r.outcome === "approved";
+                  },
+                }
+              : {}),
+          });
+          if (outcome.kind !== "disabled") console.log("[memory] 会话结束沉淀:", JSON.stringify(outcome));
+        } catch (err) {
+          console.warn("[memory] 沉淀轮失败:", err instanceof Error ? err.message : String(err));
+        }
+      })(), (reason?: unknown) => tailAbort.abort(reason));
     } catch (err) {
       console.warn("[memory] 沉淀轮失败:", err instanceof Error ? err.message : String(err));
     }
@@ -1671,20 +1763,24 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     parentFinished = true;
     // 异常、取消或审批等待超时可能绕过 runLoop 的收束段；最终检查只看最后一条 user_message 之后的本轮。
     try {
+      await eventQueue;
       const seen = eventsForCurrentRun(await replay(opts.logPath));
       const already = seen.some((e) => e.type === "tool_result" && e.callId === DELIVERY_GUARD_CALL_ID);
       const phantom = already ? null : findPhantomDelivery(seen, opts.workspace);
       if (phantom !== null) {
-        await appendFile(
-          opts.logPath,
-          JSON.stringify({
-            type: "tool_result",
-            callId: DELIVERY_GUARD_CALL_ID,
-            ok: false,
-            output: describePhantomDelivery(phantom),
-          }) + "\n",
-          "utf8",
-        );
+        const guardEvent: AgentEvent = {
+          type: "tool_result",
+          callId: DELIVERY_GUARD_CALL_ID,
+          ok: false,
+          output: describePhantomDelivery(phantom),
+        };
+        if (sessionObj.emit) {
+          await sessionObj.emit(guardEvent);
+        } else {
+          const fallbackLog = log ?? createEventLog(opts.logPath);
+          await fallbackLog.append(guardEvent);
+          if (!log) await fallbackLog.close?.();
+        }
       }
     } catch (err) {
       // 断言自己绝不能把 run 拖崩：它的全部价值是留下一条证据，不是保证留得下。
@@ -1763,6 +1859,8 @@ export interface RunOverrides
   actionFusion?: boolean;
   /** 能力 5 收束闸 runtime override（同 actionFusion 口径：settings 与 IPC 开闸另议）。 */
   autoVerify?: boolean;
+  /** 任务自带判据（spec 2026-11-04）：CLI `--verify` 人手输入的验收命令。缺省 = 旧行为。 */
+  verifyDeclaration?: VerifyDeclaration;
   /** 第 9 点·用户干预注入：本 run 的插话收件盒（由持有 IPC 会话登记表的调用方递进来）。
    *  **缺省 undefined = 零行为**：没有盒子的 run（CLI / worker / 靶场 / 定时）既不会取料、
    *  也不会因此多落一条事件——字节与请求次数都不变。
@@ -1874,13 +1972,54 @@ export async function handleAgentRun(
       const checked = await validateRunAttachments(req.attachments, workspace);
       if (!checked.ok) return { ok: false, error: `附件校验失败: ${checked.error}` };
       const external = checked.value.filter((attachment) => attachment.requiresExternalApproval);
-      if (external.length > 0) {
-        return {
-          ok: false,
-          error: "附件超出 workspace；approval-required（需显式外部引用审批）",
-        };
+      // 图片不需要再点一次「允许」：拖进来/粘贴进来本身就是用户的明确动作（截图走剪贴板
+      // 落在系统 temp，必然在 workspace 外 ⇒ 旧路径每张都弹卡）。判据是 magic number，
+      // 不是后缀名；只放行这一条路径、只活本轮。其余项目外附件仍默认 fail-closed。
+      const autoApprovedImages: ValidatedRunAttachment[] = [];
+      const needsApproval: ValidatedRunAttachment[] = [];
+      for (const attachment of external) {
+        if (await isImageRunAttachment(attachment)) autoApprovedImages.push(attachment);
+        else needsApproval.push(attachment);
       }
-      attachments = checked.value;
+      if (needsApproval.length > 0) {
+        // 这里问的是**发送时**的一次性审批：批准只给本轮 read_file/read_image 一条精确读取
+        // 白名单（目录 grant 覆盖子树），不复制文件、不写 external-refs.json、不改记忆里的
+        // @path 决议。无人值守/无会话面直接走 unattended 门（立即拒绝），不把一个没人
+        // 看得见的卡挂 60 秒。
+        const gate = over.unattended === true || over.noAnswerer === true || sessionId === undefined
+          ? unattendedAskGate
+          : appAskGate;
+        const hasDirectory = needsApproval.some((attachment) => attachment.kind === "directory");
+        const decision = await gate.request(
+          "attachment",
+          {
+            paths: needsApproval.map((attachment) => attachment.realPath),
+            count: needsApproval.length,
+            ...(autoApprovedImages.length > 0 ? { autoApprovedImages: autoApprovedImages.length } : {}),
+          },
+          {
+            reason: "项目外附件默认不读取；批准后本轮可通过 read_file / read_image 读取清单中的路径"
+              + (hasDirectory ? "（目录附件含整棵子树）" : "")
+              + (autoApprovedImages.length > 0 ? `。另有 ${String(autoApprovedImages.length)} 张图片已自动放行（仅本次）` : "")
+              + "。不复制、不修改文件。",
+            risk: "medium",
+            riskReasons: [hasDirectory ? "读取项目外文件（含目录子树）" : "读取项目外文件"],
+            ...(sessionId !== undefined ? { sessionId } : {}),
+            ...(over.signal !== undefined ? { signal: over.signal } : {}),
+          },
+        );
+        if (decision.outcome !== "approved") {
+          const why = decision.reason === "timeout"
+            ? "审批等待超时"
+            : decision.reason === "unattended" ? "本次无人应答" : "已拒绝";
+          return { ok: false, error: `项目外附件未通过外部引用审批（${why}）；本轮未开始` };
+        }
+      }
+      attachments = external.length > 0
+        ? checked.value.map((attachment) =>
+            attachment.requiresExternalApproval ? { ...attachment, externalApproved: true } : attachment,
+          )
+        : checked.value;
     }
 
     const modelSelection = over.modelSelection ?? resolveRunModel(settings, req.model);
@@ -1920,6 +2059,7 @@ export async function handleAgentRun(
         ...(over.signal ? { signal: over.signal } : {}),
         actionFusion: over.actionFusion ?? (await store().get()).actionFusion,
         autoVerify: over.autoVerify ?? (await store().get()).autoVerify,
+        ...(over.verifyDeclaration === undefined ? {} : { verifyDeclaration: over.verifyDeclaration }),
         ...(over.deliveryRepair === true ? { deliveryRepair: true } : {}),
         // M5b：路由开关的 runtime override 收成一处（CLI `--bandit/--cascade` 一族；缺省缺席 ⇒
         // 用 settings）。两枚都没给时这里不出现 ⇒ 与今日逐字同形。

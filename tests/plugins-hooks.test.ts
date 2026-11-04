@@ -168,13 +168,16 @@ describe("M2e hook 引擎：并行、去重、matcher、env、门（任务 5/6�
     expect(r3.errors.join(" ")).toContain("静态危险检测");
   });
 
-  it("非 command handler 类型：收下但运行跳过 + 警告", async () => {
-    const h = mkHook("PreToolUse", "ignored", { handler: { type: "http", command: "ignored" } });
+  it("handler 形态与类型不相称：装载期与执行期同一把闸（不再静默跳过）", async () => {
+    // 口径搬家（第 1000 页）：旧断言是「非 command 档一律收下，运行时记一行 skipped 警告」。
+    // 现在 http / mcp_tool 是真会跑的档，所以「形状不对」必须在闸上说清缺什么——
+    // 装载期 discover.ts 用的就是 hookShapeRejection 这同一个函数，两处不会漂。
+    const h = mkHook("PreToolUse", "ignored", { handler: { type: "http", url: "   " } });
     const e = await makeEngine([h]);
     const r = await e.run("PreToolUse", { event: "PreToolUse", tool_name: "glob", tool_args: {} });
     expect(r.ran).toBe(0);
     expect(r.skipped).toBe(1);
-    expect(r.errors.join(" ")).toContain("http");
+    expect(r.errors.join(" ")).toContain("url");
   });
 
   it("PostToolUse 上下文回注 + PostToolUseFailure 失败路径分流", async () => {

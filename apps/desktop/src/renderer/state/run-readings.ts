@@ -5,9 +5,11 @@ import { useEffect, useMemo } from "react";
 import type { AgentEvent,AskPayload,ProviderInfo } from "../../../../../src/main/ipc-protocol";
 import { deriveRunPhase,elapsedSecondsFor,hasAssistantTextThisRun,pendingClarifyOf,pendingPlanOf,runPhaseLabel } from "../projections";
 import { waitingForModel } from "../derived/model-waiting";
+import type { SurfaceError } from "../surface-error";
 
 interface RunReadingsDeps {
-  sessionErrors: ReadonlyMap<string, string>;
+  /** 错误条载荷：一句话，或结构化的 SurfaceError（原因/依据/下一步，2026-11-02 真机订正）。 */
+  sessionErrors: ReadonlyMap<string, string | SurfaceError>;
   activeId: string | null;
   sessionNotices: ReadonlyMap<string, string>;
   runningSet: MutableRefObject<Set<string>>;

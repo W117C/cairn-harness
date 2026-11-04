@@ -36,7 +36,7 @@ createRoot(document.getElementById("root")!).render(
   <RenderErrorBoundary variant="page">
     <Suspense fallback={null}>
       {popout !== null ? (
-        <PopoutApp kind={popout.kind} sessionId={popout.sessionId} />
+        <PopoutApp kind={popout.kind} sessionId={popout.sessionId} workspace={popout.workspace} />
       ) : (
         <>
           <App />

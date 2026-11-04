@@ -54,7 +54,14 @@ import {
 } from "../../../../src/main/agent-runner";
 import { applyCrashRecovery, handleSessionPrefsSet, initSessionsDir, requireSessionMetadata, setSessionRootResolver } from "../../../../src/main/session-handlers";
 import { readSessionPreferences, type SessionPreferences } from "../../../../src/main/session-preferences";
-import { initSettingsStore, setSettingsHostDeps } from "../../../../src/main/settings-handlers";
+import { initSettingsStore, setSettingsHostDeps, store } from "../../../../src/main/settings-handlers";
+
+// ---- 自动化保唤（2026-11-04）：实现注入缝（见装配处注释）----
+let keepAwakeApplier: ((on: boolean) => void) | null = null;
+/** shell（Electron main）注入 powerSaveBlocker 开关；headless 不注入 = noop。 */
+export function setKeepAwakeApplier(fn: ((on: boolean) => void) | null): void {
+  keepAwakeApplier = fn;
+}
 import {
   createSession as createSessionInRoot,
   deriveSessionTitle,
@@ -160,6 +167,8 @@ export interface KernelHost {
   queueGet(sessionId: string, workspace?: string): Promise<{ items: SessionQueueEntry[] }>;
   /** 覆盖写发送队列 sidecar（空数组 = 删除 sidecar）；非法载荷 fail-visible。 */
   queueSet(sessionId: string, items: SessionQueueEntry[], workspace?: string): Promise<{ ok: boolean; error?: string }>;
+  /** 会话删除或重命名成功后清理内存归属表、漂移快照与用量缓存（幂等）。 */
+  forgetSession(sessionId: string, workspace?: string): void;
 }
 
 /** 漂移拒绝文案（计划 Global Constraints 原文，逐字）。 */
@@ -325,7 +334,15 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
   // settings-handlers 的存储走独立出口 initSettingsStore(filePath)，宿主依赖面另两个回调：
   // provider 判定与 run 同源（resolveProviderKind），并发上限变更转发调度器缓存（updateScheduleCap）。
   initSettingsStore(join(deps.userDataDir, "settings.json"));
-  setSettingsHostDeps({ resolveProviderKind, onScheduleCapChange: updateScheduleCap });
+  // 自动化保唤（2026-11-04 业主截图那行）：powerSaveBlocker 是 Electron 面，kernel-host 保持
+  // electron-free——实现由 shell 经 setKeepAwakeApplier 注入；未注入（headless 判卷）= noop。
+  // 初值在装配时按 settings 落一次；此后每次 setSettings({keepAwake}) 经 host 回调即时生效。
+  setSettingsHostDeps({
+    resolveProviderKind,
+    onScheduleCapChange: updateScheduleCap,
+    onKeepAwakeChange: (on) => { keepAwakeApplier?.(on); },
+  });
+  void store().get().then((s) => { if (s.keepAwake) keepAwakeApplier?.(true); }).catch(() => undefined);
   // 沙箱自检（与 CLI 同一份事实：`initSandbox()` 写模块级 `sandboxState`，`handleAgentRun` 读它）。
   // 为什么必须在这里做：`agent-runner.ts:788` 的缺省值是 `{ available:false, reason:"尚未自检" }`，
   // 而 `permissions/risk.ts:258` 的 `sandboxRisk` 把 `false` 读成「自检过但降级」⇒ 每一次写向工具
@@ -674,11 +691,22 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
         // 隔离标记读侧现算（目录存在即真）：不落 sidecar、不进事件流 ⇒ 也不会有第二份会漂的状态。
         const isolated = new Set(await listIsolatedSessions(ws));
         const infos = await listSessionsInRoot(wsRoot(ws), metadataById);
-        const prefs = await Promise.all(infos.map((info) => readSessionPreferences(pathOf(wsRoot(ws), info.id))));
+        // 有界并发读偏好 sidecar（上限 32），防止数百条会话同时 open 撞上 macOS GUI 进程默认 fd 软限。
+        const prefs: (SessionPreferences | null)[] = new Array(infos.length).fill(null);
+        const concurrency = Math.min(32, infos.length);
+        let nextIdx = 0;
+        await Promise.all(
+          Array.from({ length: concurrency }, async () => {
+            while (nextIdx < infos.length) {
+              const cur = nextIdx++;
+              prefs[cur] = await readSessionPreferences(pathOf(wsRoot(ws), infos[cur]!.id));
+            }
+          }),
+        );
         for (const [index, info] of infos.entries()) {
           const row = { ...info, workspace: ws, ...(isolated.has(info.id) ? { isolated: true } : {}) };
           out.push(row);
-          if (prefs[index] !== null && prefs[index] !== undefined) scopedPrefs.set(row, prefs[index]);
+          if (prefs[index] !== null && prefs[index] !== undefined) scopedPrefs.set(row, prefs[index]!);
         }
       }
       // 同 id 跨工作区（秒级时间戳撞名）：无法判断这份 sidecar 属于哪一边 ⇒ 两边都不套组织字段，
@@ -715,6 +743,7 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
         let sessionsWithUsage = 0;
         let sessionsWithoutUsage = 0;
         const seenWorkspaces = new Set<string>();
+        const seenFiles = new Set<string>();
         let sessions = 0;
         let skipped = 0;
         let badLines = 0;
@@ -724,8 +753,10 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
           for (const id of ids) {
             sessions += 1;
             seenWorkspaces.add(ws);
+            const filePath = pathOf(root, id);
+            seenFiles.add(filePath);
             try {
-              const scan = await scanUsageFile(pathOf(root, id), usageCache);
+              const scan = await scanUsageFile(filePath, usageCache);
               addUsageTotals(totals, scan.totals);
               mergeUsageAnalytics(analyticsAcc, scan.analytics);
               if (scan.totals.usageCount > 0) sessionsWithUsage += 1;
@@ -736,6 +767,10 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
               skipped += 1;
             }
           }
+        }
+        // 清掉已删除/已重命名会话残留的缓存键，避免长周期常驻内存单向增长。
+        for (const cachedPath of usageCache.keys()) {
+          if (!seenFiles.has(cachedPath)) usageCache.delete(cachedPath);
         }
         return {
           ok: true, totals, sessions, workspaces: seenWorkspaces.size, skipped, badLines,
@@ -926,6 +961,28 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
         return { ok: true };
       } catch (error) {
         return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    },
+    forgetSession: (sessionId, workspace) => {
+      if (typeof sessionId !== "string" || sessionId === "") return;
+      if (workspace !== undefined && workspace !== "") {
+        const ws = canonicalWorkspacePath(workspace);
+        if (owner.get(sessionId) === ws) owner.delete(sessionId);
+        const logPath = pathOf(wsRoot(ws), sessionId);
+        drift.delete(logPath);
+        usageCache.delete(logPath);
+        // 其他工作区的同名会话可能仍用这个计数做漂移归因。
+        if (!workspaces.some((other) => drift.has(pathOf(wsRoot(other), sessionId)))) {
+          ownAppends.delete(sessionId);
+        }
+        return;
+      }
+      owner.delete(sessionId);
+      ownAppends.delete(sessionId);
+      for (const ws of workspaces) {
+        const logPath = pathOf(wsRoot(ws), sessionId);
+        drift.delete(logPath);
+        usageCache.delete(logPath);
       }
     },
   };

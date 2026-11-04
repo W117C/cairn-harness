@@ -184,6 +184,11 @@ describe("autoOf：auto 从 gate 派生，原语义一字不改", () => {
       .toEqual({ source: "session_scope", ruleId: "run_shell\u241Fpnpm test" });
   });
 
+  it("L3-mode 自动放行（full-access 免卡档）⇒ auto{source:mode}", () => {
+    expect(autoOf(g({ layer: "L3-mode", mode: "full-access" })))
+      .toEqual({ source: "mode" });
+  });
+
   it("人工批准不产生 auto（原契约由代码保证，不再靠各出口自觉）", () => {
     expect(autoOf(g({ layer: "L3-mode", verdict: "approved", scope: "once" }))).toBeUndefined();
   });

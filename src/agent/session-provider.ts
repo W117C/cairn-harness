@@ -33,6 +33,7 @@ import { createMapBuilder, mapInjectText, mapUnavailableText, type MapBuilder } 
 import { MAP_TOKENS_DEFAULT } from "./map/render";
 import { AUTOMATION_TOOL_NAMES, automationToolSpecs } from "./automation-surface";
 import { strandsWorkersOnSpawn } from "./tool-surface";
+import type { HookModelCallFn } from "./plugins/hooks";
 import { makeMentionedRe, makePathishRe } from "./context-signals";
 import {
   DEFAULT_COMPACTION_CONFIG,
@@ -47,6 +48,8 @@ import {
   type SummarizerInput,
   type SummarizerOutput,
 } from "./compaction";
+import { imageCountOfMessages, imageTokensOfMessages, sumImageTokens, withoutImagePayloads } from "./image-budget";
+import type { ImageChannel } from "./image-channel";
 import type { SolpiRuntime } from "./solpi-runtime";
 import type { RequestMeter } from "./metering";
 import { deriveProgressBoundaries } from "./economics";
@@ -92,14 +95,15 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
       function: {
         name: "read_file",
         description:
-          "读工作区单个文件（workspace 相对路径）；offset/limit 按 1-based 行号取片段，给目录路径则列条目，二进制拒读。" +
+          "读文件：给 workspace 相对路径；主会话里项目外附件经用户本轮批准后，可直接用附件上下文给出的绝对路径" +
+          "（该批准不继承给 worker）。offset/limit 按 1-based 行号取片段，给目录路径则列条目，二进制拒读。" +
           "**要一次看多份小文件（十几支源码/测试）就用 `paths` 数组**：一次调用交回多份，总量仍是同一道 50KB 帽——" +
           "一轮一支读会整段吃掉步数预算。" +
           "何时用：要用或改某段代码之前先读原文——替换时拼的那个原文字符串要从这里拿，不能凭记忆手打。" +
           "按内容找位置用 grep，按文件名形状找用 glob，别拿它遍历目录。整文件读一次通常比多次小范围读便宜；已在上下文里的内容不必重读。",
         parameters: obj(
           {
-            path: { type: "string", description: "workspace 相对路径" },
+            path: { type: "string", description: "workspace 相对路径；项目外附件用附件上下文给出的已批准绝对路径" },
             paths: {
               type: "array",
               items: { type: "string" },
@@ -119,7 +123,7 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
         description: READ_IMAGE_DESCRIPTION,
         parameters: obj(
           {
-            path: { type: "string", description: "workspace 相对路径（PNG/JPEG/GIF/WebP）" },
+            path: { type: "string", description: "workspace 相对路径（PNG/JPEG/GIF/WebP）；项目外附件用附件上下文给出的已批准绝对路径" },
           },
           ["path"],
         ),
@@ -187,16 +191,17 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
         description:
           "LSP 查询（需工作区 .agent/lsp.json 配置；未配置时返回明确不可用原因）：" +
           "definition / references / hover / documentSymbol / workspaceSymbol / implementation；行列均 1-based。" +
+          "servers 不是查询，是状态：配了几台、每台实测支持哪几支、哪台起不来或还在等授权——先问它，别逐支试错。" +
           "何时用：要跳定义、查一个符号都有谁引用（改签名前先看影响面）、看类型签名——同名符号多的仓库里它比 grep 准。" +
           "何时不用：没配 LSP 就用 grep 兜底；纯字面搜索用 grep。",
         parameters: obj(
           {
             operation: {
               type: "string",
-              enum: ["definition", "references", "hover", "documentSymbol", "workspaceSymbol", "implementation"],
-              description: "查询类型",
+              enum: ["definition", "references", "hover", "documentSymbol", "workspaceSymbol", "implementation", "servers"],
+              description: "查询类型（servers = 只读状态，不发起查询也不起进程）",
             },
-            path: { type: "string", description: "workspace 相对路径（workspaceSymbol 可省略）" },
+            path: { type: "string", description: "workspace 相对路径（workspaceSymbol 与 servers 可省略）" },
             line: { type: "number", description: "行号（1-based）" },
             column: { type: "number", description: "列号（1-based）" },
             symbol: { type: "string", description: "workspaceSymbol 的查询串" },
@@ -554,6 +559,33 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
         ),
       },
     },
+    {
+      type: "function",
+      function: {
+        name: "todo_write",
+        description:
+          "任务清单（多步任务用）：把本轮要做的事列成清单，完成一件更新一件（state=done）。" +
+          "items **全量替换**（每次都给整份，≤20 项、每条 ≤200 字）；清单展示在工作状态面板（进程 N/M）。" +
+          "什么时候用：≥3 步的任务动手前列清单；两三步就能完的小活别用（省一轮调用）。",
+        parameters: obj(
+          {
+            items: {
+              type: "array",
+              description: "整份清单（每次全量替换）",
+              items: {
+                type: "object",
+                properties: {
+                  text: { type: "string", description: "任务项一句话（≤200 字）" },
+                  state: { type: "string", description: "pending|done；缺省 pending" },
+                },
+                required: ["text"],
+              },
+            },
+          },
+          ["items"],
+        ),
+      },
+    },
   ];
   // 定时任务五件的规格与实现同在（实现在 agent-runner 的 installAutomationTools，
   // 调度器没起来时它们自己 fail-closed）——以前只有实现，模型面上一个都没有 ⇒ 发不出去。
@@ -745,6 +777,43 @@ export function createSessionSummarizer(
   };
 }
 
+/** §9.6 prompt 档钩子的模型面：与摘要器**同一条 transport 接缝**、同一套事件折法
+ *  （`assistant_delta` 累加 / `usage` / `turn_truncated`），只是不带压缩那段包装语——
+ *  钩子发给模型的 user 内容就是 hook payload 原文，压缩话术会把判定语境带歪。
+ *  「空回文」在这里是**失败**而不是成功：摘要器宁可是错，钩子也不能拿一句空话当"模型判过了"。 */
+export function createHookModelCall(
+  transport: SessionTransport,
+  meter?: RequestMeter,
+  label = "provider",
+): HookModelCallFn {
+  return async (system, user, timeoutMs) => {
+    const msgs: GlmMessage[] = [{ role: "system", content: system }, { role: "user", content: user }];
+    let text = "";
+    let truncated: string | undefined;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort("prompt 钩子超时"), Math.max(1, timeoutMs));
+    try {
+      for await (const ev of transport(
+        msgs,
+        // 不带 model：这一跳拨哪一档由注入方（`sessionModelTransport`）绑死，旁路不重猜。
+        { stream: false, ...(meter ? { metering: { meter, category: "summary" as const } } : {}) },
+        undefined,
+        { signal: controller.signal },
+      )) {
+        if (ev.type === "assistant_delta") text += ev.text;
+        else if (ev.type === "turn_truncated") truncated = ev.stop_reason;
+      }
+    } catch (err) {
+      return { ok: false, text, error: label + " prompt 钩子调用失败：" + (err instanceof Error ? err.message : String(err)) };
+    } finally {
+      clearTimeout(timer);
+    }
+    if (controller.signal.aborted) return { ok: false, text, error: label + " prompt 钩子超时（" + String(timeoutMs) + "ms）" };
+    if (!text.trim()) return { ok: false, text, error: label + " 返回空判断（按失败处理，不当「模型没意见」用）" };
+    return { ok: true, text, ...(truncated !== undefined ? { truncated } : {}) };
+  };
+}
+
 export interface SessionCompaction {
   config?: Partial<CompactionConfig>;
   /** 缺省 = 显式 transport，或 legacy CAIRN_API_KEY + GLM。 */
@@ -893,8 +962,10 @@ export function createSessionProvider(
     requestIntervention?: (events: readonly AgentEvent[]) => string | undefined;
     /** 识图通道（`read_image` → 下一轮请求）：provider 每轮组装时从这里取待发的图片。
      *  与 `ephemeralImages` 的区别是**时机**：那个是「这一轮就附上」的一次性块（调用方自己算好），
-     *  这个是「loop 什么时候读到图，下一轮就附上」的活盒子。两者都缺省 = 零行为。 */
-    imageChannel?: { take: () => { type: "image"; dataUrl: string }[] };
+     *  这个是「loop 什么时候读到图，下一轮就附上」的活盒子。两者都缺省 = 零行为。
+     *  形状取 `ImageChannel` 的 peek/take 两面：预算用量 `peek`（不消费），
+     *  清空放在最终硬闸之后（`take`）——见 image-channel.ts 里那条实测记录。 */
+    imageChannel?: Pick<ImageChannel, "peek" | "take">;
     /** 本次请求附带的图片内容块（不进日志）。见 `composeTurnMessages` 的同名参数。 */
     ephemeralImages?: readonly { type: "image"; dataUrl: string }[];
     solpi?: SolpiRuntime;
@@ -1298,6 +1369,13 @@ export function createSessionProvider(
         mapChars: mapText?.length ?? 0,
         attachmentContextChars,
       });
+      // 识图：图片只活在进程内存里（不进事件日志，见 image-channel.ts），所以预算的**两边**
+      // 都得在这里显式把它们算上。⚠️ 用 `peek` 不用 `take`：硬闸拦下的那一轮什么都没发出去，
+      // 不该顺手把图吞掉（2026-11-03 实测：两张 900×1200 的帧被 intake 后请求被拒，重试时模型
+      // 看不到图，历史里的 tool_result 却还写着「已作为图片内容块附上」）。
+      const pendingImages = opts.imageChannel?.peek() ?? [];
+      // 一张图按像素折 token，不按 base64 字符——base64 的字符数不是 token 数（见 image-budget.ts）。
+      const carriedImageTokens = sumImageTokens([...pendingImages, ...(opts.ephemeralImages ?? [])]);
       // M1d 触发检查：估算含 system/tools/记忆全量开销；B（硬兜底）→ overflow 紧急截断
       if (coordinator && opts.compaction) {
         const factor = calibrateFactor(events);
@@ -1308,7 +1386,9 @@ export function createSessionProvider(
           memoryChars,
           mapChars: mapText?.length ?? 0,
         };
-        const estimate = estimateContextTokens(history, overhead, factor);
+        // 图片 token 加在**估算结果**上，不进 `overhead`：`overhead` 还要递给压缩器当裁剪目标，
+        // 而图片不在事件流里，压历史压不掉它们——把图算进裁剪目标只会白砍一段冷细节。
+        const estimate = estimateContextTokens(history, overhead, factor) + carriedImageTokens;
         const decision = shouldCompact(estimate, budgetConfig());
         // 摊销只可能收紧 tail 预算；overflow 那支由纯函数自己挡掉（已装不下 ⇒ 少压会立刻再撞硬闸）
         const amortize = amortizedCompactionConfig({
@@ -1371,9 +1451,9 @@ export function createSessionProvider(
           console.warn("[compaction] 连续摘要失败已达上限，本会话停用摘要（仅 overflow 紧急截断可用）");
         }
       }
-      // 识图：盒子里有图就取出来附到本轮请求末尾（take 即清空 ⇒ 同一张图不会在两轮里各付一遍 token）。
+      // 识图：把上面 peek 到的那几张附到本轮请求末尾。**这里不 take**——清空放到硬闸之后：
+      // 同一张图不会在两轮里各付一遍 token 靠的是「发出去之后清空」，而不是「先清空再看能不能发」。
       // 空盒时这个参数缺席 ⇒ 消息序列逐字不变，不读图的会话一个字节都不多付。
-      const liveImages = opts.imageChannel?.take() ?? [];
       const ephemeralUserTurn = [opts.ephemeralUserTurn, opts.requestIntervention?.(events)]
         .filter((text): text is string => text !== undefined && text !== "").join("\n\n");
       const msgs = composeTurnMessages({
@@ -1386,7 +1466,7 @@ export function createSessionProvider(
         ...(surfaceNoteText ? { surfaceNote: surfaceNoteText } : {}),
         ...(opts.attachmentContext ? { attachmentContext: opts.attachmentContext } : {}),
         ...(ephemeralUserTurn !== "" ? { ephemeralUserTurn } : {}),
-        ...(liveImages.length > 0 ? { ephemeralImages: liveImages } : {}),
+        ...(pendingImages.length > 0 ? { ephemeralImages: pendingImages } : {}),
         ...(opts.ephemeralImages !== undefined ? { ephemeralImages: opts.ephemeralImages } : {}),
       });
       // 压缩重写代价的**实测**（不是估算）：本轮装配与上一轮比，头部仍然逐字相同的那段占多少。
@@ -1399,14 +1479,23 @@ export function createSessionProvider(
         prevRequestLayer = requestLayer;
       }
       // 最终装配硬闸：重挂/地图/JSON 包装均已确定，不能只检查压缩前的 overhead。
-      // 无 tokenizer：沿用既有校准估算口径；超限 fail-closed，事件历史不删改。
+      // 无 tokenizer：文本沿用既有校准估算口径；**图片块按像素折 token**——base64 的字符数不是
+      // token 数（image-budget.ts 里记着 2026-11-03 那次 185,657 的实测：两张 106KB 的帧被
+      // chars/2 折成 142,620 token，而 provider 对同一形态的请求实报 15,939）。超限 fail-closed。
       const finalConfig = budgetConfig();
-      const finalChars = JSON.stringify({ messages: msgs, tools: tools ?? [] }).length;
-      const finalEstimate = Math.ceil(finalChars / calibrateFactor(events));
+      const factor = calibrateFactor(events);
+      // 文本那半沿用既有口径：量之前先把图片载荷换成空串，图片的成本另按 token 加回去。
+      const finalChars = JSON.stringify({ messages: withoutImagePayloads(msgs), tools: tools ?? [] }).length;
+      const finalImageTokens = imageTokensOfMessages(msgs);
+      const finalEstimate = Math.ceil(finalChars / factor) + finalImageTokens;
       if (!Number.isFinite(finalConfig.inputLimit) || !Number.isFinite(finalConfig.maxOutputReserve) ||
           finalEstimate > finalConfig.inputLimit - finalConfig.maxOutputReserve) {
-        throw new Error(`[context_budget_exceeded] final estimated input ${finalEstimate}; available ${finalConfig.inputLimit - finalConfig.maxOutputReserve}; request not sent`);
+        const imageNote = finalImageTokens > 0 ? `; images ${imageCountOfMessages(msgs)} ≈ ${finalImageTokens} token` : "";
+        throw new Error(`[context_budget_exceeded] final estimated input ${finalEstimate}; available ${finalConfig.inputLimit - finalConfig.maxOutputReserve}${imageNote}; request not sent`);
       }
+      // 硬闸过了才清空识图盒：被拦下的那一轮图已经随 `msgs` 组装好却一个字节都没发出去，
+      // 先把它们留在盒里，用户点「重试」时同一批帧还能再送一次（take 语义见 image-channel.ts）。
+      opts.imageChannel?.take();
       call?.signal?.throwIfAborted();
       yield* (opts.transport ?? streamGlm)(msgs, { ...(opts.model ? { model: opts.model } : {}),
         ...(opts.thinking !== undefined ? { reasoningEffort: opts.thinking } : {}),

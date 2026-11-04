@@ -53,18 +53,17 @@ describe("providerStatusLabel（凭据段状态行，三态文案判卷）", () 
   });
 });
 
-describe("panelPatch（patch 白名单：UI 只放行六键，不透传任意 patch）", () => {
-  it("白名单本身钉死为六键：provider/model/mode/theme/planRequiredByDefault/locale（locale 为实测缺陷修复）", () => {
-    expect([...PANEL_PATCH_KEYS]).toEqual(["provider", "model", "mode", "theme", "planRequiredByDefault", "locale"]);
+describe("panelPatch（patch 白名单：UI 只放行五键，不透传任意 patch）", () => {
+  it("白名单本身钉死为五键：provider/model/mode/theme/locale（locale 为实测缺陷修复；planRequiredByDefault 出列——方案模式 2026-11-03 起由 agent 自判）", () => {
+    expect([...PANEL_PATCH_KEYS]).toEqual(["provider", "model", "mode", "theme", "locale"]);
   });
 
-  it("六键齐传原样通过", () => {
+  it("五键齐传原样通过", () => {
     const patch = {
       provider: "glm",
       model: "glm-5.2",
       mode: "auto",
       theme: "dark",
-      planRequiredByDefault: true,
       locale: "en-US",
     };
     expect(panelPatch(patch)).toEqual(patch);

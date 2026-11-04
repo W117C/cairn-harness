@@ -92,6 +92,33 @@ describe("第 1 点：截断续跑（截断 ≠ 说完）", () => {
     const notes = projectContext(log).filter((m) => String(m.content ?? "").includes("别当成已答完"));
     expect(notes).toHaveLength(1);
   });
+
+  it("前一步同时发出 tool_call 与 turn_truncated、下一步正常收束 ⇒ 不误触发截断续跑", async () => {
+    const log: AgentEvent[] = [];
+    let round = 0;
+    const provider: Provider = {
+      async *stream() {
+        round += 1;
+        if (round === 1) {
+          yield { type: "tool_call", id: "t1", name: "read_file", args: { path: "a" } };
+          yield {
+            type: "turn_truncated", callId: "a1",
+            stop_reason: "output_budget", outcome: "output_budget", outputTokens: 4096,
+          } as never;
+          return;
+        }
+        yield { type: "assistant_message", content: "已读完并回答完毕" };
+      },
+    };
+    await runLoop({
+      provider,
+      events: { async append(e: AgentEvent) { log.push(e); } },
+      workspace: "/tmp",
+      userMessage: "读文件并总结",
+      tools: { read_file: { name: "read_file", async run() { return { ok: true, output: "A" }; } } },
+    });
+    expect(round).toBe(2);
+  });
 });
 
 describe("撞帽与截断续跑不许互相顶掉", () => {

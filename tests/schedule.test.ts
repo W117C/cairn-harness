@@ -979,4 +979,37 @@ describe("调度快照把装载问题带上屏（桌面无控制台）", () => {
       expect(snap.warnings).toEqual([]);
     } finally { s.stop(); }
   });
+
+  it("正常触发的 tick 不误计 duplicates，且本进程刚收束的历史条目保留 session_id", async () => {
+    const okExecutor: TriggerExecutor = async () => ({ ok: true });
+    const { s } = makeScheduler({ runSession: okExecutor, now: new Date("2026-09-12T02:00:00Z").getTime() });
+    await s.start();
+    s.stop();
+    await s.upsert(base({ name: "归属回归靶", schedule: { kind: "once", at: "2026-09-12T02:30:00Z" }, createdAt: CREATED }));
+    await s.tick({ startup: true });
+    const rep = await s.tick({ now: new Date("2026-09-12T02:30:00Z").getTime() });
+    expect(rep.triggered).toBe(1);
+    expect(rep.duplicates).toBe(0);
+    await s.whenIdle;
+    const snap = await s.snapshot();
+    expect(snap.history).toHaveLength(1);
+    expect(snap.history[0]?.state).toBe("succeeded");
+    expect(snap.history[0]?.session_id).toBeTruthy();
+  });
+
+  it("跨进程准入锁持有者 PID 已死 ⇒ 不必傻等 2 分钟立即回收锁并正常触发", async () => {
+    const okExecutor: TriggerExecutor = async () => ({ ok: true });
+    const { s, data } = makeScheduler({ runSession: okExecutor, now: new Date("2026-09-12T02:00:00Z").getTime() });
+    await mkdir(data, { recursive: true });
+    // 写入一个必然不存在的极大死进程 PID，且 mtime 就是此刻（未满 2 分钟）
+    await writeFile(join(data, "automations.lock"), "99999999", "utf8");
+    await s.start();
+    s.stop();
+    await s.upsert(base({ name: "死锁回收靶", schedule: { kind: "once", at: "2026-09-12T02:30:00Z" }, createdAt: CREATED }));
+    await s.tick({ startup: true });
+    const rep = await s.tick({ now: new Date("2026-09-12T02:30:00Z").getTime() });
+    expect(rep.triggered).toBe(1);
+    expect(rep.duplicates).toBe(0);
+    await s.whenIdle;
+  });
 });

@@ -290,10 +290,10 @@ describe("能力断言的证人面：一句都不曾被点过才算欠（第 311
   it("★第四态也有账（第 331 页 #34）：「尺读不出」超帽红、低于帽也红，帽＝干净树现读那一档", () => {
     // 这一档从前只在四态守恒里占一格：它既不算「有证人」也不算「欠证人」⇒ 那顶零容忍的帽永远管不到它，
     // 五格可以在里面一直躺着不动。从现在起它有自己的一顶帽（只准调低）。
-    expect(CLAIM_NO_NEEDLE_CAP, "帽要等于干净树现读那一档（逐格点名见 outputs/claims-no-needle-2026-10-03/nowrite.log）").toBe(5);
-    expect(claimCountCeiling(6, CLAIM_NO_NEEDLE_CAP).over, "又多一句点不出名字的能力断言 ⇒ 红").toBe(true);
-    expect(claimCountCeiling(4, CLAIM_NO_NEEDLE_CAP).stale, "那一格配上了观测者或改了文案 ⇒ 帽要跟着调低，不许停在 5").toBe(true);
-    expect(claimCountCeiling(5, CLAIM_NO_NEEDLE_CAP), "正贴线：两头都不红").toMatchObject({ over: false, stale: false, margin: 0 });
+    expect(CLAIM_NO_NEEDLE_CAP, "帽要等于干净树现读那一档（逐格点名见 outputs/claims-no-needle-2026-11-02/nowrite.log；旧五格读数在 2026-10-03 那份）").toBe(4);
+    expect(claimCountCeiling(5, CLAIM_NO_NEEDLE_CAP).over, "又多一句点不出名字的能力断言 ⇒ 红").toBe(true);
+    expect(claimCountCeiling(3, CLAIM_NO_NEEDLE_CAP).stale, "那一格配上了观测者或改了文案 ⇒ 帽要跟着调低，不许停在 4").toBe(true);
+    expect(claimCountCeiling(4, CLAIM_NO_NEEDLE_CAP), "正贴线：两头都不红").toMatchObject({ over: false, stale: false, margin: 0 });
     // 反向哨兵：一支判定吃两顶帽（各抄一份迟早漂）⇒ 欠证人那顶必须走同一支函数
     expect(claimWitnessCeiling({ unwitnessed: ["a", "b", "c"] }, 3)).toMatchObject({ over: false, stale: false, read: 3 });
   });

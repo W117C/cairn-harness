@@ -1,7 +1,7 @@
 import type { AgentEvent, AgentPermissionMode, SecurityFinding } from "../events";
 import type { AutonomySession, PermissionRule } from "../permissions";
 import type { ArmKey } from "../routing/bandit";
-import type { ModelTier } from "../providers/registry";
+import type { ModelSpec, ModelTier } from "../providers/registry";
 import type { CompactionConfig, Summarizer } from "./compaction";
 import type { FrozenStage, PluginAgentRoleDef } from "./sequencer";
 import type { StuckConfig, StuckTurn } from "./stuck";
@@ -211,8 +211,10 @@ export interface OrchestratorOptions {
    *  缺省 undefined = 零行为（只有既有 glob 租约求交，spawn 流程与事件字节完全不变）。
    *  抛错 = 记 warn 并降级为「仅 glob 判定」——语义闸是额外探测器，不得把 spawn 炸掉。 */
   semanticLease?: (resources: string[]) => Promise<string[]>;
-  /** worker 模型解析（演示/验收通道注入脚本模型）；缺省 = GLM 暗卷（需 CAIRN_API_KEY）。 */
+  /** worker 模型解析（演示/验收通道注入脚本模型）；缺省 = defaultModelSpec 或 GLM 暗卷（需对应凭据）。 */
   modelFor?: (args: SpawnArgs) => WorkerModel | undefined;
+  /** 父会话选定的真实模型档位（未开路由且无 modelFor 注入时 worker 沿用父会话同家同档，不偷切 GLM）。 */
+  defaultModelSpec?: ModelSpec;
   /** A1 写侧 prompt 缓存断点（路由分支合成的真实 provider 模型才吃）。
    *  目前只有 Anthropic 有语义（显式 cache_control 打在静态段：末个 tool + system 首块）；
    *  GLM/OpenAI 是自动前缀缓存、Gemini 需另建 cachedContent 资源 ⇒ 传了也是零行为。

@@ -26,9 +26,11 @@ const ROOT = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "
 const BIN = join(ROOT, "bin", "cairn.mjs");
 
 describe("planDecisionFor：方案门的档位判据（纯函数，逐格穷举）", () => {
-  it("★ auto 档 ⇒ 批准（这是缺陷那一格：旧写法在管道里恒判拒绝，不看档位）", () => {
+  it("★ auto / full-access 档 ⇒ 批准（这是缺陷那一格：旧写法在管道里恒判拒绝，不看档位）", () => {
     expect(planDecisionFor({ mode: "auto", ask: true })).toBe("approve");
     expect(planDecisionFor({ mode: "auto", ask: false })).toBe("approve");
+    expect(planDecisionFor({ mode: "full-access", ask: true })).toBe("approve");
+    expect(planDecisionFor({ mode: "full-access", ask: false })).toBe("approve");
   });
 
   it("交互终端下的 default / guided ⇒ 问人（不是自动批准）", () => {

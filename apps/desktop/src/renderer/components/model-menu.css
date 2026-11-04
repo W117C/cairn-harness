@@ -36,24 +36,89 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
+  padding: 2px 0 4px;
 }
-.mp-pop .mp-group-label { padding: 8px 10px 3px; font-weight: var(--fw-medium); }
+.mp-pop .mp-group-label {
+  padding: 10px 10px 4px;
+  color: hsl(var(--text-400));
+  font-size: var(--fs-caption-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.02em;
+}
 .mp-pop .mp-group-label .g-dot { display: none; }
-.mp-pop .mp-group.separated { margin-top: 3px; padding-top: 2px; border-top: 0; }
-.mp-pop .menu-item { gap: 8px; min-height: 36px; padding: 7px 10px; border-radius: var(--radius-sm); }
+.mp-pop .mp-group.separated {
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px solid var(--hairline);
+}
+.mp-pop .menu-item { gap: 8px; min-height: 38px; padding: 7px 10px; border-radius: var(--radius-sm); }
 .mp-pop [role="option"] { font-size: var(--fs-body-sm); }
 .mp-pop [role="option"][data-highlighted="true"] { background: hsl(var(--bg-200)); }
-.mp-pop [role="option"] .mi-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 当前选中与键盘高亮是两件事：选中行带品牌色细边与淡底，高亮只换背景。
+   此前两者同色，点完一行后整个菜单像有两行被选中。 */
+.mp-pop [role="option"][aria-selected="true"] {
+  background: hsl(var(--accent-brand) / 7%);
+  box-shadow: inset 0 0 0 1px hsl(var(--accent-brand) / 22%);
+}
+.mp-pop [role="option"][aria-selected="true"][data-highlighted="true"] {
+  background: hsl(var(--accent-brand) / 11%);
+}
+.mp-pop .menu-item[role="option"] .mi-name { flex: 1 1 auto; min-width: 0; max-width: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mp-pop [role="option"] .sub { margin-left: auto; font-size: var(--fs-caption-xs); white-space: nowrap; color: hsl(var(--text-300)); }
-.mp-pop [role="option"] .check { flex: none; width: 14px; color: hsl(var(--text-100)); }
+/* 能力徽标：只画一个眼睛，用户读不出这是「图片」。给一段短文字，悬停再给完整说明。 */
+.mp-pop [role="option"] .v-badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: hsl(var(--bg-200));
+  color: hsl(var(--text-300));
+  font-size: var(--fs-caption-2xs);
+  line-height: 1;
+}
+.mp-pop [role="option"] .check {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: hsl(var(--accent-brand));
+  color: #fff;
+  font-size: 10px;
+  line-height: 1;
+  font-weight: var(--fw-bold);
+}
 .mp-pop .mp-controls { flex: none; min-height: 0; }
 .mp-pop .mp-controls:empty { display: none; }
 .mp-pop .mp-controls > .pop-label { display: none; }
-.mp-pop .th-row { margin: 0 5px 5px; padding: 3px; gap: 2px; border-radius: var(--radius-sm); background: hsl(var(--bg-200)); }
+/* 2026-11-02 真机：思考档四格此前像四个悬空文字——轨道底色 bg-200 与面板底色只差 2%，
+   亮色下几乎不可见。补一圈细描边，轨道在任何主题下都读得出来（选中段仍是 surface 白）。 */
+.mp-pop .th-row {
+  margin: 0 5px 5px; padding: 3px; gap: 2px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  background: hsl(var(--bg-200));
+}
 .mp-pop .th-row button { min-height: 30px; padding: 4px 8px; }
 .mp-pop .th-row button[aria-pressed="true"] { box-shadow: none; }
-.mp-pop .mp-foot { margin-top: 8px; padding-top: 4px; }
-.mp-pop .mp-foot .menu-item { color: hsl(var(--text-200)); font-size: var(--fs-caption-sm); }
+/* 底部动作区（2026-11-02）：与上方思考档用一条细线分开，read 成「去另一处」而不是菜单里
+   的又一行模型/档位。 */
+.mp-pop .mp-foot {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--hairline);
+}
+.mp-pop .mp-foot .menu-item {
+  min-height: 32px;
+  color: hsl(var(--text-300));
+  font-size: var(--fs-caption-sm);
+  border-radius: var(--radius-sm);
+}
 .mp-pop .th-why { margin: 2px 8px 6px; }
 .mp-pop .th-why-body { max-height: 100px; overflow-y: auto; }
 .mp-pop .menu-note { font-size: var(--fs-caption-xs); }
@@ -67,7 +132,7 @@
 .mp-pop .th-head .pop-label { display: block; margin: 0; }
 .mp-pop .th-custom {
   display: inline-flex; align-items: center; gap: 4px;
-  height: 22px; padding: 0 6px; border-radius: var(--radius-xs);
+  min-height: 28px; padding: 0 6px; border-radius: var(--radius-xs);
   color: hsl(var(--text-300)); font-size: var(--fs-caption-xs);
   transition: background var(--t-instant), color var(--t-instant);
 }
@@ -78,6 +143,20 @@
   box-shadow: 0 1px 2px rgb(0 0 0 / 6%), inset 0 0 0 1px var(--hairline-strong);
   color: hsl(var(--text-000));
 }
+/* 「不支持思考强度」态（2026-11-01 真机订正 · ADR-0009 fail-visible，不谎称可调）：
+   分段**留着**（说明这项能力存在），但不许看起来像个能拧的选中控件——选中段的高亮底、
+   浮起阴影、加粗全撤掉，只留中性轨道 + 次级文字。aria-pressed 仍如实标着当前档（off）：
+   改的是视觉，不是事实。 */
+.mp-pop .th-row[data-unsupported="true"] button[aria-pressed="true"] {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: hsl(var(--text-200));
+  font-weight: var(--fw-regular);
+}
+/* 折叠体里两段话（原因 + 机制）：段间距自己管，不吃 UA 的 p 默认外边距。 */
+.mp-pop .th-why-body p { margin: 0; }
+.mp-pop .th-why-body p + p { margin-top: 4px; }
 .mp-pop .th-edit {
   margin: 0 5px 6px; padding: 9px 10px 8px;
   border: 1px solid var(--hairline); border-radius: var(--radius-sm);

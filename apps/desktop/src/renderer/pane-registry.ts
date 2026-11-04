@@ -21,6 +21,9 @@ export const PANE_META: Record<PaneKind, { label: string }> = {
 /** 顶栏 ⋮ 菜单的列表面（App 消费；保持与 PaneKind 同集）。 */
 export const PANE_OPENABLE: readonly PaneKind[] = ["changes", "plan", "tasks", "file", "terminal", "browser", "sidechat", "plugins"];
 
+/** Loaded plugins live in the contextual sidebar; keep the old popout route compatible. */
+export const WORKBENCH_PANES = PANE_OPENABLE.filter((kind) => kind !== "plugins");
+
 /** 窗格重排（拖标题栏换位，蓝本 §3.4）：把 from 位的元素移动到 to 位，其余相对次序不变。
  *  越界/同位原样返回（不抛、不吞——与 send-queue 的越界口径一致）。 */
 export function movePane<T>(items: readonly T[], from: number, to: number): T[] {

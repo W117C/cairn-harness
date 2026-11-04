@@ -78,27 +78,34 @@ async function main() {
     await js(`new Promise(r=>requestAnimationFrame(r))`);
     frames.push(performance.now()-started);
   }
-  await js(`window.__cairnPerf.finish()`);
   const dom=await js(`({ nodes:document.querySelectorAll('*').length, users:document.querySelectorAll('.row.user').length, assistants:document.querySelectorAll('.row.assistant').length, tools:document.querySelectorAll('.tool-head').length, historyPresent:document.querySelector('[data-event-id="4"]')?.textContent.includes('模块 0'), lastPresent:document.querySelector('.reading').textContent.includes('PERF-LIVE-${samples}') })`);
   const sorted=[...frames].sort((a,b)=>a-b);
   const finalMetrics=await metrics();
   const metricDelta=(before,after)=>Object.fromEntries(['TaskDuration','ScriptDuration','LayoutDuration','RecalcStyleDuration','LayoutCount','RecalcStyleCount'].map(key=>[key,(after[key]??0)-(before[key]??0)]));
   const report={turns,samples,startupMs,openMs,runningStarted,metrics:{open:metricDelta(startupMetrics,openMetrics),stream:metricDelta(streamMetrics,finalMetrics)},frameMs:{p50:sorted[Math.floor(sorted.length*.5)],p95:sorted[Math.floor(sorted.length*.95)],max:sorted.at(-1),all:frames},dom,errors,budgets};
-  if (process.env.CAIRN_PERF_CHECK_ACTIONS === '1') {
+  const checkActions = process.env.CAIRN_PERF_CHECK_ACTIONS === '1';
+  if (checkActions) await js('window.__cairnPerf.complete()');
+  await js('window.__cairnPerf.finish()');
+  if (checkActions) {
     // 在计时结束后点击刚生成一轮的动作，验证缓存没有把事件闭包冻结在旧历史。
-    await js('window.__cairnPerf.complete()');
     const round = turns + 1;
-    await waitFor(`!!document.querySelector('[aria-label="回放到第 ${round} 轮"]') && document.querySelector('.gen-bar')?.dataset.running === 'false'`);
-    await js(`document.querySelector('[aria-label="回放到第 ${round} 轮"]').click()`);
+    const branch = `[aria-label="从第 ${round} 轮分叉新会话"]`;
+    const revert = `[aria-label="撤回第 ${round} 轮的文件改动"]`;
+    const confirm = `[role="dialog"][aria-label="还原第 ${round} 轮的改动？"] .cc-actions .danger`;
+    await waitFor(`!!document.querySelector('${branch}') && document.querySelector('.gen-bar')?.dataset.running === 'false'`);
+    await js(`document.querySelector('${revert}').click()`);
+    await waitFor(`!!document.querySelector('${confirm}')`);
+    const waitedForConfirm = await js('window.__cairnPerf.calls().reverts.length === 0');
+    await js(`document.querySelector('${confirm}').click()`);
+    await waitFor('window.__cairnPerf.calls().reverts.length === 1');
+    await js(`document.querySelector('${branch}').click()`);
     await waitFor('window.__cairnPerf.calls().forks.length === 1');
-    await js(`document.querySelector('[aria-label="重跑第 ${round} 轮"]').click()`);
-    await waitFor('window.__cairnPerf.calls().runs.length === 2');
     const calls = await js('window.__cairnPerf.calls()');
     report.actions = {
-      replayLatest: calls.forks[0].sessionId === 's1' && calls.forks[0].round === round && calls.forks[0].keepWorkspace === true,
-      retryLatest: calls.runs[1].message === '逐帧流式性能检查',
+      sentLatest: calls.runs.length === 1 && calls.runs[0].sessionId === 's1' && calls.runs[0].message === '逐帧流式性能检查',
+      branchLatest: calls.forks[0].sessionId === 's1' && calls.forks[0].round === round && calls.forks[0].unique === true && calls.forks[0].workspace === '/tmp/demo-ws',
+      revertLatest: waitedForConfirm && calls.reverts[0].sessionId === 's1' && calls.reverts[0].round === round && calls.reverts[0].workspace === '/tmp/demo-ws',
     };
-    await js('window.__cairnPerf.finish()');
   }
   mkdirSync(require('node:path').dirname(out),{recursive:true});
   writeFileSync(out,JSON.stringify(report,null,2));

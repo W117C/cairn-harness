@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { runKey } from "../src/renderer/state/session-identity";
 import { ModelMenu, ModelPicker, type ModelOption } from "../src/renderer/components/ModelPicker";
+import { STR } from "../src/renderer/strings";
 import type { ProviderInfo } from "../../../src/main/ipc-protocol";
 import { readRendererFile } from "./helpers/app-surface";
 
@@ -109,6 +110,22 @@ describe("ModelMenu 菜单（真 HTML——P2-2 合并单面：搜索 + 列表 +
     expect(html).toContain('aria-label="模型列表"');
   });
 
+  it("窗口在副标签里说人话（光一个「128.0k」没人知道这是上下文窗口）", () => {
+    const html = render();
+    expect(html).toContain('<span class="sub">窗口 128.0k</span>');
+    expect(html).toContain('<span class="sub">窗口 1.0m</span>');
+  });
+
+  it("组头说人话：给了 provider 标签表就用标签，没登记的落回原 id", () => {
+    const labeled = render({ providerLabels: new Map([["openai", "OpenAI"], ["deepseek", "DeepSeek"]]) });
+    expect(labeled).toContain(">OpenAI<");
+    expect(labeled).toContain(">DeepSeek<");
+    expect(labeled).not.toContain(">openai<");
+    // 没登记在册 ⇒ 落回 id（不猜、不编）
+    const partial = render({ providerLabels: new Map([["openai", "OpenAI"]]) });
+    expect(partial).toContain(">deepseek<");
+  });
+
   it("当前项打勾且 aria-selected 为真，其它项不打勾", () => {
     const html = render();
     expect(html).toContain('aria-selected="true"');
@@ -117,11 +134,13 @@ describe("ModelMenu 菜单（真 HTML——P2-2 合并单面：搜索 + 列表 +
     expect((html.match(/aria-selected="true"/g) ?? []).length).toBe(1);
   });
 
-  it("演示项常驻；副文案短词一行放得下，完整免责句在 title", () => {
+  it("「演示」不在菜单里（业主 2026-11-01 裁：「不要演示」）：只列真模型", () => {
     const html = render();
-    expect(html).toContain(">演示<");
-    expect(html).toContain("剧本回放 · 不产生真实调用");
-    expect(html).toContain('title="预录剧本 · 不产生真实调用 · 结果与你的任务无关"');
+    expect(html).not.toContain(">演示<");
+    expect(html).not.toContain("剧本回放");
+    expect(html).not.toContain("预录剧本");
+    // 列表里只有两行真模型（OPTIONS 里的演示项 provider=null ⇒ 不归组、不成行）
+    expect((html.match(/role="option"/g) ?? []).length).toBe(2);
   });
 
   it("key 未配置 ⇒ 置顶警示行 + 可跳设置，但**不**因此禁掉整列", () => {
@@ -134,14 +153,11 @@ describe("ModelMenu 菜单（真 HTML——P2-2 合并单面：搜索 + 列表 +
     expect((html.match(/disabled=""/g) ?? []).length).toBe(0);
   });
 
-  it("运行中 ⇒ 整列禁用（含「演示」）：跑着的时候不该换模型", () => {
+  it("运行中 ⇒ 整列禁用（跑着的时候不该换模型；「演示」已不在列表里）", () => {
     const html = render({ running: true });
-    // 三条选项全部带 disabled（两视图后「演示」只在列表出现一次）
-    const labelAt = html.lastIndexOf(">演示<");
-    const demoOpenTag = html.slice(html.lastIndexOf("<button", labelAt), labelAt);
-    expect(demoOpenTag).toContain('disabled=""');
-    expect(demoOpenTag).toContain('role="option"');
-    expect((html.match(/<button[^>]*disabled=""/g) ?? []).length).toBe(3);
+    // 两条真模型行全部带 disabled（演示 2026-11-01 起不再占一行）
+    expect((html.match(/<button[^>]*disabled=""/g) ?? []).length).toBe(2);
+    expect(html).not.toContain(">演示<");
   });
 
   it("key 未配置只是**提示**：整列仍可点（key 按家算，不能拿当前通道的状态灰掉别人家的模型）", () => {
@@ -165,6 +181,16 @@ describe("ModelMenu 菜单（真 HTML——P2-2 合并单面：搜索 + 列表 +
     });
     expect(html).not.toContain("<script>x</script>");
     expect(html).toContain("&lt;script&gt;");
+  });
+
+  it("识图能力带文字徽标（只画眼睛读不出「图片」）", () => {
+    const html = render({
+      options: [{ registryId: "v", label: "vision-model", provider: "gw", vision: true }],
+      value: "v",
+    });
+    expect(html).toContain('class="v-badge"');
+    expect(html).toContain(STR.modelPicker.visionBadge);
+    expect(html).toContain('title="支持识图（可发图片）"');
   });
 });
 
@@ -256,9 +282,14 @@ describe("⑤ 左栏视觉层级：品牌、会话状态与服务入口", () => 
     expect(html).toMatch(/<div class="s-meta"><svg[^>]*aria-label="已置顶"/);
   });
 
-  it("模型服务不再只是一颗无文字圆点", () => {
+  it("侧栏不再有页脚；用户入口收在全局轨底部的头像菜单里", () => {
     const html = sidebarHtml({ providerOk: null });
-    expect(html).toContain('class="provider-label">服务未检</span>');
+    expect(html).not.toContain('class="side-foot"');
+    expect(html).not.toContain('class="avatar-label"');
+    expect(html).not.toContain('class="provider-dot"');
+    const account = readFileSync(new URL("../src/renderer/components/AccountMenu.tsx", import.meta.url), "utf8");
+    expect(account).toContain('className="app-rail-user"');
+    expect(account).toContain("STR.footer.accountTip");
   });
 });
 
@@ -393,15 +424,13 @@ describe("④ Switch：不是裸复选框，而是一个说人话的开关", () 
 describe("④ 设置页：不摆裸复选框，开关走 Switch（说人话的开关）", () => {
   const src = (rel: string): string => readFileSync(new URL(rel, import.meta.url), "utf8");
 
-  it("设置页里不再有裸复选框；方案门走 Switch（遥测等行为面随 behavior 分区重建时恢复）", () => {
+  it("设置页里不再有裸复选框；开关走 Switch（方案开关 2026-11-03 撤下：agent 自判是否先出方案）", () => {
     // 源码级断言而不是 SSR 渲染：设置页各段要等 IPC 回来的 settings（非空）才渲染。
-    // 批 6 换壳：正文四段迁至 settings-sections.tsx（壳只留导航+状态）——锚随正文走、断言不放宽；
-    // 方案门文案同步改通俗句「写文件前先提交方案，等我批准」（总纲阶段 3-2）。
+    // 批 6 换壳：正文四段迁至 settings-sections.tsx（壳只留导航+状态）——锚随正文走、断言不放宽。
     const shell = src("../src/renderer/components/SettingsPanel.tsx");
     const sections = src("../src/renderer/components/settings-sections.tsx");
     expect(shell + sections).not.toContain('type="checkbox"');
     expect(sections).toContain("<Switch");
-    expect(sections).toContain('label="写文件前先提交方案，等我批准"');
   });
 });
 
@@ -409,7 +438,10 @@ describe("④ 设置页：不摆裸复选框，开关走 Switch（说人话的�
 // v7.1 并入设置页后页体仍是同一份源码——哨兵跟着页体走（不许退化成只读展示）。
 describe("插件信任开关：pluginDecide 双向（源码哨兵）", () => {
   it("插件抽屉与技能抽屉的信任决议都写回 pluginDecide（各一处，Switch 双向 onChange）", () => {
-    const src = readFileSync(new URL("../src/renderer/components/AppPage.tsx", import.meta.url), "utf8");
+    const src = [
+      readFileSync(new URL("../src/renderer/components/PluginsPane.tsx", import.meta.url), "utf8"),
+      readFileSync(new URL("../src/renderer/components/SkillsPane.tsx", import.meta.url), "utf8"),
+    ].join("\n");
     expect((src.match(/pluginDecide\(/g) ?? []).length).toBe(2);
     expect(src).toContain('label="信任该插件"');
     expect(src).toContain('label="信任该技能"');
@@ -643,15 +675,29 @@ describe("思考段合并单面（P2-2；触发条短档词族）", () => {
     expect(html).toContain("th-why");
     expect(html).toContain("reasoningEfforts");
     expect(html).toContain(".agent/providers.json");
+    // 不支持 ⇒ 分段挂上标记：CSS 据此撤掉「选中」的浮起高亮（fail-visible，不谎称可调）
+    expect(html).toContain('data-unsupported="true"');
+    const supportedHtml = menu({ thinkingSupported: true, thinking: "low" });
+    expect(supportedHtml).not.toContain('data-unsupported="true"');
     // 运行中同面：没有可调的，运行注记也不在（不谎称「思考程度可调」）
     const running = menu({ running: true, thinkingSupported: false });
     expect(running).not.toContain("思考程度可调");
   });
 
+  it("不支持时只留**一句**明说：「这家没提供思考能力」收进折叠里（不摆三句话）", () => {
+    const html = menu({ thinkingSupported: false });
+    const summaryHtml = html.slice(html.indexOf("<summary"), html.indexOf("</summary>"));
+    // 折叠标题上只剩「了解如何配置」（可达），那句「这家没提供思考能力」不再当独立一行摆在外面
+    expect(summaryHtml).toContain("了解如何配置");
+    expect(summaryHtml).not.toContain("这家没提供思考能力");
+    // 它在折叠体里（展开后 whyBody 把机制讲全）
+    expect(html.indexOf("这家没提供思考能力")).toBeGreaterThan(html.indexOf("</summary>"));
+  });
+
   it("运行中：列表整列禁用、思考四键一枚都不禁（跑着也能拧）+ 运行注记在场", () => {
     const html = menu({ running: true, thinkingSupported: true, thinking: "off" });
     expect(html).toContain("运行中：模型档位锁定；思考程度可调（下一轮派活生效）。");
-    expect((html.match(/<button[^>]*disabled=""/g) ?? []).length).toBe(3); // 模型两行 + 演示禁；四键不禁
+    expect((html.match(/<button[^>]*disabled=""/g) ?? []).length).toBe(2); // 模型两行；四键不禁（演示已不在列表里）
   });
 
   it("不带 onThinkingChange（旧消费者）：思考段整体不出现，列表照常（零行为变化）", () => {

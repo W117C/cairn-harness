@@ -138,7 +138,9 @@ describe("MCP 调用取消沿现有 SDK 传递", () => {
     expect(result.ok).toBe(false);
     expect(result.output).not.toContain("cancelled");
     expect(result.output).toMatch(/closed|断开/iu);
-    expect(manager.statuses()[0]?.state).toBe("failed");
+    // 反僵尸这条（E5）在这里说的是"断开后不许继续报 connected"。第 999 页起，那一刻的合法状态
+    // 多了 reconnecting（正在自己回来）；终态是回来了还是失败了，由 `tests/mcp-reconnect.test.ts` 判。
+    expect(["reconnecting", "failed"]).toContain(manager.statuses()[0]?.state);
   });
 
   it("真实权限入口把执行中的 ctx.signal 传到服务器，保留审批审计", async () => {

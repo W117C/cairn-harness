@@ -113,6 +113,7 @@ export function PluginInstalled(props: PluginInstalledProps): React.JSX.Element 
       {installed.length === 0 && unmanaged.length === 0 ? (
         <div className="plugin-state-block">
           <strong>还没有插件</strong>
+          <span>到「发现」里挑一个，或用页头的「导入」接入本地插件。</span>
         </div>
       ) : (
         <>

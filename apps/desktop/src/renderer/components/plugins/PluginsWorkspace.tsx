@@ -20,6 +20,11 @@ import { PluginUpdates } from "./PluginUpdates";
 import "./plugins.css";
 
 const VIEW_FILTERS = new Set(["discover", "installed", "updates"]);
+// 兼容入口（2026-11-02）：命令面板/持久化筛选仍可能送来旧的视图 id（如 `updates`）。
+// 视图现在归页内标签条，但旧值不能静默失效 ⇒ 收到就落到页内同一份视图状态。
+function normalizeView(id: string | undefined, current: "discover" | "installed" | "updates"): "discover" | "installed" | "updates" {
+  return id !== undefined && VIEW_FILTERS.has(id) ? (id as "discover" | "installed" | "updates") : current;
+}
 const CATEGORY_FILTERS = new Set<PluginCapabilityCategory>([
   "skills",
   "commands",
@@ -46,6 +51,8 @@ export interface PluginsWorkspaceProps {
   readonly activeFilter?: string;
   readonly onFilter?: (id: string) => void;
   readonly mutationBlocked?: boolean;
+  /** 打开设置·技能中心（插件里的技能分类 ≠ 独立技能；后者要去技能中心管理）。 */
+  readonly onOpenSkills?: () => void;
 }
 
 export function PluginsWorkspace(props: PluginsWorkspaceProps): React.JSX.Element {
@@ -53,15 +60,16 @@ export function PluginsWorkspace(props: PluginsWorkspaceProps): React.JSX.Elemen
   const externalCategory = props.activeFilter !== undefined && CATEGORY_FILTERS.has(props.activeFilter as PluginCapabilityCategory)
     ? props.activeFilter as PluginCapabilityCategory
     : null;
-  const effectiveCategory = externalCategory ?? state.category;
+  const effectiveCategory = props.activeFilter === "all" || props.activeFilter === "favorites"
+    ? "all"
+    : externalCategory ?? state.category;
   const favoriteOnly = props.activeFilter === undefined ? state.favoriteOnly : props.activeFilter === "favorites";
-  const effectiveView = props.activeFilter === "discover" || props.activeFilter === "installed" || props.activeFilter === "updates"
-    ? props.activeFilter
-    : props.activeFilter === "favorites" || externalCategory !== null
-      ? "discover"
-      : state.view;
+  // 2026-11-02：视图只由页内标签条决定 —— 页头筛选与左侧上下文栏都不再间接切视图
+  // （此前三处入口互相改写同一个筛选值，用户点「已安装」后再点分类会被弹回发现页）。
+  const effectiveView = normalizeView(props.activeFilter, state.view);
+  // 分类筛选里没有视图项了：`all` = 全部能力，`favorites` = 精选。
   const activeFilter = props.activeFilter ?? (
-    favoriteOnly ? "favorites" : effectiveCategory !== "all" ? effectiveCategory : effectiveView
+    favoriteOnly ? "favorites" : effectiveCategory !== "all" ? effectiveCategory : "all"
   );
   const busy = state.activeJob !== null
     && state.activeJob.state !== "review"
@@ -78,8 +86,7 @@ export function PluginsWorkspace(props: PluginsWorkspaceProps): React.JSX.Elemen
 
   const selectFilter = (id: string): void => {
     props.onFilter?.(id);
-    if (VIEW_FILTERS.has(id)) {
-      state.setView(id as "discover" | "installed" | "updates");
+    if (id === "all") {
       state.setFavoriteOnly(false);
       state.setCategory("all");
       return;
@@ -87,13 +94,11 @@ export function PluginsWorkspace(props: PluginsWorkspaceProps): React.JSX.Elemen
     if (id === "favorites") {
       state.setFavoriteOnly(true);
       state.setCategory("all");
-      state.setView("discover");
       return;
     }
     if (CATEGORY_FILTERS.has(id as PluginCapabilityCategory)) {
       state.setFavoriteOnly(false);
       state.setCategory(id as PluginCapabilityCategory);
-      state.setView("discover");
     }
   };
 
@@ -120,17 +125,27 @@ export function PluginsWorkspace(props: PluginsWorkspaceProps): React.JSX.Elemen
           {([
             ["discover", "发现"],
             ["installed", "已安装"],
-            ["updates", `更新${state.updates.length > 0 ? ` ${String(state.updates.length)}` : ""}`],
+            ["updates", `可更新${state.updates.length > 0 ? ` ${String(state.updates.length)}` : ""}`],
           ] as const).map(([id, label]) => (
             <button
               key={id}
               type="button"
               aria-current={effectiveView === id ? "page" : undefined}
-              onClick={() => { selectFilter(id); }}
+              onClick={() => { state.setView(id); }}
             >
               {label}
             </button>
           ))}
+          {props.onOpenSkills !== undefined && (
+            <button
+              type="button"
+              className="plugin-tabs-link"
+              onClick={props.onOpenSkills}
+              title="管理独立技能（不随插件安装）"
+            >
+              技能中心…
+            </button>
+          )}
         </nav>
 
         {state.notice !== null && (
@@ -231,6 +246,7 @@ export function PluginsDestination(props: {
   readonly onUpdateCount?: (count: number) => void;
   readonly mutationBlocked?: boolean;
   readonly className?: string;
+  readonly onOpenSkills?: () => void;
 }): React.JSX.Element {
   const state = usePluginsMarketplace({ workspace: props.workspace, onError: props.onError });
   useEffect(() => {
@@ -243,6 +259,7 @@ export function PluginsDestination(props: {
       {...(props.onFilter !== undefined ? { onFilter: props.onFilter } : {})}
       {...(props.mutationBlocked !== undefined ? { mutationBlocked: props.mutationBlocked } : {})}
       {...(props.className !== undefined ? { className: props.className } : {})}
+      {...(props.onOpenSkills !== undefined ? { onOpenSkills: props.onOpenSkills } : {})}
     />
   );
 }

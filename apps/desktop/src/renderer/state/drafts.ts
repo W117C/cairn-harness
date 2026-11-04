@@ -9,6 +9,8 @@
 import { useCallback, useRef, useState } from "react";
 import type { RunAttachmentReference } from "../../../../../src/main/ipc-protocol";
 import { readDraftIds } from "../drafts";
+import { pickedElementLabel, type PickedElementSignal } from "../picked-element";
+import type { SessionEditContext } from "../sessions-view";
 
 /** 钩子需要的外部动作（错误条/提示条住在 App 的会话键控面上，状态簇不自己持一份）。 */
 export interface ComposerDraftsDeps {
@@ -37,16 +39,17 @@ export interface ComposerDraftsState {
   noteDraft: (draftKey: string | null, has: boolean) => void;
   // 编辑并重发的上下文（2026-10-18）：点「编辑」会立刻建新分支并切换会话，但界面上没有一句话
   // 说明“你现在在新分支里编辑第 N 轮，原会话不动”——静默切换最容易让人以为原会话被改了。
-  editCtx: { originId: string; originTitle: string; forkId: string; round: number } | null;
-  editCtxRef: React.MutableRefObject<{ originId: string; originTitle: string; forkId: string; round: number } | null>;
-  setEditCtx: (v: { originId: string; originTitle: string; forkId: string; round: number } | null) => void;
+  editCtx: SessionEditContext | null;
+  editCtxRef: React.MutableRefObject<SessionEditContext | null>;
+  setEditCtx: (v: SessionEditContext | null) => void;
   // v7 附为上下文（§2.3 路径右键）：附件注入信号（seq 递增触发一次 append；与 injectedText 同式）。
   injectedAttachment: { path: string; kind: "file" | "directory"; seq: number } | undefined;
   attachFromPane: (rel: string, kind: "file" | "directory") => void;
-  // v7 元素选择（§3.6 ⌘⇧S）：App 递增信号 → browser 窗格对活动标签发起选择；结果拼文 append 进输入框。
+  // v7 元素选择（§3.6 ⌘⇧S）：App 递增信号 → browser 窗格对活动标签发起选择；
+  // 结果不再往输入框拼整段选择器/HTML，改成一枚短 chip（2026-11-03 业主）。
   pickSignal: number;
   setPickSignal: (n: number | ((prev: number) => number)) => void;
-  injectedAppend: { text: string; seq: number } | undefined;
+  injectedElement: PickedElementSignal | undefined;
   handlePickResult: (r: { selector: string; snippet: string; url: string }) => void;
   // 快捷键开 composer 菜单信号（§3.6 ⌘⇧I/M/E）：seq 单调递增即"开一次"。
   composerMenuSignal: { kind: "perm" | "model" | "effort"; seq: number } | null;
@@ -85,7 +88,7 @@ export function useComposerDrafts(deps: ComposerDraftsDeps): ComposerDraftsState
   }, []);
   // 编辑并重发的上下文（2026-10-18）：点「编辑」会立刻建新分支并切换会话，但界面上没有一句话
   // 说明“你现在在新分支里编辑第 N 轮，原会话不动”——静默切换最容易让人以为原会话被改了。
-  const [editCtx, setEditCtx] = useState<{ originId: string; originTitle: string; forkId: string; round: number } | null>(null);
+  const [editCtx, setEditCtx] = useState<SessionEditContext | null>(null);
   const editCtxRef = useRef(editCtx);
   editCtxRef.current = editCtx;
   // v7 附为上下文（§2.3 路径右键）：附件注入信号（seq 递增触发一次 append；与 injectedText 同式）。
@@ -106,17 +109,13 @@ export function useComposerDrafts(deps: ComposerDraftsDeps): ComposerDraftsState
   }, [setLastError, setLastNotice]);
   // v7 元素选择（§3.6 ⌘⇧S）：App 递增信号 → browser 窗格对活动标签发起选择；结果拼文 append 进输入框。
   const [pickSignal, setPickSignal] = useState(0);
-  const [injectedAppend, setInjectedAppend] = useState<{ text: string; seq: number } | undefined>(undefined);
-  const appendSeqRef = useRef(0);
+  const [injectedElement, setInjectedElement] = useState<PickedElementSignal | undefined>(undefined);
+  const elementSeqRef = useRef(0);
   const handlePickResult = useCallback((r: { selector: string; snippet: string; url: string }) => {
-    appendSeqRef.current += 1;
-    const lines = [
-      `浏览器中选中的页面元素（${r.url}）：`,
-      `选择器：${r.selector}`,
-      ...(r.snippet !== "" ? [`HTML 片段：${r.snippet}`] : []),
-    ];
-    setInjectedAppend({ text: lines.join("\n"), seq: appendSeqRef.current });
-    setLastNotice("已把选中元素写入输入框");
+    elementSeqRef.current += 1;
+    const label = pickedElementLabel(r.selector, r.snippet);
+    setInjectedElement({ ...r, label, seq: elementSeqRef.current });
+    setLastNotice(`已选中页面元素 ${label}，已加入输入区（可整枚移除）`);
   }, [setLastNotice]);
   // 快捷键开 composer 菜单信号（§3.6 ⌘⇧I/M/E）：seq 单调递增即"开一次"。
   const [composerMenuSignal, setComposerMenuSignal] = useState<{ kind: "perm" | "model" | "effort"; seq: number } | null>(null);
@@ -147,7 +146,7 @@ export function useComposerDrafts(deps: ComposerDraftsDeps): ComposerDraftsState
     attachFromPane,
     pickSignal,
     setPickSignal,
-    injectedAppend,
+    injectedElement,
     handlePickResult,
     composerMenuSignal,
     openComposerMenu,

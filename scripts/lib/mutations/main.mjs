@@ -679,8 +679,8 @@ export const MUTATIONS = [
     id: "sbx-network-escort-ors-conditions",
     src: "src/main/sandbox.ts",
     test: "tests/sandbox.test.ts",
-    desc: "三条取用条件由 && 退化成 || ⇒ auto 档没问过人工也拿到网络（§11.4 红线「网络全开不是免批条件」被构造性违反）",
-    apply: (s) => s.replace('return input.wantsNetwork && input.asked && input.approved ? "allow" : "deny";', 'return input.wantsNetwork || input.asked || input.approved ? "allow" : "deny";'),
+    desc: "人工审批取用条件由 && 退化成 || ⇒ 非完全允许档没问过人工或未被批准也拿到网络（§11.4 红线被构造性违反）",
+    apply: (s) => s.replace('  return input.asked && input.approved ? "allow" : "deny";', '  return input.asked || input.approved ? "allow" : "deny";'),
     expectFail: "真值表：三条条件缺一即 deny，全齐才 allow",
   },
   {
@@ -1225,5 +1225,56 @@ export const MUTATIONS = [
     desc: "重建（重放账本）时不把**账本自己定格的 declaredGates** 并进 knownGates ⇒ 生产读面（src 侧不抄门名单，那份是空集）拿空 knownGates 去卡这些门 ⇒ 一份完全合法的账本被判死（RegistryLogCorruptError）⇒ content-pack 注入与 canary 收束 tick 同时熄火，且每次重建都撞同一行（**自愈不了**）",
     apply: (s) => s.replace("replayGates.add(gate);", "replayGates.delete(gate);"),
     expectFail: "索引丢了要重建 ⇒ 重建不许因为门名单把账本判死（注入结果与索引新鲜时逐字节一致）",
+  },
+  /* 第 998 页：激活门的全局作用域。旧写法一条万能阻断把三种情况压成一句"无法跨库核验"，
+   *  而跨库核验自第 911–912 页就存在 ⇒ 能走通的路被永久堵死，读者也分不清"没验/没过/验不了"。 */
+  {
+    id: "evolve-gate-blocks-global-unconditionally",
+    src: "src/main/evolve/activation.ts",
+    test: "tests/evolve-activation-global-scope.test.ts",
+    desc: "核验过了也照样阻断 ⇒ 退回旧行为：业主显式晋升过的全局经验永远激活不了",
+    apply: (s) => s.replace("if (opts.globalCheck === undefined) {", "if (true) {"),
+    expectFail: "端到端：三个真证据库的全局条目，激活门放它到 dry-run",
+  },
+  {
+    id: "evolve-gate-reason-says-cannot-verify",
+    src: "src/main/evolve/activation.ts",
+    test: "tests/evolve-activation-global-scope.test.ts",
+    desc: "把「没人验」再说成「验不了」 ⇒ 读者以为这是一条能力边界，不会去补核验",
+    apply: (s) => s.replace(
+      "detail: \"全局作用域需要 ≥3 个 workspace 的可测证据：这次调用没带跨库核验结果，门不替没验过的条目背书（fail-closed）\",",
+      "detail: \"全局作用域需要 ≥3 个 workspace 的证据与显式全局晋升；当前门无法跨库核验（fail-closed）\",",
+    ),
+    expectFail: "没带核验结果 ⇒ 仍阻断，但说的是「这次没验」，不是「验不了」",
+  },
+  {
+    id: "evolve-gate-drops-verify-reason",
+    src: "src/main/evolve/activation.ts",
+    test: "tests/evolve-activation-global-scope.test.ts",
+    desc: "核验给出的实测理由被换回万能阻断 ⇒ 差几个库这种可行动信息丢了",
+    apply: (s) => s.replace(
+      'out.push({ code: "global-scope", detail: "全局作用的证据核验没过：" + opts.globalCheck.reason });',
+      'out.push({ code: "global-scope", detail: "全局作用域需要 ≥3 个 workspace 的证据与显式全局晋升（fail-closed）" });',
+    ),
+    expectFail: "核验没过 ⇒ 用核验给出的实测理由，不再套用万能阻断",
+  },
+  {
+    id: "evolve-activate-path-skips-verification",
+    src: "src/main/evolve/activation.ts",
+    test: "tests/evolve-activation-global-scope.test.ts",
+    desc: "产品激活路径不算核验就交给门 ⇒ 与只读预览面给出两套答案（而且全局经验一律点不亮）",
+    apply: (s) => s.replace("    ? await verifyGlobalEvidence(entry.globalEvidence ?? [])", "    ? undefined"),
+    expectFail: "端到端反向：证据只有两个库 ⇒ 照样拒，且理由给的是实测数",
+  },
+  {
+    id: "evolve-report-face-skips-verification",
+    src: "src/main/evolve/report.ts",
+    test: "tests/evolve-activation-global-scope.test.ts",
+    desc: "报告面的可激活清单不做核验 ⇒ 面板上那条全局经验永远「差一道门」，与 CLI/激活路径不一致",
+    apply: (s) => s.replace(
+      'const globalForActivation = playbook.entries.filter((entry) => entry.status !== "active" && entry.scope.workspace === "*");',
+      "const globalForActivation: ExperienceEntry[] = [];",
+    ),
+    expectFail: "报告与 CLI 两个面读的是同一份核验（不各写一套「为什么不行」）",
   },
 ];

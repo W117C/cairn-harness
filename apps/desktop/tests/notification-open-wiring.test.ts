@@ -12,7 +12,7 @@ const repo = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, im
 
 it("推送通道与协议版本：v21 增 onNotificationOpen，当前 v51（… / v47 撤销全局经验 / v48 全局冻结开关 / v49 恢复全局经验）", () => {
   expect(PUSH_CHANNELS.onNotificationOpen).toBe("agent:notification-open");
-  expect(IPC_PROTOCOL_VERSION).toBe(51);
+  expect(IPC_PROTOCOL_VERSION).toBe(52);
   const protocol = repo("../../../src/main/ipc-protocol.ts");
   expect(protocol).toContain("export interface RunNotificationPayload");
   expect(protocol).toContain("onNotificationOpen(cb: (p: RunNotificationPayload) => void)");

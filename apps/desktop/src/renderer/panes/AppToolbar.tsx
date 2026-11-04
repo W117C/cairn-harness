@@ -19,6 +19,8 @@ import { PANE_META,PANE_OPENABLE,type PaneKind } from "../components/panes";
 import type { SectionId } from "../components/settings-nav";
 import { writeDismissedGoals } from "../goal-dismiss";
 import { paneShortcutKeys } from "../pane-shortcuts";
+import { WorkStatusPill } from "../components/WorkStatusPanel";
+import type { TodoProjection } from "../derived/todo";
 import type { DeliveryTrailItem,RunPhase,StreamRow,UsageSummary } from "../projections";
 import { type QuickStartInput } from "../quick-starts";
 import type { ComposerLockReason } from "../send-queue";
@@ -71,6 +73,12 @@ interface AppToolbarProps {
   /** demo provider：标题栏常驻「演示模式」小胶囊，点开模型设置。 */
   demo?: boolean;
   onOpenProviderSettings?: () => void;
+  /** 工作状态面板（2026-11-04 截图右上角）：运行读数 + todo_write 清单。 */
+  running?: boolean;
+  phaseLabel?: string;
+  elapsedSec?: number;
+  steps?: number;
+  todos?: TodoProjection | null;
 }
 
 export function renderAppToolbar(deps: AppToolbarProps) {
@@ -79,7 +87,6 @@ export function renderAppToolbar(deps: AppToolbarProps) {
     <span className="tb-workspace" title={activeWorkspace} aria-label={`${STR.composer.workspaceAria}：${activeProjectLabel}`}>
       <Folder size={12} aria-hidden="true" />
       <span className="tb-workspace-name">{activeProjectLabel}</span>
-      <span className="tb-workspace-tag">{STR.composer.workspaceLocal}</span>
     </span>
   ) : null;
 
@@ -170,6 +177,14 @@ export function renderAppToolbar(deps: AppToolbarProps) {
       )}
       {activeId !== null && (
         <div className="tb-cluster">
+          {/* 工作状态 pill（2026-11-04 截图右上角）：当前任务/阶段一行，点开进程面板。 */}
+          <WorkStatusPill
+            running={deps.running === true}
+            phaseLabel={deps.phaseLabel ?? ""}
+            elapsedSec={deps.elapsedSec ?? 0}
+            steps={deps.steps ?? 0}
+            todos={deps.todos ?? null}
+          />
           {/* 对话目录（v7.2 长对话导航）：2026-10-17 从流内浮片迁入会话条
               （真机目验：absolute 浮片压住第一条工具行）。批 129 起随会话条并入工具栏。 */}
           {outlineTurns.length >= 2 && (

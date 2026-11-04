@@ -1,8 +1,9 @@
 // M1c 评估管线（§11.7.1）：纯函数 evaluate(tool, args, session)，四层固定序、先命中先短路：
-//   L0 硬边界（只读档摘除 + M1b 方案门，deny 位次最前——摘除的工具规则库不能复活）
-//   → L1 deny 规则 → L2 ask 规则（任何档位含自主档都绕不过）
+//   L0 硬边界（只读档摘除 + 判卷面冻结闸 + M1b 方案门，deny 位次最前——摘除的工具规则库不能复活）
+//   → 完全允许档短路面（2026-11-03：除判卷面冻结闸外全部放行）
+//   → L1 deny 规则 → L2 ask 规则（其余各档含自主档都绕不过）
 //   → L3 档位层（规则库 allow 命中放行 / session_kind 记忆 / 逐次审批）
-//   → L4 风险层（三通道，critical 任何档强制审批——allow 规则也批不掉 critical）。
+//   → L4 风险层（三通道，critical 对非完全允许档强制审批——allow 规则也批不掉 critical）。
 // 零私有状态：规则库与放行集是仅有的两个输入源；断路器计数在 session 入参里，evaluate 只读不写
 // （调用方经 note* helper 更新）——同一输入两次调用结果一致。
 import { posix } from "node:path";
@@ -79,6 +80,7 @@ export function autoOf(gate: GateMeta | undefined): AutoMeta | undefined {
   if (gate === undefined || gate.verdict !== "auto-approved") return undefined;
   if (gate.layer === "L3-rule") return { source: "rule", ...(gate.ruleId !== undefined ? { ruleId: gate.ruleId } : {}) };
   if (gate.layer === "L3-scope") return { source: "session_scope", ...(gate.ruleId !== undefined ? { ruleId: gate.ruleId } : {}) };
+  if (gate.layer === "L3-mode") return { source: "mode" };
   return undefined;
 }
 
@@ -143,7 +145,8 @@ export interface ModePolicy {
   readonly scopeMemory: boolean;
   /** 风险层送审线。 */
   readonly riskAskAt: RiskLevel;
-  /** 完全允许档 = 没有审批卡（L2 ask 规则/断路器/风险线/critical 全部放行）。硬边界（L0/L1 deny）不受它管。 */
+  /** 完全允许档 = 没有审批卡（2026-11-03 起除判卷面冻结闸外什么都不拦：方案门/deny 规则/
+   *  断路器/风险线/critical/未登记工具/出网全部放行）。 */
   readonly askNothing: boolean;
   /** 卡面文案里的档位名。 */
   readonly label: string;
@@ -450,19 +453,6 @@ export function evaluate(
       reason: grade === undefined ? "只读档摘除写向工具" : "只读档只放行带 readOnlyHint 注解的 MCP 工具（§11.7.2 只读注解白名单）",
     };
   }
-  // 方案门同样按「写向」的统一口径判：一个 allow 规则能复活未批 plan 期间的 MCP 写调用，
-  // 却复活不了 write_file——同一轮里两种口径就是这条规则的漏洞形状。
-  if (s.planBlocked() && isWriteCall(tool, grade)) {
-    return {
-      verdict: "deny",
-      layer: "L0-hard",
-      reason:
-        grade === undefined
-          ? "方案门：先批后写（当前没有已批准的方案）"
-          : "方案门：先批后写（当前没有已批准的方案；MCP 未标 readOnlyHint 按写处理）",
-    };
-  }
-
   // ---- L0 判卷面：冻结表点名的文件，任何档位、任何 allow 规则都写不了 ----
   // 放在 deny/ask/allow 之前与只读档、方案门同层，理由是同一条：**规则库不许复活被硬闸摘掉的动作**。
   // 真模型评测实测到模型会改 `tests/todo.test.ts`（`BASE_SYSTEM` 纪律 6 明文禁止却没拦住），
@@ -498,18 +488,33 @@ export function evaluate(
     }
   }
 
+  // ---- 完全允许档（2026-11-03 业主裁决）：判卷面冻结闸之后、其余一切之前短路放行 ----
+  // 保留的唯一硬边界是上面那道判卷面冻结闸（评测文件完整性，不是"要不要人点头"）。
+  // 2026-11-03 起不再保留 L0 方案门、L1 deny 规则、出网一次性批准——业主原话是
+  // 「完全允许是什么都允许，让 agent 足够自治」；这条与旧注释（2026-10-24 保留 L1/方案门/出网）
+  // 相反，旧口径作废。撤下的还有 L2 ask 规则、L3 断路器、L4 风险/critical/MCP 未注解。
+  if (policyOf(s.mode).askNothing === true) {
+    return { verdict: "approve", risk, layer: "L3-mode", auto: { source: "mode" } };
+  }
+
+  // ---- L0 方案门：先批后写（完全允许档之外仍生效）----
+  // 同样按「写向」的统一口径判：一个 allow 规则能复活未批 plan 期间的 MCP 写调用，
+  // 却复活不了 write_file——同一轮里两种口径就是这条规则的漏洞形状。
+  if (s.planBlocked() && isWriteCall(tool, grade)) {
+    return {
+      verdict: "deny",
+      layer: "L0-hard",
+      reason:
+        grade === undefined
+          ? "方案门：先批后写（当前没有已批准的方案）"
+          : "方案门：先批后写（当前没有已批准的方案；MCP 未标 readOnlyHint 按写处理）",
+    };
+  }
+
   // ---- L1 deny 规则：命中即拦 ----
   const chain = judgeChain(s.rules, tool, cmd);
   if (chain.verdict === "deny") {
     return { verdict: "deny", layer: "L1-deny", reason: ruleHitReason("deny 规则命中", chain) };
-  }
-
-  // ---- 完全允许档（2026-10-24 业主新增）：L1 deny 之后、一切审批之前短路放行 ----
-  // 保留的硬边界：L0 方案门/判卷面冻结闸（上面已判）、L1 deny 规则（用户自己写的「永远别做」）。
-  // 撤下的：L2 ask 规则、L3 断路器、L4 风险/critical/MCP 未注解——本档没有审批卡。
-  // 出网例外：§11.4 红线（网络放行永不免批）⇒ 网络命令不短路，仍走既有 ask→approved 一次性放行。
-  if (policyOf(s.mode).askNothing === true && !isNetworkCommandCall(tool, args)) {
-    return { verdict: "approve", risk, layer: "L3-mode", auto: { source: "mode" } };
   }
 
   // ---- L2 ask 规则：命中即强制审批，任何档位含自主档都绕不过 ----

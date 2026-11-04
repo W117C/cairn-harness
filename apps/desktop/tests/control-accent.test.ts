@@ -18,6 +18,18 @@ import { describe, expect, it } from "vitest";
 const CSS = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
 const TOKENS = readFileSync(fileURLToPath(new URL("../src/renderer/tokens.css", import.meta.url)), "utf8");
 
+describe("权限菜单条目（2026-11-02 真机）", () => {
+  it("档位色点进入菜单后仍有尺寸（此前只有 .ctl 里定义，菜单里 0×0 把图标挤错位）", () => {
+    const dot = CSS.slice(
+      CSS.indexOf(".perm-item .mode-dot"),
+      CSS.indexOf("}", CSS.indexOf(".perm-item .mode-dot")),
+    );
+    expect(dot).toContain("width: 7px");
+    expect(dot).toContain("height: 7px");
+    expect(dot).toContain("flex: none");
+  });
+});
+
 /** 取一条规则体（选择器 → 规则文本）。 */
 const block = (selector: string): string => {
   const i = CSS.indexOf(selector);
@@ -41,8 +53,11 @@ describe("控件强调色与品牌色分工（Claude v3）", () => {
     expect(rule).not.toContain("accent-brand");
   });
 
-  it("选中态（chip / 主题选项卡 / 设置档位）用控件蓝，不是品牌橙", () => {
-    for (const sel of [".chip.on {", ".theme-opt.on {", ".ss-opt.on {"]) {
+  it("选中态分工：设置主题选项卡走品牌陶土（2026-11-01 业主裁决），chip/设置档位仍控件蓝", () => {
+    const themeRule = block(".theme-opt.on {");
+    expect(themeRule).toContain("accent-brand");
+    expect(themeRule).not.toContain("accent-control");
+    for (const sel of [".chip.on {", ".ss-opt.on {"]) {
       const rule = block(sel);
       expect(rule, sel).toContain("accent-control");
       expect(rule, sel).not.toContain("accent-brand");

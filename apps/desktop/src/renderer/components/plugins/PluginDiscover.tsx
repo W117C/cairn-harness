@@ -32,7 +32,7 @@ function DiscoverRow(props: {
         </span>
         <span className="plugin-row-meta">
           <span>{sourceKindLabel(props.row.sourceKind)}</span>
-          <span>{props.row.version ?? "未声明版本"}</span>
+          <span>{props.row.version ?? "版本未声明"}</span>
           <span>{capabilityText(props.row)}</span>
         </span>
       </button>
@@ -136,10 +136,14 @@ export function PluginDiscover(props: PluginDiscoverProps): React.JSX.Element {
       )}
       {entries.length === 0 ? (
         <div className="plugin-state-block">
-          <span>目录为空</span>
+          <strong>目录为空</strong>
+          <span>先导入本地插件，或换一个有目录的源；安装后能力会列在这里。</span>
         </div>
       ) : props.rows.length === 0 ? (
-        <div className="plugin-state-block">没有匹配的插件</div>
+        <div className="plugin-state-block">
+          <strong>没有匹配的插件</strong>
+          <span>清空搜索或切回「全部能力」再看看。</span>
+        </div>
       ) : props.showShelves && catalog.catalog.shelves.length > 0 ? (
         <>
           {catalog.catalog.shelves.map((shelf) => {

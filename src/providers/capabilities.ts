@@ -6,7 +6,7 @@ import {
   reasoningEffortsForModel,
   type ModelSpec,
 } from "./registry";
-import { mapUpstreamEfforts } from "./reasoning";
+import { mapUpstreamEfforts, normalizeThinkingDeclaration } from "./reasoning";
 
 /** UI 与 RunRequest 共用的思考档位。Provider 不支持时只能使用 off。 */
 export const THINKING_EFFORTS = ["off", "low", "medium", "high", "max"] as const;
@@ -56,6 +56,10 @@ function capability(modelId: string, provider: string): ProviderCapability {
   // 识图能力同样要求证据：模型的输入模态声明里含 "image" 才算支持（缺席 = 上游没说，按不支持）。
   const image = spec?.inputModalities?.includes("image") === true;
   const supported = declared.length > 0;
+  /* 首选档与档位表来自**同一条声明**（`reasoningEfforts` + `reasoningDefault`），由
+     `normalizeThinkingDeclaration` 一次算出来 —— 界面与能力表不会各猜一次而分叉。
+     没声明首选档 ⇒ 仍是 off：声明了支持不等于替用户打开（思考是要花钱的）。 */
+  const { default: declaredDefault } = normalizeThinkingDeclaration(declared, spec?.reasoningDefault);
   return {
     modelId,
     provider,
@@ -63,8 +67,7 @@ function capability(modelId: string, provider: string): ProviderCapability {
     thinking: {
       supported,
       values: supported ? ["off", ...declared] : ["off"],
-      // 缺省仍是 off：声明了支持不等于替用户打开（思考是要花钱的）。
-      default: "off",
+      default: declaredDefault,
     },
     attachments: {
       text: true,

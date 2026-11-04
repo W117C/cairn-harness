@@ -11,16 +11,21 @@ import { PANE_META, PANE_OPENABLE, type PaneKind } from "../pane-registry";
 // state/ 不许 import components/，而那份是数据与纯函数、不是组件。导出面照旧从本文件转出。
 export { PANE_META, PANE_OPENABLE, lastOpenedPane, movePane, paneTabTargetForKey, type PaneKind } from "../pane-registry";
 
-/** 独立窗口路由：`#pane=<kind>[&session=<id>]` → 目标窗格；非该形状（含未知 kind）返回 null
+/** 独立窗口路由：`#pane=<kind>[&session=<id>][&workspace=<ws>]` → 目标窗格；非该形状（含未知 kind）返回 null
  *  （主窗口模式——不猜、不部分匹配）。 */
-export function parsePaneHash(hash: string): { kind: PaneKind; sessionId: string | null } | null {
+export function parsePaneHash(hash: string): { kind: PaneKind; sessionId: string | null; workspace?: string } | null {
   const raw = hash.startsWith("#") ? hash.slice(1) : hash;
   if (raw === "") return null;
   const params = new URLSearchParams(raw);
   const kind = params.get("pane");
   if (kind === null || !Object.hasOwn(PANE_META, kind)) return null;
   const session = params.get("session");
-  return { kind: kind as PaneKind, sessionId: session === null || session === "" ? null : session };
+  const workspace = params.get("workspace");
+  return {
+    kind: kind as PaneKind,
+    sessionId: session === null || session === "" ? null : session,
+    ...(workspace !== null && workspace !== "" ? { workspace } : {}),
+  };
 }
 
 // ── 方案窗格 ──────────────────────────────────────────────────────

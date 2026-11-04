@@ -14,11 +14,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { Command } from "cmdk";
 import { PaletteContent } from "../src/renderer/components/CommandPalette";
 import { ShortcutsSection } from "../src/renderer/components/settings-sections";
-import { SHORTCUTS, keysOf } from "../src/renderer/shortcuts";
+import { SHORTCUT_GROUPS, SHORTCUTS, keysOf } from "../src/renderer/shortcuts";
 import type { WorkspaceSession } from "../src/renderer/sessions-view";
 
 const appSrc = readAppSurface();
 const sidebarSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/Sidebar.tsx", import.meta.url)), "utf8");
+const accountSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/AccountMenu.tsx", import.meta.url)), "utf8");
 const stringsSrc = readFileSync(fileURLToPath(new URL("../src/renderer/strings.ts", import.meta.url)), "utf8");
 const paletteSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/CommandPalette.tsx", import.meta.url)), "utf8");
 
@@ -94,13 +95,15 @@ describe("① PaletteContent SSR（命令面板内容面）", () => {
 });
 
 describe("② ShortcutsSection（设置页「快捷键」区）", () => {
-  it("渲染 SHORTCUTS 全表：label+keys 都在 + 速查入口注（⌘/）", () => {
+  it("渲染完整分组表（2026-11-02：与 ⌘/ 弹层同源）：每组 keys+what 都在 + 入口注（⌘/）", () => {
     const html = renderToStaticMarkup(<ShortcutsSection />);
-    for (const s of SHORTCUTS) {
-      expect(html).toContain(s.keys);
-      expect(html).toContain(s.label);
+    // 设置页与弹层同一份 SHORTCUT_GROUPS；核心键的 keys 仍由 SHORTCUTS 承担（tooltip 取键）。
+    for (const g of SHORTCUT_GROUPS) {
+      expect(html).toContain(g.title);
+      for (const row of g.rows) expect(html).toContain(row.what);
     }
     expect(html).toContain("⌘/");
+    for (const s of SHORTCUTS) expect(html).toContain(s.keys);
   });
 });
 
@@ -108,7 +111,8 @@ describe("③ 同源哨兵（tooltip 与表同源，防漂移）", () => {
   it("Sidebar 键位 tooltip 从 SHORTCUTS 取；会话搜索不冒充命令面板", () => {
     expect(sidebarSrc).toContain('from "../shortcuts"');
     expect(sidebarSrc).toContain('withKeys(STR.sidebar.newTaskTip, "new-session")');
-    expect(sidebarSrc).toContain('withKeys(STR.footer.settingsTip, "settings")');
+    // 2026-11-03：账户菜单搬到全局轨底部（AccountMenu），键位同源判据跟着走。
+    expect(accountSrc).toContain('withKeys(STR.footer.settingsTip, "settings")');
     expect(sidebarSrc).toContain('title={STR.sidebar.searchTip}');
     expect(sidebarSrc).not.toContain('withKeys(STR.sidebar.searchTip, "palette")');
     expect(sidebarSrc).toContain("keysOf(id)");
@@ -329,5 +333,31 @@ describe("⑥ 面板键位提示全部走表（第 910 页：文件头自己写�
     expect(shortcuts).toContain('{ id: "rename", keys: "F2", label: "重命名当前会话" }');
     // 反向自证：不是把提示删掉了事——渲染分支仍在（值为 null 才不摆）。
     expect(paletteSrc).toContain('{renameKeys !== null && <span className="cp-keys">{renameKeys}</span>}');
+  });
+});
+
+describe("⑦ 搜索行的焦点不再是「面板里嵌一个小框」（2026-11-03 业主截图）", () => {
+  const styles = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
+  const ruleOf = (sel: string): string => {
+    const at = styles.indexOf(sel);
+    if (at === -1) return "";
+    const open = styles.indexOf("{", at);
+    const close = styles.indexOf("}", open);
+    return styles.slice(open, close + 1);
+  };
+
+  it("输入框不吃全局焦点环（那个环带 radius-xs，会浮在搜索行中间）", () => {
+    // 全局 :focus-visible 用的是 box-shadow 三层环 + border-radius: var(--radius-xs)；
+    // 搜索行是面板的第一行，环一上来就是个浮在中间的蓝色圆角小框。
+    expect(ruleOf(".cp-input:focus-visible")).toContain("box-shadow: none");
+    expect(ruleOf(".cp-input:focus-visible")).toContain("outline: 0");
+  });
+
+  it("焦点改由搜索行自己的下缘亮起来（结构性提示，不是把焦点提示删掉）", () => {
+    // 反向自证：不是「看不见焦点也没关系」——焦点换成了这一行的下边框。
+    expect(ruleOf(".cp-search:focus-within")).toContain("border-bottom-color");
+    expect(ruleOf(".cp-search:focus-within")).toContain("var(--accent-control)");
+    // 搜索行本身仍带下边框（改的是颜色那一格，不是把边框去掉）。
+    expect(ruleOf(".cp-search {")).toContain("border-bottom: 1px solid var(--hairline)");
   });
 });

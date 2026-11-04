@@ -13,6 +13,7 @@ import { seedNewSessionThinking } from "./thinking-selection";
 import { saveSessionPrefs } from "./session-prefs";
 import type { ThinkingEffort } from "../../../../../src/providers/capabilities";
 import { createQueuePersistence } from "./queue-persistence";
+import type { SessionEditContext } from "../sessions-view";
 
 /** 预览/后台会话的发送结果：调用方据此给回执，不靠猜运行态。 */
 export interface SendOutcome {
@@ -36,12 +37,10 @@ interface RunQueueDeps {
   /** 空屏上选的思考档：新会话落成时用它填 thinkingBySession（旧实现直接丢）。 */
   pendingThinking: ThinkingEffort;
   modeRef: MutableRefObject<PermissionMode>;
-  /** v23：null = 不覆盖，交给 settings.planRequiredByDefault；boolean = 本轮显式覆盖。 */
-  planRequiredRef?: MutableRefObject<boolean | null>;
   selections: MutableRefObject<Map<string, string | null>>;
   activeId: string | null;
-  editCtxRef: MutableRefObject<{ originId: string; originTitle: string; forkId: string; round: number; } | null>;
-  setEditCtx: (v: { originId: string; originTitle: string; forkId: string; round: number; } | null) => void;
+  editCtxRef: MutableRefObject<SessionEditContext | null>;
+  setEditCtx: (v: SessionEditContext | null) => void;
   askById: MutableRefObject<Map<string, AskPayload>>;
   setLastNotice: (message: string, sessionId?: string | undefined) => void;
   queueSeq: MutableRefObject<number>;
@@ -58,7 +57,7 @@ interface RunQueueDeps {
 }
 
 export function useRunQueue(deps: RunQueueDeps) {
-  const { setQueueLocal, queueWrites, queueDirty, setLastError, sendQueue, setStoppedIds, runningSet, lastDeltaAt, runGen, runStartBySession, force, thinkingBySession, pendingThinking, modeRef, planRequiredRef, selections, activeId, editCtxRef, setEditCtx, askById, setLastNotice, queueSeq, setPendingSend, activeWorkspace, setActiveWorkspace, activate, refreshSessions, setDraftRestore, draftRestoreSeq, compactNow, activeIdRef, eventsRef } = deps;
+  const { setQueueLocal, queueWrites, queueDirty, setLastError, sendQueue, setStoppedIds, runningSet, lastDeltaAt, runGen, runStartBySession, force, thinkingBySession, pendingThinking, modeRef, selections, activeId, editCtxRef, setEditCtx, askById, setLastNotice, queueSeq, setPendingSend, activeWorkspace, setActiveWorkspace, activate, refreshSessions, setDraftRestore, draftRestoreSeq, compactNow, activeIdRef, eventsRef } = deps;
   // 默认目标只跟随当前渲染；异步发送与后台恢复显式携带工作区，不反写后来切换的窗口上下文。
   const workspaceRef = useRef<string | null>(activeWorkspace);
   workspaceRef.current = activeWorkspace;
@@ -105,13 +104,11 @@ export function useRunQueue(deps: RunQueueDeps) {
         force((n) => n + 1);
         try {
           const thinking = thinkingBySession.current.get(key);
-          const planRequired = planRequiredRef?.current ?? null;
           const res = (await window.agent.run({
             message: msg.text, mode: modeRef.current, sessionId: sid, model: selections.current.get(key) ?? undefined,
             ...(runWs !== null ? { workspace: runWs } : {}),
             ...(thinking !== undefined ? { thinking: thinking as "off" | "low" | "medium" | "high" } : {}),
             ...(msg.attachments.length > 0 ? { attachments: msg.attachments } : {}),
-            ...(planRequired !== null ? { planRequired } : {}),
           })) as RunResponse & { aborted?: boolean };
           if (res.ok === false && res.accepted === false && "id" in msg && typeof msg.id === "number") {
             // 主进程明确没有接收用户轮才恢复；执行失败已经落了用户消息，重入队会重复派活。
@@ -193,7 +190,8 @@ export function useRunQueue(deps: RunQueueDeps) {
     // 会话与工作区是一对目标；插话 await 期间切窗口上下文也不能改写消息归属。
     const sendWorkspace = activeWorkspace;
     const sendKey = sid === null ? null : runKey(sendWorkspace, sid);
-    if (sid !== null && editCtxRef.current?.forkId === sid) setEditCtx(null);
+    const editCtx = editCtxRef.current;
+    if (editCtx?.forkId === sid && editCtx.workspace === sendWorkspace) setEditCtx(null);
     // 运行中发送 = 入队（收束后 runOn 的循环自动派下一条）。判据用 ref 不用渲染态：
     // 收束与点击在同一拍竞争时，runningSet 是唯一真值。
     if (sid !== null && (runningSet.current.has(sendKey!) || draining.current.has(sendKey!))) {
@@ -259,7 +257,14 @@ export function useRunQueue(deps: RunQueueDeps) {
       }
       // 这一轮显式携带来源工作区；迟到的发送不能重写用户后来切到的窗口上下文。
       setPendingSend(false);
-      await runOn(newId, { text, attachments }, runWorkspace);
+      const firstRes = await runOn(newId, { text, attachments }, runWorkspace);
+      // 主进程明确没把这一轮收进日志（accepted === false，例如项目外附件审批被拒/超时）
+      // ⇒ Composer 提交时已清空，这里必须把原文与附件还给输入框；队列那条路由 runOn
+      // 自己按 id 回队，首条消息没有 id，只能在这里补。`accepted` 缺席 = 未知，不回滚
+      // （旧主进程/协议兜底时消息可能已经送达，回滚会变成重复发送）。
+      if (firstRes !== null && firstRes.ok === false && firstRes.accepted === false) {
+        setDraftRestore({ forSession: newId, text, attachments, seq: ++draftRestoreSeq.current });
+      }
     }
     catch (err) {
       setLastError(`本轮运行失败：${err instanceof Error ? err.message : String(err)}`, id ?? "");

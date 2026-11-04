@@ -169,7 +169,7 @@ describe("候选 → SEMA staging", () => {
 
     const result = await promoteCandidateToSema(workspace, candidate.id);
     expect(result.outcome).toBe("refused");
-    expect(result.outcome === "refused" ? result.reason : "").toContain("modules");
+    expect(result.outcome === "refused" ? result.reason : "").toBe("工作区没有 modules/（SEMA 未启用）");
     expect((await loadCandidate(workspace, candidate.id))?.status).toBe("passed");
   });
 
@@ -206,7 +206,7 @@ describe("候选 → SEMA staging", () => {
     await createCandidate(workspace, candidate);
     const result = await promoteCandidateToSema(workspace, candidate.id);
     expect(result.outcome).toBe("refused");
-    expect(result.outcome === "refused" ? result.reason : "").toContain("passed");
+    expect(result.outcome === "refused" ? result.reason : "").toBe("只有 passed 候选可晋升（当前 draft）");
   });
 
   it("没有离线 holdout 评分拒绝晋升", async () => {
@@ -217,6 +217,6 @@ describe("候选 → SEMA staging", () => {
     await createCandidate(workspace, candidate);
     const result = await promoteCandidateToSema(workspace, candidate.id);
     expect(result.outcome).toBe("refused");
-    expect(result.outcome === "refused" ? result.reason : "").toContain("holdout");
+    expect(result.outcome === "refused" ? result.reason : "").toBe("没有可用的离线 holdout 评分（需要 success>0 且 safety=pass；先跑 evolve-eval）");
   });
 });

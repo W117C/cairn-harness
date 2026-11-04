@@ -20,7 +20,7 @@ import { mayHaveWrittenDisk } from "./write-face";
 // ⇒ 常量放本文件会造出依赖圈）。**两条都写**：`export … from` 不进本地作用域，而下面要用它。
 import { DELIVERY_GUARD_CALL_ID, EMPTY_RUN_DELIVERY, describePhantomDelivery, findEmptyRun, findPhantomDelivery } from "./delivery-guard";
 export { DELIVERY_GUARD_CALL_ID };
-import { TOOLS, type ClarifyChannel, type PlanChannel, type ToolContext, type ToolName } from "../tools";
+import { TOOLS, type ClarifyChannel, type ExternalReadGrant, type PlanChannel, type ToolContext, type ToolName } from "../tools";
 
 export interface LoopOptions {
   /** 新形态：stream(messages, tools) → AsyncIterable<Event>（§3.3 统一接口）；
@@ -85,6 +85,9 @@ export interface LoopOptions {
   /** M7 影响面钩子：注入后 write_file/edit_file 成功落盘会回注跨文件波及。
    *  缺省 undefined = 零行为（与 ToolContext.impact 同源，透传不加工）。 */
   impact?: ToolContext["impact"];
+  /** 用户本轮批准的项目外附件读取范围（见 ToolContext.externalReadGrants）。
+   *  缺省 undefined = 项目外路径照旧一律拒绝；不持久化、不复制文件。 */
+  externalReadGrants?: readonly ExternalReadGrant[];
   /** M2e 插件 hook 引擎：未接线 = 零行为（无插件会话事件流字节不变）。 */
   hooks?: HookEngine;
   /** M2f 工具表白名单（硬闸）：给出时不在表内的工具一律拒绝执行——不是提示词自觉，是工具表摘除。
@@ -355,6 +358,8 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       results: beatResults,
       // 归因落进事件流（审计面）；下面三处出口据此决定"这一拍算谁的账"。
       ...(cause === undefined ? {} : { cause }),
+      ...(outcome.source === undefined ? {} : { source: outcome.source }),
+      // 判据来源（spec 2026-11-04）：任务声明 / 仓库配置 / 探测。缺席 = 旧钩子没报来源，读侧不猜。
       ...(auto ? { auto: true } : {}),
     });
     {
@@ -563,6 +568,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
     // 被取消 / 验证通过或达上限 / 模型自然收束——这三条出去时承诺都还没对过账。
     if (opts.signal?.aborted) return; // M3a：取消信号于轮界收束（终态由编排器分类：cancelled）
     currentStep = step;
+    truncatedThisRun = false; // 每步重置：前一步调工具时遇到的截断已被后一步自然消化，不在收尾误触发截断续跑
     // ---- 第 9 点：轮中插话的注入位（**只在轮界，绝不在 for-await 里**）----
     // 位置要求①：必须在 `currentStep = step` **之后**——`streamFn(projectContext(seen))` 是在
     // 下面那句被调用的，它当场快照历史；写在它之前注入才进得了**这一拍**请求。
@@ -762,8 +768,8 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
           const reason = decision === "deny" ? denyReason(name) : null;
           // 方案门**不是档位裁决**，所以这条拒绝不报档。`checkPermission` 在查
           // `SIDE_EFFECT_DECISION` 之前就先判 `planBlocks()`（permissions/index.ts:107），
-          // 四档一律拒、且都与用户传了什么无关。而这一层的 mode 是冻结的 `auto`
-          // （agent-runner.ts:1523），照实写出来就变成「在 auto 档」——传了 `--mode read-only`
+          // 四档一律拒、且都与用户传了什么无关。而这一层的 mode 除完全允许档外仍是冻结的 `auto`
+          // （agent-runner.ts 的 loop 装配点），照实写出来就变成「在 auto 档」——传了 `--mode read-only`
           // 的用户撞到方案门也会看见它，于是以为自己的 flag 没生效，去 debug 错的方向。
           // 真正的档位裁决在 `gatedTool` 那一层（它读 `s.autonomy.mode`），那一层逐档正确。
           // 判据用 `reason` 而不是 `decision === "deny"`：非交互时 `ask` 被降级成 deny
@@ -792,6 +798,10 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
             plan: opts.plan,
             ...(opts.signal ? { signal: opts.signal } : {}), // C12：取消信号透传进长驻工具
             ...(opts.impact ? { impact: opts.impact } : {}), // M7：影响面钩子透传进写工具
+            // 附件审批通过后的项目外读取白名单：只有 read_file/read_image 读它；写工具不看这一格。
+            ...(opts.externalReadGrants !== undefined && opts.externalReadGrants.length > 0
+              ? { externalReadGrants: opts.externalReadGrants }
+              : {}),
           };
           try {
             result = await tool.run(output.args, ctx);

@@ -131,6 +131,21 @@ describe("send keeps the active conversation", () => {
     expect(deps.setDraftRestore).toHaveBeenCalledWith({ forSession: null, text: "keep this draft", attachments: [], seq: 1 });
     expect(deps.setPendingSend).toHaveBeenLastCalledWith(false);
   });
+
+  it("restores the first draft when the host explicitly did not admit it (external attachment rejected)", async () => {
+    const { actions, agent, deps } = harness();
+    const attachments = [{ path: "/Users/ze/Desktop/report.pdf", kind: "file" as const, explicit: true }];
+    const error = "项目外附件未通过外部引用审批（已拒绝）；本轮未开始";
+    agent.run.mockResolvedValueOnce({ ok: false, accepted: false, error });
+    await actions.send("read the attachment", attachments);
+    expect(deps.setLastError).toHaveBeenCalledWith(error, "current");
+    expect(deps.setDraftRestore).toHaveBeenCalledWith({
+      forSession: "current",
+      text: "read the attachment",
+      attachments,
+      seq: 1,
+    });
+  });
 });
 
 describe("sendTo for preview sessions", () => {

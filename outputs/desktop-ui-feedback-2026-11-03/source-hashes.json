@@ -1,0 +1,11 @@
+{
+  "apps/desktop/src/renderer/components/Composer.tsx": "185872883178896312eba4d3e7e1395e25016967a629a223f5d2abf1e8d83621",
+  "apps/desktop/src/renderer/components/ClarifyCard.tsx": "18a2d80b806e1c95980a759f43324b44a748f3e22056553fe087ec9bec456f89",
+  "apps/desktop/src/renderer/components/ErrorStrip.tsx": "0713c263209533318fe492acaa2145a95027dfd425e9588a4d20028827d7a446",
+  "apps/desktop/src/renderer/components/AppPage.tsx": "5eb4ace9b52ad551475fd033ade32df7e9b0a2d99abfd1f128db50e6dee00c86",
+  "apps/desktop/src/renderer/components/automation-form.css": "7882d2bbcce2e2c433065176edadc3fcb464f621d86ab0896bfe8e449acac22a",
+  "apps/desktop/src/renderer/styles.css": "6203ee2a53a9506b27d178faaafd99cbeff47719e765999cbe3a5b0dd86db372",
+  "apps/desktop/tests/error-strip-dismiss.test.tsx": "10d385c7415a7b0ad3c9990a0ed6cf3c96661d8a6412fe4e31942b75ecfb7239",
+  "apps/desktop/tests/composer-running.test.tsx": "93b12380cf0f29899fb52325b29ba9633b1b8d9143f8e39f6a018b9c50f72db5",
+  "apps/desktop/tests/composer-usage-ring.test.tsx": "ae3706e56ff3c47a63c37e18f1e90ce148f2c7dc502972be28bf0af3d9909dc5"
+}

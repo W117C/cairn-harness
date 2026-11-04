@@ -20,9 +20,40 @@ import {
 } from "../state/thinking-prefs";
 import "./model-menu.css";
 
+/** 菜单宽度（与 model-menu.css 那条 `width: min(344px, calc(100vw - 24px))` 同一把尺）。 */
+export const MODEL_MENU_WIDTH = 344;
+/** 弹层与窗口边缘的最小留白（与 CSS 的 `100vw - 24px` 一致：左右各 12px）。 */
+const MODEL_MENU_GUTTER = 12;
+
 /** 向上打开的真实可用高度：38px 标题栏 + 6px 间隙。空间不足交给布局选择向下开。 */
 export function modelMenuMaxHeight(triggerTop: number): number {
   return Math.max(0, Math.min(560, Math.floor(triggerTop - 44)));
+}
+
+/** 水平落点（纯函数）：默认左对齐触发器，但整块必须留在窗口内（左右各让 12px）。
+ *
+ *  模型控制移到输入框右侧后，触发条贴着窗口右沿；344px 的菜单若仍一律 `left: 0`
+ *  向右开，右半会被窗口切掉——模型行的「窗口 …」、图片徽标、思考档与说明只剩半截
+ *  （真机窄窗复现）。夹取后菜单向左让位；窗口更窄时 CSS 会把宽度收到 `100vw - 24px`，
+ *  这里同步收宽度，保证算出的左沿与真实渲染宽度是同一把尺。 */
+export function modelMenuLeft(triggerLeft: number, viewportWidth: number): number {
+  const width = Math.min(MODEL_MENU_WIDTH, Math.max(0, viewportWidth - MODEL_MENU_GUTTER * 2));
+  const maxLeft = Math.max(MODEL_MENU_GUTTER, viewportWidth - MODEL_MENU_GUTTER - width);
+  return Math.min(Math.max(triggerLeft, MODEL_MENU_GUTTER), maxLeft);
+}
+
+/** 菜单可用的横向边界：最近的横向裁剪祖先（主区 `.main` 是 `overflow-x: clip`；
+ *  右侧窗格打开时它会变窄，只按窗口宽度算仍会被主区裁掉）。没有就退回窗口。 */
+function menuBounds(from: HTMLElement | null): { left: number; right: number } {
+  let el = from?.parentElement ?? null;
+  while (el !== null && el !== document.body) {
+    if (getComputedStyle(el).overflowX !== "visible") {
+      const rect = el.getBoundingClientRect();
+      return { left: rect.left, right: rect.right };
+    }
+    el = el.parentElement;
+  }
+  return { left: 0, right: window.innerWidth };
 }
 
 /** 空间不足时向下打开；高度只取真实可用空间，不能靠最小高度越出窗口。 */
@@ -78,10 +109,13 @@ export function formatCtxWindow(n: number | undefined): string {
   return formatTokens(n);
 }
 
-/** demo 常驻首项「演示」，其余按 spec 铺平（provider 分组交给菜单的分节）。
- *  多个 ProviderInfo 会重复铺同一行 ⇒ 按 spec.id 去重，顺序保持首见。 */
+/** 真模型铺平（provider 分组交给菜单的分节）。
+ *  多个 ProviderInfo 会重复铺同一行 ⇒ 按 spec.id 去重，顺序保持首见。
+ *
+ *  「演示」**不在列表里**（业主 2026-11-01 裁：「不要演示」）：演示仍是 app 的缺省通道，
+ *  芯片照旧显示它的名字（`shortModelName` / `describeSelection`），只是不再占一格可选项。 */
 export function flattenModels(infos: readonly ProviderInfo[]): ModelOption[] {
-  const options: ModelOption[] = [{ registryId: null, label: STR.modelPicker.demo, provider: null }];
+  const options: ModelOption[] = [];
   const seen = new Set<string>();
   for (const info of infos) {
     for (const spec of info.models) {
@@ -107,7 +141,7 @@ export interface ModelGroup {
   models: ModelOption[];
 }
 
-/** 按 provider 分组（保持首见顺序）。「演示」不归组 —— 它不是某个 provider 的档位。 */
+/** 按 provider 分组（保持首见顺序）。无 provider 的项（演示通道）不归组。 */
 export function groupModels(options: readonly ModelOption[]): ModelGroup[] {
   const groups: ModelGroup[] = [];
   const index = new Map<string, ModelGroup>();
@@ -122,6 +156,19 @@ export function groupModels(options: readonly ModelOption[]): ModelGroup[] {
     }
   }
   return groups;
+}
+
+/** provider id → 人话标签（唯一事实源 = `ProviderInfo.providers`，主进程从注册表铺出来）。
+ *  组头原先直接印 id（「custom」「agnes-ai」）——用户看到的是配置里的机器名，不是这家叫什么。
+ *  没登记在册的 id 兜底回 id（不猜、不编）。 */
+export function providerLabelMap(infos: readonly ProviderInfo[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const info of infos) {
+    for (const p of info.providers) {
+      if (p.label !== "" && !map.has(p.id)) map.set(p.id, p.label);
+    }
+  }
+  return map;
 }
 
 /** 换模型后思考档的**归位**（对标 Codex 的 `supportedReasoningEfforts` + `defaultReasoningEffort`：
@@ -267,7 +314,8 @@ export function ModelPicker(props: {
   // 菜单向上开，高度必须让出标题栏：空屏输入卡在中部，393px 菜单会顶穿窗口上沿。
   const [menuMax, setMenuMax] = useState<number | undefined>(undefined);
   const [menuUp, setMenuUp] = useState(true);
-  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number }>();
+  // left 总会给（右沿夹取）；top 只在矮窗口的「窗口内浮层」档给，正常档仍吃 .pop.up/.down 的贴边。
+  const [menuPosition, setMenuPosition] = useState<{ top?: number; left: number }>();
   useLayoutEffect(() => {
     if (!open) { setMenuMax(undefined); return; }
     const update = (): void => {
@@ -276,10 +324,12 @@ export function ModelPicker(props: {
       const layout = modelMenuLayout(rect.top, rect.bottom, window.innerHeight);
       setMenuMax(layout.maxHeight);
       setMenuUp(layout.up);
-      setMenuPosition(layout.viewportTop === undefined ? undefined : {
-        top: layout.viewportTop - rect.top,
-        left: Math.max(12, Math.min(rect.left, window.innerWidth - 356)) - rect.left,
-      });
+      // 在裁剪祖先的坐标系里夹取，再换算回 `.mp` 的相对偏移。
+      const bounds = menuBounds(box.current);
+      const left = modelMenuLeft(rect.left - bounds.left, bounds.right - bounds.left) + bounds.left - rect.left;
+      setMenuPosition(layout.viewportTop === undefined
+        ? { left }
+        : { top: layout.viewportTop - rect.top, left });
     };
     update();
     window.addEventListener("resize", update);
@@ -305,7 +355,9 @@ export function ModelPicker(props: {
   const allOptions = flattenModels(props.infos);
   const options = props.configuredProviders === undefined
     ? allOptions
-    : allOptions.filter((o) => o.provider === null || props.configuredProviders!.has(o.provider));
+    : allOptions.filter((o) => o.provider !== null && props.configuredProviders!.has(o.provider));
+  // 组头显示人话标签（「DeepSeek」而不是「deepseek」）——标签表随 infos 一路带下来。
+  const providerLabels = providerLabelMap(props.infos);
   const info = props.infos[0] ?? null;
   const notice = pickerKeyNotice(info);
   // 当前选中模型**自己声明**的思考档（缺席 = 该模型不支持思考）。
@@ -374,6 +426,7 @@ export function ModelPicker(props: {
         <ModelMenu
           up={menuUp}
           options={options}
+          providerLabels={providerLabels}
           value={props.value}
           maxHeight={menuMax}
           viewportPosition={menuPosition}
@@ -399,12 +452,16 @@ export function ModelPicker(props: {
 /** 菜单本体（P2-2 合并单面）：搜索 + 模型列表 + 下半区思考强度 Segmented。
  *  纯展示、可服务端渲染。
  *
- *  判卷约束（render-structure.test.tsx 钉住的序列不许变形）：分组头 `>openai<`、
+ *  判卷约束（render-structure.test.tsx 钉住的序列不许变形）：分组头（人话标签，未登记在册才落回 id）、
  *  子行 `标准 · 窗口 128k`、勾 `class="check">✓<`、`⚠ OpenAI 未配置 key · 去设置配置`
  *  （⚠ 字面量**豁免**于全局 emoji 清理）、空目录两串、aria-selected 计数、running disabled 计数；
- *  思考段钉分段 aria-pressed / title 逐档说明 / 未声明整段禁用数。 */
+ *  思考段钉分段 aria-pressed / title 逐档说明 / 未声明整段禁用数。
+ *  「演示」**不在菜单里**（业主 2026-11-01 裁：「不要演示」）——演示仍是缺省通道，
+ *  它的名字由芯片显示（`shortModelName`），菜单里不再占一格可选项。 */
 export function ModelMenu(props: {
   options: readonly ModelOption[];
+  /** provider id → 人话标签（组头显示它；没登记在册的 id 兜底回 id）。 */
+  providerLabels?: ReadonlyMap<string, string>;
   value: string | null;
   /** 运行中：模型列表整列禁用（规范「运行中 disabled」）；**思考强度不在此列**——
    *  v7.2 业主裁：思考档是「下一轮派活」的旋钮，跑着也能拧（只随 capability 锁）。 */
@@ -415,7 +472,8 @@ export function ModelMenu(props: {
   onOpenSettings?: () => void;
   /** 向上开时允许的最大高度（px）；undefined = 不限制（测试/旧调用）。 */
   maxHeight?: number;
-  viewportPosition?: { top: number; left: number };
+  /** 弹层落点（相对 `.mp`）：left 始终给（窗口右沿夹取）；top 只在矮窗口的窗口内浮层档给。 */
+  viewportPosition?: { top?: number; left?: number };
   up?: boolean;
   /** 当前思考档位（缺省 off）。 */
   thinking?: string;
@@ -432,18 +490,15 @@ export function ModelMenu(props: {
   const wantEffort = props.onThinkingChange !== undefined;
   const [query, setQuery] = useState("");
   const [hl, setHl] = useState(() => {
-    const ordered = [...groupModels(props.options).flatMap((g) => g.models), { registryId: null }];
+    // 高亮落在当前选中的那一行；选中项不在列表里（演示通道）⇒ 回到首行，不越界。
+    const ordered = groupModels(props.options).flatMap((g) => g.models);
     return Math.max(0, ordered.findIndex((m) => m.registryId === props.value));
   });
   const listId = useId();
   const listRef = useRef<HTMLDivElement>(null);
   const filtered = filterModelOptions(props.options, query);
   const groups = groupModels(filtered);
-  const demoVisible = query.trim() === "";
-  const flat: ModelOption[] = [
-    ...groups.flatMap((g) => g.models),
-    ...(demoVisible ? [{ registryId: null, label: STR.modelPicker.demo, provider: null } as ModelOption] : []),
-  ];
+  const flat: ModelOption[] = groups.flatMap((g) => g.models);
   const warn = props.keyNotice !== undefined && props.keyNotice !== null;
   const modelsDisabled = props.running === true;
   const supported = props.thinkingSupported === true;
@@ -528,7 +583,12 @@ export function ModelMenu(props: {
       role="dialog"
       aria-label={STR.modelPicker.menuAria}
       onKeyDown={onKeyNav}
-      style={{ maxHeight: props.maxHeight, ...(props.viewportPosition === undefined ? {} : { bottom: "auto", ...props.viewportPosition }) }}
+      style={{
+        maxHeight: props.maxHeight,
+        // top 只在窗口内浮层档出现；否则保留 .pop.up/.down 的 bottom/top 贴边。
+        ...(props.viewportPosition?.top === undefined ? {} : { top: props.viewportPosition.top, bottom: "auto" }),
+        ...(props.viewportPosition?.left === undefined ? {} : { left: props.viewportPosition.left }),
+      }}
     >
       <div className="mp-search">
         <Search size={14} aria-hidden="true" />
@@ -558,11 +618,12 @@ export function ModelMenu(props: {
           <div className="mp-group-label">
             {/* 分组圆点：中性灰（v7.1 业主裁——按 provider 名取色相是装饰性用色，会被误读成状态点）。 */}
             <span className="g-dot" aria-hidden="true" />
-            <span>{g.provider}</span>
+            {/* 组头显示人话标签（ProviderInfo.providers）；没登记在册就显示原 id。 */}
+            <span>{props.providerLabels?.get(g.provider) ?? g.provider}</span>
           </div>
           {g.models.map((m) => (
             <button
-              key={m.registryId ?? "demo"}
+              key={m.registryId ?? "model"}
               type="button"
               role="option"
               id={optionId(flat.indexOf(m))}
@@ -578,39 +639,24 @@ export function ModelMenu(props: {
             >
               <span className="mi-name">{m.label}</span>
               <span className="sub">
-                {m.ctxWindow !== undefined ? formatCtxWindow(m.ctxWindow) : ""}
+                {/* 窗口要说人话：光一个「512.0k」没人知道这是上下文窗口（STR.modelPicker.ctxWindow）。 */}
+                {m.ctxWindow !== undefined ? STR.modelPicker.ctxWindow.replace("{n}", formatCtxWindow(m.ctxWindow)) : ""}
               </span>
-              {m.vision === true && <span className="v-badge" title={STR.modelPicker.visionTip}><Eye size={11} /></span>}
+              {m.vision === true && (
+                <span className="v-badge" title={STR.modelPicker.visionTip}>
+                  <Eye size={10} aria-hidden="true" />
+                  <span>{STR.modelPicker.visionBadge}</span>
+                </span>
+              )}
               {m.registryId === props.value && <span className="check">✓</span>}
             </button>
           ))}
         </div>
       ))}
-      {groups.length === 0 && !demoVisible && (
-        <div className="pop-label">{STR.modelPicker.noMatch.replace("{q}", query.trim())}</div>
-      )}
-      {groups.length === 0 && demoVisible && (
-        <div className="pop-label">{STR.modelPicker.noModels}</div>
-      )}
-      {demoVisible && (
-        <button
-          type="button"
-          role="option"
-          id={optionId(flat.length - 1)}
-          aria-selected={props.value === null}
-          className="menu-item"
-          tabIndex={-1}
-          data-highlighted={hl === flat.length - 1}
-          onPointerMove={() => setHl(flat.length - 1)}
-          disabled={props.running === true}
-          // 行副文案放短词（长句在 300px 菜单里折成两行、行高翻倍）；完整免责句进 title 与触发条。
-          title={STR.modelPicker.demoTitle}
-          onClick={() => props.onPick(null)}
-        >
-          <span className="mi-name">{STR.modelPicker.demo}</span>
-          <span className="sub">{STR.modelPicker.demoSub}</span>
-          {props.value === null && <span className="check">✓</span>}
-        </button>
+      {groups.length === 0 && (
+        <div className="pop-label">
+          {query.trim() === "" ? STR.modelPicker.noModels : STR.modelPicker.noMatch.replace("{q}", query.trim())}
+        </div>
       )}
       </div>
       <div className="mp-controls">
@@ -634,7 +680,16 @@ export function ModelMenu(props: {
             )}
           </div>
           {!editingEfforts ? (
-            <div className="th-row" role="group" aria-label={STR.modelPicker.effortGroupAria} ref={effortRef} tabIndex={-1} data-effort-anchor="true">
+            <div
+              className="th-row"
+              role="group"
+              aria-label={STR.modelPicker.effortGroupAria}
+              ref={effortRef}
+              tabIndex={-1}
+              data-effort-anchor="true"
+              // 不支持时挂一个标记：CSS 据此撤掉「选中态」的浮起高亮（fail-visible，不谎称可调）。
+              data-unsupported={supported ? undefined : "true"}
+            >
               {levels.map((lv) => (
                 <button
                   key={lv.id}
@@ -675,14 +730,18 @@ export function ModelMenu(props: {
           )}
           {!supported && (
             <>
+              {/* 只有一句明说（ADR-0009：fail-visible，不谎称可调）；「这家没提供思考能力」收进折叠里，
+                  不再在它旁边摆第三句话——展开后 whyBody 把机制讲全。 */}
               <div className="th-off" role="status">{STR.modelPicker.unsupportedNote}</div>
               <details className="th-why">
                 <summary className="th-info">
                   <Info size={12} className="th-info-ico" aria-hidden="true" />
-                  <span>{STR.modelPicker.whySummary}</span>
                   <span className="th-info-link">{STR.modelPicker.whyLink}</span>
                 </summary>
-                <div className="th-why-body">{STR.modelPicker.whyBody}</div>
+                <div className="th-why-body">
+                  <p>{STR.modelPicker.whySummary}</p>
+                  <p>{STR.modelPicker.whyBody}</p>
+                </div>
               </details>
             </>
           )}

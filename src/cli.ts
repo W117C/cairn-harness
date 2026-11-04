@@ -52,6 +52,7 @@ import {
   scheduledTaskCount,
   serveScheduler,
   setAppHooks,
+  waitForSessionTailWork,
 } from "./main/agent-runner";
 import { initSessionsDir } from "./main/session-handlers";
 import { acquireSessionRunLock, type SessionRunLock } from "./main/session-lock";
@@ -78,7 +79,7 @@ import {
   wrapProvidersFile,
   type DiscoveredRow,
 } from "./providers/provider-draft";
-import { installCustomProviders, installedCustomProviders } from "./providers/registry";
+import { PROVIDER_IDS, installCustomProviders, installedCustomProviders } from "./providers/registry";
 import { providerKindFromEnv, resolveMainModel, type MainModelSelection } from "./main/provider-runtime";
 import type { ProviderKind } from "./main/settings";
 import { envKeyOf } from "./providers/env-keys";
@@ -95,6 +96,7 @@ import {
   findPhantomDelivery,
 } from "./agent/delivery-guard";
 import {
+  createEventLog,
   forkSession,
   isEnvVerifyCause,
   readSessionView,
@@ -107,8 +109,10 @@ import {
   type PlanProposal,
   type ToolResultEvent,
   type VerifyCause,
+  type VerifyDeclaration,
 } from "./events";
-import { GATE_VERDICTS, type PermissionMode } from "./permissions";
+import { validateVerifyDeclaration } from "./agent/verify-plan";
+import { GATE_VERDICTS, PERMISSION_MODES, type PermissionMode } from "./permissions";
 
 /** 权限层的负向结果：门直接拦（未执行）、被问过但没批成、无人值守拒。 */
 const BLOCKING_VERDICTS: ReadonlySet<string> = new Set(
@@ -228,8 +232,6 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const PKG = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { version: string };
 const PKG_VERSION = PKG.version;
 
-const PERMISSION_MODES: readonly PermissionMode[] = ["read-only", "default", "guided", "auto"];
-
 // ---- 退出码（照 scripts/gym-run.ts：2 = 用法错，1 = 跑了但没成，0 = 成）----
 const EXIT_OK = 0;
 const EXIT_FAILED = 1;
@@ -249,6 +251,8 @@ const VALUE_FLAGS = [
   // 插件面那两条是**取值型**旗标：名字不进这张表就会被当位置参数，于是
   // `cairn --trust-plugin graphflow` 读成「工作区 = graphflow、任务 = 空」——批准错对象比拒了还坏。
   "--trust-plugin", "--decline-plugin",
+  // 任务自带判据（spec 2026-11-04）：可重复，`--verify "cmd"` 与 `--verify="cmd"` 都收。
+  "--verify",
 ];
 
 // 标准 `--` 结束选项：之后一律按位置参数（任务文本以 `-` / `--` 开头时唯一的传法）。
@@ -279,7 +283,7 @@ const KNOWN_FLAGS = new Set([
   "--compact", "--unattended", "--auto-verify", "--delivery-repair", "--serve",
   "--bandit", "--no-bandit", "--cascade", "--no-cascade",
   "--plugins", "--trust-plugin", "--decline-plugin",
-  "--sessions",
+  "--sessions", "--verify",
 ]);
 
 /** flag 给了却没带值 = 用法错误。照 gym-run 的 pick()：静默按缺省跑会让打错的 flag 假装生效。 */
@@ -292,6 +296,22 @@ function pick(flag: string): string | null {
     throw new UsageError(`${flag} 需要一个值（收到：${v === undefined ? "缺省" : v}）`);
   }
   return v;
+}
+
+/** 同一个旗标出现多次时全收（`--verify a --verify b`）。`pick` 只取第一枚，判据要全收。 */
+function pickAll(flag: string): string[] {
+  const out: string[] = [];
+  if (explicitFlags.has(flag)) out.push(explicitFlags.get(flag)!);
+  for (let i = 0; i < flagArgv.length; i++) {
+    if (flagArgv[i] !== flag) continue;
+    const v = flagArgv[i + 1];
+    if (v === undefined || v.startsWith("--")) {
+      throw new UsageError(`${flag} 需要一个值（收到：${v === undefined ? "缺省" : v}）`);
+    }
+    out.push(v);
+    i++;
+  }
+  return out;
 }
 
 interface DiscoverRequest {
@@ -337,6 +357,8 @@ interface Options {
   goal: GoalSpec | null;
   unattended: boolean;
   autoVerify: boolean;
+  /** 任务自带判据（spec 2026-11-04）：`--verify <cmd>` 可重复；null = 没给（旧行为）。 */
+  verifyDeclaration: VerifyDeclaration | null;
   /** M5b 路由开关覆盖（`--bandit/--no-bandit`、`--cascade/--no-cascade`）。空对象 = 一枚都没给
    *  ⇒ 递进 over 后一个键都不多（等价于今天）。 */
   routingOverrides: RoutingFlagOverrides;
@@ -588,6 +610,10 @@ function parseArgs(): Options | "help" | "version" | "doctor" {
     goal,
     unattended,
     autoVerify: flagArgv.includes("--auto-verify"),
+    verifyDeclaration: (() => {
+      const commands = pickAll("--verify");
+      return commands.length === 0 ? null : { commands };
+    })(),
     routingOverrides: routingParsed.overrides,
     serve: flagArgv.includes("--serve"),
     discover,
@@ -694,7 +720,7 @@ function resolveProviderSelection(flagProvider: string | undefined, flagModel?: 
     // 顺序：**内置家在前、自定义家在后**。理由不是偏好，是稳定：内置那四家的先后是一份写死的
     // 产品裁决（见注释上文的「否则加一个 provider 就静默改默认」），把自定义家插进去会让老用户
     // 的默认通道因为他新加了一个 provider 而改变。自定义家之间按**配置文件里的书写顺序**，可预期。
-    for (const kind of ["glm", "openai", "anthropic", "gemini"] as const) {
+    for (const kind of PROVIDER_IDS) {
       const envName = envKeyOf(kind);
       if (envName !== null && (process.env[envName] ?? "").trim() !== "") {
         return forward(kind);
@@ -704,7 +730,7 @@ function resolveProviderSelection(flagProvider: string | undefined, flagModel?: 
       const value = (process.env[custom.apiKeyEnv] ?? "").trim();
       if (value !== "") return forward(custom.id);
     }
-    const names = (["glm", "openai", "anthropic", "gemini", "deepseek"] as const)
+    const names = PROVIDER_IDS
       .map((k) => envKeyOf(k))
       .filter((n): n is string => n !== null)
       .join(" / ");
@@ -876,7 +902,7 @@ function decidePlan(approved: boolean, callId: string): void {
  *   · 交互终端 —— 问人（"ask"，调用方走 rl.question）；
  *   · 管道/CI 且非 auto —— fail-closed 拒绝（"reject"）。 */
 export function planDecisionFor(input: { mode: PermissionMode; ask: boolean }): "approve" | "ask" | "reject" {
-  if (input.mode === "auto") return "approve";
+  if (input.mode === "auto" || input.mode === "full-access") return "approve";
   return input.ask ? "ask" : "reject";
 }
 
@@ -1138,8 +1164,8 @@ function printHelp(): void {
   cairn --sessions                  列出当前工作区的会话（id / 标题 / 行数 / 时间 / 会话级模型）
 
 选项：
-  --mode <档>          read-only | default | guided | auto（默认 default = 逐次审批）
-  --provider <哪家>    glm | openai | anthropic | gemini | demo（默认：按已配置的 key 推断）
+  --mode <档>          read-only | default | guided | auto | full-access（默认 default = 逐次审批）
+  --provider <哪家>    glm | openai | anthropic | gemini | deepseek | demo（默认：按已配置的 key 推断）
                        demo = 预录剧本：零凭据、不拨号，但与你给的任务无关
                        （固定演「读→写 src/todo.ts→跑测试」），台词「任务完成」也是剧本的一部分，
                        结论请看退出码。想量能力用 pnpm bench，别用 demo。
@@ -1710,6 +1736,18 @@ async function main(): Promise<number> {
       }
     }
 
+    // 任务自带判据（spec 2026-11-04）：与 `--goal` 同一时序——**先于** handleAgentRun 落进同一份 JSONL，
+    // 否则「这一轮按什么判」只活在内存里，重放看不见。坏声明当场拒，不带着它开工。
+    if (opts.verifyDeclaration !== null) {
+      const checked = validateVerifyDeclaration(opts.verifyDeclaration);
+      if (!checked.ok) {
+        process.stderr.write(paint(RED, `[cairn] --verify 声明无效：${checked.error}\n`));
+        return EXIT_USAGE;
+      }
+      await createEventLog(opts.logPath).append({ type: "session_meta_update", patch: {}, verify: checked.value });
+      opts.verifyDeclaration = checked.value;
+    }
+
     const r = await handleAgentRun(
       { message: opts.message, mode: opts.mode },
       {
@@ -1736,6 +1774,7 @@ async function main(): Promise<number> {
         // 拆成两个槽就是为了不翻转上面那半：沉淀留开，只有续跑停。
         ...(!interactive ? { noAnswerer: true as const } : {}),
         ...(opts.autoVerify ? { autoVerify: true } : {}),
+        ...(opts.verifyDeclaration === null ? {} : { verifyDeclaration: opts.verifyDeclaration }),
         // 能力 12 交付断言的返修环（`--delivery-repair`）：承诺了没落盘时再要一轮去补做。
         // 与 `--auto-verify` 不共享旗标：那一支接的是 verify 拍出的代码红，
         // 而恰恰是「一个字节都没写」的趟走不到收束闸，才需要这一支独立接住。
@@ -1780,16 +1819,17 @@ async function main(): Promise<number> {
       if (deliveryFailure) {
         if (!already) {
           const output = phantom !== null ? describePhantomDelivery(phantom) : EMPTY_RUN_DELIVERY;
-          await appendFile(
-            opts.logPath,
-            JSON.stringify({
+          const guardLog = createEventLog(opts.logPath);
+          try {
+            await guardLog.append({
               type: "tool_result",
               callId: DELIVERY_GUARD_CALL_ID,
               ok: false,
               output,
-            }) + "\n",
-            "utf8",
-          );
+            });
+          } finally {
+            await guardLog.close?.();
+          }
           const warning = phantom !== null
             ? `承诺要造的 ${phantom.missing.join("、")} 没有落盘（检查补齐，或说明实际阻塞点）`
             : "这一轮没有工具调用，也没有收尾消息（检查任务是否真正开始）";
@@ -1815,6 +1855,7 @@ async function main(): Promise<number> {
     process.stderr.write(paint(RED, `[cairn] 运行失败：${msg}\n`));
     return EXIT_FAILED;
   } finally {
+    await waitForSessionTailWork(opts.logPath);
     if (cliLock !== null) await cliLock.release();
     // 抛错退出时那一段已收到的正文照样该打出来——它正是判断「模型走到哪一步」的唯一线索。
     flushAssistantText();

@@ -22,9 +22,9 @@
 import { readFile } from "node:fs/promises";
 import { writeFileAtomic } from "../atomic-write";
 import { isRecord } from "../is-record";
+import { isSessionId } from "./session-id";
 
 const SCHEMA_VERSION = 1 as const;
-const MAX_SESSION_ID_LENGTH = 80;
 const MAX_PROJECT_ID_LENGTH = 128;
 const MAX_TITLE_LENGTH = 160;
 
@@ -82,17 +82,6 @@ export class SessionMetadataCorruptError extends Error {
     super(`会话元数据损坏，已拒绝覆盖: ${filePath} (${reason})——修好或删除该文件后重试`);
     this.name = "SessionMetadataCorruptError";
   }
-}
-
-function isSessionId(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= MAX_SESSION_ID_LENGTH &&
-    value.trim() === value &&
-    !value.startsWith(".") &&
-    !/[\\/\u0000-\u001f\u007f]/.test(value)
-  );
 }
 
 function isProjectId(value: unknown): value is string {

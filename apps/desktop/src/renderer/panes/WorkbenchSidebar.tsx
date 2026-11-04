@@ -1,5 +1,6 @@
 import type { ComponentProps, KeyboardEvent, PointerEvent } from "react";
 import type { AppDestination } from "../app-controls";
+import type { AccountMenuProps } from "../components/AccountMenu";
 import { AppRail } from "../components/AppRail";
 import { PageContextSidebar } from "../components/PageContextSidebar";
 import { Sidebar } from "../components/Sidebar";
@@ -19,6 +20,9 @@ export interface WorkbenchSidebarProps {
   onFilter: (filter: string) => void;
   onOpenDestination: (destination: AppDestination) => void;
   onSettings: () => void;
+  /** 底部头像菜单的完整配置（设置/外观/用量/关于）。缺省时只给一个「设置」入口，
+   *  让纯导航/单元测试面不必构造整套回调。 */
+  account?: AccountMenuProps;
   onNewTask: () => void;
   onSearch: () => void;
   onFiles: () => void;
@@ -29,13 +33,15 @@ export interface WorkbenchSidebarProps {
 }
 
 export function WorkbenchSidebar(props: WorkbenchSidebarProps): React.JSX.Element {
+  // 2026-11-03 业主：账户/设置入口只留全局轨底部那一个（头像图标），侧栏页脚已删除。
+  // 展开 / 收起 / 专注 / 任意目的地都渲染同一份，避免"某个状态下入口消失"。
   return (
     <div className="workbench-sidebar" data-destination={props.destination}>
       <AppRail
         destination={props.destination}
         badges={props.badges}
         onOpen={props.onOpenDestination}
-        onSettings={props.onSettings}
+        account={props.account ?? { onOpenSettings: props.onSettings }}
         {...(!props.focusMode && props.destination === "chat"
           ? {
               actions: (

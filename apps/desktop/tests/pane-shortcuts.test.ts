@@ -21,7 +21,11 @@ it("窗格 tooltip 的键位只从 PANE_SHORTCUTS 取（不再手抄）", () => 
   expect(app).not.toContain('title="变更窗格（⌘⇧D）"');
   expect(app).not.toContain('title="浏览器窗格（⌘⇧B）"');
   expect(app).toContain('paneShortcutKeys("changes")');
-  expect(app).toContain('PANE_OPENABLE.filter(k => k !== "changes").map(kind => (');
+  // 2026-11-02 形状适配：菜单行改从窗格表起手（plugins 排外，插件由同菜单 CheckboxItem 管）。
+  // 2026-11-04 精简（业主「容纳的东西太多了」）：顶栏菜单只留文件/终端/浏览器三窗格
+  // （TOOL_PANES），方案/任务/旁路走右栏「＋」与快捷键。本条钉「行由窗格表生成、
+  // changes 交给自己的按钮、键位仍从单源取」三件。
+  expect(app).toContain('const TOOL_PANES: readonly PaneKind[] = ["file", "terminal", "browser"];');
   expect(app).toContain('<span className="sub">{paneShortcutKeys(kind)}</span>');
 });
 

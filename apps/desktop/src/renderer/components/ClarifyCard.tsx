@@ -73,8 +73,9 @@ export function ClarifyCard(props: {
               </div>
             ) : (
               <div className="q-free">
-                <input
-                  type="text"
+                <textarea
+                  rows={2}
+                  placeholder="输入回答（可留空）"
                   value={typeof values[q.question] === "string" ? (values[q.question] as string) : ""}
                   aria-label={q.question}
                   onChange={(e) => setText(q.question, e.target.value)}
@@ -86,9 +87,11 @@ export function ClarifyCard(props: {
       })}
       {error !== null && <div className="form-error">{error}</div>}
       <div className="card-actions">
-        <button className="btn primary" onClick={submit}>提交回答</button>
-        <span className="spacer" />
+        {/* 2026-11-02：与审批/方案卡同序——主按钮钉最右，提示紧跟在它前面（此前主钮在最左，
+            三张决策卡两套动作排布）。 */}
         <span className="consequence">带选项的问题必答；自由项可留空</span>
+        <span className="spacer" />
+        <button className="btn primary" onClick={submit}>提交回答</button>
       </div>
     </div>
   );

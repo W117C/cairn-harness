@@ -20,7 +20,7 @@ describe("permissionNeedsConfirm：危险档才问", () => {
   it("两档确认文案是同一处单一来源", () => {
     const auto = permissionConfirmCopy("auto");
     const full = permissionConfirmCopy("full-access");
-    expect(auto.title).toContain("自动");
+    expect(auto.title).toContain("智能审批");
     expect(full.title).toContain("完全允许");
     expect(full.desc).toContain("不再出审批卡");
     expect(auto.desc).not.toBe(full.desc);

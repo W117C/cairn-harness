@@ -212,7 +212,7 @@ describe("配对评价：先正确性，再成本/耗时；缺证据不晋升", 
     });
     expect(result.status).toBe("passed");
     expect(result.decision).toBe("keep-old");
-    expect(result.reason).toContain("holdout");
+    expect(result.reason).toBe("没有未参与搜索的 holdout 验证任务——正确性通过也不许晋升");
   });
 
   it("修好基线未通过的任务 ⇒ 正确性优先，可晋升", async () => {

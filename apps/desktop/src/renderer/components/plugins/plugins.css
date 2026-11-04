@@ -145,6 +145,17 @@
   content: "";
 }
 
+/* 「技能中心…」是去另一处的出口，不是第三个视图：把它推到标签条右端，
+   用弱色小字，避免和「发现/已安装/可更新」被读成同一组。 */
+.plugin-tabs button.plugin-tabs-link {
+  margin-left: auto;
+  color: hsl(var(--text-400));
+  font-size: var(--fs-caption-sm);
+}
+.plugin-tabs button.plugin-tabs-link:hover {
+  color: hsl(var(--text-000));
+}
+
 .plugin-view-body {
   min-width: 0;
 }
