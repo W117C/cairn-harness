@@ -95,6 +95,7 @@ import {
   findPhantomDelivery,
 } from "./agent/delivery-guard";
 import {
+  createEventLog,
   forkSession,
   isEnvVerifyCause,
   readSessionView,
@@ -107,7 +108,9 @@ import {
   type PlanProposal,
   type ToolResultEvent,
   type VerifyCause,
+  type VerifyDeclaration,
 } from "./events";
+import { validateVerifyDeclaration } from "./agent/verify-plan";
 import { GATE_VERDICTS, type PermissionMode } from "./permissions";
 
 /** 权限层的负向结果：门直接拦（未执行）、被问过但没批成、无人值守拒。 */
@@ -249,6 +252,8 @@ const VALUE_FLAGS = [
   // 插件面那两条是**取值型**旗标：名字不进这张表就会被当位置参数，于是
   // `cairn --trust-plugin graphflow` 读成「工作区 = graphflow、任务 = 空」——批准错对象比拒了还坏。
   "--trust-plugin", "--decline-plugin",
+  // 任务自带判据（spec 2026-11-04）：可重复，`--verify "cmd"` 与 `--verify="cmd"` 都收。
+  "--verify",
 ];
 
 // 标准 `--` 结束选项：之后一律按位置参数（任务文本以 `-` / `--` 开头时唯一的传法）。
@@ -279,7 +284,7 @@ const KNOWN_FLAGS = new Set([
   "--compact", "--unattended", "--auto-verify", "--delivery-repair", "--serve",
   "--bandit", "--no-bandit", "--cascade", "--no-cascade",
   "--plugins", "--trust-plugin", "--decline-plugin",
-  "--sessions",
+  "--sessions", "--verify",
 ]);
 
 /** flag 给了却没带值 = 用法错误。照 gym-run 的 pick()：静默按缺省跑会让打错的 flag 假装生效。 */
@@ -292,6 +297,22 @@ function pick(flag: string): string | null {
     throw new UsageError(`${flag} 需要一个值（收到：${v === undefined ? "缺省" : v}）`);
   }
   return v;
+}
+
+/** 同一个旗标出现多次时全收（`--verify a --verify b`）。`pick` 只取第一枚，判据要全收。 */
+function pickAll(flag: string): string[] {
+  const out: string[] = [];
+  if (explicitFlags.has(flag)) out.push(explicitFlags.get(flag)!);
+  for (let i = 0; i < flagArgv.length; i++) {
+    if (flagArgv[i] !== flag) continue;
+    const v = flagArgv[i + 1];
+    if (v === undefined || v.startsWith("--")) {
+      throw new UsageError(`${flag} 需要一个值（收到：${v === undefined ? "缺省" : v}）`);
+    }
+    out.push(v);
+    i++;
+  }
+  return out;
 }
 
 interface DiscoverRequest {
@@ -337,6 +358,8 @@ interface Options {
   goal: GoalSpec | null;
   unattended: boolean;
   autoVerify: boolean;
+  /** 任务自带判据（spec 2026-11-04）：`--verify <cmd>` 可重复；null = 没给（旧行为）。 */
+  verifyDeclaration: VerifyDeclaration | null;
   /** M5b 路由开关覆盖（`--bandit/--no-bandit`、`--cascade/--no-cascade`）。空对象 = 一枚都没给
    *  ⇒ 递进 over 后一个键都不多（等价于今天）。 */
   routingOverrides: RoutingFlagOverrides;
@@ -588,6 +611,10 @@ function parseArgs(): Options | "help" | "version" | "doctor" {
     goal,
     unattended,
     autoVerify: flagArgv.includes("--auto-verify"),
+    verifyDeclaration: (() => {
+      const commands = pickAll("--verify");
+      return commands.length === 0 ? null : { commands };
+    })(),
     routingOverrides: routingParsed.overrides,
     serve: flagArgv.includes("--serve"),
     discover,
@@ -1710,6 +1737,18 @@ async function main(): Promise<number> {
       }
     }
 
+    // 任务自带判据（spec 2026-11-04）：与 `--goal` 同一时序——**先于** handleAgentRun 落进同一份 JSONL，
+    // 否则「这一轮按什么判」只活在内存里，重放看不见。坏声明当场拒，不带着它开工。
+    if (opts.verifyDeclaration !== null) {
+      const checked = validateVerifyDeclaration(opts.verifyDeclaration);
+      if (!checked.ok) {
+        process.stderr.write(paint(RED, `[cairn] --verify 声明无效：${checked.error}\n`));
+        return EXIT_USAGE;
+      }
+      await createEventLog(opts.logPath).append({ type: "session_meta_update", patch: {}, verify: checked.value });
+      opts.verifyDeclaration = checked.value;
+    }
+
     const r = await handleAgentRun(
       { message: opts.message, mode: opts.mode },
       {
@@ -1736,6 +1775,7 @@ async function main(): Promise<number> {
         // 拆成两个槽就是为了不翻转上面那半：沉淀留开，只有续跑停。
         ...(!interactive ? { noAnswerer: true as const } : {}),
         ...(opts.autoVerify ? { autoVerify: true } : {}),
+        ...(opts.verifyDeclaration === null ? {} : { verifyDeclaration: opts.verifyDeclaration }),
         // 能力 12 交付断言的返修环（`--delivery-repair`）：承诺了没落盘时再要一轮去补做。
         // 与 `--auto-verify` 不共享旗标：那一支接的是 verify 拍出的代码红，
         // 而恰恰是「一个字节都没写」的趟走不到收束闸，才需要这一支独立接住。

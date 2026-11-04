@@ -27,6 +27,8 @@ import { ClarifyGate, PlanGate } from "../agent/gates";
 // 而本文件下面还有两处在用）。所以写成"先 import 再 export"，两条都在。
 import { BASE_SYSTEM, systemPromptFor } from "../agent/system-prompt";
 import { classifyVerifyFailure, createVerifyHook, defaultExec, withVerifyCauseNote, type ExecFn } from "../agent/verify";
+import { resolveVerifyConfig } from "../agent/verify-plan";
+import type { VerifyDeclaration } from "../events";
 import { createActionFusion } from "../agent/action-fusion";
 import { SolpiRuntime, privateSessionDirectory, removePrivateSessionData, observationRecallSpec, solpiEnabled, type SolpiFlags } from "../agent/solpi-runtime";
 import { createUsageAttributor } from "../agent/usage-attribution";
@@ -52,7 +54,7 @@ import { GOAL_TURN_CAP_MAX, goalReminder, goalStopDecision, goalWindowSpend, par
 // 收束后的三支观测读数（目标漂移 / cost-per-progress / 自进化）2026-10-17 搬去
 // `./post-run-readings.ts`：判据仍住在各自的纯模块（goal-drift / cost-per-progress / evolution），
 // 那边只做「读事件流 → 问它 → 印一行」，不新增事件类型。
-import { emitPostRunReadings } from "./post-run-readings";
+import { emitPostRunReadings, withPostRunReadingsOnThrow } from "./post-run-readings";
 // 自进化闭环的**装配侧**：下一轮装配时读回策略补丁并注进 system prompt（让「上一轮的经验」真正
 // 回流到下一轮的决策，而不是只记笔记）。落盘那一半随收尾读数搬去 post-run-readings。
 import { evolutionPromptNote, evolutionRoutingBias, COMPRESS_EARLY_RATIO } from "../agent/evolution";
@@ -825,6 +827,8 @@ export interface RunOptions extends SolpiFlags, ImpactOptions {
   /** 能力 5 收束闸：写过盘但模型没自调 verify 时，收束前补一拍验证并把红字落进事件流。
    *  缺省**开**（同族是 `impactAnalysis` / `promptCache`）；一拍 = 真跑一遍 lint/test。 */
   autoVerify?: boolean;
+  /** 任务自带判据（spec 2026-11-04）：给了就按它判，不给仍读仓库配置。 */
+  verifyDeclaration?: VerifyDeclaration;
   /** M5b 路由开关 runtime override（CLI `--bandit/--cascade` 一族；同 actionFusion / autoVerify
    *  口径：settings 开闸另议）。字段缺席 = 用 `RunOverrides` 里同名的两枚分别覆盖，最终由
    *  `resolveRoutingFlags` 与 settings 合。缺省缺席 ⇒ 与这两枚旗标存在前逐字同形。 */
@@ -1445,7 +1449,9 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       paths: extractTaskPaths(promptText, { workspace: opts.workspace }),
     });
     evolutionNote += evolution.note;
-    await runLoop({
+    await withPostRunReadingsOnThrow(
+      async () =>
+        runLoop({
       ...(impactHook ? { impact: impactHook } : {}),
       ...(opts.autoVerify === true ? { autoVerify: true } : {}),
       // 返修那一环只在收束闸开着时才有意义（它接的是拍红之后的一步），所以不单独成一支形状：
@@ -1520,12 +1526,24 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       },
       verify: createVerifyHook(opts.workspace, {
         exec: verifyExec(opts.sandbox ?? null),
+        // 任务声明优先（spec 2026-11-04）：解析一次交给钩子；不给就去仓库里读（逐字旧行为）。
+        ...(opts.verifyDeclaration === undefined
+          ? {}
+          : { resolved: await resolveVerifyConfig(opts.workspace, opts.verifyDeclaration) }),
         trustedRepo: opts.trustedRepo ?? false, // 调用方断言那一层优先；缺省 false 不等于「永远 false」——
         trustResolver: verifyTrust, // 生产那一半：查信任表，查不到经审批卡问人（S3，2026-10-05 接线）
       }),
       experienceNudge: evolution.nudge,
       ...(rt ? { hooks: rt.hooks } : {}),
-    });
+        }),
+      // 失败路径（maxSteps 撞帽等）也要留一条账：见 INCIDENTS.md 事故 2。
+      () =>
+        emitPostRunReadings({
+          logPath: opts.logPath,
+          workspace: opts.workspace,
+          ...(opts.sessionId === undefined ? {} : { sessionId: opts.sessionId }),
+        }),
+    );
     // M2e：Stop（一轮 agent 收束）——fire-and-forget，失败只告警。
     // exit 2 的「再多要一轮」语义未裁，所以回执整体丢弃（任务 #32）；SessionEnd 不在这儿，
     // 见 finally：会话终止含异常/中断路径，挂在 try 尾上就等于「崩了的会话没有收尾钩子」。
@@ -1763,6 +1781,8 @@ export interface RunOverrides
   actionFusion?: boolean;
   /** 能力 5 收束闸 runtime override（同 actionFusion 口径：settings 与 IPC 开闸另议）。 */
   autoVerify?: boolean;
+  /** 任务自带判据（spec 2026-11-04）：CLI `--verify` 人手输入的验收命令。缺省 = 旧行为。 */
+  verifyDeclaration?: VerifyDeclaration;
   /** 第 9 点·用户干预注入：本 run 的插话收件盒（由持有 IPC 会话登记表的调用方递进来）。
    *  **缺省 undefined = 零行为**：没有盒子的 run（CLI / worker / 靶场 / 定时）既不会取料、
    *  也不会因此多落一条事件——字节与请求次数都不变。
@@ -1920,6 +1940,7 @@ export async function handleAgentRun(
         ...(over.signal ? { signal: over.signal } : {}),
         actionFusion: over.actionFusion ?? (await store().get()).actionFusion,
         autoVerify: over.autoVerify ?? (await store().get()).autoVerify,
+        ...(over.verifyDeclaration === undefined ? {} : { verifyDeclaration: over.verifyDeclaration }),
         ...(over.deliveryRepair === true ? { deliveryRepair: true } : {}),
         // M5b：路由开关的 runtime override 收成一处（CLI `--bandit/--cascade` 一族；缺省缺席 ⇒
         // 用 settings）。两枚都没给时这里不出现 ⇒ 与今日逐字同形。

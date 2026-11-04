@@ -355,6 +355,8 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       results: beatResults,
       // 归因落进事件流（审计面）；下面三处出口据此决定"这一拍算谁的账"。
       ...(cause === undefined ? {} : { cause }),
+      // 判据来源（spec 2026-11-04）：任务声明 / 仓库配置 / 探测。缺席 = 旧钩子没报来源，读侧不猜。
+      ...(outcome.source === undefined ? {} : { source: outcome.source }),
       ...(auto ? { auto: true } : {}),
     });
     {

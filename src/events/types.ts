@@ -162,6 +162,20 @@ export interface SessionEvolutionStamp {
 /** 会话元信息：分支会话首行携带 branch_of 指向原会话；
  *  M2f：sidechat 会话首行携带 kind="sidechat" + parent_session_id 指向主会话；
  *  M4a：定时任务触发的新会话首行携带 origin="scheduled" + automation_id/automation_name（§12.2.2）。 */
+/** 会话级判据声明（spec 2026-11-04 §3.2）：这一场任务用什么命令判定"做完了"。
+ *
+ *  **为什么住在这里而不是 `agent/verify-plan.ts`**：它要作为 `session_meta` 的字段落进事件流，
+ *  而 events 层不得反向 import agent 层（会成环：verify-plan → verify → events）。
+ *  声明是纯数据，落在这里与 `SessionMetaEvent` 同层；解析与校验仍归 verify-plan。
+ *
+ *  `commands` 是**人写的**验收命令，原样交给现有 shell 执行器；`note` 是给人看的一句说明
+ *  （这条命令能证明什么、不能证明什么），不进判定。 */
+export interface VerifyDeclaration {
+  commands: string[];
+  timeoutMs?: number;
+  note?: string;
+}
+
 export interface SessionMetaEvent {
   type: "session_meta";
   branch_of?: string;
@@ -182,6 +196,8 @@ export interface SessionMetaEvent {
   fork?: { from_session_path: string; boundary_event_id: number; from_session_id?: string };
   /** 进化分配（Evolve）：缺席 = 不在实验中；只增字段，不改事件型与重放。 */
   evolve?: SessionEvolutionStamp;
+  /** 本场任务的判据声明（spec 2026-11-04）。缺席 = 按仓库配置/探测，行为与加这个字段前逐字相同。 */
+  verify?: VerifyDeclaration;
 }
 
 /** 日志结构控制记录（ADR 0005）：**关于日志本身**的记录，不是「agent 做了什么」。
@@ -209,6 +225,8 @@ export interface SessionRewindEvent {
 export interface SessionMetaUpdateEvent {
   type: "session_meta_update";
   patch: Record<string, string>;
+  /** 任务自带判据的声明（spec 2026-11-04）：只写一次、只增字段；缺席 = 这条补丁与判据无关。 */
+  verify?: VerifyDeclaration;
 }
 
 // ---- M1b 三门事件（澄清门 / 方案门 / 验证门）----
@@ -259,6 +277,7 @@ export type VerifyCause =
   | "no-surface"
   | "hook-error"
   | "pkg-manager"
+  | "env-fs"
   | "not-run"
   | "skipped";
 
@@ -267,7 +286,7 @@ export type VerifyCause =
  *  取消与被信号杀同样**没有一次真实的执行结果**可归因给模型（第 219 页第 3 条现读）。
  *  `skipped` 同理进表：被拒的那一拍没有执行过任何东西，它对代码对错的证明力与一条没跑完的命令完全相等＝零。 */
 const ENV_VERIFY_CAUSE_SET: ReadonlySet<VerifyCause> = new Set<VerifyCause>([
-  "timeout", "toolchain-missing", "no-surface", "hook-error", "pkg-manager", "not-run", "skipped",
+  "timeout", "toolchain-missing", "no-surface", "hook-error", "pkg-manager", "env-fs", "not-run", "skipped",
 ]);
 
 /** 唯一谓词（三个出口共用一只，别各写一份 `=== "timeout" || …` 的表）：缺席 = 未归因 = 按 code 算。 */
@@ -299,6 +318,9 @@ export interface VerifyResultEvent {
   /** 这一拍的归因（取首个失败命令的 cause；钩子抛错时 = `hook-error`）。
    *  三处出口（attempt 计数 / 级联升档与 bandit / 沉淀）据此决定"这次红算谁的"。 */
   cause?: VerifyCause;
+  /** 这一拍用的判据从哪来（spec 2026-11-04）：`task` = 会话声明，`config` = 仓库 `.agent/config.json`，
+   *  `probed` = `package.json`/语言探测。缺省 = 加这个字段之前的旧记录，读侧按"未标"处理，不猜来源。 */
+  source?: "task" | "config" | "probed" | "none";
   /** M3a §4.4.10 同口径：worker 子流的验证证据带此字段（withAgentId 归因）。
    *  缺省 = 主会话侧。此前 verify_result 拿不到归因，于是「worker 验过了」在主流里
    *  看起来就是「父会话验过了」——三处下游（上下文红回流 / 父验证计量 / 假完成率分母）都被它骗过。 */
@@ -870,6 +892,23 @@ export interface SurfaceAccountEvent {
   evolveChars?: number;
 }
 
+/** 任务清单项（todo_write 工具落盘；2026-11-04 工作状态面板「进程」的数据源）。 */
+export interface TodoItem {
+  text: string;
+  state: "pending" | "done";
+}
+
+/** todo_write 工具的事件：**全量替换**语义——每次写都带整份清单（清单小，全量最可回放）。
+ *  模型上下文不消费它（context.ts 落空分支）：清单经 tool_result 的回执文本进上下文；
+ *  面板/投影侧读最后一条 = 当前清单。 */
+export interface TodoUpdatedEvent {
+  type: "todo_updated";
+  callId: string;
+  items: TodoItem[];
+  /** worker 子流归因（主会话无此字段；worker-projection 转发时盖章）。 */
+  agent_id?: string;
+}
+
 export type AgentEvent = (
   | UserMessageEvent
   | AssistantMessageEvent
@@ -908,6 +947,7 @@ export type AgentEvent = (
   | FileRestoredEvent
   | SessionRewindEvent
   | SessionMetaUpdateEvent
+  | TodoUpdatedEvent
   | RunErrorEvent
 ) & { /** M2 §3.5：事件真值时间戳（毫秒）。core 自 8361657 起在落盘处统一盖戳——写调用方同一对象，live 与盘同式（tests/events.test.ts 三用例钉死），新事件恒在场；旧 JSONL 缺席，读侧按可选兼容（投影留空不造假）。 */ ts?: number };
 
@@ -960,5 +1000,6 @@ export const KNOWN_TYPES: Record<AgentEvent["type"], true> = {
   file_restored: true,
   session_rewind: true,
   session_meta_update: true,
+  todo_updated: true,
   error: true,
 };

@@ -168,6 +168,8 @@ function renderProjectionLine(e: AgentEvent): string | null {
       // 主会话的工具清单（含只读档本应「根本不存在于表内」的写向工具）会经这里发往外部 provider
       // （见本文件 SIDECHAT_FORBIDDEN_TOOLS 的设计意图与 streamGlm 调用点）。
       return null;
+    case "todo_updated": // 任务清单：面板/进程侧的观测数据，不是给旁路问答的对话事实——不进只读投影。
+      return null;
     case "turn_truncated":
       // 与 error 同一档：主会话那句回答不完整，是用户接着提问的前提事实。
       return "[主会话·助手输出被截断] " + e.stop_reason;

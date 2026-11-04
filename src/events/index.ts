@@ -8,7 +8,7 @@ export type {
   PromoteOrigin, SkillInvocationMeta, GoalTurnOrigin, UserMessageOrigin, UserMessageAttachment,
   UserMessageEvent, AssistantMessageEvent, AssistantDeltaEvent, ThinkingDeltaEvent,
   ToolCallEvent, ToolBlockReason, HarnessHoldReason, ToolResultEvent,
-  UsageEvent, SessionMetaEvent, SessionEvolutionStamp,
+  UsageEvent, SessionMetaEvent, SessionEvolutionStamp, VerifyDeclaration,
   ClarifyQuestion, ClarifyAnswerMap, ClarifyRequestedEvent,
   PlanFileChange, PlanProposal, PlanProposedEvent, PlanApprovedEvent,
   VerifyCause, VerifyCommandResult, VerifyResultEvent,
