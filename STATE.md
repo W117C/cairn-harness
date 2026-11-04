@@ -1,6 +1,6 @@
 # Cairn / DSH —— 现态
 
-rev: 7ead5eaa7e9189958ba52125412f2a1146c4320a
+rev: f57fe7decef08831f15038ea4ca8c6d307b84997
 
 核对日期：2026-11-04（Asia/Shanghai）。`rev` 是已推送的开发基线，不表示已合入 `main` 或完成发布认证。
 仓库与分支的现役入口是[仓库状态与分支](docs/REPOSITORY-STATUS.md)；测量和历史证据放在 `outputs/`、`PROGRESS.md` 与 `archive/`，本页只写状态与下一步。
