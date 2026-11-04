@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
-import { collectCensus } from "../scripts/verify-census.ts";
+import { collectCensus } from "../scripts/verify-census";
 
 const REPO_ROOT = join(import.meta.dirname, "..");
 const SCRIPT = join(REPO_ROOT, "scripts", "verify-census.ts");
