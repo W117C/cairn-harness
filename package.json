@@ -70,7 +70,7 @@
     "@vscode/ripgrep": "^1.18.0",
     "croner": "^10.0.1",
     "tree-sitter-wasms": "0.1.13",
-    "vscode-languageserver-protocol": "^3.18.3",
+    "vscode-languageserver-protocol": "^3.18.5",
     "web-tree-sitter": "0.25.10"
   }
 }
