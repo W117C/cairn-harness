@@ -168,6 +168,21 @@ stdin 是管道）**不会自动续跑**——那条路上审批一律 fail-clos
 续跑只会白烧钱，于是会停下来并把这个理由落到事件流上。美元闸要价表里查得到那个模型才生效，
 查不到时它明写自己没生效，绝不按 $0 继续烧。
 
+### 任务自带判据：这一轮按什么算做完
+
+`--verify` 在开工前把验收命令写进会话，收束前 harness 照着跑；绿红都留证：
+
+```sh
+./bin/cairn.mjs --verify "node --import tsx scripts/typecheck.ts" "把类型错误修掉"
+```
+
+可重复给多条，按顺序跑、全绿才算过。声明落在 `session_meta_update`，结果落在 `verify_result`
+并带 `source: "task"`——与仓库自带判据（`.agent/config.json`、`package.json` 探测）区分得开。
+不给 `--verify` 时行为与从前逐字相同。
+
+边界：判据由人写、只从命令行进，不收 agent 自提（能自己挑判据的 agent 可以挑一条永远绿的）；
+`--replay <id>` 能看到这条判据和它的结果。
+
 ### 手动压缩一条会话
 
 ```sh
