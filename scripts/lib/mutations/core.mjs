@@ -234,7 +234,7 @@ export const MUTATIONS = [
     src: "src/events/types.ts",
     test: "tests/verify-skipped-third-outcome.test.ts",
     desc: "skipped 不进 ENV_VERIFY_CAUSE_SET ⇒ 下游（额度／证据／返修）仍把它当代码红：烧一次修复额度并注入没有红字的红",
-    apply: (s) => s.replace('"pkg-manager", "not-run", "skipped",', '"pkg-manager", "not-run",'),
+    apply: (s) => s.replace('"pkg-manager", "env-fs", "not-run", "skipped",', '"pkg-manager", "env-fs", "not-run",'),
     expectFail: "被拒那一拍不记 failed、不烧修复额度：执行器一次未叫、attempt 停在 1,1、goal 证据是 absent 不是 failed",
   },
   // ---- 缓存分块进事件流（444fdcd）----
@@ -949,7 +949,7 @@ export const MUTATIONS = [
     desc: "从 ENV 集合里摘掉 not-run ⇒ 三处出口（修复额度／升档与 bandit／沉淀）同时开始记模型的账。" +
       "这一格名字叫 ENV 却进表，是因为消费者要的那句语义是「别照它改代码」，不是「是环境问题」——" +
       "集合是唯一事实源，写死的第三份表就是本仓点名的形状",
-    apply: (s) => s.replace("\"pkg-manager\", \"not-run\",", "\"pkg-manager\","),
+    apply: (s) => s.replace("\"pkg-manager\", \"env-fs\", \"not-run\",", "\"pkg-manager\", \"env-fs\","),
     expectFail: "六类不记在模型账上的成因",
   },
   {

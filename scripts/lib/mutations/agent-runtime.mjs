@@ -124,7 +124,7 @@ export const MUTATIONS = [
     src: "src/agent/verify.ts",
     test: "tests/verify.test.ts",
     desc: "任一命令失败仍判 ok（全绿门槛被拆，验证门可被单条失败绕过）",
-    apply: (s) => s.replace("return { ok: results.every((r) => r.ok), results };", "return { ok: true, results };"),
+    apply: (s) => s.replace("return { ok: results.every((r) => r.ok), results, source };", "return { ok: true, results, source };"),
     expectFail: "失败命令 → ok:false；failureDigest 摘要含命令与输出",
   },
   {
