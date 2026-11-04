@@ -1,33 +1,28 @@
 # Cairn / DSH —— 现态
 
-rev: 3ffcbeac3911e1d7a6d5061d4bac5e6c733d9085
+rev: 7ead5eaa7e9189958ba52125412f2a1146c4320a
 
-核对日期：2026-11-02（Asia/Shanghai）。`rev` 是已推送的开发基线，不表示共享工作树的改动已全部提交，也不表示已合入 `main` 或完成发布认证。
+核对日期：2026-11-04（Asia/Shanghai）。`rev` 是已推送的开发基线，不表示已合入 `main` 或完成发布认证。
 仓库与分支的现役入口是[仓库状态与分支](docs/REPOSITORY-STATUS.md)；测量和历史证据放在 `outputs/`、`PROGRESS.md` 与 `archive/`，本页只写状态与下一步。
 
 ## 当前工作
 
-- 当前开发分支为 `fix/spec-summary-double-count`，跟踪同名远端。它与 `origin/main` 已分叉，不能把当前开发线当作主线的快进更新。
-- 本地 `main` 已与 `origin/main` 对齐并配置跟踪；当前 checkout 仍是开发分支。
-- 共享工作树仍有 UI、会话标识、LSP、CI 引用及进化判卷等在途修改；文件名分组不代表确认了每个文件的任务归属。由原会话补齐行为验证并按批次提交，整理工作不替它们打包提交。
-- `cairn-gates` 与 `cairn-verify` 已进入开发分支，复用现有门禁和探针；项目内容信任、真实模型选择效果与发布验证仍是不同边界。
+- 开发分支 `fix/spec-summary-double-count` 已与远端同步，共享工作树已清空。
+- 此前多个会话留在共享树上的在飞改动已按一次落库提交入库；落库依据是当时工作树上的两套判卷与根类型检查全绿，不是逐笔审阅每个改动。
+- 本会话新增：任务自带判据（`--verify` → `session_meta_update` → `verify_result.source`）、`env-fs` 归因、失败路径读数、`verify-census` 命令、三支拒单文案统一。
+- 开发线与 `origin/main` 已分叉，且双方各有对方没有的提交。直接把开发线合进主线会在锁文件、CI 配置与核心源文件上撞冲突，必须先做集成。
 
 ## 代码入口
 
 - core 在 `src/`，应用服务在 electron-free 的 `src/main/`；desktop 在 `apps/desktop/`，依赖方向与 IPC 规则见 `AGENTS.md`。
-- 符号和稳定契约见 [CODE-WIKI](docs/CODE-WIKI.md)；功能使用见 `README.md`。本次仓库整理未重新认证所有产品功能。
-- 本地编排、远程只读适配和互操作实现的设计及未证边界，见对应设计稿与各批次凭证；不能用历史本地判卷代替真实 provider、外部部署或跨机器验证。
+- 符号和稳定契约见 [CODE-WIKI](docs/CODE-WIKI.md)；功能使用见 `README.md`。
 
 ## 下一步
 
-- 在隔离工作区规划开发线与主线的集成，逐项核对安全修复、权限边界、协议与依赖版本，保留双方功能；具体冲突和证据见仓库状态页。
-- 两个旧安全工作区保留待审差分和证据。认证工作区仍被现有命令引用，按验证基础设施保留。
-- 已按用户确认清理本地冗余分支及失效远端跟踪引用；保留主线、开发线、安全修复工作区与救援快照。历史迁移和仍有开放 PR 的远端分支继续保留。
-- 整理后再评估 PR 自动审查、区域 REVIEW 与人时指标；主线上已有治理文件，先完成集成核对再决定补什么。
+- 在隔离工作区做 dev → main 集成：先解 `pnpm-lock.yaml`、`package.json` 与 `.github/workflows`，再按 `src/main`、`src/agent`、`apps/desktop` 三组逐个核对，保留双方功能。
+- 集成分支的判据：两套套件 + 根 typecheck + `docs-check`；任一项红不进 `main`。
 
 ## 验证与交付边界
 
-本轮 Git 关系、文档检查及提交前根类型检查已完成；清理过程中出现的 LSP 判卷失败样本保留在清理凭证中。当前工作树检查不代表主线集成或提交级认证。
-近期技能定向验收见 `outputs/agent-native-sdlc-2026-11-02/`，不代表主线集成后的认证。
-完整 core/desktop、真实 provider、完整 Electron 重启、签名公证、跨平台与发布验证仍需各自证据。
-`head-cert-check` / `mutate-verify` 只证明被测提交；本次未重新运行，历史认证不转移到当前开发基线。
+- 本轮落库证明的是当时工作树与合并后 HEAD 的套件读数；`pnpm gates`、`head-cert-check`、`mutate-verify` 未跑，历史认证不转移到新提交。
+- 远端 CI 以本次推送产生的运行结果为准，不用历史运行推断当前提交。
