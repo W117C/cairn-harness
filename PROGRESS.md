@@ -36896,3 +36896,33 @@ try 内同步 await，run IPC 要等它回来才收束 ⇒ 界面 spinner 被 10
 - 第 1025 页边界里那条「另案处理」由本页关闭；旧页不追改。
 - 台账 27 条旧引用（rebase 前提交）只保留提交对象本身，父提交与部分树在旧库里就已缺失，不能 checkout、也不进任何分支历史；它们只为 D-5 的存在性判据服务，`git gc --prune=now` 连跑两次不回收。
 - 只动 `.git` 对象库，未改源码与台账正文；未跑 `pnpm test` / `gates` / `mutate-verify` / `head-cert`。
+
+## 2026-11-04 · 第 1027 页：认证假超时修复——head-cert 改用 maxWorkers=2，aeb577c7 认证全绿
+
+### 一、病灶（现读）
+
+- `head-cert-check` 在 `d40962f` 上跑出 1 条红：`tests/main-run-routing.test.ts` › `glm main-session routing` › `uses the shared adapter for RunRequest sessionMode=true` **35835ms > 30000ms** 帽；同一条 `--maxWorkers=1` 单跑 **1.88s** 全绿。
+- 这是 8GB 宿主的 load artifact（AGENTS.md 已写）：head-cert 的 vitest 调用没带并发档，默认 worker 过订阅。
+- 取料：`outputs/head-cert-d40962f-2026-11-04-1515/`。
+
+### 二、修法
+
+| 面 | 落法 |
+| --- | --- |
+| 认证判卷命令 | `scripts/head-cert.ts` 的 vitest 参数加 `--maxWorkers=${String(CERT_MAX_WORKERS)}`，`CERT_MAX_WORKERS = 2`（与 `pnpm test:capped` 同档） |
+| 读数分母 | 汇总行加「并发=maxWorkers 2」——没有并发档的套件读数不算可复现 |
+| 判据 | `tests/head-cert-deps.test.ts` 钉住 cap 常量、命令接线与汇总印出；删掉 cap 即红 |
+
+### 三、读数（现跑）
+
+| 面 | 读数 |
+| --- | --- |
+| head-cert @`d40962f`（修前） | 635 文件 / 7770 条，1 条假超时（35.8s > 30s），exit 1；取料 `outputs/head-cert-d40962f-2026-11-04-1515/` |
+| head-cert @`aeb577c7`（修后） | 25/25 道门绿；**635 文件 / 7770 条全绿**，并发 maxWorkers=2，exit 0，墙钟 342.67s；取料 `outputs/head-cert-aeb577c-2026-11-04-1523/` |
+| 单跑对照 | 同一条文件 21 条全绿，目标用例 1.88s（`--maxWorkers=1`） |
+
+### 四、边界
+
+- 只改认证跑器的并发档，不改任何产品代码与判卷断言；`--maxWorkers=2` 比默认慢一点（墙钟 342.67s），换来可复现的 exit 0。
+- 红/绿两份认证凭证都入库：红的那份是「修前」的同分母证人，不删。
+- 本页提交时工作树还有隔壁会话的 `PaneDock.tsx` 在飞改动，未纳入本笔。
