@@ -39,10 +39,12 @@
 - `gate-mutate-verify` 不再常驻：`pnpm mutate-verify` 缺树时自行 `worktree add`，存在时先 `checkout --detach --force` 到当前 HEAD，属于可重建的跑器目录。
 - 同日清空 `.tmp/`（scratch，门禁与测试会重建）与 `.mimosa/hook-state` 的陈旧 baseline；`git prune-packed` 回收了已入包的重复松散对象。`outputs/desktop-permission-2026-11-03/` 内的五份 Chromium profile 运行缓存已删（截图与读数保留，见 `40ddb2c6`）。
 
-## 已知的仓库底层问题
+## 仓库对象库（2026-11-04 已修复）
 
-- `git fsck` 报存在不可达对象缺 blob（其一为 `b8033ca8` 的父对象），`git gc` / `git prune` 会在遍历时停住；HEAD 的 `git rev-list --objects` 遍历完整、exit 0。本轮只做了 `prune-packed` 与临时包清理，未改写任何历史。
-- 要让 `git gc` 重新可用，需另案清理不可达对象；在那之前 `.git` 会保留一批无法归包的松散对象，属已知存量，不是本轮清理漏项。
+- 旧对象库混着不可达的破损历史：37 个缺失对象（其一为 `b8033ca8` 的父对象），引用它们的树/提交没有一条可从 refs 到达；`git gc` / `git prune` 会在遍历这些对象时停住。
+- 修法：把 refs 可达的对象（26,949 支）重新打成单一 pack（`bc6fcee2`），退役全部旧 packs 与松散对象；`git fsck --full`、`git commit-graph verify`、`git prune --dry-run`、`git gc --prune=now` 均 exit 0。
+- 台账另有 27 条引用指向 rebase 前提交（对象还在、父提交与部分树已缺）；为了让 D-5 的「引用必须是真提交」继续成立，这 27 个提交对象单独收进一个 promisor pack（`b022fb3c`），不进入任何分支历史，gc 不会回收。
+- 代价：全部 reflog 已清空——它们都引用了缺对象的旧历史。修复前完整 `.git`（含 reflog 原文与旧对象）备份在 `../cairn-git-backup-20261104/`，确认后即可删除。
 
 ## 下一步
 

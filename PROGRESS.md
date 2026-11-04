@@ -36860,3 +36860,39 @@ try 内同步 await，run IPC 要等它回来才收束 ⇒ 界面 spinner 被 10
 - 未跑 `pnpm test` / `pnpm gates` / `mutate-verify` / `head-cert`：本轮没有功能源码改动；唯一源码改动是收编到 rescue 分支的未判卷快照，不在任何主线。
 - 只动 scratch、机器缓存与未跟踪物；`outputs/`、`agent-canon/`、`fixtures/` 按既有裁决保留，未删任何被台账点名的 dated 工件。
 - `git fsck` 仍报不可达对象缺 blob，`git gc` / `git prune` 会停在那里（HEAD 的 `git rev-list --objects` 遍历完整、exit 0）；该底层问题另案处理，本页不记作已修。
+
+## 2026-11-04 · 第 1026 页：修复 git 对象库——退役不可达破损历史，`git gc` 恢复可用
+
+### 一、病灶（修复前现读）
+
+- `git fsck --full` 报 37 个 missing 对象，全部不在 refs 可达集里；`git rev-list --objects --all` 自身完整（26,949 支，exit 0）。
+- `git gc` / `git prune` / `git repack` 仍会撞上 `b8033ca8` 的缺失父对象，exit 128。原因不是 HEAD 坏了，而是旧 packs 里混着不可达的破损历史。
+- 旧对象库：7 个 pack（141M）＋ 5,720 支松散对象（170M）。`pack-473ac69d` 的 1,321 支对象中 274 支不可达，不能整包删除。
+
+### 二、修法
+
+| 步骤 | 动作 | 读数 |
+| --- | --- | --- |
+| 1 | 整份 `.git` 备份到仓外 `../cairn-git-backup-20261104/` | 316M |
+| 2 | `git reflog expire --expire=now --all`（各分支 reflog 都引用了缺对象旧史） | 462 条 → 0 |
+| 3 | 按 `git rev-list --objects --all --reflog` 清单重打单包 | 26,949 支 → `bc6fcee2` |
+| 4 | 逐对象核对后退役旧 7 packs 与全部松散对象 | 新包缺 0 / 多 0 |
+| 5 | `git gc --prune=now` | exit 0，1 pack |
+| 6 | 重建 commit-graph（旧图还指向已退役提交） | `commit-graph verify` exit 0 |
+| 7 | 恢复台账引用的 27 个 rebase 前提交对象（只留 commit，父/树缺失） | 收进 promisor pack `b022fb3c`，gc 不回收 |
+
+### 三、读数（修复后现量）
+
+| 面 | 读数 |
+| --- | --- |
+| `.git` | 404M（本轮清理前）→ 316M（`prune-packed`）→ **168M**（重打包后） |
+| 对象库 | 1 个可达 pack + 1 个 promisor pack / 26,976 支（26,949 可达 + 27 台账引用），松散 0、garbage 0 |
+| 完整性 | `git fsck --full` exit 0（无 missing/broken/dangling）；`git rev-list --objects --all` exit 0 |
+| 工作树 | `git status` 0 项；对象库修复不触碰任何工作树文件 |
+
+### 四、边界
+
+- 代价：reflog 全清；分支、tag、远端引用、rescue 快照原样保留。修复前完整 `.git`（含 reflog 原文与旧对象）在仓外备份，确认后可删。
+- 第 1025 页边界里那条「另案处理」由本页关闭；旧页不追改。
+- 台账 27 条旧引用（rebase 前提交）只保留提交对象本身，父提交与部分树在旧库里就已缺失，不能 checkout、也不进任何分支历史；它们只为 D-5 的存在性判据服务，`git gc --prune=now` 连跑两次不回收。
+- 只动 `.git` 对象库，未改源码与台账正文；未跑 `pnpm test` / `gates` / `mutate-verify` / `head-cert`。
