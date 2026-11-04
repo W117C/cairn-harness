@@ -96,3 +96,7 @@ TMPDIR="$PWD/.tmp-t" vitest … → 6 passed
 
 **case 草稿**：`verify-hermetic-tmpdir` —— 同一判据在系统 TMPDIR 与工作区 TMPDIR 下必须同结论；
 不同则判据本身不合格（不是代码不合格）。
+
+**事故 4 — 已修**：`tests/verify-census.test.ts` 的临时工作区从 `os.tmpdir()` 改到仓内 `.tmp/`，
+子进程的 `node --import tsx` 靠祖先 `node_modules` 稳定解析。默认 TMPDIR 下复跑 6/6。
+连同 `scripts/verify-census.ts` 一起入库：这条命令把 spec §6 的三条读数变成可重复读数。
