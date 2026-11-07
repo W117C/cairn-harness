@@ -1,0 +1,46 @@
+{
+  "fixtureData": true,
+  "checks": [
+    {
+      "name": "输入框拿到焦点且草稿在框里（尚未失焦）",
+      "ok": true,
+      "detail": []
+    },
+    {
+      "name": "Esc 关闭后面板真的关了",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "Esc 关闭前提交了草稿（6 落盘，不是丢掉）",
+      "ok": true,
+      "detail": [
+        6
+      ]
+    },
+    {
+      "name": "重开后输入框显示盘上值 6",
+      "ok": true,
+      "detail": "6"
+    },
+    {
+      "name": "第二次拿到焦点且草稿为 7",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "「返回」关闭同样落盘（7）",
+      "ok": true,
+      "detail": [
+        6,
+        7
+      ]
+    },
+    {
+      "name": "全程无渲染层控制台错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": []
+}

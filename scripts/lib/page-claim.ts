@@ -60,11 +60,11 @@ export function insideRepo(path: string, root: string): boolean {
   return rel !== "" && !rel.startsWith("..") && !rel.startsWith("/");
 }
 
-/** 台账里已出现过的页号（标题行口径与 `docs-check` 一致：`### … · 第 NNN 页`）。
- *  **一份文本里重复的号要全部收下**——撞号史就藏在这些重复里，去重就把它读成"没人占过"。 */
+/** 台账里已出现过的页号。与 `docs-check.ts#PAGE_HEAD_RE` 同源：第 308 页起页标题改用
+ *  `## 20xx-xx-xx · 第 N 页`，只认旧 h3 会让占号器把 1030+ 的页整段读丢，回退到历史小号。 */
 export function pageNumbersIn(text: string): number[] {
   const out: number[] = [];
-  for (const m of text.matchAll(/^### .{0,40}?· 第 (\d+) 页/gmu)) out.push(Number(m[1]));
+  for (const m of text.matchAll(/^#{2,3} .{0,60}?· 第 (\d+) 页/gmu)) out.push(Number(m[1]));
   return out;
 }
 

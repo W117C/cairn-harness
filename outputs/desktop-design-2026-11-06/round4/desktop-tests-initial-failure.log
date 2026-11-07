@@ -1,0 +1,42 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn/apps/desktop
+
+ ❯ tests/strings.test.ts (3 tests | 1 failed) 12ms
+   ❯ 重做面组件不写裸中文 (1)
+     × 字符串字面量里无 CJK（文案一律走 STR） 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/strings.test.ts > 重做面组件不写裸中文 > 字符串字面量里无 CJK（文案一律走 STR）
+AssertionError: src/renderer/components/AddProjectMenu.tsx 里有裸中文文案：选择克隆位置失败：${err instanceof Error ? err.message : String(err)}: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "选择克隆位置失败：${err instanceof Error ? err.message : String(err)}",
++ ]
+
+ ❯ tests/strings.test.ts:71:68
+     69|       ].map((m) => m[1] ?? "");
+     70|       const offenders = literals.filter((t) => /[\u4e00-\u9fff]/.test(…
+     71|       expect(offenders, `${rel} 里有裸中文文案：${offenders.join(" | ")}`).toE…
+       |                                                                    ^
+     72|     }
+     73|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 330 passed (331)
+      Tests  1 failed | 2279 passed (2280)
+   Start at  20:03:42
+   Duration  28.26s (tests 43%, import 42%, transform 13%, worker 2%)
+
+    Isolate  331 workers spawned · ~57ms startup each (spawn + environment, per file)
+             at least ~9.32s faster with isolate: false — reuses workers across files instead of one per file
+
+undefined
+/Users/ze/Downloads/Cairn/cairn/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: vitest run --config vitest.config.ts '--maxWorkers=2'

@@ -1,0 +1,28 @@
+PASS 项目设置打开时聚焦显示名
+PASS 项目设置位置选择失败显示原因并保留名字
+PASS 重选位置清掉错误并保留完整路径提示
+PASS 项目设置写入失败留在弹窗并显示原因
+PASS 项目设置保存中固定名字和位置并正确标注保存
+PASS 项目设置保存中只发起一次请求
+PASS 项目设置保存中Esc不关闭弹窗
+PASS 项目设置保存中遮罩不关闭弹窗
+PASS 项目设置保存中关闭按钮不丢反馈
+PASS 慢保存失败仍保留名字位置且允许重试
+PASS 项目设置重试成功后关闭并更新侧栏
+PASS 重开项目设置回显实际保存的名称和位置
+PASS 内联改名失败仍有反馈且保留已保存名称
+PASS 更改项目目录的选择器失败有反馈
+PASS 更改目录失败后可重试且保留项目名
+PASS 窗口右下角项目菜单完整可见
+PASS 项目菜单打开时聚焦第一项
+FAIL 项目菜单方向键移动焦点 {"keys":[{"key":"","code":"","target":"<button class=\"menu-item\" role=\"menuitem\" tabindex=\"-1\" title=\"在 Finder 里定位这个文件夹\">在 Finder 中显示</button>"}],"active":"<button class=\"menu-item\" role=\"menuitem\" tabindex=\"-1\" title=\"在 Finder 里定位这个文件夹\">在 Finder 中显示</button>"}
+PASS 项目菜单End落到最后一项
+PASS 项目菜单Home回到第一项
+PASS 项目菜单Esc关闭并还原触发器焦点
+PASS 窗口变化后项目菜单仍完整可见
+FAIL 项目菜单键盘进入设置且焦点到显示名 {"keys":[{"key":"","code":"","target":"<button class=\"menu-item\" role=\"menuitem\" tabindex=\"-1\" title=\"在 Finder 里定位这个文件夹\">在 Finder 中显示</button>"},{"key":"End","code":"End","target":"<button class=\"menu-item\" role=\"menuitem\" tabindex=\"-1\" title=\"在 Finder 里定位这个文件夹\">在 Finder 中显示</button>"},{"key":"Home","code":"Home","target":"<button class=\"menu-item danger-text\" role=\"menuitem\" tabindex=\"-1\" title=\"从侧栏移除（不会删除文件夹）\">移除…</button>"},{"key":"Escape","code":"Escape","target":"<button class=\"menu-item\" role=\"menuitem\" tabindex=\"-1\" title=\"在 Finder 里定位这个文件夹\">在 Finder 中显示</button>"},{"key":"","code":"","target":"<button class=\"menu-item\" role=\"menuitem\" tabindex=\"-1\" title=\"在 Finder 里定位这个文件夹\">在 Finder 中显示</button>"},{"key":"","code":"","target":"<button class=\"menu-item\" role=\"menuitem\" tabindex=\"-1\" title=\"在 Finder 里定位这个文件夹\">在 Finder 中显示</button>"},{"key":"Enter","code":"Enter","target":"<button class=\"menu-item\" role=\"menuitem\" tabindex=\"-1\" title=\"在 Finder 里定位这个文件夹\">在 Finder 中显示</button>"}],"active":"<button class=\"menu-item\" role=\"menuitem\" tabindex=\"-1\" title=\"在 Finder 里定位这个文件夹\">在 Finder 中显示</button>"}
+PASS 深色窄窗长路径不挤出项目设置
+PASS renderer无未处理错误
+undefined
+/Users/ze/Downloads/Cairn/cairn/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: electron scripts/project-entry-smoke.cjs /tmp/cairn-round5-key-diagnosis

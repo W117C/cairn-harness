@@ -1,0 +1,25 @@
+PASS 打开设置即聚焦搜索 null
+PASS 清空后焦点归还搜索，可继续输入 null
+PASS 清空按钮达到28px操作目标 {"width":28,"height":28}
+PASS 搜索中Esc只清空查询，设置仍打开 null
+PASS 组字期间Esc不关闭设置或清空查询 null
+PASS 搜索下键激活并聚焦首个匹配分区 null
+PASS 无匹配时保留搜索焦点和空态 null
+PASS 分区下键移焦下一项，不误切换正文 null
+PASS 分区回车激活聚焦项 null
+PASS 组字回车不误跳分区 null
+PASS 切分区正文回顶，标题和首项直接可见 {"beforeScroll":187.5,"afterScroll":0}
+PASS 短窗End直达最后分区，返回与搜索持续可见 {"focus":"关于与更新","backTop":56,"searchTop":95,"navTop":38,"lastBottom":546.1953125,"height":560,"bodyOverflow":false}
+PASS Home回首项并保留当前正文 null
+PASS 上键首尾循环 null
+PASS 空搜索Esc先离开搜索，设置保持打开 null
+PASS 再次Esc关闭设置 null
+PASS 返回按钮直接关闭，不被搜索清空逻辑截走 null
+PASS 有未保存草稿时Esc先打开确认框 null
+PASS 嵌套确认框Esc仅返回编辑，草稿和焦点保留 null
+PASS 1440×900设置无横向溢出且搜索可见 {"overflow":false,"searchVisible":true}
+PASS 1120×760设置无横向溢出且搜索可见 {"overflow":false,"searchVisible":true}
+PASS 880×560设置无横向溢出且搜索可见 {"overflow":false,"searchVisible":true}
+PASS 深色窄窗搜索清空仍可用 null
+PASS renderer无错误 []
+Evidence: /Users/ze/Downloads/Cairn/cairn/outputs/desktop-ux-continuation-2026-11-07/settings-navigation

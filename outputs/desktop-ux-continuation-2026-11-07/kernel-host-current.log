@@ -1,0 +1,46 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn/apps/desktop
+
+stderr | tests/kernel-host.test.ts > 第十八遍：首条消息自动命名（autoTitleFirstMessage + run 挂点） > P1 修：run 起跑前失败（模型解析不过）不再留下有标题的空会话垃圾
+[ghost-probe2] pre-handleAgentRun ws=/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-host-MXcq0E/ghost-ws
+
+stderr | tests/kernel-host.test.ts > 第十八遍：首条消息自动命名（autoTitleFirstMessage + run 挂点） > P1 修：run 起跑前失败（模型解析不过）不再留下有标题的空会话垃圾
+[ghost-probe2] wasEmpty=true
+
+stderr | tests/kernel-host.test.ts > 第十八遍：首条消息自动命名（autoTitleFirstMessage + run 挂点） > P1 修：run 起跑前失败（模型解析不过）不再留下有标题的空会话垃圾
+[ghost-probe3] pre-resolve provider=ghost-provider model=
+
+ ❯ tests/kernel-host.test.ts (21 tests | 1 failed | 20 skipped) 16ms
+   ❯ 第十八遍：首条消息自动命名（autoTitleFirstMessage + run 挂点） (5)
+     × P1 修：run 起跑前失败（模型解析不过）不再留下有标题的空会话垃圾 15ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/kernel-host.test.ts > 第十八遍：首条消息自动命名（autoTitleFirstMessage + run 挂点） > P1 修：run 起跑前失败（模型解析不过）不再留下有标题的空会话垃圾
+AssertionError: expected undefined to be '会话 2026-11-07 11:08:12 #1' // Object.is equality
+
+- Expected:
+"会话 2026-11-07 11:08:12 #1"
+
++ Received:
+undefined
+
+ ❯ tests/kernel-host.test.ts:580:29
+    578|       if (res.ok === false) expect(res.error ?? "").toContain("未知主会话 p…
+    579|       const listed = (await ghostHost.listSessions()).find((s) => s.id…
+    580|       expect(listed?.title).toBe(created.id); // 时间戳名，不是消息文本——标题没落
+       |                             ^
+    581|       // outbox 不应有 session_titled
+    582|       expect(listed).toBeDefined();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 20 skipped (21)
+   Start at  11:08:10
+   Duration  1.42s (transform 78%, import 21%, tests 1%)
+
+undefined
+/Users/ze/Downloads/Cairn/cairn/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: vitest run --config vitest.config.ts '--maxWorkers=1' tests/kernel-host.test.ts -t 'run 起跑前失败'

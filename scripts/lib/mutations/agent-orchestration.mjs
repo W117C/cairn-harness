@@ -451,6 +451,7 @@ export const MUTATIONS = [
   },
   {
     id: "subagent-stop-not-fired",
+    // 终态漏斗的跨模块包装留在 orchestrator.ts；finishInner 实现在 worker-finish.ts。
     src: "src/agent/orchestrator.ts",
     test: "tests/worker-hooks.test.ts",
     desc: "不发 SubagentStop ⇒ 「每次子任务收束都过一次审计钩子」这条承诺（§9.10 的另一半）落空，且终态已经写完才发现没人验收",
@@ -585,6 +586,7 @@ export const MUTATIONS = [
   },
   {
     id: "finish-throw-orphans-terminal-waiters",
+    // 异常收尾放行等待方的跨模块包装留在 orchestrator.ts；finishInner 实现在 worker-finish.ts。
     src: "src/agent/orchestrator.ts",
     test: "tests/terminal-sync-window.test.ts",
     desc: "收尾中途抛异常时只置标志不放行等待方 ⇒ sequencer 在没有超时的等待上永挂（整链无终态、worktree 清不掉、cancel 又被 finished 拒）",

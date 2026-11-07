@@ -1,0 +1,22 @@
+[
+  {
+    "antipattern": "layout-transition",
+    "name": "Layout property animation",
+    "description": "Animating width, height, padding, or margin causes layout thrash and janky performance. Use transform and opacity instead, or grid-template-rows for height animations.",
+    "severity": "warning",
+    "category": "quality",
+    "file": "/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/styles.css",
+    "line": 161,
+    "snippet": "transition: width"
+  },
+  {
+    "antipattern": "layout-transition",
+    "name": "Layout property animation",
+    "description": "Animating width, height, padding, or margin causes layout thrash and janky performance. Use transform and opacity instead, or grid-template-rows for height animations.",
+    "severity": "warning",
+    "category": "quality",
+    "file": "/Users/ze/Downloads/Cairn/cairn/apps/desktop/src/renderer/styles.css",
+    "line": 176,
+    "snippet": "transition: width"
+  }
+]

@@ -185,6 +185,30 @@ describe("①首次 + 批准 ⇒ 执行器真被叫到（正证人）", () => {
     const hook = createVerifyHook(repo, { exec: spyExec().exec, trustResolver: rig.resolverFor("approve") });
     expect(await hook.surface?.(), "批过之后 surface() 仍判 false ⇒ 闭环第三环还是断的").toBe(true);
   });
+
+  // #33：surface 的信任探测曾丢掉 run 信号。首次在未信任仓库跑 autoVerify 时，它会在
+  // AskGate 里悬到 60s 超时；用户按 Stop 也收不了。
+  it("surface() 透传取消信号：已取消不卡；等待中取消立即按拒绝收束", async () => {
+    const done = rig.resolverFor("no-answer", 60_000);
+    const hook = createVerifyHook(repo, { exec: spyExec().exec, trustResolver: done });
+    const pre = new AbortController();
+    pre.abort();
+    const startedPre = Date.now();
+    expect(await hook.surface?.(pre.signal)).toBe(false);
+    expect(Date.now() - startedPre).toBeLessThan(1_000);
+    expect(rig.cards.length, "已取消的 run 不该再发信任卡").toBe(0);
+
+    const waiting = new AbortController();
+    const pending = hook.surface?.(waiting.signal);
+    for (let i = 0; i < 80 && rig.cards.length === 0; i++) await new Promise((r) => setTimeout(r, 5));
+    expect(rig.cards.length, "卡没发出来 ⇒ 这一格没测到等待中取消").toBe(1);
+    const started = Date.now();
+    waiting.abort();
+    await expect(pending).resolves.toBe(false);
+    expect(Date.now() - started, "取消后不许等满 60s 超时").toBeLessThan(1_000);
+    expect(rig.gates[0]?.pendingCount, "取消要同步摘掉 pending，不留悬卡").toBe(0);
+    expect((await rig.entries()).trusted).toEqual([]);
+  });
 });
 
 describe("②首次 + 拒／无应答 ⇒ 不跑、不记账、证据不落 failed", () => {

@@ -1,0 +1,160 @@
+[
+  {
+    "name": "首页仅保留窗口级工具",
+    "ok": true,
+    "detail": {
+      "tools": true,
+      "changes": false
+    }
+  },
+  {
+    "name": "首页工具不提供会话审查入口",
+    "ok": true,
+    "detail": [
+      "打开文件窗格⌘⇧F",
+      "打开终端窗格Ctrl+`",
+      "打开浏览器窗格⌘⇧B",
+      "已加载插件⌘⌥B",
+      "进入专注模式⌘⌥F"
+    ]
+  },
+  {
+    "name": "会话只常驻改动和工具，数量指本会话",
+    "ok": true,
+    "detail": {
+      "labels": [
+        "改动1",
+        "工具"
+      ],
+      "changeLabel": "查看本会话改动（1 个文件）",
+      "hidden": true
+    }
+  },
+  {
+    "name": "会话工具菜单只保留三个常用窗格与三项布局操作",
+    "ok": true,
+    "detail": [
+      "打开文件窗格⌘⇧F",
+      "打开终端窗格Ctrl+`",
+      "打开浏览器窗格⌘⇧B",
+      "显示右侧面板⌘⌥I",
+      "已加载插件⌘⌥B",
+      "进入专注模式⌘⌥F"
+    ]
+  },
+  {
+    "name": "Esc 关闭菜单并还焦点给工具入口",
+    "ok": true,
+    "detail": {
+      "menu": false,
+      "active": "<button class=\"tb-btn tb-action\" aria-label=\"工作台工具\" title=\"工作台工具\" type=\"button\" id=\"radix-:r0:\" aria-haspopup=\"menu\" aria-expanded=\"false\" data-state=\"closed\"><span>工具</span><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-chevron-down\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"></path></svg></button>",
+      "focused": false
+    }
+  },
+  {
+    "name": "改动按钮一次打开审查窗格",
+    "ok": true
+  },
+  {
+    "name": "从工具菜单打开文件窗格",
+    "ok": true
+  },
+  {
+    "name": "已挂载改动窗格可再次直达，不误关且切到前台",
+    "ok": true
+  },
+  {
+    "name": "菜单可收起右侧面板",
+    "ok": true
+  },
+  {
+    "name": "隐藏后点击改动恢复面板与原审查内容",
+    "ok": true
+  },
+  {
+    "name": "工具菜单进入专注模式",
+    "ok": true
+  },
+  {
+    "name": "工具菜单退出专注模式",
+    "ok": true
+  },
+  {
+    "name": "插件侧栏可从菜单打开",
+    "ok": true
+  },
+  {
+    "name": "插件侧栏可从菜单关闭",
+    "ok": true
+  },
+  {
+    "name": "侧栏内部关闭后焦点返回新的工具入口",
+    "ok": true
+  },
+  {
+    "name": "原浏览器快捷键仍可打开窗格",
+    "ok": true
+  },
+  {
+    "name": "终端可从工具菜单打开",
+    "ok": true
+  },
+  {
+    "name": "720 窄窗与长标题仍有两个文字入口且不重叠",
+    "ok": true,
+    "detail": {
+      "c": 82,
+      "cLeft": 565,
+      "cRight": 647,
+      "t": 59,
+      "tLeft": 649,
+      "end": 708,
+      "viewport": 720,
+      "titleRight": 555,
+      "titleLength": 160,
+      "overflow": false
+    }
+  },
+  {
+    "name": "菜单项可用方向键到达",
+    "ok": true,
+    "detail": {
+      "active": "<div role=\"menuitem\" class=\"menu-item\" tabindex=\"-1\" data-orientation=\"vertical\" data-radix-collection-item=\"\"><span>查看文件窗格</span><span class=\"sub\">⌘⇧F</span></div>",
+      "role": "menuitem",
+      "inMenu": true,
+      "focused": false
+    }
+  },
+  {
+    "name": "低高度窗口的工具菜单限高且可滚动",
+    "ok": false,
+    "detail": {
+      "top": 35,
+      "bottom": 278,
+      "viewport": 300,
+      "client": 241,
+      "scroll": 241
+    }
+  },
+  {
+    "name": "低高度时 End 能滚动并聚焦菜单末项",
+    "ok": false,
+    "detail": {
+      "focused": true,
+      "text": "进入专注模式⌘⌥F",
+      "top": 233,
+      "bottom": 269,
+      "viewport": 300,
+      "scrollTop": 0
+    }
+  },
+  {
+    "name": "设置页不展示工作台任务入口",
+    "ok": true
+  },
+  {
+    "name": "renderer 无控制台错误",
+    "ok": true,
+    "detail": []
+  }
+]

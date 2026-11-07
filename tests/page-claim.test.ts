@@ -71,6 +71,16 @@ describe("页号取料", () => {
     expect(pageNumbersIn(text).sort((a, b) => a - b)).toEqual([237, 239, 240, 240]);
   });
 
+  it("现行 h2 台账页也必须进分母：只认旧 h3 会把 1030+ 的页读丢而回退占旧号", () => {
+    const text = [
+      "### 2026-09-30 · 第 240 页 · 旧页",
+      "## 2026-11-05 · 第 1033 页：现行页（工作树，未提交）",
+      "正文里提一句 第 9999 页 不算标题",
+    ].join("\n");
+    expect(pageNumbersIn(text).sort((a, b) => a - b)).toEqual([240, 1033]);
+    expect(nextFreePage(pageNumbersIn(text))).toBe(1034);
+  });
+
   it("号池目录名只认纯数字（临时名／别人的文件不算占位，也不能因此被删）", () => {
     expect(claimedPages(["12", "13", "tmp-14", ".lock", "14x"]).sort((a, b) => a - b)).toEqual([12, 13]);
   });

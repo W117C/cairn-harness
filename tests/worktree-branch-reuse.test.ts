@@ -156,6 +156,17 @@ describe("createWorktree：worker 的 agentId 跨进程重号，不许挂载旧�
   });
 
 
+  it("孤儿清理拒绝未登记的 wt-* 普通目录：不 rm -rf 用户文件", async () => {
+    const root = repo();
+    const wt = worktreePathFor(root, "worker-12");
+    mkdirSync(wt, { recursive: true });
+    writeFileSync(join(wt, "user.txt"), "keep me\n", "utf8");
+    const r = await cleanOrphanWorktree(root, "worker-12");
+    expect(r.removed).toBe(false);
+    expect(r.error).toContain("不是已登记的 git worktree");
+    expect(readFileSync(join(wt, "user.txt"), "utf8")).toBe("keep me\n");
+  });
+
   it("仍归属的 agent：cleanOrphanWorktree 也拒绝，文件原样保留（clean 不假定调用方筛过）", async () => {
     const root = repo();
     await createWorktree(root, "worker-10", "同一任务");

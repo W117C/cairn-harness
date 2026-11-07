@@ -1,0 +1,21 @@
+PASS Inter and JetBrains Mono load from the offline bundle
+PASS prose and table share the UI sans family
+PASS code is actually monospaced
+PASS light: sidebar metadata and input hint meet 4.5:1 contrast
+PASS light 1440: composer stays within the window
+PASS light 1440: sidebar actions have 28px targets
+PASS light 1120: composer stays within the window
+PASS light 1120: sidebar actions have 28px targets
+PASS light 880: composer stays within the window
+PASS light 880: sidebar actions have 28px targets
+PASS dark: sidebar metadata and input hint meet 4.5:1 contrast
+PASS dark 1440: composer stays within the window
+PASS dark 1440: sidebar actions have 28px targets
+PASS dark 1120: composer stays within the window
+PASS dark 1120: sidebar actions have 28px targets
+PASS dark 880: composer stays within the window
+PASS dark 880: sidebar actions have 28px targets
+PASS keyboard focus reveals the session action
+PASS model menu remains reachable
+PASS Escape closes the menu and returns focus
+PASS renderer has no console errors

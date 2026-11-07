@@ -1,0 +1,142 @@
+{
+  "fixtureData": true,
+  "checks": [
+    {
+      "name": "880 窄窗默认专注对话",
+      "ok": true,
+      "detail": {
+        "display": "block",
+        "width": 0,
+        "group": 576,
+        "main": 576,
+        "inert": true,
+        "sidebar": "expanded"
+      }
+    },
+    {
+      "name": "880 显式打开检查器后确实可见可交互",
+      "ok": true,
+      "detail": {
+        "display": "block",
+        "width": 412,
+        "group": 832,
+        "main": 420,
+        "inert": false,
+        "sidebar": "collapsed"
+      }
+    },
+    {
+      "name": "880 检查器可再次隐藏",
+      "ok": true,
+      "detail": {
+        "display": "block",
+        "width": 0,
+        "group": 576,
+        "main": 576,
+        "inert": true,
+        "sidebar": "expanded"
+      }
+    },
+    {
+      "name": "880 窗格快捷键打开可见文件",
+      "ok": true,
+      "detail": {
+        "display": "block",
+        "width": 412,
+        "group": 832,
+        "main": 420,
+        "inert": false,
+        "active": "file",
+        "sidebar": "collapsed"
+      }
+    },
+    {
+      "name": "隐藏再显示同一窗格，不销毁内容",
+      "ok": true,
+      "detail": {
+        "display": "block",
+        "width": 412,
+        "group": 832,
+        "main": 420,
+        "inert": false,
+        "active": "file",
+        "kept": "preserved",
+        "sidebar": "collapsed"
+      }
+    },
+    {
+      "name": "放宽窗口后已打开窗格仍可用",
+      "ok": true,
+      "detail": {
+        "display": "block",
+        "width": 420,
+        "group": 1072,
+        "main": 649,
+        "inert": false,
+        "active": "file",
+        "kept": "preserved",
+        "sidebar": "collapsed"
+      }
+    },
+    {
+      "name": "键盘打开记忆后焦点进入详情",
+      "ok": false,
+      "detail": {
+        "top": 229,
+        "bottom": 1975.0078125,
+        "headTop": 230,
+        "height": 560,
+        "focused": false,
+        "bodyOverflow": false,
+        "pageOverflow": false,
+        "scrollTop": 0
+      }
+    },
+    {
+      "name": "长正文约束在窗内并独立滚动",
+      "ok": false,
+      "detail": {
+        "top": 229,
+        "bottom": 1975.0078125,
+        "headTop": 230,
+        "height": 560,
+        "focused": false,
+        "bodyOverflow": false,
+        "pageOverflow": false,
+        "scrollTop": 0
+      }
+    },
+    {
+      "name": "滚到正文底仍能看到标题与关闭",
+      "ok": false,
+      "detail": {
+        "top": 229,
+        "bottom": 1975.0078125,
+        "headTop": 230,
+        "height": 560,
+        "focused": false,
+        "bodyOverflow": false,
+        "pageOverflow": false,
+        "scrollTop": 0
+      }
+    },
+    {
+      "name": "Esc 关闭详情，焦点返回原卡片",
+      "ok": false,
+      "detail": {
+        "closed": false,
+        "focus": "查看记忆主题 memory-01"
+      }
+    },
+    {
+      "name": "鼠标关闭详情同样返回卡片",
+      "ok": false
+    },
+    {
+      "name": "renderer 无控制台错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": []
+}

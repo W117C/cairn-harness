@@ -1,0 +1,165 @@
+{
+  "fixtureData": true,
+  "checks": [
+    {
+      "name": "打开目录失败显示原因",
+      "ok": true
+    },
+    {
+      "name": "打开目录失败后可重试成功并清掉旧错误",
+      "ok": true
+    },
+    {
+      "name": "最近项目登记失败显示原因",
+      "ok": true
+    },
+    {
+      "name": "最近项目可重试成功并清掉旧错误",
+      "ok": true
+    },
+    {
+      "name": "空项目名不会提交且有就地校验",
+      "ok": true
+    },
+    {
+      "name": "模板方向键移动到下一项并保持单选语义",
+      "ok": true
+    },
+    {
+      "name": "新建项目选择位置失败可见且保留项目名",
+      "ok": true
+    },
+    {
+      "name": "重选位置成功后清掉旧错误并更新预览",
+      "ok": true
+    },
+    {
+      "name": "新建提交期间固定名称模板和位置",
+      "ok": true
+    },
+    {
+      "name": "新建提交期间不会重复发起创建",
+      "ok": true
+    },
+    {
+      "name": "新建尚未完成时Esc保留表单",
+      "ok": true
+    },
+    {
+      "name": "新建尚未完成时遮罩不关闭表单",
+      "ok": true
+    },
+    {
+      "name": "新建尚未完成时取消按钮不关闭表单",
+      "ok": true
+    },
+    {
+      "name": "新建失败原因可见并保留原输入以便重试",
+      "ok": true
+    },
+    {
+      "name": "新建失败后可重试成功并关闭表单",
+      "ok": true
+    },
+    {
+      "name": "克隆表单开启后焦点在仓库地址",
+      "ok": true
+    },
+    {
+      "name": "克隆选择位置失败显示原因并保留URL",
+      "ok": true
+    },
+    {
+      "name": "克隆位置重试成功后清掉旧错误",
+      "ok": true
+    },
+    {
+      "name": "克隆期间固定URL位置并禁用取消与入口",
+      "ok": true
+    },
+    {
+      "name": "克隆期间不会假装取消后台操作",
+      "ok": true
+    },
+    {
+      "name": "克隆失败可见并保留地址位置以便重试",
+      "ok": true
+    },
+    {
+      "name": "克隆失败后重试成功并关闭表单",
+      "ok": true
+    },
+    {
+      "name": "下次克隆从空地址和未选位置开始",
+      "ok": true
+    },
+    {
+      "name": "深色窄窗新建表单无横向溢出且主按钮可见",
+      "ok": true
+    },
+    {
+      "name": "空闲时仍可Esc关闭新建表单",
+      "ok": true
+    },
+    {
+      "name": "renderer无未处理错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": [],
+  "calls": [
+    {
+      "kind": "addProject",
+      "input": {
+        "path": "/tmp/project-entry-parent"
+      }
+    },
+    {
+      "kind": "addProject",
+      "input": {
+        "path": "/tmp/history-project"
+      }
+    },
+    {
+      "kind": "addProject",
+      "input": {
+        "path": "/tmp/history-project"
+      }
+    },
+    {
+      "kind": "createProject",
+      "input": {
+        "name": "恢复项目",
+        "parentDir": "/tmp/project-entry-parent"
+      }
+    },
+    {
+      "kind": "createProject",
+      "input": {
+        "name": "恢复项目",
+        "parentDir": "/tmp/project-entry-parent"
+      }
+    },
+    {
+      "kind": "gitClone",
+      "input": {
+        "url": "https://example.com/team/demo.git",
+        "parentDir": "/tmp/project-entry-parent"
+      }
+    },
+    {
+      "kind": "gitClone",
+      "input": {
+        "url": "https://example.com/team/demo.git",
+        "parentDir": "/tmp/project-entry-parent"
+      }
+    },
+    {
+      "kind": "addProject",
+      "input": {
+        "path": "/tmp/project-entry-parent/cloned-project"
+      }
+    }
+  ]
+}

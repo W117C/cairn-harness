@@ -38,8 +38,8 @@ export const MUTATIONS = [
     test: "tests/secrets.test.ts",
     desc: "去掉 rename：tmp 写完不落定（崩溃即丢密文）",
     apply: (s) => s.replace(
-      '    await writeFile(tmp, text, "utf8");\n    if (opts.mode !== undefined) await chmod(tmp, opts.mode).catch(() => undefined);\n    await rename(tmp, path);',
-      '    await writeFile(tmp, text, "utf8");\n    if (opts.mode !== undefined) await chmod(tmp, opts.mode).catch(() => undefined);',
+      '    await writeFile(tmp, text, { encoding: "utf8", mode: opts.mode });\n    if (opts.mode !== undefined) await chmod(tmp, opts.mode).catch(() => undefined);\n    await rename(tmp, path);',
+      '    await writeFile(tmp, text, { encoding: "utf8", mode: opts.mode });\n    if (opts.mode !== undefined) await chmod(tmp, opts.mode).catch(() => undefined);',
     ),
     expectFail: "原子写：经 tmp→rename 落盘，成功后无 .tmp 残留",
   },
@@ -49,8 +49,8 @@ export const MUTATIONS = [
     test: "tests/secrets.test.ts",
     desc: "tmp+rename 退回裸 writeFile（写中途崩溃截断密文存储）",
     apply: (s) => s.replace(
-      '    await writeFile(tmp, text, "utf8");\n    if (opts.mode !== undefined) await chmod(tmp, opts.mode).catch(() => undefined);\n    await rename(tmp, path);',
-      '    await writeFile(path, text, "utf8");',
+      '    await writeFile(tmp, text, { encoding: "utf8", mode: opts.mode });\n    if (opts.mode !== undefined) await chmod(tmp, opts.mode).catch(() => undefined);\n    await rename(tmp, path);',
+      '    await writeFile(path, text, { encoding: "utf8", mode: opts.mode });',
     ),
     expectFail: "原子写：经 tmp→rename 落盘，成功后无 .tmp 残留",
   },
@@ -935,7 +935,7 @@ export const MUTATIONS = [
   },
   {
     id: "worker-selfname-not-stamped",
-    src: "src/providers/registry.ts",
+    src: "src/providers/worker-adapters.ts",
     test: "tests/usage-attribution.test.ts",
     desc: "适配器不盖自述名 ⇒ 四支 provider 全落 harness 缺省档，而归因键与折价同一个变量，" +
       "所以两者一起偏、永不互相打脸（#22 的盲区形状）。盖章点必须在包装函数里，四支各写一遍＝第五族「只硬化一支」",
@@ -992,8 +992,8 @@ export const MUTATIONS = [
       "⇒「出网永不免批」退化成「出网点一次就永久免批」。**实测过这条洞是真的**：反向对照里把这一支翻成 false，" +
       "第二轮会话的审批次数读数是 0（一次都没问就直接出网了）。判卷是跨会话的——规则库在 runAgent 开头只 load 一次，" +
       "同一轮里测不出来（那样写是空绿，本轮踩过一次）",
-    // 针脚改指（2026-10-02 修）：`0b37ad2`（M3 加 web_search）把这一支**加宽**成两个名字同一条口径 ⇒
-    // 旧针脚（只 web_fetch）失针。改法逐字照旧（把整支翻成 false），只是针脚跟上新条件。
+    // 针脚改指（2026-11-06）：浏览器驾驶三件把 `browser_navigate` 也并入出网家族，
+    // 改法仍是把整支翻成 false；新名字不进针脚会让「点一次总是允许就永久出网」漏测。
     apply: (s) => s.replace('  if ((tool as string) === "web_fetch" || (tool as string) === "web_search") return true;', '  if ((tool as string) === "web_fetch" || (tool as string) === "web_search") return false;'),
     expectFail: "点了「总是允许」也不落永久规则",
   },

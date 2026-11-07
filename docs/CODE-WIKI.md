@@ -44,6 +44,17 @@ This checkout is core-first: the agent kernel (`src/`) is electron-free. The for
 新增一挡而少配一处时，只靠类型系统会在跨模块处漏掉（`HARNESS_HOLD_PROSE_TOKEN` 用
 `Record<..., string>` 的穷尽性把这件事变成编译期错误）。
 
+## ①b 完成契约：声明、证据、交付三件事分开
+
+`VerifyDeclaration` 是用户/宿主写进 `session_meta` / `session_meta_update.verify` 的验收命令清单；模型不能自提判据。`src/events/verify-declaration.ts` 的 `findEffectiveVerifyDeclaration()` 按当前任务窗口取最后一条合法声明，坏声明 fail-closed、不跨新用户轮次继承；`projectContext()` 再由 `acceptance-contract.ts` 把它渲染成有界、经控制标签中和的 user 资料信封。`replay()` 仍逐字返回原事件，投影不改日志。
+
+三格证据不能互相顶替：
+- `verify_result.source="task"` 证明这一拍跑的是宿主声明的命令，`verify_result.ok` 证明它绿；
+- `findPhantomDelivery()` 只证明获批方案里承诺 create 的文件最终在不在盘上；
+- `goalStopDecision()` 只管 `--goal` 自动续跑何时停，它的 `verified` 取 `workerVerificationEvidence()`。
+
+「模型说做完了」不是其中任何一格。CLI 的退出码由 `runFailed()` 从错误事件、验证红、工具失败、门拒绝和交付断言取事实；桌面 `RunResponse.ok` 表示 run 生命周期正常，不等价于验收契约全绿。
+
 ## ② 权限判定：四层固定序，先命中先短路
 
 真身：`src/permissions/autonomy.ts` 的 `evaluate`（纯函数、零私有状态——规则库与放行集是仅有的两个输入源）。

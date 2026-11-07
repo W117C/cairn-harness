@@ -1,0 +1,15 @@
+PASS 设置导航列出全部分区 ["通用","模型与 Provider","个性化","子 Agent","MCP 服务器","Hooks","联网搜索","用量统计","进化","权限与安全","高级","快捷键","技能中心","工作树","迁移导入","关于与更新"]
+PASS 每个分区都能点开、正文非空、无渲染错误边界 []
+PASS 设置分区没有横向溢出 []
+PASS 三个内置角色均显示用途说明 "委派\n允许委派子 Agent\n控制主 Agent 能否启动、等待和取消子 Agent。\n已开启\n同时运行上限\n4 个\n角色\nimplement\n内置\n在专属工作树中实现任务。\nreview\n内置\n只读审查变更并给出结论。\ntest\n内置\n只读核对测试和验证证据。\nreview-checker\n自定义\n审查变更并给出验证步骤。\n编辑\nclaude-helper\nClaude Code\nClaude Code 里的自定义角色。\n刷新\n新建角色"
+PASS 进化分区渲染出报告（证据分区 + 技术详情 Episode / playbook / 预算容量） {"text":"进化\n证据\n记录总数\n12 条\n结果分布\n成功\n8\n失败\n1\n未分类\n3\n自校验\n绿\n6\n红\n2\n无\n4\n未知面\n判分未测\n3\n自校验未跑\n4\n用户反馈未测\n9\n成本\n主面\n12400 token\n子代理\n2200 token\n计价\n可定价\n6\n不可定价\n3\n技术详情\nEpisode\nsuccess 8 / failure 1 / unknown 3；verify green 6 / red 2 "}
+PASS 全局经验分区渲染出条目与撤销入口 {"found":true,"text":"全局经验\nowner 晋升 · 跨 workspace\n跨项目通用：先读测试再改实现。\n本库观测 0/5；证据库观测 0/0；负证据（本库+证据库）：观测 0/5（成功率 0% ≤ 20%）——建议 dormant\nlesson · active · 3 库 / 4 证据\n撤销\n全局休眠：失败样本先归档。\n本库观测 0/1；证据库观测 0/0\npitfall · dormant · 2 库 / 3 证据\n恢复\n全局未冻结\n冻结会立即停止所有 workspace 的全局经验注入与撤销；随时可解冻。\n冻结","hasBody":true,"hasObservation":true,"hasFinding":true,"hasButton":true,"hasRestore":true,"label":"撤销全局经验 exp-g1"}
+PASS 全局经验分区显示本库观测与体检 {"found":true,"text":"全局经验\nowner 晋升 · 跨 workspace\n跨项目通用：先读测试再改实现。\n本库观测 0/5；证据库观测 0/0；负证据（本库+证据库）：观测 0/5（成功率 0% ≤ 20%）——建议 dormant\nlesson · active · 3 库 / 4 证据\n撤销\n全局休眠：失败样本先归档。\n本库观测 0/1；证据库观测 0/0\npitfall · dormant · 2 库 / 3 证据\n恢复\n全局未冻结\n冻结会立即停止所有 workspace 的全局经验注入与撤销；随时可解冻。\n冻结","hasBody":true,"hasObservation":true,"hasFinding":true,"hasButton":true,"hasRestore":true,"label":"撤销全局经验 exp-g1"}
+PASS 全局经验分区显示恢复入口 {"found":true,"text":"全局经验\nowner 晋升 · 跨 workspace\n跨项目通用：先读测试再改实现。\n本库观测 0/5；证据库观测 0/0；负证据（本库+证据库）：观测 0/5（成功率 0% ≤ 20%）——建议 dormant\nlesson · active · 3 库 / 4 证据\n撤销\n全局休眠：失败样本先归档。\n本库观测 0/1；证据库观测 0/0\npitfall · dormant · 2 库 / 3 证据\n恢复\n全局未冻结\n冻结会立即停止所有 workspace 的全局经验注入与撤销；随时可解冻。\n冻结","hasBody":true,"hasObservation":true,"hasFinding":true,"hasButton":true,"hasRestore":true,"label":"撤销全局经验 exp-g1"}
+PASS 全局经验撤销先出确认卡 {"opened":true,"confirm":true}
+PASS 全局恢复先出确认卡 {"restoreOpened":true,"restoreConfirm":true}
+PASS 全局冻结先出确认卡 {"freezeOpened":true,"freezeConfirm":true}
+PASS 全局冻结后按钮变解冻、撤销隐藏 {"text":"全局经验\n全局 STOP 冻结中\n跨项目通用：先读测试再改实现。\n本库观测 0/5；证据库观测 0/0；负证据（本库+证据库）：观测 0/5（成功率 0% ≤ 20%）——建议 dormant\nlesson · active · 3 库 / 4 证据\n全局休眠：失败样本先归档。\n本库观测 0/1；证据库观测 0/0\npitfall · dormant · 2 库 / 3 证据\n全局已冻结（STOP）\n所有 workspace 的全局经验停止注入与撤销；解冻后恢复。\n解冻","hasUnfreeze":true,"hasRevoke":false}
+PASS 全程无渲染层控制台错误 []
+[settings-sweep-smoke] 13/13 PASS
+Evidence: /tmp/cairn-round2-settings-dark-after

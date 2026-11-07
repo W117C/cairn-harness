@@ -1,0 +1,21 @@
+FAIL Esc关闭前提示未保存的自定义指令 undefined
+FAIL 继续编辑保留输入和编辑焦点 undefined
+PASS 切换设置分区后自定义指令草稿仍在
+FAIL 返回按钮同样保护未保存的自定义指令 undefined
+PASS 明确放弃修改后关闭设置
+PASS 保存中禁用重复提交
+FAIL 保存尚未完成时保持设置在场 undefined
+PASS 保存完成后回显已保存内容
+PASS 已保存的设置可直接关闭
+FAIL 唤醒设置读取失败有可见说明 "自动化 工作流\n\n按时间自动执行工作流，查看每次运行结果。\n\n定时任务\n闲时队列\n还没有定时任务\n创建定时任务\nCairn 运行会话时保持电脑唤醒。\n关\n定时任务模板\n晨会动态\n汇总上一个工作日以来的提交、模块变化、CI 状态和待跟进事项，最终生成不超过 6 条的晨会口述摘要。只读分析，不改任何文件。\n每工作日 09:00\n风险扫描\n检查最近 24 小时的代码变更，识别运行错误、数据丢失、权限绕过、资源泄漏及跨端兼容等高置信风险，并附代码位置与建议修法。只读分析。\n每天 10"
+FAIL 读取失败不冒充已关闭状态 undefined
+FAIL 就地重试后恢复真实开关状态 undefined
+FAIL 保存失败回滚并显示原因 undefined
+FAIL 唤醒设置保存中禁止连续切换 undefined
+PASS 失败后可重新保存并回显
+PASS 已有定时任务时仍可调整唤醒设置
+PASS 窄窗口没有横向溢出
+PASS renderer 无控制台错误
+undefined
+/Users/ze/Downloads/Cairn/cairn/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: electron scripts/form-recovery-smoke.cjs /tmp/cairn-round3-before

@@ -1,0 +1,62 @@
+[
+  {
+    "task": "T1-bugfix-add",
+    "arm": "baseline",
+    "passed": false,
+    "claimedDone": true,
+    "gateBlocked": false,
+    "tokens": 2940,
+    "wallMs": 6,
+    "verifyCommand": "node --test tests/math.test.js"
+  },
+  {
+    "task": "T1-bugfix-add",
+    "arm": "quality",
+    "passed": true,
+    "claimedDone": true,
+    "gateBlocked": false,
+    "tokens": 5240,
+    "wallMs": 144,
+    "verifyCommand": "node --test tests/math.test.js"
+  },
+  {
+    "task": "T2-feature-slug",
+    "arm": "baseline",
+    "passed": false,
+    "claimedDone": true,
+    "gateBlocked": false,
+    "tokens": 2940,
+    "wallMs": 2,
+    "verifyCommand": "node --test tests/text.test.js"
+  },
+  {
+    "task": "T2-feature-slug",
+    "arm": "quality",
+    "passed": true,
+    "claimedDone": true,
+    "gateBlocked": false,
+    "tokens": 5240,
+    "wallMs": 141,
+    "verifyCommand": "node --test tests/text.test.js"
+  },
+  {
+    "task": "T3-static-syntax",
+    "arm": "baseline",
+    "passed": true,
+    "claimedDone": true,
+    "gateBlocked": false,
+    "tokens": 2940,
+    "wallMs": 2,
+    "verifyCommand": "node --check src/app.js"
+  },
+  {
+    "task": "T3-static-syntax",
+    "arm": "quality",
+    "passed": true,
+    "claimedDone": true,
+    "gateBlocked": false,
+    "tokens": 2940,
+    "wallMs": 27,
+    "verifyCommand": "node --check src/app.js"
+  }
+]

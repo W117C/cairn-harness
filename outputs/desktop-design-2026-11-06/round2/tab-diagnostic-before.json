@@ -1,0 +1,35 @@
+{
+  "initial": {
+    "scrollLeft": 92,
+    "scrollWidth": 383,
+    "clientWidth": 279,
+    "left": 210,
+    "right": 12,
+    "offsetLeft": 309,
+    "offsetWidth": 81,
+    "offsetParent": "pane-nav",
+    "snap": "x"
+  },
+  "atEnd": {
+    "scrollLeft": 104,
+    "scrollWidth": 383,
+    "clientWidth": 279,
+    "left": 198,
+    "right": 0,
+    "offsetLeft": 309,
+    "offsetWidth": 81,
+    "offsetParent": "pane-nav",
+    "snap": "x"
+  },
+  "withoutSnap": {
+    "scrollLeft": 104,
+    "scrollWidth": 383,
+    "clientWidth": 279,
+    "left": 198,
+    "right": 0,
+    "offsetLeft": 309,
+    "offsetWidth": 81,
+    "offsetParent": "pane-nav",
+    "snap": "none"
+  }
+}

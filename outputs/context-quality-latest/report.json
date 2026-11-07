@@ -1,0 +1,128 @@
+{
+  "generatedAt": "2026-11-04T19:02:29.892Z",
+  "version": 1,
+  "rows": [
+    {
+      "caseId": "paraphrase-runbook",
+      "arm": "lexical",
+      "hit": false,
+      "returnedTokens": 0,
+      "latencyMs": 0.15116700000000094,
+      "failed": false,
+      "unknown": [
+        "non-real-provider semantic quality"
+      ]
+    },
+    {
+      "caseId": "paraphrase-runbook",
+      "arm": "hybrid",
+      "hit": true,
+      "returnedTokens": 9,
+      "latencyMs": 0.2115000000000009,
+      "failed": false,
+      "unknown": [
+        "non-real-provider semantic quality"
+      ]
+    },
+    {
+      "caseId": "compacted-tool-fact",
+      "arm": "history",
+      "hit": true,
+      "returnedTokens": 4,
+      "latencyMs": 0.12412499999999937,
+      "failed": false,
+      "unknown": [
+        "non-real-provider semantic quality"
+      ]
+    },
+    {
+      "caseId": "compaction-success",
+      "arm": "sync",
+      "hit": true,
+      "returnedTokens": 17,
+      "latencyMs": 1.0480419999999953,
+      "failed": false,
+      "unknown": [
+        "non-real-provider semantic quality"
+      ]
+    },
+    {
+      "caseId": "compaction-success",
+      "arm": "prediction",
+      "hit": true,
+      "returnedTokens": 17,
+      "latencyMs": 0.03800000000000381,
+      "failed": false,
+      "unknown": [
+        "candidate-build-latency-excluded-from-request",
+        "non-real-provider semantic quality"
+      ]
+    },
+    {
+      "caseId": "compaction-failure",
+      "arm": "sync",
+      "hit": false,
+      "returnedTokens": 0,
+      "latencyMs": 1.4861249999999941,
+      "failed": true,
+      "unknown": [
+        "summarizer-failed",
+        "non-real-provider semantic quality"
+      ]
+    },
+    {
+      "caseId": "compaction-failure",
+      "arm": "prediction",
+      "hit": false,
+      "returnedTokens": 0,
+      "latencyMs": 1.3197080000000057,
+      "failed": true,
+      "unknown": [
+        "summarizer-failed",
+        "non-real-provider semantic quality"
+      ]
+    }
+  ],
+  "summary": {
+    "total": 7,
+    "hits": 4,
+    "failed": 2,
+    "byArm": {
+      "lexical": {
+        "total": 1,
+        "hits": 0,
+        "failed": 0,
+        "avgReturnedTokens": 0,
+        "avgLatencyMs": 0.15116700000000094
+      },
+      "hybrid": {
+        "total": 1,
+        "hits": 1,
+        "failed": 0,
+        "avgReturnedTokens": 9,
+        "avgLatencyMs": 0.2115000000000009
+      },
+      "history": {
+        "total": 1,
+        "hits": 1,
+        "failed": 0,
+        "avgReturnedTokens": 4,
+        "avgLatencyMs": 0.12412499999999937
+      },
+      "sync": {
+        "total": 2,
+        "hits": 1,
+        "failed": 1,
+        "avgReturnedTokens": 8.5,
+        "avgLatencyMs": 1.2670834999999947
+      },
+      "prediction": {
+        "total": 2,
+        "hits": 1,
+        "failed": 1,
+        "avgReturnedTokens": 8.5,
+        "avgLatencyMs": 0.6788540000000047
+      }
+    }
+  }
+}

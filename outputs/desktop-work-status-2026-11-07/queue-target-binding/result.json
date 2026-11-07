@@ -1,0 +1,83 @@
+{
+  "checks": [
+    {
+      "name": "迟到的插话失败只写原项目甲的队列",
+      "ok": true
+    },
+    {
+      "name": "乙项目持久队列没有混入甲的消息",
+      "ok": true
+    },
+    {
+      "name": "乙项目当前界面没有混入甲的待发送消息",
+      "ok": true
+    },
+    {
+      "name": "回到甲项目能读回原队列和刚才的消息",
+      "ok": true
+    },
+    {
+      "name": "Ctrl+Tab 把同名会话切到项目乙并显式传 workspace",
+      "ok": true
+    },
+    {
+      "name": "同名会话只标记一个当前项",
+      "ok": true
+    },
+    {
+      "name": "本次验证未启动额外任务",
+      "ok": true
+    },
+    {
+      "name": "无 renderer/preload 错误",
+      "ok": true
+    }
+  ],
+  "errors": [],
+  "calls": {
+    "queueSet": [
+      {
+        "sessionId": "dup",
+        "workspace": "/tmp/demo-ws",
+        "items": [
+          {
+            "text": "甲项目排队的那条",
+            "attachments": []
+          },
+          {
+            "text": "必须留在甲的消息",
+            "attachments": []
+          }
+        ]
+      }
+    ],
+    "open": [
+      {
+        "id": "dup",
+        "workspace": "/tmp/demo-ws"
+      },
+      {
+        "id": "dup",
+        "workspace": "/tmp/demo-ws-other"
+      },
+      {
+        "id": "dup",
+        "workspace": "/tmp/demo-ws"
+      },
+      {
+        "id": "dup",
+        "workspace": "/tmp/demo-ws-other"
+      }
+    ]
+  },
+  "controls": {
+    "steers": [
+      {
+        "id": "dup",
+        "text": "必须留在甲的消息",
+        "workspace": "/tmp/demo-ws"
+      }
+    ],
+    "cancels": []
+  }
+}

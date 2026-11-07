@@ -95,6 +95,7 @@
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@vscode/ripgrep": "^1.18.0",
     "croner": "^10.0.1",
+    "smol-toml": "1.9.0",
     "tree-sitter-wasms": "0.1.13",
     "tar": "7.5.22",
     "vscode-languageserver-protocol": "^3.18.3",

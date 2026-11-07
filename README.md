@@ -354,10 +354,15 @@ CLI 走 `handleAgentRun` 这个装配入口，所以它第一次真正读盘上�
 
 ## 工具
 
-静态注册表 10 个（`src/tools/index.ts`，`tools-check` 钉着这个数）：
+静态注册表 19 个（[src/tools/index.ts](src/tools/index.ts)，`tools-check` 钉着这个数）；工具名事实源 `TOOL_NAMES` 另有系统门 `verify`，合计 20 个名字：
 
-`read_file` · `write_file` · `edit_file` · `apply_patch`（统一 diff 补丁级编辑，跨文件原子落地）·
-`run_shell` · `grep`（真 ripgrep）· `glob` · `lsp`（真 spawn 语言服务器）· `clarify` · `propose_plan`
+`read_file`（支持 `paths` 一次读多份）· `write_file` · `edit_file` · `apply_patch`（统一 diff 补丁级编辑，跨文件原子落地）·
+`run_shell`（`background:true` 起后台任务）· `grep`（真 ripgrep）· `glob` · `lsp`（真 spawn 语言服务器）·
+`clarify` · `propose_plan` · `read_image` · `render_image` · `todo_write` · `task_output` · `task_stop` ·
+`git_read`（只读三合一 status/diff/log，零写权零 shell）· `calc`（确定性算术，零 eval）· `list_dir`（目录总览带大小/时间）·
+`read_doc`（pdf/docx/xlsx → 纯文本，零新增依赖原生解析）
+
+`task_output` / `task_stop` 与后台 `run_shell` 组成三件套：dev server、长测试、watcher 起在后台，模型按任务号读输出或组杀。只读档不装配 `run_shell`（起不了新后台任务）；读输出与组杀不写仓库，故与 `toolTableFor` 一样保留在只读规格面，避免模型看见的工具与执行白名单分叉。
 
 运行时注入（`installAppTools`，不占静态名额）：`remember`（记忆沉淀）· `spawn_agent` / `wait_for_agents` /
 `cancel_agents`（多 agent 编排，CLI 上真能派 worker——`runAgent` 每轮都建会话级编排器）·
@@ -414,7 +419,7 @@ worker 要联网只能回主会话发。
 
 内核质量很高、**产品面刚补上**的一棵树：strict 零报错，fail-closed 是设计意图而非事后补丁，
 变异测试的判红标准很硬。桌面层曾于 2026-09-27（`69fbb0d`）整体移除，2026-10-02 起以 M1 切片
-重新入库于 `apps/desktop/`（Electron + React + Vite），此后持续接线：140 个 invoke 通道（现读
+重新入库于 `apps/desktop/`（Electron + React + Vite），此后持续接线：156 个 invoke 通道（现读
 `apps/desktop/src/main/channels.ts` 的 `INVOKE_CHANNELS`；判据在 `apps/desktop/tests/channels.test.ts`
 的表长断言，改表不改数当场红——核心套件的 `tests/readme-invoke-channel-count.test.ts` 也把
 这个数与那张表钉在一起）

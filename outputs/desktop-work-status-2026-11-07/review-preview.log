@@ -1,0 +1,756 @@
+# Files (108 reviewable / 750 total)
+
+- mode: workspace
+- total_insertions: 147478
+- total_deletions: 2504
+
+~~- `PROGRESS.md` [modified] +415/-0 (excluded: unsupported_ext)~~
+~~- `README.md` [modified] +9/-4 (excluded: unsupported_ext)~~
+~~- `STATE.md` [modified] +7/-4 (excluded: unsupported_ext)~~
+~~- `apps/desktop/outputs/plugin-marketplace-2026-10-29/01-discover-1440-light.png` [binary] +0/-0 (excluded: binary)~~
+~~- `apps/desktop/outputs/plugin-marketplace-2026-10-29/02-discover-1440-dark.png` [binary] +0/-0 (excluded: binary)~~
+~~- `apps/desktop/outputs/plugin-marketplace-2026-10-29/03-installed-1120-light.png` [binary] +0/-0 (excluded: binary)~~
+~~- `apps/desktop/outputs/plugin-marketplace-2026-10-29/04-updates-1120-dark.png` [binary] +0/-0 (excluded: binary)~~
+~~- `apps/desktop/outputs/plugin-marketplace-2026-10-29/05-review-880-light.png` [binary] +0/-0 (excluded: binary)~~
+~~- `apps/desktop/outputs/plugin-marketplace-2026-10-29/06-offline-1440-light.png` [binary] +0/-0 (excluded: binary)~~
+~~- `apps/desktop/outputs/plugin-marketplace-2026-10-29/07-corrupt-1120-dark.png` [binary] +0/-0 (excluded: binary)~~
+~~- `apps/desktop/outputs/plugin-marketplace-2026-10-29/08-detail-880-dark.png` [binary] +0/-0 (excluded: binary)~~
+~~- `apps/desktop/outputs/plugin-marketplace-2026-10-29/checks.json` [modified] +2/-2 (excluded: user_exclude)~~
+  - `apps/desktop/scripts/app-shell-smoke.cjs` [modified] +11/-6
+  - `apps/desktop/scripts/automation-corrupt-smoke.cjs` [modified] +4/-2
+  - `apps/desktop/scripts/dialogs-enter-smoke.cjs` [modified] +1/-1
+  - `apps/desktop/scripts/doctor-report-smoke.cjs` [modified] +4/-1
+  - `apps/desktop/scripts/file-pane-renderer-smoke.ts` [modified] +4/-0
+  - `apps/desktop/scripts/pane-tabs-smoke.cjs` [modified] +32/-10
+  - `apps/desktop/scripts/settings-esc-commit-smoke.cjs` [modified] +1/-1
+  - `apps/desktop/scripts/settings-sweep-smoke.cjs` [modified] +18/-4
+  - `apps/desktop/scripts/terminal-renderer-smoke.ts` [modified] +3/-0
+  - `apps/desktop/scripts/ui-gallery-preload.cjs` [modified] +183/-1
+  - `apps/desktop/scripts/ui-gallery.cjs` [modified] +42/-7
+~~- `apps/desktop/src/main/browser-host.ts` [modified] +78/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/src/main/channels.ts` [modified] +18/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/src/main/index.ts` [modified] +87/-9 (excluded: user_exclude)~~
+~~- `apps/desktop/src/main/kernel-host.ts` [modified] +68/-28 (excluded: user_exclude)~~
+  - `apps/desktop/src/renderer/app-controls.ts` [modified] +1/-1
+  - `apps/desktop/src/renderer/command-gate.ts` [modified] +4/-1
+  - `apps/desktop/src/renderer/components/AddProjectMenu.tsx` [modified] +17/-8
+  - `apps/desktop/src/renderer/components/AppPage.tsx` [modified] +2/-1
+  - `apps/desktop/src/renderer/components/ApprovalCard.tsx` [modified] +25/-17
+  - `apps/desktop/src/renderer/components/AutomationPane.tsx` [modified] +42/-11
+  - `apps/desktop/src/renderer/components/ClarifyCard.tsx` [modified] +57/-53
+  - `apps/desktop/src/renderer/components/Composer.tsx` [modified] +32/-45
+  - `apps/desktop/src/renderer/components/CustomProviderForm.tsx` [modified] +137/-63
+  - `apps/desktop/src/renderer/components/Inspector.tsx` [modified] +4/-1
+  - `apps/desktop/src/renderer/components/MemoryPane.tsx` [modified] +32/-24
+  - `apps/desktop/src/renderer/components/ModalSurface.tsx` [modified] +8/-2
+  - `apps/desktop/src/renderer/components/ModelPicker.tsx` [modified] +270/-158
+  - `apps/desktop/src/renderer/components/NewProjectDialog.tsx` [modified] +13/-5
+  - `apps/desktop/src/renderer/components/PageFrame.tsx` [modified] +20/-5
+  - `apps/desktop/src/renderer/components/PaneDock.tsx` [modified] +63/-8
+  - `apps/desktop/src/renderer/components/PlanCard.tsx` [modified] +34/-30
+  - `apps/desktop/src/renderer/components/PluginsPane.tsx` [modified] +1/-1
+  - `apps/desktop/src/renderer/components/SettingsPanel.tsx` [modified] +184/-57
+  - `apps/desktop/src/renderer/components/Sidebar.tsx` [modified] +73/-15
+  - `apps/desktop/src/renderer/components/SkillsPane.tsx` [modified] +1/-1
+  - `apps/desktop/src/renderer/components/Stream.tsx` [modified] +12/-12
+  - `apps/desktop/src/renderer/components/WorkStatusPanel.tsx` [modified] +35/-12
+  - `apps/desktop/src/renderer/components/app-page-chrome.tsx` [modified] +31/-5
+  - `apps/desktop/src/renderer/components/automation-form.css` [modified] +12/-0
+  - `apps/desktop/src/renderer/components/cards.ts` [modified] +3/-0
+  - `apps/desktop/src/renderer/components/model-menu.css` [modified] +149/-114
+  - `apps/desktop/src/renderer/components/plugins/PluginDetail.tsx` [modified] +29/-16
+  - `apps/desktop/src/renderer/components/plugins/PluginDiscover.tsx` [modified] +88/-34
+  - `apps/desktop/src/renderer/components/plugins/PluginInstalled.tsx` [modified] +58/-57
+  - `apps/desktop/src/renderer/components/plugins/PluginReview.tsx` [modified] +2/-5
+  - `apps/desktop/src/renderer/components/plugins/PluginsWorkspace.tsx` [modified] +2/-0
+  - `apps/desktop/src/renderer/components/plugins/plugins.css` [modified] +127/-34
+  - `apps/desktop/src/renderer/components/settings-nav.tsx` [modified] +13/-1
+  - `apps/desktop/src/renderer/components/settings-refinement.css` [modified] +5/-3
+  - `apps/desktop/src/renderer/components/settings-sections.tsx` [modified] +3/-0
+  - `apps/desktop/src/renderer/components/settings/EvolvePanel.tsx` [modified] +145/-143
+  - `apps/desktop/src/renderer/components/settings/EvolveSection.tsx` [modified] +5/-4
+  - `apps/desktop/src/renderer/components/settings/LspStatusRow.tsx` [modified] +8/-8
+  - `apps/desktop/src/renderer/components/settings/NetworkSection.tsx` [modified] +45/-28
+  - `apps/desktop/src/renderer/components/settings/UsageSection.tsx` [modified] +48/-45
+  - `apps/desktop/src/renderer/components/settings/doctor-view.ts` [modified] +22/-21
+  - `apps/desktop/src/renderer/components/settings/network-settings.css` [modified] +1/-1
+  - `apps/desktop/src/renderer/components/settings/usage-dashboard-data.ts` [modified] +3/-2
+  - `apps/desktop/src/renderer/derived/run.ts` [modified] +3/-2
+  - `apps/desktop/src/renderer/derived/tool-verbs.ts` [modified] +13/-0
+  - `apps/desktop/src/renderer/dsh-claude-style.css` [modified] +4/-0
+  - `apps/desktop/src/renderer/markdown.tsx` [modified] +9/-3
+  - `apps/desktop/src/renderer/memory-view.ts` [modified] +14/-1
+  - `apps/desktop/src/renderer/panes/AppToolbar.tsx` [modified] +4/-2
+  - `apps/desktop/src/renderer/panes/WorkbenchView.tsx` [modified] +37/-2
+  - `apps/desktop/src/renderer/state/app-commands.ts` [modified] +8/-3
+  - `apps/desktop/src/renderer/state/projects.ts` [modified] +9/-13
+  - `apps/desktop/src/renderer/state/run-readings.ts` [modified] +5/-2
+  - `apps/desktop/src/renderer/state/session-identity.ts` [modified] +8/-0
+  - `apps/desktop/src/renderer/state/session-subscription.ts` [modified] +4/-4
+  - `apps/desktop/src/renderer/state/thinking-selection.ts` [modified] +4/-1
+  - `apps/desktop/src/renderer/state/workbench.ts` [modified] +25/-13
+  - `apps/desktop/src/renderer/strings.ts` [modified] +486/-15
+  - `apps/desktop/src/renderer/styles.css` [modified] +428/-88
+  - `apps/desktop/src/renderer/tokens.css` [modified] +45/-10
+~~- `apps/desktop/tests/app-page.test.tsx` [modified] +11/-8 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/automation-form-closed.test.tsx` [modified] +3/-1 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/channels.test.ts` [modified] +23/-1 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/command-gate.test.ts` [modified] +15/-4 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/command-palette.test.tsx` [modified] +3/-1 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/composer-phase.test.ts` [modified] +4/-1 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/composer-rework.test.tsx` [modified] +43/-28 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/composer-steer.test.tsx` [modified] +4/-3 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/control-accent.test.ts` [modified] +19/-8 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/design-minimal.test.tsx` [modified] +3/-1 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/focus-ring.test.ts` [modified] +5/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/ime-enter-coverage.test.ts` [modified] +3/-3 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/inspector.test.tsx` [modified] +1/-1 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/interaction-deadends.test.ts` [modified] +9/-7 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/kernel-host.test.ts` [modified] +71/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/marketplace-import-wiring.test.ts` [modified] +1/-1 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/marketplace-install-wiring.test.ts` [modified] +1/-1 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/marketplace-wiring.test.ts` [modified] +1/-1 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/memory-view.test.ts` [modified] +11/-1 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/menu-unify.test.tsx` [modified] +8/-7 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/modal-surface.test.tsx` [modified] +5/-1 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/model-menu-fit.test.ts` [modified] +6/-3 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/model-menu-interaction.test.tsx` [modified] +19/-8 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/model-picker-axis.test.tsx` [modified] +14/-13 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/notification-open-wiring.test.ts` [modified] +1/-1 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/page-frame.test.tsx` [modified] +2/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/pane-disclosure.test.tsx` [modified] +10/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/plan-mode-wiring.test.ts` [modified] +6/-4 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/plugin-marketplace-wiring.test.ts` [modified] +1/-1 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/plugin-review.test.tsx` [modified] +16/-1 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/projections.test.ts` [modified] +12/-1 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/protocol-version.test.ts` [modified] +1/-1 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/quick-starts.test.ts` [modified] +16/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/r1-stream-surfaces.test.tsx` [modified] +13/-3 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/r2-composer-geometry.test.tsx` [modified] +7/-4 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/render-structure.test.tsx` [modified] +62/-45 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/review-split.test.ts` [modified] +5/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/settings-evolve.test.tsx` [modified] +15/-7 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/settings-panel.test.ts` [modified] +15/-2 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/settings-sections.test.tsx` [modified] +3/-1 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/settings-ui.test.tsx` [modified] +3/-2 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/shortcuts-drift.test.ts` [modified] +1/-1 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/stream-rework.test.tsx` [modified] +2/-2 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/strings.test.ts` [modified] +16/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/thinking-declaration.test.tsx` [modified] +6/-4 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/thinking-selection.test.ts` [modified] +2/-1 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/titlebar.test.tsx` [modified] +1/-1 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/tokens.test.ts` [modified] +10/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/usage-dashboard.test.tsx` [modified] +9/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/usage-export.test.ts` [modified] +4/-1 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/workspace-context.test.ts` [modified] +6/-0 (excluded: user_exclude)~~
+~~- `docs/CODE-WIKI.md` [modified] +11/-0 (excluded: user_exclude)~~
+  - `package.json` [modified] +1/-0
+  - `pnpm-lock.yaml` [modified] +9/-0
+  - `scripts/lib/eval-assembly.ts` [modified] +15/-0
+  - `scripts/lib/mutations/agent-orchestration.mjs` [modified] +2/-0
+  - `scripts/lib/mutations/agent-runtime.mjs` [modified] +15/-12
+  - `scripts/lib/mutations/core.mjs` [modified] +7/-7
+  - `scripts/lib/page-claim.ts` [modified] +3/-3
+  - `scripts/loop-eval.ts` [modified] +2/-2
+  - `scripts/probe-promise-recall.ts` [modified] +5/-18
+  - `scripts/tools-check.ts` [modified] +126/-2
+~~- `src/agent/compaction.ts` [modified] +296/-27 (excluded: user_exclude)~~
+~~- `src/agent/context.ts` [modified] +187/-64 (excluded: user_exclude)~~
+~~- `src/agent/goal.ts` [modified] +3/-3 (excluded: user_exclude)~~
+~~- `src/agent/loop.ts` [modified] +38/-3 (excluded: user_exclude)~~
+~~- `src/agent/orchestrator-approvals.ts` [modified] +9/-1 (excluded: user_exclude)~~
+~~- `src/agent/orchestrator-config.ts` [modified] +5/-4 (excluded: user_exclude)~~
+~~- `src/agent/orchestrator.ts` [modified] +63/-314 (excluded: user_exclude)~~
+~~- `src/agent/plugins/discover.ts` [modified] +46/-3 (excluded: user_exclude)~~
+~~- `src/agent/plugins/index.ts` [modified] +7/-0 (excluded: user_exclude)~~
+~~- `src/agent/security/llm-review.ts` [modified] +14/-7 (excluded: user_exclude)~~
+~~- `src/agent/sequencer.ts` [modified] +5/-2 (excluded: user_exclude)~~
+~~- `src/agent/session-provider.ts` [modified] +155/-23 (excluded: user_exclude)~~
+~~- `src/agent/session-view-context.ts` [modified] +5/-1 (excluded: user_exclude)~~
+~~- `src/agent/sidechat.ts` [modified] +10/-5 (excluded: user_exclude)~~
+~~- `src/agent/system-prompt.ts` [modified] +70/-46 (excluded: user_exclude)~~
+~~- `src/agent/tool-surface.ts` [modified] +6/-0 (excluded: user_exclude)~~
+~~- `src/agent/verify.ts` [modified] +5/-3 (excluded: user_exclude)~~
+~~- `src/agent/worker-merge.ts` [modified] +15/-0 (excluded: user_exclude)~~
+~~- `src/agent/worker-model.ts` [modified] +10/-3 (excluded: user_exclude)~~
+~~- `src/agent/worker-prompt.ts` [modified] +27/-16 (excluded: user_exclude)~~
+~~- `src/agent/worker-shell-tools.ts` [modified] +3/-2 (excluded: user_exclude)~~
+~~- `src/agent/worker-tool-table.ts` [modified] +4/-0 (excluded: user_exclude)~~
+~~- `src/agent/worktree.ts` [modified] +12/-1 (excluded: user_exclude)~~
+~~- `src/atomic-write.ts` [modified] +1/-1 (excluded: user_exclude)~~
+~~- `src/cli.ts` [modified] +37/-11 (excluded: user_exclude)~~
+~~- `src/events/index.ts` [modified] +2/-0 (excluded: user_exclude)~~
+~~- `src/events/log.ts` [modified] +31/-0 (excluded: user_exclude)~~
+~~- `src/events/projection.ts` [modified] +7/-3 (excluded: user_exclude)~~
+~~- `src/events/session-view.ts` [modified] +34/-3 (excluded: user_exclude)~~
+~~- `src/events/types.ts` [modified] +3/-1 (excluded: user_exclude)~~
+~~- `src/interop/acp-stdio.ts` [modified] +10/-1 (excluded: user_exclude)~~
+~~- `src/main/agent-runner.ts` [modified] +187/-46 (excluded: user_exclude)~~
+~~- `src/main/evolution/assess.ts` [modified] +14/-1 (excluded: user_exclude)~~
+~~- `src/main/evolve/episode-store.ts` [modified] +27/-0 (excluded: user_exclude)~~
+~~- `src/main/ipc-protocol.ts` [modified] +56/-2 (excluded: user_exclude)~~
+~~- `src/main/orchestration-backend.ts` [modified] +2/-1 (excluded: user_exclude)~~
+~~- `src/main/post-run-readings.ts` [modified] +27/-1 (excluded: user_exclude)~~
+~~- `src/main/provider-assembly.ts` [modified] +6/-1 (excluded: user_exclude)~~
+~~- `src/main/scheduler-runtime.ts` [modified] +19/-1 (excluded: user_exclude)~~
+~~- `src/main/scheduler.ts` [modified] +272/-43 (excluded: user_exclude)~~
+~~- `src/main/session-lock.ts` [modified] +52/-7 (excluded: user_exclude)~~
+~~- `src/main/session-metadata.ts` [modified] +23/-0 (excluded: user_exclude)~~
+~~- `src/main/session-search.ts` [modified] +5/-0 (excluded: user_exclude)~~
+~~- `src/main/sessions.ts` [modified] +5/-3 (excluded: user_exclude)~~
+~~- `src/main/settings.ts` [modified] +34/-1 (excluded: user_exclude)~~
+~~- `src/main/state-handlers.ts` [modified] +5/-0 (excluded: user_exclude)~~
+~~- `src/main/suggest-next.ts` [modified] +6/-5 (excluded: user_exclude)~~
+~~- `src/main/tool-gates.ts` [modified] +26/-6 (excluded: user_exclude)~~
+~~- `src/orchestration/engine.ts` [modified] +35/-7 (excluded: user_exclude)~~
+~~- `src/orchestration/local-backend.ts` [modified] +9/-5 (excluded: user_exclude)~~
+~~- `src/orchestration/project.ts` [modified] +14/-0 (excluded: user_exclude)~~
+~~- `src/orchestration/remote-backend.ts` [modified] +1/-0 (excluded: user_exclude)~~
+~~- `src/orchestration/types.ts` [modified] +3/-0 (excluded: user_exclude)~~
+~~- `src/permissions/autonomy.ts` [modified] +3/-1 (excluded: user_exclude)~~
+~~- `src/permissions/risk.ts` [modified] +5/-1 (excluded: user_exclude)~~
+~~- `src/providers/capabilities.ts` [modified] +3/-2 (excluded: user_exclude)~~
+~~- `src/providers/openai.ts` [modified] +14/-1 (excluded: user_exclude)~~
+~~- `src/providers/provider-draft.ts` [modified] +14/-3 (excluded: user_exclude)~~
+~~- `src/providers/reasoning.ts` [modified] +6/-5 (excluded: user_exclude)~~
+~~- `src/providers/registry.ts` [modified] +7/-193 (excluded: user_exclude)~~
+~~- `src/tools/base.ts` [modified] +14/-2 (excluded: user_exclude)~~
+~~- `src/tools/index.ts` [modified] +15/-1 (excluded: user_exclude)~~
+~~- `src/tools/run_shell.ts` [modified] +32/-3 (excluded: user_exclude)~~
+~~- `tests/action-fusion.test.ts` [modified] +10/-3 (excluded: user_exclude)~~
+~~- `tests/base-system-discipline.test.ts` [modified] +50/-21 (excluded: user_exclude)~~
+~~- `tests/cascade-wiring.test.ts` [modified] +32/-0 (excluded: user_exclude)~~
+~~- `tests/cli-plan-auto.test.ts` [modified] +27/-1 (excluded: user_exclude)~~
+~~- `tests/compaction-prediction.test.ts` [modified] +73/-2 (excluded: user_exclude)~~
+~~- `tests/compaction.test.ts` [modified] +236/-0 (excluded: user_exclude)~~
+~~- `tests/custom-provider-wiring.test.ts` [modified] +1/-1 (excluded: user_exclude)~~
+~~- `tests/eval-assembly.test.ts` [modified] +13/-0 (excluded: user_exclude)~~
+~~- `tests/events-tail-repair.test.ts` [modified] +17/-0 (excluded: user_exclude)~~
+~~- `tests/goal-drift.test.ts` [modified] +11/-2 (excluded: user_exclude)~~
+~~- `tests/hook-precompact-producer.test.ts` [modified] +6/-4 (excluded: user_exclude)~~
+~~- `tests/interop-acp-stdio.test.ts` [modified] +41/-0 (excluded: user_exclude)~~
+~~- `tests/ipc-protocol-version.test.ts` [modified] +1/-1 (excluded: user_exclude)~~
+~~- `tests/loop-cancellation-boundaries.test.ts` [modified] +27/-0 (excluded: user_exclude)~~
+~~- `tests/m3c.test.ts` [modified] +5/-1 (excluded: user_exclude)~~
+~~- `tests/main-run-routing.test.ts` [modified] +145/-1 (excluded: user_exclude)~~
+~~- `tests/model-surface.test.ts` [modified] +5/-3 (excluded: user_exclude)~~
+~~- `tests/orchestrator-hold.test.ts` [modified] +6/-4 (excluded: user_exclude)~~
+~~- `tests/page-claim.test.ts` [modified] +10/-0 (excluded: user_exclude)~~
+~~- `tests/permissions-tool-registry.test.ts` [modified] +17/-0 (excluded: user_exclude)~~
+~~- `tests/post-run-readings.test.ts` [modified] +23/-0 (excluded: user_exclude)~~
+~~- `tests/projection-invariant.test.ts` [modified] +80/-1 (excluded: user_exclude)~~
+~~- `tests/prompt-cache-breakpoints.test.ts` [modified] +2/-1 (excluded: user_exclude)~~
+~~- `tests/prompt-surface-check.test.ts` [modified] +7/-4 (excluded: user_exclude)~~
+~~- `tests/provider-capabilities.test.ts` [modified] +1/-1 (excluded: user_exclude)~~
+~~- `tests/provider-draft.test.ts` [modified] +35/-1 (excluded: user_exclude)~~
+~~- `tests/provider-stream-lifecycle.test.ts` [modified] +24/-0 (excluded: user_exclude)~~
+~~- `tests/providers.test.ts` [modified] +1/-1 (excluded: user_exclude)~~
+~~- `tests/read-shape.test.ts` [modified] +2/-0 (excluded: user_exclude)~~
+~~- `tests/reasoning-wire.test.ts` [modified] +5/-4 (excluded: user_exclude)~~
+~~- `tests/schedule.test.ts` [modified] +70/-0 (excluded: user_exclude)~~
+~~- `tests/scheduler-wiring.test.ts` [modified] +25/-4 (excluded: user_exclude)~~
+~~- `tests/session-event-view.test.ts` [modified] +30/-0 (excluded: user_exclude)~~
+~~- `tests/session-lock.test.ts` [modified] +41/-1 (excluded: user_exclude)~~
+~~- `tests/session-provider.test.ts` [modified] +28/-2 (excluded: user_exclude)~~
+~~- `tests/session-reference-compaction.test.ts` [modified] +4/-2 (excluded: user_exclude)~~
+~~- `tests/session-search.test.ts` [modified] +20/-0 (excluded: user_exclude)~~
+~~- `tests/sessions.test.ts` [modified] +11/-0 (excluded: user_exclude)~~
+~~- `tests/shell-redirect-snapshot.test.ts` [modified] +12/-0 (excluded: user_exclude)~~
+~~- `tests/system-prompt-mode-contract.test.ts` [modified] +21/-22 (excluded: user_exclude)~~
+~~- `tests/thinking-declaration.test.ts` [modified] +4/-4 (excluded: user_exclude)~~
+~~- `tests/tool-surface-parity.test.ts` [modified] +12/-0 (excluded: user_exclude)~~
+~~- `tests/usage-attribution.test.ts` [modified] +2/-1 (excluded: user_exclude)~~
+~~- `tests/verify-trust-fingerprint.test.ts` [modified] +24/-0 (excluded: user_exclude)~~
+~~- `tests/worker-merge-failure-path.test.ts` [modified] +1/-0 (excluded: user_exclude)~~
+~~- `tests/worktree-branch-reuse.test.ts` [modified] +11/-0 (excluded: user_exclude)~~
+~~- `tests/write-face.test.ts` [modified] +11/-0 (excluded: user_exclude)~~
+  - `apps/desktop/diff-render-latency.json` [added] +10/-0
+~~- `apps/desktop/outputs/design-audit-2026-11-06/01-home.png` [added] +149/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/02-session.png` [added] +364/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/03-inspector-changes.png` [added] +416/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/04-inspector-plan.png` [added] +510/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/05-inspector-timeline.png` [added] +511/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/06-settings.png` [added] +198/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/07-settings-general.png` [added] +165/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/08-settings-provider.png` [added] +242/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/09-settings-personalization.png` [added] +163/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/10-settings-subagents.png` [added] +259/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/11-settings-integrations.png` [added] +211/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/12-settings-hooks.png` [added] +173/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/13-settings-network.png` [added] +169/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/14-settings-usage.png` [added] +329/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/15-settings-evolve.png` [added] +309/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/16-settings-permissions.png` [added] +232/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/17-settings-advanced.png` [added] +341/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/18-settings-shortcuts.png` [added] +541/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/19-settings-migration.png` [added] +205/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/20-settings-about.png` [added] +325/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/21-settings-skills.png` [added] +135/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/22-settings-worktrees.png` [added] +139/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/23-plugins.png` [added] +184/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/24-plugins-installed.png` [added] +206/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/25-plugins-updates.png` [added] +99/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/27-plugins-detail.png` [added] +236/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/28-memory.png` [added] +443/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/29-memory-detail.png` [added] +434/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/30-automation.png` [added] +321/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/31-automation-idle.png` [added] +149/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/31-automation-paused.png` [added] +334/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/32-clarify-card.png` [added] +222/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/33-approval-card.png` [added] +198/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/34-plan-card.png` [added] +204/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/35-dark-home.png` [added] +158/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/36-dark-session.png` [added] +350/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/37-dark-plugins.png` [added] +187/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/38-dark-settings.png` [added] +172/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/39-narrow-880-plugins.png` [added] +140/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/40-narrow-880-chat.png` [added] +371/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/41-1120-chat.png` [added] +366/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/42-session-1440.png` [added] +348/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/checks.json` [added] +247/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/comparison-after.png` [added] +2117/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/contact-01.png` [added] +577/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/contact-02.png` [added] +545/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/contact-03.png` [added] +606/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/contact-after-01.png` [added] +1768/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/contact-after-02.png` [added] +1725/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/contact-after-03.png` [added] +1611/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/issues.md` [added] +70/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-2026-11-06/repair-summary.json` [added] +30/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/design-audit-after.log` [added] +42/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/file-pane-renderer/01-initial.png` [added] +81/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/file-pane-renderer/02-directory-error.png` [added] +155/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/file-pane-renderer/03-preview-error.png` [added] +98/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/file-pane-renderer/04-long-path-narrow.png` [added] +268/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/file-pane-renderer/05-dark-narrow.png` [added] +270/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/file-pane-renderer/checks.json` [added] +125/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/outputs/ui-gallery-after.log` [added] +39/-0 (excluded: user_exclude)~~
+  - `apps/desktop/scripts/design-audit.cjs` [added] +299/-0
+  - `apps/desktop/scripts/desktop-readability-smoke.cjs` [added] +110/-0
+  - `apps/desktop/scripts/form-recovery-smoke.cjs` [added] +94/-0
+  - `apps/desktop/scripts/project-entry-smoke.cjs` [added] +197/-0
+  - `apps/desktop/scripts/settings-navigation-smoke.cjs` [added] +126/-0
+  - `apps/desktop/scripts/work-status-smoke.cjs` [added] +98/-0
+  - `apps/desktop/scripts/workspace-design-smoke.cjs` [added] +148/-0
+~~- `apps/desktop/src/main/browser-agent-tools.ts` [added] +52/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/src/main/settings-migration.ts` [added] +307/-0 (excluded: user_exclude)~~
+  - `apps/desktop/src/renderer/browser-link.ts` [added] +34/-0
+  - `apps/desktop/src/renderer/components/BackgroundCommands.tsx` [added] +74/-0
+  - `apps/desktop/src/renderer/components/IdleTaskPane.tsx` [added] +139/-0
+  - `apps/desktop/src/renderer/components/background-commands.css` [added] +22/-0
+  - `apps/desktop/src/renderer/components/composer-helpers.ts` [added] +38/-0
+  - `apps/desktop/src/renderer/components/plugins/PluginCapabilities.tsx` [added] +24/-0
+  - `apps/desktop/src/renderer/components/settings/HooksSection.tsx` [added] +278/-0
+  - `apps/desktop/src/renderer/components/settings/McpSection.tsx` [added] +324/-0
+  - `apps/desktop/src/renderer/components/settings/MigrationSection.tsx` [added] +157/-0
+  - `apps/desktop/src/renderer/components/settings/PersonalizationSection.tsx` [added] +48/-0
+  - `apps/desktop/src/renderer/components/settings/SubagentsSection.tsx` [added] +161/-0
+  - `apps/desktop/src/renderer/components/settings/agent-settings.css` [added] +58/-0
+  - `apps/desktop/src/renderer/components/settings/integration-ui.tsx` [added] +178/-0
+  - `apps/desktop/src/renderer/components/settings/integrations.css` [added] +229/-0
+  - `apps/desktop/src/renderer/strings-evolve.ts` [added] +167/-0
+~~- `apps/desktop/src/renderer/vendor/dsh-claude-style/fonts/InterVariable.woff2` [added] +580/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/src/renderer/vendor/dsh-claude-style/fonts/JetBrainsMonoVariable.ttf` [added] +3475/-0 (excluded: user_exclude)~~
+  - `apps/desktop/terminal-renderer.json` [added] +252/-0
+~~- `apps/desktop/terminal-startup-failure.png` [added] +48/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/terminal-wide.png` [added] +93/-0 (excluded: unsupported_ext)~~
+~~- `apps/desktop/tests/background-running.test.ts` [added] +33/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/browser-agent-tools.test.ts` [added] +98/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/browser-approval-description.test.ts` [added] +19/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/browser-link.test.ts` [added] +41/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/font-resources.test.ts` [added] +23/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/settings-integrations.test.ts` [added] +74/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/settings-migration.test.ts` [added] +259/-0 (excluded: user_exclude)~~
+~~- `apps/desktop/tests/user-mcp.test.ts` [added] +122/-0 (excluded: user_exclude)~~
+~~- `fixtures/gym/drafts/会话 2026-11-05 23:07:30 #1/DRAFT.md` [added] +19/-0 (excluded: unsupported_ext)~~
+  - `fixtures/gym/drafts/会话 2026-11-05 23:07:30 #1/expect.candidate.json` [added] +5/-0
+~~- `fixtures/gym/drafts/会话 2026-11-05 23:07:30 #1/task.md` [added] +1/-0 (excluded: unsupported_ext)~~
+~~- `outputs/context-quality-latest/report.json` [added] +128/-0 (excluded: user_exclude)~~
+~~- `outputs/context-quality-latest/report.md` [added] +60/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-core-audit-2026-11-05/README.md` [added] +141/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-core-audit-2026-11-05/findings-readable.md` [added] +336/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-core-audit-2026-11-05/findings.json` [added] +786/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/REPORT.md` [added] +52/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/after/checks.json` [added] +503/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/after/conversation-dark-1120.png` [added] +739/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/after/conversation-dark-1440.png` [added] +737/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/after/conversation-dark-880.png` [added] +700/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/after/conversation-light-1120.png` [added] +742/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/after/conversation-light-1440.png` [added] +845/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/after/conversation-light-880.png` [added] +717/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/before/checks.json` [added] +451/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/before/conversation-dark-880.png` [added] +706/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/before/conversation-light-1440.png` [added] +738/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/build.log` [added] +33/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/desktop-tests.log` [added] +12/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/detector.json` [added] +22/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round2/REPORT.md` [added] +46/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round2/after/panes-1440.png` [added] +266/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round2/after/roles-dark-880.png` [added] +219/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round2/after/roles-light-1440.png` [added] +264/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round2/before/panes-1440.png` [added] +279/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round2/before/roles-light-880.png` [added] +197/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round2/build.log` [added] +33/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round2/composer-before.log` [added] +20/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round2/desktop-tests.log` [added] +12/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round2/detector.json` [added] +22/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round2/pane-after.log` [added] +18/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round2/pane-before.log` [added] +17/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round2/pane-checks.json` [added] +155/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round2/readability-checks.json` [added] +503/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round2/readability.log` [added] +21/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round2/roles-before.log` [added] +18/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round2/settings-dark-checks.json` [added] +276/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round2/settings-dark.log` [added] +15/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round2/settings-light-checks.json` [added] +276/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round2/settings-light.log` [added] +15/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round2/shell-checks.json` [added] +494/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round2/shell.log` [added] +54/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round2/tab-diagnostic-before.json` [added] +35/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round3/REPORT.md` [added] +48/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round3/after/01-instructions-discard.png` [added] +345/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round3/after/02-wake-read-error.png` [added] +644/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round3/after/03-wake-with-tasks-dark-880.png` [added] +526/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round3/after/checks.json` [added] +80/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round3/before.log` [added] +21/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round3/before/02-wake-read-error.png` [added] +680/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round3/before/03-wake-with-tasks-dark-880.png` [added] +582/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round3/before/checks.json` [added] +80/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round3/build.log` [added] +33/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round3/desktop-tests.log` [added] +12/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round3/detector.json` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round3/form-recovery.log` [added] +19/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round3/review-esc-rule.md` [added] +29/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round3/review-preview.md` [added] +333/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round3/review-rules.md` [added] +81/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round3/settings-dark-checks.json` [added] +276/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round3/settings-esc-checks.json` [added] +46/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round3/shell-checks.json` [added] +494/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round4/REPORT.md` [added] +49/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round4/after/01-new-project-pick-error.png` [added] +441/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round4/after/02-new-project-creating.png` [added] +454/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round4/after/03-clone-retry.png` [added] +547/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round4/after/04-new-project-dark-880.png` [added] +519/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round4/after/checks.json` [added] +165/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round4/before.log` [added] +29/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round4/before/01-new-project-pick-error.png` [added] +461/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round4/before/02-new-project-creating.png` [added] +440/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round4/before/03-clone-retry.png` [added] +537/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round4/before/04-new-project-dark-880.png` [added] +519/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round4/before/checks.json` [added] +172/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round4/build.log` [added] +33/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round4/desktop-tests-initial-failure.log` [added] +42/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round4/desktop-tests.log` [added] +12/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round4/detector.json` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round4/dialogs-enter-checks.json` [added] +85/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round4/dialogs-enter.log` [added] +12/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round4/form-recovery-checks.json` [added] +80/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round4/form-recovery.log` [added] +19/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round4/project-entry.log` [added] +26/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round4/review-enter-rule.md` [added] +29/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round4/review-preview.md` [added] +356/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round4/review-rules.md` [added] +81/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round4/review-strings-rule.md` [added] +47/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round5/REPORT.md` [added] +56/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round5/after/05-project-settings-write-error.png` [added] +334/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round5/after/06-project-menu-edge.png` [added] +433/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round5/after/07-project-settings-dark-880.png` [added] +378/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round5/after/08-project-menu-dark-880.png` [added] +479/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round5/after/checks.json` [added] +200/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round5/before.log` [added] +28/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round5/before/05-project-settings-write-error.png` [added] +313/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round5/before/06-project-menu-edge.png` [added] +473/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round5/before/07-project-settings-dark-880.png` [added] +444/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round5/before/checks.json` [added] +202/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round5/build.log` [added] +33/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round5/desktop-tests.log` [added] +12/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round5/detector.json` [added] +22/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round5/dialogs-enter-checks.json` [added] +85/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round5/dialogs-enter.log` [added] +11/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round5/keyboard-driver-diagnosis.log` [added] +28/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round5/layer-before.log` [added] +29/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round5/layer-before/05-project-settings-write-error.png` [added] +334/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round5/layer-before/06-project-menu-edge.png` [added] +419/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round5/layer-before/07-project-settings-dark-880.png` [added] +378/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round5/layer-before/checks.json` [added] +200/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round5/project-entry-checks.json` [added] +165/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round5/project-entry.log` [added] +27/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round5/review-preview.md` [added] +385/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round5/review-rules.md` [added] +82/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round5/review-style-rule.md` [added] +29/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/round5/settings-menu.log` [added] +27/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-design-2026-11-06/smoke.log` [added] +21/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/PLAN.md` [added] +13/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/REPORT.md` [added] +57/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/after/01-search-escape.png` [added] +346/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/after/02-section-start.png` [added] +608/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/after/03-short-light.png` [added] +507/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/after/04-short-dark.png` [added] +231/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/after/checks.json` [added] +124/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before-navigation/01-search-escape.png` [added] +357/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before-navigation/02-section-start.png` [added] +596/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before-navigation/03-short-light.png` [added] +230/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before-navigation/04-short-dark.png` [added] +231/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before-navigation/checks.json` [added] +124/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/01-home.png` [added] +142/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/02-session.png` [added] +364/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/03-inspector-changes.png` [added] +416/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/04-inspector-plan.png` [added] +510/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/05-inspector-timeline.png` [added] +511/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/06-settings.png` [added] +198/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/07-settings-general.png` [added] +165/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/08-settings-provider.png` [added] +242/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/09-settings-personalization.png` [added] +163/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/10-settings-subagents.png` [added] +259/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/11-settings-integrations.png` [added] +211/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/12-settings-hooks.png` [added] +173/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/13-settings-network.png` [added] +169/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/14-settings-usage.png` [added] +277/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/15-settings-evolve.png` [added] +309/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/16-settings-permissions.png` [added] +232/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/17-settings-advanced.png` [added] +341/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/18-settings-shortcuts.png` [added] +541/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/19-settings-migration.png` [added] +205/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/20-settings-about.png` [added] +325/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/21-settings-skills.png` [added] +135/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/22-settings-worktrees.png` [added] +139/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/23-plugins.png` [added] +184/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/24-plugins-installed.png` [added] +206/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/25-plugins-updates.png` [added] +99/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/27-plugins-detail.png` [added] +236/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/28-memory.png` [added] +453/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/29-memory-detail.png` [added] +481/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/30-automation.png` [added] +321/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/31-automation-idle.png` [added] +149/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/32-clarify-card.png` [added] +200/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/33-approval-card.png` [added] +198/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/34-plan-card.png` [added] +204/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/35-dark-home.png` [added] +134/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/36-dark-session.png` [added] +350/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/37-dark-plugins.png` [added] +187/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/38-dark-settings.png` [added] +172/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/39-narrow-880-plugins.png` [added] +140/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/40-narrow-880-chat.png` [added] +371/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/41-1120-chat.png` [added] +366/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/42-session-1440.png` [added] +359/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/checks.json` [added] +247/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/contact.png` [added] +633/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/overview-1.jpg` [added] +650/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/overview-2.jpg` [added] +762/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/overview-3.jpg` [added] +762/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/before/overview-4.jpg` [added] +418/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/boundary.log` [added] +2/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/build.log` [added] +33/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/comparison.png` [added] +536/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/desktop-capped.log` [added] +13/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/desktop-tests.log` [added] +708/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/detector.json` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/docs-check.log` [added] +7/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/esc-regression/01-after-esc.png` [added] +311/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/esc-regression/checks.json` [added] +46/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/final/01-search-escape.png` [added] +346/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/final/02-section-start.png` [added] +578/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/final/03-short-light.png` [added] +569/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/final/04-short-dark.png` [added] +231/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/final/checks.json` [added] +132/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/red/01-search-escape.png` [added] +357/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/red/02-section-start.png` [added] +766/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/red/03-short-light.png` [added] +296/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/red/04-short-dark.png` [added] +231/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/red/checks.json` [added] +124/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/renderer-layer.log` [added] +2/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/review-preview.txt` [added] +591/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/review-rules.txt` [added] +83/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/task.patch` [added] +169/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-2026-11-07/typecheck.log` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/REPORT.md` [added] +54/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/after/01-inspector-880.png` [added] +427/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/after/02-file-880.png` [added] +454/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/after/03-memory-open-880.png` [added] +834/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/after/04-memory-end-880.png` [added] +866/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/after/05-memory-filter-wide.png` [added] +918/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/after/06-idle-filter-880.png` [added] +256/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/after/checks.json` [added] +193/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/app-shell-final.log` [added] +53/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/app-shell-final/01-desktop-light-plugins.png` [added] +281/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/app-shell-final/02-narrow-880-memory.png` [added] +497/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/app-shell-final/03-desktop-dark-memory.png` [added] +883/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/app-shell-final/04-keyboard-focus-memory.png` [added] +737/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/app-shell-final/05-empty-memory.png` [added] +73/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/app-shell-final/06-read-error-memory.png` [added] +37/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/app-shell-final/07-1120-memory-overlap.png` [added] +665/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/app-shell-final/08-operation-error-automation.png` [added] +1019/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/app-shell-final/09-settings-skills-inline.png` [added] +187/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/app-shell-final/10-memory-list.png` [added] +845/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/app-shell-final/11-memory-detail.png` [added] +710/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/app-shell-final/checks.json` [added] +494/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/app-shell.log` [added] +53/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/app-shell/01-desktop-light-plugins.png` [added] +281/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/app-shell/02-narrow-880-memory.png` [added] +517/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/app-shell/03-desktop-dark-memory.png` [added] +883/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/app-shell/04-keyboard-focus-memory.png` [added] +737/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/app-shell/05-empty-memory.png` [added] +73/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/app-shell/06-read-error-memory.png` [added] +37/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/app-shell/07-1120-memory-overlap.png` [added] +665/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/app-shell/08-operation-error-automation.png` [added] +956/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/app-shell/09-settings-skills-inline.png` [added] +187/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/app-shell/10-memory-list.png` [added] +845/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/app-shell/11-memory-detail.png` [added] +710/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/app-shell/checks.json` [added] +494/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/baseline-build.log` [added] +33/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/baseline/01-inspector-880.png` [added] +392/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/baseline/02-file-880.png` [added] +454/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/baseline/03-memory-open-880.png` [added] +594/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/baseline/04-memory-end-880.png` [added] +594/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/baseline/05-memory-filter-wide.png` [added] +907/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/baseline/06-idle-filter-880.png` [added] +244/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/baseline/checks.json` [added] +192/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/before/01-inspector-880.png` [added] +392/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/before/02-file-880.png` [added] +454/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/before/03-memory-open-880.png` [added] +621/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/before/04-memory-end-880.png` [added] +621/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/before/checks.json` [added] +142/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/boundary.log` [added] +2/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/build.log` [added] +33/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/card-keyboard-baseline.log` [added] +28/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/card-keyboard-baseline/01-inspector-880.png` [added] +431/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/card-keyboard-baseline/02-file-880.png` [added] +454/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/card-keyboard-baseline/03-memory-open-880.png` [added] +877/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/card-keyboard-baseline/04-memory-end-880.png` [added] +882/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/card-keyboard-baseline/05-memory-filter-wide.png` [added] +751/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/card-keyboard-baseline/06-idle-filter-880.png` [added] +256/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/card-keyboard-baseline/07-memory-dark-880.png` [added] +855/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/card-keyboard-baseline/checks.json` [added] +227/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/comparison-1.png` [added] +864/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/comparison-2.png` [added] +268/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/delivery.log` [added] +25/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/delivery/01-inspector-880.png` [added] +427/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/delivery/02-file-880.png` [added] +454/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/delivery/03-memory-open-880.png` [added] +861/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/delivery/04-memory-end-880.png` [added] +851/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/delivery/05-memory-filter-wide.png` [added] +853/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/delivery/06-idle-filter-880.png` [added] +256/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/delivery/07-memory-dark-880.png` [added] +882/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/delivery/checks.json` [added] +227/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/desktop-final.log` [added] +12/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/desktop-tests.log` [added] +43/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/detector-final.json` [added] +22/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/detector.json` [added] +22/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/docs-check.log` [added] +7/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/final-build.log` [added] +33/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/final/01-inspector-880.png` [added] +407/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/final/02-file-880.png` [added] +454/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/final/03-memory-open-880.png` [added] +881/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/final/04-memory-end-880.png` [added] +866/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/final/05-memory-filter-wide.png` [added] +896/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/final/06-idle-filter-880.png` [added] +256/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/final/07-memory-dark-880.png` [added] +877/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/final/checks.json` [added] +219/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/kernel-host-current.log` [added] +46/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/kernel-host-recheck.log` [added] +44/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/keyboard-and-filter-baseline/01-inspector-880.png` [added] +399/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/keyboard-and-filter-baseline/02-file-880.png` [added] +454/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/keyboard-and-filter-baseline/03-memory-open-880.png` [added] +834/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/keyboard-and-filter-baseline/04-memory-end-880.png` [added] +778/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/keyboard-and-filter-baseline/05-memory-filter-wide.png` [added] +940/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/keyboard-and-filter-baseline/06-idle-filter-880.png` [added] +256/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/keyboard-and-filter-baseline/07-memory-dark-880.png` [added] +942/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/keyboard-and-filter-baseline/checks.json` [added] +219/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/pane-tabs.log` [added] +17/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/pane-tabs/01-seven-panes-active-visible.png` [added] +301/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/pane-tabs/02-browser.png` [added] +269/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/pane-tabs/checks.json` [added] +155/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/panes-baseline/01-seven-panes-active-visible.png` [added] +225/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/panes-baseline/02-browser.png` [added] +303/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/panes-baseline/checks.json` [added] +155/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/renderer-layer-final.log` [added] +4/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/renderer-layer.log` [added] +4/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/review-markdown-rule.txt` [added] +47/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/review-preview.txt` [added] +663/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/review-rules.txt` [added] +89/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/settings-navigation.log` [added] +25/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/settings-navigation/01-search-escape.png` [added] +346/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/settings-navigation/02-section-start.png` [added] +578/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/settings-navigation/03-short-light.png` [added] +548/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/settings-navigation/04-short-dark.png` [added] +231/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/settings-navigation/checks.json` [added] +132/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/typecheck-final.log` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-ux-continuation-2026-11-07/typecheck.log` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-work-status-2026-11-07/after.log` [added] +11/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-work-status-2026-11-07/after/01-running-wide.png` [added] +892/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-work-status-2026-11-07/after/02-short-list.png` [added] +275/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-work-status-2026-11-07/after/03-second-session-dark.png` [added] +670/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-work-status-2026-11-07/after/checks.json` [added] +127/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-work-status-2026-11-07/baseline-build.log` [added] +33/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-work-status-2026-11-07/baseline.log` [added] +14/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-work-status-2026-11-07/baseline/01-running-wide.png` [added] +878/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-work-status-2026-11-07/baseline/02-short-list.png` [added] +358/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-work-status-2026-11-07/baseline/03-second-session-dark.png` [added] +637/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-work-status-2026-11-07/baseline/checks.json` [added] +112/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-work-status-2026-11-07/before/01-running-wide.png` [added] +906/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-work-status-2026-11-07/before/02-short-list.png` [added] +337/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-work-status-2026-11-07/before/03-second-session-dark.png` [added] +637/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-work-status-2026-11-07/before/checks.json` [added] +96/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-work-status-2026-11-07/build.log` [added] +33/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-work-status-2026-11-07/desktop-tests.log` [added] +3/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-work-status-2026-11-07/diff-check.log` [added] +0/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-work-status-2026-11-07/layer-boundary.log` [added] +2/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-work-status-2026-11-07/review-preview.log` [added] +0/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-work-status-2026-11-07/review-rules.log` [added] +87/-0 (excluded: user_exclude)~~
+~~- `outputs/desktop-work-status-2026-11-07/typecheck.log` [added] +0/-0 (excluded: user_exclude)~~
+~~- `outputs/opencode-continuation-2026-11-05/README.md` [added] +72/-0 (excluded: user_exclude)~~
+~~- `outputs/opencode-continuation-2026-11-05/core-initial.log` [added] +70/-0 (excluded: user_exclude)~~
+~~- `outputs/opencode-continuation-2026-11-05/core.log` [added] +44/-0 (excluded: user_exclude)~~
+~~- `outputs/opencode-continuation-2026-11-05/desktop.log` [added] +14/-0 (excluded: user_exclude)~~
+~~- `outputs/opencode-continuation-2026-11-05/docs-check.log` [added] +7/-0 (excluded: user_exclude)~~
+~~- `outputs/opencode-continuation-2026-11-05/evidence-typecheck.log` [added] +4/-0 (excluded: user_exclude)~~
+~~- `outputs/opencode-continuation-2026-11-05/review-rules.log` [added] +47/-0 (excluded: user_exclude)~~
+~~- `outputs/opencode-continuation-2026-11-05/targeted.log` [added] +13/-0 (excluded: user_exclude)~~
+~~- `outputs/opencode-continuation-2026-11-05/typecheck.log` [added] +1/-0 (excluded: user_exclude)~~
+~~- `outputs/opencode-continuation-2026-11-05/verified-files.sha256` [added] +15/-0 (excluded: user_exclude)~~
+~~- `outputs/quality-ab/2026-11-06T05-44-01-576Z/readings.json` [added] +62/-0 (excluded: user_exclude)~~
+~~- `outputs/quality-ab/2026-11-06T05-44-01-576Z/report.md` [added] +14/-0 (excluded: user_exclude)~~
+~~- `outputs/quality-ab/2026-11-06T13-40-07-500Z/readings.json` [added] +62/-0 (excluded: user_exclude)~~
+~~- `outputs/quality-ab/2026-11-06T13-40-07-500Z/report.md` [added] +14/-0 (excluded: user_exclude)~~
+  - `scripts/quality-ab.ts` [added] +198/-0
+~~- `src/agent/acceptance-contract.ts` [added] +28/-0 (excluded: user_exclude)~~
+~~- `src/agent/browser-agent.ts` [added] +75/-0 (excluded: user_exclude)~~
+~~- `src/agent/plugins/user-mcp.ts` [added] +163/-0 (excluded: user_exclude)~~
+~~- `src/agent/quality/env-facts.ts` [added] +175/-0 (excluded: user_exclude)~~
+~~- `src/agent/quality/notes.ts` [added] +28/-0 (excluded: user_exclude)~~
+~~- `src/agent/quality/policy.ts` [added] +112/-0 (excluded: user_exclude)~~
+~~- `src/agent/quality/tools.ts` [added] +56/-0 (excluded: user_exclude)~~
+~~- `src/agent/quality/verifiers.ts` [added] +85/-0 (excluded: user_exclude)~~
+~~- `src/agent/worker-finish.ts` [added] +284/-0 (excluded: user_exclude)~~
+~~- `src/agent/worker-runtime.ts` [added] +119/-0 (excluded: user_exclude)~~
+~~- `src/events/verify-declaration.ts` [added] +126/-0 (excluded: user_exclude)~~
+~~- `src/main/idle-tasks.ts` [added] +83/-0 (excluded: user_exclude)~~
+~~- `src/main/subagent-settings.ts` [added] +147/-0 (excluded: user_exclude)~~
+~~- `src/main/user-integration-settings.ts` [added] +158/-0 (excluded: user_exclude)~~
+~~- `src/providers/worker-adapters.ts` [added] +218/-0 (excluded: user_exclude)~~
+~~- `src/tools/background-tasks.ts` [added] +222/-0 (excluded: user_exclude)~~
+~~- `src/tools/calc.ts` [added] +120/-0 (excluded: user_exclude)~~
+~~- `src/tools/git_read.ts` [added] +113/-0 (excluded: user_exclude)~~
+~~- `src/tools/list_dir.ts` [added] +62/-0 (excluded: user_exclude)~~
+~~- `src/tools/read_doc.ts` [added] +230/-0 (excluded: user_exclude)~~
+~~- `src/user-instructions.ts` [added] +1/-0 (excluded: user_exclude)~~
+~~- `tests/background-command-scope.test.ts` [added] +50/-0 (excluded: user_exclude)~~
+~~- `tests/calc-list-dir.test.ts` [added] +104/-0 (excluded: user_exclude)~~
+~~- `tests/compaction-continuation.test.ts` [added] +185/-0 (excluded: user_exclude)~~
+~~- `tests/evolve-efficacy.test.ts` [added] +105/-0 (excluded: user_exclude)~~
+~~- `tests/git-read-tool.test.ts` [added] +114/-0 (excluded: user_exclude)~~
+~~- `tests/local-idle-tasks.test.ts` [added] +163/-0 (excluded: user_exclude)~~
+~~- `tests/merge-review-restart-cancel.test.ts` [added] +94/-0 (excluded: user_exclude)~~
+~~- `tests/orchestration-lease-renewal.test.ts` [added] +346/-0 (excluded: user_exclude)~~
+~~- `tests/orchestrator-diff-failure.test.ts` [added] +113/-0 (excluded: user_exclude)~~
+~~- `tests/personalization.test.ts` [added] +44/-0 (excluded: user_exclude)~~
+~~- `tests/quality-gate.test.ts` [added] +28/-0 (excluded: user_exclude)~~
+~~- `tests/read-doc.test.ts` [added] +148/-0 (excluded: user_exclude)~~
+~~- `tests/readme-tool-count.test.ts` [added] +31/-0 (excluded: user_exclude)~~
+~~- `tests/run-failure-cancels-workers.test.ts` [added] +107/-0 (excluded: user_exclude)~~
+~~- `tests/session-prompt-continuity.test.ts` [added] +44/-0 (excluded: user_exclude)~~
+~~- `tests/subagent-settings.test.ts` [added] +42/-0 (excluded: user_exclude)~~
+~~- `tests/task-acceptance-contract.test.ts` [added] +166/-0 (excluded: user_exclude)~~
+~~- `tests/tool-call-continuation.test.ts` [added] +69/-0 (excluded: user_exclude)~~
+~~- `tests/user-integration-settings.test.ts` [added] +50/-0 (excluded: user_exclude)~~
+~~- `tests/worker-model-signal.test.ts` [added] +37/-0 (excluded: user_exclude)~~

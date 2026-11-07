@@ -1,0 +1,19 @@
+sandbox_extension_issue_file failed for /Users/ze/Downloads/Cairn/cairn/node_modules/.pnpm/electron@44.7.0_supports-color@7.2.0/node_modules/electron/dist/Electron.app/Contents/Frameworks/Electron Helper.app/Contents/Resources: 1 (Operation not permitted)
+PASS Esc关闭前提示未保存的自定义指令
+PASS 继续编辑保留输入和编辑焦点
+PASS 切换设置分区后自定义指令草稿仍在
+PASS 返回按钮同样保护未保存的自定义指令
+PASS 明确放弃修改后关闭设置
+PASS 保存中禁用重复提交
+PASS 保存尚未完成时保持设置在场
+PASS 保存完成后回显已保存内容
+PASS 已保存的设置可直接关闭
+PASS 唤醒设置读取失败有可见说明
+PASS 读取失败不冒充已关闭状态
+PASS 就地重试后恢复真实开关状态
+PASS 保存失败回滚并显示原因
+PASS 唤醒设置保存中禁止连续切换
+PASS 失败后可重新保存并回显
+PASS 已有定时任务时仍可调整唤醒设置
+PASS 窄窗口没有横向溢出
+PASS renderer 无控制台错误

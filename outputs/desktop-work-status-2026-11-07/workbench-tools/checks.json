@@ -1,0 +1,69 @@
+[
+  {
+    "name": "首页仅保留窗口级工具",
+    "ok": true,
+    "detail": {
+      "tools": true,
+      "changes": false
+    }
+  },
+  {
+    "name": "无会话时菜单不提供任务窗格",
+    "ok": false,
+    "detail": "全部1运行中0已置顶0已归档0定时任务0紧凑视图"
+  },
+  {
+    "name": "会话只常驻改动和工具，数量指本会话",
+    "ok": true,
+    "detail": {
+      "labels": [
+        "改动1",
+        "工具"
+      ],
+      "changeLabel": "查看本会话改动（1 个文件）",
+      "hidden": true
+    }
+  },
+  {
+    "name": "菜单提供现有窗格与布局操作，插件侧栏含义明确",
+    "ok": false,
+    "detail": "全部1运行中0已置顶0已归档0定时任务0紧凑视图"
+  },
+  {
+    "name": "Esc 关闭菜单并还焦点给工具入口",
+    "ok": true,
+    "detail": {
+      "menu": false,
+      "active": "<button class=\"tb-btn tb-action\" aria-label=\"工作台工具\" title=\"工作台工具\" type=\"button\" id=\"radix-:r0:\" aria-haspopup=\"menu\" aria-expanded=\"false\" data-state=\"closed\"><span>工具</span><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-chevron-down\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"></path></svg></button>",
+      "focused": false
+    }
+  },
+  {
+    "name": "改动按钮一次打开审查窗格",
+    "ok": true
+  },
+  {
+    "name": "从工具菜单打开文件窗格",
+    "ok": true
+  },
+  {
+    "name": "已挂载改动窗格可再次直达，不误关且切到前台",
+    "ok": true
+  },
+  {
+    "name": "菜单可收起右侧面板",
+    "ok": true
+  },
+  {
+    "name": "隐藏后点击改动恢复面板与原审查内容",
+    "ok": true
+  },
+  {
+    "name": "工具菜单进入专注模式",
+    "ok": true
+  },
+  {
+    "name": "工具菜单退出专注模式",
+    "ok": true
+  }
+]

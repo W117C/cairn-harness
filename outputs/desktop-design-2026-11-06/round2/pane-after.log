@@ -1,0 +1,18 @@
+sandbox_extension_issue_file failed for /Users/ze/Downloads/Cairn/cairn/node_modules/.pnpm/electron@44.7.0_supports-color@7.2.0/node_modules/electron/dist/Electron.app/Contents/Frameworks/Electron Helper.app/Contents/Resources: 1 (Operation not permitted)
+PASS 两个标签都挂载，只有最新开的方案是 active {"mounted":2,"activeCount":1,"active":"plan","fileVisible":"hidden","planVisible":"visible","fileIdentity":"kept-file","planIdentity":"kept-plan","pluginsPresent":false,"sidechatPresent":false}
+PASS 切回文件标签：文件可见、方案隐藏，两边状态都还在 {"mounted":2,"activeCount":1,"active":"file","fileVisible":"visible","planVisible":"hidden","fileIdentity":"kept-file","planIdentity":"kept-plan","pluginsPresent":false,"sidechatPresent":false}
+PASS 再切回方案：方案状态仍在（DOM 未被销毁重建） undefined
+PASS 7 个工具窗格与独立插件侧栏同时在场，只有旁路 active {"mounted":7,"activeCount":1,"active":"sidechat","fileVisible":"hidden","planVisible":"hidden","fileIdentity":"kept-file","planIdentity":"kept-plan","pluginsPresent":false,"sidechatPresent":true}
+PASS 多标签溢出时激活标签自动滚进可视区 {"scrollLeft":104,"scrollWidth":383,"clientWidth":279,"tabLeft":985,"tabRight":1066,"viewLeft":787,"viewRight":1066,"label":"旁路"}
+PASS 溢出标签条左缘有渐隐覆盖层（首标签淡出，不被拦腰切） {"scrolled":"true","fadeWidth":"26px","fadeImage":"linear-gradient(to right, color(srgb 0.9"}
+PASS 1120px 调整窗口后当前标签与关闭按钮完整可见 {"viewport":1120,"width":279,"left":198,"right":0}
+PASS 1120px 输入控件换行后主动作仍靠右 {"gap":8,"padding":8}
+PASS 880px 自动收起工具区时保留全部窗格状态 {"viewport":880,"width":0,"left":162,"right":243}
+PASS 880px 输入控件换行后主动作仍靠右 {"gap":8,"padding":8}
+PASS 1440px 调整窗口后当前标签与关闭按钮完整可见 {"viewport":1440,"width":279,"left":198,"right":0}
+PASS 1440px 输入控件换行后主动作仍靠右 {"gap":8,"padding":8}
+PASS 关闭 active 窗格只移除那一块，其余状态保留 {"mounted":6,"activeCount":1,"active":"terminal","fileVisible":"hidden","planVisible":"hidden","fileIdentity":"kept-file","planIdentity":"kept-plan","pluginsPresent":false,"sidechatPresent":false}
+PASS 关闭后焦点落到当前可见标签 undefined
+PASS renderer 无控制台错误 []
+截图与读数：/tmp/cairn-round2-panes-after
+隔离测试配置：/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-pane-tabs-profile-9xVRXp

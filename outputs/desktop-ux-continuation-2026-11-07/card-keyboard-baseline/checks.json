@@ -1,0 +1,227 @@
+{
+  "fixtureData": true,
+  "checks": [
+    {
+      "name": "880 窄窗默认专注对话",
+      "ok": true,
+      "detail": {
+        "display": "block",
+        "width": 0,
+        "group": 576,
+        "main": 576,
+        "inert": true,
+        "sidebar": "expanded"
+      }
+    },
+    {
+      "name": "880 显式打开检查器后确实可见可交互",
+      "ok": true,
+      "detail": {
+        "display": "block",
+        "width": 412,
+        "group": 832,
+        "main": 420,
+        "inert": false,
+        "sidebar": "collapsed"
+      }
+    },
+    {
+      "name": "880 检查器可再次隐藏",
+      "ok": true,
+      "detail": {
+        "display": "block",
+        "width": 0,
+        "group": 576,
+        "main": 576,
+        "inert": true,
+        "sidebar": "expanded"
+      }
+    },
+    {
+      "name": "880 窗格快捷键打开可见文件",
+      "ok": true,
+      "detail": {
+        "display": "block",
+        "width": 412,
+        "group": 832,
+        "main": 420,
+        "inert": false,
+        "active": "file",
+        "sidebar": "collapsed"
+      }
+    },
+    {
+      "name": "隐藏再显示同一窗格，不销毁内容",
+      "ok": true,
+      "detail": {
+        "display": "block",
+        "width": 412,
+        "group": 832,
+        "main": 420,
+        "inert": false,
+        "active": "file",
+        "kept": "preserved",
+        "sidebar": "collapsed"
+      }
+    },
+    {
+      "name": "放宽窗口后已打开窗格仍可用",
+      "ok": true,
+      "detail": {
+        "display": "block",
+        "width": 420,
+        "group": 1072,
+        "main": 649,
+        "inert": false,
+        "active": "file",
+        "kept": "preserved",
+        "sidebar": "collapsed"
+      }
+    },
+    {
+      "name": "含链接预览的卡片仍只有一个键盘停点",
+      "ok": false
+    },
+    {
+      "name": "打开卡片后正文保留可操作链接",
+      "ok": true
+    },
+    {
+      "name": "键盘打开记忆后焦点进入详情",
+      "ok": true,
+      "detail": {
+        "top": 54,
+        "bottom": 552,
+        "headTop": 55,
+        "height": 560,
+        "focused": true,
+        "bodyOverflow": true,
+        "pageOverflow": false,
+        "scrollTop": 0
+      }
+    },
+    {
+      "name": "长正文约束在窗内并独立滚动",
+      "ok": true,
+      "detail": {
+        "top": 54,
+        "bottom": 552,
+        "headTop": 55,
+        "height": 560,
+        "focused": true,
+        "bodyOverflow": true,
+        "pageOverflow": false,
+        "scrollTop": 0
+      }
+    },
+    {
+      "name": "键盘能直接聚焦详情正文并滚动阅读",
+      "ok": true
+    },
+    {
+      "name": "滚到正文底仍能看到标题与关闭",
+      "ok": true,
+      "detail": {
+        "top": 54,
+        "bottom": 552,
+        "headTop": 55,
+        "height": 560,
+        "focused": false,
+        "bodyOverflow": true,
+        "pageOverflow": false,
+        "scrollTop": 1248
+      }
+    },
+    {
+      "name": "Esc 关闭详情，焦点返回原卡片",
+      "ok": true,
+      "detail": {
+        "closed": true,
+        "focus": "查看记忆主题 memory-01"
+      }
+    },
+    {
+      "name": "鼠标关闭详情同样返回卡片",
+      "ok": true
+    },
+    {
+      "name": "记忆链接打开可见浏览器，地址正确",
+      "ok": true,
+      "detail": {
+        "visible": true,
+        "url": "http://localhost:5147/audit",
+        "shown": true
+      }
+    },
+    {
+      "name": "返回记忆保留已读详情，原生浏览视图让位",
+      "ok": true,
+      "detail": {
+        "detail": "memory-01",
+        "hidden": true
+      }
+    },
+    {
+      "name": "搜索排除已打开记录时不再显示旧详情",
+      "ok": true
+    },
+    {
+      "name": "清空搜索不意外重开旧详情",
+      "ok": true
+    },
+    {
+      "name": "宽窗有上下文栏时只显示一套筛选",
+      "ok": true,
+      "detail": {
+        "context": true,
+        "chips": false,
+        "select": false,
+        "value": "all"
+      }
+    },
+    {
+      "name": "窄窗只有页内筛选，并保留项目层选择",
+      "ok": true,
+      "detail": {
+        "context": false,
+        "chips": false,
+        "select": true,
+        "value": "project"
+      }
+    },
+    {
+      "name": "窄窗闲时队列有唯一筛选入口",
+      "ok": true,
+      "detail": {
+        "context": false,
+        "chips": false,
+        "select": true,
+        "value": "all"
+      }
+    },
+    {
+      "name": "闲时筛选隐藏排队任务并保留已完成历史",
+      "ok": true
+    },
+    {
+      "name": "深色窄窗详情和关闭按钮都在视口内",
+      "ok": true,
+      "detail": {
+        "top": 54,
+        "bottom": 552,
+        "headTop": 55,
+        "height": 560,
+        "focused": true,
+        "bodyOverflow": true,
+        "pageOverflow": false,
+        "scrollTop": 0
+      }
+    },
+    {
+      "name": "renderer 无控制台错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": []
+}

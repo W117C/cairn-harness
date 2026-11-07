@@ -1,0 +1,4 @@
+$ node --import tsx scripts/renderer-layer-check.ts
+renderer-layer-check 红线：
+  [I4] apps/desktop/src/renderer/state/workbench.ts:1 — 行数 1202 超过上限 1200
+[ELIFECYCLE] Command failed with exit code 1.

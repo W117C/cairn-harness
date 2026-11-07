@@ -1,0 +1,43 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn/apps/desktop
+
+stderr | tests/kernel-host.test.ts > 第十八遍：首条消息自动命名（autoTitleFirstMessage + run 挂点） > P1 修：run 起跑前失败（模型解析不过）不再留下有标题的空会话垃圾
+[ghost-probe] created=会话 2026-11-07 11:04:41 #1 M3A=undefined M0A=undefined
+
+stderr | tests/kernel-host.test.ts > 第十八遍：首条消息自动命名（autoTitleFirstMessage + run 挂点） > P1 修：run 起跑前失败（模型解析不过）不再留下有标题的空会话垃圾
+[ghost-probe2] pre-handleAgentRun ws=/private/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-host-pYEREI/ghost-ws
+
+stderr | tests/kernel-host.test.ts > 第十八遍：首条消息自动命名（autoTitleFirstMessage + run 挂点） > P1 修：run 起跑前失败（模型解析不过）不再留下有标题的空会话垃圾
+[ghost-probe2] wasEmpty=true
+
+ ❯ tests/kernel-host.test.ts (21 tests | 1 failed) 67141ms
+   ❯ 第十八遍：首条消息自动命名（autoTitleFirstMessage + run 挂点） (5)
+     × P1 修：run 起跑前失败（模型解析不过）不再留下有标题的空会话垃圾 60194ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/kernel-host.test.ts > 第十八遍：首条消息自动命名（autoTitleFirstMessage + run 挂点） > P1 修：run 起跑前失败（模型解析不过）不再留下有标题的空会话垃圾
+Error: Test timed out in 60000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/kernel-host.test.ts:533:3
+    531|   });
+    532|
+    533|   it(
+       |   ^
+    534|     "P1 修：run 起跑前失败（模型解析不过）不再留下有标题的空会话垃圾",
+    535|     async () => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 330 passed (331)
+      Tests  1 failed | 2285 passed (2286)
+   Start at  11:04:27
+   Duration  74.41s (tests 72%, import 19%, transform 9%, worker 1%)
+
+    Isolate  331 workers spawned · ~69ms startup each (spawn + environment, per file)
+             at least ~11.31s faster with isolate: false — reuses workers across files instead of one per file
+
+undefined
+/Users/ze/Downloads/Cairn/cairn/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: vitest run --config vitest.config.ts '--maxWorkers=2'

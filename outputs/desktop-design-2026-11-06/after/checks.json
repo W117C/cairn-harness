@@ -1,0 +1,503 @@
+{
+  "syntheticData": true,
+  "fonts": {
+    "loaded": [
+      "Claude Style Inter",
+      "Claude Style Noto Serif",
+      "JetBrains Mono"
+    ],
+    "ui": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+    "prose": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+    "table": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+    "code": "\"JetBrains Mono\", ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", \"PingFang SC\", \"Microsoft YaHei\", monospace",
+    "narrow": 72,
+    "wide": 72
+  },
+  "checks": [
+    {
+      "name": "Inter and JetBrains Mono load from the offline bundle",
+      "ok": true,
+      "detail": {
+        "loaded": [
+          "Claude Style Inter",
+          "Claude Style Noto Serif",
+          "JetBrains Mono"
+        ],
+        "ui": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "prose": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "table": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "code": "\"JetBrains Mono\", ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", \"PingFang SC\", \"Microsoft YaHei\", monospace",
+        "narrow": 72,
+        "wide": 72
+      }
+    },
+    {
+      "name": "prose and table share the UI sans family",
+      "ok": true,
+      "detail": {
+        "loaded": [
+          "Claude Style Inter",
+          "Claude Style Noto Serif",
+          "JetBrains Mono"
+        ],
+        "ui": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "prose": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "table": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "code": "\"JetBrains Mono\", ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", \"PingFang SC\", \"Microsoft YaHei\", monospace",
+        "narrow": 72,
+        "wide": 72
+      }
+    },
+    {
+      "name": "code is actually monospaced",
+      "ok": true,
+      "detail": {
+        "loaded": [
+          "Claude Style Inter",
+          "Claude Style Noto Serif",
+          "JetBrains Mono"
+        ],
+        "ui": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "prose": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "table": "\"Anthropic Sans Web Text\", \"Claude Style Inter\", \"Noto Sans SC\", \"Source Han Sans SC\", -apple-system, \"system-ui\", \"Segoe UI\", \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Helvetica Neue\", Helvetica, Arial, sans-serif",
+        "code": "\"JetBrains Mono\", ui-monospace, SFMono-Regular, Menlo, Consolas, \"Liberation Mono\", \"PingFang SC\", \"Microsoft YaHei\", monospace",
+        "narrow": 72,
+        "wide": 72
+      }
+    },
+    {
+      "name": "light: sidebar metadata and input hint meet 4.5:1 contrast",
+      "ok": true,
+      "detail": [
+        {
+          "selector": ".s-time",
+          "ratio": 6.0412728576994565
+        },
+        {
+          "selector": ".s-bucket",
+          "ratio": 7.529544080744516
+        },
+        {
+          "selector": ".add-project-btn",
+          "ratio": 7.529544080744516
+        },
+        {
+          "selector": ".composer-card textarea",
+          "ratio": 7.937254310998762
+        }
+      ]
+    },
+    {
+      "name": "light 1440: composer stays within the window",
+      "ok": true,
+      "detail": {
+        "width": 1440,
+        "overflow": false,
+        "composer": {
+          "left": 495.5,
+          "right": 1245.5,
+          "bottom": 888
+        },
+        "height": 900,
+        "buttons": [
+          {
+            "selector": ".g-more",
+            "width": 28,
+            "height": 28
+          },
+          {
+            "selector": ".g-new",
+            "width": 28,
+            "height": 28
+          },
+          {
+            "selector": ".s-more",
+            "width": 28,
+            "height": 28
+          },
+          {
+            "selector": ".s-bucket",
+            "width": 246.5,
+            "height": 28
+          }
+        ]
+      }
+    },
+    {
+      "name": "light 1440: sidebar actions have 28px targets",
+      "ok": true,
+      "detail": [
+        {
+          "selector": ".g-more",
+          "width": 28,
+          "height": 28
+        },
+        {
+          "selector": ".g-new",
+          "width": 28,
+          "height": 28
+        },
+        {
+          "selector": ".s-more",
+          "width": 28,
+          "height": 28
+        },
+        {
+          "selector": ".s-bucket",
+          "width": 246.5,
+          "height": 28
+        }
+      ]
+    },
+    {
+      "name": "light 1120: composer stays within the window",
+      "ok": true,
+      "detail": {
+        "width": 1120,
+        "overflow": false,
+        "composer": {
+          "left": 345,
+          "right": 1076,
+          "bottom": 708
+        },
+        "height": 720,
+        "buttons": [
+          {
+            "selector": ".g-more",
+            "width": 28,
+            "height": 28
+          },
+          {
+            "selector": ".g-new",
+            "width": 28,
+            "height": 28
+          },
+          {
+            "selector": ".s-more",
+            "width": 28,
+            "height": 28
+          },
+          {
+            "selector": ".s-bucket",
+            "width": 246.5,
+            "height": 28
+          }
+        ]
+      }
+    },
+    {
+      "name": "light 1120: sidebar actions have 28px targets",
+      "ok": true,
+      "detail": [
+        {
+          "selector": ".g-more",
+          "width": 28,
+          "height": 28
+        },
+        {
+          "selector": ".g-new",
+          "width": 28,
+          "height": 28
+        },
+        {
+          "selector": ".s-more",
+          "width": 28,
+          "height": 28
+        },
+        {
+          "selector": ".s-bucket",
+          "width": 246.5,
+          "height": 28
+        }
+      ]
+    },
+    {
+      "name": "light 880: composer stays within the window",
+      "ok": true,
+      "detail": {
+        "width": 880,
+        "overflow": false,
+        "composer": {
+          "left": 320,
+          "right": 861,
+          "bottom": 628
+        },
+        "height": 640,
+        "buttons": [
+          {
+            "selector": ".g-more",
+            "width": 28,
+            "height": 28
+          },
+          {
+            "selector": ".g-new",
+            "width": 28,
+            "height": 28
+          },
+          {
+            "selector": ".s-more",
+            "width": 28,
+            "height": 28
+          },
+          {
+            "selector": ".s-bucket",
+            "width": 246.5,
+            "height": 28
+          }
+        ]
+      }
+    },
+    {
+      "name": "light 880: sidebar actions have 28px targets",
+      "ok": true,
+      "detail": [
+        {
+          "selector": ".g-more",
+          "width": 28,
+          "height": 28
+        },
+        {
+          "selector": ".g-new",
+          "width": 28,
+          "height": 28
+        },
+        {
+          "selector": ".s-more",
+          "width": 28,
+          "height": 28
+        },
+        {
+          "selector": ".s-bucket",
+          "width": 246.5,
+          "height": 28
+        }
+      ]
+    },
+    {
+      "name": "dark: sidebar metadata and input hint meet 4.5:1 contrast",
+      "ok": true,
+      "detail": [
+        {
+          "selector": ".s-time",
+          "ratio": 7.108528710411863
+        },
+        {
+          "selector": ".s-bucket",
+          "ratio": 10.539368718258707
+        },
+        {
+          "selector": ".add-project-btn",
+          "ratio": 10.539368718258707
+        },
+        {
+          "selector": ".composer-card textarea",
+          "ratio": 9.721110624078904
+        }
+      ]
+    },
+    {
+      "name": "dark 1440: composer stays within the window",
+      "ok": true,
+      "detail": {
+        "width": 1440,
+        "overflow": false,
+        "composer": {
+          "left": 495.5,
+          "right": 1245.5,
+          "bottom": 888
+        },
+        "height": 900,
+        "buttons": [
+          {
+            "selector": ".g-more",
+            "width": 28,
+            "height": 28
+          },
+          {
+            "selector": ".g-new",
+            "width": 28,
+            "height": 28
+          },
+          {
+            "selector": ".s-more",
+            "width": 28,
+            "height": 28
+          },
+          {
+            "selector": ".s-bucket",
+            "width": 247,
+            "height": 28
+          }
+        ]
+      }
+    },
+    {
+      "name": "dark 1440: sidebar actions have 28px targets",
+      "ok": true,
+      "detail": [
+        {
+          "selector": ".g-more",
+          "width": 28,
+          "height": 28
+        },
+        {
+          "selector": ".g-new",
+          "width": 28,
+          "height": 28
+        },
+        {
+          "selector": ".s-more",
+          "width": 28,
+          "height": 28
+        },
+        {
+          "selector": ".s-bucket",
+          "width": 247,
+          "height": 28
+        }
+      ]
+    },
+    {
+      "name": "dark 1120: composer stays within the window",
+      "ok": true,
+      "detail": {
+        "width": 1120,
+        "overflow": false,
+        "composer": {
+          "left": 345,
+          "right": 1076,
+          "bottom": 708
+        },
+        "height": 720,
+        "buttons": [
+          {
+            "selector": ".g-more",
+            "width": 28,
+            "height": 28
+          },
+          {
+            "selector": ".g-new",
+            "width": 28,
+            "height": 28
+          },
+          {
+            "selector": ".s-more",
+            "width": 28,
+            "height": 28
+          },
+          {
+            "selector": ".s-bucket",
+            "width": 247,
+            "height": 28
+          }
+        ]
+      }
+    },
+    {
+      "name": "dark 1120: sidebar actions have 28px targets",
+      "ok": true,
+      "detail": [
+        {
+          "selector": ".g-more",
+          "width": 28,
+          "height": 28
+        },
+        {
+          "selector": ".g-new",
+          "width": 28,
+          "height": 28
+        },
+        {
+          "selector": ".s-more",
+          "width": 28,
+          "height": 28
+        },
+        {
+          "selector": ".s-bucket",
+          "width": 247,
+          "height": 28
+        }
+      ]
+    },
+    {
+      "name": "dark 880: composer stays within the window",
+      "ok": true,
+      "detail": {
+        "width": 880,
+        "overflow": false,
+        "composer": {
+          "left": 320,
+          "right": 861,
+          "bottom": 628
+        },
+        "height": 640,
+        "buttons": [
+          {
+            "selector": ".g-more",
+            "width": 28,
+            "height": 28
+          },
+          {
+            "selector": ".g-new",
+            "width": 28,
+            "height": 28
+          },
+          {
+            "selector": ".s-more",
+            "width": 28,
+            "height": 28
+          },
+          {
+            "selector": ".s-bucket",
+            "width": 247,
+            "height": 28
+          }
+        ]
+      }
+    },
+    {
+      "name": "dark 880: sidebar actions have 28px targets",
+      "ok": true,
+      "detail": [
+        {
+          "selector": ".g-more",
+          "width": 28,
+          "height": 28
+        },
+        {
+          "selector": ".g-new",
+          "width": 28,
+          "height": 28
+        },
+        {
+          "selector": ".s-more",
+          "width": 28,
+          "height": 28
+        },
+        {
+          "selector": ".s-bucket",
+          "width": 247,
+          "height": 28
+        }
+      ]
+    },
+    {
+      "name": "keyboard focus reveals the session action",
+      "ok": true
+    },
+    {
+      "name": "model menu remains reachable",
+      "ok": true
+    },
+    {
+      "name": "Escape closes the menu and returns focus",
+      "ok": true
+    },
+    {
+      "name": "renderer has no console errors",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": []
+}

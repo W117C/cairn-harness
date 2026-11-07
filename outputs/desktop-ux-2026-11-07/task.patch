@@ -1,0 +1,169 @@
+--- before/apps/desktop/src/renderer/components/SettingsPanel.tsx
++++ after/apps/desktop/src/renderer/components/SettingsPanel.tsx
+@@ -7,7 +7,7 @@
+ //   字段级保存（无全局保存键，SettingsStore patch 语义）；校验失败行内红字，不静默。
+ // 纯函数资产（panelPatch / providerStatusLabel / …）随迁 settings-sections，
+ // 本文件重导出保旧 import 面（settings-panel.test 判卷锚不动）。
+-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
++import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+ import { ChevronLeft, Search, X } from "lucide-react";
+ import type { AgentApi, AppSettings, CapabilityReadout, ProviderInfo } from "../../../../../src/main/ipc-protocol";
+ import type { SettingsLoadIssue, TextSizeSetting, UiSizeSetting } from "../../../../../src/main/settings";
+@@ -27,6 +27,7 @@
+ } from "./settings-sections";
+ import { AppPageBody, type PageId } from "./AppPage";
+ import { ModalSurface } from "./ModalSurface";
++import { menuNavIndex } from "./popover-keys";
+ import { ConfirmDialog } from "./ConfirmDialog";
+ import { isCompositionEnter } from "../ime";
+ import { RenderErrorBoundary } from "./RenderErrorBoundary";
+@@ -199,7 +200,21 @@
+   // 分区搜索（2026-10-18）：收窄左栏九个分区；Esc 两级（有字先清空，空着才失焦）。
+   const [navQuery, setNavQuery] = useState("");
+   const navSearchRef = useRef<HTMLInputElement | null>(null);
++  const navSectionsRef = useRef<HTMLDivElement | null>(null);
++  const bodyRef = useRef<HTMLDivElement | null>(null);
+   const visibleSections = useMemo(() => filterSections(navQuery), [navQuery]);
++
++  useLayoutEffect(() => {
++    if (bodyRef.current !== null) bodyRef.current.scrollTop = 0;
++  }, [section]);
++
++  const handleSettingsEscape = (event: KeyboardEvent) => {
++    if (isCompositionEnter(event, null)) { event.preventDefault(); return; }
++    if (document.activeElement !== navSearchRef.current) return;
++    event.preventDefault();
++    if (navQuery !== "") setNavQuery("");
++    else navSearchRef.current?.blur();
++  };
+ 
+   const pulse = (msg: string) => {
+     setFlash(msg);
+@@ -395,7 +410,7 @@
+     : STR.settingsPanel.foundNewVersion.replace("{v}", update.version);
+ 
+   return (
+-    <ModalSurface className="sp-page" label={STR.settingsPanel.label} onClose={closeSettings} initialFocusRef={navSearchRef}>
++    <ModalSurface className="sp-page" label={STR.settingsPanel.label} onClose={closeSettings} initialFocusRef={navSearchRef} onEscapeKeyDown={handleSettingsEscape}>
+       <div className="sp-shell">
+         <nav className="sp-nav" aria-label={STR.settingsPanel.navAria}>
+           <div className="sp-nav-head">
+@@ -416,6 +431,7 @@
+           <div className="sp-nav-search">
+             <Search size={12} aria-hidden="true" />
+             <input
++              ref={navSearchRef}
+               className="sp-nav-search-input"
+               type="text"
+               value={navQuery}
+@@ -423,16 +439,15 @@
+               aria-label={STR.settingsPanel.searchAria}
+               onChange={(e) => setNavQuery(e.target.value)}
+               onKeyDown={(e) => {
+-                if (e.key === "Escape") {
+-                  e.preventDefault();
+-                  e.stopPropagation();
+-                  if (navQuery !== "") { setNavQuery(""); return; }
+-                  (e.target as HTMLInputElement).blur();
+-                  return;
+-                }
+-                if ((e.key === "Enter" && !isCompositionEnter(e, null)) || e.key === "ArrowDown") {
+-                  const first = visibleSections[0];
+-                  if (first !== undefined) { e.preventDefault(); setSection(first); }
++                if (isCompositionEnter(e, null)) return;
++                if (e.key === "Enter" || e.key === "ArrowDown" || e.key === "ArrowUp") {
++                  const index = e.key === "ArrowUp" ? visibleSections.length - 1 : 0;
++                  const next = visibleSections[index];
++                  if (next !== undefined) {
++                    e.preventDefault();
++                    setSection(next);
++                    navSectionsRef.current?.querySelectorAll<HTMLButtonElement>(".sp-nav-item")[index]?.focus();
++                  }
+                 }
+               }}
+             />
+@@ -442,6 +457,14 @@
+               </button>
+             )}
+           </div>
++          <div className="sp-nav-sections" ref={navSectionsRef} onKeyDown={(event) => {
++            if (isCompositionEnter(event, null)) return;
++            const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>(".sp-nav-item")];
++            const next = menuNavIndex(event.key, items.indexOf(document.activeElement as HTMLButtonElement), items.length);
++            if (next === null) return;
++            event.preventDefault();
++            items[next]?.focus();
++          }}>
+           {(["settings", "workspace", "system"] as const).map((group) => {
+             const groupIds = visibleSections.filter((id) => {
+               const inWorkspace = (SETTINGS_PAGE_ORDER as readonly string[]).includes(id);
+@@ -473,10 +496,9 @@
+           {visibleSections.length === 0 && (
+             <div className="sp-nav-empty">没有匹配「{navQuery.trim()}」的分区</div>
+           )}
+-          {/* 导航列底部留白（原「修改即保存」静态行已按清单撤除，改为右下瞬时指示）。 */}
+-          <div className="sp-nav-foot" aria-hidden="true" />
++          </div>
+         </nav>
+-        <div className="sp-body" data-density={SETTINGS_DENSITY[section]}>
++        <div className="sp-body" ref={bodyRef} data-density={SETTINGS_DENSITY[section]}>
+           {navQuery.trim() !== "" && visibleSections.length > 0 && (
+             <div className="sp-search-hint" role="status">
+               {STR.design.settingsSearchHint.replace("{query}", navQuery.trim())}
+--- before/apps/desktop/src/renderer/components/ModalSurface.tsx
++++ after/apps/desktop/src/renderer/components/ModalSurface.tsx
+@@ -44,17 +44,20 @@
+ type ModalSurfaceProps = Omit<HTMLAttributes<HTMLDivElement>, "role" | "aria-modal" | "aria-label" | "tabIndex"> & {
+   label: string;
+   onClose: () => void;
++  onEscapeKeyDown?: (event: KeyboardEvent) => void;
+   initialFocusRef?: RefObject<HTMLElement | null>;
+   returnFocusRef?: RefObject<HTMLElement | null>;
+ };
+ 
+ export function ModalSurface(props: ModalSurfaceProps): React.JSX.Element {
+-  const { label, onClose, initialFocusRef, returnFocusRef, className, children, ...rest } = props;
++  const { label, onClose, onEscapeKeyDown, initialFocusRef, returnFocusRef, className, children, ...rest } = props;
+   const surfaceRef = useRef<HTMLDivElement | null>(null);
+   const closeRef = useRef(onClose);
++  const escapeRef = useRef(onEscapeKeyDown);
+   const initialRef = useRef(initialFocusRef);
+   const returnRef = useRef(returnFocusRef);
+   closeRef.current = onClose;
++  escapeRef.current = onEscapeKeyDown;
+   initialRef.current = initialFocusRef;
+   returnRef.current = returnFocusRef;
+ 
+@@ -69,10 +72,13 @@
+     const onKey = (e: KeyboardEvent): void => {
+       if (MODAL_STACK[MODAL_STACK.length - 1] !== surface) return;
+       if (e.key === "Escape") {
++        // Let the topmost surface consume Escape locally before dismissing it.
++        escapeRef.current?.(e);
++        const canceled = e.defaultPrevented;
+         e.preventDefault();
+         e.stopPropagation();
+         e.stopImmediatePropagation();
+-        closeRef.current();
++        if (!canceled) closeRef.current();
+         return;
+       }
+       if (e.key !== "Tab") return;
+--- before/apps/desktop/src/renderer/components/settings-refinement.css
++++ after/apps/desktop/src/renderer/components/settings-refinement.css
+@@ -1,10 +1,12 @@
+ /* Settings keeps the workbench palette; spacing and alignment carry its hierarchy. */
+ .sp-page .sp-shell { grid-template-columns: 208px minmax(0, 1fr); }
+-.sp-page .sp-nav { background: hsl(var(--bg-200)); padding: 20px 12px 16px; gap: 3px; }
+-.sp-page .sp-nav-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px 10px 10px; }
++.sp-page .sp-nav { background: hsl(var(--bg-200)); padding: 20px 12px 16px; gap: 3px; overflow: hidden; }
++.sp-page .sp-nav-head { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px 10px 10px; }
+ .sp-page .sp-nav-title { font-size: var(--fs-body-lg); }
+ .sp-page .sp-back { margin: 0; }
+-.sp-page .sp-nav-search { height: 32px; margin-bottom: 8px; padding: 0 8px; }
++.sp-page .sp-nav-search { height: 32px; margin-bottom: 8px; padding: 0 2px 0 8px; }
++.sp-page .sp-nav-search-x { width: 28px; height: 28px; border-radius: var(--radius-xs); }
++.sp-page .sp-nav-sections { flex: 1; min-height: 0; overflow-y: auto; }
+ .sp-page .sp-nav-item { min-height: 34px; height: auto; padding: 7px 10px; font-size: var(--fs-body-sm); text-align: left; }
+ .sp-page .sp-nav-group + .sp-nav-group { margin-top: 12px; }
+ .sp-page .sp-nav-label { padding: 4px 10px 6px; }

@@ -1,0 +1,1 @@
+export const CUSTOM_INSTRUCTIONS_MAX_BYTES = 12_000;

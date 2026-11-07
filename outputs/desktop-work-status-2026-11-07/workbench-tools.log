@@ -1,0 +1,20 @@
+PASS 首页仅保留窗口级工具 {"tools":true,"changes":false}
+FAIL 无会话时菜单不提供任务窗格 "全部1运行中0已置顶0已归档0定时任务0紧凑视图"
+PASS 会话只常驻改动和工具，数量指本会话 {"labels":["改动1","工具"],"changeLabel":"查看本会话改动（1 个文件）","hidden":true}
+FAIL 菜单提供现有窗格与布局操作，插件侧栏含义明确 "全部1运行中0已置顶0已归档0定时任务0紧凑视图"
+PASS Esc 关闭菜单并还焦点给工具入口 {"menu":false,"active":"<button class=\"tb-btn tb-action\" aria-label=\"工作台工具\" title=\"工作台工具\" type=\"button\" id=\"radix-:r0:\" aria-haspopup=\"menu\" aria-expanded=\"false\" data-state=\"closed\"><span>工具</span><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-chevron-down\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"></path></svg></button>","focused":false}
+PASS 改动按钮一次打开审查窗格 undefined
+PASS 从工具菜单打开文件窗格 undefined
+PASS 已挂载改动窗格可再次直达，不误关且切到前台 undefined
+PASS 菜单可收起右侧面板 undefined
+PASS 隐藏后点击改动恢复面板与原审查内容 undefined
+PASS 工具菜单进入专注模式 undefined
+PASS 工具菜单退出专注模式 undefined
+Error: Script failed to execute, this normally means an error was thrown. Check the renderer console for the error.
+    at node:electron/js2c/sandbox_bundle:2:98605
+    at IpcRendererInternal.<anonymous> (node:electron/js2c/sandbox_bundle:2:93432)
+    at IpcRendererInternal.emit (node:electron/js2c/sandbox_bundle:2:35958)
+    at Object.onMessage (node:electron/js2c/sandbox_bundle:2:92646)
+undefined
+/Users/ze/Downloads/Cairn/cairn/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: electron scripts/workbench-tools-smoke.cjs /Users/ze/Downloads/Cairn/cairn/outputs/desktop-work-status-2026-11-07/workbench-tools

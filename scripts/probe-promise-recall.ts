@@ -454,24 +454,11 @@ export const CLAIM_BINDINGS: readonly ClaimBinding[] = [
       + "同形状的另一半（连续两次都没成功 ⇒ 成条且正文带「没有一次成功」）在同文件"
       + "「写向动作的完全相同参数重复调用成条」里，那里判的是正向，故不重复登记。",
   },
-  {
-    face: "src/agent/sidechat.ts#SIDECHAT_SYSTEM｜写向工具已从你的工具表摘除",
-    symbol: "SIDECHAT_FORBIDDEN_TOOLS",
-    testFile: "tests/sidechat-core.test.ts",
-    testCase: "三个写向工具不在 sidechat 工具表里",
-    why: "那句话的范围由这份名单兜：那条用例逐个断言名单里的工具不在 `sidechatToolSpecs()` 给的表内；"
-      + "而表本身是按 `SIDECHAT_TOOL_WHITELIST` 过滤出来的（allow-list，不是黑名单加补丁）",
-  },
-  {
-    face: "src/agent/sidechat.ts#SIDECHAT_SYSTEM｜你的结论不会自动进入主会话",
-    symbol: "promoteToMain",
-    testFile: "tests/sidechat-core.test.ts",
-    testCase: "source_event_ids 为空 → 拒绝（结论须可追溯）",
-    why: "旁路进主流只有 `promoteToMain` 这一个显式入口，那条用例钉的是「没有可追溯的源事件号 ⇒ 整条拒绝」，"
-      + "⇒ 不调它（或调了但缺三件事）主会话一个字节都不写。"
-      + "这句的另一半（旁路事件落在自己的 JSONL、主文件字节不变）由同文件那条 JSONL 用例守着，"
-      + "而那条不引用这个符号 ⇒ 本条登记说的是**入口这一半**，不冒充整句都被它兜住。",
-  },
+  /* 第 313 页那两条 sidechat 绑定（「写向工具已摘除」/「结论不自动进主会话」）已于 2026-11-06 撤下：
+     原句随全英文 SOTA 重构翻成英文，CLAIM_MARKS 措辞网是纯中文词表，英文句不再入网 ⇒ 两格成了白登记。
+     能力本身仍由 tests/sidechat-core.test.ts 守着（名单 + promoteToMain 三条件）。
+     **语言盲区欠账（规则 122 同族）**：能力断言网挂在中文措辞上，英文面整族漏收——
+     补英文标记（cannot / must not / never / only）会整批新增欠证人面，需同笔配证人后再收，另开一批。 */
   /* 第 317 页：拿新的四条件把「其实早就有人判，只是证人用了另一套词」那几格捞回来。
      每条都是先跑候选名单（`outputs/claim-binding-tighten-2026-10-03/find-candidates.mts`）、
      再逐条读那条用例的体确认"它判的就是这句话"才登记的——不是符号两边都在就填。 */

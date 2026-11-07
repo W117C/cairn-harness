@@ -51,7 +51,7 @@ import { installHeldOut, judgeHeldOut, runHeldOut, type HeldOutRun, type HeldOut
 // 装配面登记：产品缺省开的每一枚开关，跑器这边必须说一句「装／不装／这格对我无意义」。
 // 这张表存在的理由：`autoVerify`（能力 5 的收束闸）产品缺省开、基准不接，
 // 于是盘上 49 趟跑批的 `autoVerifyBeat` 全 false——被读成「模型不自己验证」，其实是跑器没装这一环。
-import { assemblyOverrides, assemblyRows, renderAssemblyFace, runLoopKnobsFromAssembly, undeclaredKnobs } from "./lib/eval-assembly";
+import { assemblyOverrides, assemblyRows, BENCH_FACE_ONLY, renderAssemblyFace, runLoopKnobsFromAssembly, undeclaredKnobs } from "./lib/eval-assembly";
 import { DEFAULT_SETTINGS } from "../src/main/settings";
 
 const sleep = (ms: number): Promise<void> => new Promise((res) => setTimeout(res, ms));
@@ -145,7 +145,7 @@ if (AUTO_VERIFY && NO_AUTO_VERIFY) {
 }
 const ASSEMBLY = assemblyRows(DEFAULT_SETTINGS, undefined, assemblyOverrides(AUTO_VERIFY, AUTO_VERIFY_REPAIR, NO_AUTO_VERIFY));
 const ASSEMBLY_UNDECLARED = undeclaredKnobs(ASSEMBLY);
-const ASSEMBLY_FACE = renderAssemblyFace(ASSEMBLY);
+const ASSEMBLY_FACE = [renderAssemblyFace(ASSEMBLY), BENCH_FACE_ONLY].filter(Boolean).join(" ");
 const BENCH_RUNLOOP_KNOBS = runLoopKnobsFromAssembly(ASSEMBLY);
 // 配对规则的**出声**：带了返修旗标而这张表里却没有它 ⇒ 这一趟没装闸，它没有对象。
 // 判据取表而不是在这里重算一遍布尔（重算＝第二份配对逻辑，宽度迟早不同）。

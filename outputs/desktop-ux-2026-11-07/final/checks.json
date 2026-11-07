@@ -1,0 +1,132 @@
+{
+  "fixtureData": true,
+  "checks": [
+    {
+      "name": "打开设置即聚焦搜索",
+      "ok": true
+    },
+    {
+      "name": "清空后焦点归还搜索，可继续输入",
+      "ok": true
+    },
+    {
+      "name": "清空按钮达到28px操作目标",
+      "ok": true,
+      "detail": {
+        "width": 28,
+        "height": 28
+      }
+    },
+    {
+      "name": "搜索中Esc只清空查询，设置仍打开",
+      "ok": true
+    },
+    {
+      "name": "组字期间Esc不关闭设置或清空查询",
+      "ok": true
+    },
+    {
+      "name": "搜索下键激活并聚焦首个匹配分区",
+      "ok": true
+    },
+    {
+      "name": "无匹配时保留搜索焦点和空态",
+      "ok": true
+    },
+    {
+      "name": "分区下键移焦下一项，不误切换正文",
+      "ok": true
+    },
+    {
+      "name": "分区回车激活聚焦项",
+      "ok": true
+    },
+    {
+      "name": "组字回车不误跳分区",
+      "ok": true
+    },
+    {
+      "name": "切分区正文回顶，标题和首项直接可见",
+      "ok": true,
+      "detail": {
+        "beforeScroll": 187.5,
+        "afterScroll": 0
+      }
+    },
+    {
+      "name": "短窗End直达最后分区，返回与搜索持续可见",
+      "ok": true,
+      "detail": {
+        "focus": "关于与更新",
+        "backTop": 56,
+        "searchTop": 95,
+        "navTop": 38,
+        "lastBottom": 546.1953125,
+        "height": 560,
+        "bodyOverflow": false
+      }
+    },
+    {
+      "name": "Home回首项并保留当前正文",
+      "ok": true
+    },
+    {
+      "name": "上键首尾循环",
+      "ok": true
+    },
+    {
+      "name": "空搜索Esc先离开搜索，设置保持打开",
+      "ok": true
+    },
+    {
+      "name": "再次Esc关闭设置",
+      "ok": true
+    },
+    {
+      "name": "返回按钮直接关闭，不被搜索清空逻辑截走",
+      "ok": true
+    },
+    {
+      "name": "有未保存草稿时Esc先打开确认框",
+      "ok": true
+    },
+    {
+      "name": "嵌套确认框Esc仅返回编辑，草稿和焦点保留",
+      "ok": true
+    },
+    {
+      "name": "1440×900设置无横向溢出且搜索可见",
+      "ok": true,
+      "detail": {
+        "overflow": false,
+        "searchVisible": true
+      }
+    },
+    {
+      "name": "1120×760设置无横向溢出且搜索可见",
+      "ok": true,
+      "detail": {
+        "overflow": false,
+        "searchVisible": true
+      }
+    },
+    {
+      "name": "880×560设置无横向溢出且搜索可见",
+      "ok": true,
+      "detail": {
+        "overflow": false,
+        "searchVisible": true
+      }
+    },
+    {
+      "name": "深色窄窗搜索清空仍可用",
+      "ok": true
+    },
+    {
+      "name": "renderer无错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": []
+}

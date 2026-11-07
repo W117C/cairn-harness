@@ -1,0 +1,17 @@
+PASS 两个标签都挂载，只有最新开的方案是 active {"mounted":2,"activeCount":1,"active":"plan","fileVisible":"hidden","planVisible":"visible","fileIdentity":"kept-file","planIdentity":"kept-plan","pluginsPresent":false,"sidechatPresent":false}
+PASS 切回文件标签：文件可见、方案隐藏，两边状态都还在 {"mounted":2,"activeCount":1,"active":"file","fileVisible":"visible","planVisible":"hidden","fileIdentity":"kept-file","planIdentity":"kept-plan","pluginsPresent":false,"sidechatPresent":false}
+PASS 再切回方案：方案状态仍在（DOM 未被销毁重建） undefined
+PASS 7 个工具窗格与独立插件侧栏同时在场，只有旁路 active {"mounted":7,"activeCount":1,"active":"sidechat","fileVisible":"hidden","planVisible":"hidden","fileIdentity":"kept-file","planIdentity":"kept-plan","pluginsPresent":false,"sidechatPresent":true}
+FAIL 多标签溢出时激活标签自动滚进可视区 {"scrollLeft":92,"scrollWidth":383,"clientWidth":279,"tabLeft":997,"tabRight":1078,"viewLeft":787,"viewRight":1066,"label":"旁路"}
+PASS 溢出标签条左缘有渐隐覆盖层（首标签淡出，不被拦腰切） {"scrolled":"true","fadeWidth":"26px","fadeImage":"linear-gradient(to right, color(srgb 0.9"}
+FAIL 1120px 调整窗口后当前标签与关闭按钮完整可见 {"viewport":1120,"width":279,"left":210,"right":12}
+FAIL 880px 调整窗口后当前标签与关闭按钮完整可见 {"viewport":880,"width":0,"left":210,"right":291}
+FAIL 1440px 调整窗口后当前标签与关闭按钮完整可见 {"viewport":1440,"width":279,"left":210,"right":12}
+PASS 关闭 active 窗格只移除那一块，其余状态保留 {"mounted":6,"activeCount":1,"active":"terminal","fileVisible":"hidden","planVisible":"hidden","fileIdentity":"kept-file","planIdentity":"kept-plan","pluginsPresent":false,"sidechatPresent":false}
+FAIL 关闭后焦点落到当前可见标签 undefined
+PASS renderer 无控制台错误 []
+截图与读数：/tmp/cairn-round2-pane-red
+隔离测试配置：/var/folders/pc/fqvmbm2s2ydc22z1z2frt08m0000gn/T/cairn-pane-tabs-profile-djqbNC
+undefined
+/Users/ze/Downloads/Cairn/cairn/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: electron scripts/pane-tabs-smoke.cjs /tmp/cairn-round2-pane-red

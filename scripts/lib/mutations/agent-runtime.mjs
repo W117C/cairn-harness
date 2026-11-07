@@ -415,7 +415,7 @@ export const MUTATIONS = [
     src: "src/agent/system-prompt.ts",
     test: "tests/base-system-discipline.test.ts",
     desc: "「先写复现测试跑到红」这条纪律被删（提示词回到「改完就说修好了」，能力 5 最关键那条失去唯一的字面抓手）",
-    apply: (s) => s.replace("  \"4) 修 bug 先写一条能复现它的测试并跑到红，再改代码到绿；没有红过的复现就不要宣称已修复；\",\n", ""),
+    apply: (s) => s.replace("  \"4) When fixing bugs, first write a test reproducing the bug and run to red, then fix to green; never claim resolved without a red reproduction;\",\n", ""),
     expectFail: "先红后绿写进纪律：修 bug 必须先有跑到红的复现，没红过不得宣称修好（能力 5 的正面）",
   },
   {
@@ -423,7 +423,7 @@ export const MUTATIONS = [
     src: "src/agent/system-prompt.ts",
     test: "tests/base-system-discipline.test.ts",
     desc: "「改已有文件用 edit_file 打补丁」被删 ⇒ 模型继续整文件重抄（write_file 的行数提示只在事后，事前预防更省一轮）",
-    apply: (s) => s.replace("  \"3) 改已有文件用 edit_file 打补丁，write_file 只用于新建文件（整份重抄费 output 又容易漏抄未改的行）；\",\n", ""),
+    apply: (s) => s.replace("  \"3) Edit existing files using edit_file; write_file is only for creating new files (full rewrites waste tokens and risk dropping lines);\",\n", ""),
     expectFail: "补丁优先写进纪律：改已有文件用 edit_file，write_file 只用于新建（能力 2「补丁级 diff」）",
   },
   {
@@ -431,7 +431,7 @@ export const MUTATIONS = [
     src: "src/agent/system-prompt.ts",
     test: "tests/base-system-discipline.test.ts",
     desc: "去掉「第 4 条是新增用例，不是改判卷面」的消歧 ⇒ 两条纪律互相矛盾，模型只能二选一（要么不写复现，要么去改判卷文件）",
-    apply: (s) => s.replace("  \"6) 只改任务需要的文件；既有测试与判卷文件不得改写（第 4 条是**新增**用例，不是改判卷面）。\",\n", "  \"6) 只改任务需要的文件，不改测试与判卷文件。\",\n"),
+    apply: (s) => s.replace("  \"6) Only modify files required by the task; existing test and judging benchmark files must not be rewritten (rule 4 means adding new test cases, not rewriting the judging suite).\",\n", "  \"6) Only modify files required by the task, do not rewrite test and judging files.\",\n"),
     expectFail: "两条纪律不互斥：明确「第 4 条是新增用例，不是改判卷文件」",
   },
   {
@@ -611,7 +611,7 @@ export const MUTATIONS = [
     src: "src/agent/system-prompt.ts",
     test: "tests/base-system-discipline.test.ts",
     desc: "整段编排纪律删掉 ⇒ 模型面重新没人教「何时拆 / 怎么派 / 派完收队」，而 W1a 的工具照样在线（能力已发货、指令面缺席）",
-    apply: (s) => s.replace("  \"编排（派子代理时）：能各自独立验收才拆，单一改动别拆；任务书必须自包含（worker 看不到本会话历史）；派完先调 wait_for_agents 收队，未拿到回执不得转述 worker 的结论。\",\n", ""),
+    apply: (s) => s.replace("  \"Orchestration (subagents): Only decompose when independently verifiable; single changes must not be split; taskbook must be self-contained (workers cannot see parent history); wait_for_agents to collect upon dispatch, and never relay findings without receipt.\",\n", ""),
     expectFail: "编排段在：拆的判据 / 任务书自包含 / 派完必须收队，三句各锁一句（W1a 的收队义务此前只在工具描述里）",
   },
   {
@@ -619,7 +619,7 @@ export const MUTATIONS = [
     src: "src/agent/system-prompt.ts",
     test: "tests/base-system-discipline.test.ts",
     desc: "只删收队那半句 ⇒ 派完仍会凭想象转述 worker 结论，D1 的失败模式重新敞开（工具在、没人叫它）",
-    apply: (s) => s.replace("派完先调 wait_for_agents 收队，未拿到回执不得转述 worker 的结论。", ""),
+    apply: (s) => s.replace("wait_for_agents to collect upon dispatch, and never relay findings without receipt.", ""),
     expectFail: "编排段在：拆的判据 / 任务书自包含 / 派完必须收队，三句各锁一句（W1a 的收队义务此前只在工具描述里）",
   },
   {
@@ -627,7 +627,7 @@ export const MUTATIONS = [
     src: "src/agent/system-prompt.ts",
     test: "tests/base-system-discipline.test.ts",
     desc: "删「任务书自包含」半句 ⇒ worker 拿不到验收口径就要返工（它看不到父会话历史，这条是 worker 质量的上游）",
-    apply: (s) => s.replace("任务书必须自包含（worker 看不到本会话历史）；", ""),
+    apply: (s) => s.replace("taskbook must be self-contained (workers cannot see parent history);", ""),
     expectFail: "编排段在：拆的判据 / 任务书自包含 / 派完必须收队，三句各锁一句（W1a 的收队义务此前只在工具描述里）",
   },
   {
@@ -635,7 +635,7 @@ export const MUTATIONS = [
     src: "src/agent/system-prompt.ts",
     test: "tests/base-system-discipline.test.ts",
     desc: "把编排段改成「7) …」⇒ 条件段混进动作序列编号，纪律 1–6 的连续性断号（模型会以为后面的约束可省）",
-    apply: (s) => s.replace("\"编排（派子代理时）：", "\"7) 编排（派子代理时）："),
+    apply: (s) => s.replace("\"Orchestration (subagents):", "\"7) Orchestration (subagents):"),
     expectFail: "六条纪律编号连续（缺号=模型读到断号，会以为后面的约束可省）",
   },
   {
@@ -646,7 +646,7 @@ export const MUTATIONS = [
       "（2026-10-16）：agent 写鹈鹕骑自行车的循环动画，IK 算对了、模板组装对了、回执确认无残留占位符，" +
       "然后就没回头看。产物里膝盖被选肢钉死在身体右前方（膝 x 全程只摆 21px），" +
       "而它三个机会都没发现——缺的不是能力，是没人要求它回头看。",
-    apply: (s) => s.replace('  "视觉产物（HTML/SVG/动画/图表）：交付前必须真的看过；只交付落盘那一份——不要在回复里重抄内容。",\n', ''),
+    apply: (s) => s.replace('  "Visual artifacts (HTML/SVG/animations/charts): Must inspect actual output before delivery; only deliver the file on disk -- do not duplicate in reply.",\n', ''),
     expectFail: "视觉产物自检段在：交付前必须真的看过（能力 5 对非代码产物同样成立）",
   },
   {
@@ -655,7 +655,7 @@ export const MUTATIONS = [
     test: "tests/base-system-discipline.test.ts",
     desc: "视觉产物段被编成「7)」⇒ 条件段混进纪律编号，1–6 连续性断号（模型会以为后面的约束可省）。" +
       "与编排段同一条理由。",
-    apply: (s) => s.replace('"视觉产物（HTML/SVG/动画/图表）', '"7) 视觉产物（HTML/SVG/动画/图表）'),
+    apply: (s) => s.replace('"Visual artifacts (HTML/SVG/animations/charts)', '"7) Visual artifacts (HTML/SVG/animations/charts)'),
     expectFail: "视觉产物段不占纪律编号（同编排段：条件段混进编号会造断号）",
   },
   // ---- 能力 5 回流通道：自动验证拍的红投进下一轮（tests/context-auto-verify-note.test.ts）----
@@ -840,7 +840,7 @@ export const MUTATIONS = [
     test: "tests/hook-precompact-producer.test.ts",
     desc: "协调器收了 onPreCompact 却不往 runCompaction 递 ⇒ 会话内自动/溢出压缩永不发钩子（构造面收下即丢，只有手动档看起来是好的）",
     apply: (s) => s.replace("      ...(this.onPreCompact ? { onPreCompact: this.onPreCompact } : {}),", "      ...(false ? { onPreCompact: this.onPreCompact } : {}),"),
-    expectFail: "压缩没开始就不发：decision=null 不发；摘要停用后 auto 不发，overflow 截断照发",
+    expectFail: "压缩没开始就不发：decision=null 不发；摘要停用后 auto 由微压缩接管（真开始 ⇒ 发），overflow 截断照发",
   },
   {
     id: "precompact-session-provider-forward-dropped",
@@ -1403,7 +1403,7 @@ export const MUTATIONS = [
     src: "src/agent/session-provider.ts",
     test: "tests/automation-tool-surface.test.ts",
     desc: "只读档漏摘 ⇒ 只读会话能排下一次无人值守的写盘（与 wait/cancel 同族的漏摘形状）",
-    apply: (s) => s.replace(" &&\n      !AUTOMATION_TOOL_NAMES.includes(s.function.name),", ","),
+    apply: (s) => s.replace("!AUTOMATION_TOOL_NAMES.includes(s.function.name)", "true"),
     expectFail: "只读档整族摘除（只读会话不该能排一次无人值守的写盘）",
   },
   {
@@ -1773,7 +1773,10 @@ export const MUTATIONS = [
     test: "tests/loop-cap-verify-beat.test.ts",
     desc: "撞帽路不再补那一拍 ⇒ 被帽砍掉的 run 又回到「一条 verify 证据都没有」。#69 的原形状"
       + "（真模型面实测 5/43≈12% 整趟跑废，且这批恰是写得最多、最可能失败的那一批）",
-    apply: (s) => s.replace("      if (!capReached) return;", "      return;"),
+    apply: (s) => s.replace(
+      "      if (opts.verify && opts.autoVerify === true && wroteThisRun && (firstBeat || repairBeat)) {",
+      "      if (!capReached && opts.verify && opts.autoVerify === true && wroteThisRun && (firstBeat || repairBeat)) {",
+    ),
     expectFail: "撞帽 + 写过盘 + 开闸 ⇒ 恰一拍 auto 证据落流，且 run 照旧抛错（帽没被藏起来）",
   },
   {

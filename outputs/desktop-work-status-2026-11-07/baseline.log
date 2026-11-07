@@ -1,0 +1,14 @@
+PASS 本轮已开始，仍在等待合成运行结束 null
+FAIL 进度只显示当前轮的 1 步 {"top":40,"bottom":435.1875,"left":859,"right":1257,"width":1440,"height":768,"role":"menu","focused":false,"footer":"运行 0s · 4 步","scroll":0}
+FAIL 键盘打开后焦点进入可阅读区域 {"top":40,"bottom":435.1875,"left":859,"right":1257,"width":1440,"height":768,"role":"menu","focused":false,"footer":"运行 0s · 4 步","scroll":0}
+FAIL 轮中插话后保留本轮前后两步 {"top":40,"bottom":435.1875,"left":859,"right":1257,"width":1440,"height":768,"role":"menu","focused":false,"footer":"运行 1s · 5 步","scroll":0}
+FAIL 已打开的进度面板缩到短窗仍完整在视口内 {"top":40,"bottom":217.1875,"left":299,"right":697,"width":880,"height":205,"role":"menu","focused":false,"footer":"运行 1s · 5 步","scroll":0}
+FAIL 键盘可滚动长任务清单 {"top":40,"bottom":217.1875,"left":299,"right":697,"width":880,"height":205,"role":"menu","focused":false,"footer":"运行 1s · 5 步","scroll":0}
+PASS Esc 只关进度并还焦点，未停止运行 null
+FAIL 键盘切换会话关闭旧进度，下一会话可自行打开 {"title":"整理竞品对照册","open":true,"pill":"另一会话的任务"}
+PASS 另一会话显示自己的清单 null
+PASS renderer 无控制台错误 []
+4/10 PASS · /Users/ze/Downloads/Cairn/cairn/outputs/desktop-work-status-2026-11-07/baseline
+undefined
+/Users/ze/Downloads/Cairn/cairn/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: electron scripts/work-status-smoke.cjs /Users/ze/Downloads/Cairn/cairn/outputs/desktop-work-status-2026-11-07/baseline

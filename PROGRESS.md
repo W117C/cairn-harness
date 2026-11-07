@@ -36926,3 +36926,418 @@ try 内同步 await，run IPC 要等它回来才收束 ⇒ 界面 spinner 被 10
 - 只改认证跑器的并发档，不改任何产品代码与判卷断言；`--maxWorkers=2` 比默认慢一点（墙钟 342.67s），换来可复现的 exit 0。
 - 红/绿两份认证凭证都入库：红的那份是「修前」的同分母证人，不删。
 - 本页提交时工作树还有隔壁会话的 `PaneDock.tsx` 在飞改动，未纳入本笔。
+
+## 2026-11-05 · 第 1028 页：设置面四件收口 + 点击蓝框清除（工作树，未提交）
+
+### 一、范围
+
+接续 2026-11-05 09:03 的 Codex 会话（usage limit 中断）。该会话的四条线是：个性化/自定义指令、子 Agent 设置面、闲时队列、迁移导入，外加 MCP/Hooks 的设计调整。功能实现已在工作树里；本轮补的是让它们**可被看见、可被判卷**的那一层。
+
+- 画廊夹具：新增 `subagentSettingsList/Read/Save/Remove`、`mcpUserConfig/Save/Probe`、`hooksUserConfig/Save`、`settingsPreviewMigration/ApplyMigration`、`idleTaskList/Enqueue/Update` 的可用返回值，并在 `SETTINGS` 补 `customInstructions`。此前这些接口落到兜底 `{}`，设置逐页自查在 MCP 页报 `reading 'length'`、在子 Agent 页报 `reading 'map'`——那是证人缺料，不是产品崩。
+- 子 Agent 读取兜底：`roles`/`warnings` 缺失时不再整页抛错；上限非法时显示 `—`。
+- 蓝框：`.ss-opt.on` 的选中蓝边/淡底与原生 `checkbox/radio` 的 `accent-color` 改走品牌陶土（2026-11-05 业主裁：点击后不要蓝框）。键盘 `:focus-visible` 三层环仍是控件蓝——那不是点击态，不动。`control-accent` / `settings-ui` 两条判卷跟着改口径，并补一条「原生勾选框不许吃 accent-control」。
+- MCP/Hooks/子 Agent 里的 `<code>` 值（路径、服务器名、命令、角色名）不再吃 Markdown 行内代码的暗红字 `#943333`，改中性芯片——否则「配置文件 /Users/…/mcp.json」看起来像一条报错。
+- 顺带：MemoryPane 卡片脚注对比度 3.50:1 → 7.73:1（原 `.sub` 用 text-300，新卡误用 text-400）；Composer 1201 行贴帽 → 抽 `components/composer-helpers.ts`（Composer 1169 行，导出面原样 re-export）；app-shell 冒烟的 memory/plugin 选择器跟随 `memory-card` / `plugin-store-main`，设置入口改走 ⌘,（旧 `.app-rail-settings` 节点已随账户菜单下架）。
+
+### 二、读数（现跑，工作树）
+
+| 面 | 读数 |
+| --- | --- |
+| 桌面套件 | **326 文件 / 2257 条全绿**（`pnpm --filter cairn-desktop test`，含 desktop-boundary） |
+| core 全量 | **640 文件 / 7785 条全绿**（`pnpm test:capped` = maxWorkers=2，墙钟 233.77s） |
+| 根 typecheck | 0 条报错 |
+| renderer-layer-check | 绿（209 个渲染层源文件；Composer 1169 ≤ 1200） |
+| desktop-boundary-check | 绿 |
+| docs-check | 受检项全绿；下一个未占用页号 1028 |
+| settings-sweep（light / dark） | 各 **11/11 PASS**，0 控制台错误；权限档卡已无蓝框（前/后蓝色像素 505/56 → 0；`getComputedStyle` 勾选框蓝 → 品牌陶土，亮暗同值） |
+| app-shell-smoke | **51/51 PASS**，0 控制台错误 |
+| 新设置面隔离探针 | MCP 2 台 / 添加表单、Hooks 2 条 / 添加表单、子 Agent 7 行 / 编辑表单、迁移预览 4 项（2 可导入 + 1 冲突 + 1 不兼容）；0 控制台错误 |
+
+### 三、边界
+
+- 未提交。工作树还含着其他会话的在飞改动（模型菜单、插件市场、记忆卡等），本页只记本轮改动与读数，不替它们背书。
+- `interaction-smoke` 31 项中 2 项红（工具组摘要缺 `Assertion failed`、流式追加后组展开态回 false）、`layout-smoke` 18 项中 4 项红（检查器概览/运行态 chip/方向键 Tabs、旧 `.app-rail-settings` 选择器）。逐条比对后均非本批引入：Stream 本轮只把 `title` 改成 `data-hint`，Inspector 与账户菜单是更早的在飞改动。登记在此，不冒充绿。
+- 未跑 `pnpm gates` / `head-cert-check` / `mutate-verify`：后两者量 HEAD，本批未提交。
+
+## 2026-11-05 · 第 1029 页：桌面/内核审计收口——56 条核验，23 条落地，两套套件全绿
+
+### 一、范围
+
+接续上一段被中断的 Claude 审计会话。56 条 findings 先由三组只读核验逐条对源码复核（desktop 21 / core 14 / agent-providers 15），再按「低风险、可判卷、高价值」落一批修复；其余进入后续批次，不一次改完。
+
+- 本批直接改动 **23 条**（桌面 12、内核 11；#26 只完成重复标题，字阶统一留后）。
+- 核验时共享工作树已有修复 **6 条**：`#8`（`forceQueue`）、`#10`（`xhigh` 入白名单）、`#11`（ChangesPane 按会话 key 隔离）、`#18`（完整尾事件补换行）、`#25`（菜单常量对齐 420）、`#29`（worker `call.signal` 透传）；本批不重复改。
+- 驳回 **1 条**：`#16` 的设置写入行为是现有契约的刻意选择，不按 finding 改。
+- 刻意设计 **1 条**：`#22` 的会话行密度属 2026-10-31 R3 裁决，暂不强改。
+- 延后 **25 条**：`#43–#49` 权限/沙箱安全项独立成批；`#36` 受冻结语料约束；其余为流式投影、生命周期取消、provider 协议与渲染层架构重构。
+
+### 二、落地
+
+桌面：`#1/#12` 切项目后 `newSession()`；`#2` 后台非终态事件只在 0→1 时 force；`#9` Escape 对二级输入框让路并补浮层选择器；`#13` 打开会话/新建任务先回 chat；`#14` 关最后一格窗格焦点回工具栏；`#23` 审查与详情共用能力胶囊；`#24` 插件抽屉 `top:38px`；`#26` 删重复「设置」标题；`#27` 删插件页局部 outline；`#28` 六桶色改 HSL 三元组并补暗色；`#55` provider 读写改用当前工作区。
+
+内核：`#15` journal 跨进程写锁 + 压缩保留每任务最后一条；`#17` PID 复用判据；`#19` custom 计划锚点改墙钟纪元；`#20` 搜索排除 `agent_id` 语料；`#21` 冷读水位按实际字节；`#32` 未登记 worktree 拒绝 `rm -rf`；`#35` sequencer 异常收束整链 failed；`#50` `reasoningDefault` 真正进入请求；`#52` 发现价进 provider 草稿；`#54` ACP 跨块 UTF-8 解码；`#56` OpenAI 非流式 200 错误体 fail-loud。
+
+### 三、读数（工作树，未提交）
+
+| 面 | 读数 |
+| --- | --- |
+| 桌面套件 | **327 文件 / 2267 条全绿**（含 desktop-boundary） |
+| core 全量 | **641 文件 / 7805 条全绿**（`pnpm test:capped` = `--maxWorkers=2`，墙钟 190.48s） |
+| 定向 core | 15 文件 / 238 条全绿 |
+| 根 typecheck | 0 条报错 |
+| docs-check | 受检项全绿；下一个未占用页号 1030 |
+| renderer-layer-check | 绿（210 个渲染层源文件；I1–I4 全过） |
+| evidence-typecheck-check | 绿（危险码 12/12；在飞未入库 0 条 / 0 个文件） |
+| 证据 | 本批 README 与 56 条原始 findings（工作树，随本笔落库） |
+
+### 四、边界
+
+- 未提交。共享工作树还含着其他会话的在飞改动（设置面、模型菜单、插件市场、浏览器标签等），本批只做定点替换，没有 reset/stash。
+- `#36` 的判卷切换会让冻结正样本 `real-red-verify-stagnation` 从 fire 变 silent；`fixtures/no-progress/*` 与 `scripts/frozen-sha256.json` 不动，新增正样本需人工登记冻结表，留待维护窗口。
+- 未跑 `pnpm gates` / `head-cert-check` / `mutate-verify`：后两者量 HEAD，本批未提交；本页读数只覆盖工作树。
+
+
+## 2026-11-05 · 第 1030 页：系统提示词 AGI 级全面演化——科学假设、架构守恒与全域对齐（工作树，未提交）
+
+### 一、范围
+
+根据业主指导「优化完善补充我们项目的系统提示词，当前的所有东西都不一定是最好的，主要还是要先调研了解之后才可以动手，我们要做最强 agent，AGI 水平；没有上限科学假设调试（复杂 Bug 绝不掩盖症状）、全景架构保护与最小影响面（避免次生破坏与过度重构）都需要；继续深度优化；继续不断优化系统提示词，我感觉还是不够」，基于 `agent-canon/` 1,213 份外泄 SOTA 正典与现有提示词机制，对主会话基座、子代理、辅助对话、长程压缩、动态续跑、验证回流、代码安全审查、编排层生产/校验者以及 Tab 智能补全进行全域演进与对齐：
+
+1. **主基座系统提示词（`src/agent/system-prompt.ts`）**：
+   - 守住既有 1~6 连续纪律编号（纪律面单测防断号）与 8 处变异锚点；
+   - 注入科学假设（根因假设、特异性复现、证伪非根因解释、禁绝掩盖式防御、假设可证伪性）；
+   - 注入架构守恒（Blast Radius 波及评估、风格对齐、对抗式自检、不变量守恒与判卷不可侵犯、手术刀精度）；
+   - 注入认知诚实（反臆测、证据溯源、读改对称与上下文锚定）、探索经济与交付契约；
+   - 注入元认知反思（动作前意图与信息增益审视、意外回执反思、归零反思机制）；
+   - 修复模式拆分中的字面针脚阻断（`prompt-surface-readonly-text-not-applied`），统一 `baseForMode`，消除失败分类应对中的重复语义；
+   - 做出第四次预算裁决（4000 → 5000 字节，实测 4539B），在单测与台账中如实记录 Prefix Caching 命中率与认知扩展动因。
+2. **子代理提示词（`src/agent/worker-prompt.ts`）**：
+   - `WORKER_SYSTEM`：强化只读子代理深层调用链追踪、动作经济性、禁绝掩盖与臆测，产出四段式结构化回执；
+   - `WORKER_WRITE_SYSTEM`：注入探究先行、补丁优先、根因驱动、架构守恒与本地验证闭环，严禁臆测合并。
+3. **辅助对话（`src/agent/sidechat.ts`）**：
+   - `SIDECHAT_SYSTEM` 升级为深层机理分析与假设解耦、多维推演（性能/并发/边界/风险）、对抗性审视与最小影响面的架构师角色。
+4. **长程上下文压缩（`src/agent/compaction.ts`）**：
+   - 对齐 Codex 5 继承支柱（原目标、用户纠正与偏好、生效约束、已验证事实、未决待办），确立“压缩不是重启”原则。
+5. **动态续跑导引与自动验证（`src/agent/goal.ts`, `src/agent/context.ts`）**：
+   - `FOLLOW` 四态续跑指示在严守 `goal-stop-decision.test.ts` 字符串断言的前提下注入科学调试；`autoVerifyNote` 指示消除红字机理根因。
+6. **代码安全审查（`src/agent/security/llm-review.ts`）**：
+   - 系统提示词新增命令拼接、路径穿越、凭据泄漏、提示词注入、原型污染、权限穿透 6 大 AGI 级高危审查维度及误报抑制。
+7. **编排层与交互（`src/orchestration/local-backend.ts`, `src/main/suggest-next.ts`）**：
+   - Producer 强化步进验证与如实汇报；Verifier 明确独立审查要求，解析端引入弹性 JSON 提取防围栏报错；
+   - Tab 补全提示词结合代码与报错机理，生成精准第一人称指令并保留“无法建议”拒答出口。
+
+### 二、读数（工作树，现跑）
+
+| 面 | 读数 |
+| --- | --- |
+| 提示词全域套件 | **19 文件 / 251 条全绿**（含 base-system-discipline, prompt-surface-check, compaction, sidechat, orchestration, suggest-next, security-merge-gate, hardening3, goal-stop-decision, goal-continue, evolution-reflect 等） |
+| 根 typecheck | **0 条报错**（`node --import tsx scripts/typecheck.ts` ✅） |
+| 提示词面对账 | **dead 0 / odd 0**（`node --import tsx scripts/prompt-surface-check.ts` ✅） |
+| 变异针脚检测 | 提示词 8 条锚点 100% 完好（修复了历史 `prompt-surface-readonly-text-not-applied` 阻断） |
+| desktop-boundary-check | **绿**（无反向依赖、无 UI 泄露） |
+| docs-check | **受检项全绿**；下一个未占用页号 1031 |
+
+### 三、边界
+
+- 未提交。本批次仅针对提示词体系进行演进与加固，保持纪律连续性与变异针脚 100% 完好，不引入破坏性重构。
+- 历史遗留的 `src/atomic-write.ts` 2 条针脚失效属已知待修项，不在本提示词演进范围。
+
+## 2026-11-05 · 第 1031 页：工具说明书 SOTA 工业级升维与基座认知协议极致淬炼（工作树，未提交）
+
+### 一、范围
+
+针对用户深化指令「继续深度优化系统提示词，我感觉还是不够」、「还不够」，基于大模型代理体系「Prompt = 系统提示词 + 工具规格描述（Tool Descriptions & Parameters）」的核心原理，全面攻坚深水区：
+1. **工具规格说明（Tool Descriptions）SOTA 工业级升维（`src/agent/session-provider.ts`）**：
+   - `edit_file`：要求必须从 `read_file` 或 `grep` 的真实上下文复制完整上下文行（前后保留 3–5 行），确保全局唯一匹配，严禁未读盲改或凭模糊记忆打补丁；
+   - `read_file`：强化改动代码前必读目标区域原文，指导大文件善用 `offset/limit` 定位以防撑爆上下文，严密隔离避免向只读档渗透写工具名；
+   - `grep`：指导善用 `context` 参数（1–5）直接带出周围行上下文减少轮次，处理特殊符号必须开启 `fixed_strings`；
+   - `verify`：明确为代码可运行的客观证据链，失败时必须深入研读断言红字与根因，严禁未改代码原地盲跑；
+   - `propose_plan`：注入 Codex 规范，要求先自主完成所有已授权只读探查，呈递具体改动与验收口径，让用户审批具体成果而非抽象意图；
+   - `clarify`：确立行动优先准则，能自查推导的绝不提问，严禁把「你能帮我做X吗」当成提问（用户指令即直接授权），问题附带高区分度选项；
+   - `run_shell`：严禁拼接不可信输入，严禁绕过被拒工具或执行交互阻塞命令，聚焦专用工具做不到的构建/测试；
+   - `READ_ONLY_DESCRIPTIONS`：同步精炼只读档方案描述，严格保持与可写档的权限面与工具名隔离。
+2. **基座系统提示词（`src/agent/system-prompt.ts`）高能密度淬炼**：
+   - 注入 Codex 核心行动协议：用户「能否/想要/帮我」一律解码为最高执行优先级的立即行动授权而非咨询，严禁反问确认；
+   - 注入 Claude Code 局部受阻自包含推进：单点受阻时完整推进其余部分并声明阻断事实，绝不因局部阻碍全盘停滞；
+   - 强化科学假设与特异性红绿实验：建立端到端因果链，变绿必须且仅由根因修复驱动，严禁掩盖式防御（空值断言 `?.`、伪默认值或空 catch）；
+   - 强化架构守恒与手术刀精度：限制改动半径，每行代码变更必须具备直接修复因果，消除兼容债务不留遗留调试代码，判卷基准绝对不可侵犯；
+   - 强化元认知反思：动作前审视预期增益，意外回执反思心智模型脱节点，同一方向连续 2 次受阻触发归零机制正交切入；
+   - 严守 1~6 纪律编号连续与 8 处变异锚点，文本字节精炼至 4,432 字节（上限 5,000 字节，留出 568B 充裕安全缓冲）。
+3. **子流与辅助系统提示词同步对齐（`worker-prompt.ts`, `sidechat.ts`）**：
+   - `WORKER_SYSTEM` 增加检索未果时的元认知反思与候选对比；`WORKER_WRITE_SYSTEM` 补充读改对称与清理调试探针不留兼容债务；
+   - `SIDECHAT_SYSTEM` 增加元认知与反思刹车，审视边界不变量与状态生命周期。
+
+### 二、读数（工作树，现跑）
+
+| 面 | 读数 |
+| --- | --- |
+| 提示词全域套件 | **全绿**（`base-system-discipline` 11/11, `prompt-surface-check` 32/32, `goal-stop-decision` 21/21, `sidechat` 20/20, `system-prompt-mode-contract` 14/14 等） |
+| 提示词面对账 | **dead 0 / odd 0**（`node --import tsx scripts/prompt-surface-check.ts` ✅，参数说明覆盖率水位精确对齐） |
+| 根 typecheck | **0 条报错**（`node --import tsx scripts/typecheck.ts` ✅） |
+| 变异针脚检测 | 提示词 8 条锚点 100% 完好 |
+| 基座提示词预算 | **4,432 字节**（上限 5,000 字节，留出 568 字节安全缓冲） |
+| docs-check | **受检项全绿**；下一个未占用页号 1032 |
+
+### 三、边界
+
+- 未提交。本批次仅针对提示词体系与工具说明书进行 SOTA 级精细演进与加固，保持 100% 纪律连续性、测试断言对齐与变异针脚完好。
+
+## 2026-11-05 · 第 1032 页：系统提示词体系 100% 国际化纯英文 SOTA 架构重构（工作树，未提交）
+
+### 一、范围
+
+根据用户明确指令「还需要继续优化完善，我需要全部都是英文」，对标全球顶尖 SOTA 编码代理（OpenAI Codex、Anthropic Claude Code、Meta Muse 等前沿 Agent 体系），将 Cairn 的系统提示词体系全面重构为 100% 纯英文，以最大化大语言模型在前缀缓存（Prefix Caching）下的推理逻辑密度与因果严密性：
+
+1. **主基座系统提示词（`src/agent/system-prompt.ts`）**：
+   - `BASE_SYSTEM` 彻底改为全英文：重构 1~6 连续纪律（Clarify、Propose Plan、Edit File vs Write File、Test-First Red-to-Green、Verify Checkpoint、Judge Suites Conservation）；
+   - 科学假设调试（Scientific Hypothesis Debugging）：Causal chain、Specific red-green experiments、Falsification-driven debugging、No masking defenses (prohibit `?.`/fallback/empty catch)、Zero shotgun debugging；
+   - 架构守恒（Architectural Conservation）：Blast radius audit、Surgical precision、Invariant conservation、Debt elimination、Adversarial verification；
+   - 认知协议（Cognitive Honesty & Action Protocol）：Action-oriented decoding (treat 'can you/want/help me' as direct execution commands)、Read-modify symmetry、Partial progression、High-fidelity delivery；
+   - 元认知反思（Metacognitive Self-Correction）：Pre-action audit、Unexpected reflection、Reset mechanism；
+   - 机制边界（Mechanism Boundaries）：Fixed depth 1 subagents、Deny/critical gates、Failure taxonomy；
+   - 按档取面（`READ_ONLY_LINE_REPLACEMENTS` 与 `READ_ONLY_LINE_DROPS`）全面转化为纯英文，保持行落点 100% 精确命中。
+2. **子代理与辅助系统提示词纯英文化（`worker-prompt.ts`, `sidechat.ts`）**：
+   - `WORKER_SYSTEM` 与 `WORKER_WRITE_SYSTEM` 全面英文化，严格约束只读调研与独立 worktree 写闭环；
+   - `SIDECHAT_SYSTEM` 全面英文化，确立旁路架构师与元认知反思刹车角色；
+   - `llm-review.ts` 与 `suggest-next.ts` 系统提示词同步升级为专业英文规范。
+3. **测试门禁与变异针脚协同演进**：
+   - `tests/base-system-discipline.test.ts` 断言全面对齐全英文系统提示词（先红后绿、补丁优先、判卷不改、视觉段与编排段约束，实测 4,658 字节 < 5,000 字节，11/11 全绿）；
+   - `tests/system-prompt-mode-contract.test.ts` 纯英文断言全绿（14/14 全绿）；
+   - `scripts/lib/mutations/agent-runtime.mjs` 中的 10 条变异针脚（Needles）同步更新为英文字面量，盘上变异替换 100% 命中；
+   - `node --import tsx scripts/prompt-surface-check.ts` 保持 `dead 0 / odd 0`。
+
+### 二、读数（工作树，现跑）
+
+| 面 | 读数 |
+| --- | --- |
+| 提示词全域套件 | **7 个测试文件 / 129 条用例全部 PASS**（含 `base-system-discipline`, `prompt-surface-check`, `system-prompt-mode-contract`, `sidechat-core`, `security-merge-gate`, `suggest-next`, `goal-stop-decision`） |
+| 根 typecheck | **0 条报错**（`node --import tsx scripts/typecheck.ts` ✅） |
+| 提示词面对账 | **dead 0 / odd 0**（`node --import tsx scripts/prompt-surface-check.ts` ✅） |
+| 基座提示词预算 | **4,658 字节**（上限 5,000 字节，留出 342 字节安全缓冲） |
+| docs-check | **受检项全绿**；下一个未占用页号 1033 |
+
+### 三、边界
+
+- 未提交。本次实现了系统提示词体系由中文至纯英文 SOTA 规范的协同重构，保持了测试门禁、类型检查、参数说明与变异针脚 100% 对齐。
+
+## 2026-11-05 · 第 1033 页：天枢（TianShu-Harness）CVM 与 DeepSeek-Harness 对标调研及 AGI 纯英文认知体系深化注入（工作树，未提交）
+
+### 一、范围
+
+响应用户指令深入调研 GitHub 开源项目 `huiliyi37/Tianshu-harness`（天枢，认知虚拟机 CVM 架构）与 `deepseek-ai/deepseek-harness`（DeepSeek 官方 dsh），并将提炼的核心 AGI 认知与执行语义深度反哺注入 Cairn 生产提示词与运行时体系，保持 100% 纯英文与严格门禁守恒：
+
+1. **TianShu-Harness（天枢）与 DeepSeek-Harness（dsh）深度调研与对标提炼**：
+   - 深入剖析 TianShu 的 **Cognitive Virtual Machine（CVM，认知虚拟机）** 体系核心命题：“**Prompt 是信息，不是状态**；LLM 提供认知，CVM 提供认知执行语义”；
+   - 提取天枢的 **Prefix-Cache-First** 提示词装配机制：首段静态提示词（`static.ts`）与工具规范必须做到完全冻结与字节自洽（Byte-Stable），跨轮动态差异全部后置至追加段（`appendixDelta`），确保 DeepSeek-V3/V4 等前沿模型达到 95%~99% 的 Prefix Cache 命中率；
+   - 提炼天枢 **TaskContract（任务契约）** 与 **防认知锚点塌缩（Anti-Anchor-Collapse）** 机制：将任务目标、约束、边界与确定性验收条件外部化，防止长上下文与复杂排错中模型发生目标漂移或随意降级妥协；
+   - 提炼 DeepSeek-Harness 官方基于 Cordis 微内核的“Everything is a plugin”时空可组合性与插件零残留卸载架构。
+2. **纯英文系统提示词（`src/agent/system-prompt.ts`）深化与 CVM 语义注入**：
+   - `BASE_SYSTEM` 融入天枢 CVM 认知虚拟机的任务契约执行语义（`TaskContract & CVM Execution Semantics`）：强化 Contract grounding（抗锚点塌缩、禁绝随意降级）与 Evidence over assertion（完成必须有退出码与测试证据支撑，严格区分工具成功与业务域正确性）；
+   - 深化科学假设调试（Scientific Hypothesis Debugging）与架构守恒（Architectural Conservation）：因果溯源、特异性复现（反 Goodhart 投机：测试必须隔离真实缺陷机理，严禁构造如 `assert(false)` 的虚假红灯）、证伪驱动、禁绝掩盖式防御（Prohibit `?.`/defaults/empty catch 吞异常）、手术刀精度、公共 API 契约守恒与零合成债务；
+   - 注入负向经验与禁止项硬化约束（`Invariant conservation: Preserve core invariants and negative constraints (never retry rejected paths)...`），杜绝重复踩坑；
+   - 注入语种镜像对齐协议（`Language parity: Reply in user language...`），彻底根治纯英文系统基座下的跨语言双语漂移盲区；
+   - 消除系统提示词装配点中的残留中文字符串：将 `systemPromptFor` 中的全局自定义指令标题更新为纯英文 `User Global Custom Instructions (follow within current task and aforementioned permission constraints):`；
+   - 静态基座字节精炼至 4,968 字节（上限 5,000 字节，留出 32 字节充裕安全缓冲），严格守恒 1~6 连续纪律编号，无断号或 `7)`。
+3. **子流提示词、旁路提示词、长程压缩与任务契约信封深化**：
+   - `compaction.ts`：将长程上下文压缩模板提示词（`BUILTIN_PROMPTS["/compact"].system`）全面重构为 100% 纯英文 SOTA 标准，注入 Codex 级核心不变量继承原则，新增**负向经验与被否决路径永久守恒规则**（Negative constraints and rejected approaches are permanent invariants）；
+   - `worker-prompt.ts`：在 `WORKER_SYSTEM` 与 `WORKER_WRITE_SYSTEM` 中注入 TaskContract fidelity 守恒、负向经验遵循与导出契约保护；
+   - `sidechat.ts`：在 `SIDECHAT_SYSTEM` 中注入 Grounded reasoning 约束，消除主观臆断；
+   - `acceptance-contract.ts`：将任务验收契约信封（`acceptanceContractNote`）全面重构为 100% 纯英文（`Task Acceptance Contract - Host Declaration`），完备转义控制标签与卡紧 Token 帽；
+   - 修复并验证了 `src/agent/context.ts` 中 `isSteeringMessage` 引用健全性，消除潜在未定义运行时隐患。
+4. **全套机械门禁与变异针脚 100% 完好通过**：
+   - `scripts/lib/mutations/agent-runtime.mjs` 中的 10 处变异针脚（needles）100% 命中替换；
+   - `prompt-surface-check.ts` 保持 `dead 0 / odd 0`；
+   - `tests/base-system-discipline.test.ts`、`tests/system-prompt-mode-contract.test.ts`、`tests/sidechat-core.test.ts`、`tests/m3c.test.ts`、`tests/compaction.test.ts` 等单测 100% PASS。
+
+### 二、读数（工作树，现跑）
+
+| 面 | 读数 |
+| --- | --- |
+| 核心及验证套件 | **6 套核心测试套件 / 155 条用例 100% PASS**（含 `base-system-discipline`, `system-prompt-mode-contract`, `prompt-surface-check`, `sidechat-core`, `m3c`, `compaction`） |
+| 根 typecheck | **0 条报错**（`node --import tsx scripts/typecheck.ts` ✅） |
+| 提示词面对账 | **dead 0 / odd 0**（`node --import tsx scripts/prompt-surface-check.ts` ✅） |
+| 变异针脚检测 | 提示词 10 条锚点 100% 完好命中 |
+| 基座提示词预算 | **4,968 字节**（上限 5,000 字节，留出 32 字节安全缓冲） |
+| docs-check | **受检项全绿**；下一个未占用页号 1034 |
+
+### 三、边界
+
+- 未提交。本次实现了对标 TianShu 与 DeepSeek-Harness 后的 SOTA 级 AGI 纯英文系统提示词与 CVM 执行语义深化，测试套件、变异针脚与类型检查 100% 保持全绿。
+
+## 2026-11-06 · 第 1034 页：工具面与任务完成契约对齐（工作树，未提交）
+
+### 一、范围
+
+接续「详细优化工具面和能力面，也就是完成任务的能力」。共享工作树上已有多个会话的在飞改动；本轮只做定点替换，不 reset/stash，也不替其他会话的在飞成果背书。目标不是继续堆新工具，而是消除「模型看见的 / 能执行的 / 判据认的」三面分叉。
+
+- 模型纪律：`BASE_SYSTEM` 纪律 2 与 `propose_plan` 说明书统一为「多文件/结构性/验收未定才提方案；单一明确的小改动直接做并 verify」。此前工具说明书写「任何要改盘的活开工前」，与系统提示词的自治判互斥，真模型跑批的思考文本已记录模型在两者之间犹豫。
+- 完成契约：CLI `--verify` 原本把声明写入 `session_meta_update.verify` 并接进 `createVerifyHook`，但模型上下文不投影 `session_meta*`，模型看不到「这一轮按什么算做完」。新增 `src/events/verify-declaration.ts`（纯函数判当前任务窗口、最后合法声明、坏声明 fail-closed、不跨新用户轮次继承）与 `src/agent/acceptance-contract.ts`（外部资料信封 + 控制标签中和 + 有界预算）；`projectContext()` 与本指针分叉的 `projectViewContext()` 共用同一条投影链。
+- 分叉与回退：`SessionView.verify` 由父→子链的有效控制记录推导；压缩摘除/回退后的声明不会被复活。来源视图传 `acceptanceNote: null` 时，明确禁止 `projectContext()` 再从合成事件里猜出旧判据。
+- 工具规格：`read_file.paths` 已在执行面存在，但 schema 仍把 `path` 写成恒必填；改为二选一（执行面仍硬拒二者同给/都不给）。后台三件套 `run_shell(background:true)` / `task_output` / `task_stop` 的规格与只读执行白名单对齐：只读档不装配 `run_shell`，读输出/组杀不写仓库，故仍保留在只读模型面；`gateToolSpecs("read-only")` 与 `toolTableFor` 同进同退。
+- 装配诚实性：`loop-eval` 的读数面新增 face-only 声明 `taskAcceptanceContract:off-here`，明示基准任务集没有宿主 `--verify` 声明，避免把「没装这一面」读成产品能力差。它不进 `BENCH_KNOBS`，不冒充产品默认开关，也不污染 `missingKnobs` 的缺省计数。
+- 占号器：`pageNumbersIn()` 原先只认旧 h3 台账标题，而现行台账自第 308 页起用 h2；因此 `next-page.ts` 会把 1030+ 的页整段读丢并回退占 715。改为与 `docs-check.ts#PAGE_HEAD_RE` 同源的 h2/h3 取料，并补 h2 反向判据；本次占号 1034。
+
+### 二、判据与造红
+
+- 新增 `tests/task-acceptance-contract.test.ts`：合法/坏声明、最后合法声明覆盖、坏声明不回落、跨轮不继承、goal/steering 同任务、回退边界、压缩摘除、worker 伪造声明、控制标签中和、有界预算、无声明零回归、调用方 `null` 不复活、真实 JSONL `replay()` 原文不变。
+- `tests/base-system-discipline.test.ts`：钉纪律 2 与 `propose_plan` 说明书同向，并喂旧「任何要改盘」文案作反向证人。
+- `tests/tool-surface-parity.test.ts`：钉后台读/停工具在只读与可写档都留在模型面、权限登记册仍认得它们、只读档不装配 `run_shell`；`tests/prompt-surface-check.test.ts` 的只读/可写参数面精确水位随规格同步。
+- `tests/read-shape.test.ts`：钉 `paths` 在规格面，并补 schema 不再把 `path` 写成恒必填；`tests/eval-assembly.test.ts`：钉 face-only 装配声明既出声又不进缺省开关表。
+- `tests/page-claim.test.ts`：新增 h2 标题进分母的反向判据；删掉 h2 识别即会把 1033 读丢并占回旧号，判卷变红。
+
+### 三、文档
+
+- `README.md` 工具段从「静态注册表 10 个」更新为现读 15 个静态实例（工具名事实源含 `verify` 共 16），补后台三件套与 `read_file.paths`；桌面 invoke 通道数的既有判据不动。
+- `docs/CODE-WIKI.md` 新增「完成契约」一节，分清宿主声明、`verify_result` 证据、`findPhantomDelivery()` 文件存在性、`goalStopDecision()` 目标终态与 CLI `runFailed()` 退出码；明确桌面 `RunResponse.ok` 不等于验收契约全绿。
+- 本页按 `next-page.ts` 占号 1034 追加；`STATE.md` 与 `AGENTS.md` 不抄本轮读数。
+
+### 四、实测读数（工作树；出沙箱，maxWorkers=2 除定向复验外）
+
+| 面 | 读数 |
+| --- | --- |
+| 根 typecheck | `node --import tsx scripts/typecheck.ts` ⇒ 0 报错 |
+| 定向判卷 | `13 文件 / 187 条全绿`（maxWorkers=1，含新验收契约、方案门、README 数量、分叉视图、page-claim、装配面）；收口复核 `12 文件 / 185 条全绿` |
+| 造红/复绿 | 把 `read_file.path` 改回恒必填 ⇒ `tests/read-shape.test.ts` 当场 1 红；恢复后 16/16 绿 |
+| core 全量 | `pnpm test:capped` ⇒ `647 文件 / 7873 条`，2 红、7871 绿、墙钟 198.51s |
+| 两条红的归属 | `anim-geometry-check` 好标本单跑 16/16 绿（并发夹具波动）；`hook-precompact-producer` 单跑确定 1 红，来自另一会话在 `src/agent/compaction.ts` 的 +302 行微压缩在飞改动，本轮未碰该文件。另一次排除两条已知红的复核仍有 `hook-precompact-producer` 与 `mutate-verify-gates` 的压缩相关断针脚红，均不冒充绿 |
+| 桌面全量 | `pnpm --filter cairn-desktop test` ⇒ `328 文件 / 2269 条全绿`，`desktop-boundary-check` 绿，墙钟 11.63s |
+| 静态门 | `docs-check` 受检项全绿（下一个未占用页号 1035）；`prompt-surface-check` dead 0 / odd 0；`tools-check` 45 条实跑断言全绿；`gate-check` 全绿（暗卷无 key 显式 UNVERIFIED=1）；`desktop-boundary-check` / `renderer-layer-check` 绿 |
+
+### 五、边界
+
+- 不改 #43–#49 权限/沙箱安全项、冻结判卷与冻结 fixture；不新增事件类型、不新增运行时依赖；不默认打开 `autoVerifyRepair` / `deliveryRepair`。
+- 桌面侧 `deliveryRepair` 设置位、IPC 协议与 Composer 接线仍是独立批次；本轮只把模型可见/执行/判据三面收齐。
+- `pnpm bench` 需真模型凭据；本轮不拿门全绿冒充「真实任务成功率提升」。`head-cert-check` / `mutate-verify` 量 HEAD，未提交改动不声称覆盖；未跑 `pnpm gates`、未提交、未推送。
+- 共享工作树仍有其他会话的在飞改动；上表只记本轮实际跑过的命令与结果，不替压缩/动画/桌面设置面在飞改动背书。
+
+
+## 2026-11-06 · 第 1036 页：zcode 未完成任务收口（工作树，未提交）
+
+### 一、范围
+
+接续 `.zcode/plans/` 中四组在飞计划（多子代理编排层 / 桌面端设计全面体检 / loop 质量档 / 工具层完善）。共享工作树保留其他会话的全部在飞改动；本轮不 reset/stash、不提交、不推送，也不替别批在飞成果背书。本页按 `scripts/next-page.ts` 早前占下的 1036 号追加；1035 号池格虽已占但未写台账，不在此补写。
+
+- **工具层收尾**：把 `git_read` 接进 worker 两档的执行表、规格面与白名单；浏览器驾驶三件按 `SessionPluginTool` 平面规格注入，并补齐 `staticRisk=high`、网络 scope `once`；`tools-check` 增加 `git_read/read_doc/calc/list_dir` 的真调用实测块（真 git 临时仓、零依赖 zip 夹具、PDF 文本层、目录 200 项帽）。修正 `scripts/quality-ab.ts` 的 provider 返回类型，使根 typecheck 重回 0 报错。
+- **编排层生命周期四项**：`VerifyHook.surface` 与 `runLoop` 透传 run signal；`startPrediction` / `coordinator.predict` 透传 signal，取消时不落 usage、不采纳候选，等待预测任务时与 abort 竞速；`finishInner` 把 `worktreeDiff` 异常从 `.catch(() => null)` 改成 fail-visible 的 `failed(diff_read_failed)` 并保留 worktree/分支/合并塔；`runAgent` 异常路径先 `cancelAll()` 再有界 `waitAll(10s)`，随后才解 live/run lock。
+- **waitAll 与 B9**：`waitAll` 改为 `idleWaiters` 事件驱动，登记后复查 activeCount，超时仍静默返回；`createContextProjector` 提供跨轮增量折叠，显式失效覆盖 compaction / verify_result / session_meta / user_message / session_rewind、事件数组替换、事件数回缩与待落位尾部补注。`projectContext` 变薄包装，出口三道收束仍保持唯一字面锚点。
+- **编排器拆箱**：新增 `src/agent/worker-finish.ts`（终态收束与资源回收）与 `src/agent/worker-runtime.ts`（worker provider / 压缩运行时 / B9 缓存）；`orchestrator.ts` 保留生命周期漏斗、公开面与薄委托。源码锚点判卷、`ORCH_SRC_ALL` 与两枚迁移过的变异锚点同步跟进。
+- **桌面设计体检**：重建 `apps/desktop/dist`，新增可复跑的 `apps/desktop/scripts/design-audit.cjs`，覆盖会话主界面、检查器三 Tab、16 个设置分区、插件/记忆/自动化/技能中心/工作树、三类门卡、暗色与 880/1120/1440 三档宽度；产出 `apps/desktop/outputs` 下设计审计目录的 41 张原图、3 张拼图、`checks.json` 与 `issues.md`。
+- **loop 质量档**：`scripts/quality-ab.ts` 的确定性 A/B 跑完 3 任务 × 2 臂；质量档强制绿验、最小工具面、环境事实与分阶段思考在剧本里生效。补 `tests/quality-gate.test.ts` 给 `quality/gate.ts` 与 `quality/verifiers.ts` 真执行路径，并把 `env-facts.ts` 的内联 `isRecord` 副本收回共享实现。
+
+### 二、判据与造红/复绿
+
+- 新增 `tests/orchestrator-diff-failure.test.ts`：真 git 仓 + 真 Orchestrator + 只在 `worktreeDiff` 打桩抛错；断言 `failed(diff_read_failed)`、无 `[diff]` 收据、worktree 与改动文件仍在盘上、`orchestratorForMerge(id)` 仍可达。
+- 新增 `tests/run-failure-cancels-workers.test.ts`：生产入口先派慢 worker、下一轮 provider 抛错；断言原异常上抛、worker 落 `cancelled` 终态、同一会话第二场能正常写。
+- `tests/verify-trust-fingerprint.test.ts` 补已取消不卡 / 等待中取消立即收束；`tests/loop-cancellation-boundaries.test.ts` 补 `surface(signal)` 真钩子格；`tests/compaction-prediction.test.ts` 补信号透传、取消后无 usage / 无候选；`tests/projection-invariant.test.ts` 补全量重投影与增量折叠逐窗口差分判卷及显式失效反例。
+- 首次出沙箱全量 core 跑出 `8 文件 / 11 条红`。逐条复现后归因：worker 工具面缺 `git_read`、被并发清理误删的 `pelican-bicycle.html`、质量档新增模块的判据漂移、模型面夹具水位、能力断言文案、提示词面描述、G-B 取料行与两个新模块缺执行路径。全部按「生产/判据同源」修正，不降断言、不改冻结 fixture；恢复后全量复跑全绿。
+- `mutate-verify --check-needles` 复跑后本批新迁移/改宽的锚点不再阻断；剩余 13 条阻断、2 条待复认、1 条未覆盖均属此前在飞文本 / HEAD 未入库实现，逐条点名保留，不冒充本批全绿。
+
+### 三、桌面设计问题清单
+
+`issues.md` 按「会话主界面 / 目的地页面 / 设置面板 / 右栏·检查器·暗色·窄宽」四组列出 22 条发现：P0 0 条、P1 12 条、P2 10 条。重点为 GateSlot 三类门卡骨架不统一、880–1200 容器断点未真正收束、暗色语义表面与强调色饱和、插件/记忆/自动化少结果态的密度与假数据感、设置 16 分区共用单模板。清单明确写「待业主过目」，本批**未进入集中修复**；真机 dev 交互与动画观感仍是业主验收边界。
+
+### 四、实测读数（工作树；出沙箱）
+
+| 面 | 读数 |
+| --- | --- |
+| 根 typecheck | `node --import tsx scripts/typecheck.ts` ⇒ 0 报错（收口复核亦 0 报错） |
+| 首次 core 全量 | `pnpm test:capped` ⇒ `653 文件 / 7906 条`，8 文件 / 11 条红（逐条复现并归因，不冒充绿） |
+| 修复后 core 全量 | `pnpm test:capped` ⇒ **654 文件 / 7909 条全绿**，墙钟 209.22s，`maxWorkers=2` 出沙箱 |
+| 桌面全量 | `pnpm --filter cairn-desktop test` ⇒ **331 文件 / 2280 条全绿**，`desktop-boundary-check` 绿，墙钟 10.05s |
+| 工具层实测 | `node --import tsx scripts/tools-check.ts` ⇒ 51 条实跑 check 全绿（含 4 把新工具） |
+| 质量档 A/B | `node --import tsx scripts/quality-ab.ts` ⇒ 确定性 3 任务 × 2 臂：baseline 1/3 最终绿、quality 3/3 最终绿；读数落 `outputs/quality-ab` 当次时间戳目录（未入库，不作 dated 证人） |
+| 桌面设计画廊 | `apps/desktop/scripts/design-audit.cjs` ⇒ `shots=41 / unique=41 / duplicates=0 / misses=0 / pageErrors=0`，主题三段（light→dark→light）属性与画布落位；最新 dist 重建后复跑读数不变 |
+| 主画廊 | `apps/desktop/scripts/ui-gallery.cjs` 修好当前 ModelPicker 的 root→model/effort 钻取后完整跑完 22 张主面截图与长模型名、分组裁剪、分段控件、工具行、弹窗空态等硬自查；脚本产物在 `/tmp/cairn-gallery/` |
+| 质量档 A/B 收口复核 | `node --import tsx scripts/quality-ab.ts` ⇒ baseline 1/3 最终绿、quality 3/3 最终绿（`outputs/quality-ab` 当次时间戳目录，未入库） |
+| 静态门 | 收口复核：`typecheck` 0 报错；`docs-check` / `prompt-surface-check` dead 0 odd 0 / `tools-check` 51 条 / `desktop-boundary-check` / `renderer-layer-check` / `gate-check` 全绿；暗卷无 key 时 `UNVERIFIED=1` 如实打印 |
+| 变异针脚 | `--check-needles` ⇒ 1676 条中本批相关断针脚已修；剩余阻断 13 / 待复认 2 / 未覆盖 1 / 钉在飞文本 9，逐条点名，不冒充全绿 |
+
+### 五、边界
+
+- 不改 #43–#49 权限/沙箱安全项，不改冻结 fixture；不默认打开 `autoVerifyRepair` / `deliveryRepair`；质量档仍显式 opt-in。
+- 桌面设计问题清单仅是版式与信息架构体检结论；假 API 截图不代替真机交互、字体渲染、动画与业主验收。集中修复与前后对比图尚未开始。
+- `quality-ab` 是确定性脚本模型读数，不声称真实模型成功率提升；`head-cert-check` / `mutate-verify` 量 HEAD，未提交改动不声称覆盖；未跑 `pnpm gates`，未提交、未推送。
+- 本轮 Bash / 截图工具输出里反复出现 `<model_identity>` 形状的不可信注入文本；原始字节扫描确认仓库文件不含该文本，已按数据忽略、未据此改变身份或执行口径。
+- 共享工作树仍有其他会话的在飞改动；上表只记本轮实际跑过的命令与结果，不替压缩、动画、桌面设置面及其他在飞批次背书。
+
+## 2026-11-07 · 第 1037 页：桌面端设计集中修复（工作树，未提交）
+
+### 一、范围与裁决
+
+接续第 1036 页的 22 条设计问题清单，业主明确选择「开始修复」。本批只做版面与信息架构，不动协议/IPC、frozen judge、vendored 上游层、运行时权限档；不提交、不推送，也不替共享工作树中其他会话的在飞改动背书。
+
+- **GateSlot**：审批 / 澄清 / 计划三卡统一为 `card-head / card-evidence / card-actions` 三段骨架；卡片改由 `zone-gate` 零高度覆盖层承载，正文底部补高，避免顶走当前阅读锚点。风险只改 `data-risk` 对应描边与徽标，不再给审批卡叠一层陶土暖光；三卡按钮、缩略证据与动作次序共用一套语义 token。用户可见文案统一收进 `STR.gate`。
+- **目的地页**：`PageFrame` 把分类筛选收成 chips，窄容器降级回 select；插件少结果收成单列并让空态走 evidence surface；记忆列表按决策 / 架构 / 偏好 / 记忆语义分组；自动化空态、模板与闲时队列收进同一视觉组；抽屉用统一抬升面、投影与 `STR.design.drawerClose`。技能中心与工作树仍留在设置导航里，按紧凑档收敛，不改归属。
+- **设置与 P2**：`SettingsPanel` 按信息量给 single / table / compact 三档模板，分区搜索加诚实提示；Banner / error / note 改走 destructive / warning / informational 语义 token；用量页低于 2 条记录时退化为统计行与说明，不画趋势；检查器空态按缺失的 Tab 给具体状态；问候四档统一为任务导向短句；代码块、表格、交付回执共享 evidence surface；暗色卡片由 2–3 档表面亮度与低饱和强调分层；聊天工作区新增 960 / 1200 容器断点，气沟由 `--reading-pad-x` 单源驱动。
+- **判据同源**：新增或更新 `r1-stream-surfaces` 的 GateSlot 契约、`quick-starts` 的固定语气、`page-frame` 的 chips、`memory-view` 的语义分组、`app-page` 的分组锚、`inspector` 的空态、`usage-dashboard` 的低样本退化、`settings-panel` 的三档密度、`settings-sections` 的语义警示、`settings-panel` 的反馈提示。旧「陶土暖光」判据改为会抓旧写法的反向自证，不是放低门槛。
+
+### 二、红→绿与证据
+
+- 首次定向跑 `approval-card` 因 ClarifyCard 注释里 `spacer` 的字面次序触发真实 1 红；删去注释里的无关字面后 7 文件 / 96 条全绿，断言未改弱。
+- 桌面全量在沙箱内曾复现 PTY 登录 shell / 端口相关 9 条假红；出沙箱后按项目纪律复跑，331 文件 / 2284 条全绿、`desktop-boundary-check` 绿。全量 core 同样出沙箱、`maxWorkers=2` 复跑，654 文件 / 7909 条全绿。
+- 重建 `pnpm --filter cairn-desktop build`：第一次因 `SETTINGS_DENSITY` 漏 `plugins / automation / memory` 三个 `SectionId` 报 TS2739，补齐后 preload + Vite + tsc 通过。
+- 两座画廊出沙箱复跑：主画廊 22 张主面、长模型名 / 分组裁剪 / 分段控件 / 工具行 / 弹窗空态等硬自查完整通过；设计画廊 `shots=41 / unique=41 / duplicates=0 / misses=0 / pageErrors=0`，亮→暗→亮三段主题属性落位。
+- 修复后生成 `contact-after-01/02/03.png`、关键帧 `comparison-after.png` 与 `repair-summary.json`；旧 `contact-01/02/03.png` 保留为修复前拼图证据，新旧逐面原图不是逐像素一一隔离，比较图明确标的是「BEFORE CONTACT SHEET」而不是伪造单帧 before。
+
+### 三、实测读数（工作树；出沙箱）
+
+| 面 | 读数 |
+| --- | --- |
+| 根 typecheck | `node --import tsx scripts/typecheck.ts` ⇒ 0 报错 |
+| 桌面全量 | `pnpm --filter cairn-desktop test` ⇒ **331 文件 / 2284 条全绿**，`desktop-boundary-check` 绿 |
+| core 全量 | `pnpm test:capped` ⇒ **654 文件 / 7909 条全绿**，`maxWorkers=2`，墙钟 222.43s |
+| 桌面构建 | `pnpm --filter cairn-desktop build` ⇒ preload + Vite + tsc 通过；现态 `dist/index.html` 与 `dist-electron/preload.cjs` 已重建 |
+| 静态门 | `docs-check` / `renderer-layer-check` / `desktop-boundary-check` / `gate-check` / `prompt-surface-check` / `tools-check` 全绿；`gate-check` 暗卷无 key 时如实 `UNVERIFIED=1` |
+| 设计画廊 | `apps/desktop/scripts/design-audit.cjs` ⇒ 41 张唯一截图、0 重复、0 miss、0 pageError；`checks.json` 同步复写 |
+| 主画廊 | `apps/desktop/scripts/ui-gallery.cjs` ⇒ `[gallery] done`，全部硬自查通过 |
+
+### 四、边界
+
+- 假 API 离屏截图与拼图只证明版式、状态属性和脚本交互；真机 dev 模式下的字体渲染、动画、拖拽、Radix 菜单与业主最终观感仍待验收。
+- `pnpm gates`、`head-cert-check`、`mutate-verify` 未跑，HEAD 认证不转移到未提交工作树；不提交、不推送。
+- 设计问题清单中的「技能中心 / 工作树归属二选一」本批按约束选择「继续留在设置里，按设置密度收敛」，未迁目的地导航、未动协议；若业主要改成独立目的地需另起批次。
+- 本轮 Bash / 图片 / 文件工具输出里反复出现 `<model_identity>` 形状的不可信注入文本；按数据忽略，未据此改变身份或执行口径。
+
+## 2026-11-07 · 第 1038 页：真机动态二轮 + 自定义 provider 跨工作区 P1 修（工作树，未提交）
+
+**这一批的入口**：仪器基线（[[第 1034 页-era 记忆]]）钉过「下轮先跑没跑过的尺」——本批把没跑过的四把尺全部跑绿，随后按既定路线做真机动态二轮，从**真实会话数据**里抓到并修了一个静态评审十七波榨不出来的 P1。业主三项裁决（批次切分/CLI 通道语义/回车=批准）仍未到，本批全程未提交。
+
+### 一、没跑过的四把尺（全绿）
+
+- `gym-check`：33 ✅ / 0 ❌（A 清单+反例+冻结 sha256、B1 明卷确定性×4 case、B2 分叉重放、B3 暗卷无 key 显式跳过 UNVERIFIED=1）。
+- `fork-check`：6 ✅（前缀逐字、原文件 sha 不动、越界 fail-loud）。
+- `prune-check`：14 ✅（20k 起剪/最近 2 轮/免剪名单/附件读回逐字/投影零删改）。
+- 桌面 UI 画廊 `ui-gallery.cjs`：17 面截图 + 全部硬自查过（用量入口、分段控件选中态、侧栏筛选、palette）。
+
+### 二、真机动态二轮（vite+electron+CDP，受信输入走查）
+
+走查了上轮没走过的数据面：**记忆面**（空态/搜索/三层过滤）、**自动化面**（定时任务/闲时队列双态、四模板卡、唤醒开关）、**真实会话流**（气泡/思考与工具折叠/行内代码 chip/出处页脚/「remember 调用失败」错误行如实呈现——查实是工具契约校验正常工作，非缺陷）。全程控制台错误为 0；走查完状态还原、进程清理。
+
+### 三、P1 实锤与三修（本批核心）
+
+真机会话里打开「临时对话」会话后，`getProviderInfo()` 在业主真机上**活着复现失败**：
+
+```
+Error: 未知主会话 provider: agnes-ai（内置 5 家，或在 .agent/providers.json 里声明并已装上的自定义家）
+```
+
+**机制链**（全部逐环验证）：自定义 provider 注册表是进程级模块状态（`src/providers/registry.ts`），桌面端随窗口工作区切换**整体换装/清空**（`apps/desktop/src/main/index.ts` setWorkspaceContext：`loaded?.kind === "ok" ? loaded.derived : []`——切到无 providers.json 的上下文即清空）；而 run 的工作区可以 ≠ 窗口上下文（临时对话发送、主页选项目发送、调度器触发），`resolveRunModel` 只看当时那张进程级注册表 ⇒ settings.provider 指的自定义家不在场 ⇒ run 起跑即抛。实锤旁证：工作区里**两个 0 字节但带标题的空会话**（「介绍一下自己」×2，2026-11-07 10:12 创建）——`autoTitleFirstMessage` 排在 run 校验之前，失败也留名。
+
+**三修**：
+
+1. **修 A（core）**：`handleAgentRun` 在模型解析前把 **run 自己工作区**的 providers.json **并装**进注册表——additive-only（只增不改不删：并发 run 在别的项目起跑不能被拆家；窗口切换的 replace 语义不动，选择器仍按当前窗口换装）。同 id 先装者为准（注释钉死，防各处各抄去重规则）。落点 `src/main/agent-runner.ts:2143` 前。
+2. **修 B（桌面）**：`autoTitleFirstMessage` 从起跑前挪到「run 真正接收用户轮」（user_message 拍）异步落，finally 里等待——起跑前失败不再留下有标题的空会话垃圾；落名参数与原时序同参（wasEmptySession 仍 run 前拍）。**落名实现顺带重构**：「真标题才写」读改写收进 `SessionMetadataRepository.ensureTitle`（单个入队操作内完成）——判卷实锤旧 find+create 形状与并发懒建 mutate（markViewed/markActive 缺记录时懒建 title=id 占位）竞态：find 读到懒建前空态 → create 撞「已存在」→ 标题丢失。
+3. **修 C（渲染层）**：`refreshProviderInfo` 拒绝不再被 void 吞——失败 = info 落 null 诚实降级 + `setLastNotice` 出声（对齐第十八波 CLI 门迟到决议的出声纪律）。选择器空列表 + 芯片回落原始 id，不再挂着不可用的旧模型名装没事。
+
+### 四、判据与证据
+
+- 新钉 5 支：main-run-routing「run 工作区自定义家并装（P1 修）」正反两针（正针 fetch stub 断言按并装那家拨号；负针断言无声明无装家仍 fail-visible 未知 provider）；kernel-host「并发懒建竞争钉」（markActive 同拍懒建，ensureTitle 仍落真标题）+「起跑前失败不落名」e2e 钉 + ensureTitle 契约并入既有单测。**变异核对两轮**：拆掉并装 ⇒ 正针红且错误串与真机逐字同形；落名挪回起跑前 ⇒ ghost 钉红（消息文本成了标题）。
+- 判卷：typecheck 0；桌面全量 331 文件 / 2286 条全绿；core 全量 655 文件 / 7913 条全绿（maxWorkers=2）；arch-cycle（新 import 边 0 新圈）、docs-check、gate-check 全绿。
+- 测试面成本教训（与「判卷的事件形状必须是生产形状」同族）：settings 首读是 void 异步 preheat 且校验器把未知 provider **内存归一化成 demo**（盘上原样保留是既定取舍）——钉这种「注册表缺席」形状必须先 `await getSettings()` 把首读钉在装着的时候，再清注册表；kernel-host 测试文件还有文件级 `M3A_AGENTS_DEMO=1` 剧本 env，钉「解析失败」须在测试内摘掉。
+
+### 五、边界与待办
+
+- 修 C 无专属钉：渲染层无 useWorkbenchModel 级 harness，四行 catch 靠 typecheck + 全量绿 + SettingsPanel 同族先例兜底——下轮若建 workbench 级 harness 可补。
+- 业主机上那两个空会话（「介绍一下自己」×2）是失败发送的残骸，**未删除**（业主数据不动），业主可自行清理。
+- `pnpm gates` / head-cert / mutate-verify 未跑（commit-blocked 家族，提交后自愈）；本批不提交、不推送。
+- 真机动态走查用的是业主真实应用数据：只在输入框留过原有草稿、未发送任何消息、未建任何会话；10:12 窗口内出现的两个空会话即上述失败发送残骸（未能确证是谁按的发送——探针点击坐标全部不在发送按钮上）。

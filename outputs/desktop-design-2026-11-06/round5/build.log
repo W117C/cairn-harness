@@ -1,0 +1,33 @@
+vite v7.3.6 building client environment for production...
+transforming...
+✓ 2241 modules transformed.
+rendering chunks...
+computing gzip size...
+../../../../../../../../../tmp/cairn-design-round5-final-build/index.html                                   4.29 kB │ gzip:   2.09 kB
+../../../../../../../../../tmp/cairn-design-round5-final-build/assets/NotoSerifVariable-f932DlCQ.woff2     76.55 kB
+../../../../../../../../../tmp/cairn-design-round5-final-build/assets/InterVariable-DJwk3cVO.woff2        137.26 kB
+../../../../../../../../../tmp/cairn-design-round5-final-build/assets/JetBrainsMonoVariable-DgTxpPXt.ttf  303.14 kB
+../../../../../../../../../tmp/cairn-design-round5-final-build/assets/App-AgJ7li9J.css                      7.46 kB │ gzip:   1.74 kB
+../../../../../../../../../tmp/cairn-design-round5-final-build/assets/Stream-D-I7M4PW.css                   8.16 kB │ gzip:   1.99 kB
+../../../../../../../../../tmp/cairn-design-round5-final-build/assets/PaneDock-Bgsc8SQJ.css                 9.56 kB │ gzip:   2.51 kB
+../../../../../../../../../tmp/cairn-design-round5-final-build/assets/AppPage-De2zWGk_.css                 17.71 kB │ gzip:   3.56 kB
+../../../../../../../../../tmp/cairn-design-round5-final-build/assets/SettingsPanel-Ct0JrghB.css           23.38 kB │ gzip:   4.92 kB
+../../../../../../../../../tmp/cairn-design-round5-final-build/assets/index-DlkMPXXR.css                  314.59 kB │ gzip:  50.41 kB
+../../../../../../../../../tmp/cairn-design-round5-final-build/assets/index-CiTatD6I.js                     0.09 kB │ gzip:   0.10 kB
+../../../../../../../../../tmp/cairn-design-round5-final-build/assets/arrow-left-DG1n2Tjt.js                0.20 kB │ gzip:   0.18 kB
+../../../../../../../../../tmp/cairn-design-round5-final-build/assets/addon-fit-DX4qG4td.js                 1.21 kB │ gzip:   0.51 kB
+../../../../../../../../../tmp/cairn-design-round5-final-build/assets/PopoutApp-L4g0Jkaz.js                 1.29 kB │ gzip:   0.66 kB
+../../../../../../../../../tmp/cairn-design-round5-final-build/assets/settings-nav-CW0ucHDT.js              6.04 kB │ gzip:   2.89 kB
+../../../../../../../../../tmp/cairn-design-round5-final-build/assets/navigation-OfDe0ylp.js                7.46 kB │ gzip:   2.90 kB
+../../../../../../../../../tmp/cairn-design-round5-final-build/assets/markdown-cX5eXQ_W.js                 14.92 kB │ gzip:   5.36 kB
+../../../../../../../../../tmp/cairn-design-round5-final-build/assets/Stream-DUW4eNYz.js                   26.71 kB │ gzip:   9.06 kB
+../../../../../../../../../tmp/cairn-design-round5-final-build/assets/index-cl21wk0r.js                    34.83 kB │ gzip:   9.89 kB
+../../../../../../../../../tmp/cairn-design-round5-final-build/assets/CommandPalette-ezW7j4Zl.js           39.03 kB │ gzip:  13.41 kB
+../../../../../../../../../tmp/cairn-design-round5-final-build/assets/PaneDock-BYbKgd8W.js                 64.55 kB │ gzip:  21.63 kB
+../../../../../../../../../tmp/cairn-design-round5-final-build/assets/AppPage-CAQMLF01.js                 101.22 kB │ gzip:  27.80 kB
+../../../../../../../../../tmp/cairn-design-round5-final-build/assets/change-diff-state-DR3OKG2o.js       118.67 kB │ gzip:  41.49 kB
+../../../../../../../../../tmp/cairn-design-round5-final-build/assets/SettingsPanel-t6k7f1KP.js           124.97 kB │ gzip:  38.45 kB
+../../../../../../../../../tmp/cairn-design-round5-final-build/assets/index-SP5ZJqS0.js                   181.12 kB │ gzip:  62.97 kB
+../../../../../../../../../tmp/cairn-design-round5-final-build/assets/App-BmcJhuIk.js                     323.26 kB │ gzip: 101.87 kB
+../../../../../../../../../tmp/cairn-design-round5-final-build/assets/xterm-B-qIQCd3.js                   329.31 kB │ gzip:  83.04 kB
+✓ built in 2.87s

@@ -56,6 +56,8 @@ function makeOrch(over: {
   cascadeMaxUpgrades?: number;
   banditPath?: string;
   workerVerify?: (repoDir: string) => VerifyHook;
+  /** 判卷注入：返回 true 时该次 emit 抛错（模拟落盘失败/sequencer 边界异常）。 */
+  emitFailsWhen?: (event: AgentEvent) => boolean;
 }): { orch: Orchestrator; events: AgentEvent[] } {
   const events: AgentEvent[] = [];
   const orch = new Orchestrator({
@@ -64,6 +66,7 @@ function makeOrch(over: {
     parentMode: "default",
     emit: async (e) => {
       events.push(e);
+      if (over.emitFailsWhen?.(e) === true) throw new Error("fixture emit failure");
       await createEventLog(logPath).append(e);
     },
     routing: over.routing === true,
@@ -285,5 +288,34 @@ describe("级联升级接进产品路径（sequencer 环）", () => {
     expect(post).toBeDefined();
     expect(post!.alpha).toBe(2); // reward=0：客观判据红的那一跑不给 α 加分
     expect(post!.beta).toBeGreaterThan(2); // β 照旧吃惩罚 + 真钱代价
+  }, 60_000);
+
+  it("第二环的状态落盘抛错 ⇒ 整链收束为 failed，而不是永远停在 running", async () => {
+    // 父模型在批准时已经收到 ok:true；sequencer 边界若只 catch(()=>{})，链会永远 running，
+    // 父模型等一条永不结束的 pipeline。这里让第二环的启动状态 emit 抛一次（模拟日志落盘失败），
+    // 断言异常被翻成**整链 failed** 且原因可读。
+    let failedOnce = false;
+    const { orch, events } = makeOrch({
+      model: () => scriptedWorkerModel(writeScript("two-rings.txt")),
+      emitFailsWhen: (e) => {
+        const output = e.type === "tool_result" ? (e as { output?: unknown }).output : undefined;
+        if (!failedOnce && typeof output === "string" && output.includes("stage 2/2")) {
+          failedOnce = true;
+          return true;
+        }
+        return false;
+      },
+    });
+    const chainId = await runPipeline(orch, events, [
+      { role: "implement", task: "第一环" },
+      { role: "implement", task: "第二环" },
+    ]);
+    expect(await waitFor(() => events.some((e) =>
+      e.type === "tool_result" && (e as { output: string }).output.includes("整链 failed")))).toBe(true);
+    const fail = events.find((e) =>
+      e.type === "tool_result" && (e as { output: string }).output.includes("整链 failed")) as Extract<AgentEvent, { type: "tool_result" }>;
+    expect(fail.output).toContain("sequencer 异常");
+    expect(fail.output).toContain("fixture emit failure");
+    expect(orch.pipelineSnapshot(chainId)?.status).toBe("failed");
   }, 60_000);
 });

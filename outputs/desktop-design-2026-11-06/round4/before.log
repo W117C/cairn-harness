@@ -1,0 +1,29 @@
+FAIL 打开目录失败显示原因 undefined
+PASS 打开目录失败后可重试成功并清掉旧错误
+FAIL 最近项目登记失败显示原因 undefined
+PASS 最近项目可重试成功并清掉旧错误
+PASS 空项目名不会提交且有就地校验
+PASS 模板方向键保持单选语义和焦点
+FAIL 新建项目选择位置失败可见且保留项目名 undefined
+PASS 重选位置成功后清掉旧错误并更新预览
+FAIL 新建提交期间固定名称模板和位置 undefined
+PASS 新建提交期间不会重复发起创建
+FAIL 新建尚未完成时Esc保留表单 undefined
+FAIL 新建尚未完成时遮罩不关闭表单 undefined
+FAIL 新建尚未完成时取消按钮不关闭表单 undefined
+FAIL 新建失败原因可见并保留原输入以便重试 undefined
+PASS 新建失败后可重试成功并关闭表单
+PASS 克隆表单开启后焦点在仓库地址
+FAIL 克隆选择位置失败显示原因并保留URL undefined
+PASS 克隆位置重试成功后清掉旧错误
+FAIL 克隆期间固定URL位置并禁用取消与入口 undefined
+FAIL 克隆期间不会假装取消后台操作 undefined
+FAIL 克隆失败可见并保留地址位置以便重试 undefined
+PASS 克隆失败后重试成功并关闭表单
+PASS 下次克隆从空地址和未选位置开始
+PASS 深色窄窗新建表单无横向溢出且主按钮可见
+PASS 空闲时仍可Esc关闭新建表单
+FAIL renderer无未处理错误 ["Uncaught (in promise) Error: 夹具：目录选择失败","Uncaught (in promise) Error: 夹具：目录选择失败","Uncaught (in promise) Error: 夹具：目录选择失败"]
+undefined
+/Users/ze/Downloads/Cairn/cairn/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: electron scripts/project-entry-smoke.cjs /tmp/cairn-round4-before

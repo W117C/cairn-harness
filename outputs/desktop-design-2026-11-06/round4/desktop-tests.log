@@ -1,0 +1,12 @@
+
+ RUN  v5.0.0 /Users/ze/Downloads/Cairn/cairn/apps/desktop
+
+
+ Test Files  331 passed (331)
+      Tests  2280 passed (2280)
+   Start at  20:04:47
+   Duration  33.50s (import 47%, tests 39%, transform 12%, worker 2%)
+
+    Isolate  331 workers spawned · ~75ms startup each (spawn + environment, per file)
+             at least ~12.40s faster with isolate: false — reuses workers across files instead of one per file
+

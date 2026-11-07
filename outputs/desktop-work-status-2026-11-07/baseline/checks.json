@@ -1,0 +1,112 @@
+{
+  "fixtureData": true,
+  "checks": [
+    {
+      "name": "本轮已开始，仍在等待合成运行结束",
+      "ok": true
+    },
+    {
+      "name": "进度只显示当前轮的 1 步",
+      "ok": false,
+      "detail": {
+        "top": 40,
+        "bottom": 435.1875,
+        "left": 859,
+        "right": 1257,
+        "width": 1440,
+        "height": 768,
+        "role": "menu",
+        "focused": false,
+        "footer": "运行 0s · 4 步",
+        "scroll": 0
+      }
+    },
+    {
+      "name": "键盘打开后焦点进入可阅读区域",
+      "ok": false,
+      "detail": {
+        "top": 40,
+        "bottom": 435.1875,
+        "left": 859,
+        "right": 1257,
+        "width": 1440,
+        "height": 768,
+        "role": "menu",
+        "focused": false,
+        "footer": "运行 0s · 4 步",
+        "scroll": 0
+      }
+    },
+    {
+      "name": "轮中插话后保留本轮前后两步",
+      "ok": false,
+      "detail": {
+        "top": 40,
+        "bottom": 435.1875,
+        "left": 859,
+        "right": 1257,
+        "width": 1440,
+        "height": 768,
+        "role": "menu",
+        "focused": false,
+        "footer": "运行 1s · 5 步",
+        "scroll": 0
+      }
+    },
+    {
+      "name": "已打开的进度面板缩到短窗仍完整在视口内",
+      "ok": false,
+      "detail": {
+        "top": 40,
+        "bottom": 217.1875,
+        "left": 299,
+        "right": 697,
+        "width": 880,
+        "height": 205,
+        "role": "menu",
+        "focused": false,
+        "footer": "运行 1s · 5 步",
+        "scroll": 0
+      }
+    },
+    {
+      "name": "键盘可滚动长任务清单",
+      "ok": false,
+      "detail": {
+        "top": 40,
+        "bottom": 217.1875,
+        "left": 299,
+        "right": 697,
+        "width": 880,
+        "height": 205,
+        "role": "menu",
+        "focused": false,
+        "footer": "运行 1s · 5 步",
+        "scroll": 0
+      }
+    },
+    {
+      "name": "Esc 只关进度并还焦点，未停止运行",
+      "ok": true
+    },
+    {
+      "name": "键盘切换会话关闭旧进度，下一会话可自行打开",
+      "ok": false,
+      "detail": {
+        "title": "整理竞品对照册",
+        "open": true,
+        "pill": "另一会话的任务"
+      }
+    },
+    {
+      "name": "另一会话显示自己的清单",
+      "ok": true
+    },
+    {
+      "name": "renderer 无控制台错误",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "errors": []
+}

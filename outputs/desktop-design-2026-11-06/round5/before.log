@@ -1,0 +1,28 @@
+PASS 项目设置打开时聚焦显示名
+FAIL 项目设置位置选择失败显示原因并保留名字 undefined
+PASS 重选位置清掉错误并保留完整路径提示
+FAIL 项目设置写入失败留在弹窗并显示原因 undefined
+FAIL 项目设置保存中固定名字和位置并正确标注保存 undefined
+PASS 项目设置保存中只发起一次请求
+FAIL 项目设置保存中Esc不关闭弹窗 undefined
+FAIL 项目设置保存中遮罩不关闭弹窗 undefined
+FAIL 项目设置保存中关闭按钮不丢反馈 undefined
+FAIL 慢保存失败仍保留名字位置且允许重试 undefined
+PASS 项目设置重试成功后关闭并更新侧栏
+PASS 重开项目设置回显实际保存的名称和位置
+PASS 内联改名失败仍有反馈且保留已保存名称
+FAIL 更改项目目录的选择器失败有反馈 undefined
+PASS 更改目录失败后可重试且保留项目名
+FAIL 窗口右下角项目菜单完整可见 undefined
+FAIL 项目菜单打开时聚焦第一项 undefined
+FAIL 项目菜单方向键移动焦点 {"keys":[{"key":"ArrowDown","code":"ArrowDown","target":"<button class=\"g-more\" aria-label=\"项目菜单（也可右键）\" title=\"项目菜单（也可右键）\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\""}],"active":"<button class=\"g-more\" aria-label=\"项目菜单（也可右键）\" title=\"项目菜单（也可右键）\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-ellipsis lucide-more-horizontal\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"1\"></circle><circle cx=\"19\" cy=\"12\" r=\"1\"></circle><circle cx=\"5\" cy=\"12\" r=\"1\"></circle></svg></button>"}
+FAIL 项目菜单End落到最后一项 undefined
+FAIL 项目菜单Home回到第一项 undefined
+PASS 项目菜单Esc关闭并还原触发器焦点
+FAIL 窗口变化后项目菜单仍完整可见 undefined
+FAIL 项目菜单键盘进入设置且焦点到显示名 {"keys":[{"key":"ArrowDown","code":"ArrowDown","target":"<button class=\"g-more\" aria-label=\"项目菜单（也可右键）\" title=\"项目菜单（也可右键）\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\""},{"key":"End","code":"End","target":"<button class=\"g-more\" aria-label=\"项目菜单（也可右键）\" title=\"项目菜单（也可右键）\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\""},{"key":"Home","code":"Home","target":"<button class=\"g-more\" aria-label=\"项目菜单（也可右键）\" title=\"项目菜单（也可右键）\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\""},{"key":"Escape","code":"Escape","target":"<button class=\"g-more\" aria-label=\"项目菜单（也可右键）\" title=\"项目菜单（也可右键）\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\""},{"key":"ArrowDown","code":"ArrowDown","target":"<button class=\"g-more\" aria-label=\"项目菜单（也可右键）\" title=\"项目菜单（也可右键）\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\""},{"key":"ArrowDown","code":"ArrowDown","target":"<button class=\"g-more\" aria-label=\"项目菜单（也可右键）\" title=\"项目菜单（也可右键）\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\""},{"key":"Enter","code":"Enter","target":"<button class=\"g-more\" aria-label=\"项目菜单（也可右键）\" title=\"项目菜单（也可右键）\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\""}],"active":"<button class=\"g-more\" aria-label=\"项目菜单（也可右键）\" title=\"项目菜单（也可右键）\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-ellipsis lucide-more-horizontal\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"1\"></circle><circle cx=\"19\" cy=\"12\" r=\"1\"></circle><circle cx=\"5\" cy=\"12\" r=\"1\"></circle></svg></button>"}
+PASS 深色窄窗长路径不挤出项目设置
+FAIL renderer无未处理错误 ["Uncaught (in promise) Error: 夹具：目录选择失败","Uncaught (in promise) Error: 夹具：目录选择失败"]
+undefined
+/Users/ze/Downloads/Cairn/cairn/apps/desktop:
+[ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] Command failed with exit code 1: electron scripts/project-entry-smoke.cjs /tmp/cairn-round5-before-valid

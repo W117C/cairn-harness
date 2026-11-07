@@ -160,3 +160,7 @@ var/
 
 # Project-local evolution episodes/playbook are generated runtime state.
 /.agent/evolve/
+
+# gym 靶场的草稿运行态（fixtures/gym/drafts/<会话>/，gym-check A4 的草稿面）：会话目录名带空格
+# 与时间戳、内容是未齐件的运行残留——按「别把运行态写进 fixtures 树」的既定口径掐分发通路。
+fixtures/gym/drafts/
