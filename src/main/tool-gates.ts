@@ -42,7 +42,7 @@ import type { GlmToolSpec } from "../providers/glm";
 import { TOOLS, type Tool, type ToolResult } from "../tools";
 import type { ToolContext, ToolName } from "../tools/base";
 import type { AskGate } from "./ask-gate";
-import { annotateNetworkDenial, buildSandboxProfile, networkProfileFor, runInSandbox, type SandboxStatus } from "./sandbox";
+import { annotateNetworkDenial, buildSandboxProfile, networkProfileFor, runInSandbox, sandboxEnv, type SandboxStatus } from "./sandbox";
 import { MODEL_SHELL_TEST_ALIASES, mapSandboxTestCommandForWorkspace } from "./sandbox-test-command";
 
 /** 门评估所需的会话态。主会话从 run scope/全局活读；没有 run scope 的独立面（sidechat）
@@ -135,7 +135,8 @@ export function withSkillAllowNote(tool: string, reason: string): string {
  *
  *  读侧三把（`read_file`/`grep`/`glob`）在 2026-10-20 接进来（此前主会话没包它们 ⇒
  *  路径通道的判据在主会话这条路上一次也没跑过）。它们在 `TOOL_NAMES` 里 ⇒ 直接列名即可。 */
-type GatedName = "write_file" | "edit_file" | "apply_patch" | "run_shell" | "web_fetch" | "web_search" | "diagnose" | "lsp" | "render_image" | "read_file" | "grep" | "glob";
+type GatedName = "write_file" | "edit_file" | "apply_patch" | "run_shell" | "web_fetch" | "web_search" | "diagnose" | "lsp" | "render_image" | "read_file" | "grep" | "glob"
+  | "browser_navigate" | "browser_snapshot" | "browser_pick";
 
 /** 审批卡上要**多显示**的字段（纯展示面；不改执行语义，也不改模型给的 args）。
  *
@@ -280,16 +281,35 @@ export function gatedTool(
         // 缺省 deny：profile 里不写任何 network 规则 ⇒ 闭箱即全断网（sandbox:check ④ 钉着）。
         // allow 支的取用条件全部住在 networkProfileFor（完全允许档按档放行；其余档要问过且批了）。
         const network = networkProfileFor({ wantsNetwork, asked: d.verdict === "ask", approved: humanApproved, mode: aMode });
+        if (args.background === true) {
+          const tmp = join(await realpath(ctx.workspace), ".tmp");
+          await mkdir(tmp, { recursive: true });
+          return withGate(await original.run(args, {
+            ...ctx,
+            backgroundShellLaunch: {
+              executable: "sandbox-exec",
+              args: ["-p", buildSandboxProfile(ctx.workspace, { network }), "bash", "-c", mapped],
+              env: sandboxEnv(tmp),
+            },
+          }));
+        }
         if (beforeExecute) {
           // runInSandbox has no cancellation input. Reuse its profile, but launch via the existing
           // run_shell process-group/cancellation path; approval above evaluated the original lint.
           const tmp = join(await realpath(ctx.workspace), ".tmp");
           await mkdir(tmp, { recursive: true });
           if (ctx.signal?.aborted) return { ok: false, output: "cancelled before sandbox lint" };
-          const quote = (s: string): string => "'" + s.replace(/'/g, "'\\''") + "'";
-          const command = `TMPDIR=${quote(tmp)} exec /usr/bin/sandbox-exec -p ${quote(buildSandboxProfile(ctx.workspace, { network }))} bash -c ${quote(mapped)}`;
-          // 这条出口经 run_shell 工具而非 runInSandbox，故同一判据的提示在这里补（两处共用一只函数）。
-          return withGate(annotateNetworkDenial(await original.run({ command }, ctx), network));
+          // 前台沙箱走 backgroundShellLaunch 同形的启动描述：命令串保持**模型原文**，
+          // run_shell 的 `.agent` 词法闸与重定向快照都只看用户命令——宿主包装串
+          // （profile 内嵌工作区路径）进闸会把路径含 .agent 段的工作区整族误伤成必拒。
+          return withGate(annotateNetworkDenial(await original.run(args, {
+            ...ctx,
+            foregroundShellLaunch: {
+              executable: "/usr/bin/sandbox-exec",
+              args: ["-p", buildSandboxProfile(ctx.workspace, { network }), "bash", "-c", mapped],
+              env: sandboxEnv(tmp),
+            },
+          }), network));
         }
         const sand = await runInSandbox(mapped, { cwd: ctx.workspace, network, ...(ctx.signal ? { signal: ctx.signal } : {}) });
         // 上面那条注释说的是「经 run_shell 的那条出口」；这一条不经，故同一只归因函数在这里补

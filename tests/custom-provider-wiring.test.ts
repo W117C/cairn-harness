@@ -12,7 +12,7 @@ import {
   customProviderById,
 } from "../src/providers/registry";
 import { envKeyOf } from "../src/providers/env-keys";
-import { toWorkerModel } from "../src/providers/registry";
+import { toWorkerModel } from "../src/providers/worker-adapters";
 import { effectivePriceTable, priceOf, costUsd } from "../src/routing/pricing";
 import { deriveCustomProviders, parseCustomProviders } from "../src/providers/provider-config";
 import { providerKindFromEnv, resolveMainModel, selectionProviderId, assertProviderKeyConfigured } from "../src/main/provider-runtime";

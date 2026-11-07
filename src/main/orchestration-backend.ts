@@ -1,7 +1,8 @@
 import type { ExecutionBackend } from "../orchestration/types";
 import { createLocalBackend, type LocalProviderConfig, type TrustedCommandSandbox } from "../orchestration/local-backend";
 import type { Provider } from "../providers";
-import { DEFAULT_MODEL_TABLE, toWorkerModel } from "../providers/registry";
+import { DEFAULT_MODEL_TABLE } from "../providers/registry";
+import { toWorkerModel } from "../providers/worker-adapters";
 import { effectivePriceTable, type ModelPrice } from "../routing/pricing";
 import { providerKeyConfigured, providerKindFromEnv, resolveMainModel, selectionProviderId, type MainModelSelection } from "./provider-runtime";
 import { store } from "./settings-handlers";

@@ -8,7 +8,8 @@
 //   ④ 推理增量（DeepSeek 的 reasoning_content）绝不混进答给用户的正文。
 import { afterEach, describe, expect, it } from "vitest";
 import { reasoningDirective, mapUpstreamEfforts, REASONING_BUDGET_TOKENS } from "../src/providers/reasoning";
-import { toWorkerModel, installCustomProviders, effectiveModelTable, type ModelSpec } from "../src/providers/registry";
+import { installCustomProviders, effectiveModelTable, type ModelSpec } from "../src/providers/registry";
+import { toWorkerModel } from "../src/providers/worker-adapters";
 import { capabilityForModel, validateThinkingEffort } from "../src/providers/capabilities";
 import { deriveCustomProviders, parseCustomProviders } from "../src/providers/provider-config";
 
@@ -62,17 +63,17 @@ describe("映射表", () => {
     expect(reasoningDirective("off")).toBeNull();
   });
 
-  it("四档各有预算，且单调递增（max 是上游自述的最高档）", () => {
+  it("五档各有预算，且单调递增（max 是上游自述的最高档；2026-11-05 +xhigh）", () => {
     expect(reasoningDirective("low")).toEqual({ effort: "low", budgetTokens: REASONING_BUDGET_TOKENS.low });
     expect(REASONING_BUDGET_TOKENS.low).toBeLessThan(REASONING_BUDGET_TOKENS.medium);
     expect(REASONING_BUDGET_TOKENS.medium).toBeLessThan(REASONING_BUDGET_TOKENS.high);
     expect(REASONING_BUDGET_TOKENS.high).toBeLessThan(REASONING_BUDGET_TOKENS.max);
   });
 
-  it("上游档位名映射：实测 DeepSeek 的 [low,high,max] ⇒ [low,high,max]（max 原样；xhigh 保守落 high）", () => {
+  it("上游档位名映射：实测 DeepSeek 的 [low,high,max] ⇒ [low,high,max]（2026-11-05 起 xhigh 自成一档）", () => {
     expect(mapUpstreamEfforts(["low", "high", "max"])).toEqual(["low", "high", "max"]);
     expect(mapUpstreamEfforts(["minimal", "low"])).toEqual(["low"]);
-    expect(mapUpstreamEfforts(["xhigh"])).toEqual(["high"]);
+    expect(mapUpstreamEfforts(["xhigh"])).toEqual(["xhigh"]);
     expect(mapUpstreamEfforts(["unknown-level", ""])).toEqual([]);
     // 输出去重且按我们自己的顺序（低→高）
     expect(mapUpstreamEfforts(["high", "low", "low"])).toEqual(["low", "high"]);

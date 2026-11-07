@@ -213,6 +213,30 @@ describe("请求计量逐笔覆盖真实传输尝试", () => {
     expect(requests[1].usage).toMatchObject({ inputTokens: 9, outputTokens: 3 });
   });
 
+  it("非流式 HTTP 200 携带 error 对象 ⇒ 报错并记失败，不把空回复伪装成成功", async () => {
+    const meter = new RequestMeter();
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      error: { type: "invalid_request_error", message: "quota exhausted for this key" },
+    }), { status: 200, headers: { "content-type": "application/json" } }));
+    await expect(collect(streamOpenAI(messages, {
+      apiKey: "fixture", fetchImpl, stream: false, stallTimeoutMs: 0, metering: { meter, category: "summary" },
+    }))).rejects.toThrow(/quota exhausted for this key/);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(meter.snapshot().requests.map((request) => request.outcome)).toEqual(["failed"]);
+  });
+
+  it("非流式 HTTP 200 但缺 choices[0].message ⇒ 报错，不静默返回空摘要", async () => {
+    const meter = new RequestMeter();
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ id: "empty", choices: [] }), {
+      status: 200, headers: { "content-type": "application/json" },
+    }));
+    await expect(collect(streamOpenAI(messages, {
+      apiKey: "fixture", fetchImpl, stream: false, stallTimeoutMs: 0, metering: { meter, category: "summary" },
+    }))).rejects.toThrow(/缺少 choices\[0\]\.message/);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(meter.snapshot().requests.map((request) => request.outcome)).toEqual(["failed"]);
+  });
+
   it.each([false, true])("SSE 失败尝试的 usage 不会混入下一次请求（后续上报=%s）", async (finalUsage) => {
     const meter = new RequestMeter();
     const first = responseFixture(frame({ choices: [], usage: { prompt_tokens: 11, completion_tokens: 4 } })

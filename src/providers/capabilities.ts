@@ -8,8 +8,9 @@ import {
 } from "./registry";
 import { mapUpstreamEfforts, normalizeThinkingDeclaration } from "./reasoning";
 
-/** UI 与 RunRequest 共用的思考档位。Provider 不支持时只能使用 off。 */
-export const THINKING_EFFORTS = ["off", "low", "medium", "high", "max"] as const;
+/** UI 与 RunRequest 共用的思考档位（2026-11-05 业主裁：按业界标准档 low/medium/high/xhigh/max）。
+ *  Provider 不支持时只能使用 off。 */
+export const THINKING_EFFORTS = ["off", "low", "medium", "high", "xhigh", "max"] as const;
 export type ThinkingEffort = (typeof THINKING_EFFORTS)[number];
 
 export type ModelAvailability = "verified" | "unverified";

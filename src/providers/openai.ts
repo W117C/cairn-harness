@@ -212,7 +212,7 @@ export async function* streamOpenAI(
     // ——「一个字不加」在别家是逐字旧行为，在这家被服务端读成「要思考」：更慢、更贵、输出上限
     // 也按思考档（64K）给。所以 native DeepSeek **永远写显式开关**；effort 同按官方形状放进
     // `thinking.reasoning_effort`，顶层 reasoning_effort 是 OpenAI 家的形状，这家不发
-    // （档位词汇的兼容映射 minimal→low、medium/xhigh→high 由服务端做，见官方文档）。
+    // （档位按 reasoning.ts 的直发表：xhigh 自 2026-11-05 起自成一档，不再折叠成 high）。
     if (opts.reasoningEffort === undefined || opts.reasoningEffort === "" || opts.reasoningEffort === "off") {
       body.thinking = { type: "disabled" };
     } else {
@@ -285,9 +285,22 @@ export async function* streamOpenAI(
     const resNs = estNs.res;
     try {
       const data = (await resNs.json()) as ChatChunk;
+      // HTTP 200 + 错误对象是网关的常见形状（配额/内容审查/上游 5xx 被包成 200）。
+      // 非流式分支以前只读 choices ⇒ 空回复被记成 ok，摘要器把配额错误伪装成「摘要为空」。
+      if (data.error) {
+        const e = data.error;
+        const named = typeof e.type === "string" ? e.type : undefined;
+        throw new StreamFailure(
+          `${label} 响应错误 ${named ?? e.code ?? "unknown"}: ${e.message ?? ""}`,
+          retryableStreamErrorFrame({ names: [e.type, e.code] }),
+        );
+      }
       if (data.usage) observeUsage(data.usage);
       const callId = data.id ?? "a-0";
       const msg = data.choices?.[0]?.message;
+      if (msg === undefined) {
+        throw new StreamFailure(`${label} 非流式响应缺少 choices[0].message（HTTP 200 但无回复体）`, false);
+      }
       const nativeReasoning = typeof msg?.reasoning_content === "string" && msg.reasoning_content !== "";
       if (nativeReasoning) yield { type: "thinking_delta", callId, text: msg!.reasoning_content!, reasoning: { id: toolRequestScope, source: reasoningSource } };
       if (msg?.content) yield { type: "assistant_delta", callId, text: msg.content };

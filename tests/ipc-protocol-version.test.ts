@@ -55,6 +55,6 @@ describe("IPC 协议版本（§3.5/§12）", () => {
     // v49 → v50：runCancel/runSteer 按 workspace 校验目标，拒绝不自动续发。
     // v51 → v52：＋lspStatus（读 LSP 状态：配了几台 / 实测支持什么 / 授权态；只读不起进程）。
     // v50 → v51：RunResponse.accepted 区分接收前拒绝与执行失败。
-    expect(IPC_PROTOCOL_VERSION).toBe(52);
+    expect(IPC_PROTOCOL_VERSION).toBe(53);
   });
 });

@@ -10,7 +10,8 @@ import { pathOf } from "../src/main/sessions";
 import { handleAgentDecide, handleAgentRun, setAppHooks, waitForSessionTailWork } from "../src/main/agent-runner";
 import type { AskPayload } from "../src/main/ipc-protocol";
 import { PROVIDER_ENV_KEYS } from "../src/providers/env-keys";
-import { DEFAULT_MODEL_TABLE, type ModelSpec } from "../src/providers/registry";
+import { deriveCustomProviders, parseCustomProviders } from "../src/providers/provider-config";
+import { DEFAULT_MODEL_TABLE, installCustomProviders, type ModelSpec } from "../src/providers/registry";
 
 /** 最小合法 1×1 PNG（magic number 完整）。 */
 const PNG_1X1 = Buffer.from(
@@ -418,5 +419,148 @@ describe("in-workspace attachment is consumed as a path reference", () => {
     expect(messages.some((message) => message.role === "system" && message.content.includes("context.txt"))).toBe(true);
     expect(JSON.stringify(calls[0]?.body)).not.toContain(root);
     expect(JSON.stringify(calls[0]?.body)).not.toContain("content stays local");
+  });
+});
+
+describe("思考首选档接线", () => {
+  it("客户端没传 thinking ⇒ 模型声明的 reasoningDefault 进第一跳请求体；显式档位/off 仍优先", async () => {
+    const parsed = parseCustomProviders({
+      version: 1,
+      providers: [{
+        id: "myprovider",
+        label: "我的模型",
+        protocol: "openai",
+        baseURL: "https://api.example.com/v1",
+        apiKeyEnv: "MYPROVIDER_API_KEY",
+        models: [{
+          id: "chat",
+          model: "gpt-x",
+          contextWindow: 131_072,
+          reasoningEfforts: ["low", "high"],
+          reasoningDefault: "high",
+        }],
+      }],
+    });
+    expect(parsed.ok, parsed.ok ? undefined : JSON.stringify(parsed.problems)).toBe(true);
+    if (!parsed.ok) return;
+    const derived = deriveCustomProviders(parsed.file);
+    installCustomProviders(derived);
+    const spec = derived[0]!.specs[0]!;
+    const selection = { kind: "custom" as const, providerId: "myprovider", spec, modelExplicit: true };
+    try {
+      vi.stubEnv("MYPROVIDER_API_KEY", "test-key-never-logged");
+      await setSettings({ provider: "openai", model: "openai-standard", autoMemory: false });
+      const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
+      vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        calls.push({ url: String(input), body: JSON.parse(String(init?.body)) as Record<string, unknown> });
+        return streamResponse([
+          'data: {"id":"x","choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}',
+          "data: [DONE]",
+        ]);
+      }));
+
+      const first = await handleAgentRun(
+        { message: "hello", mode: "read-only" },
+        { workspace: root, logPath: join(root, "reasoning-default.jsonl"), modelSelection: selection },
+      );
+      expect(first.ok, first.error).toBe(true);
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.url).toBe("https://api.example.com/v1/chat/completions");
+      expect(calls[0]?.body.reasoning_effort, "声明了首选 high 却没发出去").toBe("high");
+
+      const second = await handleAgentRun(
+        { message: "hello again", mode: "read-only", thinking: "low" },
+        { workspace: root, logPath: join(root, "reasoning-explicit.jsonl"), modelSelection: selection },
+      );
+      expect(second.ok, second.error).toBe(true);
+      expect(calls[1]?.body.reasoning_effort).toBe("low");
+
+      const third = await handleAgentRun(
+        { message: "hello off", mode: "read-only", thinking: "off" },
+        { workspace: root, logPath: join(root, "reasoning-off.jsonl"), modelSelection: selection },
+      );
+      expect(third.ok, third.error).toBe(true);
+      expect(calls[2]?.body.reasoning_effort).toBeUndefined();
+    } finally {
+      installCustomProviders([]);
+    }
+  });
+});
+
+// ---- P1（2026-11-07 真机实证）：自定义 provider 注册表是进程级、随窗口工作区切换换装/清空，
+// 而 run 的工作区可以 ≠ 窗口上下文（临时对话发送、主页选项目发送、调度器触发）。修法 =
+// handleAgentRun 在模型解析前把 run 工作区的 providers.json **并装**（additive-only）。
+describe("run 工作区自定义家并装（P1 修）", () => {
+  it("注册表未装而 run 工作区声明的自定义家：起跑前并装 ⇒ 解析过、按那家拨号", async () => {
+    // 真实时序：provider 在装着的时候被写进 settings（选择器写盘），随后窗口切走清空注册表；
+    // settings 首读缓存的正是原始串。这里按同一时序摆布：先装 → 写设置 → 清空。
+    try {
+      const ws = join(root, "pin-ws");
+      await mkdir(join(ws, ".agent"), { recursive: true });
+      const file = {
+        version: 1,
+        providers: [
+          {
+            id: "pinws",
+            protocol: "openai",
+            baseURL: "https://pinws.example.com/v1",
+            apiKeyEnv: "PINWS_API_KEY",
+            models: [{ id: "chat", model: "pin-model" }],
+          },
+        ],
+      };
+      await writeFile(join(ws, ".agent", "providers.json"), JSON.stringify(file));
+      const parsed = parseCustomProviders(JSON.parse(JSON.stringify(file)));
+      expect(parsed.ok, parsed.ok ? undefined : JSON.stringify(parsed.problems)).toBe(true);
+      if (!parsed.ok) return;
+      installCustomProviders(deriveCustomProviders(parsed.file));
+      await setSettings({ provider: "pinws", model: "pinws-chat", autoMemory: false });
+      installCustomProviders([]); // 模拟窗口切到无 providers.json 上下文后的空注册表
+      vi.stubEnv("PINWS_API_KEY", "test-key-never-logged");
+      const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
+      vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        calls.push({ url: String(input), body: JSON.parse(String(init?.body)) as Record<string, unknown> });
+        return streamResponse([
+          'data: {"id":"pinws-1","choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1}}',
+          "data: [DONE]",
+        ]);
+      }));
+
+      const res = await handleAgentRun(
+        { message: "hello", mode: "read-only" },
+        { logPath: join(root, "pin-union.jsonl"), workspace: ws },
+      );
+      expect(res.ok, JSON.stringify(res)).toBe(true);
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.url).toBe("https://pinws.example.com/v1/chat/completions");
+    } finally {
+      installCustomProviders([]);
+    }
+  });
+
+  it("负针：注册表没有且工作区也没声明的自定义家，仍 fail-visible（不静默回落）", async () => {
+    // 同上时序：settings 里留着当年装过、现已不在注册表的 provider 串。
+    const ghostFile = {
+      version: 1,
+      providers: [
+        { id: "ghost-provider", protocol: "openai", baseURL: "https://ghost.example.com/v1", apiKeyEnv: "GHOST_KEY", models: [{ id: "chat", model: "ghost-model" }] },
+      ],
+    } as const;
+    const ghostParsed = parseCustomProviders(JSON.parse(JSON.stringify(ghostFile)));
+    expect(ghostParsed.ok, ghostParsed.ok ? undefined : JSON.stringify(ghostParsed.problems)).toBe(true);
+    if (!ghostParsed.ok) return;
+    installCustomProviders(deriveCustomProviders(ghostParsed.file));
+    try {
+      await setSettings({ provider: "ghost-provider", model: "", autoMemory: false });
+      installCustomProviders([]);
+      const res = await handleAgentRun(
+        { message: "hello", mode: "read-only" },
+        { logPath: join(root, "pin-ghost.jsonl"), workspace: root },
+      );
+      expect(res.ok, JSON.stringify(res)).toBe(false);
+      if (res.ok === false) expect(res.error ?? "").toContain("未知主会话 provider");
+    } finally {
+      installCustomProviders([]);
+    }
   });
 });

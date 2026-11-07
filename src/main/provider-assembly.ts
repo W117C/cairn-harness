@@ -14,7 +14,7 @@ import type { SolpiRuntime } from "../agent/solpi-runtime";
 import type { AgentEvent } from "../events";
 import type { GlmToolSpec } from "../providers/glm";
 import { createMockProvider } from "../providers/mock";
-import { toWorkerModel, type RegistryWorkerModel } from "../providers/registry";
+import { toWorkerModel, type RegistryWorkerModel } from "../providers/worker-adapters";
 import type { ThinkingEffort } from "../providers/capabilities";
 import type { Provider, ProviderToolSpec } from "../providers";
 import { MOCK_FIXTURE, scriptedMainModelPath } from "./demo-scripted";
@@ -51,6 +51,9 @@ export interface SessionProviderOptions {
   promptCache?: boolean;
   /** 思考档位（§S8）：一路带到适配器的请求体里。缺省 / "off" ⇒ 请求体里不出现这个字段。 */
   thinking?: ThinkingEffort;
+  /** 逐请求思考档（质量档）：按当前 run 的事件决定规划/执行/返修各用哪档。
+   *  给了就由它接管每一拍；`undefined` 回落 `thinking`；两者都不给 = 旧行为。 */
+  thinkingPolicy?: NonNullable<Parameters<typeof createSessionProvider>[1]>["thinkingPolicy"];
   onPreCompact?: (trigger: "manual" | "auto") => Promise<void>;
   /** compaction 触发旋钮的注入面（自进化「提前压缩」偏置用，闭环 v2 · 批次 A4）：
    *  给了就透传给 SessionCompaction.config，覆盖缺省 ratio。缺省不传 = compaction
@@ -98,6 +101,7 @@ export function sessionModelTransport(
     call,
     ...(options?.stream !== undefined ? { stream: options.stream } : {}),
     ...(options?.metering ? { metering: options.metering } : {}),
+    ...(options?.reasoningEffort !== undefined ? { reasoningEffort: options.reasoningEffort as ThinkingEffort } : {}),
   });
   return { transport, label: selection.spec.provider };
 }
@@ -170,6 +174,7 @@ export function createProvider(
       // 自由档位的名字查表恒为 undefined ⇒ 窗口必须由 spec 递进预算，否则 `--ctx-window` 只改到一半
       // （toWorkerModel 会丢掉 ctxWindow，只有这一条真的落到 inputLimit 上）。
       ...(selection.modelExplicit ? { ctxWindow: selection.spec.ctxWindow } : {}),
+      ...(sessionOptions.thinkingPolicy !== undefined ? { thinkingPolicy: sessionOptions.thinkingPolicy } : {}),
       transport,
       transportLabel: label,
       ...(sessionOptions.ephemeralUserTurn !== undefined ? { ephemeralUserTurn: sessionOptions.ephemeralUserTurn } : {}),

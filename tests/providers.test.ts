@@ -13,8 +13,8 @@ import {
   findSpecByNameOrId,
   resolveModel,
   specsByTier,
-  toWorkerModel,
 } from "../src/providers/registry";
+import { toWorkerModel } from "../src/providers/worker-adapters";
 import { ENV_KEYED_PROVIDERS, envKeyOf } from "../src/providers/env-keys";
 import { assertProviderKeyConfigured, providerKeyConfigured } from "../src/main/provider-runtime";
 import { byokGapsOf, sameSet } from "../src/providers/byok";

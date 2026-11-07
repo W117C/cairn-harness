@@ -23,6 +23,7 @@ export const REASONING_BUDGET_TOKENS: Readonly<Record<ActiveReasoningEffort, num
   low: 1_024,
   medium: 4_096,
   high: 16_384,
+  xhigh: 32_768,
   max: 65_536,
 };
 
@@ -32,7 +33,7 @@ export interface ReasoningDirective {
 }
 
 /** 我们支持的档位名（顺序即展示顺序；"off" 由调用方另行处理）。 */
-export const ACTIVE_REASONING_EFFORTS: readonly ActiveReasoningEffort[] = ["low", "medium", "high", "max"];
+export const ACTIVE_REASONING_EFFORTS: readonly ActiveReasoningEffort[] = ["low", "medium", "high", "xhigh", "max"];
 
 /** 档位 → 中立描述；"off" / 未给 ⇒ null（= 请求体里一个字都不加，逐字保持旧行为）。 */
 export function reasoningDirective(effort: ThinkingEffort | undefined): ReasoningDirective | null {
@@ -43,16 +44,16 @@ export function reasoningDirective(effort: ThinkingEffort | undefined): Reasonin
 /** 上游自述的档位名 → 我们的档位名。认不出的**丢掉**（不猜、不硬塞）。
  *
  *  为什么需要别名表：各家的档位词汇不一样。实测 DeepSeek 的 `/models` 给 `["low","high","max"]`，
- *  OpenRouter 的 `reasoning.supported_efforts` 会给 `minimal|xhigh|max` 之类。我们有五档
- *  （off/low/medium/high/max）：max 是**上游自述的最高档字面量**，原样保留；xhigh 这类
- *  「比 high 更高但没有 max 名字」的仍保守落在 high（**宁可发小一档**：发大了是烧钱与跑偏）。
+ *  OpenRouter 的 `reasoning.supported_efforts` 会给 `minimal|xhigh|max` 之类。我们有六档
+ *  （off/low/medium/high/xhigh/max）：2026-11-05 业主裁按业界标准档，xhigh 自成一档
+ *  （不再是折回 high 的保守别名）；认不出的档位名照旧**丢掉**（不猜、不硬塞）。
  *  这张表是唯一映射处，别处不要再抄。 */
 const EFFORT_ALIASES: Readonly<Record<string, ActiveReasoningEffort>> = {
   low: "low",
   minimal: "low",
   medium: "medium",
   high: "high",
-  xhigh: "high",
+  xhigh: "xhigh",
   max: "max",
 };
 

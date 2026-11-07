@@ -627,7 +627,7 @@ describe("M3c 卡死检测集成", () => {
       model: () => scriptedWorkerModel(script as Parameters<typeof scriptedWorkerModel>[0]),
       stuckConfig: { maxActionObsRepeats: 4, silenceMs: 0 },
     });
-    const r = await orch.spawn({ mode: "read", task: "会卡死的任务" }, { callId: "stuck-1" });
+    const r = await orch.spawn({ mode: "read", task: "会卡死的任务" }, { callId: "stuck-1", threadId: "thr-stuck" });
     expect(r.ok).toBe(true);
     const id = (JSON.parse(r.output) as { agent_id: string }).agent_id;
     expect(await waitFor(() => events.some((e) => e.type === "agent_status" && (e as { reason?: string }).reason === "stuck"))).toBe(true);
@@ -637,6 +637,10 @@ describe("M3c 卡死检测集成", () => {
     expect(await waitFor(() => events.some((e) => e.type === "agent_message" && (e as { text: string }).text.includes("[stuck]")))).toBe(true);
     const remind = events.find((e) => e.type === "agent_message" && (e as { text: string }).text.includes("[stuck]")) as Extract<AgentEvent, { type: "agent_message" }> | undefined;
     expect(remind?.text).toContain("same_action_obs_x4");
+    // 线程装饰同源钉：卡死提醒是 worker 出口族的一员，thread_id 必须与 agent_status 同源
+    // （此前是同文件唯一漏带 workerThreadFields 的出口 ⇒ 线程化会话里卡片脱离 worker 线程）。
+    expect(remind?.thread_id).toBe("thr-stuck");
+    expect(stuckStatus.thread_id).toBe("thr-stuck");
     // resume：清除卡死态 → worker 收束
     expect(orch.resumeAgent(id)).toBe(true);
     await orch.waitAll(10_000);

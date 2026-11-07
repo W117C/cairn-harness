@@ -6,7 +6,7 @@
 // Gemini / GLM / .agent/providers.json 自定义家各走自家适配器）——这里不碰任何 wire 形态，
 // 只收 assistant 文本事件。失败一律分类 + 给下一步（fail-visible），绝不抛、绝不静默凑字。
 import type { GlmMessage } from "../providers/glm";
-import { toWorkerModel } from "../providers/registry";
+import { toWorkerModel } from "../providers/worker-adapters";
 import {
   assertProviderKeyConfigured,
   selectionProviderId,
@@ -21,10 +21,11 @@ export const SUGGEST_MAX_CHARS = 80;
 /** 系统提示词。要点：写给**用户**的下一句（第一人称对 agent 说话）、一句话、直接给内容本身。
  *  「无法建议」是留给模型的诚实出口——上下文看不出下一步时不硬编，由 sanitize 归到 empty。 */
 export const SUGGEST_SYSTEM_PROMPT =
-  "你在为一个编程 agent 的聊天界面做输入补全。根据对话摘录，替【用户】写出他接下来最可能要说的一句话" +
-  "（对 agent 的下一句指令，或对 agent 提问的回答）。要求：一句话、不超过 30 个字、第一人称、" +
-  "直接输出那句话本身（不要引号、不要前缀、不要解释、不要换行）；用对话的主要语言回答。" +
-  "如果摘录不足以推断接下来要说什么，只回答：无法建议";
+  "You provide input completions for a coding agent chat interface. Based on the conversation excerpt, predict the next single sentence the USER is most likely to say " +
+  "(a command to the agent, or an answer to the agent's question). " +
+  "Requirements: Grounded in code, tests, and task context; single sentence; concise; first-person (e.g., 'Check why tests failed', 'Continue with the next error'); " +
+  "output ONLY the sentence itself (no quotes, no prefixes, no explanations, no linebreaks). " +
+  "If the excerpt is insufficient to infer the next step, reply ONLY: 无法建议";
 
 export interface SuggestNextInput {
   selection: MainModelSelection;

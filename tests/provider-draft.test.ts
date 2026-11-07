@@ -1,7 +1,8 @@
 // 草稿生成的判卷。这里有一条**最要紧**的断言：生成的配置片段必须能通过我们自己的严格校验
 // （parseCustomProviders）——「帮你填好的东西自己都不合法」是这个功能最丢人的失败形态。
 import { describe, expect, it } from "vitest";
-import { buildProviderDraft, suggestApiKeyEnv, suggestProviderId, wrapProvidersFile } from "../src/providers/provider-draft";
+import { buildProviderDraft, mergeDiscoveredWithCatalog, suggestApiKeyEnv, suggestProviderId, wrapProvidersFile } from "../src/providers/provider-draft";
+import type { CatalogSnapshot } from "../src/providers/catalog";
 import { parseCustomProviders } from "../src/providers/provider-config";
 
 describe("从地址推名字（建议值，用户可改）", () => {
@@ -110,5 +111,38 @@ describe("草稿：只写拿到的字段，缺的必须点名", () => {
     const parsed = parseCustomProviders(JSON.parse(wrapProvidersFile([a, b])) as unknown);
     expect(parsed.ok).toBe(true);
     if (parsed.ok) expect(parsed.file.providers.map((p) => p.id)).toEqual(["mydeepseek", "moonshot"]);
+  });
+});
+
+describe("探测价并入草稿（目录没价时不再把已知价格丢掉）", () => {
+  const emptyCatalog: CatalogSnapshot = { version: 1, source: "fixture", providers: [] };
+
+  it("目录认不出这家 ⇒ 用探测的每百万 token 价，并把来源标成 discovery", () => {
+    const merged = mergeDiscoveredWithCatalog({
+      models: [{ id: "vendor/model", priceInPerMTok: 0.5, priceOutPerMTok: 1.5 }],
+      catalog: emptyCatalog,
+      baseURL: "https://openrouter.ai/api/v1",
+    });
+    expect(merged.rows[0]?.price).toEqual({ inputPerMTok: 0.5, outputPerMTok: 1.5 });
+    expect(merged.rows[0]?.origin).toBe("discovery");
+  });
+
+  it("目录有价 ⇒ 目录优先；两边都有 ⇒ origin=both", () => {
+    const catalog: CatalogSnapshot = {
+      version: 1,
+      source: "fixture",
+      providers: [{
+        id: "openrouter",
+        apiBaseURL: "https://openrouter.ai/api/v1",
+        models: [{ id: "vendor/model", pricing: { inputPerMTok: 9, outputPerMTok: 8 } }],
+      }],
+    };
+    const merged = mergeDiscoveredWithCatalog({
+      models: [{ id: "vendor/model", priceInPerMTok: 0.5, priceOutPerMTok: 1.5 }],
+      catalog,
+      baseURL: "https://openrouter.ai/api/v1",
+    });
+    expect(merged.rows[0]?.price).toEqual({ inputPerMTok: 9, outputPerMTok: 8 });
+    expect(merged.rows[0]?.origin).toBe("both");
   });
 });

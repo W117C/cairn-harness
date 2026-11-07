@@ -31,7 +31,15 @@ export interface PostRunReadingInput {
   /** 反思位（闭环 v2 · 批次 A2）：读真实轨迹改写本轮补丁措辞的 provider 构造口。
    *  缺省不传 = 纯规则补丁（既有行为）。由装配根递进来（provider 闭包在那边）。 */
   reflectProviderFor?: (instruction: string) => Provider;
+  /** 反思轮限时（判卷可调小）：到点返回 null ⇒ fail-open 回规则兜底。 */
+  reflectDeadlineMs?: number;
+  /** 尾工让位信号（2026-11-06）：读数转注册尾工后，下一场 run 入口让位（awaitSessionTailWork）
+   *  触发 abort ⇒ 反思竞速即刻返回 null（fail-open），不再占着让位等待。 */
+  signal?: AbortSignal;
 }
+
+/** 反思轮缺省限时：60s。反思是收尾读数的一支（fail-open），不该拖住任何等待它的东西。 */
+const REFLECT_DEADLINE_MS = 60_000;
 
 /** 在 fn 抛错时**先**落一次读数，再把原错抛出去；成功路径不动（收尾那次由调用方负责，不重复读）。
  *
@@ -118,7 +126,25 @@ export async function emitPostRunReadings(input: PostRunReadingInput): Promise<v
   try {
     const reflect: ReflectFn | undefined = input.reflectProviderFor === undefined
       ? undefined
-      : async (req) => consumeReflectOutput(input.reflectProviderFor!(req.instruction));
+      : async (req) => {
+          // 反思轮限时+让位（2026-11-06）：反射 provider 没有取消缝；读数转注册尾工后，挂死的反思
+          // 会让下一场 run 的让位等待吃满 120s 保险丝。到点/让位返回 null ⇒ runEvolution fail-open
+          // 回规则兜底（真 provider 慢 ≠ 丢账，规则补丁照落）。
+          const input_ = input;
+          return await Promise.race([
+            consumeReflectOutput(input_.reflectProviderFor!(req.instruction)),
+            new Promise<null>((resolve) => {
+              const t = setTimeout(() => resolve(null), input_.reflectDeadlineMs ?? REFLECT_DEADLINE_MS);
+              (t as { unref?: () => void }).unref?.();
+            }),
+            ...(input_.signal !== undefined
+              ? [new Promise<null>((resolve) => {
+                  if (input_.signal!.aborted) { resolve(null); return; }
+                  input_.signal!.addEventListener("abort", () => resolve(null), { once: true });
+                })]
+              : []),
+          ]);
+        };
     const evo = await runEvolution(events, input.workspace, input.sessionId ?? input.logPath, reflect === undefined ? undefined : { reflect });
     if (evo.persistedTo !== null && evo.patches.length > 0) {
       console.warn("[evolution] 本跑产出 " + evo.patches.length + " 条策略补丁，已落 " + String(evo.persistedTo));

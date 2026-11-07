@@ -57,12 +57,12 @@ function install(raw: unknown): void {
 const capOf = (): ReturnType<typeof capabilityForModel> => capabilityForModel({ id: "myprovider-chat", provider: "myprovider" });
 
 describe("声明归一化（纯函数：档位表与首选档只有这一个出处）", () => {
-  it("四档里挑、去重、按低→高排；「off」写在列表里等于没写", () => {
+  it("五档里挑、去重、按低→高排；「off」写在列表里等于没写", () => {
     const d = normalizeThinkingDeclaration(["high", "low", "high", "off"], "high");
     expect(d.levels).toEqual(["low", "high"]); // 低→高（不是书写顺序）
     expect(d.default).toBe("high");
     expect(d.unknown).toEqual([]);
-    expect(ACTIVE_REASONING_EFFORTS).toEqual(["low", "medium", "high", "max"]); // 可挑的四档
+    expect(ACTIVE_REASONING_EFFORTS).toEqual(["low", "medium", "high", "xhigh", "max"]); // 可挑的五档（2026-11-05 +xhigh）
   });
 
   it("认不出的档位名原样回传（判错还是忽略由调用方定，这里不替它决定）", () => {
@@ -71,8 +71,8 @@ describe("声明归一化（纯函数：档位表与首选档只有这一个出�
     expect(d.unknown).toEqual(["turbo"]);
   });
 
-  it("各家词汇照旧映射（minimal→low、xhigh→high）；空声明 = 不支持", () => {
-    expect(normalizeThinkingDeclaration(["minimal", "xhigh"], undefined).levels).toEqual(["low", "high"]);
+  it("各家词汇映射（minimal→low；2026-11-05 起 xhigh 自成一档）；空声明 = 不支持", () => {
+    expect(normalizeThinkingDeclaration(["minimal", "xhigh"], undefined).levels).toEqual(["low", "xhigh"]);
     const empty = normalizeThinkingDeclaration([], undefined);
     expect(empty.levels).toEqual([]);
     expect(empty.default).toBe("off"); // 空 = 不支持：首选档只能是「关」

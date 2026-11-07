@@ -1,3 +1,5 @@
+import { CUSTOM_INSTRUCTIONS_MAX_BYTES } from "../user-instructions";
+export { CUSTOM_INSTRUCTIONS_MAX_BYTES } from "../user-instructions";
 // 主进程 settings 存储（§10.7 layout.get|set + §13 设置页）：JSON 文件，原子写，加载时逐字段校验，
 // 非法值回退默认（验收：写入后重新加载得到相同布局 / 非法布局值回退默认）。electron-free，可 headless 单测。
 import { readFile } from "node:fs/promises";
@@ -51,6 +53,8 @@ export interface AppSettings {
   locale: LocaleSetting;
   /** 当前会话（JSONL 即会话；重启还原用）。 */
   currentSession: string | null;
+  /** 用户级指令。每次 Agent 运行开始时读取。 */
+  customInstructions: string;
   /** M2d：会话结束自动沉淀开关（记忆面板/设置页可关，默认开，§8.1.4 双轨）。 */
   autoMemory: boolean;
   /** 子代理三件套（spawn_agent / wait_for_agents / cancel_agents）挂不挂到模型面上。
@@ -72,6 +76,11 @@ export interface AppSettings {
   onboarded: boolean;
   /** M4b §2.3：更新 manifest URL（缺省空 = 「未配置更新源」显式态；V1 轻量检查不做自动下载）。 */
   updateManifestUrl: string;
+  /** 联网免批（2026-11-05 业主裁「为什么每次都要问」）：开 = web_search / web_fetch 在所有档
+   *  免审批（以内存 allow 规则种进每场 run，不落 permissions.json）；关（缺省）= 照旧逐次出卡。
+   *  出网仍是「外部不可信输入」——开关只是把「问不问」的决定权交给用户，风险通道（SSRF 面的
+   *  命令侧判据）原样不动。 */
+  webAutoApprove: boolean;
   /** M4b §2.6：遥测开关（§13 默认关；V1 无上报实现 = 最强「零数据出门」保证，关于页注明）。 */
   telemetry: boolean;
   /** 完成通知开关（缺省开 = 与既有行为一致）：窗口不在前台时，run 收束发系统通知。 */
@@ -143,6 +152,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   theme: "system",
   locale: "zh-CN",
   currentSession: null,
+  customInstructions: "",
   autoMemory: true,
   subagentTools: true,
   maxBudgetUsd: 0,
@@ -151,6 +161,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   onboarded: false,
   updateManifestUrl: "",
   telemetry: false,
+  webAutoApprove: false,
   notifyOnComplete: true,
   routingBandit: false,
   routingCascade: false,
@@ -250,6 +261,8 @@ export function validateSettings(raw: unknown): AppSettings {
     locale: LOCALES.includes(r.locale as LocaleSetting) ? (r.locale as LocaleSetting) : d.locale,
     currentSession: typeof r.currentSession === "string" && r.currentSession.length > 0 ? r.currentSession : null,
     autoMemory: typeof r.autoMemory === "boolean" ? r.autoMemory : d.autoMemory,
+    customInstructions: typeof r.customInstructions === "string" && Buffer.byteLength(r.customInstructions) <= CUSTOM_INSTRUCTIONS_MAX_BYTES
+      ? r.customInstructions : d.customInstructions,
     subagentTools: typeof r.subagentTools === "boolean" ? r.subagentTools : d.subagentTools,
     maxBudgetUsd: nonNegNumber(r.maxBudgetUsd) ?? d.maxBudgetUsd,
     budgetPricePerMTok: nonNegNumber(r.budgetPricePerMTok) ?? d.budgetPricePerMTok,
@@ -258,6 +271,7 @@ export function validateSettings(raw: unknown): AppSettings {
     onboarded: typeof r.onboarded === "boolean" ? r.onboarded : d.onboarded,
     updateManifestUrl: typeof r.updateManifestUrl === "string" ? r.updateManifestUrl : d.updateManifestUrl,
     telemetry: typeof r.telemetry === "boolean" ? r.telemetry : d.telemetry,
+    webAutoApprove: typeof r.webAutoApprove === "boolean" ? r.webAutoApprove : d.webAutoApprove,
     // 缺省开的键走 `d.` 回退（promptCache 同族）：老 settings.json 没有这个键时保持「发通知」。
     notifyOnComplete: typeof r.notifyOnComplete === "boolean" ? r.notifyOnComplete : d.notifyOnComplete,
     routingBandit: typeof r.routingBandit === "boolean" ? r.routingBandit : d.routingBandit,
@@ -376,8 +390,27 @@ export class SettingsStore {
     return next;
   }
 
+  /** 迁移只在现有指令为空时写入，检查和提交共用设置写队列。 */
+  async importCustomInstructions(content: string): Promise<boolean> {
+    const next = this.writes.then(async () => {
+      const current = await this.get();
+      if (this.issue !== null) throw new Error("请先修复设置文件");
+      const raw = (await this.readRaw())?.customInstructions;
+      if (current.customInstructions.trim() !== "" || (typeof raw === "string" && raw.trim() !== "")) return false;
+      await this.applyPatch({ customInstructions: content });
+      return true;
+    });
+    this.writes = next.catch(() => undefined);
+    return next;
+  }
+
   private async applyPatch(patch: Partial<Omit<AppSettings, "layout">> & { layout?: Partial<LayoutState> }): Promise<AppSettings> {
+    if ("customInstructions" in patch &&
+      (typeof patch.customInstructions !== "string" || Buffer.byteLength(patch.customInstructions) > CUSTOM_INSTRUCTIONS_MAX_BYTES)) {
+      throw new Error(`自定义指令最多 ${CUSTOM_INSTRUCTIONS_MAX_BYTES} 字节`);
+    }
     const cur = await this.get();
+    if ("customInstructions" in patch && this.issue !== null) throw new Error("请先修复设置文件");
     /* 标量字段整体浅合并——旧写法把 26 个键名手抄成一条布尔表达式，只有列在里面的键才生效：
        往 AppSettings 加一个字段而忘了抄进名单，set() 会把它**连同整笔 patch** 静默丢成 {}
        （与 606fe7f 那两份名单同族）。名单由类型本身覆盖，没有可漂移的副本。 */
@@ -422,6 +455,6 @@ export class SettingsStore {
 
   /** 原子写（临时文件 + rename，中断自愈）。 */
   private async persist(s: Record<string, unknown>): Promise<void> {
-    await writeFileAtomic(this.filePath, JSON.stringify(s, null, 2));
+    await writeFileAtomic(this.filePath, JSON.stringify(s, null, 2), { mode: 0o600 });
   }
 }

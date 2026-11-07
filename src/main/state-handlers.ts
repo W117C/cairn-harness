@@ -14,6 +14,7 @@ import {
   userPluginsDirOf,
   type PluginPanelSnapshot,
 } from "../agent/plugins";
+import { userHooksConfigPathOf, userMcpConfigPathOf } from "../agent/plugins/user-mcp";
 import { ownedWorktreeAgentIds } from "../agent/orchestrator";
 import { listWorktreeDirs, orphanWorktrees, worktreeDirty } from "../agent/worktree";
 import type { MemorySnapshot, SidechatPanelSnapshot } from "./ipc-protocol";
@@ -203,6 +204,10 @@ export function pluginRuntimeOpts(workspace: string): Omit<Parameters<typeof Plu
     // 外部声明式来源：项目级恒扫（.opencode/.pi/.agents/.qoder/.claude）；用户级目录只在装配面显式带 home。
     // `M2E_FOREIGN_SOURCES=off` 关掉整顶——判卷要可复现，不能让结果取决于跑测试那台机器的 home。
     foreignSources: process.env.M2E_FOREIGN_SOURCES === "off" ? [] : defaultForeignSources(workspace, homedir()),
+    // 用户级 MCP（ZCode 独立管理对应面）：<appData>/mcp.json 合成虚拟插件 user-mcp（恒 trusted）。
+    userMcpConfigPath: userMcpConfigPathOf(pluginDataRoot),
+    // 用户级 hooks：<appData>/hooks.json 合成虚拟插件 user-hooks（恒 trusted，跑在既有 HookEngine）。
+    userHooksConfigPath: userHooksConfigPathOf(pluginDataRoot),
     workspace,
     pluginDataRoot,
     ...(process.env.M2E_TRUST_FILE ? { trustFile: process.env.M2E_TRUST_FILE } : {}),

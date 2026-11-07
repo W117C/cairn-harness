@@ -34,7 +34,7 @@ describe("provider capability contract", () => {
   });
 
   it("keeps the UI vocabulary centralized and stable", () => {
-    expect(THINKING_EFFORTS).toEqual(["off", "low", "medium", "high", "max"]);
+    expect(THINKING_EFFORTS).toEqual(["off", "low", "medium", "high", "xhigh", "max"]);
   });
 
   it("defaults an omitted thinking value to the model capability default", () => {

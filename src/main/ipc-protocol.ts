@@ -8,6 +8,10 @@ import type { SandboxStatus } from "./sandbox";
 import type { AppSettings } from "./settings";
 import type { OnboardingGroup } from "./onboarding-groups";
 import type { ScheduleSnapshot } from "./scheduler";
+import type { IdleTaskAction, IdleTaskInput, IdleTaskResult, IdleTaskSnapshot } from "./idle-tasks";
+import type { BackgroundTaskStatus } from "../tools/background-tasks";
+import type { SubagentMarkdown, SubagentSettingsSnapshot } from "./subagent-settings";
+import type { UserIntegrationSaveResult } from "./user-integration-settings";
 import type { LicenseImportOutcome, LicenseState } from "./license";
 import type { BuildInfo } from "./build-info";
 import type { PreferencePatch } from "./preferences";
@@ -22,6 +26,7 @@ import type { LspStatus } from "../tools/lsp";
 import type { ThinkingEffort } from "../providers/capabilities";
 import type { ProviderInfo } from "./provider-runtime";
 import type { CapabilityReadout } from "./doctor";
+import type { McpServerConfig } from "../agent/plugins/types";
 // v9：建议单发的结果形状事实源在 suggest-next（分类 + hint 的构造与失败面同源）；这里只转发类型。
 import type { SuggestNextResult } from "./suggest-next";
 import type { OrchestrationAddress, OrchestrationSubmitRequest, OrchestrationControlRequest, OrchestrationResponse } from "./orchestration-service";
@@ -124,8 +129,20 @@ export type { SearchProvider } from "../tools/web-search";
  *  v49 = 恢复全局经验（evolveGlobalActivate；dormant → active，复核 ≥3 库证据）。
  *  v50 = 会话运行控制携带 workspace；目标校验拒绝带 code，不触发陈旧旗自动续发。
  *  v51 = RunResponse.accepted 区分未接收的请求和已接收后的执行失败，供队列安全恢复。
- *  v52 = 读 LSP 状态（lspStatus；第 996 页那份跨进程可读的运行态第一次进桌面——只读、不起进程、不改授权）。 */
-export const IPC_PROTOCOL_VERSION = 52;
+ *  v52 = 读 LSP 状态（lspStatus；第 996 页那份跨进程可读的运行态第一次进桌面——只读、不起进程、不改授权）。
+ *  v53 = 子 Agent 角色、配置迁移、闲时队列与会话后台命令管理。 */
+export const IPC_PROTOCOL_VERSION = 53;
+
+export type SettingsMigrationSource = "claude-code" | "codex";
+export interface SettingsMigrationItem {
+  id: string;
+  kind: "instructions" | "mcp" | "unsupported";
+  name: string;
+  status: "ready" | "collision" | "unsupported" | "skipped";
+  detail?: string;
+}
+export interface SettingsMigrationPreview { id: string; items: SettingsMigrationItem[] }
+export interface SettingsMigrationResult { imported: string[]; skipped: Array<{ id: string; detail: string }> }
 
 /** 密钥只允许写入；读取面只报告状态，不回传明文。端点为空时 Brave/Tavily 使用官方地址。 */
 export interface SearchSettingsInput {
@@ -798,6 +815,32 @@ export interface AgentApi {
       models?: readonly { id: string; reasoningEfforts?: readonly string[]; reasoningDefault?: string }[];
     }[];
   }>;
+  // ---- 用户级 MCP 服务器管理（ZCode 独立管理对应面，2026-11-05 业主裁）----
+  /** 用户级 MCP 配置（<appData>/mcp.json）：当前服务器表 + 解析期错误（fail-visible）。
+   *  这些 server 在运行时以虚拟插件 user-mcp 激活，工具名 = mcp__plugin_user-mcp_<server>__<tool>。 */
+  mcpUserConfig(): Promise<{
+    ok: boolean;
+    path: string;
+    revision: string;
+    servers: readonly { name: string; config: McpServerConfig }[];
+    errors: readonly string[];
+  }>;
+  /** 整表覆盖保存用户级 MCP 配置：逐台校验，坏台拒绝整次保存（错误行原样回给设置面）。 */
+  mcpUserSave(req: { servers: Record<string, unknown>; expectedRevision?: string }): Promise<UserIntegrationSaveResult>;
+  /** 探测一台用户级 MCP server：真连 + tools/list（真握手；不落任何文件，连接即关）。 */
+  mcpUserProbe(req: { name: string; config: unknown }): Promise<{ ok: boolean; tools?: readonly string[]; toolCount?: number; error?: string }>;
+  // ---- 用户级 hooks（ZCode Hooks 管理对应面，2026-11-05）----
+  /** 用户级 hooks 配置（<appData>/hooks.json）：事件表原样 + 解析期错误（fail-visible）。
+   *  运行时以虚拟插件 user-hooks 跑在既有 HookEngine 上，下一场 run 生效。 */
+  hooksUserConfig(): Promise<{
+    ok: boolean;
+    path: string;
+    revision: string;
+    hooks: Record<string, unknown>;
+    errors: readonly string[];
+  }>;
+  /** 整表覆盖保存用户级 hooks：以 hooks 同一把解析尺校验（坏结构拒绝整次保存）。 */
+  hooksUserSave(req: { hooks: Record<string, unknown>; expectedRevision?: string }): Promise<UserIntegrationSaveResult>;
   /** M4b §2.3：轻量更新检查（未配置 / 网络失败 / 已最新 / 有新版 全显式态）。 */
   checkUpdate(): Promise<UpdateCheckResult>;
   /** M4b §2.3：打开下载页（shell.openExternal，仅 http(s) 白名单——防 manifest 注入协议）。 */
@@ -864,6 +907,17 @@ export interface AgentApi {
    *  把「用户下一句最可能说的话」取回来填入输入框（只填不发）。单发不进会话流、不落 JSONL、不计量；
    *  失败按类分说（demo/no-key/empty/timeout/error + hint）——renderer 原样上屏，不静默凑字。 */
   suggestNext(input: { model: string | null; excerpt: string }): Promise<SuggestNextResult>;
+  subagentSettingsList(): Promise<SubagentSettingsSnapshot>;
+  subagentSettingsRead(file: string): Promise<SubagentMarkdown>;
+  subagentSettingsSave(file: string, markdown: string, expectedRevision: string | null): Promise<void>;
+  subagentSettingsRemove(file: string, expectedRevision: string): Promise<void>;
+  settingsPreviewMigration(source: SettingsMigrationSource): Promise<SettingsMigrationPreview | null>;
+  settingsApplyMigration(previewId: string, itemIds: string[]): Promise<SettingsMigrationResult>;
+  idleTaskList(): Promise<IdleTaskSnapshot>;
+  idleTaskEnqueue(input: IdleTaskInput): Promise<IdleTaskResult>;
+  idleTaskUpdate(id: string, action: IdleTaskAction): Promise<IdleTaskResult>;
+  backgroundTaskList(sessionId: string, workspace?: string): Promise<BackgroundTaskStatus[]>;
+  backgroundTaskStop(sessionId: string, taskId: string, workspace?: string): Promise<BackgroundTaskStatus | null>;
   /** SEMA §3.5/§12：主进程实况协议版本（唯一事实源 = 本文件 IPC_PROTOCOL_VERSION）。
    *  renderer 挂载即比对构建期注入的期望版本，失配即 fatal——通道本身恒答得上来（版本化
    *  的第一格就是它自己），查询失败也按失配面处理。 */

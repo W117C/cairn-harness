@@ -56,13 +56,15 @@ describe("模型面总预算：零回归支", () => {
 
 describe("模型面总预算：降配梯", () => {
   it("梯级 A（压描述）在 B（丢工具）之前：刚好超一点时一把都不丢", () => {
-    // 8 条 × 2048 字符描述 ≈ 17.1k，加固定面 8.8k ⇒ 刚好破 24k；压到紧帽后远低于帽。
-    const specs = faceWith(8, 2_048);
+    // 5 条 × 2048 字符描述，加现读固定面 ⇒ 刚好破 24k；压到紧帽后仍在帽内。
+    // 固定工具表随后新增四把（git_read/calc/list_dir/read_doc）⇒ 仍用旧的 7 条会让预算
+    // 走到梯级 B；这里按「刚好超一点」的语义把话痨工具数调到 5，判据仍钉 A 先于 B。
+    const specs = faceWith(5, 2_048);
     const plan = planSurfaceBudget({ specs, systemChars: SYSTEM_CHARS, coreNames: CORE });
     expect(plan.account.totalChars).toBeGreaterThan(plan.account.limitChars);
     expect(plan.specs.length).toBe(specs.length);
     expect(plan.dropped).toEqual([]);
-    expect(plan.shortened.length).toBe(8);
+    expect(plan.shortened.length).toBe(5);
     for (const s of plan.specs) {
       if (s.function.name.startsWith("mcp__")) {
         expect(s.function.description!.length).toBeLessThanOrEqual(MODEL_SURFACE_TIGHT_DESC_CHAR_CAP + 40);
