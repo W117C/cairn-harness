@@ -201,9 +201,16 @@ describe("C1 actual main runner integration (local scripts, no model calls)", ()
     let signal: AbortSignal | undefined;
     const shell = vi.spyOn(run_shell, "run").mockImplementation(async (args, ctx) => {
       signal = ctx.signal;
-      expect(String(args.command)).toContain("exec /usr/bin/sandbox-exec -p");
-      expect(String(args.command)).toContain(buildSandboxProfile(dir));
-      expect(String(args.command)).toContain("TMPDIR=");
+      // 2026-11-07 前台沙箱改走 backgroundShellLaunch 同形的启动描述面：命令串保持**模型原文**
+      // （宿主的 .agent 词法闸与重定向快照只看用户命令，包装串进闸会误伤路径含 .agent 段的工作区），
+      // profile / TMPDIR 移到 launch 参数与 env 上。本测钉的是同一语义：profile 在场、
+      // 独立 TMPDIR、shell 上下文随会话取消。
+      expect(String(args.command)).toBe("printf 'QUOTED'");
+      const launch = ctx.foregroundShellLaunch;
+      expect(launch, "前台沙箱必须以启动描述面到达 run_shell").toBeDefined();
+      expect(launch?.executable).toBe("/usr/bin/sandbox-exec");
+      expect(launch?.args.join(" ")).toContain(buildSandboxProfile(dir));
+      expect(launch?.env.TMPDIR ?? "").not.toBe("");
       abort.abort();
       expect(ctx.signal?.aborted).toBe(true);
       return { ok: false, output: "sandbox shell cancelled" };

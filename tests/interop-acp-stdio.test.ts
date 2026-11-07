@@ -153,4 +153,45 @@ describe("ACP stdio transport", () => {
     await server;
     output.end();
   });
+
+  it("多字节 UTF-8 字符被切成两个输入块时仍能拼回同一帧", async () => {
+    // pipe/流按字节切块，一个汉字常被切在中间。逐块 toString("utf8") 会各吐一个 U+FFFD，
+    // 整帧 JSON 解析失败（用户看到的是 -32700，而不是他的中文 prompt 被送进模型）。
+    let seen = "";
+    const provider: Provider = {
+      async *stream(messages) {
+        seen = JSON.stringify(messages);
+        yield { type: "assistant_message", content: "ok" };
+      },
+    };
+    const client = createAgentClientV1(host(provider));
+    const input = new PassThrough();
+    const output = new PassThrough();
+    const server = serveAcpStdio({ client, input, output });
+    const { frames, waitFor } = outputFrames(output);
+
+    input.write(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "session/new", params: { cwd: process.cwd() } }) + "\n");
+    await waitFor((list) => list.some((f) => f.id === 1));
+    const sessionId = (frames.find((f) => f.id === 1)?.result as { sessionId: string }).sessionId;
+
+    const line = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 2,
+      method: "session/prompt",
+      params: { sessionId, prompt: [{ type: "text", text: "你好，世界" }] },
+    }) + "\n";
+    const bytes = Buffer.from(line, "utf8");
+    const split = bytes.indexOf(Buffer.from("你", "utf8")) + 1; // 切在 3 字节字符的中间
+    expect(split).toBeGreaterThan(0);
+    input.write(bytes.subarray(0, split));
+    await new Promise((resolve) => setImmediate(resolve));
+    input.write(bytes.subarray(split));
+
+    await waitFor((list) => list.some((f) => f.id === 2));
+    expect(frames.find((f) => f.id === 2)?.result).toEqual({ stopReason: "end_turn" });
+    expect(seen).toContain("你好，世界");
+    input.end();
+    await server;
+    output.end();
+  });
 });

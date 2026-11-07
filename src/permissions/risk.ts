@@ -269,7 +269,11 @@ export function staticRisk(tool: ToolName, args: Record<string, unknown>): RiskF
   //  直接 `tool === "web_fetch"` 是 TS2367（两侧无重叠）——反向先例见 agent-runner 的 `as ToolName`。
   // web_search 是同族的第二个名字：检索也是出网、结果也是外部不可信输入。不给 high 的后果是
   // auto 档会免批放行它（writeAsk=false 且无风险通道命中）——撞「出网永不免批」红线。
-  if ((tool as string) === "web_fetch" || (tool as string) === "web_search") {
+  // browser_navigate 是同族的第三个名字：模型发起侧栏浏览器加载外部页面，与 web_fetch 一样
+  // 把外部不可信页面带进用户可见面；不给 high ⇒ 只读/默认档零审批、auto 档免批加载任意站点。
+  // snapshot/pick 只内省已加载页，不新增出网 ⇒ 保持 NONE。
+  if ((tool as string) === "web_fetch" || (tool as string) === "web_search"
+      || (tool as string) === "browser_navigate") {
     return { level: "high", reason: "出网取内容（外部不可信输入，SSRF 面）" };
   }
   // lsp（#58，2026-10-05）：这个工具会 **spawn 工作区配置里写的命令**（`.agent/lsp.json` 的

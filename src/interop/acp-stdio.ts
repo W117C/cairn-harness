@@ -41,8 +41,16 @@ interface Frame {
 async function* readFrames(input: AsyncIterable<Uint8Array | string>, maxBytes: number): AsyncIterable<Frame> {
   let buffer = "";
   let discarding = false;
+  // 跨 chunk 保留解码状态：一个多字节 UTF-8 字符可能被 pipe/流切成两半，
+  // 对每块单独 toString("utf8") 会各吐一个 U+FFFD，整帧 JSON 解析失败。
+  const decoder = new TextDecoder("utf-8");
   for await (const chunk of input) {
-    buffer += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
+    if (typeof chunk === "string") {
+      buffer += decoder.decode(); // 先把待续字节收尾，再拼已解码字符串
+      buffer += chunk;
+    } else {
+      buffer += decoder.decode(chunk, { stream: true });
+    }
     for (;;) {
       const newline = buffer.indexOf("\n");
       if (newline < 0) {
@@ -67,6 +75,7 @@ async function* readFrames(input: AsyncIterable<Uint8Array | string>, maxBytes: 
       yield { line };
     }
   }
+  buffer += decoder.decode(); // 输入 EOF：吐出解码器里最后一个不完整字符（若有）
   if (!discarding && buffer.length > 0) {
     const line = buffer.endsWith("\r") ? buffer.slice(0, -1) : buffer;
     if (Buffer.byteLength(line, "utf8") > maxBytes) yield { oversized: true };

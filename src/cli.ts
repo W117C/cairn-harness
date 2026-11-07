@@ -357,6 +357,8 @@ interface Options {
   goal: GoalSpec | null;
   unattended: boolean;
   autoVerify: boolean;
+  /** 质量档（`--quality`）：强制绿验、最小工具面、环境事实、分阶段思考档。 */
+  quality: boolean;
   /** 任务自带判据（spec 2026-11-04）：`--verify <cmd>` 可重复；null = 没给（旧行为）。 */
   verifyDeclaration: VerifyDeclaration | null;
   /** M5b 路由开关覆盖（`--bandit/--no-bandit`、`--cascade/--no-cascade`）。空对象 = 一枚都没给
@@ -610,6 +612,7 @@ function parseArgs(): Options | "help" | "version" | "doctor" {
     goal,
     unattended,
     autoVerify: flagArgv.includes("--auto-verify"),
+    quality: flagArgv.includes("--quality"),
     verifyDeclaration: (() => {
       const commands = pickAll("--verify");
       return commands.length === 0 ? null : { commands };
@@ -846,6 +849,16 @@ export function renderEvent(e: AgentEvent): string | null {
 //     这个 throw 会从 notify 一路冒到工具执行里，被 loop 记成「工具失败：readline was closed」
 //     ——一次没人应答的审批，伪装成模型写盘失败。必须吞掉并转成拒绝。
 //     （`rl.closed` 运行时存在但不在 @types/node 的 Interface 上，所以自己跟踪。）
+/** 审批门/方案门的输入→决议映射（纯函数，业主 2026-11-07 裁决：回车=拒绝）。
+ *  旧形状 `a !== "n"` 把空回车和一切打错的字都当批准——默认不安全（误触放行写操作）。
+ *  三档：y/yes ⇒ 批准一次；a/all ⇒ 批准 + 本会话内同类；其余（含空回车）⇒ 拒绝。 */
+export function approvalDecisionFor(answer: string): { approved: boolean; scope: "once" | "session_kind" } {
+  const a = answer.trim().toLowerCase();
+  if (a === "a" || a === "all") return { approved: true, scope: "session_kind" };
+  if (a === "y" || a === "yes") return { approved: true, scope: "once" };
+  return { approved: false, scope: "once" };
+}
+
 function promptForApproval(
   rl: ReturnType<typeof createInterface>,
   isClosed: () => boolean,
@@ -856,11 +869,14 @@ function promptForApproval(
   try {
     rl.question(
       `\n${color ? YELLOW : ""}批准？${color ? RESET : ""} ${req.tool} ${argsDigest(req.args)}${risk}${why}\n` +
-      `  [y] 批准一次  [a] 本会话内同类批准  [n] 拒绝  > `,
+      `  [y] 批准一次  [a] 本会话内同类批准  [n] 拒绝（回车=拒绝） > `,
       (answer) => {
-        const a = answer.trim().toLowerCase();
-        const scope = a === "a" || a === "all" ? "session_kind" : "once";
-        handleAgentDecide(req.askId, a !== "n" && a !== "no", scope);
+        const { approved, scope } = approvalDecisionFor(answer);
+        const ok = handleAgentDecide(req.askId, approved, scope);
+        // 迟到的输入必须出声（与 submitClarify 的「无人等待」同一纪律）：交互审批 60s 无响应已
+        // 按拒绝收束（AskGate 缺省超时），用户对着死卡打 y 却毫无反馈 = 最难查的一类静默。
+        // 60s 超时本身是业主 2026-11-07 裁决定案：维持按拒绝收束（与 clarify/plan 无限等的不对称接受）。
+        if (!ok) process.stderr.write(paint(YELLOW, "[cairn] 该审批已超时或已被处理（默认 60s 无响应按拒绝收束），本次输入未生效\n"));
         if (!isClosed()) rl.prompt();
       },
     );
@@ -884,9 +900,14 @@ function decidePlan(approved: boolean, callId: string): void {
   // handlePlanDecide 是 async（决议要经会话管线落盘），调用点却都在同步回调里。
   // fire-and-forget 没问题——propose_plan 挂的是 waitApproval，decide 只是解挂它。
   // 但落盘那一 await 可能抛，而没人接的 promise 拒绝会直接打崩进程。
-  handlePlanDecide(approved, callId).catch((err: unknown) => {
-    process.stderr.write(paint(RED, `[cairn] 方案决议落盘失败：${err instanceof Error ? err.message : String(err)}\n`));
-  });
+  // 迟到的决议（run 已推进/中止 ⇒ settle false）同样要出声——静默吞掉 = 用户对着死卡打字没反馈。
+  handlePlanDecide(approved, callId)
+    .then((ok) => {
+      if (!ok) process.stderr.write(paint(YELLOW, "[cairn] 该方案卡已失效或已被处理（会话已推进/中止），本次输入未生效\n"));
+    })
+    .catch((err: unknown) => {
+      process.stderr.write(paint(RED, `[cairn] 方案决议落盘失败：${err instanceof Error ? err.message : String(err)}\n`));
+    });
 }
 
 /** 方案门在 CLI 上该给出什么决议（纯函数，可单测）。
@@ -936,9 +957,9 @@ function promptForPlan(
     return;
   }
   try {
-    rl.question(`${header}  [y] 批准  [n] 拒绝  > `, (answer) => {
-      const a = answer.trim().toLowerCase();
-      decidePlan(a !== "n" && a !== "no", callId);
+    rl.question(`${header}  [y] 批准  [n] 拒绝（回车=拒绝） > `, (answer) => {
+      // 业主 2026-11-07 裁决：回车=拒绝，与审批门同一份映射（approvalDecisionFor）。
+      decidePlan(approvalDecisionFor(answer).approved, callId);
       if (!isClosed()) rl.prompt();
     });
   } catch {
@@ -1501,7 +1522,11 @@ async function main(): Promise<number> {
     for (const warning of custom.warnings) process.stderr.write(paint(YELLOW, `[cairn] ⚠️ ${warning}\n`));
   }
 
-  // provider 解析：M0A_PROVIDER 显式覆盖优先，其次 settings，最后按已配置的 key 推断。
+  // provider 解析：旗标/env 显式覆盖 → key 探测（内置家按 PROVIDER_IDS 固定序，自定义家按配置书写序）。
+  // **settings 的 provider/model 不参与 CLI 的通道选择**（resolveProviderSelection 从第一天起就传
+  // settingsModel:""，见 resolveProviderSelection 内的 forward）——settings 那一格是桌面面
+  // resolveRunModel(settings, …) 的输入；CLI 的通道控制在 --provider/--model 旗标。
+  // （2026-11-07 评审订正：原文「其次 settings」与实现自诞生起不符——注释不许描述不存在的步骤。）
   // 推断顺序写死在这里而不是「挑第一个有的」——否则加一个 provider 就静默改默认。
   // 门的位置也在这一行说话：**放在 replay 之后**（回放不碰 provider，没 key 也得能看日志）；
   // `--compact` 与目标轮要主模型，解析照旧发生在起跑前。ConfigError 同样 exit 2，但不打「用法」行。
@@ -1774,6 +1799,7 @@ async function main(): Promise<number> {
         // 拆成两个槽就是为了不翻转上面那半：沉淀留开，只有续跑停。
         ...(!interactive ? { noAnswerer: true as const } : {}),
         ...(opts.autoVerify ? { autoVerify: true } : {}),
+        ...(opts.quality ? { quality: true } : {}),
         ...(opts.verifyDeclaration === null ? {} : { verifyDeclaration: opts.verifyDeclaration }),
         // 能力 12 交付断言的返修环（`--delivery-repair`）：承诺了没落盘时再要一轮去补做。
         // 与 `--auto-verify` 不共享旗标：那一支接的是 verify 拍出的代码红，

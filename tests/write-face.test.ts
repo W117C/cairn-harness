@@ -120,6 +120,17 @@ describe("mayHaveWrittenDisk：写向判据的唯一事实源", () => {
         "render_image",
         // 2026-11-04 任务清单：只写会话日志（面板数据），不改任何盘 ⇒ 与 remember 同档。
         "todo_write",
+        // 2026-11-05 后台任务三件套：读任务输出 / 进程组组杀——都不落盘 ⇒ 只读面登记。
+        "task_output",
+        "task_stop",
+        // 2026-11-06 只读 git 三合一：spawn 固定 argv 的 git 子进程（status/diff/log），
+        // 零写权零 shell——只读档与 worker 面都可放行。
+        "git_read",
+        // 2026-11-06 第三批小件：确定性算术（纯解析器，零 eval 零子进程）+ 目录总览（只读 stat）。
+        "calc",
+        "list_dir",
+        // 2026-11-06 第二批大件：文档读取（zip/zlib 原生解析 + pdf 文本层，只读）。
+        "read_doc",
       ] as const;
       const names = Object.keys(TOOLS);
       const unclassified = names.filter(

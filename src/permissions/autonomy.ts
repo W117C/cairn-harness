@@ -260,8 +260,10 @@ export function isNetworkCommandCall(tool: ToolName, args: Record<string, unknow
   // 之后每次出网都在 `L3-rule` 直接 approve（那一层只豁免 critical）⇒ "出网永不免批"
   // 退化成"出网点一次就永久免批"。与 `run_shell` 跑 curl 同口径：**网络类不放行 scope 记忆**。
   // `as string` 的理由同 `staticRisk` 里那一支：web_fetch 是运行时注入，不在 TOOL_NAMES。
-  // web_search 同族：检索也是出网、返回的也是外部不可信文本 ⇒ 同一条口径（scope 钉 once + 卡面措辞）。
+  // web_search / browser_navigate 同族：检索与侧栏页加载都出网、都带回外部不可信内容
+  // ⇒ 同一条口径（scope 钉 once + 卡面措辞）。runtime 注入名同样不在 TOOL_NAMES 联合里。
   if ((tool as string) === "web_fetch" || (tool as string) === "web_search") return true;
+  if ((tool as string) === "browser_navigate") return true;
   if (!isShellFamily(tool)) return false;
   return isNetworkCommand(typeof args.command === "string" ? args.command : undefined);
 }
