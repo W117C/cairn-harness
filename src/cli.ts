@@ -280,7 +280,7 @@ const KNOWN_FLAGS = new Set([
   "--mode", "--provider", "--model", "--ctx-window", "--workspace", "--message", "--log",
   "--session", "--goal", "--max-turns", "--max-usd", "--replay", "--fork", "--from",
   "--discover", "--key-env", "--protocol", "--provider-name", "--label", "--allow-local", "--json",
-  "--compact", "--unattended", "--auto-verify", "--delivery-repair", "--serve",
+  "--compact", "--unattended", "--auto-verify", "--quality", "--delivery-repair", "--serve",
   "--bandit", "--no-bandit", "--cascade", "--no-cascade",
   "--plugins", "--trust-plugin", "--decline-plugin",
   "--sessions", "--verify",
@@ -1208,6 +1208,7 @@ function printHelp(): void {
   --log <路径>         事件日志落盘位置（与 --goal / --session 互斥，见下）
   --unattended         无人值守：一切审批 fail-closed 拒绝（不给交互门）
   --auto-verify        收束前补一拍验证（模型没自调 verify 时）
+  --quality            质量档，写盘后必须通过验证才能成功收束
   --delivery-repair    交付断言落红后再要一轮补做（幽灵文件 / 空输出；缺省关）
   --bandit             本会话开「路由 bandit」：每轮可能换模型档位，改花钱行为（--no-bandit 显式关；都不给=按设置）
   --cascade            本会话开「级联升档」：客观判据不过时升一档重跑，多花一遍钱（--no-cascade 显式关；都不给=按设置）

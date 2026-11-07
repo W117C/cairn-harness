@@ -1,27 +1,33 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
 interface Entry { workspace: string | null; version: number; alive: boolean }
-interface Invocation { entry: Entry; workspace: string | null }
+interface Invocation<Owner> { runOwner: Owner | null; entry: Entry; workspace: string | null }
 
 /** Trusted IPC sender owns the selection; each invocation reads a stable snapshot. */
-export class WindowWorkspaceContext {
-  private readonly windows = new WeakMap<object, Entry>();
-  private readonly invocation = new AsyncLocalStorage<Invocation>();
+export class WindowWorkspaceContext<Owner extends object = object> {
+  private readonly windows = new WeakMap<Owner, Entry>();
+  private readonly invocation = new AsyncLocalStorage<Invocation<Owner>>();
 
   constructor(private readonly validate: (path: string) => Promise<string | null>) {}
 
-  run<T>(owner: object, callback: () => T): T {
+  run<T>(owner: Owner, callback: () => T, agentRun = false): T {
     let entry = this.windows.get(owner);
     if (entry === undefined) {
       entry = { workspace: null, version: 0, alive: true };
       this.windows.set(owner, entry);
     }
-    return this.invocation.run({ entry, workspace: entry.workspace }, callback);
+    return this.invocation.run({ runOwner: agentRun ? owner : null, entry, workspace: entry.workspace }, callback);
   }
 
   current(): string | null {
     const call = this.invocation.getStore();
     return call?.entry.alive ? call.workspace : null;
+  }
+
+  /** Only a direct agent run grants a browser owner. Other IPC and timer jobs carry none. */
+  currentRunOwner(): Owner | null {
+    const call = this.invocation.getStore();
+    return call?.entry.alive ? call.runOwner : null;
   }
 
   require(): string {
@@ -42,11 +48,11 @@ export class WindowWorkspaceContext {
     return { ok: true };
   }
 
-  inherit(owner: object): void {
+  inherit(owner: Owner): void {
     this.windows.set(owner, { workspace: this.current(), version: 0, alive: true });
   }
 
-  forget(owner: object): void {
+  forget(owner: Owner): void {
     const entry = this.windows.get(owner);
     if (entry !== undefined) { entry.alive = false; entry.version++; }
     this.windows.delete(owner);

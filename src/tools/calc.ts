@@ -9,8 +9,9 @@ const CALC_MAX_CHARS = 1_000;
 
 type Token = { kind: "num"; value: number } | { kind: "op"; value: string } | { kind: "const"; value: number };
 
-/** 手写扫描器：逐字符走，认识的形状当场折算，不认识的当场点名（不吞进解析器再报含糊的「语法错误」）。 */
-function tokenize(input: string): Token[] {
+/** 手写扫描器：逐字符走，认识的形状当场折算，不认识的当场点名（不吞进解析器再报含糊的「语法错误」）。
+ *  导出只为判卷（承诺面证人直接钉函数本体；同 planDecisionFor/approvalDecisionFor 先例）。 */
+export function tokenize(input: string): Token[] {
   const tokens: Token[] = [];
   let i = 0;
   while (i < input.length) {

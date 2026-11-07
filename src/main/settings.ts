@@ -5,6 +5,7 @@ export { CUSTOM_INSTRUCTIONS_MAX_BYTES } from "../user-instructions";
 import { readFile } from "node:fs/promises";
 import { writeFileAtomic } from "../atomic-write";
 import { ENV_KEYED_PROVIDERS } from "../providers/env-keys";
+import { PROVIDER_ID_RE } from "../providers/provider-identifiers";
 import { effectiveModelTable, findSpecByNameOrId, isKnownProviderId } from "../providers/registry";
 
 // M2d：第四面板 memory（两层记忆快照 + 会话内 remember 审计投影）；M2e：第五面板 plugins（插件容器）；
@@ -348,6 +349,16 @@ export class SettingsStore {
       if (read.issue !== null) this.issue = read.issue;
     }
     return this.cache;
+  }
+
+  /** A run resolves these preferences against its own workspace, independent of the UI cache. */
+  async runModelPreferences(): Promise<Pick<AppSettings, "provider" | "model">> {
+    const raw = await this.readRaw();
+    const cached = await this.get();
+    return {
+      provider: typeof raw?.provider === "string" && PROVIDER_ID_RE.test(raw.provider) ? raw.provider : cached.provider,
+      model: typeof raw?.model === "string" && raw.model.length <= 200 ? raw.model : cached.model,
+    };
   }
 
   /** 重新读盘（外部修好/改坏文件后由设置页「重新读取」触发）：丢掉缓存与旧失败结论，按盘上内容重来。

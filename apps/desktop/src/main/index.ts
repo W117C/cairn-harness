@@ -1,7 +1,7 @@
 // Electron main 装配根（M1-6）：kernel-host 单点装配 + IPC 薄映射。
 // 装载通道：entry.cjs 注册 repo 根 tsx 后 require 本 TS 源——core 链零打包零漂移
 // （esbuild 打包会把 agent-runner 的 ROOT 漂进 <repo>/apps，fixtures 运行时静默落空）。
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, Notification, powerSaveBlocker, safeStorage, screen, shell, webContents, type IpcMainInvokeEvent } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, Notification, powerSaveBlocker, safeStorage, screen, shell, webContents, type IpcMainInvokeEvent, type WebContents } from "electron";
 import { clampToWorkArea, readWindowState, writeWindowState } from "./window-state";
 import { bootBackgroundFor, normalizeThemePreference, resolveBootTheme, type ThemePreference } from "./boot-theme";
 import { windowVibrancyOptions } from "./window-vibrancy";
@@ -321,7 +321,7 @@ if (app.isPackaged && process.env.CAIRN_DESKTOP_WORKSPACE === undefined) {
 
 // 工作区由可信 IPC sender 所属窗口保存；弹窗继承打开时的选择，之后独立。
 // 缺少窗口上下文时，文件/回滚/终端操作拒绝执行，不能回落到别的窗口最近跑过的项目。
-const windowWorkspaces = new WindowWorkspaceContext(canonicalKnownProjectPath);
+const windowWorkspaces = new WindowWorkspaceContext<WebContents>(canonicalKnownProjectPath);
 const workspaceContext = (): string | null => windowWorkspaces.current();
 const resolveWorkspace = (): string => windowWorkspaces.require();
 
@@ -471,7 +471,10 @@ const browserHost = new BrowserHost(
 );
 // 浏览器驾驶三件（2026-11-06 业主①）：进程级一次性注册；installAppTools 消费——
 // CLI/headless 无此注册 ⇒ 整族不注入，模型面一个字节不付。
-registerBrowserAgentTools(makeBrowserAgentTools(browserHost));
+registerBrowserAgentTools(makeBrowserAgentTools(browserHost, () => {
+  const sender = windowWorkspaces.currentRunOwner();
+  return sender === null || sender.isDestroyed() ? null : BrowserWindow.fromWebContents(sender);
+}));
 
 // v6 项目预览运行时：static 走进程内静态服务，vite 起受控子进程（命令写死在 core，见其头注）。
 // 状态推送与 browserHost 同一条广播面；退出时由 will-quit 全部回收（不留孤儿 dev server）。
@@ -1568,7 +1571,7 @@ for (const [key, channel] of Object.entries(INVOKE_CHANNELS) as [InvokeChannel, 
         return handler(owner); // 窗口归属只由可信 sender 提供，忽略 renderer 自报参数。
       }
       return handler(...args);
-    });
+    }, key === "run");
   });
 }
 void webContents; // 显式留痕：推送经 BrowserWindow.getAllWindows()

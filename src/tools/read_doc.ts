@@ -5,55 +5,127 @@
 // （resolveReadTarget：workspace 相对 + 本轮已批准的项目外附件 grant）。
 // 诚实边界：复杂 pdf（CJK 编码子表、连字、多栏）提取不保证完整——输出带来源说明，
 // 模型要保真时该知道去核对原文。
-import { readFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { open } from "node:fs/promises";
+import { posix } from "node:path";
 import { inflateRawSync, inflateSync } from "node:zlib";
 import { resolveReadTarget, ToolError, type Tool, type ToolResult } from "./base.js";
 
 const DOC_MAX_FILE_BYTES = 20 * 1024 * 1024; // 20MB：文档读取不是挖矿
+const DOC_MAX_MEMBER_BYTES = 8 * 1024 * 1024;
+const DOC_MAX_EXPANDED_BYTES = 16 * 1024 * 1024;
 const DOC_MAX_CHARS = 20_000; // 输出帽（字符），超帽截断 + 出声
 const XLSX_MAX_ROWS = 500;
 const XLSX_MAX_CELL_CHARS = 300;
 
+function expansionError(): ToolError {
+  return new ToolError("read_doc: 解压内容超过上限（单个成员 8 MiB，累计 16 MiB）");
+}
+
+function memberLimit(expanded: number): number {
+  return Math.min(DOC_MAX_MEMBER_BYTES, DOC_MAX_EXPANDED_BYTES - expanded);
+}
+
+function exceedsInflateLimit(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException).code === "ERR_BUFFER_TOO_LARGE";
+}
+
+async function readDocumentFile(path: string, display: string): Promise<Buffer> {
+  const file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK).catch((err: NodeJS.ErrnoException) => {
+    if (err.code === "ENOENT") throw new ToolError(`read_doc: 文件不存在: ${display}`);
+    if (err.code === "EISDIR") throw new ToolError(`read_doc: ${display} 是目录不是文件`);
+    throw err;
+  });
+  try {
+    const stat = await file.stat();
+    if (stat.isDirectory()) throw new ToolError(`read_doc: ${display} 是目录不是文件`);
+    if (!stat.isFile()) throw new ToolError(`read_doc: 只支持普通文件（${display}）`);
+    const tooLarge = () => new ToolError(`read_doc: 文件超过 ${String(DOC_MAX_FILE_BYTES / (1024 * 1024))}MB 上限（${display}）`);
+    if (stat.size > DOC_MAX_FILE_BYTES) throw tooLarge();
+    // 额外读一个字节检测文件增长，读到的总量仍有硬上限。
+    const buf = Buffer.allocUnsafe(stat.size + 1);
+    let offset = 0;
+    while (offset < buf.length) {
+      const { bytesRead } = await file.read(buf, offset, buf.length - offset, offset);
+      if (bytesRead === 0) break;
+      offset += bytesRead;
+    }
+    if (offset > DOC_MAX_FILE_BYTES) throw tooLarge();
+    if (offset !== stat.size) throw new ToolError(`read_doc: 文件大小在读取期间变化（${display}），请重试`);
+    return buf.subarray(0, offset);
+  } finally {
+    await file.close();
+  }
+}
+
 // ---- zip 容器解析（EOCD → central directory → local data）----
-/** 解析 zip 的 central directory：name → 原始字节（stored 直取，deflate inflateRaw）。
+/** 只索引 central directory，正文需要的成员才读出（stored 直取，deflate inflateRaw）。
  *  只支持单盘无 zip64 的常规档——办公文档都是这个形状；超界当场报错不硬猜。 */
-function readZipEntries(buf: Buffer): Map<string, Buffer> {
+function readZipEntries(buf: Buffer) {
   // EOCD 签名 0x06054b50：从尾部扫（注释最长 65535，扫最后 66KB 足够）。
   let eocd = -1;
   for (let i = buf.length - 22; i >= Math.max(0, buf.length - 66 * 1024); i--) {
-    if (buf.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }
+    if (buf.readUInt32LE(i) === 0x06054b50 && i + 22 + buf.readUInt16LE(i + 20) === buf.length) {
+      eocd = i;
+      break;
+    }
   }
   if (eocd < 0) throw new ToolError("read_doc: zip 容器损坏（找不到 central directory 末端）");
   const count = buf.readUInt16LE(eocd + 10);
   const cdOffset = buf.readUInt32LE(eocd + 16);
-  const entries = new Map<string, Buffer>();
+  const cdEnd = cdOffset + buf.readUInt32LE(eocd + 12);
+  if (cdEnd > eocd) throw new ToolError("read_doc: zip 容器损坏（central directory 越界）");
+  const entries = new Map<string, { method: number; compressedSize: number; expandedSize: number; localOffset: number }>();
   let p = cdOffset;
   for (let i = 0; i < count; i++) {
-    if (p + 46 > buf.length || buf.readUInt32LE(p) !== 0x02014b50) {
+    if (p + 46 > cdEnd || buf.readUInt32LE(p) !== 0x02014b50) {
       throw new ToolError("read_doc: zip 容器损坏（central directory 条目越界）");
     }
     const method = buf.readUInt16LE(p + 10);
     const compressedSize = buf.readUInt32LE(p + 20);
+    const expandedSize = buf.readUInt32LE(p + 24);
     const nameLen = buf.readUInt16LE(p + 28);
     const extraLen = buf.readUInt16LE(p + 30);
     const commentLen = buf.readUInt16LE(p + 32);
     const localOffset = buf.readUInt32LE(p + 42);
-    const name = buf.slice(p + 46, p + 46 + nameLen).toString("utf8");
-    p += 46 + nameLen + extraLen + commentLen;
-    // local header：文件名/扩展段各自有一份长度，数据起点要用 local 那一份算。
-    if (localOffset + 30 > buf.length || buf.readUInt32LE(localOffset) !== 0x04034b50) continue;
-    const lNameLen = buf.readUInt16LE(localOffset + 26);
-    const lExtraLen = buf.readUInt16LE(localOffset + 28);
-    const dataStart = localOffset + 30 + lNameLen + lExtraLen;
-    const data = buf.slice(dataStart, dataStart + compressedSize);
-    if (method === 0) entries.set(name, data);
-    else if (method === 8) {
-      try { entries.set(name, inflateRawSync(data)); }
-      catch { /* 解压不了的成员跳过：缺它时由取用方报缺 */ }
-    }
+    const next = p + 46 + nameLen + extraLen + commentLen;
+    if (next > cdEnd) throw new ToolError("read_doc: zip 容器损坏（central directory 条目越界）");
+    const name = buf.toString("utf8", p + 46, p + 46 + nameLen);
+    entries.set(name, { method, compressedSize, expandedSize, localOffset });
+    p = next;
   }
-  return entries;
+
+  let expanded = 0;
+  function read(name: string): Buffer | undefined {
+    const entry = entries.get(name);
+    if (entry === undefined) return undefined;
+    const { method, compressedSize, expandedSize, localOffset } = entry;
+    if (localOffset + 30 > cdOffset || buf.readUInt32LE(localOffset) !== 0x04034b50) {
+      throw new ToolError(`read_doc: zip 成员头损坏（${name}）`);
+    }
+    const dataStart = localOffset + 30 + buf.readUInt16LE(localOffset + 26) + buf.readUInt16LE(localOffset + 28);
+    if (dataStart + compressedSize > cdOffset) throw new ToolError(`read_doc: zip 成员越界（${name}）`);
+    const limit = memberLimit(expanded);
+    if (expandedSize > limit || (method === 0 && compressedSize > limit)) throw expansionError();
+    const raw = buf.subarray(dataStart, dataStart + compressedSize);
+    let data: Buffer;
+    if (method === 0) data = raw;
+    else if (method === 8) {
+      try {
+        data = inflateRawSync(raw, { maxOutputLength: Math.max(1, limit) });
+      } catch (error) {
+        if (exceedsInflateLimit(error)) throw expansionError();
+        throw new ToolError(`read_doc: zip 成员解压失败（${name}）`);
+      }
+    } else throw new ToolError(`read_doc: zip 成员使用了不支持的压缩方式（${name}）`);
+    if (data.length > limit) throw expansionError();
+    expanded += data.length;
+    return data;
+  }
+  return { entries, read };
 }
+
+type ZipDocument = ReturnType<typeof readZipEntries>;
 
 function decodeEntities(s: string): string {
   return s
@@ -75,8 +147,8 @@ function xmlToText(xml: string, paragraphTags: boolean): string {
 }
 
 // ---- docx ----
-function extractDocx(entries: Map<string, Buffer>): string {
-  const doc = entries.get("word/document.xml");
+function extractDocx(archive: ZipDocument): string {
+  const doc = archive.read("word/document.xml");
   if (doc === undefined) throw new ToolError("read_doc: zip 容器里没有 word/document.xml——不是 docx");
   const text = xmlToText(doc.toString("utf8"), true);
   if (text === "") throw new ToolError("read_doc: docx 里没有可提取的正文（可能是空文档或纯图形）");
@@ -84,8 +156,43 @@ function extractDocx(entries: Map<string, Buffer>): string {
 }
 
 // ---- xlsx ----
-function extractXlsx(entries: Map<string, Buffer>): string {
-  const sharedRaw = entries.get("xl/sharedStrings.xml");
+function attributesOf(tag: string): Map<string, string> {
+  return new Map(Array.from(tag.matchAll(/([\w.:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g), (m) =>
+    [m[1]!, decodeEntities(m[2] ?? m[3] ?? "")]));
+}
+
+function firstSheetPath(archive: ZipDocument, workbook: string): string | undefined {
+  const relationships = archive.read("xl/_rels/workbook.xml.rels")?.toString("utf8");
+  const sheet = workbook.replace(/<!--[\s\S]*?-->/g, "").match(/<(?:[\w.-]+:)?sheet\b(?=[\s/>])(?:[^"'<>]|"[^"]*"|'[^']*')*>/);
+  const attributes = attributesOf(sheet?.[0] ?? "");
+  const relationshipId = attributes.get("r:id") ?? [...attributes].find(([name]) => name.endsWith(":id"))?.[1];
+  // 旧简化档缺席关系元数据时仍能读取。声明了关系的文件必须兑现，不按文件编号猜表。
+  if (relationshipId === undefined && relationships === undefined) {
+    const conventional = "xl/worksheets/sheet1.xml";
+    return archive.entries.has(conventional) ? conventional
+      : [...archive.entries.keys()].find((name) => name.startsWith("xl/worksheets/") && name.endsWith(".xml"));
+  }
+  if (relationshipId === undefined || relationships === undefined) throw new ToolError("read_doc: xlsx 首表关系缺失");
+  for (const match of relationships.replace(/<!--[\s\S]*?-->/g, "").matchAll(/<(?:[\w.-]+:)?Relationship\b(?=[\s/>])(?:[^"'<>]|"[^"]*"|'[^']*')*>/g)) {
+    const relation = attributesOf(match[0]);
+    if (relation.get("Id") !== relationshipId) continue;
+    const target = relation.get("Target");
+    const type = relation.get("Type");
+    if (!target || relation.get("TargetMode") === "External"
+      || (type !== undefined && !type.endsWith("/worksheet")) || /^[\w+.-]+:|^\/\/|[\\?#]/.test(target)) {
+      throw new ToolError("read_doc: xlsx 首个标签未指向内部工作表");
+    }
+    return posix.resolve("/xl", target).slice(1);
+  }
+  throw new ToolError("read_doc: xlsx 首表关系缺失");
+}
+
+function extractXlsx(archive: ZipDocument): string {
+  const workbook = archive.read("xl/workbook.xml")!.toString("utf8");
+  const sheetPath = firstSheetPath(archive, workbook);
+  const sheet = sheetPath === undefined ? undefined : archive.read(sheetPath);
+  if (sheet === undefined) throw new ToolError("read_doc: xlsx 里没有首表对应的工作表成员");
+  const sharedRaw = archive.read("xl/sharedStrings.xml");
   const shared: string[] = [];
   if (sharedRaw !== undefined) {
     const xml = sharedRaw.toString("utf8");
@@ -95,19 +202,11 @@ function extractXlsx(entries: Map<string, Buffer>): string {
       shared.push(parts.join(""));
     }
   }
-  // 第一张工作表：sheet1.xml 缺席时按 entries 里第一份 worksheets 成员兜底，不硬猜名字。
-  let sheet = entries.get("xl/worksheets/sheet1.xml");
-  if (sheet === undefined) {
-    for (const [name, data] of entries) {
-      if (name.startsWith("xl/worksheets/") && name.endsWith(".xml")) { sheet = data; break; }
-    }
-  }
-  if (sheet === undefined) throw new ToolError("read_doc: xlsx 里没有工作表成员");
   const xml = sheet.toString("utf8");
-  const totalRows = [...xml.matchAll(/<row[^>]*>/g)].length;
   const rows: string[] = [];
-  for (const row of xml.matchAll(/<row[^>]*>([\s\S]*?)<\/row>/g)) {
-    if (rows.length >= XLSX_MAX_ROWS) break;
+  let truncated = false;
+  for (const row of xml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)) {
+    if (rows.length >= XLSX_MAX_ROWS) { truncated = true; break; }
     const cells: string[] = [];
     for (const cell of row[1]!.matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
       if (cells.length >= 50) break;
@@ -129,7 +228,7 @@ function extractXlsx(entries: Map<string, Buffer>): string {
     rows.push(cells.join("\t"));
   }
   if (rows.length === 0) throw new ToolError("read_doc: xlsx 首表没有可提取的行（可能是空表）");
-  return rows.join("\n") + (totalRows > XLSX_MAX_ROWS ? `\n[read_doc] 行数超 ${String(XLSX_MAX_ROWS)}，已截断` : "");
+  return rows.join("\n") + (truncated ? `\n[read_doc] 行数超 ${String(XLSX_MAX_ROWS)}，已截断` : "");
 }
 
 // ---- pdf（best-effort 文本层）----
@@ -148,6 +247,7 @@ function collectPdfContentStreams(buf: Buffer): string[] {
   const segments: string[] = [];
   const STREAM_MARK = "stream";
   let searchFrom = 0;
+  let expanded = 0;
   for (;;) {
     const sig = latin.indexOf(STREAM_MARK, searchFrom);
     if (sig < 0) break;
@@ -158,16 +258,26 @@ function collectPdfContentStreams(buf: Buffer): string[] {
     const end = latin.indexOf("endstream", start);
     if (end < 0) break;
     const rawBytes = buf.slice(start, end);
-    let content = "";
-    try { content = inflateSync(rawBytes).toString("latin1"); }
-    catch { content = rawBytes.toString("latin1"); }
+    const limit = memberLimit(expanded);
+    let data: Buffer;
+    try {
+      data = inflateSync(rawBytes, { maxOutputLength: Math.max(1, limit) });
+    } catch (error) {
+      if (exceedsInflateLimit(error)) throw expansionError();
+      data = rawBytes;
+    }
+    if (data.length > limit) throw expansionError();
+    expanded += data.length;
+    const content = data.toString("latin1");
     if (/\bT[jJ]\b/.test(content)) segments.push(content);
     searchFrom = end + "endstream".length;
   }
   return segments;
 }
 
-function extractPdfText(buf: Buffer): string {
+/** pdf → 文本层。加密件在入口就点名拒绝（「先解除加密再读」的可行动出口）。
+ *  导出只为判卷（承诺面证人直接钉函数本体；同 planDecisionFor 先例）。 */
+export function extractPdfText(buf: Buffer): string {
   if (/\/Encrypt\b/.test(buf.toString("latin1"))) {
     throw new ToolError("read_doc: 加密 PDF 不支持（先解除加密再读）");
   }
@@ -193,22 +303,15 @@ export const read_doc: Tool = {
     const rel = typeof args.path === "string" && args.path.trim() !== "" ? args.path : "";
     if (rel === "") throw new ToolError("read_doc: path 参数必须是非空字符串（pdf/docx/xlsx 文件）");
     const target = await resolveReadTarget(ctx.workspace, rel, "read_doc", ctx.externalReadGrants);
-    const buf = await readFile(target.abs).catch((err: NodeJS.ErrnoException) => {
-      if (err.code === "ENOENT") throw new ToolError(`read_doc: 文件不存在: ${rel}`);
-      if (err.code === "EISDIR") throw new ToolError(`read_doc: ${rel} 是目录不是文件`);
-      throw err;
-    });
-    if (buf.length > DOC_MAX_FILE_BYTES) {
-      throw new ToolError(`read_doc: 文件超过 ${String(DOC_MAX_FILE_BYTES / (1024 * 1024))}MB 上限（${rel}）`);
-    }
+    const buf = await readDocumentFile(target.abs, rel);
     const isZip = buf.length > 4 && buf[0] === 0x50 && buf[1] === 0x4b;
     const isPdf = buf.length > 4 && buf.toString("latin1", 0, 5) === "%PDF-";
     let kind = "";
     let text = "";
     if (isZip) {
-      const entries = readZipEntries(buf);
-      if (entries.has("word/document.xml")) { kind = "docx"; text = extractDocx(entries); }
-      else if (entries.has("xl/workbook.xml")) { kind = "xlsx"; text = extractXlsx(entries); }
+      const archive = readZipEntries(buf);
+      if (archive.entries.has("word/document.xml")) { kind = "docx"; text = extractDocx(archive); }
+      else if (archive.entries.has("xl/workbook.xml")) { kind = "xlsx"; text = extractXlsx(archive); }
       else {
         throw new ToolError("read_doc: 是 zip 容器但不是 docx/xlsx（本工具只读这两类 Office 文档与 pdf）");
       }

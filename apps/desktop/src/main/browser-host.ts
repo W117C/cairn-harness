@@ -274,6 +274,7 @@ export class BrowserHost {
     if (e === undefined) return;
     if (rect.width <= 0 || rect.height <= 0) {
       e.view.setVisible(false);
+      if (this.activeKeyByWin.get(e.owner.id) === key) this.activeKeyByWin.delete(e.owner.id);
       return;
     }
     e.view.setVisible(true);
@@ -283,45 +284,45 @@ export class BrowserHost {
     this.activeKeyByWin.set(e.owner.id, key);
   }
 
-  /** 浏览器驾驶三件用：当前活动标签（用户看得见的那张）；窗格全关/全隐藏 ⇒ null。 */
-  activeTabId(owner?: BrowserWindow | null): string | null {
-    const win = owner ?? this.getWindow();
+  private activeEntry(owner?: BrowserWindow | null): Entry | null {
+    const win = owner === undefined ? this.getWindow() : owner;
     if (win === null || win.isDestroyed()) return null;
     const key = this.activeKeyByWin.get(win.id);
     if (key === undefined) return null;
-    const e = this.entries.get(key);
-    if (e === undefined || e.view.webContents.isDestroyed()) return null;
-    return e.tabId;
+    const entry = this.entries.get(key);
+    return entry !== undefined && !entry.view.webContents.isDestroyed() ? entry : null;
+  }
+
+  /** 浏览器驾驶三件用：当前活动标签（用户看得见的那张）；窗格全关/全隐藏 ⇒ null。 */
+  activeTabId(owner?: BrowserWindow | null): string | null {
+    return this.activeEntry(owner)?.tabId ?? null;
   }
 
   /** browser_navigate 的执行端：先过与 will-navigate 同一把 host 闸（未授权拒，工具不借道越闸），
    *  过闸后走 open() 的既有全链（视图复用/授权登记/加载失败推送）。活动标签不存在 ⇒ 拒。 */
   agentNavigate(url: string, owner?: BrowserWindow | null): { ok: boolean; error?: string } {
-    const tabId = this.activeTabId(owner);
-    if (tabId === null) {
+    const entry = this.activeEntry(owner);
+    if (entry === null) {
       return { ok: false, error: "侧栏浏览器没有活动标签——先让用户打开浏览器窗格（⌘⇧B 或工具栏），再导航" };
     }
     if (!this.targetAllowed(url)) {
       const host = (() => { try { return new URL(url).hostname; } catch { return url; } })();
       return { ok: false, error: `站点未授权：${host}——授权走窗格地址栏的手动首访（弹卡允许后工具就能导航）` };
     }
-    const win = owner ?? this.getWindow();
-    const opened = this.open(tabId, url, win);
+    const opened = this.open(entry.tabId, url, entry.owner);
     return opened.ok ? { ok: true } : opened;
   }
 
   /** browser_snapshot：当前页 URL/标题/可见文本（帽 8000 字符）。只内省，不发请求。 */
   async snapshot(owner?: BrowserWindow | null): Promise<{ ok: boolean; url?: string; title?: string; text?: string; error?: string }> {
-    const tabId = this.activeTabId(owner);
-    if (tabId === null) return { ok: false, error: "侧栏浏览器没有活动标签——先让用户打开浏览器窗格" };
-    const key = this.resolveKey(tabId, owner);
-    const e = key === null ? undefined : this.entries.get(key);
-    if (e === undefined) return { ok: false, error: "活动标签的视图已关闭" };
+    const e = this.activeEntry(owner);
+    if (e === null) return { ok: false, error: "侧栏浏览器没有活动标签——先让用户打开浏览器窗格" };
     try {
       const r = (await e.view.webContents.executeJavaScript(
         "JSON.stringify({ title: document.title, url: location.href, text: (document.body && document.body.innerText ? document.body.innerText : '').slice(0, 8000) })",
         false,
       )) as string;
+      if (this.activeEntry(e.owner) !== e) return { ok: false, error: "活动标签已切换或隐藏" };
       const parsed = JSON.parse(r) as { title?: string; url?: string; text?: string };
       return {
         ok: true,
@@ -336,11 +337,8 @@ export class BrowserHost {
 
   /** browser_pick：按 CSS 选择器查元素（文本片段 + 标签名，帽 10 条）。只内省。 */
   async pickBySelector(selector: string, max: number, owner?: BrowserWindow | null): Promise<{ ok: boolean; matches?: { text: string; tag: string }[]; error?: string }> {
-    const tabId = this.activeTabId(owner);
-    if (tabId === null) return { ok: false, error: "侧栏浏览器没有活动标签——先让用户打开浏览器窗格" };
-    const key = this.resolveKey(tabId, owner);
-    const e = key === null ? undefined : this.entries.get(key);
-    if (e === undefined) return { ok: false, error: "活动标签的视图已关闭" };
+    const e = this.activeEntry(owner);
+    if (e === null) return { ok: false, error: "侧栏浏览器没有活动标签——先让用户打开浏览器窗格" };
     // 选择器不原样拼进页面代码（页面上下文注入面）：JSON.stringify 成字符串字面量再进去。
     const script =
       "(() => { const sel = " + JSON.stringify(selector) + "; const cap = " + JSON.stringify(max) + ";" +
@@ -348,6 +346,7 @@ export class BrowserHost {
       " catch (e) { return JSON.stringify({ error: String(e && e.message || e) }); } })()";
     try {
       const r = (await e.view.webContents.executeJavaScript(script, false)) as string;
+      if (this.activeEntry(e.owner) !== e) return { ok: false, error: "活动标签已切换或隐藏" };
       const parsed = JSON.parse(r) as { error?: string } | { text: string; tag: string }[];
       if (!Array.isArray(parsed)) return { ok: false, error: parsed.error ?? "选择器执行失败" };
       return { ok: true, matches: parsed };
@@ -372,6 +371,7 @@ export class BrowserHost {
     const e = this.entries.get(key);
     if (e === undefined) return;
     this.entries.delete(key);
+    if (this.activeKeyByWin.get(e.owner.id) === key) this.activeKeyByWin.delete(e.owner.id);
     try {
       if (!e.owner.isDestroyed()) e.owner.contentView.removeChildView(e.view);
     } catch {

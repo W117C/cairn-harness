@@ -8,6 +8,9 @@ import { relocateRegisteredProject } from "../src/main/project-presence";
 import { handleAttachmentThumb } from "../src/main/thumb";
 import { parsePaneHash } from "../src/renderer/components/panes";
 import { popoutEventBelongsTo } from "../src/renderer/projections";
+import type { BrowserWindow } from "electron";
+import { makeBrowserAgentTools } from "../src/main/browser-agent-tools";
+import { WindowWorkspaceContext } from "../src/main/window-workspace-context";
 import { createKernelHost } from "../src/main/kernel-host";
 import { createSession as createSessionInRoot, pathOf } from "../../../src/main/sessions";
 
@@ -38,7 +41,11 @@ vi.mock("electron", () => {
       close: () => { this.webContents.destroyed = true; },
       reload: vi.fn(),
       setWindowOpenHandler: vi.fn(),
-      executeJavaScript: vi.fn(async () => ({ ok: true, selector: "#app" })),
+      executeJavaScript: vi.fn(async (script: string) => {
+        if (script.includes("location.href")) return JSON.stringify({ url: this.webContents.url, text: this.webContents.url });
+        if (script.includes("querySelectorAll")) return JSON.stringify([{ text: this.webContents.url, tag: "div" }]);
+        return { ok: true, selector: "#app" };
+      }),
       on: (event: string, fn: (...args: unknown[]) => void) => {
         const list = this.listeners.get(event) ?? [];
         list.push(fn);
@@ -62,6 +69,29 @@ vi.mock("electron", () => {
     },
   };
 });
+
+
+function makeWindow(id: number) {
+  const children = new Set<unknown>();
+  const closeHandlers: (() => void)[] = [];
+  let destroyed = false;
+  return {
+    id,
+    isDestroyed: () => destroyed,
+    contentView: {
+      addChildView: (v: unknown) => { children.add(v); },
+      removeChildView: (v: unknown) => { children.delete(v); },
+    },
+    once: (ev: string, cb: () => void) => {
+      if (ev === "closed") closeHandlers.push(cb);
+    },
+    destroyWindow: () => {
+      destroyed = true;
+      for (const cb of closeHandlers) cb();
+    },
+    childCount: () => children.size,
+  };
+}
 
 describe("Wave 5 desktop main regressions", () => {
   it("relocateRegisteredProject updates registry and syncs KernelHost workspaces", async () => {
@@ -122,28 +152,6 @@ describe("Wave 5 desktop main regressions", () => {
 
   it("BrowserHost isolates same tab id across multiple BrowserWindows and scopes push callbacks", async () => {
     const { BrowserHost } = await import("../src/main/browser-host");
-    const makeWindow = (id: number) => {
-      const children = new Set<unknown>();
-      const closeHandlers: (() => void)[] = [];
-      let destroyed = false;
-      return {
-        id,
-        isDestroyed: () => destroyed,
-        contentView: {
-          addChildView: (v: unknown) => { children.add(v); },
-          removeChildView: (v: unknown) => { children.delete(v); },
-        },
-        once: (ev: string, cb: () => void) => {
-          if (ev === "closed") closeHandlers.push(cb);
-        },
-        destroyWindow: () => {
-          destroyed = true;
-          for (const cb of closeHandlers) cb();
-        },
-        childCount: () => children.size,
-      };
-    };
-
     const win1 = makeWindow(1);
     const win2 = makeWindow(2);
     const pushes: { winId: number | undefined; id: string; url: string }[] = [];
@@ -171,6 +179,56 @@ describe("Wave 5 desktop main regressions", () => {
 
     win1.destroyWindow();
     expect(host.webContentsForAudit("b1", win1 as never)).toBeNull();
+  });
+
+  it("模型浏览器工具在焦点切换后仍操作发起运行的窗口", async () => {
+    const { BrowserHost } = await import("../src/main/browser-host");
+    const a = makeWindow(1) as unknown as BrowserWindow;
+    const b = makeWindow(2) as unknown as BrowserWindow;
+    let focused = a;
+    const host = new BrowserHost(() => focused, () => {});
+    const context = new WindowWorkspaceContext<BrowserWindow>(async (path) => path);
+    const tools = makeBrowserAgentTools(host, () => context.currentRunOwner());
+    const ctx = { workspace: "/project" };
+    const bounds = { x: 0, y: 0, width: 400, height: 300 };
+    host.open("tab", "https://example.com/a", a);
+    host.open("tab", "https://example.com/b", b);
+    host.setBounds("tab", bounds, a);
+    host.setBounds("tab", bounds, b);
+
+    await context.run(a, async () => {
+      await Promise.resolve();
+      focused = b;
+      expect(await tools.snapshot.run({}, ctx)).toMatchObject({ ok: true, output: expect.stringContaining("https://example.com/a") });
+      expect(await tools.pick.run({ selector: "div" }, ctx)).toMatchObject({ ok: true, output: expect.stringContaining("https://example.com/a") });
+      expect(await tools.navigate.run({ url: "https://example.com/next" }, ctx)).toMatchObject({ ok: true });
+    }, true);
+    expect(host.webContentsForAudit("tab", a)?.getURL()).toBe("https://example.com/next");
+    expect(host.webContentsForAudit("tab", b)?.getURL()).toBe("https://example.com/b");
+    expect(await context.run(a, () => tools.snapshot.run({}, ctx))).toMatchObject({ ok: false });
+    expect(await tools.snapshot.run({}, ctx)).toMatchObject({ ok: false });
+    expect(await tools.pick.run({ selector: "div" }, ctx)).toMatchObject({ ok: false });
+    expect(await tools.navigate.run({ url: "https://example.com/next" }, ctx)).toMatchObject({ ok: false });
+  });
+
+  it("浏览器隐藏活动标签后停止读取，隐藏其他标签不影响活动标签", async () => {
+    const { BrowserHost } = await import("../src/main/browser-host");
+    const window = makeWindow(1) as unknown as BrowserWindow;
+    const host = new BrowserHost(() => window, () => {});
+    const bounds = { x: 0, y: 0, width: 400, height: 300 };
+    const hidden = { ...bounds, width: 0 };
+    host.open("old", "https://example.com/old", window);
+    host.open("active", "https://example.com/active", window);
+    host.setBounds("old", bounds, window);
+    host.setBounds("active", bounds, window);
+    host.setBounds("old", hidden, window);
+    expect(await host.snapshot(window)).toMatchObject({ ok: true, url: "https://example.com/active" });
+    const reading = host.snapshot(window);
+    host.setBounds("active", hidden, window);
+    expect(await reading).toMatchObject({ ok: false });
+    expect(await host.snapshot(window)).toMatchObject({ ok: false });
+    expect(await host.pickBySelector("div", 1, window)).toMatchObject({ ok: false });
+    expect(host.agentNavigate("https://example.com/next", window)).toMatchObject({ ok: false });
   });
 
   it("handleAttachmentThumb reads asynchronously and validates extension/decode", async () => {

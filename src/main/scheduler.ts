@@ -11,15 +11,16 @@
 //   AskGate 承担；超时双闸 = runTimeoutMs（到点 abort，轮界收束）+ settlesWithin（宿主不响应时的二道退出）。
 // - 完成回写：summarizeRun 纯投影摘要（零新 LLM 调用）→ automation_completed 事件（复用 report 卡类型）。
 // electron-free；tick/jitter/clock/executor 全部可注入，验收禁止真实 sleep 等触发。
-import { mkdir, open, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rm, stat, writeFile, type FileHandle } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { writeFileAtomic } from "../atomic-write";
 import { processLiveness } from "../process-liveness";
 import type { PermissionMode } from "../permissions/modes";
 import { Cron } from "croner";
 import type { AgentEvent } from "../events";
-import { createEventLog, hasEventLogHandle, invalidateEventLogHandle, replay, resolveHandle } from "../events";
+import { createEventLog, invalidateEventLogHandle, replay, resolveHandle } from "../events";
 import { createSession, isValidSessionName, pathOf } from "./sessions";
+import { parseMutationLockPid } from "./session-mutation-lock";
 import { createIdleTask, readIdleTasks, saveIdleTasks, type IdleTaskResult, type IdleTaskSnapshot, type StoredIdleTask } from "./idle-tasks";
 import {
   normalizeTimeZone,
@@ -138,42 +139,80 @@ const journalChain = new Map<string, Promise<unknown>>();
  *  与准入锁 `automations.lock` 分开：准入锁内会调用 append，共用一把会自锁。 */
 const JOURNAL_FILE_LOCK = "automations-journal.lock";
 
+async function schedulerLockOwner(path: string): Promise<ReturnType<typeof processLiveness>> {
+  try {
+    return processLiveness(parseMutationLockPid(await readFile(path, "utf8")));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "unknown";
+    throw error;
+  }
+}
+
+async function releaseSchedulerLock(path: string, handle: FileHandle): Promise<void> {
+  try {
+    const owned = await handle.stat();
+    const current = await stat(path);
+    if (current.dev === owned.dev && current.ino === owned.ino) {
+      await rm(path, { force: true });
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      console.warn(`[scheduler] 无法释放调度锁 ${path}:`, error);
+    }
+  } finally {
+    await handle.close().catch(() => undefined);
+  }
+}
+
+async function acquireSchedulerLock(path: string): Promise<FileHandle | null> {
+  let handle: FileHandle;
+  try {
+    handle = await open(path, "wx");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") return null;
+    throw error;
+  }
+  try {
+    await handle.writeFile(String(process.pid));
+    return handle;
+  } catch (error) {
+    await releaseSchedulerLock(path, handle);
+    throw error;
+  }
+}
+
+async function recoverSchedulerLock(path: string): Promise<boolean> {
+  const recoveryPath = path + ".recovery";
+  const recovery = await acquireSchedulerLock(recoveryPath);
+  if (recovery === null) return false;
+  try {
+    // 首次读到的陈旧锁可能已经换代。串行化回收后重查，只删确认已退出的持有者。
+    if (await schedulerLockOwner(path) !== "dead") return false;
+    await rm(path, { force: true });
+    return true;
+  } finally {
+    await releaseSchedulerLock(recoveryPath, recovery);
+  }
+}
+
 async function withJournalFileLock<T>(file: string, job: () => Promise<T>): Promise<T> {
   const lockPath = join(dirname(file), JOURNAL_FILE_LOCK);
   const deadline = Date.now() + 5_000;
+  await mkdir(dirname(file), { recursive: true });
   for (;;) {
-    let fh: Awaited<ReturnType<typeof open>>;
-    try {
-      await mkdir(dirname(file), { recursive: true });
-      fh = await open(lockPath, "wx");
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-      const pidRaw = await readFile(lockPath, "utf8").catch(() => "");
-      const holderPid = Number.parseInt(pidRaw.trim(), 10);
-      const liveness = Number.isInteger(holderPid) && holderPid > 0 ? processLiveness(holderPid) : "unknown";
-      if (liveness === "dead") {
-        await rm(lockPath, { force: true }).catch(() => undefined);
-        continue;
+    const handle = await acquireSchedulerLock(lockPath);
+    if (handle !== null) {
+      try {
+        return await job();
+      } finally {
+        await releaseSchedulerLock(lockPath, handle);
       }
-      const st = await stat(lockPath).catch(() => null);
-      // PID 复用/坏内容：超过两分钟的锁按陈旧处理（journal 写入是毫秒级临界区）。
-      // **活着的持有者不抢**：mtime 陈旧 + holder 存活 = 持有者卡死或时钟偏斜——抢锁会造出
-      // 两个并发写者（比等到 deadline 拒跑更糟）；持有者真死了走上面的 liveness 分支。
-      if (liveness !== "alive" && st !== null && Date.now() - st.mtimeMs > 120_000) {
-        await rm(lockPath, { force: true }).catch(() => undefined);
-        continue;
-      }
-      if (Date.now() >= deadline) throw new Error(`调度日志正被另一个进程占用：${lockPath}`);
-      await new Promise((resolve) => setTimeout(resolve, 10));
-      continue;
     }
-    try {
-      await fh.writeFile(String(process.pid));
-      return await job();
-    } finally {
-      await fh.close().catch(() => undefined);
-      await rm(lockPath, { force: true }).catch(() => undefined);
+    if (await schedulerLockOwner(lockPath) === "dead" && await recoverSchedulerLock(lockPath)) continue;
+    if (Date.now() >= deadline) {
+      throw new Error(`调度日志锁无法取得，请检查锁及其回收标记是否为崩溃残留：${lockPath}`);
     }
+    await new Promise((resolve) => setTimeout(resolve, 10));
   }
 }
 
@@ -192,12 +231,7 @@ function onJournalPath<T>(file: string, job: () => Promise<T>): Promise<T> {
 
 export async function appendJournalEntry(file: string, entry: JournalEntry): Promise<void> {
   await onJournalPath(file, () => withJournalFileLock(file, async () => {
-    // X2：常驻文件句柄直写（与 A1 同族）——裸 appendFile 是 open+write+close 三连（实测 2,220µs/次），
-    // journal 是 append-only，复用 events 的 resolveHandle（含 inode 校验 + 有界缓存 + 串行化）。
-    // mkdir 只在**首次**（该 path 尚无句柄）时做：本机 mkdir(recursive) 实测 ≈2,126µs/次，是 10k
-    // 级 append 的主成本；目录已存在时每次都做会把这条路径钉死在毫秒级。
-    if (!hasEventLogHandle(file)) await mkdir(dirname(file), { recursive: true });
-    const fh = await resolveHandle(file);
+    const fh = await resolveHandle(file, isJournalEntry);
     await fh.write(JSON.stringify(entry) + "\n");
   }));
 }
@@ -237,6 +271,12 @@ export async function compactJournalIfLarge(
   }));
 }
 
+function isJournalEntry(value: unknown): value is JournalEntry {
+  if (value === null || typeof value !== "object") return false;
+  const row = value as Partial<JournalEntry>;
+  return typeof row.task_id === "string" && typeof row.occurrence_key === "string" && typeof row.decision === "string";
+}
+
 /** 读调度日志（append-only；坏行跳过 + 警告，不断链）。 */
 export async function readJournalFile(file: string): Promise<{ entries: JournalEntry[]; warnings: string[] }> {
   const warnings: string[] = [];
@@ -251,8 +291,8 @@ export async function readJournalFile(file: string): Promise<{ entries: JournalE
     const t = line.trim();
     if (t === "") return;
     try {
-      const e = JSON.parse(t) as JournalEntry;
-      if (typeof e.task_id === "string" && typeof e.occurrence_key === "string" && typeof e.decision === "string") {
+      const e: unknown = JSON.parse(t);
+      if (isJournalEntry(e)) {
         entries.push(e);
       } else {
         warnings.push(`journal 第 ${String(i + 1)} 行缺关键字段，已跳过`);
@@ -838,43 +878,20 @@ export class Scheduler {
     return next;
   }
 
-  /** 跨进程准入锁（O_EXCL + 陈旧清理）。返回 false = 锁被活着的另一进程持有。 */
+  /** 跨进程准入锁。活着或无法确认的持有者都让路。 */
   private async withCrossProcessLock<T>(fn: () => Promise<T>): Promise<T | false> {
     const lockPath = join(this.deps.dataDir, "automations.lock");
-    const tryOnce = async (): Promise<T | false> => {
-      let fh: Awaited<ReturnType<typeof open>>;
-      try {
-        await mkdir(this.deps.dataDir, { recursive: true });
-        fh = await open(lockPath, "wx");
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-        return false;
-      }
-      try {
-        try {
-          await fh.writeFile(String(process.pid));
-        } finally {
-          await fh.close().catch(() => undefined);
-        }
-        return await fn();
-      } finally {
-        await rm(lockPath, { force: true }).catch(() => undefined);
-      }
-    };
-    const first = await tryOnce();
-    if (first !== false) return first;
-    // 陈旧锁（崩溃留下的）：核对持有者 PID 是否存活，避免误删仍在准入的慢进程锁，同时在持有者已死时立即回收。
-    const pidRaw = await readFile(lockPath, "utf8").catch(() => "");
-    const holderPid = Number.parseInt(pidRaw.trim(), 10);
-    const liveness = Number.isInteger(holderPid) && holderPid > 0 ? processLiveness(holderPid) : "unknown";
-    if (liveness === "alive") return false;
-    const st = await stat(lockPath).catch(() => null);
-    if (liveness === "dead" || (st !== null && this.clock() - st.mtimeMs > 120_000)) {
-      await rm(lockPath, { force: true }).catch(() => undefined);
-      const retry = await tryOnce();
-      return retry;
+    await mkdir(this.deps.dataDir, { recursive: true });
+    let handle = await acquireSchedulerLock(lockPath);
+    if (handle === null && await schedulerLockOwner(lockPath) === "dead" && await recoverSchedulerLock(lockPath)) {
+      handle = await acquireSchedulerLock(lockPath);
     }
-    return false;
+    if (handle === null) return false;
+    try {
+      return await fn();
+    } finally {
+      await releaseSchedulerLock(lockPath, handle);
+    }
   }
 
   /** 把磁盘上（别的进程刚写的）新 journal 条目并入内存去重表。 */

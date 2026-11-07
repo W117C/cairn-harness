@@ -610,6 +610,28 @@ function runWriteScript(
   return { out: r.out, ws, written: existsSync(join(ws, "payload.txt")), logInWorkspace: r.out.includes(join(ws, ".agent", "sessions")) };
 }
 
+describe("cairn CLI：质量档", () => {
+  it("在帮助中列出质量档", () => {
+    expect(runCli(["--help"]).out).toMatch(/^\s+--quality\s/m);
+  });
+
+  it("识别质量档，并在写盘后无验证器时返回失败", () => {
+    const ws = mkdtempSync(join(tmpdir(), "cairn-cli-quality-"));
+    try {
+      const script = writeScript(ws);
+      const r = runCli(
+        ["--quality", "--workspace", ws, "--provider", "demo", "--mode", "auto", "写入 payload.txt"],
+        { env: { M3A_MAIN_SCRIPT: script }, timeout: 15_000 },
+      );
+      expect(r.status, r.out).toBe(1);
+      expect(readFileSync(join(ws, "payload.txt"), "utf8")).toBe("写下来了\n");
+      expect(r.out).toContain("quality gate");
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  }, 20_000);
+});
+
 describe("cairn CLI：默认档位是 fail-closed 的那一档", () => {
   /* 原来这条读源码（`pick("--mode") ?? "default"`），可 `--mode` 到底进没进裁决只有真跑能答。
      判据用「同一个剧本、同一个工作区，只差 argv 里有没有 --mode」：

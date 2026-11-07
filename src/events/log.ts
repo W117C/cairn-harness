@@ -20,103 +20,68 @@ const logHandles = new Map<string, CachedHandle>();
 /** 按 path 串行化句柄解析（照抄 replayChain 写法）：并发 append 在 await 间隙不得各开一次句柄。 */
 const logHandleChain = new Map<string, Promise<FileHandle>>();
 
-/** 半写尾行的扫描上限：尾段超过它仍无换行就**不猜边界**（见 `repairPartialTail` 的分支二）。 */
-/** 尾部反向扫描上限：64MB。旧值 1MB 对一条超大 tool_result（>1MB）不够——扫描会停在上限、
- *  走「补换行隔离」分支，下一次 append 就把坏行升级成中段坏行（会话永久打不开）。 */
+/** Uncertain tails beyond this limit must remain untouched. */
 const TAIL_SCAN_CAP = 64 << 20;
-/** 识别「完整但缺换行」尾事件的最大解析字节。超过它的尾段不做 JSON.parse（避免为一条坏尾
- *  吃掉无界内存）；这类文件本来就会走「不猜边界」的隔离分支。 */
-const COMPLETE_TAIL_PARSE_MAX = 16 << 20;
 
-/** 尾段是否是一条完整的、已知类型的事件（与 append 的写入口径一致）。 */
-function isCompleteEventText(text: string): boolean {
-  const trimmed = text.trim();
-  if (trimmed === "") return false;
-  try {
-    const parsed: unknown = JSON.parse(trimmed);
-    if (parsed === null || typeof parsed !== "object") return false;
-    const type = (parsed as { type?: unknown }).type;
-    return typeof type === "string" && Object.hasOwn(KNOWN_TYPES, type);
-  } catch {
-    return false;
-  }
+function isEventRecord(value: unknown): value is AgentEvent {
+  return value !== null && typeof value === "object" && typeof (value as { type?: unknown }).type === "string";
 }
 
-/** 半写尾行修复（只在新开句柄时做，= 跨进程续写的唯一入口）：
- *  进程被硬杀在单次 `write` 中途时，文件尾可能留下**半条 JSON**。读者侧一直按「尾部半写可丢」
- *  容错（`replay`/`replayIncremental`），但写入侧此前没人补这一步——下一次 append 会把它和
- *  下一条事件拼成**一条**坏行，于是**新事件静默不可见**（2026-10-01 M8 侧发现并登记的边界，
- *  本笔收口）。这里把没成行的尾段裁掉并响亮告警：丢的是从未成行的字节，而读者本来就看不见它们。
- *  **只在尾部修**：文件中间的坏行不动——那是另一类事故，重放会当场抛；不许被这条修安静地抹掉。
- *
- *  2026-10-19 修一个真缺陷（分支二打偏）：旧代码用 `scanned < TAIL_SCAN_CAP` 当循环条件，
- *  退出时分不清「扫完全文都没换行」与「扫到上限就收手」——**小于一个 chunk（64KB）的文件
- *  一轮就把全文扫完**，`cut` 仍是 null，于是掉进分支二：补一个换行把半写尾段**留在文件里**。
- *  那不是隔离，是**把尾部坏行升级成中间坏行**：`replay` 见到"坏行后面还有好行"会当场抛
- *  `midBadLineError`（跳过会使事件 id 与行号错位）⇒ 整个会话永久打不开，只能手工修文件。
- *  实测复现：全新日志的第一个事件被硬杀在写中途（33 字节无换行），下一次 append 后
- *  `replay` 抛「有 1 条非尾部坏行（首在第 1 行）」，并先打一句假的「尾部超过 1MB 无换行」
- *  ——文件总共 33 字节。而这条路正是 headless run 的常见形状（`agent-runner.ts` 先 rm 日志）。
- *  修法：循环退出后先问「扫到哪儿了」。`pos === 0` ⇒ 全文已扫，边界是已知的（没有换行）
- *  ⇒ 裁到 0；只有真被上限挡住（`scanned >= TAIL_SCAN_CAP` 且 `pos > 0`）才走"不猜边界"那支。 */
-async function repairPartialTail(path: string, fh: FileHandle): Promise<void> {
-  const size = (await fh.stat()).size;
+/** Retain a complete record even when the writer died before its newline. Truncate only a
+ *  malformed tail whose full byte range is known. Mid-log corruption is handled by replay. */
+async function repairPartialTail(
+  path: string, fh: FileHandle, isRecord: (value: unknown) => boolean,
+): Promise<void> {
+  const { size, mtimeMs } = await fh.stat();
   if (size === 0) return;
   const last = Buffer.allocUnsafe(1);
-  await fh.read(last, 0, 1, size - 1);
+  const changed = () => new Error(`日志尾部读取时发生变化，原文件未修改：${path}`);
+  if ((await fh.read(last, 0, 1, size - 1)).bytesRead !== 1) throw changed();
   if (last[0] === 0x0a) return; // 以换行收尾：没有半写尾行
   let pos = size;
-  let scanned = 0;
+  const scanStart = Math.max(0, size - TAIL_SCAN_CAP - 1);
   const chunk = 64 * 1024;
   let cut: number | null = null;
-  while (pos > 0 && scanned < TAIL_SCAN_CAP) {
-    const start = Math.max(0, pos - chunk);
+  while (pos > scanStart) {
+    const start = Math.max(scanStart, pos - chunk);
     const len = pos - start;
     const buf = Buffer.allocUnsafe(len);
-    await fh.read(buf, 0, len, start);
+    if ((await fh.read(buf, 0, len, start)).bytesRead !== len) throw changed();
     const idx = buf.lastIndexOf(0x0a);
     if (idx >= 0) {
       cut = start + idx + 1; // 指向最后一个换行符之后
       break;
     }
     pos = start;
-    scanned += len;
   }
-  // 扫完全文仍无换行：边界已知（cut = 0）——整个文件都是没成行的尾段。
-  // 与分支二的区别只在于"我们知不知道该裁在哪儿"，不在于文件大小。
   if (cut === null && pos === 0) cut = 0;
-  if (cut !== null) {
-    // 先别急着裁：写入可能已经完成，只是最后那条事件还没等到换行（崩溃窗口在 JSON 之后、
-    // 换行之前）。这种尾段 replay() 能完整读出来；裁掉它等于把一条已可见的事件从历史里删除，
-    // 后续事件 id 也跟着前移。只有「解析不成一条已知事件」的尾段才是真正的半写。
-    if (size - cut <= COMPLETE_TAIL_PARSE_MAX) {
-      const tail = Buffer.allocUnsafe(size - cut);
-      await fh.read(tail, 0, tail.length, cut);
-      if (isCompleteEventText(tail.toString("utf8"))) {
-        await fh.write("\n");
-        console.warn(
-          `[events] 检测到完整尾事件缺少换行：已补换行保留（${String(size - cut)} 字节，不裁剪）：${path}`,
-        );
-        return;
-      }
-    }
-    await fh.truncate(cut);
-    console.warn(
-      `[events] 检测到半写尾行（上次写入未完成，多半是被硬杀在写中途）：已丢弃未成行的 ${String(size - cut)} 字节并续写：${path}`,
-    );
+  if (cut === null || size - cut > TAIL_SCAN_CAP) {
+    throw new Error(`日志尾部超过 ${String(TAIL_SCAN_CAP >> 20)} MiB 无换行，无法安全续写，原文件未修改：${path}`);
+  }
+  const tail = Buffer.allocUnsafe(size - cut);
+  if ((await fh.read(tail, 0, tail.length, cut)).bytesRead !== tail.length) throw changed();
+  const current = await fh.stat();
+  if (current.size !== size || current.mtimeMs !== mtimeMs) throw changed();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(tail.toString("utf8").trim());
+  } catch {
+    // The entire tail was read, so invalid JSON is an incomplete record.
+  }
+  if (isRecord(parsed)) {
+    await fh.write("\n");
+    console.warn(`[events] 检测到完整尾事件缺少换行：已补换行保留（${String(tail.length)} 字节，不裁剪）：${path}`);
     return;
   }
-  // 扫到上限仍无换行（文件真的很大且一个换行都没有）：不猜边界。补一个换行把劣质尾段隔离——
-  // 这一支保持原样：那种文件不是半写一行，而是另一种事故，让重放**大声抛**（可见胜于静默）。
-  await fh.write("\n");
+  await fh.truncate(cut);
   console.warn(
-    `[events] 尾部超过 ${String(TAIL_SCAN_CAP / 1024 / 1024)}MB 无换行，放弃自动裁剪：已补换行隔离，重放会点名该坏行：${path}`,
+    `[events] 检测到半写尾行（上次写入未完成，多半是被硬杀在写中途）：已丢弃未成行的 ${String(tail.length)} 字节并续写：${path}`,
   );
 }
 
 /** 解析（必要时新建）path 的常驻句柄。inode 校验是必须的：agent-runner 会先 rm(logPath) 再
  *  createEventLog——不校验会把事件写进已 unlink 的旧 inode（静默丢数据）。 */
-async function resolveHandleInner(path: string): Promise<FileHandle> {
+async function resolveHandleInner(path: string, isRecord: (value: unknown) => boolean): Promise<FileHandle> {
   const st = await stat(path).catch(() => null);
   const cached = logHandles.get(path);
   if (cached && st !== null && st.ino === cached.ino) return cached.fh; // 同 inode → 复用
@@ -128,8 +93,14 @@ async function resolveHandleInner(path: string): Promise<FileHandle> {
   // `a+` 而不是 `a`：半写尾行修复要在**同一句柄**上回读文件尾（`a` 是只写 fd，read 报 EBADF）。
   // 追加语义逐字不变（O_APPEND：写永远落在末尾），只多一个可读位。
   const fh = await open(path, "a+");
-  await repairPartialTail(path, fh);
-  const ino = (await fh.stat()).ino;
+  let ino: number;
+  try {
+    await repairPartialTail(path, fh, isRecord);
+    ino = (await fh.stat()).ino;
+  } catch (error) {
+    await fh.close().catch(() => undefined);
+    throw error;
+  }
   if (logHandles.size >= LOG_HANDLE_MAX) {
     // 有界：淘汰最早插入的一条并关闭其句柄（照抄 replayCache 的淘汰写法；Map 插入序即 LRU-ish，
     // 不做访问序更新，保持简单）。
@@ -145,11 +116,11 @@ async function resolveHandleInner(path: string): Promise<FileHandle> {
 }
 
 /** 串行化入口（照抄 replayIncremental）：同一 path 的解析按到达顺序执行，跑完即回收链（有界）。
- *  导出给同族的 append-only 写路径复用（scheduler journal），不另造一套缓存/链。 */
-export async function resolveHandle(path: string): Promise<FileHandle> {
+ *  scheduler journal 共用缓存与修复流程，但用自己的行校验避免把已决记录误判为半写。 */
+export async function resolveHandle(path: string, isRecord: (value: unknown) => boolean = isEventRecord): Promise<FileHandle> {
   const prev = logHandleChain.get(path);
   const job = (prev === undefined ? Promise.resolve() : prev.catch(() => undefined)).then(() =>
-    resolveHandleInner(path),
+    resolveHandleInner(path, isRecord),
   );
   logHandleChain.set(path, job);
   try {
@@ -285,12 +256,12 @@ export async function replay(path: string, untilEventId?: string): Promise<Agent
       badLines.push(i + 1); // 半写行/坏行：先记下，按位置决定容忍还是判坏
       continue;
     }
-    if (!parsed || typeof parsed !== "object" || typeof (parsed as { type?: unknown }).type !== "string") {
+    if (!isEventRecord(parsed)) {
       badLines.push(i + 1); // 合法 JSON 但非事件对象（null / 123 / 数组）：同样按位置判定
       continue;
     }
     lastGoodLine = i + 1;
-    events.push(parsed as AgentEvent);
+    events.push(parsed);
   }
   const midBad = badLines.filter((l) => l < lastGoodLine);
   if (midBad.length > 0) throw midBadLineError(path, midBad);
@@ -322,8 +293,7 @@ function parseReplayLine(t: string): AgentEvent | null {
   } catch {
     return null;
   }
-  if (!parsed || typeof parsed !== "object" || typeof (parsed as { type?: unknown }).type !== "string") return null;
-  return parsed as AgentEvent;
+  return isEventRecord(parsed) ? parsed : null;
 }
 
 /** B8 同型（审查 S1-2）：共享缓存的「读尾部 + push + offset 推进」在 await 间隙会被并发

@@ -32,7 +32,7 @@ describe("活动工作区上下文（override）", () => {
     expect(read("src/main/ipc-protocol.ts")).toContain("setWorkspaceContext(path: string)");
     expect(read("apps/desktop/src/main/channels.ts")).toContain('setWorkspaceContext: "agent:set-workspace-context"');
     const main = read("apps/desktop/src/main/index.ts");
-    expect(main).toContain("new WindowWorkspaceContext(canonicalKnownProjectPath)");
+    expect(main).toContain("new WindowWorkspaceContext<WebContents>(canonicalKnownProjectPath)");
     expect(main).toContain("windowWorkspaces.run(event.sender");
     expect(main).toContain("windowWorkspaces.inherit(win.webContents)");
     expect(main).toContain("handleChangeDiff(req as never, resolveWorkspace())");

@@ -13,6 +13,7 @@ import type { ModelOutput, ProviderCall, ProviderMessage, ProviderToolSpec } fro
 import { reasoningDirective } from "./reasoning";
 import { capabilityForModel, type ThinkingEffort } from "./capabilities";
 import { PROVIDER_IDS, customProviderById, installedCustomProviders, type ModelSpec } from "./registry";
+import { providerApiKey } from "./env-keys";
 
 export interface RegistryWorkerCallOptions {
   call?: ProviderCall;
@@ -172,6 +173,7 @@ function pickWorkerModel(spec: ModelSpec, opts: ToWorkerModelOptions): RegistryW
         model: spec.model,
         baseURL: custom.baseURL,
         apiKeyEnv: custom.apiKeyEnv,
+        apiKey: providerApiKey(custom.id) ?? "",
         label: custom.label,
         ...(fetchImpl ? { fetchImpl } : {}),
         // 自定义家走的就是这三支适配器，思考档位按协议翻译（见 providers/reasoning.ts）

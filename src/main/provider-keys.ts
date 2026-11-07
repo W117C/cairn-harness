@@ -3,11 +3,14 @@
 // 复用 src/agent/plugins/secrets.ts 的 fail-closed 纪律：safeStorage 不可用 → **拒绝保存** +
 // 显式错误，绝不静默退回明文。Electron main 侧经 installProviderKeyBackend 注入 IO（headless/测试可换）。
 // 应用启动时解密注入 provider 配置（process.env.CAIRN_API_KEY，进程内；env 已在 = 优先，零行为）。
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { writeFileAtomic } from "../atomic-write";
 import type { SafeStorageIo } from "../agent/plugins/secrets";
 import { ENV_KEYED_PROVIDERS, customEnvKeyedProviders, type EnvKeyedProvider } from "../providers/env-keys";
 import { PROVIDER_ID_RE, RESERVED_PROVIDER_IDS } from "../providers/provider-identifiers";
+import { customProviderById } from "../providers/registry";
+import type { DerivedCustomProvider } from "../providers/provider-config";
 
 export type { SafeStorageIo };
 
@@ -15,7 +18,7 @@ export type { SafeStorageIo };
  *  { version: 1, keys: { <providerId>: { ciphertext: base64, updatedAt: ISO } } } */
 export interface ProviderKeyStore {
   version: 1;
-  keys: Record<string, { ciphertext: string; updatedAt: string }>;
+  keys: Record<string, { ciphertext: string; updatedAt: string; route?: string }>;
 }
 
 /** 无安全后端时的拒绝原因（fail-closed，不静默退回明文——secrets.ts NO_BACKEND_ERROR 同款纪律）。 */
@@ -29,8 +32,8 @@ export type ProviderId = EnvKeyedProvider;
 export interface ProviderKeyBackend {
   name: string;
   isAvailable(): boolean;
-  set(provider: string, plaintext: string): Promise<void>;
-  get(provider: string): Promise<string | null>;
+  set(provider: string, plaintext: string, route?: string): Promise<void>;
+  get(provider: string, route?: string): Promise<string | null>;
   delete(provider: string): Promise<boolean>;
   storedProviders(): Promise<string[]>;
 }
@@ -51,20 +54,31 @@ export function installProviderKeyBackend(io: SafeStorageIo, storePath: string):
   backend = {
     name: "safeStorage",
     isAvailable: () => io.isEncryptionAvailable(),
-    set: (provider, plaintext) => serialize(async () => {
+    set: (provider, plaintext, route) => serialize(async () => {
       const store = await readStore(storePath);
-      store.keys[provider] = { ciphertext: io.encryptString(plaintext).toString("base64"), updatedAt: new Date().toISOString() };
+      store.keys[provider] = {
+        ciphertext: io.encryptString(plaintext).toString("base64"),
+        updatedAt: new Date().toISOString(),
+        ...(route === undefined ? {} : { route }),
+      };
       await writeStore(storePath, store);
     }),
-    get: provider => serialize(async () => {
+    get: (provider, route) => serialize(async () => {
       const store = await readStore(storePath);
-      const v = store.keys[provider];
-      if (!v || typeof v.ciphertext !== "string") return null;
+      const entry = store.keys[provider];
+      if (!entry || (entry.route !== undefined && entry.route !== route)) return null;
+      let plaintext: string;
       try {
-        return io.decryptString(Buffer.from(v.ciphertext, "base64"));
+        plaintext = io.decryptString(Buffer.from(entry.ciphertext, "base64"));
       } catch {
-        return null; // 解密失败（换机器/换钥匙）→ null，不抛明文
+        return null;
       }
+      // Old stores had only the provider id. Bind on the first registered activation.
+      if (route !== undefined && entry.route === undefined) {
+        entry.route = route;
+        await writeStore(storePath, store);
+      }
+      return plaintext;
     }),
     delete: provider => serialize(async () => {
       const store = await readStore(storePath);
@@ -127,7 +141,7 @@ function parseProviderKeyStore(raw: unknown, registeredOnly: boolean): ReturnTyp
     if (!isProviderId(id) && !persistedCustom) return { ok: false, reason: "未知 provider id：" + id };
     if (typeof v !== "object" || v === null || Array.isArray(v)) return { ok: false, reason: "keys[" + id + "] 不是对象" };
     const e = v as Record<string, unknown>;
-    const uk = Object.keys(e).filter((k) => k !== "ciphertext" && k !== "updatedAt");
+    const uk = Object.keys(e).filter((k) => k !== "ciphertext" && k !== "updatedAt" && k !== "route");
     if (uk.length > 0) return { ok: false, reason: "keys[" + id + "] 未知字段：" + uk.join("、") };
     if (typeof e.ciphertext !== "string" || e.ciphertext === "" || !/^[A-Za-z0-9+/]+={0,2}$/.test(e.ciphertext)
       || Buffer.from(e.ciphertext, "base64").toString("base64") !== e.ciphertext) {
@@ -136,7 +150,10 @@ function parseProviderKeyStore(raw: unknown, registeredOnly: boolean): ReturnTyp
     if (typeof e.updatedAt !== "string" || Number.isNaN(Date.parse(e.updatedAt))) {
       return { ok: false, reason: "keys[" + id + "].updatedAt 不是可解析时间" };
     }
-    keys[id] = { ciphertext: e.ciphertext, updatedAt: e.updatedAt };
+    if (e.route !== undefined && (typeof e.route !== "string" || !/^[0-9a-f]{64}$/.test(e.route))) {
+      return { ok: false, reason: "keys[" + id + "].route 格式无效" };
+    }
+    keys[id] = { ciphertext: e.ciphertext, updatedAt: e.updatedAt, ...(e.route === undefined ? {} : { route: e.route }) };
   }
   return { ok: true, value: { version: 1, keys } };
 }
@@ -158,6 +175,15 @@ function isCustomProviderId(v: string): boolean {
 }
 
 
+export function customProviderKeyRoute(provider: DerivedCustomProvider): string {
+  return createHash("sha256").update(JSON.stringify([provider.id, provider.protocol, provider.baseURL, provider.apiKeyEnv])).digest("hex");
+}
+
+function registeredKeyRoute(id: string): string | undefined {
+  const provider = customProviderById(id);
+  return provider === undefined ? undefined : customProviderKeyRoute(provider);
+}
+
 /** 存一个 provider key；无后端 / 非白名单 provider → fail-closed 拒绝（绝不静默退回明文）。 */
 export async function putProviderKey(
   provider: string,
@@ -167,7 +193,7 @@ export async function putProviderKey(
   if (!isProviderId(provider)) return { ok: false, error: "未知 provider：" + provider + "（白名单：" + PROVIDER_IDS.join("/") + "）" };
   if (plaintext.trim() === "") return { ok: false, error: "key 为空（拒存）" };
   try {
-    await backend.set(provider, plaintext);
+    await backend.set(provider, plaintext, registeredKeyRoute(provider));
     return { ok: true };
   } catch {
     return { ok: false, error: "保存 provider key 失败：请检查安全存储、文件格式与权限；原有配置未被替换" };
@@ -175,9 +201,9 @@ export async function putProviderKey(
 }
 
 /** 无后端/未存/解密失败 → null；存储不可读或损坏显式抛错，错误不含密文或明文。 */
-export async function getProviderKey(provider: string): Promise<string | null> {
+export async function getProviderKey(provider: string, route = registeredKeyRoute(provider)): Promise<string | null> {
   if (!backend || !backend.isAvailable() || !isProviderId(provider)) return null;
-  return await backend.get(provider);
+  return await backend.get(provider, route);
 }
 
 /** 删除一个 provider key（用户经设置页显式删除）。 */

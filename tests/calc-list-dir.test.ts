@@ -7,7 +7,7 @@ import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { calc } from "../src/tools/calc";
+import { calc, tokenize } from "../src/tools/calc";
 import { list_dir } from "../src/tools/list_dir";
 import { ToolError } from "../src/tools";
 import { workerToolSpecs } from "../src/agent/worker-shell-tools";
@@ -51,6 +51,12 @@ describe("calc", () => {
     await expect(run("0xff")).rejects.toBeInstanceOf(ToolError);
     await expect(run("1 +")).rejects.toBeInstanceOf(ToolError);
     await expect(run("(1 + 2")).rejects.toBeInstanceOf(ToolError);
+  });
+
+  it("tokenize：不认识的字符当场点名（承诺面证人）", () => {
+    // 「不认识的字符」这句承诺住在 tokenize 的错误分支（不吞进解析器报含糊的语法错误）——
+    // 证人直接钉函数本体（2026-11-07 承诺清单账，台账第 1040 页）。
+    expect(() => tokenize("2 & 3")).toThrow(/不认识的字符「&」/);
   });
 });
 

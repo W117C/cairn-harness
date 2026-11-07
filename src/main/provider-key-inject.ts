@@ -1,12 +1,22 @@
 // BYOK key 启动注入（M4b §2.1）：从 agent-runner 抽出为独立轻模块——
 // 原实现放在 agent-runner.ts（静态依赖链含 MCP SDK/LSP，测试环境动态导入约 20s），
 // provider-keys 单测为测本函数被迫导入整条重链而确定性超时（5s）。
-// 本模块只依赖 provider-keys + providers/env-keys：启动注入与测试两侧都不必为重依赖付导入成本。
-import { getProviderKey, PROVIDER_IDS } from "./provider-keys";
+// 本模块只依赖 provider-keys 与轻量 provider 注册表：启动注入与测试两侧都不必为重依赖付导入成本。
+import { customProviderKeyRoute, getProviderKey, PROVIDER_IDS } from "./provider-keys";
 import { customEnvKeyedProviders, envKeyOf } from "../providers/env-keys";
+import { customProviderById } from "../providers/registry";
+import type { DerivedCustomProvider } from "../providers/provider-config";
 
 // Only values injected by Cairn may be refreshed or removed. External env remains authoritative.
-const injectedValues = new Map<string, { provider: string; value: string }>();
+const injectedValues = new Map<string, { provider: string; value: string; route: string | undefined }>();
+
+/** An app-injected key belongs to the route that activated it. External env values stay explicit. */
+export function customProviderKeyForRun(provider: DerivedCustomProvider): string | undefined {
+  const value = process.env[provider.apiKeyEnv];
+  const injected = injectedValues.get(provider.apiKeyEnv);
+  if (injected === undefined || injected.value !== value) return value;
+  return injected.route === customProviderKeyRoute(provider) ? value : undefined;
+}
 
 /** Revoke only this provider's own values, including mappings no longer in the registry. */
 export function revokeInjectedProviderKey(provider: string, keepEnv?: string): boolean {
@@ -38,26 +48,27 @@ export async function injectStoredProviderKey(
     if (envName === null) {
       throw new Error(`provider-key 注入：provider=${JSON.stringify(provider)} 没有 env 名映射（须登记进 src/providers/env-keys.ts）`);
     }
-    if (revokeInjectedProviderKey(provider, envName)) injected = true;
+    const custom = customProviderById(provider);
+    const route = custom === undefined ? undefined : customProviderKeyRoute(custom);
     const current = process.env[envName];
     const owner = injectedValues.get(envName);
     const previous = owner?.provider === provider ? owner.value : undefined;
     if (owner !== undefined && current !== owner.value) injectedValues.delete(envName);
     if (current && current !== previous) continue;
-    const stored = await getProviderKey(provider);
+    const stored = await getProviderKey(provider, route);
     // Another refresh or the caller may change env while storage is being read.
     if (process.env[envName] !== current) continue;
     if (!stored) {
-      if (previous !== undefined && current === previous) {
+      if (previous !== undefined && current === previous && owner?.route === route) {
         delete process.env[envName];
         injectedValues.delete(envName);
         injected = true;
       }
       continue;
     }
-    if (stored === current) { injected = true; continue; }
+    if (revokeInjectedProviderKey(provider, envName)) injected = true;
     process.env[envName] = stored;
-    injectedValues.set(envName, { provider, value: stored });
+    injectedValues.set(envName, { provider, value: stored, route });
     injected = true;
   }
   return injected;

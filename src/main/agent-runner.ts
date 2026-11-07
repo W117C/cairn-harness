@@ -86,8 +86,9 @@ import { getLastWorkspace, setRunWorkspace } from "./runner-workspace";
 import { createSession, pathOf, sessionExists, type SessionInfo } from "./sessions";
 import { validateThinkingEffort } from "../providers/capabilities";
 import type { ModelOutput, Provider } from "../providers";
-import { installCustomProviders, installedCustomProviders } from "../providers/registry";
+import { customProviderById, isFreeformModelId, withCustomProviders } from "../providers/registry";
 import { loadCustomProviders } from "./custom-provider-store";
+import { customProviderKeyForRun } from "./provider-key-inject";
 import { validateRunRequestEnvelope } from "./run-request";
 import {
   MODEL_SHELL_TEST_ALIASES,
@@ -316,6 +317,7 @@ let interactiveRunAbort: AbortController | null = null;
 // 审批路由与权限态投影。
 interface RunScope {
   session: Session;
+  unattended: boolean;
   orchestrator: Orchestrator | null;
   agentRuntime: LocalAgentRuntime | null;
 }
@@ -541,23 +543,36 @@ export async function handleCompact(
   over: { sessionId?: string; sessionsRoot?: string } = {},
 ): Promise<{ ok: boolean; error?: string; cardPayload?: Record<string, unknown> }> {
   let logPath: string | null;
+  let sessionDir: string | null = null;
   if (over.sessionId !== undefined) {
     const dir = over.sessionsRoot ?? await resolveSessionRoot(over.sessionId);
     if (dir === null || !(await sessionExists(dir, over.sessionId))) return { ok: false, error: "会话不存在，未压缩" };
     logPath = pathOf(dir, over.sessionId);
+    sessionDir = dir;
   } else {
     logPath = lastLogPath;
   }
   if (!logPath) return { ok: false, error: "无会话日志（先跑一轮会话再 /compact）" };
   if (isSessionLogBusy(logPath)) return { ok: false, error: "该会话正在运行，先停止再压缩" };
+  // 与 handleAgentRun 同一条纪律：压缩摘要器要拨会话所属项目的自定义端点，不能被进程级/聚焦
+  // 工作区的全局注册表抢走（additive-only 也不够——同 id 的 session 端点必须胜出）。
+  // 工作区从 sessions 根向上推（<project>/.agent/sessions → <project>）；没有 .agent/providers.json
+  // 时 loadCustomProviders 返回 absent，withCustomProviders 用空数组 ⇒ 退回全局注册表，零行为变化。
+  const workspace = sessionDir !== null
+    ? resolve(sessionDir, "..", "..")
+    : null;
+  const loaded = workspace !== null ? loadCustomProviders(workspace) : { kind: "absent" as const, path: "" };
+  const providers = loaded.kind === "ok" ? loaded.derived : [];
   const log = createEventLog(logPath);
   try {
-    const res = await compactSessionLog(
-      logPath,
-      async (e) => { await log.append(e); hooks.onEvent?.(e); },
-      currentPluginRuntime()?.hooks,
-    );
-    return { ok: res.ok, error: res.error, cardPayload: res.cardPayload };
+    return await withCustomProviders(providers, customProviderKeyForRun, async () => {
+      const res = await compactSessionLog(
+        logPath!,
+        async (e) => { await log.append(e); hooks.onEvent?.(e); },
+        currentPluginRuntime()?.hooks,
+      );
+      return { ok: res.ok, error: res.error, cardPayload: res.cardPayload };
+    });
   } finally {
     await log.close?.();
   }
@@ -676,9 +691,12 @@ export function installAppTools(opts: { automation?: boolean; omitTools?: readon
       // 注：这里**必须**保留逐名点号挂载形——G-B 三面对账（tool-surface-parity）按源文本
       // 静态解析 `TOOLS as unknown as Record<string, Tool>)\.名字 =` 收实例面分母，
       // 换成变量下标循环 = 三件从对账分母里消失（测试读不到，不是没装）。
-      (TOOLS as unknown as Record<string, Tool>).browser_navigate = gatedTool("browser_navigate", browserAgent.navigate);
-      (TOOLS as unknown as Record<string, Tool>).browser_snapshot = gatedTool("browser_snapshot", browserAgent.snapshot);
-      (TOOLS as unknown as Record<string, Tool>).browser_pick = gatedTool("browser_pick", browserAgent.pick);
+      // 交互 run 内部触发的定时任务可能继承桌面 IPC 上下文；它自己的 run scope 仍是无人值守。
+      const requireInteractiveBrowser = async (): Promise<ToolResult | null> =>
+        runScopeALS.getStore()?.unattended === true ? { ok: false, output: "无人值守运行无法使用侧栏浏览器" } : null;
+      (TOOLS as unknown as Record<string, Tool>).browser_navigate = gatedTool("browser_navigate", browserAgent.navigate, requireInteractiveBrowser);
+      (TOOLS as unknown as Record<string, Tool>).browser_snapshot = gatedTool("browser_snapshot", browserAgent.snapshot, requireInteractiveBrowser);
+      (TOOLS as unknown as Record<string, Tool>).browser_pick = gatedTool("browser_pick", browserAgent.pick, requireInteractiveBrowser);
     }
   }
   TOOLS.write_file = gatedTool("write_file", TOOLS.write_file);
@@ -1210,7 +1228,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
   const signal = opts.signal ? AbortSignal.any([opts.signal, runAbort.signal]) : runAbort.signal;
   if (interactive) interactiveRunAbort = runAbort;
   setRunWorkspace(opts.workspace);
-  const runScope: RunScope = { session: sessionObj, orchestrator: null, agentRuntime: null };
+  const runScope: RunScope = { session: sessionObj, unattended: !interactive, orchestrator: null, agentRuntime: null };
   runScopeALS.enterWith(runScope); // 本 run 整条异步链（loop await / 门等待 / 工具执行）都在 scope 内
   // P1（审查）：plan 门状态随 run 隔离——并发 run 互不污染（permissions ALS）。
   // planRequired = run 级武装的 plan 模式（2026-11-03 起 UI 不再武装，agent 自判是否先出方案；
@@ -1519,7 +1537,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       ...(diagnoseTool ? [diagnoseSpec] : []),
       ...(searchTool ? [webSearchSpec] : []),
       // 浏览器驾驶三件的规格面（桌面注册了才付；与 installAppTools 的执行面同条件）。
-      ...(registeredBrowserAgentTools() !== null ? BROWSER_AGENT_SPECS : []),
+      ...(interactive && registeredBrowserAgentTools() !== null ? BROWSER_AGENT_SPECS : []),
       ...pluginToolSpecsFromRuntime(rt).filter(t => !recall || t.name !== "obs_recall"),
     ];
     const faceArgs = {
@@ -2057,23 +2075,49 @@ export async function handleAgentRun(
   req: RunRequest,
   over: RunOverrides = {},
 ): Promise<{ ok: boolean; error?: string; attachmentCount?: number; notStarted?: boolean }> {
+  try {
+    const validated = validateRunRequestEnvelope(req, { deferModelLookup: true });
+    if (!validated.ok) return { ok: false, error: validated.error };
+    const settings = await store().get();
+    const workspace = resolveRunWorkspace(
+      over.workspace, validated.value.workspace, process.env.M0B_WORKSPACE, settings.workspace, DEFAULT_WORKSPACE,
+    );
+    const loaded = loadCustomProviders(workspace);
+    const providers = loaded.kind === "ok" ? loaded.derived : [];
+    return await withCustomProviders(providers, customProviderKeyForRun, async () => {
+      try {
+        const model = over.modelSelection ?? resolveRunModel(await store().runModelPreferences(), validated.value.model);
+        if (model.kind === "custom") {
+          const provider = customProviderById(model.providerId);
+          if (!provider || (!isFreeformModelId(model.spec.id) &&
+              !provider.specs.some((spec) => spec.id === model.spec.id && spec.model === model.spec.model))) {
+            throw new Error(`当前工作区未登记自定义模型: ${model.spec.id}`);
+          }
+        }
+        return await runValidatedRequest(validated.value, over, workspace, model);
+      } catch (error) {
+        if (loaded.kind === "broken") {
+          throw new Error(`自定义 provider 配置有问题：${loaded.path}（${loaded.message}）`, { cause: error });
+        }
+        throw error;
+      }
+    });
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+async function runValidatedRequest(
+  req: RunRequest,
+  over: RunOverrides,
+  workspace: string,
+  modelSelection: MainModelSelection,
+): Promise<{ ok: boolean; error?: string; attachmentCount?: number; notStarted?: boolean }> {
   let runLock: SessionRunLock | null = null;
   try {
-    const validatedRequest = validateRunRequestEnvelope(req);
-    if (!validatedRequest.ok) return { ok: false, error: validatedRequest.error };
-    req = validatedRequest.value;
-
-    const settings = await store().get();
     const sessionId = over.sessionId ?? req.sessionId;
     const sessionMode = sessionId !== undefined;
     const logPath = over.logPath ?? (sessionMode ? pathOf(requireSessionsDir(), sessionId) : join(tmpdir(), "m0b-agent-events.jsonl"));
-    const workspace = resolveRunWorkspace(
-      over.workspace,
-      req.workspace,
-      process.env.M0B_WORKSPACE,
-      settings.workspace,
-      DEFAULT_WORKSPACE,
-    );
     // 同一份会话日志同时只允许一个 run 写：两条 CLI 并发续跑实测会把两轮事件交错进同一份转录，
     // 双方还都报成功。无 sessionId 且没显式给日志时走的是进程间共享的 tmp 草稿路径——那不是会话，
     // 不上锁（否则互不相关的 headless 调用会互相挡）。
@@ -2142,26 +2186,6 @@ export async function handleAgentRun(
         : checked.value;
     }
 
-    // P1（2026-11-07 真机实证）：自定义 provider 注册表是进程级模块状态（providers/registry.ts），
-    // 桌面端随窗口工作区切换整体换装/清空（index.ts setWorkspaceContext），而 run 的工作区可以
-    // ≠ 窗口上下文（临时对话发送、主页选项目发送、调度器触发）。此前模型解析只用当时那张进程级
-    // 注册表 ⇒ run 自己工作区声明的自定义家不在场时 resolveRunModel 抛「未知主会话 provider」，
-    // 发送失败（真机：两个 0 字节带标题的空会话垃圾）。
-    // 修法：模型解析前把 **run 自己工作区**的 providers.json **并装**进注册表——additive-only
-    // （只增不改不删：并发 run 在别的项目起跑不能被这条路径拆家；窗口切换的 replace 语义不动，
-    // 选择器仍按当前窗口工作区换装）。同 id 冲突先装者为准——这条路径不抢配置，留给窗口切换
-    // 那条主路径决定（钉死，免得各处各抄一套去重规则）。
-    {
-      const runLoaded = loadCustomProviders(workspace);
-      if (runLoaded.kind === "ok") {
-        const current = installedCustomProviders();
-        const knownIds = new Set(current.map((p) => p.id));
-        const missing = runLoaded.derived.filter((p) => !knownIds.has(p.id));
-        if (missing.length > 0) installCustomProviders([...current, ...missing]);
-      }
-    }
-
-    const modelSelection = over.modelSelection ?? resolveRunModel(settings, req.model);
     // 校验的返回值就是**生效档位**：requested 缺席时它是模型声明的首选档（reasoningDefault）。
     // 以前这行裸调用把返回值丢了，声明的高档只在校验里存在、从不进请求。
     const effectiveThinking = modelSelection.kind === "demo"

@@ -9,9 +9,11 @@ import { handleSessionCreate, initSessionsDir } from "../src/main/session-handle
 import { pathOf } from "../src/main/sessions";
 import { handleAgentDecide, handleAgentRun, setAppHooks, waitForSessionTailWork } from "../src/main/agent-runner";
 import type { AskPayload } from "../src/main/ipc-protocol";
+import { injectStoredProviderKey, revokeInjectedProviderKey } from "../src/main/provider-key-inject";
+import { setProviderKeyBackend } from "../src/main/provider-keys";
 import { PROVIDER_ENV_KEYS } from "../src/providers/env-keys";
 import { deriveCustomProviders, parseCustomProviders } from "../src/providers/provider-config";
-import { DEFAULT_MODEL_TABLE, installCustomProviders, type ModelSpec } from "../src/providers/registry";
+import { DEFAULT_MODEL_TABLE, installCustomProviders, installedCustomProviders, type ModelSpec } from "../src/providers/registry";
 
 /** 最小合法 1×1 PNG（magic number 完整）。 */
 const PNG_1X1 = Buffer.from(
@@ -445,6 +447,8 @@ describe("思考首选档接线", () => {
     if (!parsed.ok) return;
     const derived = deriveCustomProviders(parsed.file);
     installCustomProviders(derived);
+    await mkdir(join(root, ".agent"), { recursive: true });
+    await writeFile(join(root, ".agent", "providers.json"), JSON.stringify(parsed.file));
     const spec = derived[0]!.specs[0]!;
     const selection = { kind: "custom" as const, providerId: "myprovider", spec, modelExplicit: true };
     try {
@@ -491,6 +495,116 @@ describe("思考首选档接线", () => {
 // 而 run 的工作区可以 ≠ 窗口上下文（临时对话发送、主页选项目发送、调度器触发）。修法 =
 // handleAgentRun 在模型解析前把 run 工作区的 providers.json **并装**（additive-only）。
 describe("run 工作区自定义家并装（P1 修）", () => {
+  it("同名 provider 按运行工作区拨号，且不会被未配置的工作区继承", async () => {
+    const first = join(root, "project-a");
+    const second = join(root, "project-b");
+    const missing = join(root, "project-c");
+    const config = (project: string, apiKeyEnv: string) => ({
+      version: 1,
+      providers: [{
+        id: "shared",
+        protocol: "openai",
+        baseURL: `https://${project}.example.com/v1`,
+        apiKeyEnv,
+        models: [{ id: "chat", model: `${project}-chat` }],
+      }],
+    });
+    for (const [workspace, file] of [[first, config("a", "PROJECT_A_KEY")], [second, config("b", "PROJECT_B_KEY")]] as const) {
+      await mkdir(join(workspace, ".agent"), { recursive: true });
+      await writeFile(join(workspace, ".agent", "providers.json"), JSON.stringify(file));
+    }
+    await mkdir(missing);
+    const parsed = parseCustomProviders(config("a", "PROJECT_A_KEY"));
+    if (!parsed.ok) throw new Error(JSON.stringify(parsed.problems));
+    const registered = deriveCustomProviders(parsed.file);
+    installCustomProviders(registered);
+    try {
+      await setSettings({ provider: "shared", model: "shared-chat", autoMemory: false });
+      vi.stubEnv("PROJECT_A_KEY", "fixture-a");
+      vi.stubEnv("PROJECT_B_KEY", "fixture-b");
+      const calls: { url: string; model: string; authorization: string | null }[] = [];
+      vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        calls.push({ url: String(input), model: JSON.parse(String(init?.body)).model, authorization: new Headers(init?.headers).get("authorization") });
+        return streamResponse(ROUTES[1].sse);
+      }));
+      const run = (workspace: string, suffix: string) => handleAgentRun(
+        { message: "fixture", mode: "read-only", model: "shared-chat" },
+        { workspace, logPath: join(root, `route-${suffix}.jsonl`) },
+      );
+      expect(await run(first, "a")).toEqual({ ok: true });
+      expect(await run(second, "b")).toEqual({ ok: true });
+      expect(await run(missing, "missing")).toMatchObject({ ok: false, error: expect.stringContaining("shared-chat") });
+      expect(calls).toEqual([
+        { url: "https://a.example.com/v1/chat/completions", model: "a-chat", authorization: "Bearer fixture-a" },
+        { url: "https://b.example.com/v1/chat/completions", model: "b-chat", authorization: "Bearer fixture-b" },
+      ]);
+      expect(installedCustomProviders()).toBe(registered);
+    } finally {
+      installCustomProviders([]);
+    }
+  });
+
+  it("禁止同名但不同端点的项目复用 Cairn 为另一端点注入的密钥", async () => {
+    const config = (host: string) => ({
+      version: 1, providers: [{
+        id: "byok-shared", protocol: "openai", baseURL: `https://${host}.example.com/v1`,
+        apiKeyEnv: "REVIEW_BYOK_SHARED_KEY", models: [{ id: "chat", model: "chat" }],
+      }],
+    });
+    const parsed = parseCustomProviders(config("original"));
+    if (!parsed.ok) throw new Error(JSON.stringify(parsed.problems));
+    installCustomProviders(deriveCustomProviders(parsed.file));
+    vi.stubEnv("REVIEW_BYOK_SHARED_KEY", undefined);
+    setProviderKeyBackend({
+      name: "fixture", isAvailable: () => true, get: async () => "fixture-byok",
+      set: async () => undefined, delete: async () => true, storedProviders: async () => ["byok-shared"],
+    });
+    try {
+      expect(await injectStoredProviderKey(["byok-shared"])).toBe(true);
+      await setSettings({ provider: "byok-shared", model: "byok-shared-chat", autoMemory: false });
+      installCustomProviders([]); // 窗口切走，原端点的 BYOK 值仍在环境中
+      await mkdir(join(root, ".agent"), { recursive: true });
+      await writeFile(join(root, ".agent", "providers.json"), JSON.stringify(config("other")));
+      const { calls } = await installRoute(ROUTES[1]);
+      expect(await handleAgentRun(
+        { message: "fixture", mode: "read-only" },
+        { workspace: root, logPath: join(root, "byok.jsonl") },
+      )).toMatchObject({ ok: false, error: expect.stringContaining("REVIEW_BYOK_SHARED_KEY") });
+      expect(calls).toHaveLength(0);
+    } finally {
+      revokeInjectedProviderKey("byok-shared");
+      setProviderKeyBackend(null);
+      installCustomProviders([]);
+    }
+  });
+
+  it("冷启动后，当前窗口未装载的自定义模型仍可在实际工作区显式选择", async () => {
+    const file = {
+      version: 1,
+      providers: [{
+        id: "only-here", protocol: "openai", baseURL: "https://only-here.example.com/v1",
+        apiKeyEnv: "ONLY_HERE_KEY", models: [{ id: "chat", model: "here-chat" }],
+      }],
+    };
+    await mkdir(join(root, ".agent"), { recursive: true });
+    await writeFile(join(root, ".agent", "providers.json"), JSON.stringify(file));
+    await writeFile(join(root, "settings.json"), JSON.stringify({ provider: "only-here", model: "only-here-chat", autoMemory: false }));
+    initSettingsStore(join(root, "settings.json"));
+    vi.stubEnv("ONLY_HERE_KEY", "fixture-only-here");
+    const { calls } = await installRoute(ROUTES[1]);
+    const run = (model?: string) => handleAgentRun(
+      { message: "fixture", mode: "read-only", ...(model ? { model } : {}) },
+      { workspace: root, logPath: join(root, `${model ?? "settings"}.jsonl`) },
+    );
+    expect(await run("only-here-chat")).toEqual({ ok: true });
+    expect(await run()).toEqual({ ok: true });
+    expect(calls.map((call) => [call.url, call.body.model])).toEqual([
+      ["https://only-here.example.com/v1/chat/completions", "here-chat"],
+      ["https://only-here.example.com/v1/chat/completions", "here-chat"],
+    ]);
+    expect(installedCustomProviders()).toEqual([]);
+  });
+
   it("注册表未装而 run 工作区声明的自定义家：起跑前并装 ⇒ 解析过、按那家拨号", async () => {
     // 真实时序：provider 在装着的时候被写进 settings（选择器写盘），随后窗口切走清空注册表；
     // settings 首读缓存的正是原始串。这里按同一时序摆布：先装 → 写设置 → 清空。

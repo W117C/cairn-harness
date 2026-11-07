@@ -1,16 +1,34 @@
 // 只读 git 工具（2026-11-06 业主「完善工具层」第一批，对标 CC/Codex 的 git 面缺位）：
-// status / diff / log 三个动词，零写权、零 shell——argv 逐个传给 git 子进程，
-// 不经 shell 解释（无注入面），非写向 ⇒ 只读档与后续 worker 面都可直接放行。
+// status / diff / log 三个动词。固定 argv 不足以约束 Git，仓库配置也能注册执行入口。
 // 为什么值得一枚专用工具：现在模型看仓库状态只能走 run_shell（白名单闸+审批摩擦），
 // 而「现在改了什么」是工单/worktree/合并控制塔场景的高频地面化需求。
-import { spawn } from "node:child_process";
+import { devNull } from "node:os";
 import { resolveInWorkspace, ToolError, type Tool, type ToolResult } from "./base.js";
-import { sanitizedEnv } from "./process.js";
+import { killGroup, sanitizedEnv, spawnTracked } from "./process.js";
 
 /** 子进程墙钟：git 本地操作是毫秒级；大仓 diff 也只受输出帽约束，不靠超时兜底。 */
 const GIT_READ_TIMEOUT_MS = 15_000;
 /** 输出帽（字符）：diff 在大改工作区可以很长；超帽截断 + 出声，绝不静默。 */
 const GIT_READ_MAX_CHARS = 20_000;
+const GIT_PROCESS_MAX_BYTES = 8 * 1024 * 1024;
+
+const GIT_READ_FLAGS = [
+  "--no-pager", "--no-optional-locks", "--literal-pathspecs",
+  "-c", "core.fsmonitor=false",
+  "-c", "core.hooksPath=" + devNull,
+  "-c", "core.attributesFile=" + devNull,
+  "-c", "status.submoduleSummary=false",
+  "-c", "maintenance.auto=false",
+  "-c", "gc.auto=0",
+] as const;
+
+// Seatbelt 禁止 Git 派生任何子进程，且只许读。即使配置在预检后变化也无法执行辅助程序。
+const GIT_READ_PROFILE = `(version 1)
+(allow default)
+(deny process-fork)
+(deny network*)
+(deny file-write*)
+(allow file-write* (literal "/dev/null"))`;
 
 type GitReadOp = "status" | "diff" | "log";
 
@@ -19,53 +37,71 @@ function argvFor(op: GitReadOp, pathAbs?: string): string[] {
   switch (op) {
     case "status":
       // -b 带分支行：地面化「在哪个分支」也是高频需求，零额外成本。
-      return ["status", "--porcelain=v1", "-b"];
+      return ["status", "--porcelain=v1", "-b", "--ignore-submodules=dirty"];
     case "diff":
       return [
-        "diff", "HEAD", "--no-textconv", "--no-color",
+        "diff", "HEAD", "--no-ext-diff", "--no-textconv", "--no-color",
+        "--ignore-submodules=dirty", "--submodule=short",
         // 静态上下文行数：diff 的文件头还是带完整路径；小上下文 = 同帽下能看更多文件。
         "--unified=2",
         ...(pathAbs !== undefined ? ["--", pathAbs] : []),
       ];
     case "log":
-      return ["log", "--oneline", "-n", "20"];
+      return ["log", "--oneline", "--no-patch", "--no-show-signature", "--no-color", "-n", "20"];
   }
 }
 
 /** 跑一条固定 argv 的 git 子进程：限时击杀 + 输出字节帽 + env 消毒 + 不经 shell。 */
 function runGit(args: readonly string[], cwd: string): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolvePromise, rejectPromise) => {
-    const child = spawn("git", args, { cwd, env: sanitizedEnv() });
+    const gitArgs = [...GIT_READ_FLAGS, "-C", cwd, ...args];
+    const sandboxed = process.platform === "darwin";
+    const { child, dispose } = spawnTracked(
+      sandboxed ? "/usr/bin/sandbox-exec" : "git",
+      sandboxed ? ["-p", GIT_READ_PROFILE, "/usr/bin/git", ...gitArgs] : gitArgs,
+      {
+        cwd,
+        env: {
+          ...sanitizedEnv(),
+          GIT_CONFIG_NOSYSTEM: "1",
+          GIT_CONFIG_GLOBAL: devNull,
+          GIT_ATTR_NOSYSTEM: "1",
+          GIT_TERMINAL_PROMPT: "0",
+          GIT_NO_LAZY_FETCH: "1",
+          GIT_ALLOW_PROTOCOL: "",
+        },
+        timeoutMs: GIT_READ_TIMEOUT_MS,
+        onTimeout: () => fail(new ToolError(`git_read: 子进程超时（${String(GIT_READ_TIMEOUT_MS / 1000)}s，已终止）`)),
+      },
+    );
     let stdout = "";
     let stderr = "";
     let settled = false;
     let bytes = 0;
-    const killWith = (msg: string): void => {
+    function fail(error: Error): void {
       if (settled) return;
       settled = true;
-      child.kill("SIGKILL");
-      rejectPromise(new Error(msg));
-    };
-    const timer = setTimeout(() => killWith(`git_read: 子进程超时（${String(GIT_READ_TIMEOUT_MS / 1000)}s，已终止）`), GIT_READ_TIMEOUT_MS);
-    timer.unref?.();
-    child.stdout.setEncoding("utf8");
-    child.stdout.on("data", (d: string) => {
-      stdout += d;
-      bytes += Buffer.byteLength(d);
-      if (bytes > 8 * 1024 * 1024) killWith("git_read: 输出超过 8MB 上限，已终止");
-    });
-    child.stderr.setEncoding("utf8");
-    child.stderr.on("data", (d: string) => { stderr += d; });
-    child.on("error", (err) => {
+      dispose();
+      rejectPromise(error);
+    }
+    for (const stream of ["stdout", "stderr"] as const) {
+      child[stream]?.setEncoding("utf8").on("data", (data: string) => {
+        if (settled) return;
+        bytes += Buffer.byteLength(data);
+        if (bytes > GIT_PROCESS_MAX_BYTES) {
+          fail(new ToolError("git_read: 输出超过 8MB 上限，已终止"));
+          killGroup(child);
+          return;
+        }
+        if (stream === "stdout") stdout += data;
+        else stderr += data;
+      });
+    }
+    child.once("error", fail);
+    child.once("close", (code) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
-      rejectPromise(err);
-    });
-    child.on("close", (code) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
+      dispose();
       resolvePromise({ code: code ?? -1, stdout, stderr });
     });
   });
@@ -78,13 +114,24 @@ export const git_read: Tool = {
     if (op !== "status" && op !== "diff" && op !== "log") {
       throw new ToolError("git_read: op 只允许 status / diff / log");
     }
-    // diff 的 path 参数：workspace 相对 + 真实包含闸（软链越界与 glob/grep 同口径）。
+    // diff 的 path 参数只作为 Git 的字面路径规格，不能改变选项或匹配到其他文件。
     let pathAbs: string | undefined;
     if (typeof args.path === "string" && args.path.trim() !== "") {
       if (op !== "diff") throw new ToolError("git_read: path 参数只用于 diff");
       pathAbs = resolveInWorkspace(ctx.workspace, args.path, "git_read");
     }
-    const proc = await runGit(["-C", ctx.workspace, ...argvFor(op as GitReadOp, pathAbs)], ctx.workspace);
+    if (op !== "log") {
+      // clean/process 过滤器独立于 diff driver；检查含 include 的有效配置并明确拒绝。
+      // macOS 还有进程沙箱兜住配置在两次 Git 调用之间被改写的窗口。
+      const filters = await runGit(["config", "--null", "--name-only", "--get-regexp", "^filter\\..*\\.(clean|process)$"], ctx.workspace);
+      if (filters.code === 0) {
+        return { ok: false, output: "git_read: 仓库配置了可执行的 Git clean/process 过滤器，无法安全比较工作区" };
+      }
+      if (filters.code !== 1 || filters.stderr !== "") {
+        return { ok: false, output: "git_read: 无法确认 Git 过滤器配置，已拒绝比较工作区" };
+      }
+    }
+    const proc = await runGit(argvFor(op, pathAbs), ctx.workspace);
     if (proc.code !== 0) {
       // 阴性要说清（错误分支里的两可行动出口），不许读成「工具坏了」：
       // ① 不是 git 仓库；② 空仓库 log（exit 128 + 「还没有任何 commit」）。

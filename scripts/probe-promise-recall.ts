@@ -196,8 +196,13 @@ function scanMarkedSites(
 }
 
 export function scanPromiseSites(files: readonly { path: string; text: string }[]): PromiseSite[] {
+  // 弱标记「 available」的佐证判别式（2026-11-07，台账第 1040 页）：真面是「<工具名> available」
+  // （ledger 的「obs_recall available」一族——英文写法的可回取承诺），不是 "available tools"
+  // 这种普通英语。旧规则「字面量里出现任意工具名就算佐证」被 acceptance-contract.ts 的防注入
+  // 提示句误收（「using available tools … via verify」——同一句里恰好有工具名，且词序相反）。
+  const recallAvailable = new RegExp("\\b(" + CALLABLE_NAMES.join("|") + ")\\s+available");
   return scanMarkedSites(files, PROMISE_MARKS, (text, mark) =>
-    !(WEAK_MARKS.includes(mark) && !CALLABLE_NAMES.some((n) => text.includes(n))), false);
+    !(mark === " available" && !recallAvailable.test(text)), false);
 }
 
 /* ---------------- 第二个 claim 类：模型可见的「能力断言」有没有证人（第 311 页） ----------------

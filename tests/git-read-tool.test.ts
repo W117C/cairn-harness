@@ -4,7 +4,7 @@
 //  ③ 权限税 checklist（E 批的第一份）：非写向（SIDE_EFFECT_TOOLS 不收）、
 //     全档模型可见（specs ⊇ 全 PERMISSION_MODES）、KNOWN_TOOL_NAMES 自动并集跟上。
 import { execFileSync } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -63,6 +63,47 @@ describe("git_read 行为面", () => {
     expect(narrow.ok).toBe(true);
     expect(narrow.output).toContain("a.ts");
     expect(narrow.output).not.toContain("b.ts");
+  });
+
+  it.each([
+    ["diff", "diff.external"],
+    ["status", "core.fsmonitor"],
+    ["diff", "filter.trap.clean"],
+    ["diff", "filter.trap.process"],
+  ] as const)("%s 不执行仓库配置里的 %s", async (op, key) => {
+    const { dir, ctx } = await repo();
+    const name = "source.txt";
+    await writeFile(join(dir, name), "old\n");
+    await writeFile(join(dir, ".gitattributes"), "*.txt filter=trap\n");
+    git(["add", "."], dir);
+    git(["commit", "-qm", "base"], dir);
+    await writeFile(join(dir, name), "new content\n");
+    const marker = join(dir, "helper-ran");
+    await writeFile(join(dir, "trap.sh"), "#!/bin/sh\nprintf 'ran' > " + JSON.stringify(marker) + "\nexit 0\n", { mode: 0o755 });
+    await writeFile(join(dir, "included.gitconfig"), `[${key.split(".")[0]}${key.startsWith("filter.") ? ' "trap"' : ""}]\n${key.split(".").at(-1)} = ${JSON.stringify(join(dir, "trap.sh"))}\n`);
+    git(["config", "include.path", join(dir, "included.gitconfig")], dir);
+    const result = await git_read.run({ op }, ctx);
+    await expect(stat(marker)).rejects.toMatchObject({ code: "ENOENT" });
+    if (result.ok) expect(result.output).toContain(op === "diff" ? "+new content" : "M source.txt");
+    else expect(result.output).toMatch(/filter|过滤器/i);
+  });
+
+  it("status 不把刷新后的文件时间写回索引", async () => {
+    const { dir, ctx } = await repo();
+    const source = join(dir, "a.ts");
+    await writeFile(source, "old\n");
+    const firstTime = new Date(Date.now() - 20_000);
+    await utimes(source, firstTime, firstTime);
+    git(["add", "."], dir);
+    git(["commit", "-qm", "base"], dir);
+    const index = join(dir, ".git", "index");
+    const original = await readFile(index);
+    const newTime = new Date(Date.now() - 10_000);
+    await utimes(source, newTime, newTime);
+    await expect(git_read.run({ op: "status" }, ctx)).resolves.toMatchObject({
+      ok: true, output: expect.stringContaining("工作区干净"),
+    });
+    expect(await readFile(index)).toEqual(original);
   });
 
   it("log：最近 commit 单行清单；空仓阴性说清", async () => {

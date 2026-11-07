@@ -3,6 +3,8 @@ import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { deriveCustomProviders, parseCustomProviders } from "../src/providers/provider-config";
+import { installCustomProviders } from "../src/providers/registry";
 import { installCustomEnvKeys } from "../src/providers/env-keys";
 import {
   deleteProviderKey, getProviderKey, installProviderKeyBackend, providerKeyStatus,
@@ -90,6 +92,32 @@ describe("provider key persistence", () => {
     expect(await getProviderKey("openai")).toBe("fixture-builtin");
     installCustomEnvKeys({ "fixture-gateway": "FIXTURE_GATEWAY_KEY" });
     expect(await getProviderKey("fixture-gateway")).toBe("fixture-custom");
+  });
+
+  it("a stored custom key remains bound to its endpoint after backend reinitialization", async () => {
+    const io = encryptedBackend();
+    installProviderKeyBackend(io, path);
+    const install = (host: string): void => {
+      const parsed = parseCustomProviders({
+        version: 1, providers: [{
+          id: "fixture-gateway", protocol: "openai", baseURL: `https://${host}.example.com/v1`,
+          apiKeyEnv: "FIXTURE_GATEWAY_KEY", models: [{ id: "chat", model: "fixture-chat" }],
+        }],
+      });
+      if (!parsed.ok) throw new Error(JSON.stringify(parsed.problems));
+      installCustomProviders(deriveCustomProviders(parsed.file));
+    };
+    try {
+      install("original");
+      expect(await putProviderKey("fixture-gateway", "fixture-original-key")).toEqual({ ok: true });
+      installProviderKeyBackend(io, path);
+      install("other");
+      expect(await getProviderKey("fixture-gateway")).toBeNull();
+      install("original");
+      expect(await getProviderKey("fixture-gateway")).toBe("fixture-original-key");
+    } finally {
+      installCustomProviders([]);
+    }
   });
 
   it("an unavailable replacement backend cannot leave the previous backend active", async () => {

@@ -24,7 +24,8 @@ import { streamAnthropic } from "../src/providers/anthropic";
 import { PROVIDER_ENV_KEYS } from "../src/providers/env-keys";
 import { streamGemini } from "../src/providers/gemini";
 import { streamOpenAI } from "../src/providers/openai";
-import { DEFAULT_MODEL_TABLE, type ModelSpec } from "../src/providers/registry";
+import { deriveCustomProviders, parseCustomProviders } from "../src/providers/provider-config";
+import { DEFAULT_MODEL_TABLE, installCustomProviders, type ModelSpec } from "../src/providers/registry";
 
 let root = "";
 let defaultSessions = "";
@@ -100,6 +101,47 @@ describe("多厂商一致性：手动压缩 /compact 与未开路由的 spawn_ag
     expect(calls).toHaveLength(1);
     expect(calls[0]?.url).toBe("https://api.openai.com/v1/chat/completions");
     expect(calls[0]?.body.model).toBe("gpt-4o");
+  });
+
+  it("手动压缩使用会话所属项目的自定义端点", async () => {
+    const project = join(root, "project");
+    const agentDir = join(project, ".agent");
+    const sessions = join(agentDir, "sessions");
+    await mkdir(sessions, { recursive: true });
+    const file = (host: string) => ({
+      version: 1, providers: [{
+        id: "shared-compact", protocol: "openai", baseURL: `https://${host}.example.com/v1`,
+        apiKeyEnv: "SHARED_COMPACT_TEST_KEY", models: [{ id: "chat", model: "fixture-chat" }],
+      }],
+    });
+    await writeFile(join(agentDir, "providers.json"), JSON.stringify(file("session")));
+    const parsed = parseCustomProviders(file("focused"));
+    if (!parsed.ok) throw new Error(JSON.stringify(parsed.problems));
+    installCustomProviders(deriveCustomProviders(parsed.file));
+    try {
+      await setSettings({ provider: "shared-compact", model: "shared-compact-chat", autoMemory: false });
+      vi.stubEnv("SHARED_COMPACT_TEST_KEY", "fixture-compact");
+      const sessionId = await createSession(sessions, "compact");
+      const log = createEventLog(pathOf(sessions, sessionId));
+      for (let i = 0; i < 16; i++) {
+        await log.append({ type: "user_message", content: "内容填充 ".repeat(1500) });
+        await log.append({ type: "assistant_message", content: "细节展开 ".repeat(1500) });
+      }
+      await log.close?.();
+      const urls: string[] = [];
+      vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+        urls.push(String(input));
+        return new Response(JSON.stringify({
+          id: "summary", choices: [{ message: { content: "## Objective\n- fixture" }, finish_reason: "stop" }],
+          usage: { prompt_tokens: 100, completion_tokens: 20 },
+        }), { headers: { "content-type": "application/json" } });
+      }));
+      const result = await handleCompact({ sessionId, sessionsRoot: sessions });
+      expect(result.ok, result.error).toBe(true);
+      expect(urls).toEqual(["https://session.example.com/v1/chat/completions"]);
+    } finally {
+      installCustomProviders([]);
+    }
   });
 
   it("未开启 routing 时 Orchestrator 沿用父会话 defaultModelSpec（不要求 CAIRN_API_KEY，也不借用环境变量里的 GLM key）", async () => {

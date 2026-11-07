@@ -1,6 +1,6 @@
 // CX-02/CX-03：主会话与 worker 共用同一 model registry / capability map / provider adapter 路由。
 // 本模块只做选择与只读描述；网络调用仍由 providers/registry.ts 的 toWorkerModel 承担。
-import { envKeyOf, type EnvKeyedProvider } from "../providers/env-keys";
+import { envKeyOf, providerApiKey, type EnvKeyedProvider } from "../providers/env-keys";
 import { modelsForCurrentTable, type ProviderModelInfo } from "../providers/models";
 import {
   PROVIDER_IDS,
@@ -261,7 +261,7 @@ export function providerKeyConfigured(
   if (kind === "demo") return false;
   const envName = envKeyOf(kind);
   if (envName === null) throw new Error(`Provider ${kind} 未登记 env key 映射`);
-  const value = env[envName];
+  const value = providerApiKey(kind, env);
   return typeof value === "string" && value.trim() !== "";
 }
 

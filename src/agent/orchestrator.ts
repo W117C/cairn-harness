@@ -12,7 +12,7 @@ import type { AgentEvent, HarnessHoldReason } from "../events";
 import { replay } from "../events";
 import type { ModelOutput, Provider } from "../providers";
 import { glmDefaultModelName, type GlmMessage, type GlmToolSpec } from "../providers/glm";
-import { envKeyOf } from "../providers/env-keys";
+import { envKeyOf, providerApiKey } from "../providers/env-keys";
 import { effectiveModelTable, findSpecByNameOrId, resolveModel, type ModelTier } from "../providers/registry";
 import { toWorkerModel } from "../providers/worker-adapters";
 import { routeFor, TIER_ORDER as MODEL_TIER_ORDER } from "../routing/policy";
@@ -648,7 +648,7 @@ export class Orchestrator {
     // 未开路由时若有父会话 defaultModelSpec，同样按父会话 provider 核验凭据并复用该家传输面。
     const routedProviderId = effectiveSpec?.provider ?? "glm";
     const routedEnvName = envKeyOf(routedProviderId);
-    const hasRoutedCredential = routedEnvName !== null && process.env[routedEnvName] !== undefined;
+    const hasRoutedCredential = providerApiKey(routedProviderId) !== undefined;
     if (!model && !hasRoutedCredential) {
       return { ok: false, output: `spawn_agent: 无可用模型（无 ${routedEnvName ?? "provider"} 凭据且未接 modelFor；fail-closed 不造必败 worker）` };
     }

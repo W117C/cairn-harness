@@ -519,6 +519,21 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
     return envBeat ? "environment-red" : "continue";
   };
 
+  const enforceQualityGate = async (step: number): Promise<void> => {
+    if (!wroteThisRun || opts.signal?.aborted) return;
+    const lastVerify = [...seen].reverse().find((event) => event.type === "verify_result");
+    if (lastVerify?.ok && !wroteSinceVerifyBeat) return;
+
+    let reason = "quality gate: writes happened but no verification ran (no verifier surface or auto-verify disabled)";
+    if (lastVerify !== undefined) {
+      reason = wroteSinceVerifyBeat
+        ? "quality gate: writes happened after the last verification"
+        : "quality gate: verification is still red (" + (lastVerify.cause ?? "code") + ")";
+    }
+    await events.append({ type: "error", message: reason, step });
+    throw new QualityGateError(reason);
+  };
+
   // 新旧形态统一收敛成流式事件源（legacy next() 源遇 tool_call 断轮，日志同序）
   const provider = opts.provider;
   // C12（审查 P2）：取消信号随轮传入 provider——在途 fetch 随 abort 收束，不再只等静默窗。
@@ -968,13 +983,19 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       });
       // 新提交（含新的 verify）⇒ 本轮有进展；非 verify 的重放走原有步数预算（撞帽仍要落 error 事件）。
       if (isNewSubmission || output.name !== "verify") onlyVerifyReplays = false;
-      if (control === "stop") return;
+      if (control === "stop") {
+        if (opts.requireGreenVerify === true) await enforceQualityGate(step);
+        return;
+      }
     }
     if (opts.signal?.aborted) return;
     // 整轮只是重放已执行过的 verify = 无进展：重放的旧回执已经在本轮输入里，模型再问一次拿到的还是同一份。
     // 真红与环境红同判——只认环境红会让真红的重放绕过 maxVerify（verify 不再执行、拍数不涨），
     // 一路烧到 maxSteps 的付费请求。非 verify 的重放不走这条：它们仍有步数预算兜底，且撞帽要落 error。
-    if (sawToolCall && onlyVerifyReplays) return;
+    if (sawToolCall && onlyVerifyReplays) {
+      if (opts.requireGreenVerify === true) await enforceQualityGate(step);
+      return;
+    }
     // #69：最后一步模型**仍在调工具**时，也让收束闸有机会留下证据——
     // 从前这一段只在模型自己不再调工具时才走到，于是撞帽的 run 一条 verify 证据都没有
     // （真模型面实测 5/43≈12% 整趟被帽砍掉）。这里只把"该收束了"这件事说给它听，
@@ -995,7 +1016,10 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       //    且 autoBeats 上限 2 ——一次返修、一次重验，红就收束。不开时下面整个判断与今日逐字同形。
       const firstBeat = verifyAttempts === 0;
       const repairBeat = repairPending && wroteSinceAutoBeat && autoBeats < 2;
-      if (opts.verify && opts.autoVerify === true && wroteThisRun && (firstBeat || repairBeat)) {
+      // 截断续跑和交付返修也能改盘。质量档可在自动验证额度内补验，额度耗尽时拒绝旧证据。
+      const qualityRefresh = opts.requireGreenVerify === true && wroteSinceVerifyBeat
+        && autoBeats < 2 && chargedAttempts < maxVerify && envVerifyBeats < MAX_ENV_VERIFY_BEATS;
+      if (opts.verify && opts.autoVerify === true && wroteThisRun && (firstBeat || repairBeat || qualityRefresh)) {
         let hasSurface = true;
         try {
           hasSurface = (await opts.verify.surface?.(opts.signal)) !== false;
@@ -1068,21 +1092,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
         continue;
       }
       if (!capReached) {
-        // ---- 质量档硬门：写过盘就必须带着绿色 verify 收束 ----
-        // 这一条不接受模型的自述，也不接受「补拍跑过了但红着」：红就是没做完。
-        // 放在收束处而不是工具处，是因为「做完了」这个判断只在这一刻成立；
-        // 抛错而不是 return，是为了让 CLI / 桌面拿到一个可判定的失败，而不是一条看起来正常的收尾。
-        if (opts.requireGreenVerify === true && wroteThisRun) {
-          const lastVerify = [...seen].reverse().find((e) => e.type === "verify_result");
-          if (lastVerify === undefined || !lastVerify.ok) {
-            const reason =
-              lastVerify === undefined
-                ? "quality gate: writes happened but no verification ran (no verifier surface or auto-verify disabled)"
-                : "quality gate: verification is still red (" + (lastVerify.cause ?? "code") + ")";
-            await events.append({ type: "error", message: reason, step });
-            throw new QualityGateError(reason);
-          }
-        }
+        if (opts.requireGreenVerify === true) await enforceQualityGate(step);
         return; // 模型认为任务结束（纯文本轮 / 事件源耗尽）；撞帽则落回循环外那条 throw
       }
       // 撞帽路：证据已在上面落流，这里**不吞掉失败**——继续往下走，由循环外那句抛。

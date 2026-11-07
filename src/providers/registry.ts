@@ -3,7 +3,8 @@
 // 在 ./worker-adapters（toWorkerModel）——2026-11-07 拆出，断掉与 capabilities 的运行环
 // （registry 的 effortFor 调 capabilityForModel、capabilities 又查本文件的档位表，互指成环）。
 // 档位模型名与价格为**占位**——需联网实测校准（m5-acceptance C5：provider 可用性抽样 + 价格核实）。
-import { installCustomEnvKeys } from "./env-keys";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { installCustomEnvKeys, withCustomProviderEnv } from "./env-keys";
 import type { ThinkingEffort } from "./capabilities";
 import type { DerivedCustomProvider } from "./provider-config";
 
@@ -38,6 +39,19 @@ export const PROVIDER_IDS = ["glm", "openai", "anthropic", "gemini", "deepseek"]
 
    缺省为空 ⇒ 没装自定义 provider 时全仓行为与改造前逐字一致 —— 这是本设计的前提：零装配 = 零改变。 */
 let customProviders: readonly DerivedCustomProvider[] = [];
+const runCustomProviders = new AsyncLocalStorage<readonly DerivedCustomProvider[]>();
+
+/** A workspace snapshot shadows the UI registry even when it has no custom providers. */
+export function withCustomProviders<T>(
+  list: readonly DerivedCustomProvider[],
+  keyFor: (provider: DerivedCustomProvider) => string | undefined,
+  fn: () => T,
+): T {
+  const credentials = new Map(list.map((provider) => [
+    provider.id, { envName: provider.apiKeyEnv, key: keyFor(provider) },
+  ]));
+  return runCustomProviders.run(list, () => withCustomProviderEnv(credentials, fn));
+}
 
 /** 装一批自定义 provider（进程内一次性；重复调用覆盖）。传空数组 = 回到纯内置行为。
  *  **同时**把它们的 env 名推给 env-keys（叶子模块，见那边的注释）：装一次、处处生效，
@@ -48,12 +62,12 @@ export function installCustomProviders(list: readonly DerivedCustomProvider[]): 
 }
 
 export function installedCustomProviders(): readonly DerivedCustomProvider[] {
-  return customProviders;
+  return runCustomProviders.getStore() ?? customProviders;
 }
 
 /** 按 id 找自定义 provider（内置 id 不会出现在这里：配置校验已禁止占用内置名字）。 */
 export function customProviderById(id: string): DerivedCustomProvider | undefined {
-  return customProviders.find((p) => p.id === id);
+  return installedCustomProviders().find((p) => p.id === id);
 }
 
 /** 这个 provider id 是不是**已知**的（内置家，或已装的自定义家）。
@@ -65,7 +79,7 @@ export function isKnownProviderId(id: string): boolean {
 /** 某个档位 id 自述支持的推理档位（上游档位名，**未映射**）。
  *  没有自述 ⇒ 空数组。它是能力表开门的唯一证据来源：没证据就不许报 supported（同 abilities 的纪律）。 */
 export function reasoningEffortsForModel(id: string): readonly string[] {
-  for (const provider of customProviders) {
+  for (const provider of installedCustomProviders()) {
     const declared = provider.reasoning[id];
     if (declared !== undefined) return declared;
   }
@@ -74,8 +88,9 @@ export function reasoningEffortsForModel(id: string): readonly string[] {
 
 /** 有效档位表 = 内置 + 已装自定义。所有「按 id 查模型」「按名字查档位」都该用这一张。 */
 export function effectiveModelTable(): readonly ModelSpec[] {
-  if (customProviders.length === 0) return DEFAULT_MODEL_TABLE;
-  return [...DEFAULT_MODEL_TABLE, ...customProviders.flatMap((p) => p.specs)];
+  const providers = installedCustomProviders();
+  if (providers.length === 0) return DEFAULT_MODEL_TABLE;
+  return [...DEFAULT_MODEL_TABLE, ...providers.flatMap((p) => p.specs)];
 }
 
 /** 自由档位的 id 前缀（`--model <线上模型名>`，如 `freeform/stealth/space-bunny-alpha`）。

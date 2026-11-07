@@ -90,7 +90,7 @@ describe("write worker diff 读取失败（fail-visible + 保现场）", () => {
     expect(results).toHaveLength(1);
     expect(results[0]!.status).toBe("failed");
     expect(results[0]!.reason).toContain("diff_read_failed");
-    expect(results[0]!.reason).toContain("git index.lock");
+    expect(results[0]!.reason).toMatch(/git index\.lock/);
 
     const statuses = events.filter((e): e is Extract<AgentEvent, { type: "agent_status" }> => e.type === "agent_status");
     expect(statuses.at(-1)?.status).toBe("failed");
