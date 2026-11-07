@@ -162,6 +162,13 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   providerDiscover: "agent:provider-discover",
   providerSave: "agent:provider-save",
   providerCustomList: "agent:provider-custom-list",
+  // 用户级 MCP 服务器管理（ZCode 独立管理对应面，2026-11-05）：配置读写 + 单台探测。
+  mcpUserConfig: "agent:mcp-user-config",
+  mcpUserSave: "agent:mcp-user-save",
+  mcpUserProbe: "agent:mcp-user-probe",
+  // 用户级 hooks（ZCode Hooks 管理对应面，2026-11-05）：配置读写。
+  hooksUserConfig: "agent:hooks-user-config",
+  hooksUserSave: "agent:hooks-user-save",
   checkUpdate: "agent:check-update",
   openExternal: "agent:open-external",
   // M4-5：dialog 选目录（M3 deferred 收口）——main 端 dialog.showOpenDialog({ openDirectory })，
@@ -174,6 +181,17 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   suggestNext: "agent:suggest-next",
   // SEMA §3.5/§12：协议版本握手——main 实况版本（IPC_PROTOCOL_VERSION）→ renderer 与构建期
   // 注入的期望版本比对，失配 fail-closed。
+  subagentSettingsList: "agent:subagent-settings-list",
+  subagentSettingsRead: "agent:subagent-settings-read",
+  subagentSettingsSave: "agent:subagent-settings-save",
+  subagentSettingsRemove: "agent:subagent-settings-remove",
+  settingsPreviewMigration: "agent:settings-preview-migration",
+  settingsApplyMigration: "agent:settings-apply-migration",
+  idleTaskList: "agent:idle-task-list",
+  idleTaskEnqueue: "agent:idle-task-enqueue",
+  idleTaskUpdate: "agent:idle-task-update",
+  backgroundTaskList: "agent:background-task-list",
+  backgroundTaskStop: "agent:background-task-stop",
   protocolVersion: "agent:protocol-version",
   // v10：能力在场性——搜索端点配没配（口径同 CLI --doctor 的 search 那一格）。
   // 它回答的是「模型为什么少了一把工具」：没配 search.endpoint 时 web_search 整族不注入。

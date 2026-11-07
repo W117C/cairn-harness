@@ -43,6 +43,7 @@ import {
 import { cleanOrphanWorktree, parseWorktreeRef, worktreeDiff as readWorktreeDiff } from "../../../../src/agent/worktree";
 import { ownedWorktreeAgentIds } from "../../../../src/agent/orchestrator";
 import { scheduledRunCount } from "../../../../src/main/scheduler-runtime";
+import { forgetBackgroundTasks, listBackgroundTasks, stopBackgroundTask, type BackgroundTaskStatus } from "../../../../src/tools/background-tasks";
 import {
   handleAgentDecide,
   handleAgentRun,
@@ -163,12 +164,15 @@ export interface KernelHost {
   openSession(id: string, workspace?: string): Promise<{ events: AgentEvent[]; session: import("../../../../src/events").SessionRef; view: import("../../../../src/events").SessionView; running: boolean; startedAt?: number }>;
   /** 在跑会话数（per-session runController 键数）——§3.3 退出告知闸的判据（main 内直调，不经 IPC）。 */
   runningCount(): number;
+  hasWorkspace(workspace: string): boolean;
+  backgroundTaskList(sessionId: string, workspace?: string): Promise<BackgroundTaskStatus[]>;
+  backgroundTaskStop(sessionId: string, taskId: string, workspace?: string): Promise<BackgroundTaskStatus | null>;
   /** 发送队列 sidecar 读回（重启恢复的数据面）；会话不存在 fail-visible。 */
   queueGet(sessionId: string, workspace?: string): Promise<{ items: SessionQueueEntry[] }>;
   /** 覆盖写发送队列 sidecar（空数组 = 删除 sidecar）；非法载荷 fail-visible。 */
   queueSet(sessionId: string, items: SessionQueueEntry[], workspace?: string): Promise<{ ok: boolean; error?: string }>;
   /** 会话删除或重命名成功后清理内存归属表、漂移快照与用量缓存（幂等）。 */
-  forgetSession(sessionId: string, workspace?: string): void;
+  forgetSession(sessionId: string, workspace?: string, renamedTo?: string): void;
 }
 
 /** 漂移拒绝文案（计划 Global Constraints 原文，逐字）。 */
@@ -266,7 +270,7 @@ export async function stableSessionSnapshot(
  *  id 与 JSONL 一字不动（秒戳身份不换——渲染层活动会话、settings.currentSession、归属表都持着它）。
  *  返回落下的标题；任一门槛不满足或提炼不出（纯附件/全空白）= null（保留戳名，不硬凑）。 */
 export async function autoTitleFirstMessage(
-  repo: Pick<SessionMetadataRepository, "find" | "create" | "setTitle">,
+  repo: Pick<SessionMetadataRepository, "ensureTitle">,
   sessionId: string,
   isEmptySession: boolean,
   message: string,
@@ -276,12 +280,12 @@ export async function autoTitleFirstMessage(
   // 业主口径「标题 20 字」。只改桌面这条调用；core 缺省 32 不动（CLI/其他调用面零影响）。
   const title = deriveSessionTitle(message, 40);
   if (title === null) return null;
-  const record = await repo.find(sessionId);
-  // title 已是真标题（手动命名/前次自动命名落下的 title ≠ id）⇒ 永不覆盖。
-  if (record !== undefined && record.title !== sessionId) return null;
-  if (record === undefined) await repo.create(sessionId, title);
-  else await repo.setTitle(sessionId, title);
-  return title;
+  // 「真标题才写」的读改写收进仓库单个入队操作（ensureTitle）：外层 find（直读）与并发懒建
+  // mutate（markViewed/markActive 同拍 title=id 占位）有竞态——判卷实锤 find 读到懒建前空态、
+  // create 撞「已存在」、标题丢失。落位后的记录回读：标题没写上（已有真标题，永不覆盖）⇒
+  // 返回 null——push-only session_titled 只在真落名时发。
+  const record = await repo.ensureTitle(sessionId, title);
+  return record.title === title ? title : null;
 }
 
 /** 工作区串真实化 + 去重（2026-10-17 真机实证的重复会话）：env 给的默认工作区可能是
@@ -390,6 +394,7 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
   // 不会静默变成另一个任务的指令（`steering-channel` 头注释同一条纪律）。
   const runSteering = new Map<string, SteeringChannel>();
   const runControllers = new Map<string, { controller: AbortController; workspace: string }>();
+  let transientRuns = 0;
   /** v14 用量账本的单文件缓存：跨面板开合复用，文件变了（size/mtime）才重读。 */
   const usageCache: UsageFileCache = new Map();
   // 每会话这一轮 run 的**起点**（毫秒）：渲染层换实例（HMR/重载）后秒表要接着真值算，
@@ -501,12 +506,12 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
   };
 
   /** 会话工作区解析：显式参 > 归属表 > 全工作区扫描（CLI 建的会话/进程重启后的首开）> activeWorkspace。 */
-  const resolveSessionWs = async (sessionId: string, explicit?: string): Promise<string> => {
+  const resolveSessionWs = async (sessionId: string, explicit?: string, remember = true): Promise<string> => {
     if (explicit !== undefined) {
       const ws = canonicalWorkspacePath(explicit);
       // 显式 workspace 同样过已登记根闸：否则 openSession/run 的 workspace 参数就是一个任意目录读面。
       if (!workspaces.includes(ws)) throw new Error(`workspace 不在 workspaces 里: ${explicit}`);
-      owner.set(sessionId, ws);
+      if (remember) owner.set(sessionId, ws);
       return ws;
     }
     const known = owner.get(sessionId);
@@ -517,11 +522,22 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       throw new Error(`会话 id 在多个工作区同时存在（${hits.join("、")}），必须显式指定 workspace：${sessionId}`);
     }
     if (hits.length === 1) {
-      owner.set(sessionId, hits[0]!);
+      if (remember) owner.set(sessionId, hits[0]!);
       return hits[0]!;
     }
     if (known !== undefined) return known;
     return activeWorkspace;
+  };
+
+  const backgroundLogPath = async (id: string, workspace?: string): Promise<string> => {
+    if (typeof id !== "string" || id.trim() === "") throw new Error("会话 id 必须是非空字符串");
+    if (workspace !== undefined && (typeof workspace !== "string" || workspace.trim() === "")) {
+      throw new Error("workspace 必须是非空字符串");
+    }
+    const ws = await resolveSessionWs(id, workspace, false);
+    const root = wsRoot(ws);
+    if (!(await sessionExists(root, id))) throw new Error(`会话不存在: ${id}`);
+    return pathOf(root, id);
   };
 
   // 控制面不修改 owner：另一个项目的同名会话不能借打开/停止来改写运行归属。
@@ -563,7 +579,12 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       const sessionId = req.sessionId;
       if (sessionId === undefined) {
         // 非会话模式：临时日志，无归属无漂移无可取消缝；plan 覆盖仍随请求透传。
-        return handleAgentRun(req, req.planRequired !== undefined ? { planRequired: req.planRequired } : {});
+        transientRuns++;
+        try {
+          return await handleAgentRun(req, req.planRequired !== undefined ? { planRequired: req.planRequired } : {});
+        } finally {
+          transientRuns--;
+        }
       }
       const live = runControllers.get(sessionId);
       if (live !== undefined && req.workspace !== undefined && canonicalWorkspacePath(req.workspace) !== live.workspace) {
@@ -587,23 +608,15 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       // 插话盒随 run 建：收件箱是 per-run 的（见上方 runSteering 处注释）。
       const steering = createSteeringChannel();
       runSteering.set(sessionId, steering);
-      // 第十八遍：首条消息自动命名——空会话（0 字节）才出手；装饰性增强不挡跑（sidecar 写不上
-      // 就留戳名，catch 不吞 run）。落名后 push-only 合成事件（同收束终态先例，不落 JSONL）让
-      // 渲染层秒级刷新侧栏标题。**刻意排在 controller 注册之后**：demo 剧本 21ms 就收束，
-      // openSession.running 的观察窗只比注册点晚几毫秒——挂点塞在注册前会把窗口整个挤掉
-      // （kernel-host「收束补发合成终态」判卷实证）。
-      const titled = await autoTitleFirstMessage(
-        requireSessionMetadata(),
-        sessionId,
-        (await statSession(logPath))?.size === 0,
-        req.message,
-      ).catch(() => null);
-      if (titled !== null) {
-        deps.outbox("onEvent", withWorkspace({ type: "session_titled", session_id: sessionId, title: titled, ts: Date.now() }, sessionId));
-      }
+      // 空会话前提在 run 前拍下（落名参数与原时序同参）。
+      const wasEmptySession = (await statSession(logPath))?.size === 0;
       let settledOk = false;
       let accepted = false;
       let activeAudit: Promise<void> | undefined;
+      // 落名 promise 挂变量：finally（controller 守卫块）里等待它——run 应答返回前标题已可查询
+      // （kernel-host 判卷钉过「run → listSessions 立即可见标题」的时序），又不把 run 应答拖到
+      // user_message 之前。
+      let titlePromise: Promise<void> | undefined;
       try {
         const res = await handleAgentRun(req, {
           sessionId, logPath, workspace: runWs, signal: controller.signal, steering,
@@ -614,6 +627,21 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
               (!("agent_id" in event) || event.agent_id === undefined) && runControllers.get(sessionId)?.controller === controller) {
               accepted = true;
               activeAudit = writeSessionAudit(sessionId, "markActive");
+              // 第十八遍：首条消息自动命名——空会话（wasEmptySession，run 前拍下）才出手。
+              // **落名时机（2026-11-07 真机实证改）**：挪到「run 真正接收用户轮」这一拍异步落，
+              // 不再在起跑前抢先落名——此前请求校验/模型解析失败（resolveRunModel 抛
+              // 「未知主会话 provider」）也会把标题落进 metadata，侧栏多出有名字的 0 字节空会话
+              // 垃圾（真机两个）。装饰性增强不挡跑（sidecar 写不上就留戳名，catch 不吞 run，
+              // 与原纪律同式）。落名后 push-only 合成事件（同收束终态先例，不落 JSONL）让渲染层
+              // 秒级刷新侧栏标题。controller 注册时序不动（demo 剧本 21ms 收束的观察窗约束仍成立：
+              // user_message 是 run 的第一拍，早于任何模型输出）。
+              titlePromise = autoTitleFirstMessage(requireSessionMetadata(), sessionId, wasEmptySession, req.message)
+                .then((titled) => {
+                  if (titled !== null) {
+                    deps.outbox("onEvent", withWorkspace({ type: "session_titled", session_id: sessionId, title: titled, ts: Date.now() }, sessionId));
+                  }
+                })
+                .catch(() => { /* 同原 .catch(() => null)：装饰性增强，写不上就留戳名 */ });
             }
           },
         });
@@ -623,6 +651,7 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       } finally {
         if (runControllers.get(sessionId)?.controller === controller) {
           await activeAudit;
+          if (titlePromise !== undefined) await titlePromise;
           if (accepted) await writeSessionAudit(sessionId, "markIdle");
           runControllers.delete(sessionId);
           runStartedAt.delete(sessionId);
@@ -924,7 +953,16 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       }
     },
     // §3.3 退出告知闸判据（main 内直调）：在跑 run 的 per-session controller 键数。
-    runningCount: () => runControllers.size + scheduledRunCount(),
+    runningCount: () => runControllers.size + transientRuns + scheduledRunCount(),
+    hasWorkspace: (workspace) => {
+      try {
+        return workspaces.includes(workspace) && realpathSync(workspace) === workspace;
+      } catch {
+        return false;
+      }
+    },
+    backgroundTaskList: async (id, workspace) => listBackgroundTasks(await backgroundLogPath(id, workspace)),
+    backgroundTaskStop: async (id, taskId, workspace) => stopBackgroundTask(await backgroundLogPath(id, workspace), taskId),
     openSession: async (id, workspace) => {
       const ws = await resolveSessionWs(id, workspace);
       const root = wsRoot(ws);
@@ -963,12 +1001,13 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
         return { ok: false, error: error instanceof Error ? error.message : String(error) };
       }
     },
-    forgetSession: (sessionId, workspace) => {
+    forgetSession: (sessionId, workspace, renamedTo) => {
       if (typeof sessionId !== "string" || sessionId === "") return;
       if (workspace !== undefined && workspace !== "") {
         const ws = canonicalWorkspacePath(workspace);
         if (owner.get(sessionId) === ws) owner.delete(sessionId);
         const logPath = pathOf(wsRoot(ws), sessionId);
+        forgetBackgroundTasks(logPath, renamedTo === undefined ? undefined : pathOf(wsRoot(ws), renamedTo));
         drift.delete(logPath);
         usageCache.delete(logPath);
         // 其他工作区的同名会话可能仍用这个计数做漂移归因。
@@ -981,6 +1020,7 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       ownAppends.delete(sessionId);
       for (const ws of workspaces) {
         const logPath = pathOf(wsRoot(ws), sessionId);
+        forgetBackgroundTasks(logPath, renamedTo === undefined ? undefined : pathOf(wsRoot(ws), renamedTo));
         drift.delete(logPath);
         usageCache.delete(logPath);
       }

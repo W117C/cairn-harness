@@ -18,7 +18,7 @@ import { handleAttachmentThumb } from "./thumb";
 import type { InvokeChannel, PushChannel } from "./channels";
 // SEMA §3.5/§12：IPC_PROTOCOL_VERSION 是本文件从协议面取的唯一**值**（其余全 type import）——
 // wired 表的 protocolVersion 行把它递给 renderer 比对构建期注入的期望版本。
-import { IPC_PROTOCOL_VERSION, type AddProjectInput, type SessionQueueEntry } from "../../../../src/main/ipc-protocol";
+import { IPC_PROTOCOL_VERSION, type AddProjectInput, type SessionQueueEntry, type SettingsMigrationSource } from "../../../../src/main/ipc-protocol";
 // M3 终审 Critical 修复：澄清/方案两卡自 M2 起端到端死路（wired 表漏行 ⇒ renderer 调用即
 // reject「No handler registered」）。与 decide 同式——main 进程 import core 出口后直调，
 // 不经 kernel-host 转手（两出口本就是为 IPC 处理函数而生的单例缝，见 agent-runner 各自头注）。
@@ -62,6 +62,7 @@ import {
   providerInfo,
   reloadSettings,
   setSettings,
+  store,
 } from "../../../../src/main/settings-handlers";
 import {
   handleFeedbackList, handlePinSet, handlePinList,
@@ -83,6 +84,8 @@ import { workspaceOfSessionsRoot } from "../../../../src/main/sessions";
 import { getLastWorkspace } from "../../../../src/main/runner-workspace";
 import { TerminalHost } from "./terminal-host";
 import { BrowserHost } from "./browser-host";
+import { makeBrowserAgentTools } from "./browser-agent-tools";
+import { registerBrowserAgentTools } from "../../../../src/agent/browser-agent";
 import type { ClarifyAnswerMap } from "../../../../src/events";
 import { installProviderKeyBackend } from "../../../../src/main/provider-keys";
 import { installSafeStorageBackend } from "../../../../src/agent/plugins/secrets";
@@ -93,6 +96,12 @@ import {
   trustFilePathOf,
   userPluginsDirOf,
 } from "../../../../src/agent/plugins";
+import { validateUserMcpServer } from "../../../../src/agent/plugins/user-mcp";
+import { McpManager } from "../../../../src/agent/plugins/mcp";
+import { UserIntegrationSettings } from "../../../../src/main/user-integration-settings";
+import { SubagentSettings } from "../../../../src/main/subagent-settings";
+import { handleIdleTaskEnqueue, handleIdleTaskList, handleIdleTaskUpdate } from "../../../../src/main/scheduler-runtime";
+import { SettingsMigration } from "./settings-migration";
 import {
   loadPluginMarketplaceCatalog,
   marketplaceSourceConfigFromEnv,
@@ -318,6 +327,24 @@ const resolveWorkspace = (): string => windowWorkspaces.require();
 
 // 插件安装、registry 与运行时发现必须共享同一个数据根；renderer 永远不提供落点路径。
 const pluginDataRoot = pluginDataRootOf(process.env, homedir());
+const userIntegrations = new UserIntegrationSettings(pluginDataRoot);
+const subagentSettings = new SubagentSettings();
+const settingsMigration = new SettingsMigration({
+  async pickFiles(source) {
+    const claude = source === "claude-code";
+    const result = await dialog.showOpenDialog({
+      title: claude ? "选择 Claude Code 配置" : "选择 Codex 配置",
+      defaultPath: join(homedir(), claude ? ".claude" : ".codex"),
+      properties: ["openFile", "multiSelections", "showHiddenFiles"],
+      filters: [{ name: "配置文件", extensions: claude ? ["md", "json"] : ["md", "toml", "json"] }],
+    });
+    return result.canceled ? null : result.filePaths;
+  },
+  getInstructions: async () => (await getSettings()).customInstructions,
+  importInstructions: (content) => store().importCustomInstructions(content),
+  listMcpNames: () => userIntegrations.listMcpNames(),
+  importMcp: (servers) => userIntegrations.importMcp(servers),
+});
 const effectiveUserPluginsDir = process.env.M2E_USER_PLUGINS || userPluginsDirOf(pluginDataRoot);
 const effectivePluginTrustFile = process.env.M2E_TRUST_FILE || trustFilePathOf({ pluginDataRoot });
 const pluginInstallRegistry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
@@ -442,6 +469,9 @@ const browserHost = new BrowserHost(
     broadcastToWindows(PUSH_CHANNELS.onBrowserState, state);
   },
 );
+// 浏览器驾驶三件（2026-11-06 业主①）：进程级一次性注册；installAppTools 消费——
+// CLI/headless 无此注册 ⇒ 整族不注入，模型面一个字节不付。
+registerBrowserAgentTools(makeBrowserAgentTools(browserHost));
 
 // v6 项目预览运行时：static 走进程内静态服务，vite 起受控子进程（命令写死在 core，见其头注）。
 // 状态推送与 browserHost 同一条广播面；退出时由 will-quit 全部回收（不留孤儿 dev server）。
@@ -596,11 +626,13 @@ async function explicitSessionsRoot(workspace: unknown): Promise<string | undefi
   return join(canonical, ".agent", "sessions");
 }
 
-async function mutateSession<T>(id: string, workspace: unknown, mutate: (root: string) => Promise<T>): Promise<T> {
+async function mutateSession<T>(
+  id: string, workspace: unknown, mutate: (root: string) => Promise<T>, renamedTo?: (result: T) => string,
+): Promise<T> {
   const root = await explicitSessionsRoot(workspace) ?? await resolveSessionRoot(id);
   if (root === null) throw new Error(`会话不存在: ${id}`);
   const result = await mutate(root);
-  host.forgetSession(id, workspaceOfSessionsRoot(root) ?? undefined);
+  host.forgetSession(id, workspaceOfSessionsRoot(root) ?? undefined, renamedTo?.(result));
   return result;
 }
 
@@ -966,8 +998,8 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   },
   setGoal: (req) => handleGoalSet(req as never),
   cardAction: (req) => handleCardAction(req as never),
-  renameSession: (oldId, newName, workspace) => mutateSession(oldId as string, workspace, (root) =>
-    handleSessionRename(oldId as string, newName as string, root)),
+  renameSession: (oldId, newName, workspace) => mutateSession(oldId as string, workspace,
+    (root) => handleSessionRename(oldId as string, newName as string, root), (result) => result.id),
   // v35：会话级模型/思考档持久化（sidecar；null = 清除回跟随全局）。
   sessionPrefsSet: (id, prefs, workspace) => host.sessionPrefsSet(id, prefs, workspace),
   deleteSession: (id, workspace) => mutateSession(id as string, workspace, async (root) => {
@@ -985,7 +1017,16 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
       try { return (await stat(p)).isDirectory(); } catch { return false; }
     });
     if (missing !== null) return { ok: false, error: missing };
-    return windowWorkspaces.select(requested);
+    const selected = await windowWorkspaces.select(requested);
+    if (selected.ok) {
+      // provider registry 是进程级模块状态；切项目后必须换成**当前窗口工作区**的那一份，
+      // 否则选择器里还挂着上一个项目的自定义家，保存也会继续写旧项目的 .agent/providers.json。
+      const current = workspaceContext();
+      const loaded = current === null ? null : loadCustomProviders(current);
+      installCustomProviders(loaded?.kind === "ok" ? loaded.derived : []);
+      if (loaded?.kind === "broken") console.warn(`[custom-providers] ${loaded.path} 配置有问题：${loaded.message}`);
+    }
+    return selected;
   },
   // v33：窗口可见会话上报（通知判据）。workspace 规范化后存，与 run 请求的工作区同口径比对；
   // 校验失败（未注册）存 null ⇒ 只按 session 比对（宁可多一条，不丢一条——与旧注释同一取舍）。
@@ -1326,7 +1367,7 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     // 为什么不是「先存钥匙」：钥匙面的判据是「已装上的 provider 才许存」（本仓既有判据，未知 id 拒收），
     // 所以首次添加一家时先存钥匙必然被拒 —— 用户看到的就是「点了保存没有回音」。
     // 判据是对的，错的是顺序。
-    const prepared = prepareCustomProvider(workspace, {
+    const prepared = prepareCustomProvider(resolveWorkspace(), {
       id: providerId,
       ...(r.label !== undefined ? { label: r.label } : {}),
       protocol: r.protocol,
@@ -1350,7 +1391,7 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   },
   // 自定义供应商编辑模式的预填数据面：DerivedCustomProvider 的界面投影（不含 key 明文）。
   providerCustomList: async () => {
-    const loaded = loadCustomProviders(workspace);
+    const loaded = loadCustomProviders(resolveWorkspace());
     if (loaded.kind !== "ok") return { ok: true, entries: [] };
     return {
       ok: true,
@@ -1370,6 +1411,39 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
         })),
       })),
     };
+  },
+  subagentSettingsList: () => subagentSettings.list(),
+  subagentSettingsRead: (file) => subagentSettings.read(file as string),
+  subagentSettingsSave: (file, markdown, expectedRevision) => subagentSettings.save(file as string, markdown as string, expectedRevision as string | null),
+  subagentSettingsRemove: (file, expectedRevision) => subagentSettings.remove(file as string, expectedRevision as string),
+  settingsPreviewMigration: (source) => settingsMigration.preview(source as SettingsMigrationSource),
+  settingsApplyMigration: (id, items) => settingsMigration.apply(id as string, items as string[]),
+  idleTaskList: () => handleIdleTaskList(resolveWorkspace()),
+  idleTaskEnqueue: (raw) => handleIdleTaskEnqueue(raw, resolveWorkspace()),
+  idleTaskUpdate: (id, action) => handleIdleTaskUpdate(id, action, resolveWorkspace()),
+  backgroundTaskList: (id, workspace) => host.backgroundTaskList(id as string, workspace as string | undefined),
+  backgroundTaskStop: (id, taskId, workspace) => host.backgroundTaskStop(id as string, taskId as string, workspace as string | undefined),
+  mcpUserConfig: () => userIntegrations.mcpConfig(),
+  mcpUserSave: (req) => userIntegrations.mcpSave(req as Parameters<UserIntegrationSettings["mcpSave"]>[0]),
+  hooksUserConfig: () => userIntegrations.hooksConfig(),
+  hooksUserSave: (req) => userIntegrations.hooksSave(req as Parameters<UserIntegrationSettings["hooksSave"]>[0]),
+  mcpUserProbe: async (req) => {
+    const r = req as { name: string; config: unknown };
+    const name = String(r.name ?? "").trim();
+    if (name === "") return { ok: false, error: "缺 server 名" };
+    const v = validateUserMcpServer(r.config);
+    if (!v.ok) return { ok: false, error: v.error };
+    // 独立 McpManager（连接即关）：真握手 + tools/list，不碰会话运行时的连接态。
+    const mcp = new McpManager();
+    try {
+      const res = await mcp.connect("probe", name, v.config);
+      if (!res.ok) return { ok: false, error: res.error ?? "连接失败" };
+      return { ok: true, tools: res.tools.map((t) => t.name), toolCount: res.tools.length };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    } finally {
+      await mcp.disconnectAll().catch(() => {});
+    }
   },
   checkUpdate: () => handleUpdateCheck(),
   openExternal: async (url) => {
@@ -1735,7 +1809,11 @@ app.whenReady().then(() => {
     (injected) => console.log(`[byok-inject] 启动注入${injected ? "：有已存 key 注入 provider env" : "：无可注入 key（未存或 env 优先）"}`),
     (error) => console.error("[byok-inject] 启动注入失败（不阻启动）:", error),
   );
-  void serveScheduler({ workspace }).then(
+  void serveScheduler({
+    workspace: canonicalWorkspacePath(workspace),
+    isAgentBusy: () => host.runningCount() > 0,
+    isIdleWorkspaceAvailable: (target) => host.hasWorkspace(target),
+  }).then(
     ({ stop }) => {
       stopDesktopScheduler = stop;
       console.log("[m4a] 调度器已启动（桌面端常驻接线：快照/CRUD/触发同实例）");

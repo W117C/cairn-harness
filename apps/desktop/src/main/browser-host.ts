@@ -65,6 +65,8 @@ export class BrowserHost {
   /** 已授权站点（host）。只由 open() 的显式导航写入——渲染层在地址栏提交前已问过用户。 */
   private readonly allowedHosts = new Set<string>();
   private readonly entries = new Map<string, Entry>();
+  /** 活动标签跟踪（浏览器驾驶三件）：window.id → 最后一次拿到非零矩形的 entry key。 */
+  private readonly activeKeyByWin = new Map<number, string>();
   private readonly observedOwners = new WeakSet<BrowserWindow>();
   constructor(
     private readonly getWindow: () => BrowserWindow | null,
@@ -276,6 +278,82 @@ export class BrowserHost {
     }
     e.view.setVisible(true);
     e.view.setBounds({ x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) });
+    // 活动标签跟踪（2026-11-06 浏览器驾驶三件）：非零矩形 = 用户正看着的那一张。
+    // 渲染层在标签切换/窗格开合时同步矩形（切走 = 零矩形），所以「最后一次非零」就是活动面。
+    this.activeKeyByWin.set(e.owner.id, key);
+  }
+
+  /** 浏览器驾驶三件用：当前活动标签（用户看得见的那张）；窗格全关/全隐藏 ⇒ null。 */
+  activeTabId(owner?: BrowserWindow | null): string | null {
+    const win = owner ?? this.getWindow();
+    if (win === null || win.isDestroyed()) return null;
+    const key = this.activeKeyByWin.get(win.id);
+    if (key === undefined) return null;
+    const e = this.entries.get(key);
+    if (e === undefined || e.view.webContents.isDestroyed()) return null;
+    return e.tabId;
+  }
+
+  /** browser_navigate 的执行端：先过与 will-navigate 同一把 host 闸（未授权拒，工具不借道越闸），
+   *  过闸后走 open() 的既有全链（视图复用/授权登记/加载失败推送）。活动标签不存在 ⇒ 拒。 */
+  agentNavigate(url: string, owner?: BrowserWindow | null): { ok: boolean; error?: string } {
+    const tabId = this.activeTabId(owner);
+    if (tabId === null) {
+      return { ok: false, error: "侧栏浏览器没有活动标签——先让用户打开浏览器窗格（⌘⇧B 或工具栏），再导航" };
+    }
+    if (!this.targetAllowed(url)) {
+      const host = (() => { try { return new URL(url).hostname; } catch { return url; } })();
+      return { ok: false, error: `站点未授权：${host}——授权走窗格地址栏的手动首访（弹卡允许后工具就能导航）` };
+    }
+    const win = owner ?? this.getWindow();
+    const opened = this.open(tabId, url, win);
+    return opened.ok ? { ok: true } : opened;
+  }
+
+  /** browser_snapshot：当前页 URL/标题/可见文本（帽 8000 字符）。只内省，不发请求。 */
+  async snapshot(owner?: BrowserWindow | null): Promise<{ ok: boolean; url?: string; title?: string; text?: string; error?: string }> {
+    const tabId = this.activeTabId(owner);
+    if (tabId === null) return { ok: false, error: "侧栏浏览器没有活动标签——先让用户打开浏览器窗格" };
+    const key = this.resolveKey(tabId, owner);
+    const e = key === null ? undefined : this.entries.get(key);
+    if (e === undefined) return { ok: false, error: "活动标签的视图已关闭" };
+    try {
+      const r = (await e.view.webContents.executeJavaScript(
+        "JSON.stringify({ title: document.title, url: location.href, text: (document.body && document.body.innerText ? document.body.innerText : '').slice(0, 8000) })",
+        false,
+      )) as string;
+      const parsed = JSON.parse(r) as { title?: string; url?: string; text?: string };
+      return {
+        ok: true,
+        ...(parsed.title !== undefined ? { title: parsed.title } : {}),
+        ...(parsed.url !== undefined ? { url: parsed.url } : {}),
+        ...(parsed.text !== undefined ? { text: parsed.text } : {}),
+      };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
+  /** browser_pick：按 CSS 选择器查元素（文本片段 + 标签名，帽 10 条）。只内省。 */
+  async pickBySelector(selector: string, max: number, owner?: BrowserWindow | null): Promise<{ ok: boolean; matches?: { text: string; tag: string }[]; error?: string }> {
+    const tabId = this.activeTabId(owner);
+    if (tabId === null) return { ok: false, error: "侧栏浏览器没有活动标签——先让用户打开浏览器窗格" };
+    const key = this.resolveKey(tabId, owner);
+    const e = key === null ? undefined : this.entries.get(key);
+    if (e === undefined) return { ok: false, error: "活动标签的视图已关闭" };
+    // 选择器不原样拼进页面代码（页面上下文注入面）：JSON.stringify 成字符串字面量再进去。
+    const script =
+      "(() => { const sel = " + JSON.stringify(selector) + "; const cap = " + JSON.stringify(max) + ";" +
+      " try { return JSON.stringify([...document.querySelectorAll(sel)].slice(0, cap).map(el => ({ text: (el.textContent || '').trim().slice(0, 200), tag: el.tagName.toLowerCase() }))); }" +
+      " catch (e) { return JSON.stringify({ error: String(e && e.message || e) }); } })()";
+    try {
+      const r = (await e.view.webContents.executeJavaScript(script, false)) as string;
+      const parsed = JSON.parse(r) as { error?: string } | { text: string; tag: string }[];
+      if (!Array.isArray(parsed)) return { ok: false, error: parsed.error ?? "选择器执行失败" };
+      return { ok: true, matches: parsed };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
   }
 
   navigate(id: string, action: "back" | "forward" | "reload", owner?: BrowserWindow | null): void {
