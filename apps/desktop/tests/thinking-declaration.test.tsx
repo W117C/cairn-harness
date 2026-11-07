@@ -112,6 +112,7 @@ describe("声明 → capability → 模型菜单（整条链走真函数）", ()
         thinkingLevels={opt?.thinkingLevels}
         thinkingSupported
         onThinkingChange={() => undefined}
+        initialFocus="effort"
       />,
     );
     expect(html).toContain('data-e="off"');
@@ -121,7 +122,7 @@ describe("声明 → capability → 模型菜单（整条链走真函数）", ()
     expect(html).not.toContain("当前模型不支持思考强度"); // 声明过 ⇒ 不摆那道禁用注记
   });
 
-  it("没声明的模型 ⇒ 整段禁用（fail-visible，不谎称可调）", () => {
+  it("没声明的模型 ⇒ 思考面空态（fail-visible，不摆假按键）", () => {
     const options = menuOptionsFrom(
       configWith([{ id: "coder", model: "deepseek-coder", contextWindow: 65_536 }]),
       "myprovider-coder",
@@ -137,10 +138,11 @@ describe("声明 → capability → 模型菜单（整条链走真函数）", ()
         thinking="off"
         thinkingSupported={false}
         onThinkingChange={() => undefined}
+        initialFocus="effort"
       />,
     );
-    expect(html).toContain('data-e="high"'); // 四档照旧摆出来（不摆空壳）
-    expect(html).toContain("disabled"); // 但整段是禁用的
+    expect(html).not.toContain('data-e='); // 没有可摆的档位行（不摆假按键）
+    expect(html).not.toContain("disabled"); // 也没有被禁用的行——是空态不是禁用
     expect(html).toContain("当前模型不支持思考强度"); // 且明说为什么
   });
 });
@@ -179,7 +181,7 @@ describe("设置表单里的那一格（勾选四档 + 首选档）", () => {
     const src = readRendererFile("components/CustomProviderForm.tsx");
     expect(src).toContain("thinking={thinking}");
     expect(src).toContain("onThinkingChange={(id, next) => setThinking((cur) => ({ ...cur, [id]: next }))}");
-    expect(src).toContain("const models = modelsFromPicker(discovered.rows, selected, thinking);");
+    expect(src).toContain("const models = modelsFromPicker(discovered.rows, selected, thinking, overrides);");
     expect(src).toContain("setThinking(initialDeclarations(r.rows, props.editing?.models));");
   });
 });

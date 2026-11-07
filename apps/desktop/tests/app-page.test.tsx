@@ -63,13 +63,14 @@ describe("页体并入设置（v7.1 业主裁）：AppPageBody + 事实源", () 
     expect(src).toContain('{...(props.onOpenSection !== undefined ? { onOpenMemorySettings');
   });
 
-  it("记忆列表按层分组：只在「全部」下出组头（单层筛选不重复那行）", () => {
+  it("记忆列表按语义分组：只在「全部」下出组头（单层筛选不重复那行）", () => {
     const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/MemoryPane.tsx", import.meta.url)), "utf8");
     const css = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
-    // 组头由层别变化驱动，筛选到单层时 grouped=false ⇒ 一节组头都不出。
+    // 组头由语义类别变化驱动，筛选到单层时 grouped=false ⇒ 一节组头都不出。
     expect(src).toContain('const grouped = filter === "all";');
-    expect(src).toContain('{grouped && (index === 0 || sorted[index - 1]?.layer !== r.layer) && (');
-    expect(src).toContain('className="ap-group-label"');
+    expect(src).toContain('{grouped && (index === 0 || memorySemanticGroup(sorted[index - 1]!.topic) !== memorySemanticGroup(r.topic)) && (');
+    // 2026-11-05 记忆卡重做：组头仍是 ap-group-label（网格跨列 variant 叠加其上）。
+    expect(src).toContain('ap-group-label memory-grid-label');
     expect(css).toContain(".ap-group-label {");
   });
 
@@ -134,11 +135,13 @@ describe("记忆页重做（2026-10-16 业主裁 · D/E/F · 源码哨兵）", (
     expect(src).toContain("subTitle={fullTime(selected.modified)}");
   });
 
-  it("H：列表行顺序 = 名称 / 元信息（层别徽标下架，层别只从左侧筛选读）", () => {
-    const rowAt = src.indexOf('<span className="nm">{r.topic.topic}</span>');
-    const subAt = src.indexOf('<span className="sub" title={fullTime(r.topic.modified)}>');
+  it("H：卡片行顺序 = 名称 / 正文 hero / 卡脚元信息（2026-11-05 内容前置卡重做；层别随卡徽标）", () => {
+    const rowAt = src.indexOf('<span className="nm" title={r.topic.topic}>');
+    const bodyAt = src.indexOf('className="memory-card-body"');
+    const footAt = src.indexOf('className="memory-card-foot"');
     expect(rowAt).toBeGreaterThan(-1);
-    expect(subAt).toBeGreaterThan(rowAt);
+    expect(bodyAt).toBeGreaterThan(rowAt);
+    expect(footAt).toBeGreaterThan(bodyAt);
     expect(src).not.toContain('className="sp-tag">{r.layer === "project"');
   });
 

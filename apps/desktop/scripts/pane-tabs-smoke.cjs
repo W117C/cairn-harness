@@ -1,6 +1,6 @@
 // 单窗格标签页的真实 renderer 冒烟（2026-10-25）：
 //   ① 切标签只换可见性，不卸载内容（终端/浏览器/文件树/旁路状态要保留）；
-//   ② 8 个窗格全开、标签条横向溢出时，激活标签必须自己滚进可视区。
+//   ② 7 个工具窗格与独立插件侧栏同时打开时，激活标签必须完整可见。
 // 先 pnpm --filter cairn-desktop build，再 electron scripts/pane-tabs-smoke.cjs [输出目录]
 const { app, BrowserWindow, nativeTheme } = require("electron");
 const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
@@ -35,7 +35,7 @@ async function main() {
     },
   });
   const errors = [];
-  win.webContents.on("console-message", (_e, level, message) => { if (level >= 2) errors.push(message); });
+  win.webContents.on("console-message", (details) => { if (details.level === "error") errors.push(details.message); });
   await win.webContents.session.clearStorageData();
   await win.loadFile(process.env.CAIRN_RENDERER_ENTRY ?? join(__dirname, "../dist/index.html"));
   await new Promise((r) => setTimeout(r, 1200));
@@ -58,7 +58,7 @@ async function main() {
   await js(`document.querySelector('[aria-label="切换到方案窗格"]').click()`); await wait();
   check("再切回方案：方案状态仍在（DOM 未被销毁重建）", (await readState()).planIdentity === "kept-plan");
 
-  // 开满 8 个窗格，验证激活标签滚入可视区。
+  // 当前插件入口打开独立上下文侧栏；同时保留 7 个工具窗格的内容树。
   await key("KeyD", "d", { meta: true, shift: true }); await wait();
   await key("KeyT", "t", { meta: true, shift: true }); await wait();
   await key("KeyB", "b", { meta: true, shift: true }); await wait();
@@ -66,7 +66,7 @@ async function main() {
   await key("Semicolon", ";", { meta: true }); await wait();
   await key("KeyU", "u", { meta: true, shift: true }); await wait(800);
   state = await readState();
-  check("8 个窗格全挂载，只有一个 active 且可见", state.mounted === 8 && state.activeCount === 1 && state.active === "plugins", state);
+  check("7 个工具窗格与独立插件侧栏同时在场，只有旁路 active", state.mounted === 7 && state.activeCount === 1 && state.active === "sidechat" && !state.pluginsPresent && await js(`!!document.querySelector('.mod-sidebar')`), state);
   const geometry = await js(`(() => {
     const scroller = document.querySelector('.pane-nav-items');
     const activeTab = document.querySelector('.pane-tab.on');
@@ -87,16 +87,37 @@ async function main() {
   })()`);
   check("溢出标签条左缘有渐隐覆盖层（首标签淡出，不被拦腰切）", maskCheck !== null && maskCheck.scrolled === "true" && maskCheck.fadeImage !== null && parseFloat(maskCheck.fadeWidth) >= 20, maskCheck);
   const img = await win.webContents.capturePage();
-  writeFileSync(join(out, "01-eight-panes-active-visible.png"), img.toPNG());
+  writeFileSync(join(out, "01-seven-panes-active-visible.png"), img.toPNG());
+  for (const width of [1120, 880, 1440]) {
+    win.setContentSize(width, 720); await wait(450);
+    const visible = await js(`(() => {
+      const s = document.querySelector('.pane-nav-items'), t = document.querySelector('.pane-tab.on');
+      const sr = s.getBoundingClientRect(), tr = t.getBoundingClientRect();
+      return { viewport: innerWidth, width: sr.width, left: tr.left - sr.left, right: tr.right - sr.right };
+    })()`);
+    if (width === 880) {
+      check("880px 自动收起工具区时保留全部窗格状态", visible.width === 0 && (await readState()).mounted === 7 && (await readState()).fileIdentity === "kept-file", visible);
+    } else {
+      check(`${width}px 调整窗口后当前标签与关闭按钮完整可见`, visible.width > 0 && visible.left >= -1 && visible.right <= 1, visible);
+    }
+    const composer = await js(`(() => {
+      const row = document.querySelector('.row3'), action = row.querySelector('.send-btn:last-child');
+      const r = row.getBoundingClientRect(), a = action.getBoundingClientRect();
+      return { gap: r.right - a.right, padding: parseFloat(getComputedStyle(row).paddingRight) };
+    })()`);
+    check(`${width}px 输入控件换行后主动作仍靠右`, composer.gap <= composer.padding + 1, composer);
+  }
   await js(`document.querySelector('[aria-label="切换到浏览器窗格"]').click()`); await wait();
   writeFileSync(join(out, "02-browser.png"), (await win.webContents.capturePage()).toPNG());
-  await js(`document.querySelector('[aria-label="切换到插件窗格"]').click()`); await wait();
+  await js(`document.querySelector('[aria-label="切换到旁路窗格"]').click()`); await wait();
 
-  // 用关闭钮关掉 active 的插件窗格：内容真的移除，其余 7 块仍在。
-  await js(`document.querySelector('[aria-label="关闭插件窗格"]').focus()`);
-  await js(`document.querySelector('[aria-label="关闭插件窗格"]').click()`); await wait();
+  // 关闭 active 的旁路：内容移除，其余 6 块保留，焦点跟随当前可见窗格。
+  await js(`document.querySelector('[aria-label="关闭旁路窗格"]').focus()`);
+  await js(`document.querySelector('[aria-label="关闭旁路窗格"]').click()`); await wait();
   state = await readState();
-  check("关闭 active 窗格只移除那一块，其余状态保留", state.mounted === 7 && state.pluginsPresent === false && state.fileIdentity === "kept-file" && state.planIdentity === "kept-plan", state);
+  check("关闭 active 窗格只移除那一块，其余状态保留", state.mounted === 6 && !state.sidechatPresent && state.fileIdentity === "kept-file" && state.planIdentity === "kept-plan", state);
+  check("关闭后焦点落到当前可见标签", await js(`document.activeElement === document.querySelector('.pane-nav-item[aria-pressed="true"]')`));
+  check("renderer 无控制台错误", errors.length === 0, errors);
 
   writeFileSync(join(out, "checks.json"), JSON.stringify({ checks, consoleErrors: errors }, null, 2));
   console.log(`截图与读数：${out}\n隔离测试配置：${profile}`);
@@ -117,6 +138,7 @@ async function main() {
         fileIdentity: byPane('file')?.dataset.identity ?? null,
         planIdentity: byPane('plan')?.dataset.identity ?? null,
         pluginsPresent: !!byPane('plugins'),
+        sidechatPresent: !!byPane('sidechat'),
       };
     })()`);
   }

@@ -5,7 +5,7 @@
 .ns-status { margin-left: auto; font-size: var(--fs-caption-sm); }
 .ns-status.on { color: hsl(var(--text-100)); }
 .ns-switch { display: inline-flex; gap: 9px; align-items: center; font-size: var(--fs-body-sm); cursor: pointer; }
-.ns-switch input { width: 16px; height: 16px; accent-color: hsl(var(--accent-control)); }
+.ns-switch input { width: 16px; height: 16px; accent-color: hsl(var(--accent-brand)); }
 .ns-secret { display: flex; gap: 6px; width: min(100%, 460px); align-items: center; }
 .ns-secret .ss-field { flex: 1; min-width: 0; }
 .ns-eye { flex: 0 0 36px; padding-inline: 0; justify-content: center; }

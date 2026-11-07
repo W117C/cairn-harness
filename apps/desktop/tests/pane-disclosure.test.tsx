@@ -55,6 +55,16 @@ it("账户菜单固定在轨底部：任意目的地/收起/专注态都只有�
   expect(src).toContain("account={props.account ?? { onOpenSettings: props.onSettings }}");
 });
 
+it("关掉最后一个窗格：焦点回到工具栏入口，不掉到 document.body", () => {
+  const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/PaneDock.tsx", import.meta.url)), "utf8");
+  const close = src.slice(src.indexOf("const closePane = (kind: PaneKind)"), src.indexOf("useEffect(() => {", src.indexOf("const closePane")));
+  expect(close).toContain("const last = props.tabs.length === 1;");
+  expect(close).toContain('document.querySelector<HTMLElement>(\'[data-workbench-changes="true"]\')');
+  expect(close).toContain('document.querySelector<HTMLElement>(\'[aria-label="工作台工具"]\')');
+  expect(close).toContain("opener?.focus();");
+  expect(close).toContain("if (last)");
+});
+
 it("退出语义（2026-11-03 业主）：为窗格借出的右栏，关掉最后一个窗格就整栏收回", () => {
   // 看完代码改动 → 点退出，右栏应当整个关上，而不是落回检查器内容。
   // 判据钉 chrome.ts 的三条关窗路径（closePane / closeLastPane / togglePane 关闭分支）

@@ -1,7 +1,8 @@
 // 控件强调色与品牌色分离（2026-10-21 · Claude v3 token 复核）。
 //
 // Claude v3 的三枚 token 各有明确职责，混用就会把「控件态」读成「品牌态」：
-//   --cds-fill-accent  = role-accent-450 (blue-450) → 焦点环 / 实心填充 / 选中边框
+//   --cds-fill-accent  = role-accent-450 (blue-450) → 焦点环 / 实心填充
+//   （2026-11-05 业主裁：选中边框/勾选框改走品牌陶土，控件蓝只留键盘焦点）
 //   --cds-text-accent  = role-accent-600 (blue-600) → 强调**文字**（链接、选中项文字）
 //   --cds-fill-brand   = clay-emphasized (#c6613f)  → 品牌填充（主按钮）
 //
@@ -53,15 +54,25 @@ describe("控件强调色与品牌色分工（Claude v3）", () => {
     expect(rule).not.toContain("accent-brand");
   });
 
-  it("选中态分工：设置主题选项卡走品牌陶土（2026-11-01 业主裁决），chip/设置档位仍控件蓝", () => {
-    const themeRule = block(".theme-opt.on {");
-    expect(themeRule).toContain("accent-brand");
-    expect(themeRule).not.toContain("accent-control");
-    for (const sel of [".chip.on {", ".ss-opt.on {"]) {
+  it("选中态分工：主题选项卡与权限档卡走品牌陶土（2026-11-05 业主裁决：点击后不要蓝框），chip 仍控件蓝", () => {
+    // 2026-11-05 变更：权限档卡（.ss-opt.on）此前跟 chip 一起用控件蓝，点击后是一圈蓝框 +
+    // 8% 蓝底，业主读成「焦点框残留在页面上」。选中态改走品牌陶土，与主题选项卡同取值；
+    // 控件蓝只留给键盘 :focus-visible 环（见下一条）。chip 是轻量标签态，不在本次裁决面内。
+    for (const sel of [".theme-opt.on {", ".ss-opt.on {"]) {
       const rule = block(sel);
-      expect(rule, sel).toContain("accent-control");
-      expect(rule, sel).not.toContain("accent-brand");
+      expect(rule, sel).toContain("accent-brand");
+      expect(rule, sel).not.toContain("accent-control");
     }
+    const chipRule = block(".chip.on {");
+    expect(chipRule).toContain("accent-control");
+    expect(chipRule).not.toContain("accent-brand");
+  });
+
+  it("原生勾选框不吃控件蓝（2026-11-05）：点选后是品牌色方块，不是浏览器默认蓝", () => {
+    expect(CSS).toContain('input[type="checkbox"], input[type="radio"] { accent-color: hsl(var(--accent-brand)); }');
+    const network = readFileSync(fileURLToPath(new URL("../src/renderer/components/settings/network-settings.css", import.meta.url)), "utf8");
+    expect(network).toContain("accent-color: hsl(var(--accent-brand))");
+    expect(network).not.toContain("accent-color: hsl(var(--accent-control))");
   });
 
   it("焦点环外发光分主题：亮 blue-100 不透明 / 暗 blue-600 60%（v3 --cds-focus-shadow 实测）", () => {

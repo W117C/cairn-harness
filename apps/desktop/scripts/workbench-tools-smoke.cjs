@@ -46,7 +46,13 @@ async function main() {
     win.webContents.sendInputEvent({ type: "keyUp", keyCode, modifiers });
     await settle();
   };
-  const menuItem = async (text) => js(`(() => { const el = [...document.querySelectorAll('[role^="menuitem"]')].find(e => e.textContent.includes(${JSON.stringify(text)})); if (!el) throw new Error('菜单项缺失: ' + ${JSON.stringify(text)}); el.click(); })()`);
+  const openMenu = '[data-workbench-menu][data-state="open"]';
+  const menuItemSelector = JSON.stringify(openMenu + ' [role^="menuitem"]');
+  const menuItems = () => js(`[...document.querySelectorAll(${menuItemSelector})].map(e => e.textContent.trim())`);
+  const menuItem = async (text) => {
+    const found = await js(`(() => { const el = [...document.querySelectorAll(${menuItemSelector})].find(e => e.textContent.startsWith(${JSON.stringify(text)})); el?.click(); return !!el; })()`);
+    if (!found) throw new Error(`工作台菜单项缺失: ${text}`);
+  };
   const menu = async () => { await click('[aria-label="工作台工具"]'); };
   const openFromMenu = async (text) => { await menu(); await menuItem(text); await settle(); };
   const active = (kind) => js(`document.querySelector('[data-pane="${kind}"]')?.dataset.active === 'true'`);
@@ -57,23 +63,25 @@ async function main() {
   check("首页仅保留窗口级工具", home.tools && !home.changes, home);
   if (!home.tools) throw new Error("缺少工作台工具入口");
   await menu();
-  const homeItems = await js(`document.querySelector('[role="menu"]')?.innerText ?? ''`);
-  check("无会话时菜单不提供任务窗格", homeItems.includes("专注模式") && homeItems.includes("插件侧栏") && !homeItems.includes("终端窗格"), homeItems);
+  const homeItems = await menuItems();
+  check("首页工具不提供会话审查入口", homeItems.length === 5 &&
+    ["文件窗格", "终端窗格", "浏览器窗格", "已加载插件", "专注模式"].every(t => homeItems.some(item => item.includes(t))), homeItems);
   await key("Escape");
   await click(".session");
   const shell = await js(`({ labels: [...document.querySelectorAll('.tb-right button')].map(b => b.textContent.trim()), changeLabel: document.querySelector('[data-workbench-changes]')?.getAttribute('aria-label'), hidden: document.querySelector('.inspector-col')?.hasAttribute('inert') })`);
   check("会话只常驻改动和工具，数量指本会话", shell.labels.join("|") === "改动1|工具" && shell.changeLabel === "查看本会话改动（1 个文件）" && shell.hidden, shell);
   await shot("01-session");
   await menu();
-  const menuText = await js(`document.querySelector('[role="menu"]')?.innerText ?? ''`);
-  check("菜单提供现有窗格与布局操作，插件侧栏含义明确", ["文件窗格", "终端窗格", "浏览器窗格", "方案窗格", "任务窗格", "旁路窗格", "插件窗格", "插件侧栏", "右侧面板", "专注模式"].every(t => menuText.includes(t)), menuText);
+  const sessionItems = await menuItems();
+  check("会话工具菜单只保留三个常用窗格与三项布局操作", sessionItems.length === 6 &&
+    ["文件窗格", "终端窗格", "浏览器窗格", "已加载插件", "右侧面板", "专注模式"].every(t => sessionItems.some(item => item.includes(t))), sessionItems);
   await shot("02-tools-menu");
   await key("Escape");
-  const escapeState = await js(`({ menu: !!document.querySelector('[role="menu"][data-state="open"]'), active: document.activeElement?.outerHTML.slice(0,600), focused: document.hasFocus() })`);
+  const escapeState = await js(`({ menu: !!document.querySelector(${JSON.stringify(openMenu)}), active: document.activeElement?.outerHTML.slice(0,600), focused: document.hasFocus() })`);
   check("Esc 关闭菜单并还焦点给工具入口", !escapeState.menu && escapeState.active?.includes('aria-label="工作台工具"'), escapeState);
   await click("[data-workbench-changes]");
   check("改动按钮一次打开审查窗格", await active("changes") && await visible());
-  await openFromMenu("文件窗格");
+  await openFromMenu("打开文件窗格");
   check("从工具菜单打开文件窗格", await active("file"));
   await click("[data-workbench-changes]");
   check("已挂载改动窗格可再次直达，不误关且切到前台", await active("changes") && await js(`!!document.querySelector('[data-pane="file"]')`));
@@ -85,16 +93,16 @@ async function main() {
   check("工具菜单进入专注模式", await js(`document.querySelector('.app')?.dataset.sidebar === 'collapsed' && !document.querySelector('.sidebar-rail')`) && !await visible());
   await openFromMenu("退出专注模式");
   check("工具菜单退出专注模式", await js(`document.querySelector('.app')?.dataset.sidebar === 'expanded'`));
-  await openFromMenu("打开插件侧栏");
+  await openFromMenu("已加载插件");
   check("插件侧栏可从菜单打开", await js(`!!document.querySelector('#mod-sidebar')`));
-  await openFromMenu("收起插件侧栏");
+  await openFromMenu("收起已加载插件");
   check("插件侧栏可从菜单关闭", await js(`!document.querySelector('#mod-sidebar')`));
-  await openFromMenu("打开插件侧栏");
+  await openFromMenu("已加载插件");
   await click('#mod-sidebar .mod-sidebar-head button');
   check("侧栏内部关闭后焦点返回新的工具入口", await js(`!document.querySelector('#mod-sidebar') && document.activeElement?.getAttribute('aria-label') === '工作台工具'`));
   await key("b", ["meta", "shift"]);
   check("原浏览器快捷键仍可打开窗格", await active("browser"));
-  await openFromMenu("终端窗格");
+  await openFromMenu("打开终端窗格");
   check("终端可从工具菜单打开", await active("terminal"));
   await openFromMenu("收起右侧面板");
   await click('.tb-title');
@@ -107,10 +115,11 @@ async function main() {
   await shot("03-narrow");
   await menu();
   await key("ArrowDown");
-  const keyState = await js(`({ active: document.activeElement?.outerHTML.slice(0,600), role: document.activeElement?.getAttribute('role'), menu: !!document.querySelector('[role="menu"]'), focused: document.hasFocus() })`);
-  check("菜单项可用方向键到达", keyState.role?.startsWith('menuitem'), keyState);
+  const keyState = await js(`({ active: document.activeElement?.outerHTML.slice(0,600), role: document.activeElement?.getAttribute('role'), inMenu: !!document.activeElement?.closest(${JSON.stringify(openMenu)}), focused: document.hasFocus() })`);
+  check("菜单项可用方向键到达", keyState.inMenu && keyState.role?.startsWith('menuitem'), keyState);
   await key("Escape");
-  await win.setContentSize(880, 300);
+  // 现在只剩六项，300 px 已经能放完；缩到 205 px 才会触发滚动。
+  await win.setContentSize(880, 205);
   await settle();
   await menu();
   const shortMenu = await js(`(() => { const m = document.querySelector('[data-workbench-menu][data-state="open"]'); const r = m.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, viewport: innerHeight, client: m.clientHeight, scroll: m.scrollHeight }; })()`);

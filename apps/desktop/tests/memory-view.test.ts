@@ -4,7 +4,7 @@
 //   indexLines    MEMORY.md 切行（丢空行、剥「- 」；**加粗**/`代码` 留给 renderInline）
 // 固定 NOW 断言（不读真钟）：五档边界 + 未来戳 + 解析失败三条路都钉住。
 import { describe, expect, it } from "vitest";
-import { bodyLines, fullTime, indexLines, relativeTime } from "../src/renderer/memory-view";
+import { bodyLines, fullTime, indexLines, memorySemanticGroup, relativeTime } from "../src/renderer/memory-view";
 
 const NOW = Date.parse("2026-10-16T12:00:00.000Z");
 
@@ -40,6 +40,16 @@ describe("indexLines（E：MEMORY.md 切行）", () => {
 
   it("无列表符的行原样（不误剥正文内容）", () => {
     expect(indexLines("标题行\n- x")).toEqual(["标题行", "x"]);
+  });
+});
+
+describe("memorySemanticGroup（2026-11-06 设计体检）", () => {
+  it("主题名/类型都参与语义分组；认不出返回「记忆」，不上机器值", () => {
+    const t = { topic: "x", type: "project", body: "" };
+    expect(memorySemanticGroup({ ...t, type: "decision" })).toBe("决策");
+    expect(memorySemanticGroup({ ...t, topic: "架构约束" })).toBe("架构");
+    expect(memorySemanticGroup({ ...t, type: "preference" })).toBe("偏好");
+    expect(memorySemanticGroup(t)).toBe("记忆");
   });
 });
 

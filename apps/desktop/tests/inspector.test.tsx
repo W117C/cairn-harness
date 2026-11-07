@@ -79,7 +79,7 @@ describe("④ Inspector SSR", () => {
   it("全空会话 ⇒ 无 Tab + 诚实引导 + ＋菜单仍在（不再整栏空白）", () => {
     const html = renderToStaticMarkup(<Inspector events={[]} onRestore={() => undefined} />);
     expect((html.match(/class="isp-tab[ "]/g) ?? []).length).toBe(0);
-    expect(html).toContain("本会话还没有可检查的内容");
+    expect(html).toContain("当前会话还没有改动");
     expect(html).not.toContain("用量次数");
     expect(html).toContain('aria-label="打开窗格"');
   });

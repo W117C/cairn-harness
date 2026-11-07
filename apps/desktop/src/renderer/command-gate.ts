@@ -40,6 +40,8 @@ export interface GateInput {
   modalSurfaceOpen: boolean;
   /** 焦点在可编辑元素上？ */
   editableTarget: boolean;
+  /** 焦点在 Composer 输入框？Esc 智慧停止只允许从这里触发（侧栏搜索、浏览器地址栏等让给字段自己）。 */
+  composerTarget: boolean;
   /** 焦点元素自己声明「Esc 归我」（如排队项的就地编辑）：全局 Esc 智慧停止让路。 */
   escOwnsTarget: boolean;
 }
@@ -53,13 +55,14 @@ export interface GateDom {
 /** 从 DOM 读当前状态（**唯一读法**）。DOM 缺席（node 环境）⇒ 读成"没有浮层、没有编辑焦点"。 */
 export function readGateInput(paletteOpen: boolean, dom?: GateDom): GateInput {
   const d = dom ?? (globalThis as { document?: GateDom }).document;
-  if (d === undefined) return { paletteOpen, modalSurfaceOpen: false, editableTarget: false, escOwnsTarget: false };
+  if (d === undefined) return { paletteOpen, modalSurfaceOpen: false, editableTarget: false, composerTarget: false, escOwnsTarget: false };
   const active = d.activeElement;
   const activeElement = typeof Element !== "undefined" && active instanceof Element ? active : null;
   return {
     paletteOpen,
     modalSurfaceOpen: d.querySelector('[data-modal-surface="true"]') !== null,
     editableTarget: isEditableTarget(active as EventTarget | null),
+    composerTarget: activeElement !== null && activeElement.closest("[data-composer-input='true']") !== null,
     escOwnsTarget: activeElement !== null && activeElement.closest("[data-esc-owns='true']") !== null,
   };
 }

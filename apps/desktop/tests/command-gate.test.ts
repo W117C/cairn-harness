@@ -24,9 +24,10 @@ import { readAppSurface } from "./helpers/app-surface";
 /** 判卷要模拟「焦点在输入框」⇒ 需要浏览器里的 `Element` 全局（桌面端那套 vitest 是 node 环境，没有）。
  *  给它一个最小替身：`closest` 命中 = 可编辑元素。装完复原（不污染别的用例）。 */
 class FakeElement {
-  constructor(private readonly editable: boolean, private readonly escOwns: boolean) {}
+  constructor(private readonly editable: boolean, private readonly escOwns: boolean, private readonly composer: boolean) {}
   closest(selector: string): object | null {
     if (selector.includes("data-esc-owns")) return this.escOwns ? {} : null;
+    if (selector.includes("data-composer-input")) return this.composer ? {} : null;
     return this.editable ? {} : null;
   }
 }
@@ -39,10 +40,12 @@ afterAll(() => {
 });
 
 /** 假 DOM：回答门真正问的几件事（模态面 / 可编辑焦点 / 自持 Esc 的焦点）。 */
-function fakeDom(opts: { modal?: boolean; editable?: boolean; escOwns?: boolean } = {}): GateDom {
+function fakeDom(opts: { modal?: boolean; editable?: boolean; composer?: boolean; escOwns?: boolean } = {}): GateDom {
   return {
     querySelector: (selectors: string) => (opts.modal === true && selectors.includes("modal-surface") ? {} : null),
-    activeElement: opts.editable === true || opts.escOwns === true ? new FakeElement(opts.editable === true, opts.escOwns === true) : null,
+    activeElement: opts.editable === true || opts.composer === true || opts.escOwns === true
+      ? new FakeElement(opts.editable === true || opts.composer === true, opts.escOwns === true, opts.composer === true)
+      : null,
   };
 }
 
@@ -56,6 +59,7 @@ describe("命令门：浮层与焦点（键盘路径与菜单路径共用）", (
       paletteOpen: false,
       modalSurfaceOpen: false,
       editableTarget: false,
+      composerTarget: false,
       escOwnsTarget: false,
     });
     expect(readGateInput(false, fakeDom({ modal: true })).modalSurfaceOpen).toBe(true);
@@ -66,6 +70,11 @@ describe("命令门：浮层与焦点（键盘路径与菜单路径共用）", (
     expect(readGateInput(false, fakeDom({ editable: true })).escOwnsTarget).toBe(false);
     expect(readGateInput(false, fakeDom({ escOwns: true })).escOwnsTarget).toBe(true);
     expect(readGateInput(false, fakeDom())).toEqual(expect.objectContaining({ editableTarget: false, escOwnsTarget: false }));
+  });
+
+  it("Composer 与二级输入框分开读：只有 data-composer-input 才是智慧停止的合法来源", () => {
+    expect(readGateInput(false, fakeDom({ editable: true }))).toEqual(expect.objectContaining({ editableTarget: true, composerTarget: false }));
+    expect(readGateInput(false, fakeDom({ composer: true }))).toEqual(expect.objectContaining({ editableTarget: true, composerTarget: true }));
   });
 
   it("浮层挡着：模态面在场 或 面板开着", () => {
@@ -100,8 +109,10 @@ describe("命令门：浮层与焦点（键盘路径与菜单路径共用）", (
 
   it("接线：App 的**两条入口**都走这道门（键盘路径 + 菜单路径）", () => {
     const src = appSrc();
-    expect(src, "键盘路径必须走共享门").toContain("overlayBlocked(readGateInput(");
+    expect(src, "键盘路径必须走共享门").toContain("const gate = readGateInput(");
+    expect(src, "键盘路径必须走共享门").toContain("overlayBlocked(gate)");
     expect(src, "Esc 智慧停止必须给自持 Esc 的编辑框让路").toContain("escOwnsTarget");
+    expect(src, "Esc 智慧停止必须给二级输入框让路，只允许 Composer 触发").toContain("gate.editableTarget && !gate.composerTarget");
     expect(src, "菜单路径必须走共享门").toContain("commandAllowed(id as string, readGateInput(");
     // 反向对照：这两处不许各写一份自己的判断（那就又漂了）
     expect(src, "App.tsx 不许自己判模态面（要走共享门）").not.toContain("document.querySelector('[data-modal-surface");

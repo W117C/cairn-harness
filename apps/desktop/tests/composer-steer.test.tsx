@@ -23,12 +23,13 @@ describe("运行中：插话与排队的两个入口不混", () => {
     expect(composerSrc).toMatch(/showQueueButton[\s\S]{0,400}submit\(\{\s*forceQueue:\s*true\s*\}\)/);
   });
 
-  it("回车 Enter 的那条路**不**传 forceQueue（默认=先试插话）", () => {
+  it("普通 Enter 不传 forceQueue（默认=先试插话）；⌘↩ 必须传（先排队再打断）", () => {
     // submit 的缺省调用点（Enter / 发送钮）不带这个参数 <<<
     expect(composerSrc).toMatch(/const submit = \(opts\?: \{ interrupt\?: boolean; forceQueue\?: boolean \}\)/);
-    // 只有队列钮那一处传它；别处出现就是两种意图又混回去
+    // 两处显式 forceQueue：队列钮 + ⌘↩（打断并发送必须先排队，否则 onSend 会插话、onCancel 再把这轮杀掉）
     const occurrences = composerSrc.match(/forceQueue:\s*true/g) ?? [];
-    expect(occurrences).toHaveLength(1);
+    expect(occurrences).toHaveLength(2);
+    expect(composerSrc).toContain("e.metaKey || e.ctrlKey ? { interrupt: true, forceQueue: true }");
   });
 
   it("运行中且有草稿 ⇒ 队列钮出现（与插入话路径同一判据）", () => {

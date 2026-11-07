@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import { suggestApiKeyEnv, suggestProviderId, type DiscoveredRow } from "../../../../../src/providers/provider-draft";
 import { ACTIVE_REASONING_EFFORTS, normalizeThinkingDeclaration } from "../../../../../src/providers/reasoning";
 import { STR } from "../strings";
+import { formatTokens } from "../derived/format-tokens";
 import { isLocalEndpointURL, selectAllRows } from "./provider-form";
 import { ModalSurface } from "./ModalSurface";
 import { Field, SettingsRow } from "./settings-ui";
@@ -56,22 +57,34 @@ export function initialDeclarations(
 
 /** 勾选的行 + 各自的思考声明 → `providerSave` 的 models 载荷（纯函数；判卷钉在这里）。
  *  声明就是**接线本身**：漏了它，界面上的勾选不会变成能力表里的档位。 */
+/** 2026-11-05 业主裁：选中模型在表单里可改 上下文窗口 / 最大输出——探测值只是缺省，
+ *  用户手填的覆盖值优先；空字段 = 回落探测值（不偷偷改成 0）。 */
+export interface ModelNumericOverride {
+  contextWindow?: number;
+  maxOutputTokens?: number;
+}
 export function modelsFromPicker(
   rows: readonly DiscoveredRow[],
   selected: Record<string, boolean>,
   thinking: Record<string, ThinkingDraft> = {},
+  overrides: Record<string, ModelNumericOverride> = {},
 ): { id: string; contextWindow?: number; maxOutputTokens?: number; price?: DiscoveredRow["price"]; reasoningEfforts?: readonly string[]; reasoningDefault?: string; inputModalities?: readonly string[] }[] {
   return rows
     .filter((row) => selected[row.id] === true)
-    .map((row) => ({
+    .map((row) => {
+      const o = overrides[row.id] ?? {};
+      const contextWindow = o.contextWindow ?? row.contextWindow;
+      const maxOutputTokens = o.maxOutputTokens ?? row.maxOutputTokens;
+      return {
       id: row.id,
-      ...(row.contextWindow !== undefined ? { contextWindow: row.contextWindow } : {}),
-      ...(row.maxOutputTokens !== undefined ? { maxOutputTokens: row.maxOutputTokens } : {}),
+      ...(contextWindow !== undefined ? { contextWindow } : {}),
+      ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
       ...(row.price !== undefined ? { price: row.price } : {}),
       // 声明由用户那格说了算（探测值只是它的初值）：空 = 明确「不支持」。
       ...declarationPayload(thinking[row.id]),
       ...(row.inputModalities !== undefined ? { inputModalities: [...row.inputModalities] } : {}),
-    }));
+      };
+    });
 }
 
 /** 档位短词 + 说明（唯一出处 = STR.modelPicker：菜单里的思考段与这里必须同一套词，不另抄一份）。 */
@@ -79,6 +92,7 @@ const LEVEL_WORDS: Readonly<Record<string, { short: string; hint: string }>> = {
   low: { short: STR.modelPicker.thinkLow, hint: STR.modelPicker.thinkLowHint },
   medium: { short: STR.modelPicker.thinkMedium, hint: STR.modelPicker.thinkMediumHint },
   high: { short: STR.modelPicker.thinkHigh, hint: STR.modelPicker.thinkHighHint },
+  xhigh: { short: STR.modelPicker.thinkXhigh, hint: STR.modelPicker.thinkXhighHint },
   max: { short: STR.modelPicker.thinkMax, hint: STR.modelPicker.thinkMaxHint },
 };
 
@@ -142,67 +156,85 @@ export function ModelPickModal(props: {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="cp-modal-head">
-          <span className="num">已选 {String(picked)} / {String(props.rows.length)}</span>
-          <button className="mini-btn" disabled={props.busy === true} onClick={() => props.onChange(selectAllRows(props.rows, true))}>全选</button>
-          <button className="mini-btn" disabled={props.busy === true} onClick={() => props.onChange(selectAllRows(props.rows, false))}>全不选</button>
-          <button className="mini-btn primary" onClick={props.onDone}>完成</button>
+          <span className="cp-modal-title">选择要启用的模型</span>
+          <span className="cp-count" role="status">已选 {String(picked)} / {String(props.rows.length)}</span>
+          <div className="cp-modal-actions">
+            <button className="mini-btn" disabled={props.busy === true} onClick={() => props.onChange(selectAllRows(props.rows, true))}>全选</button>
+            <button className="mini-btn" disabled={props.busy === true} onClick={() => props.onChange(selectAllRows(props.rows, false))}>全不选</button>
+            <button className="mini-btn primary" onClick={props.onDone}>完成</button>
+          </div>
         </div>
         <div className="cp-modal-list">
-          {props.rows.map((row) => {
-            const on = props.selected[row.id] === true;
-            const draft = props.thinking?.[row.id] ?? { levels: [], default: "off" };
-            return (
-              <div className="cp-model" key={row.id}>
-                <button
-                  role="checkbox"
-                  aria-checked={on}
-                  className={"cp-row" + (on ? " on" : "")}
-                  disabled={props.busy === true}
-                  onClick={() => props.onChange({ ...props.selected, [row.id]: !on })}
-                >
-                  <span className="cp-check" aria-hidden="true">{on ? "✓" : ""}</span>
-                  <span className="nm mono-k">{row.id}</span>
-                  <span className="sub">{rowMeta(row)}</span>
-                </button>
-                {/* 声明只在勾选的行上摆出来（没启用的模型不需要声明），且只在可编辑时摆。 */}
-                {on && props.onThinkingChange !== undefined && (
-                  <div className="cp-th" role="group" aria-label={`${row.id} 的思考档位`}>
-                    {ACTIVE_REASONING_EFFORTS.map((lv) => {
-                      const word = LEVEL_WORDS[lv];
-                      const pickedLevel = draft.levels.includes(lv);
-                      return (
-                        <button
-                          key={lv}
-                          type="button"
-                          className="cp-th-chip"
-                          aria-pressed={pickedLevel}
-                          title={word?.hint}
-                          disabled={props.busy === true}
-                          onClick={() => toggleLevel(row.id, lv)}
-                        >{word?.short ?? lv}</button>
-                      );
-                    })}
-                    <label className="cp-th-def">
-                      <span>首选</span>
-                      <select
-                        aria-label={`${row.id} 的首选思考档`}
-                        value={draft.default}
-                        disabled={props.busy === true}
-                        onChange={(e) => props.onThinkingChange?.(row.id, { levels: draft.levels, default: e.target.value })}
-                      >
-                        <option value="off">{STR.modelPicker.thinkOff}</option>
-                        {ACTIVE_REASONING_EFFORTS.filter((lv) => draft.levels.includes(lv)).map((lv) => (
-                          <option key={lv} value={lv}>{LEVEL_WORDS[lv]?.short ?? lv}</option>
-                        ))}
-                      </select>
-                    </label>
-                    {/* 空档位 = 不支持思考：明说，别让用户以为「勾了才有档」是显示问题。 */}
-                    {draft.levels.length === 0 && <span className="cp-th-note">未勾选档位 = 该模型不支持思考（选择器里整段禁用）</span>}
+          <div className="cp-card">
+            {props.rows.map((row) => {
+              const on = props.selected[row.id] === true;
+              const draft = props.thinking?.[row.id] ?? { levels: [], default: "off" };
+              return (
+                <div className="cp-model" key={row.id}>
+                  <div className="cp-row" title={rowMeta(row)}>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={on}
+                      aria-label={`启用 ${row.id}`}
+                      className="cp-switch"
+                      disabled={props.busy === true}
+                      onClick={() => props.onChange({ ...props.selected, [row.id]: !on })}
+                    />
+                    <span className="nm mono-k">{row.id}</span>
+                    {row.contextWindow !== undefined && (
+                      <span className="cp-pill" title={`窗口 ${String(row.contextWindow)}`}>{formatTokens(row.contextWindow)}</span>
+                    )}
+                    {row.price !== undefined && (
+                      <span className="cp-pill" title={`价 ${String(row.price.inputPerMTok ?? "?")} / ${String(row.price.outputPerMTok ?? "?")}（USD / 百万 token）`}>
+                        {`${String(row.price.inputPerMTok ?? "?")} / ${String(row.price.outputPerMTok ?? "?")}`}
+                      </span>
+                    )}
+                    <span className="cp-grow" aria-hidden="true" />
+                    <span className="cp-pill cp-think" title="点击行下方的档位勾选可声明思考能力">
+                      思考 {draft.levels.length > 0 ? draft.levels.map((lv) => LEVEL_WORDS[lv]?.short ?? lv).join("/") : "不支持"}
+                    </span>
                   </div>
-                )}
-              </div>
-            );
-          })}
+                  {/* 声明只在勾选的行上摆出来（没启用的模型不需要声明），且只在可编辑时摆。 */}
+                  {on && props.onThinkingChange !== undefined && (
+                    <div className="cp-th" role="group" aria-label={`${row.id} 的思考档位`}>
+                      {ACTIVE_REASONING_EFFORTS.map((lv) => {
+                        const word = LEVEL_WORDS[lv];
+                        const pickedLevel = draft.levels.includes(lv);
+                        return (
+                          <button
+                            key={lv}
+                            type="button"
+                            className="cp-th-chip"
+                            aria-pressed={pickedLevel}
+                            title={word?.hint}
+                            disabled={props.busy === true}
+                            onClick={() => toggleLevel(row.id, lv)}
+                          >{word?.short ?? lv}</button>
+                        );
+                      })}
+                      <label className="cp-th-def">
+                        <span>首选</span>
+                        <select
+                          aria-label={`${row.id} 的首选思考档`}
+                          value={draft.default}
+                          disabled={props.busy === true}
+                          onChange={(e) => props.onThinkingChange?.(row.id, { levels: draft.levels, default: e.target.value })}
+                        >
+                          <option value="off">{STR.modelPicker.thinkOff}</option>
+                          {ACTIVE_REASONING_EFFORTS.filter((lv) => draft.levels.includes(lv)).map((lv) => (
+                            <option key={lv} value={lv}>{LEVEL_WORDS[lv]?.short ?? lv}</option>
+                          ))}
+                        </select>
+                      </label>
+                      {/* 空档位 = 不支持思考：明说，别让用户以为「勾了才有档」是显示问题。 */}
+                      {draft.levels.length === 0 && <span className="cp-th-note">未勾选档位 = 该模型不支持思考（选择器里整段禁用）</span>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </ModalSurface>
     </div>
@@ -233,6 +265,8 @@ export function CustomProviderForm(props: {
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   /** 每个模型一条的思考声明（唯一出口 = 选择弹窗里的那条；保存时逐条落盘）。 */
   const [thinking, setThinking] = useState<Record<string, ThinkingDraft>>({});
+  /** 选中模型的数值覆盖（上下文窗口 / 最大输出）：表单里的可编辑清单唯一出口；探测时清空。 */
+  const [overrides, setOverrides] = useState<Record<string, ModelNumericOverride>>({});
   const [pickerOpen, setPickerOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -275,6 +309,7 @@ export function CustomProviderForm(props: {
       setSelected(all);
       // 思考声明的初值：已存的手写声明优先，其余用探测值（见 initialDeclarations）。
       setThinking(initialDeclarations(r.rows, props.editing?.models));
+      setOverrides({}); // 新探测 = 新目录，旧覆盖值作废（编辑模式的手改也会被探测刷新——保存过的值仍在已存配置里）
       setPickerOpen(true); // 拉到清单直接弹选择窗，别让用户在表单里翻一整面墙
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -286,7 +321,7 @@ export function CustomProviderForm(props: {
   const save = useCallback(async () => {
     if (discovered === null) return;
     // 载荷构造抽成纯函数（判卷钉在那里）：勾选 × 每个模型自己的思考声明 → models 数组。
-    const models = modelsFromPicker(discovered.rows, selected, thinking);
+    const models = modelsFromPicker(discovered.rows, selected, thinking, overrides);
     if (models.length === 0) {
       setError("一条都没勾：至少选一个模型再存");
       return;
@@ -407,6 +442,45 @@ export function CustomProviderForm(props: {
               已选 {String(discovered.rows.filter((row) => selected[row.id] === true).length)} / {String(discovered.rows.length)}
             </span>
           </SettingsRow>
+          {/* 2026-11-05 业主裁：选中模型就地列出——上下文窗口 / 最大输出可直接改。
+              探测值是缺省；手填的覆盖值优先（空 = 回落探测），保存时逐条落盘。 */}
+          {discovered.rows.some((row) => selected[row.id] === true) && (
+            <div className="sp-model-list" role="group" aria-label="已启用模型">
+              {discovered.rows.filter((row) => selected[row.id] === true).map((row) => {
+                const ov = overrides[row.id] ?? {};
+                const numOf = (v: number | undefined): string => (v === undefined ? "" : String(v));
+                const setNum = (field: "contextWindow" | "maxOutputTokens", raw: string): void => {
+                  const parsed = raw.trim() === "" ? undefined : Number(raw);
+                  setOverrides((cur) => {
+                    const next = { ...cur };
+                    const entry = { ...(next[row.id] ?? {}) };
+                    if (parsed === undefined || !Number.isFinite(parsed) || parsed <= 0) delete entry[field];
+                    else entry[field] = Math.floor(parsed);
+                    if (Object.keys(entry).length === 0) delete next[row.id];
+                    else next[row.id] = entry;
+                    return next;
+                  });
+                };
+                return (
+                  <div className="sp-model-row" key={row.id}>
+                    <span className="nm mono-k" title={row.id}>{row.id}</span>
+                    <label className="sp-model-field">
+                      <span>上下文</span>
+                      <input type="number" min={1} inputMode="numeric" value={numOf(ov.contextWindow ?? row.contextWindow)}
+                        placeholder="探测" aria-label={`${row.id} 的上下文窗口`}
+                        disabled={busy} onChange={(e) => setNum("contextWindow", e.target.value)} />
+                    </label>
+                    <label className="sp-model-field">
+                      <span>最大输出</span>
+                      <input type="number" min={1} inputMode="numeric" value={numOf(ov.maxOutputTokens ?? row.maxOutputTokens)}
+                        placeholder="探测" aria-label={`${row.id} 的最大输出`}
+                        disabled={busy} onChange={(e) => setNum("maxOutputTokens", e.target.value)} />
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+          )}
           {discovered.missing.length > 0 && (
             <div className="sp-note">服务未提供以下模型信息：{discovered.missing.join(" / ")}</div>
           )}

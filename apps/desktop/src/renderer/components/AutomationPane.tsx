@@ -8,6 +8,7 @@ import { fullTime } from "../memory-view";
 import { PAGE_CONTEXT_ITEMS } from "../navigation";
 import { activates } from "./a11y-activate";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { IdleTaskPane } from "./IdleTaskPane";
 import { PageFrame } from "./PageFrame";
 import { Banner } from "./settings-ui";
 import { Switch } from "./Switch";
@@ -106,27 +107,45 @@ const AUTOMATION_TEMPLATES: readonly AutomationTemplate[] = [
  *  主进程经 powerSaveBlocker('prevent-app-suspension') 落地（kernel-host 注入缝）。 */
 function AutomationWakeRow(): React.JSX.Element {
   const [on, setOn] = useState<boolean | null>(null); // null = 读取中（开关禁用，不摆假态）
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const [saving, setSaving] = useState(false);
   useEffect(() => {
     let alive = true;
-    void window.agent.getSettings().then((s) => { if (alive) setOn(s.keepAwake); }).catch(() => { if (alive) setOn(false); });
+    setOn(null);
+    setError(null);
+    void window.agent.getSettings().then((s) => { if (alive) setOn(s.keepAwake === true); }).catch((err: unknown) => {
+      if (alive) setError(`保持唤醒设置读取失败：${err instanceof Error ? err.message : String(err)}`);
+    });
     return () => { alive = false; };
-  }, []);
+  }, [attempt]);
   const toggle = (next: boolean): void => {
-    setOn(next); // 乐观落位；写失败回滚（fail-visible 到 toast 由 setSettings 报错面承担）
-    void window.agent.setSettings({ keepAwake: next }).catch(() => setOn(!next));
+    if (on === null || saving) return;
+    const previous = on;
+    setSaving(true);
+    setError(null);
+    setOn(next);
+    void window.agent.setSettings({ keepAwake: next }).then((s) => setOn(s.keepAwake === true)).catch((err: unknown) => {
+      setOn(previous);
+      setError(`保持唤醒设置保存失败：${err instanceof Error ? err.message : String(err)}`);
+    }).finally(() => setSaving(false));
   };
   return (
     <div className="at-wake">
       <Info size={14} aria-hidden="true" />
-      <span className="at-wake-text">Cairn 运行会话时保持电脑唤醒。</span>
-      <Switch
+      <span className="at-wake-text">{error !== null
+        ? <span className="danger-text" role="alert">{error}</span>
+        : "Cairn 运行会话时保持电脑唤醒。"}</span>
+      {on === null && error !== null && <button type="button" className="mini-btn" aria-label="重新读取保持唤醒设置" onClick={() => setAttempt((value) => value + 1)}>重试</button>}
+      {on === null && error === null && <span className="sp-dim" role="status">读取中…</span>}
+      {on !== null && <Switch
         label="保持电脑唤醒"
         checked={on === true}
-        {...(on === null ? { disabled: true } : {})}
+        busy={saving}
         onText="开"
         offText="关"
         onChange={toggle}
-      />
+      />}
     </div>
   );
 }
@@ -153,10 +172,12 @@ export function AutomationPane(props: {
   snap: ScheduleSnapshot;
   onError: (m: string) => void;
   refresh: () => void;
+  workspace?: string | null;
   filter?: string;
   onFilter?: (filter: string) => void;
 }): React.JSX.Element {
   const schedule = props.snap;
+  const [idleView, setIdleView] = useState(false);
   // 装载期坏档 / 坏行上屏（2026-10-30）：桌面没有控制台，只 warn 的后果是
   // 「automations.json 坏了 ⇒ 页面写着还没有定时任务，新建又被拒」，用户无从知道原因。
   // 坏档时任务表恰好是空的 ⇒ 空态分支也必须摆这条横幅。
@@ -308,6 +329,14 @@ export function AutomationPane(props: {
     </div>
   ) : null;
 
+  const tabs = (
+    <div className="automation-views" role="group" aria-label="自动化类型">
+      <button className={`mini-btn${idleView ? "" : " primary"}`} aria-pressed={!idleView} onClick={() => setIdleView(false)}>定时任务</button>
+      <button className={`mini-btn${idleView ? " primary" : ""}`} aria-pressed={idleView} onClick={() => setIdleView(true)}>闲时队列</button>
+    </div>
+  );
+  if (idleView) return <IdleTaskPane key={props.workspace ?? ""} tabs={tabs} filter={filter} onFilter={setFilter} />;
+
   // 任务为 0 但历史非空 ⇒ 不能只显示 EmptyState：运行历史仍在快照里，
   // 旧分支会让「删光任务」后的运行历史/统计整块不可见（空态隐藏真实数据）。
   if (schedule.tasks.length === 0 && schedule.history.length === 0) {
@@ -315,7 +344,8 @@ export function AutomationPane(props: {
       <PageFrame
         title="自动化"
         titleAccent="工作流"
-        subtitle="创建定时任务，或排队在闲时算力空闲时后台执行。"
+        subtitle="按时间自动执行工作流，查看每次运行结果。"
+        actions={tabs}
         search={{ label: "搜索任务", value: query, onChange: setQuery }}
         onRefresh={props.refresh}
         filters={PAGE_CONTEXT_ITEMS.automation}
@@ -365,7 +395,8 @@ export function AutomationPane(props: {
     <PageFrame
       title="自动化"
       titleAccent="工作流"
-      subtitle="创建定时任务，或排队在闲时算力空闲时后台执行。"
+      subtitle="按时间自动执行工作流，查看每次运行结果。"
+      actions={tabs}
       search={{ label: "搜索任务", value: query, onChange: setQuery }}
       onRefresh={props.refresh}
       filters={PAGE_CONTEXT_ITEMS.automation}
@@ -421,7 +452,7 @@ export function AutomationPane(props: {
           </div>}
         </div>
         {selected !== null && (
-          <Drawer title={selected.name} sub={`${scheduleLabel(selected.schedule)} · ${selected.timeZone}`} onClose={() => setSel(null)}>
+          <Drawer key={selected.id} title={selected.name} sub={`${scheduleLabel(selected.schedule)} · ${selected.timeZone}`} onClose={() => setSel(null)}>
             <section className="ap-sec">
               <h3>提示词</h3>
               <div className="ap-prompt">{selected.prompt}</div>

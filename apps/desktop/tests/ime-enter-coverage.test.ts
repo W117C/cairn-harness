@@ -20,8 +20,8 @@ const GUARDED: readonly (readonly [string, string])[] = [
   ["../src/renderer/components/Sidebar.tsx", 'if (e.key === "Enter" && !isCompositionEnter(e, null)) {\n                const first = visibleActive[0]'],
   // 设置数字框 / 更新源：回车 = blur（走既有校验）
   ["../src/renderer/components/settings-sections.tsx", 'if (e.key === "Enter" && !isCompositionEnter(e, null)) { e.preventDefault(); e.currentTarget.blur(); }'],
-  // 设置导航搜索：回车选第一个分区
-  ["../src/renderer/components/SettingsPanel.tsx", 'if ((e.key === "Enter" && !isCompositionEnter(e, null)) || e.key === "ArrowDown")'],
+  // 设置导航搜索：组字期间回车与上下键均不跳转；实际键盘行为另由 settings-navigation-smoke 验证。
+  ["../src/renderer/components/SettingsPanel.tsx", 'if (isCompositionEnter(e, null)) return;\n                if (e.key === "Enter" || e.key === "ArrowDown" || e.key === "ArrowUp")'],
   // 会话内查找
   ["../src/renderer/components/FindBar.tsx", 'if (e.key === "Enter" && !isCompositionEnter(e, null))'],
   // 旁路提问（Enter 发送）
@@ -33,7 +33,7 @@ const GUARDED: readonly (readonly [string, string])[] = [
   // 浏览器地址栏
   ["../src/renderer/components/PaneDock.tsx", 'if (e.key === "Enter" && !isCompositionEnter(e, null)) go('],
   // 既有的两处（Composer / ModelPicker）继续在场，防回退
-  ["../src/renderer/components/ModelPicker.tsx", "if (isCompositionEnter(e, null) || modelsDisabled) return;"],
+  ["../src/renderer/components/ModelPicker.tsx", "if (isCompositionEnter(e, null)) return;"],
   ["../src/renderer/components/Composer.tsx", 'if (e.key === "Enter" && isCompositionEnter(e, composing)) return;'],
 ];
 

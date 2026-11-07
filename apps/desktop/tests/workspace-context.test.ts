@@ -36,6 +36,12 @@ describe("活动工作区上下文（override）", () => {
     expect(main).toContain("windowWorkspaces.run(event.sender");
     expect(main).toContain("windowWorkspaces.inherit(win.webContents)");
     expect(main).toContain("handleChangeDiff(req as never, resolveWorkspace())");
+    // 自定义 provider 也必须跟窗口工作区走：保存/预填若用进程启动时的 workspace，
+    // 切项目后会把新项目的模型写进旧项目的 .agent/providers.json，选择器也继续挂着旧家。
+    expect(main).toContain("prepareCustomProvider(resolveWorkspace(),");
+    expect(main).toContain("loadCustomProviders(resolveWorkspace())");
+    expect(main).toContain("const loaded = current === null ? null : loadCustomProviders(current);");
+    expect(main).toContain('installCustomProviders(loaded?.kind === "ok" ? loaded.derived : []);');
     const app = readAppSurface();
     expect(app).toContain("applyWorkspaceContext(activeWorkspace)");
     expect(app).toContain("void applyWorkspaceContext(sessionWs)");

@@ -18,6 +18,10 @@
 
 /* 原有组件消费 HSL 分量；用原生相对颜色接到上游值，避免再维护一套色值。 */
 body[data-dsh-claude-style] {
+  /* Operational prose and tables share the UI face. Keep system mono before CJK
+     fallbacks so Latin code stays fixed-width even when a webfont cannot load. */
+  --dsh-claude-font-prose: var(--dsw-font-family);
+  --dsh-claude-font-code: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", "PingFang SC", "Microsoft YaHei", monospace;
   --bg-000: from var(--dsw-specific-input-major) h s l;
   --bg-100: from var(--dsw-alias-bg-base) h s l;
   --bg-200: from var(--dsh-claude-sidebar-canvas) h s l;

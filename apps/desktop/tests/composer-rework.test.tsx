@@ -115,39 +115,50 @@ describe("P2-2 模型+思考合并单面", () => {
     const supported = renderToStaticMarkup(
       <ModelPicker infos={[]} value="cn:hy3" onChange={() => undefined} thinking="low" thinkingSupported onThinkingChange={() => undefined} />,
     );
-    expect(supported).toContain("cn:hy3 · 思考 低");
+    expect(supported).toContain("cn:hy3 · 思考 low");
     const unsupported = renderToStaticMarkup(
       <ModelPicker infos={[]} value="cn:hy3" onChange={() => undefined} thinking="off" onThinkingChange={() => undefined} />,
     );
     expect(unsupported).not.toContain("· 思考");
   });
 
-  it("弹层（ModelMenu 本体）：搜索框 + 列表 + 下半区思考 segmented（五键 + 逐档 title 说明 + 当前档提示）", () => {
-    const html = renderToStaticMarkup(
+  it("弹层 root 面：模型/思考强度两枚 cell；模型面：搜索（>4 个模型才出现）+ 分组列表", () => {
+    const root = renderToStaticMarkup(
       <ModelMenu options={OPTIONS} value="deepseek-chat" onPick={() => undefined} onThinkingChange={() => undefined} thinking="low" thinkingSupported />,
     );
-    expect(html).toContain("mp-search");
-    expect(html).toContain(STR.modelPicker.searchPlaceholder);
-    expect(html).toContain(">openai<");
-    expect(html).toContain("th-row");
-    // 多 provider 分组之间有发丝线，glm 标签不再紧贴 deepseek 最后一行。
-    expect(html).toContain('class="mp-group separated"');
-    expect(css).toMatch(/\.mp-group\.separated\s*{[^}]*border-top:\s*1px solid var\(--hairline-strong\)/s);
+    expect(root).toContain("mp-cells");
+    expect(root).toContain(">思考强度<");
+    // OPTIONS 只有 3 个真模型 ⇒ 不出搜索行（DeepSeek 规则：>4 个才搜）
+    expect(root).not.toContain("mp-search");
+    expect(root).toContain(">deepseek-chat</span>");
+    const model = renderToStaticMarkup(
+      <ModelMenu options={OPTIONS} value="deepseek-chat" onPick={() => undefined} onThinkingChange={() => undefined} initialFocus="model" />,
+    );
+    expect(model).toContain(">openai<");
+    expect(model).toContain('class="mp-group separated"');
+  });
+
+  it("思考面：档位 radio 行（逐行 title 说明 + 当前档恰一枚 aria-selected）", () => {
+    const html = renderToStaticMarkup(
+      <ModelMenu options={OPTIONS} value="deepseek-chat" onPick={() => undefined} onThinkingChange={() => undefined} thinking="low" thinkingSupported initialFocus="effort" />,
+    );
+    expect(html).toContain("mp-effort");
     for (const s of [STR.modelPicker.thinkOff, STR.modelPicker.thinkLow, STR.modelPicker.thinkMedium, STR.modelPicker.thinkHigh, STR.modelPicker.thinkMax]) {
       expect(html).toContain(`>${s}<`);
     }
-    expect((html.match(/aria-pressed="true"/g) ?? []).length).toBe(1);
-    expect(html).toContain(STR.modelPicker.thinkLowHint); // 当前档说明上屏
-    expect(html).toContain(`title="${STR.modelPicker.thinkHighHint}"`); // 每档一句说明（逐键 tooltip）
+    expect((html.match(/aria-selected="true"/g) ?? []).length).toBe(1);
+    expect(html).toContain(STR.modelPicker.thinkLowHint); // 当前档说明在行 title
+    expect(html).toContain(`title="${STR.modelPicker.thinkHighHint}"`); // 每档一句说明（逐行 tooltip）
   });
 
-  it("档位词表含 max（最高）：与能力值同字面量，文案来自 STR", () => {
-    expect(THINKING_LEVELS.map((level) => level.id)).toEqual(["off", "low", "medium", "high", "max"]);
+  it("档位词表含 xhigh 与 max（英文标准档，2026-11-05）：与能力值同字面量，文案来自 STR", () => {
+    expect(THINKING_LEVELS.map((level) => level.id)).toEqual(["off", "low", "medium", "high", "xhigh", "max"]);
     expect(THINKING_LEVELS.find((level) => level.id === "max")?.short).toBe(STR.modelPicker.thinkMax);
-    expect(STR.modelPicker.thinkMax).toBe("最高");
+    expect(STR.modelPicker.thinkXhigh).toBe("xhigh");
+    expect(STR.modelPicker.thinkMax).toBe("max");
   });
 
-  it("模型声明 max ⇒ 菜单按当前模型出现「最高」档", () => {
+  it("模型声明 max ⇒ 思考面按当前模型出现 max 档", () => {
     const html = renderToStaticMarkup(
       <ModelMenu
         options={[{ registryId: "deepseek-cheap", label: "deepseek-flash", provider: "deepseek", thinkingLevels: ["off", "low", "high", "max"], thinkingDefault: "off" }]}
@@ -156,6 +167,7 @@ describe("P2-2 模型+思考合并单面", () => {
         onThinkingChange={() => undefined}
         thinking="high"
         thinkingSupported
+        initialFocus="effort"
       />,
     );
     expect(html).toContain(STR.modelPicker.thinkMax);
@@ -163,28 +175,31 @@ describe("P2-2 模型+思考合并单面", () => {
     expect(html).toContain('data-e="max"');
   });
 
-  it("未声明能力：整区禁用（五键 disabled）+ 注「当前模型不支持思考强度」+ 配置折叠在场", () => {
+  it("未声明能力：思考面空态 + 注「当前模型不支持思考强度」+ 配置折叠在场", () => {
     const html = renderToStaticMarkup(
-      <ModelMenu options={OPTIONS} value="deepseek-chat" onPick={() => undefined} onThinkingChange={() => undefined} thinking="off" />,
+      <ModelMenu options={OPTIONS} value="deepseek-chat" onPick={() => undefined} onThinkingChange={() => undefined} thinking="off" initialFocus="effort" />,
     );
-    expect(html).toContain("th-row");
-    expect((html.match(/<button[^>]*disabled=""/g) ?? []).length).toBe(5); // 五键 + 无列表禁用（本面无 running）
+    expect((html.match(/<button[^>]*disabled=""/g) ?? []).length).toBe(0); // 空态，不摆假按键
     expect(html).toContain(STR.modelPicker.unsupportedNote);
     expect(html).toContain("th-why");
     expect(html).toContain("reasoningEfforts");
   });
 
-  it("运行中：列表禁用、思考段照开（跑着也能拧）+ 运行注记在场", () => {
-    const html = renderToStaticMarkup(
-      <ModelMenu options={OPTIONS} value="deepseek-chat" onPick={() => undefined} onThinkingChange={() => undefined} thinking="off" thinkingSupported running />,
+  it("运行中：模型面禁用、思考面照开（跑着也能拧）+ 运行注记在场", () => {
+    const effort = renderToStaticMarkup(
+      <ModelMenu options={OPTIONS} value="deepseek-chat" onPick={() => undefined} onThinkingChange={() => undefined} thinking="off" thinkingSupported running initialFocus="effort" />,
     );
-    expect(html).toContain(STR.modelPicker.runningNote);
-    expect((html.match(/<button[^>]*disabled=""/g) ?? []).length).toBe(2); // 两行真模型禁（演示 2026-11-01 起不再占一行）；五键不禁
+    expect(effort).toContain(STR.modelPicker.runningNote);
+    expect((effort.match(/<button[^>]*disabled=""/g) ?? []).length).toBe(0); // 档位行不禁
+    const models = renderToStaticMarkup(
+      <ModelMenu options={OPTIONS} value="deepseek-chat" onPick={() => undefined} running initialFocus="model" />,
+    );
+    expect((models.match(/<button[^>]*disabled=""/g) ?? []).length).toBe(2); // 两行真模型禁
   });
 
-  it("无 onThinkingChange（旧消费者）：思考段不出现（零行为变化）", () => {
+  it("无 onThinkingChange（旧消费者）：root 面无思考强度 cell（零行为变化）", () => {
     const html = renderToStaticMarkup(<ModelMenu options={OPTIONS} value="deepseek-chat" onPick={() => undefined} />);
-    expect(html).not.toContain("th-row");
+    expect(html).not.toContain("mp-effort");
   });
 });
 

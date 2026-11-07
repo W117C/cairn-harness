@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { UsageLedgerPayload } from "../../../src/main/ipc-protocol";
+import { STR } from "../src/renderer/strings";
 import { UsageDashboard, usagePeriod, usageTokenLabel } from "../src/renderer/components/settings/UsageSection";
 
 const data: Extract<UsageLedgerPayload, { ok: true }> = {
@@ -87,6 +88,14 @@ describe("usage dashboard", () => {
     expect(html).toContain("Token 为模型上报值，含子代理。");
     // 缓存读取的完整口径仍留在 SVG <title>（无障碍说明），只是不再常驻正文。
     expect(html).toContain("缓存读取单独展示");
+  });
+
+  it("低样本不把少量事实画成趋势：低于两条用量记录时只给诚实说明", () => {
+    const one = { ...data, totals: { ...data.totals, usageCount: 1 }, analytics: { ...data.analytics!, buckets: [data.analytics!.buckets[1]!], activity: [data.analytics!.activity[1]!] } };
+    const html = renderToStaticMarkup(<UsageDashboard data={one} refreshing={false} error={null} onRefresh={() => undefined} />);
+    expect(html).toContain(STR.design.lowSample);
+    expect(html).not.toContain('class="ud-trend"');
+    expect(html).toContain('class="ud-overview"');
   });
 
   it("does not turn sessions without usage or an older payload into measured zero", () => {

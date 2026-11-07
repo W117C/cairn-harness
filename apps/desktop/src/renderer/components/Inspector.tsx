@@ -15,6 +15,7 @@ import { changedFilesOf, PANE_META, PANE_OPENABLE, projectPlans, type PaneKind }
 import { changeLabel } from "../derived/change-labels";
 import { DiffView } from "./DiffView";
 import { TimelinePane } from "./TimelinePane";
+import { STR } from "../strings";
 
 /** Inspector 是水平 tablist：方向键循环，Home/End 到首尾，其他键留给原生焦点移动。 */
 export function inspectorTabIndexForKey(key: string, index: number, count: number): number | null {
@@ -182,7 +183,9 @@ export function Inspector(props: InspectorProps): React.JSX.Element {
         )}
         {selected === "timeline" && <TimelinePane items={items} onJump={props.onJump} />}
         {selected === null && (
-          <div className="isp-empty">本会话还没有可检查的内容——改动、计划与时间线会随对话在这里长出来。</div>
+          // 空态只在三个 Tab 全空时出现（available 非空必有选中项）：后面的分支是永不触达的
+          // 死路，删——「按缺失 Tab 给具体状态」的落点在 available 的出现规则，不在这里。
+          <div className="isp-empty">{STR.design.inspectorNoChanges}</div>
         )}
       </div>
     </div>

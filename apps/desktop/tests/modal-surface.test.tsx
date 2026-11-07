@@ -78,6 +78,10 @@ describe("ModalSurface（统一模态边界）", () => {
     // 判断本身搬进了 src/renderer/command-gate.ts（**行为**判据在 tests/command-gate.test.ts：
     // 真造一个模态面、真把焦点放进输入框），这里钉的是
     // **App 的全局快捷键路径确实走那道门**（键盘与菜单两条入口同源，别再各判各的）。
-    expect(readAppSurface()).toContain("overlayBlocked(readGateInput(");
+    // 2026-11-05：门输入改为先读一次（`const gate = …`），Esc 分支还要复用
+    // `escOwnsTarget`/`composerTarget`——仍是同一道门，只是不再内联嵌套。
+    expect(readAppSurface()).toMatch(
+      /const gate = readGateInput\([^;]*\);\s*if \(overlayBlocked\(gate\)\) return;/,
+    );
   });
 });

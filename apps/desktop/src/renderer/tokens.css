@@ -138,21 +138,25 @@
 
   /* 品牌陶土橙（brief：保留现有陶土橙 ≈#d97757，只用于品牌/主按钮） */
   --accent-brand: 15 63.1% 59.6%;
-  /* 上下文容量分段条六桶色（2026-11-04 截图形制；组件层只 var() 引用——M4 色值进令牌表）。 */
-  --ctx-seg-messages: hsl(214 90% 62%);
-  --ctx-seg-tools: hsl(262 70% 68%);
-  --ctx-seg-skills: hsl(187 65% 55%);
-  --ctx-seg-memory: hsl(28 85% 60%);
-  --ctx-seg-system: hsl(48 90% 58%);
-  --ctx-seg-other: hsl(220 8% 52%);
+  /* 上下文容量分段条六桶色（2026-11-04 截图形制；组件层只 var() 引用——M4 色值进令牌表）。
+     本仓颜色令牌一律存 HSL 三元组，组件写 hsl(var(--…))；暗色档在 [data-theme="dark"]。 */
+  --ctx-seg-messages: 214 90% 62%;
+  --ctx-seg-tools: 262 70% 68%;
+  --ctx-seg-skills: 187 65% 55%;
+  --ctx-seg-memory: 28 85% 60%;
+  --ctx-seg-system: 48 90% 58%;
+  --ctx-seg-other: 220 8% 52%;
   /* 品牌橙的**前景档**（2026-11-01 第 878 页）：令牌自己的注释就写着「只用于品牌/主按钮」，
      但它被 27 处当成图标/状态文字色用。真算：#d97757 在本应用自己的表面上是
      bg-100 2.96:1 / bg-200 2.82:1 / bg-300 2.68:1 ⇒ 连 WCAG 非文本 3:1 都不到，
      当文字更远离 4.5:1。所以前景走这一档（L 59.6%→46%，同色相同饱和）：
      bg-100 5.24:1、四表面最差 4.75:1。暗色方向相反（要提亮，见暗块）。 */
   --accent-brand-ink: 15 63.1% 42%;
-  /* 控件焦点/选中（Claude v3 `--cds-focus-shadow` 用 `--cds-fill-accent` = blue-450，
-     与品牌陶土橙分开；否则焦点环会被当成品牌色，蓝环的“控件态”语义丢失）。
+  /* 控件焦点（Claude v3 `--cds-focus-shadow` 用 `--cds-fill-accent` = blue-450，
+     与品牌陶土橙分开；否则键盘焦点环会被当成品牌色，蓝环的“控件态”语义丢失）。
+     2026-11-05 业主裁：选中态（权限档卡、原生勾选框）不再用这枚蓝色——点击后留蓝框
+     会被读成焦点残留；选中改走 --accent-brand。本 token 只留给键盘 focus-visible 环
+     与输入聚焦这类“临时焦点”面。
      `--accent-control` = blue-450（实心填充/环用）；`--accent-control-text` = blue-600
      （**文字**用：v3 的 `--cds-text-accent` 就是 role-accent-600）——
      450 当文字在亮底上只有约 5.4:1，600 有 14:1 以上。 */
@@ -326,7 +330,7 @@
   --sw-knob-inset: calc(2px * var(--size-scale));
   --w-row-action: calc(28px * var(--size-scale));          /* 行操作条宽 */
   --h-row-action: calc(22px * var(--size-scale));          /* 行操作条高 / 折叠钮 */
-  --h-send: calc(32px * var(--size-scale));                /* 发送/打断圆钮 */
+  --h-send: calc(34px * var(--size-scale));                /* 发送/打断圆钮（官方 .primary 34） */
   --h-menu-item: calc(2.25rem * var(--size-scale));       /* 36 · 弹层条目（批 5 细则 §五） */
   /* 嵌套控件高 */
   --h-nested-1: calc(1rem * var(--size-scale));
@@ -438,6 +442,24 @@
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.05);
   /* 弹层投影（v3 `--cds-shadow-popover` 亮色实测）：8px 24px #0000001f + 2px 6px #00000014。 */
   --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.12), 0 2px 6px rgb(0 0 0 / 0.08);
+  /* 2026-11-06 设计体检：门卡与证据块共用抬升表面 / 语义描边；
+     审批卡的 risk 通道只换徽标色，不再叠一层自定义暖光。 */
+  --shadow-gate: var(--shadow-pop);
+  --gate-surface: hsl(var(--bg-elevated));
+  --gate-border: hsl(var(--color-wait) / 45%);
+  --gate-accent: hsl(var(--color-wait));
+  --gate-note-surface: hsl(var(--color-wait) / 8%);
+  /* 证据块：代码、结构化表、文件回执共享同一表面 / 描边 / 圆角族。 */
+  --evidence-surface: hsl(var(--bg-200));
+  --evidence-border: var(--hairline-strong);
+  /* 语义警示卡：destructive / warning / informational 三档只换一对背景与描边，
+     文字仍用既定 --color-*-ink，暗色由 role-* 翻转。 */
+  --semantic-danger-surface: hsl(var(--color-danger) / 8%);
+  --semantic-danger-border: hsl(var(--color-danger) / 35%);
+  --semantic-warning-surface: hsl(var(--color-risk) / 8%);
+  --semantic-warning-border: hsl(var(--color-risk) / 35%);
+  --semantic-info-surface: hsl(var(--bg-200));
+  --semantic-info-border: var(--hairline-strong);
   --reading: 52rem; /* 阅读列 832px（2026-10-21 设计重做：1440 下 760 留白过大；实际正文 750） */
   /* ── 对话轨道（2026-10-28 第 754 页）────────────────────────────────
      一条左轨：轮内**所有**内容（过程带 / 正文 / 交付卡）挂在同一条左轨上
@@ -478,6 +500,8 @@
      **只动 opacity**：官方 reveal-scale = none —— 不位移、不缩放。延迟位只收时长。 */
   --t-reveal-in: 120ms;
   --t-reveal-in-delay: 100ms;
+  /* 悬浮说明（row-action ::after）的延迟出现：纯时长令牌（motion 门咬裸时长）。 */
+  --t-hint-delay: 350ms;
   --t-reveal-out: 60ms;
   /* 模型芯片「值变了弹一下」（对标 Claude 的 cds-pill-pop：上冲 40% 时长到 1.32、
      再用 overshoot 落回 60%）。总时长取 Claude 的 base 200ms，故两段是 80/120ms。
@@ -561,6 +585,15 @@
      暗色 = alpha-1（5% 亮墨）。本仓输入框/卡片用 bg-000 实体底，
      这里补一枚「字段底」供输入类控件使用（暗色下比 bg-000 略亮，与 v3 一致）。 */
   --fill-field: hsl(from hsl(var(--text-000)) h s l / 5%);
+
+  /* 上下文容量六桶：暗色下整体降饱和、提亮，避免成为界面上最鲜艳的一块。
+     亮色档在 :root（三元组）；组件统一 hsl(var(--ctx-seg-*))。 */
+  --ctx-seg-messages: 214 55% 68%;
+  --ctx-seg-tools: 262 45% 72%;
+  --ctx-seg-skills: 187 45% 62%;
+  --ctx-seg-memory: 28 60% 66%;
+  --ctx-seg-system: 48 60% 66%;
+  --ctx-seg-other: 220 8% 60%;
 
   /* ── 角色层 · 暗色分档（2026-10-20 新增）─────────────────────────
      关键机制：暗色块**只重定义 role-*，不碰语义层**。语义层（--success 等）
@@ -661,6 +694,8 @@
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.06), 0 2px 8px rgb(0 0 0 / 0.24);
   /* v3 暗色 `--cds-shadow-popover`：8px 24px #00000052 + 2px 6px #0003。 */
   --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.32), 0 2px 6px rgb(0 0 0 / 0.2);
+  /* 暗色：门卡 / 证据块 / 语义卡改由抬升表面与低饱和语义色分层；
+     这里不重定义 --evidence-* / --semantic-* 的色值，主题翻面全走 bg-* 与 role-*。 */
 
   /* 字重暗色补偿（2026-10-22 按 Claude v3 暗色轴实测更正 · 2026-10-20 初版只取了两档）：
      亮色用静态字重 400/500/580/600；暗色换的是**可变字体轴实例** 360/460/540/560

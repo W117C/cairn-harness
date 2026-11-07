@@ -14,6 +14,7 @@ import { describe, expect, it } from "vitest";
 
 const CSS = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
 const TOKENS = readFileSync(fileURLToPath(new URL("../src/renderer/tokens.css", import.meta.url)), "utf8");
+const PLUGIN_CSS = readFileSync(fileURLToPath(new URL("../src/renderer/components/plugins/plugins.css", import.meta.url)), "utf8");
 /** 取出全局 :focus-visible 规则体（到第一个 } 为止）。 */
 function focusRule(): string {
   const m = /(?<![\w-]):focus-visible\s*\{([^}]*)\}/.exec(CSS);
@@ -47,6 +48,10 @@ describe("焦点环（裁 B：强调色域 · 2026-10-20 三层结构）", () =>
 
   it("保留 outline 透明占位（兼容强制颜色模式 / 读屏）", () => {
     expect(focusRule()).toMatch(/outline:\s*2px solid transparent/);
+  });
+
+  it("插件页不再叠第二层 outline：键盘焦点只有全局三层环", () => {
+    expect(PLUGIN_CSS).not.toMatch(/\.plugins-workspace\s+:focus-visible\s*\{/);
   });
 
   it("焦点不改变控件轮廓：pill 仍是 pill、发送键仍是圆（2026-10-28 第 741 页）", () => {

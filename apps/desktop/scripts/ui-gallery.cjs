@@ -230,24 +230,36 @@ async function main() {
     await win.setContentSize(1440, 900);
   }
 
-  // 模型菜单（搜索 + 分组 + 徽标 + 管理入口）
+  // 模型菜单（根卡片 → 模型列表 / 思考强度 / 管理入口）。
+  // 2026-11-06：当前 ModelPicker 先显示 root pane，旧脚本直接找 [aria-selected] 行会读到空面；
+  // 先点「模型」单元进入列表，再跑下面的长名截断 / 分组裁剪 / 非高亮行自查。
   await js(`document.querySelector(".mp-trigger")?.click()`);
   await shot("02-model-menu.png", 400);
+  const modelPane = await js(`(() => {
+    const cell = [...document.querySelectorAll('.mp-pop .mp-cell')].find((b) => (b.querySelector('.mp-cell-label')?.textContent || '').includes('模型'));
+    if (!cell) return false;
+    cell.click();
+    return true;
+  })()`);
+  if (!modelPane) throw new Error('模型菜单根卡片里没有「模型」入口');
+  await new Promise((r) => setTimeout(r, 250));
   const longModel = await js(`(() => {
     const menu = document.querySelector('.mp-pop');
-    const name = menu?.querySelector('[aria-selected="true"] .mi-name');
+    const name = menu?.querySelector('[role="option"][aria-selected="true"] .mi-name');
     if (!name) return { ok: false, reason: 'no selected model' };
     const original = name.textContent;
     try {
       name.textContent = '一个很长的自定义模型名称 / organization / model-with-long-context-and-vision';
-      const row = name.parentElement;
-      const meta = row.querySelector('.sub').getBoundingClientRect();
+      const row = name.closest('button[role="option"]');
       const label = name.getBoundingClientRect();
       const bounds = menu.getBoundingClientRect();
-      return { ok: menu.scrollWidth <= menu.clientWidth && label.right <= meta.left && meta.right <= bounds.right,
+      const meta = row?.querySelector('.check, .v-badge')?.getBoundingClientRect() ?? null;
+      const noOverflow = menu.scrollWidth <= menu.clientWidth && label.left >= bounds.left && label.right <= bounds.right;
+      return { ok: noOverflow && (!meta || label.right <= meta.left + 1),
         truncated: name.scrollWidth > name.clientWidth, menuWidth: menu.clientWidth,
         nameClient: name.clientWidth, nameScroll: name.scrollWidth, display: getComputedStyle(name).display,
-        rowDisplay: getComputedStyle(row).display, label: { left: label.left, right: label.right }, meta: { left: meta.left, right: meta.right } };
+        rowDisplay: row ? getComputedStyle(row).display : null,
+        label: { left: label.left, right: label.right }, meta: meta ? { left: meta.left, right: meta.right } : null };
     } finally { name.textContent = original; }
   })()`);
   console.log('[gallery] 长模型名布局自查:', JSON.stringify(longModel));
@@ -292,7 +304,30 @@ async function main() {
   }
   // 思考强度（2026-10-22 契约：P2-2 起思考与模型合并成单芯片菜单，旧的 `.ctl[aria-label=思考档位]`
   // 已不存在——旧选择器让 03/04 两张图静默退化成 01 的副本，而脚本只报 done）。
-  await js(`document.querySelector('.mp-pop .th-row button[data-e="medium"]')?.click()`);
+  // 当前 ModelPicker 的钻取面按 Esc / Shift+Tab 退回 root（组件内没有可见「返回」按钮）；
+  // 事件必须从 `.mp-pop` 冒泡到菜单的 onKeyDown，直接 dispatch 到 document 会被整层漏掉。
+  await js(`(() => {
+    const menu = document.querySelector('.mp-pop');
+    if (!menu) return false;
+    menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+    return true;
+  })()`);
+  await new Promise((r) => setTimeout(r, 250));
+  const effortOpen = await js(`(() => {
+    const cell = [...document.querySelectorAll('.mp-pop .mp-cell')].find((b) => (b.querySelector('.mp-cell-label')?.textContent || '').includes('思考'));
+    if (!cell) return false;
+    cell.click();
+    return true;
+  })()`);
+  if (!effortOpen) throw new Error('模型菜单根卡片里没有「思考强度」入口');
+  await new Promise((r) => setTimeout(r, 250));
+  const effortPicked = await js(`(() => {
+    const b = document.querySelector('.mp-pop .mp-effort button[data-e="medium"]');
+    if (!b) return false;
+    b.click();
+    return true;
+  })()`);
+  if (!effortPicked) throw new Error('思考强度列表里没有 medium 档');
   await shot("03-thinking.png", 400);
 
   // 空态起手行（QuickStarts；2026-10-20 起由 `.pill` 改成 `.start`）填入 composer，不发送。

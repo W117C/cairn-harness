@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { AlertTriangle, Check, ShieldAlert, X } from "lucide-react";
 import { ModalSurface } from "../ModalSurface";
 import type { ScopedPluginReview } from "../../state/plugins-marketplace";
+import { PluginCapabilities } from "./PluginCapabilities";
 import { scopeLabelOf, sourceKindLabel } from "./labels";
 
 export interface PluginReviewProps {
@@ -58,11 +59,7 @@ export function PluginReview(props: PluginReviewProps): React.JSX.Element {
 
         <section className="plugin-review-section">
           <h3>能力</h3>
-          <div className="plugin-capability-grid">
-            {Object.entries(review.capabilities).map(([key, value]) => (
-              <div key={key}><span>{key}</span><strong>{value}</strong></div>
-            ))}
-          </div>
+          <PluginCapabilities capabilities={review.capabilities} />
         </section>
 
         <section className="plugin-review-section">

@@ -10,10 +10,12 @@ describe("Composer：输入框高度轴", () => {
   const css = read("../src/renderer/styles.css");
   const src = read("../src/renderer/components/Composer.tsx");
 
-  it("14px / 1.5 行高；最小 44px，最大 min(40svh, 24rem)", () => {
+  it("14px / 1.5 行高；最小 36px（2026-11-05 对齐 DeepSeek 官方 InputBar），最大 min(40svh, 24rem)", () => {
     expect(css).toMatch(/\.row2 textarea\s*\{[^}]*line-height:\s*1\.5/s);
-    expect(css).toMatch(/\.row2 textarea\s*\{[^}]*min-height:\s*calc\(44px \* var\(--size-scale\)\)/s);
+    expect(css).toMatch(/\.row2 textarea\s*\{[^}]*min-height:\s*calc\(36px \* var\(--size-scale\)\)/s);
     expect(css).toMatch(/\.row2 textarea\s*\{[^}]*max-height:\s*min\(40svh, calc\(24rem \* var\(--size-scale\)\)\)/s);
+    // 官方 .card：padding-top 8（卡顶距）
+    expect(css).toMatch(/\.composer-card\s*\{[^}]*padding-top:\s*var\(--space-sm\)/s);
   });
 
   it("自增高仍读 CSS 的 max-height，不写第二份上限", () => {
@@ -25,9 +27,10 @@ describe("Composer：输入框高度轴", () => {
 describe("Composer：下颌与附件磁贴", () => {
   const css = read("../src/renderer/styles.css");
 
-  it("下颌有 1px 上分线与 28px 最小高", () => {
+  it("下颌无上分线（官方 InputBar 无分隔）、28px 最小高、控件间距 12px", () => {
     expect(css).toMatch(/\.row3\s*\{[^}]*min-height:\s*calc\(28px \* var\(--size-scale\)\)/s);
-    expect(css).toMatch(/\.row3\s*\{[^}]*border-top:\s*1px solid var\(--hairline\)/s);
+    expect(css).toMatch(/\.row3\s*\{[^}]*gap:\s*calc\(12px \* var\(--size-scale\)\)/s);
+    expect(css).not.toMatch(/\.row3\s*\{[^}]*border-top/s);
   });
 
   it("思考档是分段滑轨：6% 中性轨道 + 30px 选中段", () => {

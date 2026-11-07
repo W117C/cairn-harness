@@ -18,6 +18,7 @@ import { CairnMark } from "../components/CairnMark";
 import { menuNavIndex } from "../components/popover-keys";
 import { lazy,Suspense,useEffect,useRef,useState } from "react";
 import { useUpdateNotice } from "../state/update-notice";
+import { registerBrowserLinkHandler } from "../browser-link";
 import { Group,Panel,Separator,type PanelImperativeHandle } from "react-resizable-panels";
 import type { AgentEvent,AskPayload,PermissionMode,ProjectDiagnosis,ProjectRecord,ProviderInfo,RunAttachmentReference,SuggestNextResult } from "../../../../../src/main/ipc-protocol";
 import type { PreviewSnapshot } from "../../../../../src/main/project-preview";
@@ -25,6 +26,7 @@ import type { TextSizeSetting,UiSizeSetting } from "../../../../../src/main/sett
 import type { AppDestination,SectionId } from "../app-controls";
 import { AddProjectMenu } from "../components/AddProjectMenu";
 import { ApprovalCard } from "../components/ApprovalCard";
+import { BackgroundCommands } from "../components/BackgroundCommands";
 import { ChangeSummaryCard } from "../components/ChangeSummaryCard";
 import type { ChangesFocus } from "../components/ChangesPane";
 import { ClarifyCard } from "../components/ClarifyCard";
@@ -331,11 +333,31 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
   // ⌘+点击侧栏会话：右侧预览目标（可继续发送；seq 允许连续预览同一会话）。
   const [sessionPreview, setSessionPreview] = useState<{ id: string; workspace?: string; title: string; seq: number } | null>(null);
   const [paneTarget, setPaneTarget] = useState<{ kind: PaneKind; seq: number } | null>(null);
+  // 聊天链接直达侧栏浏览器（2026-11-05 业主）：markdown http(s) 链接点击 → browser 窗格导航。
+  // 注册收口在常驻的 WorkbenchView（PaneDock 条件挂载，paneTabs 为空时它不存在，监听放它
+  // 身上会丢「窗格全关后的第一击」）；弹出窗不注册 → browser-link 自动回落系统浏览器。
+  const [browserLinkTarget, setBrowserLinkTarget] = useState<{ url: string; seq: number } | null>(null);
+  const browserLinkSeqRef = useRef(0);
   const [changesFocus, setChangesFocus] = useState<ChangesFocus | null>(null);
   const changesFocusSeq = useRef(0);
   const { activeWorkspace, projects, pickerValue, providerInfo, settingsOpen, destination, pageFilter, openDestination, setPageFilter, activeId, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, togglePane, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode, sidebarCollapsed, toggleSidebar, newSession, handleOpenPalette, openPane, setSettingsSection, setSettingsOpen, sidebarWidth, runningSet, waitingIdSet, draftIds, outcomes, registryNotice, retryProjects, sessionsLoaded, sessionsLoadError, sessionsLoadErrorDetail, retrySessions, providerOk, openSession, setActiveWorkspace, activeWorkspaceRef, touchWorkspace, handleAddProject, handleCloneProject, setNewProjectOpen, handleUpdateProject, handleRelocateProject, handleRemoveProject, handleRevealProject, pinSessionById, forkSessionFromMenu, requestArchiveSession, openSessionInCli, setWtDiscard, sessionWorktreeOp, requestDeleteSession, themePref, changeTheme, usageStats, startSidebarDrag, persistSidebarWidth, sidebarWidthRef, mainGroupRef, showEmpty, findRef, findOpen, streamEl, closeFind, lastError, clearLastError, setLogTarget, lastNotice, clearLastNotice, importDiagnosis, setImportDiagnosis, chipRef, chipOpen, openChipPopover, emptyData, chipQuery, setChipQuery, chipRecent, chipList, closeChip, setLastError, setStreamEl, stick, streamRows, rowRefs, inheritedSeqs, viewMode, runningActive, foldedRounds, flashRound, streamActions, deliveryTrailItems, deliveryExpandedFor, openPreview, setDeliveryExpandedFor, outlineCurrent, jumpToRound, unfoldAllTurns, foldAllTurns, askForActive, setMode, setLastNotice, pendingClarify, pendingPlan, composerZoneRef, editCtx, events, sendQueue, setEditCtx, setDraftRemap, draftRemapSeq, refreshSessions, setQueueFor, cancelRunHeal, resumeQueueFor, sendTo, queueLoading, pendingSend, skills, composerLock, mode, stopped, usage, phaseLabel, phase, elapsedSec, steps, runSteps, chosenCtx, recentRefsBySession, noteRecentRef, promptHistory, noteDraft, injectedText, injectedTextSeq, draftRemap, draftRestore, sendWithGoal, configuredProviders, thinkingBySession, pendingThinking, setPendingThinking, force, selections, refreshProviderInfo, compactNow, composerMenuSignal, onSuggestNext, injectedAttachment, injectedElement, injectText, inspectorRef, inspectorDefault, setInspectorCollapsed, inspectorSaveTimer, inspectorColRef, jumpToEvent, handleRestoreSnapshot, toggleInspector, attachFromPane, pickSignal, handlePickResult, preview, closePane, send, setPaneTabs, pluginSidebarWidth, setPluginSidebarWidthPersist, closePluginSidebar, fillPluginCommand, viewToast, cheatOpen, closeCheat, revertConfirm, setRevertConfirm, doRevertTurn, permissionGuard, projectRemoveConfirm, setProjectRemoveConfirm, doRemoveProject, archiveConfirm, setArchiveConfirm, doArchiveSession, deleteConfirm, setDeleteConfirm, doDeleteSession, wtDiscard, paletteOpen, setPaletteOpen, focusComposer, handlePaletteAction, startBarRename, logTarget, settingsSection, refreshProviderKeys, setThemePref, setTextSize, setUiSize, setCtrlTabCycle, dragOverApp, newProjectOpen, templates, handleCreateFromDialog } = deps;
   // 启动时轻量检查更新：有更新源才查，24h 一次，有可用版本才出 notice。
   useUpdateNotice(setLastNotice);
+  // 记忆正文也复用 Markdown 链接：先露出会话工作台，浏览器不在隐藏页面后面打开。
+  useEffect(() => {
+    registerBrowserLinkHandler((url) => {
+      browserLinkSeqRef.current += 1;
+      setBrowserLinkTarget({ url, seq: browserLinkSeqRef.current });
+      if (destination !== "chat") openDestination("chat");
+      openPane("browser");
+    });
+    return () => registerBrowserLinkHandler(null);
+  }, [destination, openDestination, openPane]);
+  // 浏览器窗格关闭时清掉待导航目标：seq 闸只活在一次挂载内（PaneDock 重挂后 openTargetSeqRef
+  // 归零），不清的话重开窗格会静默重放上一次点过的旧链接。
+  useEffect(() => {
+    if (!paneTabs.includes("browser") && browserLinkTarget !== null) setBrowserLinkTarget(null);
+  }, [paneTabs, browserLinkTarget]);
   const { inspectorCollapsed } = deps;
   const pendingSession = pendingSend && activeId === null;
   const page = pageForDestination(destination);
@@ -381,7 +403,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
     : (projects.find((p) => p.path === activeWorkspace)?.name ?? activeWorkspace.slice(activeWorkspace.lastIndexOf("/") + 1));
   // 工作状态面板（2026-11-04 截图右上角）：todo_write 清单投影 + 运行读数（阶段/耗时/步数）。
   const workTodos = useMemo(() => todoProjection(events), [events]);
-  const { toolbarContext, toolbarCenter, toolbarAside, toolbarRight } = renderAppToolbar({ settingsOpen: settingsOpen || destination !== "chat", activeId, activeWorkspace, activeProjectLabel, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, onOpenPane: openToolbarPane, inspectorOpen: !inspectorCollapsed, onToggleInspector: toggleInspector, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode, demo: providerInfo?.kind === "demo", onOpenProviderSettings: () => { setSettingsSection("provider"); setSettingsOpen(true); }, running: runningActive, phaseLabel, elapsedSec, steps, todos: workTodos });
+  const { toolbarContext, toolbarCenter, toolbarAside, toolbarRight } = renderAppToolbar({ settingsOpen: settingsOpen || destination !== "chat", activeId, activeWorkspace, activeProjectLabel, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, onOpenPane: openToolbarPane, inspectorOpen: !inspectorCollapsed, onToggleInspector: toggleInspector, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode, demo: providerInfo?.kind === "demo", onOpenProviderSettings: () => { setSettingsSection("provider"); setSettingsOpen(true); }, running: runningActive, phaseLabel, elapsedSec, runSteps, todos: workTodos });
 
     return (
     <div className="app" data-sidebar={sidebarCollapsed ? "collapsed" : "expanded"}>
@@ -832,6 +854,9 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                 setQueueFor={setQueueFor} cancelRunHeal={cancelRunHeal} resumeQueueFor={resumeQueueFor}
               />
             )}
+            {activeId !== null && (
+              <BackgroundCommands key={runKey(activeWorkspace, activeId)} sessionId={activeId} workspace={activeWorkspace ?? undefined} />
+            )}
             {activeId !== null && <SessionLoadNotice loading={queueLoading} error={deps.sessionLoadError} onRetry={deps.retrySessionOpen} />}
             <Composer
               skills={skills}
@@ -996,6 +1021,8 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                       pickSignal={pickSignal}
                       onPickResult={handlePickResult}
                       {...(preview !== null && preview.status === "ready" && preview.url !== undefined ? { browserUrl: preview.url } : {})}
+                      {...(browserLinkTarget !== null ? { browserLinkTarget } : {})}
+                      browserVisible={destination === "chat" && !settingsOpen && !inspectorCollapsed}
                       onClose={closePane}
                       onOpen={openPane}
                       onReview={(text) => void send(text)}
@@ -1069,7 +1096,15 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
             sessions={sessions}
             projects={projects.map((p) => ({ id: p.id, name: p.name, path: p.path }))}
             onOpenSession={(id, workspace) => { setPaletteOpen(false); openSession(id, workspace); }}
-            onSwitchWorkspace={(path) => { setPaletteOpen(false); setActiveWorkspace(path); activeWorkspaceRef.current = path; touchWorkspace(path); }}
+            onSwitchWorkspace={(path) => {
+              setPaletteOpen(false);
+              setActiveWorkspace(path);
+              activeWorkspaceRef.current = path;
+              touchWorkspace(path);
+              // 切项目 = 切到该项目的空聊天面：旧 activeId 留在原项目，继续发送会把同一
+              // sessionId 写进新工作区（2026-11-05 审计确认的数据串写）。
+              newSession();
+            }}
             onOpenSettings={(section) => { setPaletteOpen(false); setSettingsSection(section); setSettingsOpen(true); }}
             onOpenDestination={(next) => { setPaletteOpen(false); openDestination(next); }}
             onOpenFile={(path) => {

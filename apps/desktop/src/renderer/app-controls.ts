@@ -12,4 +12,4 @@ export type AppDestination = "chat" | "plugins" | "memory" | "automation";
 
 export type AppPageDestination = Exclude<AppDestination, "chat">;
 
-export type SectionId = "general" | "provider" | "network" | "usage" | "evolve" | "permissions" | "advanced" | "shortcuts" | PageId | "about";
+export type SectionId = "general" | "personalization" | "subagents" | "migration" | "provider" | "mcp" | "hooks" | "network" | "usage" | "evolve" | "permissions" | "advanced" | "shortcuts" | PageId | "about";

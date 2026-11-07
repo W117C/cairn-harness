@@ -93,27 +93,45 @@ describe("ModelPicker 触发条（真 HTML）", () => {
   });
 });
 
-describe("ModelMenu 菜单（真 HTML——P2-2 合并单面：搜索 + 列表 + 下半区思考段同屏）", () => {
+describe("ModelMenu 菜单（真 HTML——2026-11-04 业主裁：DeepSeek 两级面板：root cells + 模型面 + 思考面）", () => {
+  // 2026-11-04 起菜单默认开在 root 面（模型/思考强度两枚 cell）；列表/档位面要显式钻入：
+  // render() = 模型面（⌘⇧I 同落点），renderRoot() = root 面（点击开同落点）。
   const render = (over: Partial<Parameters<typeof ModelMenu>[0]> = {}): string =>
+    renderToStaticMarkup(
+      <ModelMenu options={OPTIONS} value="deepseek-chat" onPick={() => undefined} initialFocus="model" {...over} />,
+    );
+  const renderRoot = (over: Partial<Parameters<typeof ModelMenu>[0]> = {}): string =>
     renderToStaticMarkup(
       <ModelMenu options={OPTIONS} value="deepseek-chat" onPick={() => undefined} {...over} />,
     );
 
-  it("按 provider 分节，每行都有档位文字与上下文窗口", () => {
+  it("root 面：模型/思考强度两枚 cell（label + 当前值），DeepSeek 根面；管理模型在底部", () => {
+    const html = renderRoot({ onThinkingChange: () => undefined, thinking: "off", thinkingSupported: true, onOpenSettings: () => undefined });
+    expect(html).toContain("mp-cells");
+    expect(html).toContain("mp-cell");
+    expect(html).toContain('>模型</span>');
+    expect(html).toContain('>deepseek-chat</span>');
+    expect(html).toContain(">思考强度<");
+    expect(html).toContain('>off</span>'); // 当前档值（2026-11-05 起短词=英文标准名）
+    expect(html).toContain("管理模型");
+  });
+
+  it("按 provider 分节，档位与窗口收进行 title（不再占可见副标签）", () => {
     const html = render();
     expect(html).toContain(">openai<");
     expect(html).toContain(">deepseek<");
-    // 档位徽标是**文字**（规范 a11y 条：不只靠颜色）
-    expect(html).toContain("标准 · 窗口 128.0k");
-    expect(html).toContain("便宜 · 窗口 1.0m");
+    // 档位徽标是**文字**（规范 a11y 条：不只靠颜色）——现在收进 tooltip
+    expect(html).toContain('title="标准 · 窗口 128.0k"');
+    expect(html).toContain('title="便宜 · 窗口 1.0m"');
     expect(html).toContain('role="listbox"');
     expect(html).toContain('aria-label="模型列表"');
   });
 
-  it("窗口在副标签里说人话（光一个「128.0k」没人知道这是上下文窗口）", () => {
+  it("窗口不再占可见副标签（DeepSeek 名称行）：档位/窗口只在 title 里", () => {
     const html = render();
-    expect(html).toContain('<span class="sub">窗口 128.0k</span>');
-    expect(html).toContain('<span class="sub">窗口 1.0m</span>');
+    expect(html).not.toContain('class="sub"');
+    expect(html).toContain("窗口 128.0k"); // 只出现在 title
+    expect(html).toContain("窗口 1.0m");
   });
 
   it("组头说人话：给了 provider 标签表就用标签，没登记的落回原 id", () => {
@@ -143,10 +161,10 @@ describe("ModelMenu 菜单（真 HTML——P2-2 合并单面：搜索 + 列表 +
     expect((html.match(/role="option"/g) ?? []).length).toBe(2);
   });
 
-  it("key 未配置 ⇒ 置顶警示行 + 可跳设置，但**不**因此禁掉整列", () => {
+  it("key 未配置 ⇒ root 面底部警示行 + 可跳设置，但**不**因此禁掉整列", () => {
     // 2026-10-06 修正：旧判据钉的是"整列禁用"，而那条规则本身是错的 —— key 按家算，
     // 拿当前通道的状态去灰掉别人家的模型，正好造成用户实测的"列表出来了但点不动"。
-    const html = render({ keyNotice: "OpenAI 未配置 key · 去设置配置" });
+    const html = renderRoot({ keyNotice: "OpenAI 未配置 key · 去设置配置" });
     expect(html).toContain("⚠ OpenAI 未配置 key · 去设置配置");
     expect(html).not.toContain("点这里去设置"); // 提示本身已经给出「去设置配置」，不重复 CTA。
     expect(html).toContain("mp-warn");
@@ -164,7 +182,6 @@ describe("ModelMenu 菜单（真 HTML——P2-2 合并单面：搜索 + 列表 +
     // 2026-10-06 用户实测「列表出来了但点不动」的第二处根因：旧实现拿当前通道的 key 状态禁整列。
     // 但那两条模型可能属于另一家（那家有 key），灰掉它们等于把用户想要的能力藏起来。
     const html = render({ keyNotice: "OpenAI 未配置 key · 去设置配置" });
-    expect(html).toContain("⚠ OpenAI 未配置 key · 去设置配置"); // 提示还在
     expect((html.match(/<button[^>]*disabled=""/g) ?? []).length).toBe(0); // 但一行都不禁
   });
 
@@ -475,10 +492,10 @@ describe("设置页左侧导航：一处事实源，不许重复", () => {
 });
 
 describe("设置页信息架构：导航分组与面板标题", () => {
-  it("导航有标题，并按设置 / 工作台 / 系统三段分组，搜索仍保留", () => {
+  it("导航按设置 / 工作台 / 系统三段分组，搜索仍保留；不重复工具栏的「设置」标题", () => {
     const html = renderToStaticMarkup(<SettingsPanel onClose={() => undefined} />);
     expect(html).toContain('class="sp-nav-head"');
-    expect(html).toContain('class="sp-nav-title">设置</div>');
+    expect(html).not.toContain('class="sp-nav-title"');
     expect(html).toContain('aria-label="搜索设置分区"');
     expect(html).toContain('class="sp-nav-group" data-group="settings"');
     expect(html).toContain('class="sp-nav-group" data-group="workspace"');
@@ -545,10 +562,11 @@ describe("C-31 思考行（live）：有计时、可点开", () => {
     expect(html).toContain("think-elapsed");
   });
 
-  it("计时位是 tabular-nums 的独立位（走秒不跳动），并挂了 aria-live", () => {
+  it("计时位是 tabular-nums 的独立位（走秒不跳动），用 role=timer 而不是 aria-live", () => {
     const html = renderToStaticMarkup(<ThinkingLive seq={2} />);
     expect(html).toContain("think-elapsed");
-    expect(html).toContain('aria-live="polite"');
+    expect(html).toContain('role="timer"');
+    expect(html).not.toContain('think-elapsed" aria-live');
     expect(html).toContain('aria-label="模型思考中，点击展开说明"');
   });
 
@@ -628,7 +646,7 @@ describe("思考正文：投影与渲染", () => {
 });
 
 // 思考档位（P2-2 合并单面：brief 三节「模型列表…思考强度 Segmented 同屏」；旧两视图下架）。
-// 触发条 = 「模型 · 思考 关」单芯片（短档词族 关/低/中/强）；弹窗 = 搜索 + 模型列表 + 下半区思考段。
+// 触发条 = 「模型 · 思考 off」单芯片（2026-11-05 起短词=英文标准名 off/low/medium/high/xhigh/max）。
 // 22.01 裁的语义随 brief 更新：未声明支持 ⇒ 触发条不带「· 思考」段、弹窗思考段**整组禁用** +
 // 注「当前模型不支持思考强度」+ 配置折叠（不摆空壳也不噤声）。
 import { filterModelOptions } from "../src/renderer/components/ModelPicker";
@@ -639,11 +657,11 @@ describe("思考段合并单面（P2-2；触发条短档词族）", () => {
       <ModelMenu options={OPTIONS} value="deepseek-chat" onPick={() => undefined} onThinkingChange={() => undefined} {...over} />,
     );
 
-  it("触发条 = 「deepseek-chat · 思考 关」单芯片（短档词族；请求侧 off 字面量不变）", () => {
+  it("触发条 = 「deepseek-chat · 思考 off」单芯片（英文标准档名；请求侧 off 字面量不变）", () => {
     const html = renderToStaticMarkup(
       <ModelPicker infos={[info]} value="deepseek-chat" onChange={() => undefined} thinking="off" thinkingSupported onThinkingChange={() => undefined} />,
     );
-    expect(html).toContain("deepseek-chat · 思考 关");
+    expect(html).toContain("deepseek-chat · 思考 off");
     // 不给 onThinkingChange（如旧消费者）就不显示思考段——触发条保持纯模型名
     const plain = renderToStaticMarkup(<ModelPicker infos={[info]} value="deepseek-chat" onChange={() => undefined} />);
     expect(plain).not.toContain("· 思考");
@@ -654,38 +672,34 @@ describe("思考段合并单面（P2-2；触发条短档词族）", () => {
     expect(unsupported).not.toContain("· 思考");
   });
 
-  it("合并面：搜索框 + 列表同屏 + 下半区思考分段（四键、当前档恰一枚 aria-pressed、逐键 title 说明、当前档提示）", () => {
-    const html = menu({ thinkingSupported: true, thinking: "low" });
-    expect(html).toContain("mp-search");
-    expect(html).toContain(">openai<"); // 列表与思考段同屏（旧两视图的翻面下架）
-    expect(html).toContain("思考强度");
-    for (const s of ["关", "低", "中", "强"]) expect(html).toContain(`>${s}<`);
-    expect((html.match(/aria-pressed="true"/g) ?? []).length).toBe(1);
-    expect(html).toContain("轻量思考"); // low 的当前档提示上屏
-    expect(html).toContain('title="强 = 深度思考（16k 预算）——难题、方案设计、跨文件推理。"'); // 逐键一句说明
-    expect(html).toContain('role="listbox"');
+  it("思考面：档位 radio 行（当前档恰一枚 aria-selected、逐行 title 说明）", () => {
+    const html = menu({ thinkingSupported: true, thinking: "low", initialFocus: "effort" });
+    expect(html).toContain("mp-effort");
+    for (const s of ["off", "low", "medium", "high", "xhigh", "max"]) expect(html).toContain(`>${s}<`);
+    expect((html.match(/aria-selected="true"/g) ?? []).length).toBe(1);
+    expect(html).toContain("轻量思考"); // low 的说明在行 title
+    expect(html).toContain('title="high = 深度思考（16k 预算）——难题、方案设计、跨文件推理。"'); // 逐行一句说明
+    expect(html).not.toContain("th-row"); // 底部 Segmented 下架
   });
 
-  it("未声明 ⇒ 整组禁用（五键 disabled）+ 注「当前模型不支持思考强度」+ 配置折叠（为什么+怎么解锁）", () => {
-    const html = menu({ thinkingSupported: false });
-    expect(html).toContain("th-row"); // 按键仍在场（brief：Segmented 常摆，按能力禁用）
-    expect((html.match(/aria-pressed="true"/g) ?? []).length).toBe(1); // 选中态仍是 off
-    expect((html.match(/<button[^>]*disabled=""/g) ?? []).length).toBe(5); // 五键全禁（列表本面不禁）
+  it("未声明 ⇒ 思考面空态 + 配置折叠（为什么+怎么解锁），并挂 data-unsupported 标记（ADR-0009 fail-visible）", () => {
+    const html = menu({ thinkingSupported: false, initialFocus: "effort" });
+    expect((html.match(/<button[^>]*disabled=""/g) ?? []).length).toBe(0); // 没有可禁的档位键（空态，不摆假按键）
     expect(html).toContain("当前模型不支持思考强度");
     expect(html).toContain("th-why");
     expect(html).toContain("reasoningEfforts");
     expect(html).toContain(".agent/providers.json");
-    // 不支持 ⇒ 分段挂上标记：CSS 据此撤掉「选中」的浮起高亮（fail-visible，不谎称可调）
+    // 思考面挂上标记：不支持时这是空态说明，不是可调控件
     expect(html).toContain('data-unsupported="true"');
-    const supportedHtml = menu({ thinkingSupported: true, thinking: "low" });
+    const supportedHtml = menu({ thinkingSupported: true, thinking: "low", initialFocus: "effort" });
     expect(supportedHtml).not.toContain('data-unsupported="true"');
     // 运行中同面：没有可调的，运行注记也不在（不谎称「思考程度可调」）
-    const running = menu({ running: true, thinkingSupported: false });
+    const running = menu({ running: true, thinkingSupported: false, initialFocus: "effort" });
     expect(running).not.toContain("思考程度可调");
   });
 
   it("不支持时只留**一句**明说：「这家没提供思考能力」收进折叠里（不摆三句话）", () => {
-    const html = menu({ thinkingSupported: false });
+    const html = menu({ thinkingSupported: false, initialFocus: "effort" });
     const summaryHtml = html.slice(html.indexOf("<summary"), html.indexOf("</summary>"));
     // 折叠标题上只剩「了解如何配置」（可达），那句「这家没提供思考能力」不再当独立一行摆在外面
     expect(summaryHtml).toContain("了解如何配置");
@@ -694,16 +708,19 @@ describe("思考段合并单面（P2-2；触发条短档词族）", () => {
     expect(html.indexOf("这家没提供思考能力")).toBeGreaterThan(html.indexOf("</summary>"));
   });
 
-  it("运行中：列表整列禁用、思考四键一枚都不禁（跑着也能拧）+ 运行注记在场", () => {
-    const html = menu({ running: true, thinkingSupported: true, thinking: "off" });
+  it("运行中：模型面整列禁用、思考面一行都不禁（跑着也能拧）+ 运行注记在场", () => {
+    const html = menu({ running: true, thinkingSupported: true, thinking: "off", initialFocus: "effort" });
     expect(html).toContain("运行中：模型档位锁定；思考程度可调（下一轮派活生效）。");
-    expect((html.match(/<button[^>]*disabled=""/g) ?? []).length).toBe(2); // 模型两行；四键不禁（演示已不在列表里）
+    expect((html.match(/<button[^>]*disabled=""/g) ?? []).length).toBe(0); // 档位行不禁
+    const models = menu({ running: true, initialFocus: "model" });
+    expect((models.match(/<button[^>]*disabled=""/g) ?? []).length).toBe(2); // 模型两行全禁
   });
 
-  it("不带 onThinkingChange（旧消费者）：思考段整体不出现，列表照常（零行为变化）", () => {
-    const html = renderToStaticMarkup(<ModelMenu options={OPTIONS} value="deepseek-chat" onPick={() => undefined} />);
-    expect(html).not.toContain("th-row");
-    expect(html).toContain(">openai<");
+  it("不带 onThinkingChange（旧消费者）：root 面没有思考强度 cell，模型面照常（零行为变化）", () => {
+    const root = renderToStaticMarkup(<ModelMenu options={OPTIONS} value="deepseek-chat" onPick={() => undefined} />);
+    expect(root).not.toContain("思考强度");
+    const list = renderToStaticMarkup(<ModelMenu options={OPTIONS} value="deepseek-chat" onPick={() => undefined} initialFocus="model" />);
+    expect(list).toContain(">openai<");
   });
 
   it("运行中：触发器不灰（可开菜单拧思考档）；标签照常显示当前档（短词）", () => {
@@ -712,7 +729,7 @@ describe("思考段合并单面（P2-2；触发条短档词族）", () => {
     );
     const trigger = /<button[^>]*aria-label="模型选择"[^>]*>/.exec(html)?.[0] ?? "";
     expect(trigger).not.toContain("disabled");
-    expect(html).toContain("deepseek-chat · 思考 低");
+    expect(html).toContain("deepseek-chat · 思考 low");
   });
 });
 

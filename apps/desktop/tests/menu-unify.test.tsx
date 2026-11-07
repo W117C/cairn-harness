@@ -14,6 +14,7 @@ import { ModelMenu } from "../src/renderer/components/ModelPicker";
 import type { PermissionMode } from "../../../src/main/ipc-protocol";
 
 const styles = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
+const menuCss = readFileSync(new URL("../src/renderer/components/model-menu.css", import.meta.url), "utf8");
 const tokens = readFileSync(new URL("../src/renderer/tokens.css", import.meta.url), "utf8");
 const permSrc = readFileSync(new URL("../src/renderer/components/PermissionMenu.tsx", import.meta.url), "utf8");
 
@@ -122,17 +123,17 @@ describe("批 5：权限菜单（图标 + 两行 + 危险标签 + 自动二次�
   });
 });
 
-describe("批 5：模型弹层（分段 selected=elevated / 未声明收成 info 行）", () => {
-  it("思考分段：选中 = elevated 背景 + primary；未选 = secondary（不再近隐灰）", () => {
+describe("批 5：模型弹层（DeepSeek 两级面板：选中=尾随✓不铺色 / 未声明收成 info 行）", () => {
+  it("选中行不铺品牌色底，勾是主色细勾（DeepSeek：✓ 就是选中的记号）", () => {
     // token 是 HSL 三元组——必须 hsl() 包裹（裸用 var() 是无效值：真机曾读回透明背景，判卷哨兵补上精确形态）
-    expect(block(styles, '.th-row button[aria-pressed="true"]')).toContain("background: hsl(var(--bg-elevated))");
-    expect(block(styles, '.th-row button[aria-pressed="true"]')).toContain("color: hsl(var(--text-000))");
-    expect(block(styles, ".th-row button")).toContain("color: hsl(var(--text-200))");
+    expect(block(menuCss, '.mp-pop [role="option"][aria-selected="true"]')).toContain("background: transparent");
+    expect(block(menuCss, '.mp-pop [role="option"] .check')).toContain("background: transparent");
+    expect(block(menuCss, '.mp-pop [role="option"] .check')).toContain("color: hsl(var(--text-000))");
   });
 
-  it("未声明 reasoningEfforts：一行 info（th-info + 小图标 + 「了解如何配置」折叠），配置句收进折叠内", () => {
+  it("未声明 reasoningEfforts：思考面空态（th-info + 小图标 + 「了解如何配置」折叠），配置句收进折叠内", () => {
     const h = renderToStaticMarkup(
-      <ModelMenu options={[]} value={null} onPick={() => undefined} onThinkingChange={() => undefined} thinkingSupported={false} />,
+      <ModelMenu options={[]} value={null} onPick={() => undefined} onThinkingChange={() => undefined} thinkingSupported={false} initialFocus="effort" />,
     );
     expect(h).toContain("th-info");
     expect(h).toContain("th-info-ico");

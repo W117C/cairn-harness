@@ -189,16 +189,16 @@ async function main() {
   await js(`document.querySelector('.destination-page[aria-label="插件"] input[aria-label="搜索插件"]')?.focus()`);
   await typeText("Featured");
   check("plugin search accepts keyboard input", await js(`document.querySelector('.destination-page[aria-label="插件"] input[aria-label="搜索插件"]')?.value === "Featured"`));
-  await click('.destination-page[aria-label="插件"] .plugin-discover-main');
+  await click('.destination-page[aria-label="插件"] .plugin-store-main');
   check("plugin detail opens before destination switching", await isVisible('.destination-page[aria-label="插件"] .plugin-detail'));
 
   await click('[data-destination="memory"]');
   await js(`document.querySelector('input[aria-label="搜索记忆"]').focus()`);
   await typeText("长期记忆条目 24");
-  check("memory search finds body content", await js(`document.querySelectorAll('.memory-list .ap-item').length === 1 && document.querySelector('.memory-list .nm')?.textContent === 'memory-24'`));
+  check("memory search finds body content", await js(`document.querySelectorAll('.memory-grid .memory-card').length === 1 && document.querySelector('.memory-grid .nm')?.textContent === 'memory-24'`));
   await js(`document.querySelector('input[aria-label="搜索记忆"]').select()`);
   await pressKey("Backspace");
-  check("clearing memory search restores every topic", await js(`document.querySelectorAll('.memory-list .ap-item').length === 24`));
+  check("clearing memory search restores every topic", await js(`document.querySelectorAll('.memory-grid .memory-card').length === 24`));
   const contrast = await js(`(() => {
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = 1;
@@ -216,13 +216,13 @@ async function main() {
       const foreground = luminance(color);
       return (Math.max(background, foreground) + 0.05) / (Math.min(background, foreground) + 0.05);
     };
-    const meta = getComputedStyle(document.querySelector('.memory-list .sub')).color;
+    const meta = getComputedStyle(document.querySelector('.memory-card-foot')).color;
     const placeholder = getComputedStyle(document.querySelector('input[aria-label="搜索记忆"]'), '::placeholder').color;
     return { metadata: ratio(meta), placeholder: ratio(placeholder) };
   })()`);
   check("light memory metadata and search placeholder meet 4.5:1 contrast", contrast.metadata >= 4.5 && contrast.placeholder >= 4.5, contrast);
   await shot("10-memory-list");
-  await click('.memory-list .ap-item');
+  await click('.memory-grid .memory-card');
   check("memory topic opens its own body and metadata", await js(`document.querySelector('.ap-drawer-head .nm')?.textContent === 'memory-01' && document.querySelector('.ap-drawer-body')?.textContent.includes('长期记忆条目 1')`));
   await shot("11-memory-detail");
   await click('.ap-drawer-head button');
@@ -392,7 +392,12 @@ async function main() {
   await click('.destination-page[aria-label="自动化"] .error-strip button[aria-label="关闭错误提示"]');
   check("destination error can be dismissed", !(await isVisible('.destination-page[aria-label="自动化"] .error-strip')));
 
-  await click(".app-rail-settings");
+  // 2026-11-03 起设置入口并进账户菜单，旧的 .app-rail-settings 节点已不存在；
+  // 用应用自己的键盘入口（⌘,）打开设置，避免依赖菜单层级。
+  win.webContents.sendInputEvent({ type: "keyDown", keyCode: ",", modifiers: ["meta"] });
+  win.webContents.sendInputEvent({ type: "keyUp", keyCode: ",", modifiers: ["meta"] });
+  // 设置面板是惰性块：新增四个分区后首帧组装更慢，原断言在 nav 还没挂上时读到空串会假红。
+  await pause(700);
   check("settings no longer contains durable destinations", await js(`(() => {
     const nav = document.querySelector('[aria-label="设置分区"]')?.textContent ?? "";
     return !nav.includes("插件") && !nav.includes("记忆系统") && !nav.includes("自动化任务")

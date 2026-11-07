@@ -159,8 +159,19 @@ describe("searchCapabilityLabel（联网搜索状态行，三态文案判卷）"
 });
 
 describe("设置页模态边界（背景不可达 + 焦点环绕 + 关闭恢复）", () => {
+  it("布局按三档密度与搜索提示取事实源", () => {
+    expect(panelSrc).toContain("const SETTINGS_DENSITY: Readonly<Record<SectionId, \"single\" | \"table\" | \"compact\">>");
+    expect(panelSrc).toContain('data-density={SETTINGS_DENSITY[section]}');
+    expect(panelSrc).toContain("STR.design.settingsSearchHint");
+    const styles = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
+    expect(styles).toContain('.sp-body[data-density="compact"] > .ss-page');
+    expect(styles).toContain('.sp-search-hint');
+  });
+
   it("设置页走统一 ModalSurface，由边界声明 aria-modal 并隔离背景（关闭前先提交焦点输入）", () => {
-    expect(panelSrc).toContain('<ModalSurface className="sp-page" label="设置" onClose={closeSettings}>');
+    // 2026-11-05 初始焦点改落导航搜索框（业主截图「返回按钮蓝环」）：initialFocusRef 交给
+    // sp-nav-search，打开设置不再把焦点+蓝环摆在「返回」动作上；JSX 字面随 prop 追加更新。
+    expect(panelSrc).toContain('<ModalSurface className="sp-page" label={STR.settingsPanel.label} onClose={closeSettings} initialFocusRef={navSearchRef} onEscapeKeyDown={handleSettingsEscape}>');
     // v33：关闭（Esc / 返回 / 遮罩）先把面板内焦点元素 blur ⇒ onBlur 保存，再卸载。
     expect(panelSrc).toContain("const closeSettings = () => {");
     expect(panelSrc).toMatch(/active\.closest\("\.sp-page"\) !== null\) active\.blur\(\);/);
@@ -180,7 +191,9 @@ describe("设置页模态边界（背景不可达 + 焦点环绕 + 关闭恢复�
   it("设置打开时 App 全局快捷键让路，Esc 不会被误判成停止运行", () => {
     // 2026-10-20：改钉「走共享门」（command-gate.ts 的 overlayBlocked）——
     // 行为判据在 tests/command-gate.test.ts（真 DOM）；这里钉 App 的快捷键路径接上了那道门。
-    expect(appSrc).toContain("overlayBlocked(readGateInput(");
+    // 2026-11-05：门输入改为先读一次（`const gate = …`），Esc 分支还要复用
+    // `escOwnsTarget`/`composerTarget`——仍是同一道门，只是不再内联嵌套。
+    expect(appSrc).toMatch(/const gate = readGateInput\([^;]*\);\s*if \(overlayBlocked\(gate\)\) return;/);
   });
 });
 

@@ -191,6 +191,7 @@ export function PluginsWorkspace(props: PluginsWorkspaceProps): React.JSX.Elemen
               rows={discoverRows}
               showShelves={state.query.trim() === "" && effectiveCategory === "all" && !favoriteOnly}
               mutationBlocked={mutationBlocked}
+              busy={busy}
             />
           )}
           {effectiveView === "installed" && (
@@ -232,6 +233,7 @@ export function PluginsWorkspace(props: PluginsWorkspaceProps): React.JSX.Elemen
           onEnabled={(enabled) => state.setPluginEnabled(selected, enabled)}
           onUninstall={() => state.uninstallPlugin(selected)}
           onConfigure={(values) => state.configurePlugin(selected, values)}
+          onImportLocal={(sourcePath) => { void state.importPlugin({ kind: "local", sourcePath }, state.workspace === null ? "user" : "project"); }}
         />
       ) : null}
     </div>

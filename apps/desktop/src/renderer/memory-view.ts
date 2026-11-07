@@ -48,15 +48,28 @@ export function bodyLines(body: string): string[] {
 
 import type { MemorySnapshot } from "../../../../src/main/ipc-protocol";
 
-/** Keep scope groups stable while sorting their contents; never mutate a live snapshot. */
+/** 语义分组：从主题类型取中文组名；认不出的类型归「记忆」，不把机器值直接上屏。 */
+export type MemorySemanticGroup = "决策" | "架构" | "偏好" | "记忆";
+export function memorySemanticGroup(topic: { topic: string; type: string; body: string }): MemorySemanticGroup {
+  const haystack = `${topic.topic}\n${topic.type}`.toLowerCase();
+  if (/决策|decision/.test(haystack)) return "决策";
+  if (/架构|architecture/.test(haystack)) return "架构";
+  if (/偏好|preference/.test(haystack)) return "偏好";
+  return "记忆";
+}
+
+/** 按语义分组排序：先分组、层别保持稳定，再在各组内按时间/名称排序；不改动 live snapshot。 */
 export function memoryRows(snap: MemorySnapshot, query: string, filter: string, sortByName: boolean) {
   const q = query.trim().toLowerCase();
+  const GROUP_ORDER: readonly MemorySemanticGroup[] = ["决策", "架构", "偏好", "记忆"];
   return (["project", "global"] as const).flatMap((layer) => {
     if (filter !== "all" && filter !== layer) return [];
     return snap[layer].topics
       .filter((t) => `${t.topic}\n${t.type}\n${t.body}`.toLowerCase().includes(q))
       .map((topic) => ({ layer, topic }))
       .sort((a, b) => {
+        const group = GROUP_ORDER.indexOf(memorySemanticGroup(a.topic)) - GROUP_ORDER.indexOf(memorySemanticGroup(b.topic));
+        if (group !== 0) return group;
         const byName = a.topic.topic.localeCompare(b.topic.topic, "zh");
         if (sortByName) return byName;
         const aTime = Date.parse(a.topic.modified);

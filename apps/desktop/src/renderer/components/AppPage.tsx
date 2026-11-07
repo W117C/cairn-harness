@@ -132,7 +132,8 @@ export function AppPageBody(props: {
           {loadError === null && snapshot !== null && props.page === "automation" && (
             snapshot.schedule === undefined
               ? stateFrame("调度器未初始化")
-              : <AutomationPane snap={snapshot.schedule} onError={reportError} refresh={refresh} filter={activeFilter} onFilter={setActiveFilter} />
+              : <AutomationPane snap={snapshot.schedule} onError={reportError} refresh={refresh} filter={activeFilter} onFilter={setActiveFilter}
+                  {...(props.workspace === undefined ? {} : { workspace: props.workspace })} />
           )}
           {loadError === null && snapshot !== null && props.page === "skills" && (
             snapshot.plugins === undefined

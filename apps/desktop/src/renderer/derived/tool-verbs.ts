@@ -14,6 +14,19 @@ export const TOOL_VERBS: Readonly<Record<string, string>> = {
   // 处理 ⇒ 折叠行把 `grep` / `glob` / `lsp` / `clarify` / `propose_plan` / `render_image` 这些
   // 实现名原样摆上屏，与「不暴露实现名」相反。`list_dir` 是从前的工具，现已不存在（glob 取代），
   // 留着这条 = 词表比工具面多一格，判据看不出来。
+  // 2026-11-05 后台任务三件套：读后台任务的输出 / 停止后台任务。
+  task_output: "读任务输出",
+  task_stop: "停任务",
+  // 2026-11-06 只读 git 三合一：看状态 / 看 diff / 看提交历史。
+  git_read: "看仓库",
+  // 2026-11-06 第三批小件：确定性算术 / 目录总览；文档读取。
+  calc: "计算",
+  list_dir: "看目录",
+  read_doc: "读文档",
+  // 2026-11-06 浏览器驾驶三件：开页 / 读页 / 选元素（驾驶的是用户看得见的侧栏浏览器）。
+  browser_navigate: "开网页",
+  browser_snapshot: "读网页",
+  browser_pick: "选元素",
   grep: "查找",
   glob: "找文件",
   lsp: "查符号",

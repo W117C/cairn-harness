@@ -214,9 +214,10 @@ describe("批 6：设置页公共组件（CSS 口径哨兵）", () => {
     expect(refinement).toContain(".sp-page .sp-tech-body");
   });
 
-  it(".ss-opt 选中 = 强调描边 + 淡底；danger 档 = 危险色描边（不铺大红底）", () => {
+  it(".ss-opt 选中 = 品牌描边 + 淡底（2026-11-05 业主裁：点击后不要蓝框）；danger 档 = 危险色描边（不铺大红底）", () => {
     const on = styles.match(/\.ss-opt\.on \{[^}]*\}/) ?? [""];
-    expect(on[0]).toContain("accent-control");
+    expect(on[0]).toContain("accent-brand");
+    expect(on[0]).not.toContain("accent-control");
     expect(styles).toContain(".ss-opt.danger .ss-opt-title");
     expect(styles).toMatch(/\.ss-opt\.danger \{[^}]*color-danger/);
   });

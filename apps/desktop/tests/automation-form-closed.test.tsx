@@ -71,7 +71,9 @@ describe("自动化工作流形制（2026-11-04 业主截图）", () => {
   it("头部双色调 + 副标题；四张模板卡带排程行；胶囊下拉内容包 Portal", () => {
     const h = renderToStaticMarkup(<AutomationPane snap={SCHED_EMPTY} onError={noop} refresh={noop} />);
     expect(h).toContain('class="page-frame-title">自动化<span class="page-frame-title-accent"> 工作流</span></h1>');
-    expect(h).toContain("创建定时任务，或排队在闲时算力空闲时后台执行。");
+    expect(h).toContain("按时间自动执行工作流，查看每次运行结果。");
+    expect(h).toMatch(/aria-pressed="true">定时任务<\/button>/);
+    expect(h).toMatch(/aria-pressed="false">闲时队列<\/button>/);
     for (const name of ["晨会动态", "风险扫描", "发布简报", "文档同步检查"]) expect(h).toContain(name);
     for (const line of ["每工作日 09:00", "每天 10:00", "每周五 16:00", "每周三 15:00"]) expect(h).toContain(line);
     // 卡片描述是完整句（省略号只出现在 CSS 截断那一层，不是文案本身）

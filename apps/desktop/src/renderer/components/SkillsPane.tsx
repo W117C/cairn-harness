@@ -108,7 +108,7 @@ export function SkillsPane(props: {
           )}
         </div>
         {selected !== null && (
-          <Drawer title={selected.invoke} sub={selected.description} onClose={() => setSel(null)}>
+          <Drawer key={selected.invoke} title={selected.invoke} sub={selected.description} onClose={() => setSel(null)}>
             <section className="ap-sec">
               <h3>来源</h3>
               <div className="ap-kv">独立技能（loose）· 信任态 {selected.trust}</div>

@@ -65,19 +65,15 @@ export function useProjectActions(deps: ProjectActionsDeps) {
 
   /** 显示名 / 默认运行位置：同路径 upsert（addProject 既有语义，零新通道）。 */
   const handleUpdateProject = useCallback(async (p: ProjectRecord, patch: { name?: string; defaultLocation?: string }): Promise<void> => {
-    try {
-      await window.agent.addProject({
-        path: p.path,
-        name: patch.name ?? p.name,
-        defaultLocation: patch.defaultLocation ?? p.defaultLocation,
-      });
-      await refreshProjects();
-      refreshSessions();
-    } catch (err) {
-      // 内联改名是 fire-and-forget：失败必须上屏，不能变成未处理的 rejection。
-      setLastError(`项目更新失败：${err instanceof Error ? err.message : String(err)}`);
-    }
-  }, [refreshProjects, refreshSessions, setLastError]);
+    // 由调用入口呈现错误：设置弹窗收到拒绝后必须保留草稿，不能被当成保存成功。
+    await window.agent.addProject({
+      path: p.path,
+      name: patch.name ?? p.name,
+      defaultLocation: patch.defaultLocation ?? p.defaultLocation,
+    });
+    await refreshProjects();
+    refreshSessions();
+  }, [refreshProjects, refreshSessions]);
 
   /** 移除项目（必问闸 + 明说不删文件；确认文案走 STR——「不删除文件」四个字必须在）。
    *  2026-10-17：确认由原生 window.confirm 换成产品自绘卡；真正执行拆到 doRemoveProject。 */

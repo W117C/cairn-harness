@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { usageCsv } from "../src/renderer/components/settings/usage-dashboard-data";
+import { STR } from "../src/renderer/strings";
 
 const period = {
   days: [
@@ -26,6 +27,8 @@ describe("usageCsv", () => {
   it("页面有「复制 CSV」动作，调用 usageCsv", () => {
     const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/settings/UsageSection.tsx", import.meta.url)), "utf8");
     expect(src).toContain("navigator.clipboard.writeText(usageCsv(period))");
-    expect(src).toContain("复制 CSV");
+    // 2026-11-07 strings 整批收编：字面量进 STR.usage.copyCsv（组件源文引 STR；值面钉在这里）。
+    expect(src).toContain("STR.usage.copyCsv");
+    expect(STR.usage.copyCsv).toBe("复制 CSV");
   });
 });

@@ -119,7 +119,7 @@ export function PluginsPane(props: {
           )}
         </div>
         {selected !== null && (
-          <Drawer title={selected.name} sub={`${selected.scope} · 信任态：${selected.trust}`} onClose={() => setSel(null)}>
+          <Drawer key={sel} title={selected.name} sub={`${selected.scope} · 信任态：${selected.trust}`} onClose={() => setSel(null)}>
             <section className="ap-sec">
               <h3>组成</h3>
               <div className="ap-kv">

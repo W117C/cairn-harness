@@ -101,8 +101,8 @@ describe("⑤ hover 操作：user 复制+分叉+撤回 / agent 复制+撤回+分
       />,
     );
     // 分叉在 user 行与 agent 行都有（2026-10-24 起代理行也带）⇒ 2 行 × 2 条 = 4；撤回在 agent 行 2 枚
-    expect(html.match(/title="分叉：从该轮起新建会话，原会话不动"/g)?.length).toBe(4);
-    expect(html.match(/title="撤回：把这一轮改过的文件还原"/g)?.length).toBe(2);
+    expect(html.match(/data-hint="分叉：从该轮起新建会话，原会话不动"/g)?.length).toBe(4);
+    expect(html.match(/data-hint="撤回：把这一轮改过的文件还原"/g)?.length).toBe(2);
     expect(html).not.toContain("回放");
     expect(html).not.toContain("重跑");
   });

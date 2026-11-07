@@ -11,7 +11,10 @@
 import type { ThinkingEffort } from "../../../../../src/providers/capabilities";
 import { runKey } from "./session-identity";
 
-const LEVELS: readonly ThinkingEffort[] = ["off", "low", "medium", "high", "max"];
+// 与 src/providers/capabilities.ts 的 THINKING_EFFORTS 同一条词表。xhigh 是 2026-11-05
+// 业主裁定的标准档之一；这里漏掉它会让芯片可选、thinkingChangeTarget 却返回 null——控件
+// 看着是活的、数据不动，正是本文件头注释点名的「装饰性按钮」。
+const LEVELS: readonly ThinkingEffort[] = ["off", "low", "medium", "high", "xhigh", "max"];
 
 export function isThinkingEffort(value: unknown): value is ThinkingEffort {
   return typeof value === "string" && (LEVELS as readonly string[]).includes(value);

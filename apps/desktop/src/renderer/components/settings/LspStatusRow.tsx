@@ -14,16 +14,16 @@ import type { LspStatus } from "../../../../../../src/tools/lsp";
 import { Badge, SettingsRow } from "../settings-ui";
 import { STR } from "../../strings";
 
-/** 状态一句话（纯函数，判卷直接钉它）。 */
+/** 状态一句话（纯函数，判卷直接钉它）。文案出自 STR.lspRow（2026-11-07 设置面整批收编）。 */
 export function lspSummary(st: LspStatus | null | "unreadable"): string {
-  if (st === null) return "读取中…";
-  if (st === "unreadable") return "读数失败";
-  if (st.configError !== "") return "配置读不出";
-  if (!st.enabled) return "未配置";
+  if (st === null) return STR.lspRow.reading;
+  if (st === "unreadable") return STR.lspRow.failed;
+  if (st.configError !== "") return STR.lspRow.configError;
+  if (!st.enabled) return STR.lspRow.notConfigured;
   const trust = st.trust === "trusted"
-    ? "已授权"
-    : st.trust === "declined" ? "已拒绝授权" : st.trust === "pending" ? "待授权" : "不适用";
-  return `${String(st.servers.length)} 台 · ${trust}`;
+    ? STR.lspRow.trusted
+    : st.trust === "declined" ? STR.lspRow.declined : st.trust === "pending" ? STR.lspRow.pending : STR.lspRow.notApplicable;
+  return STR.lspRow.serversTrust.replace("{n}", String(st.servers.length)).replace("{trust}", trust);
 }
 
 export function LspStatusRow(): React.JSX.Element {

@@ -1,14 +1,14 @@
 import { useState } from "react";
 import {
   ArrowUpCircle,
-  Power,
-  PowerOff,
+  Puzzle,
   RefreshCw,
   Trash2,
 } from "lucide-react";
 import type { PluginRowView } from "../../derived/plugins";
 import type { PluginsMarketplaceState } from "../../state/plugins-marketplace";
 import { ConfirmDialog } from "../ConfirmDialog";
+import { Switch } from "../Switch";
 import { scopeLabelOf, sourceKindLabel } from "./labels";
 
 function stateLabel(row: PluginRowView): string {
@@ -30,69 +30,70 @@ function InstalledRow(props: {
   const unmanaged = installed === null;
   const conflict = props.row.state === "name-conflict";
   const disabled = props.busy || props.mutationBlocked || unmanaged || conflict;
+  const enabled = installed?.enabled === true;
   return (
     <article
-      className="plugin-operational-row"
+      className="plugin-store-card"
       data-plugin-row="installed"
       data-plugin-id={props.row.id}
       data-plugin-state={props.row.state}
     >
-      <button type="button" className="plugin-operational-main" onClick={() => { props.state.select(props.row.id); }}>
-        <span className="plugin-row-copy">
-          <strong>{props.row.name}</strong>
-          <span>{props.row.summary}</span>
-        </span>
-        <span className="plugin-row-meta">
-          <span>{sourceKindLabel(props.row.sourceKind)}</span>
-          <span>{props.row.version ?? "未声明版本"}</span>
-          {!unmanaged && <span>{scopeLabelOf(props.row.installed?.scope === "project" ? "project" : "user")}</span>}
-          <span>{stateLabel(props.row)}</span>
+      <button type="button" className="plugin-store-main" onClick={() => { props.state.select(props.row.id); }}>
+        <span className="plugin-mark lg" aria-hidden="true"><Puzzle size={20} /></span>
+        <span className="plugin-store-copy">
+          <span className="plugin-store-title">
+            <strong>{props.row.name}</strong>
+            {props.row.version !== null && <span className="plugin-pill">{props.row.version}</span>}
+            {!unmanaged && <span className="plugin-pill subtle">{scopeLabelOf(props.row.installed?.scope === "project" ? "project" : "user")}</span>}
+            <span className={"plugin-pill subtle" + (enabled ? "" : " warn")}>{stateLabel(props.row)}</span>
+          </span>
+          <span className="plugin-store-desc">{props.row.summary}</span>
+          <span className="plugin-store-meta">{sourceKindLabel(props.row.sourceKind)}</span>
         </span>
       </button>
-      {!unmanaged && !conflict && (
-        <div className="plugin-row-actions">
-          <button
-            type="button"
-            className="plugin-icon-btn"
-            aria-label={`${installed.enabled ? "停用" : "启用"} ${props.row.name}`}
-            title={installed.enabled ? "停用" : "启用"}
-            disabled={disabled}
-            onClick={() => { void props.state.setPluginEnabled(props.row, !installed.enabled); }}
-          >
-            {installed.enabled ? <PowerOff size={15} aria-hidden="true" /> : <Power size={15} aria-hidden="true" />}
-          </button>
-          <button
-            type="button"
-            className="plugin-icon-btn"
-            aria-label={`检查更新 ${props.row.name}`}
-            title="检查更新"
-            disabled={disabled}
-            onClick={() => { void props.state.checkPluginUpdate(props.row); }}
-          >
-            <RefreshCw size={15} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="plugin-icon-btn"
-            aria-label={`更新 ${props.row.name}`}
-            title="更新"
-            disabled={disabled}
-            onClick={() => { void props.state.updatePlugin(props.row); }}
-          >
-            <ArrowUpCircle size={15} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="plugin-icon-btn plugin-danger"
-            aria-label={`卸载 ${props.row.name}`}
-            title="卸载"
-            disabled={disabled}
-            onClick={() => { props.onConfirmUninstall(props.row); }}
-          >
-            <Trash2 size={15} aria-hidden="true" />
-          </button>
-        </div>
-      )}
+      <div className="plugin-store-actions">
+        {!unmanaged && !conflict && (
+          <>
+            <Switch
+              checked={enabled}
+              busy={props.busy}
+              disabled={props.mutationBlocked}
+              label={`${enabled ? "停用" : "启用"} ${props.row.name}`}
+              onChange={(next) => { void props.state.setPluginEnabled(props.row, next); }}
+            />
+            <button
+              type="button"
+              className="plugin-icon-btn plugin-hover-act"
+              aria-label={`检查更新 ${props.row.name}`}
+              title="检查更新"
+              disabled={disabled}
+              onClick={() => { void props.state.checkPluginUpdate(props.row); }}
+            >
+              <RefreshCw size={14} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="plugin-icon-btn plugin-hover-act"
+              aria-label={`更新 ${props.row.name}`}
+              title="更新"
+              disabled={disabled}
+              onClick={() => { void props.state.updatePlugin(props.row); }}
+            >
+              <ArrowUpCircle size={14} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="plugin-icon-btn plugin-danger plugin-hover-act"
+              aria-label={`卸载 ${props.row.name}`}
+              title="卸载"
+              disabled={disabled}
+              onClick={() => { props.onConfirmUninstall(props.row); }}
+            >
+              <Trash2 size={14} aria-hidden="true" />
+            </button>
+          </>
+        )}
+      </div>
     </article>
   );
 }

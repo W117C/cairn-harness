@@ -4,13 +4,12 @@
 // 触发条 = 单芯片形态：`deepseek-chat · 思考 关 ⌄`（档词 = 关/低/中/强/最高；未声明支持不带思考段）。
 // 数据面不变（唯一事实源仍是 `getProviderInfo()`，本层不造第二份）；文案全出处 STR。
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { ChevronDown, Eye, Info, Search, Settings, SlidersHorizontal } from "lucide-react";
+import { ChevronDown, ChevronRight, Eye, Info, Search, Settings, SlidersHorizontal, X } from "lucide-react";
 import type { ProviderInfo } from "../../../../../src/main/ipc-protocol";
 import { formatTokens } from "../derived/format-tokens";
 import { STR } from "../strings";
 import { isCompositionEnter } from "../ime";
 import { Popover, usePopoverDismiss } from "./Popover";
-import { menuNavIndex } from "./popover-keys";
 import {
   readThinkingHidden,
   visibleThinkingLevels,
@@ -20,8 +19,10 @@ import {
 } from "../state/thinking-prefs";
 import "./model-menu.css";
 
-/** 菜单宽度（与 model-menu.css 那条 `width: min(344px, calc(100vw - 24px))` 同一把尺）。 */
-export const MODEL_MENU_WIDTH = 344;
+/** 菜单宽度上限（与 model-menu.css 的 `max-width: min(420px, calc(100vw - 24px))` 同一把尺）。
+ *  CSS 是 fit-content（240–420）：这里取**最大**宽度做右沿夹取的保守假设。取 344 会让
+ *  实际 420 宽的菜单在 880 窄窗右缘溢出 76px（2026-11-05 审计抓到）。 */
+export const MODEL_MENU_WIDTH = 420;
 /** 弹层与窗口边缘的最小留白（与 CSS 的 `100vw - 24px` 一致：左右各 12px）。 */
 const MODEL_MENU_GUTTER = 12;
 
@@ -240,6 +241,7 @@ export const THINKING_LEVELS = [
   { id: "low", short: STR.modelPicker.thinkLow, hint: STR.modelPicker.thinkLowHint },
   { id: "medium", short: STR.modelPicker.thinkMedium, hint: STR.modelPicker.thinkMediumHint },
   { id: "high", short: STR.modelPicker.thinkHigh, hint: STR.modelPicker.thinkHighHint },
+  { id: "xhigh", short: STR.modelPicker.thinkXhigh, hint: STR.modelPicker.thinkXhighHint },
   { id: "max", short: STR.modelPicker.thinkMax, hint: STR.modelPicker.thinkMaxHint },
 ] as const;
 
@@ -431,8 +433,9 @@ export function ModelPicker(props: {
           maxHeight={menuMax}
           viewportPosition={menuPosition}
           {...(props.disabled === true || props.running === true ? { running: true } : {})}
-          initialFocus={props.initialFocus ?? "model"}
+          initialFocus={props.initialFocus}
           keyNotice={notice}
+          onClose={close}
           {...(props.onOpenSettings !== undefined ? { onOpenSettings: props.onOpenSettings } : {})}
           {...(props.onThinkingChange !== undefined
             ? {
@@ -449,15 +452,17 @@ export function ModelPicker(props: {
   );
 }
 
-/** 菜单本体（P2-2 合并单面）：搜索 + 模型列表 + 下半区思考强度 Segmented。
- *  纯展示、可服务端渲染。
- *
- *  判卷约束（render-structure.test.tsx 钉住的序列不许变形）：分组头（人话标签，未登记在册才落回 id）、
- *  子行 `标准 · 窗口 128k`、勾 `class="check">✓<`、`⚠ OpenAI 未配置 key · 去设置配置`
- *  （⚠ 字面量**豁免**于全局 emoji 清理）、空目录两串、aria-selected 计数、running disabled 计数；
- *  思考段钉分段 aria-pressed / title 逐档说明 / 未声明整段禁用数。
- *  「演示」**不在菜单里**（业主 2026-11-01 裁：「不要演示」）——演示仍是缺省通道，
- *  它的名字由芯片显示（`shortModelName`），菜单里不再占一格可选项。 */
+/** 菜单面板：root（模型/思考强度 cell）、model（列表+搜索）、effort（档位行）。 */
+type Pane = "root" | "model" | "effort";
+
+/** 菜单本体（2026-11-04 业主裁：做成 DeepSeek 官方 harness `ui-model-selection` 一模一样的两级面板）。
+ *  root = 「模型 / 思考强度」两枚 cell（label + 当前值 + 右尖括号），点进去才是各自的面板；
+ *  模型面 = 搜索（>4 个模型才出现，带清除 ×）+ provider 分组（组头吸顶）+ 名称行 + 尾随 ✓；
+ *  思考面 = 档位 radio 行（旧底部 Segmented 下架）。Esc / ⇧Tab 先退回 root 再关菜单；
+ *  Tab 在行上 = 选中该行，在搜索框 = 接受高亮行（对标 DeepSeek MenuSelect 键位）。
+ *  既有契约全保留：运行中只禁模型行；key 提示置顶 root；1–9 快选；档位自定义（收起档）；
+ *  不支持思考 ⇒ 思考面空态 + 配置折叠（ADR-0009 fail-visible）；「演示」不在列表里。
+ *  判卷序列见 render-structure.test.tsx / model-picker-axis.test.tsx。 */
 export function ModelMenu(props: {
   options: readonly ModelOption[];
   /** provider id → 人话标签（组头显示它；没登记在册的 id 兜底回 id）。 */
@@ -466,11 +471,12 @@ export function ModelMenu(props: {
   /** 运行中：模型列表整列禁用（规范「运行中 disabled」）；**思考强度不在此列**——
    *  v7.2 业主裁：思考档是「下一轮派活」的旋钮，跑着也能拧（只随 capability 锁）。 */
   running?: boolean;
-  /** key 未配置时的置顶提示行；undefined / null = 不显示。 */
+  /** key 未配置时的置顶提示行（root 面板底部）；undefined / null = 不显示。 */
   keyNotice?: string | null;
   onPick: (registryId: string | null) => void;
   onOpenSettings?: () => void;
-  /** 向上开时允许的最大高度（px）；undefined = 不限制（测试/旧调用）。 */
+  /** 向上开时允许的最大高度（px）；undefined = 不限制（测试/旧调用）。
+   *  视觉上限照 DeepSeek 卡片 ≤360px（超出滚动；空间不足时取实际可用高度）。 */
   maxHeight?: number;
   /** 弹层落点（相对 `.mp`）：left 始终给（窗口右沿夹取）；top 只在矮窗口的窗口内浮层档给。 */
   viewportPosition?: { top?: number; left?: number };
@@ -480,14 +486,21 @@ export function ModelMenu(props: {
   /** 当前模型**自己声明**的思考档位；给了就只出这些档（对标 Codex 的 supportedReasoningEfforts）。
    *  不给 = 沿用全局四档（旧行为；未声明支持的模型整段禁用，见下）。 */
   thinkingLevels?: readonly string[];
-  /** 当前模型是否**声明**支持思考档位；未声明 ⇒ 整区禁用 + 注记 + 配置折叠（fail-visible）。 */
+  /** 当前模型是否**声明**支持思考档位；未声明 ⇒ 思考面出空态 + 配置折叠（ADR-0009 fail-visible）。 */
   thinkingSupported?: boolean;
   onThinkingChange?: (level: string) => void;
-  /** 打开落点（2026-10-18）：effort = 首帧把焦点送进思考档分段（⌘⇧E）；
-   *  model = 保持搜索框 autofocus（⌘⇧I / 点击）。 */
+  /** 打开落点（2026-10-18）：effort = 直落思考面（⌘⇧E）；model = 直落模型面聚焦搜索（⌘⇧I）；
+   *  缺省（点击开）= root 面板；未选模型（演示）时 root 没有可显示的值 ⇒ 直落模型面。 */
   initialFocus?: "model" | "effort";
+  /** 请求关闭（⇧Tab 在 root / 退无可退时的 Esc 之外通道；开合真相在上层）。 */
+  onClose?: () => void;
 }): React.JSX.Element {
   const wantEffort = props.onThinkingChange !== undefined;
+  const [pane, setPane] = useState<Pane>(() =>
+    props.initialFocus === "effort" ? "effort"
+    : props.initialFocus === "model" || props.value === null ? "model"
+    : "root",
+  );
   const [query, setQuery] = useState("");
   const [hl, setHl] = useState(() => {
     // 高亮落在当前选中的那一行；选中项不在列表里（演示通道）⇒ 回到首行，不越界。
@@ -496,16 +509,24 @@ export function ModelMenu(props: {
   });
   const listId = useId();
   const listRef = useRef<HTMLDivElement>(null);
-  const filtered = filterModelOptions(props.options, query);
+  const effortRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  const surfaceRef = useRef<HTMLDivElement | null>(null);
+  const modelCellRef = useRef<HTMLButtonElement | null>(null);
+  const effortCellRef = useRef<HTMLButtonElement | null>(null);
+  // DeepSeek 规则：目录 >4 个模型才出搜索；更短的目录不需要搜。
+  const showSearch = props.options.length > 4;
+  const filtered = filterModelOptions(props.options, showSearch ? query : "");
   const groups = groupModels(filtered);
   const flat: ModelOption[] = groups.flatMap((g) => g.models);
   const warn = props.keyNotice !== undefined && props.keyNotice !== null;
   const modelsDisabled = props.running === true;
   const supported = props.thinkingSupported === true;
   const level = props.thinking ?? "off";
+  // root 思考 cell 的当前值（档位短词；不支持时显示「不支持」注记）。
+  const levelLabel = THINKING_LEVELS.find((l) => l.id === level)?.short ?? STR.modelPicker.thinkOff;
   // 档位列表 = **当前模型声明的档**（对标 Codex：每个模型带自己的 supportedReasoningEfforts）。
-  // 此前无论哪个模型都摆全局四档 ⇒ 能选到该模型不支持的档（请求会被 provider 拒）。
-  // 模型没声明 ⇒ 沿用四档但整段禁用（fail-visible，见下方 unsupportedNote）。
+  // 模型没声明 ⇒ 思考面出空态（fail-visible，见下）。
   const declared = props.thinkingLevels;
   // 2026-10-31 · 业主「有多少档、用户可以自己定义，但默认从上游得知」：
   // 声明表仍由上游决定（capability），用户只能收起不想看到的档（存 localStorage，见 state/thinking-prefs）。
@@ -543,37 +564,118 @@ export function ModelMenu(props: {
   useEffect(() => {
     listRef.current?.querySelector<HTMLElement>('[data-highlighted="true"]')?.scrollIntoView({ block: "nearest" });
   }, [hl, query]);
-  // ⌘⇧E 的落点（2026-10-18）：首帧滚到思考分段并聚焦当前档按钮；模型不声明思考时
-  // 分段整区禁用——聚焦分组本身（读屏仍报「思考强度，不可用」+ 下方说明），不静默。
-  const effortRef = useRef<HTMLDivElement | null>(null);
-  const searchRef = useRef<HTMLInputElement | null>(null);
+  // 面板切换后把焦点送进当前面板（对标 DeepSeek：drill 进的面板聚焦当前值那一行；
+  // root 不抢焦点——触发条保持焦点）。⌘⇧E 首帧（pane 初始即 effort）同走这里：
+  // 聚焦当前档那一行（不支持 ⇒ 聚焦面板容器）。
+  // 注：↑/↓ 只在本面板（Popover）内生效——触发条在 Popover 外，它的键盘事件到不了这里。
   useEffect(() => {
-    if (props.initialFocus !== "effort") { searchRef.current?.focus(); return; }
-    const box = effortRef.current;
-    if (box === null) return;
-    const target = box.querySelector<HTMLButtonElement>('button[aria-pressed="true"]:not(:disabled)') ?? box.querySelector<HTMLButtonElement>("button:not(:disabled)") ?? box;
-    target.focus({ preventScroll: true });
-    target.scrollIntoView({ block: "nearest" });
-  }, [props.initialFocus]);
+    if (pane === "root") return;
+    const raf = requestAnimationFrame(() => {
+      if (pane === "model") {
+        if (showSearch) { searchRef.current?.focus({ preventScroll: true }); return; }
+        const checked = listRef.current?.querySelector<HTMLButtonElement>('button[aria-selected="true"]:not(:disabled)')
+          ?? listRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)");
+        checked?.focus({ preventScroll: true });
+        checked?.scrollIntoView({ block: "nearest" });
+        return;
+      }
+      const checked = effortRef.current?.querySelector<HTMLButtonElement>('button[aria-selected="true"]:not(:disabled)')
+        ?? effortRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)");
+      if (checked !== null && checked !== undefined) {
+        checked.focus({ preventScroll: true });
+        checked.scrollIntoView({ block: "nearest" });
+      } else {
+        effortRef.current?.focus({ preventScroll: true }); // 空态/不支持：聚焦面板容器，读屏报空态
+      }
+      // ⌘⇧E 的落点承诺：聚焦后把当前行滚进视口（真机窄窗下当前档可能在滚动区外）。
+      checked?.scrollIntoView({ block: "nearest" });
+    });
+    return () => window.cancelAnimationFrame(raf);
+  }, [pane, showSearch]);
 
-  const onKeyNav = (e: React.KeyboardEvent): void => {
-    if (isCompositionEnter(e, null) || modelsDisabled) return;
-    const targetElement = e.target as HTMLElement;
-    const inSearch = targetElement === searchRef.current;
-    if (!inSearch && targetElement.closest('[role="option"]') === null) return;
-    // 蓝本 §3.6：在打开的列表里 1–9 选第 N 项。搜索框里的数字是**输入**不是选择——先让路。
-    if (/^[1-9]$/.test(e.key) && !(e.target instanceof HTMLInputElement)) {
-      const target = flat[Number(e.key) - 1];
+  // 键位（对标 DeepSeek MenuSelect）：Esc / ⇧Tab 先退回 root 再关菜单；Tab 在行上 = 选中该行，
+  // 在搜索框 = 接受高亮行；↑/↓ 在搜索框 = 移动高亮（焦点留在搜索框），其余场合 = 行间移动焦点；
+  // 1–9 快选第 N 项（蓝本 §3.6；数字在搜索框里是输入，让路）。
+  const onMenuKeyDown = (e: React.KeyboardEvent): void => {
+    if (isCompositionEnter(e, null)) return;
+    const key = e.key;
+    const inSearch = e.target === searchRef.current;
+    // 1–9 快选（模型面；搜索框里的数字是**输入**不是选择——先让路）。
+    // 运行中锁定模型（v7.2：行 disabled + 键盘同口径，思考档行不锁）——否则鼠标被闸挡住、
+    // 键盘 1–9 照样换模型，同一扇门两把锁。
+    if (pane === "model" && !inSearch && /^[1-9]$/.test(key)) {
+      if (modelsDisabled) return;
+      const target = flat[Number(key) - 1];
       if (target !== undefined) { e.preventDefault(); props.onPick(target.registryId); }
       return;
     }
-    const next = inSearch && (e.key === "Home" || e.key === "End") ? null : menuNavIndex(e.key, hl, flat.length);
-    if (next !== null) { e.preventDefault(); setHl(next); }
-    else if (e.key === "Enter") {
+    if (key === "Enter" && inSearch) {
+      // 搜索框聚焦时的 Enter = 接受高亮行（组字态已在函数头被拦下）。运行中同样不捡模型。
+      if (modelsDisabled) return;
       const target = flat[hl];
       if (target !== undefined) { e.preventDefault(); props.onPick(target.registryId); }
+      return;
+    }
+    if (key === "Escape" || (key === "Tab" && e.shiftKey)) {
+      if (pane !== "root") {
+        // 先退回 root，别让 usePopoverDismiss 的文档级 Esc 把菜单整个关掉。
+        e.preventDefault();
+        e.stopPropagation();
+        back(pane);
+      } else if (key === "Tab") {
+        e.preventDefault();
+        props.onClose?.();
+      }
+      return;
+    }
+    if (key === "Tab") {
+      e.preventDefault();
+      const active = document.activeElement;
+      const onButton = active instanceof HTMLButtonElement && surfaceRef.current?.contains(active) === true && active !== searchRef.current;
+      if (onButton) { active.click(); return; }
+      if (inSearch) {
+        if (modelsDisabled) return;
+        const target = flat[hl];
+        if (target !== undefined) props.onPick(target.registryId);
+        return;
+      }
+      // 焦点在面板容器（不在任何行上，如空态 focus 落在 .mp-effort）：送进当前值那一行
+      //（root cell / 选中行 / 当前档行）。
+      const checked = surfaceRef.current?.querySelector<HTMLButtonElement>('button[aria-selected="true"]:not(:disabled)')
+        ?? surfaceRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)");
+      checked?.focus();
+      return;
+    }
+    if (key === "ArrowDown" || key === "ArrowUp") {
+      e.preventDefault();
+      const dir = key === "ArrowDown" ? 1 : -1;
+      if (pane === "model" && showSearch && inSearch) {
+        if (flat.length === 0) return;
+        setHl((h) => (h + dir + flat.length) % flat.length);
+        return;
+      }
+      moveFocus(dir);
     }
   };
+
+  /** Leave a drilled pane for the root one, handing the keyboard back to its cell. */
+  const back = (from: Exclude<Pane, "root">): void => {
+    const cell = from === "model" ? modelCellRef : effortCellRef;
+    setPane("root");
+    window.requestAnimationFrame(() => { cell.current?.focus(); });
+  };
+
+  /** 行间移动焦点（DeepSeek moveFocus：焦点在触发条时，前进进首行、后退进末行）。 */
+  const moveFocus = (offset: number): void => {
+    const items = Array.from(surfaceRef.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? []);
+    if (items.length === 0) return;
+    const active = items.indexOf(document.activeElement as HTMLButtonElement);
+    const next = active === -1
+      ? (offset > 0 ? 0 : items.length - 1)
+      : (active + offset + items.length) % items.length;
+    items[next]?.focus();
+  };
+
 
   return (
     <Popover
@@ -582,127 +684,145 @@ export function ModelMenu(props: {
       className="mp-pop"
       role="dialog"
       aria-label={STR.modelPicker.menuAria}
-      onKeyDown={onKeyNav}
+      onKeyDown={onMenuKeyDown}
       style={{
-        maxHeight: props.maxHeight,
+        // DeepSeek 卡片视觉上限 360px：更高的列表在内部滚动（空间不足时仍取实际可用高度）。
+        maxHeight: props.maxHeight === undefined ? undefined : Math.min(props.maxHeight, 360),
         // top 只在窗口内浮层档出现；否则保留 .pop.up/.down 的 bottom/top 贴边。
         ...(props.viewportPosition?.top === undefined ? {} : { top: props.viewportPosition.top, bottom: "auto" }),
         ...(props.viewportPosition?.left === undefined ? {} : { left: props.viewportPosition.left }),
       }}
     >
-      <div className="mp-search">
-        <Search size={14} aria-hidden="true" />
-        <input
-          ref={searchRef}
-          type="text"
-          role="combobox"
-          aria-expanded="true"
-          aria-autocomplete="list"
-          aria-controls={listId}
-          aria-activedescendant={flat[hl] === undefined || modelsDisabled ? undefined : optionId(hl)}
-          aria-label={STR.modelPicker.searchAria}
-          placeholder={STR.modelPicker.searchPlaceholder}
-          value={query}
-          autoFocus
-          onChange={(e) => { setQuery(e.target.value); setHl(0); }}
-        />
-      </div>
-      {warn && (
-        <button type="button" className="menu-item mp-warn" onClick={() => props.onOpenSettings?.()}>
-          <span>⚠ {props.keyNotice}</span>
-        </button>
-      )}
-      <div id={listId} className="mp-models" role="listbox" aria-label={STR.modelPicker.menuAria} ref={listRef}>
-      {groups.map((g, gi) => (
-        <div key={g.provider} className={"mp-group" + (gi > 0 ? " separated" : "")}>
-          <div className="mp-group-label">
-            {/* 分组圆点：中性灰（v7.1 业主裁——按 provider 名取色相是装饰性用色，会被误读成状态点）。 */}
-            <span className="g-dot" aria-hidden="true" />
-            {/* 组头显示人话标签（ProviderInfo.providers）；没登记在册就显示原 id。 */}
-            <span>{props.providerLabels?.get(g.provider) ?? g.provider}</span>
-          </div>
-          {g.models.map((m) => (
-            <button
-              key={m.registryId ?? "model"}
-              type="button"
-              role="option"
-              id={optionId(flat.indexOf(m))}
-              aria-selected={m.registryId === props.value}
-              className="menu-item"
-              disabled={modelsDisabled}
-              tabIndex={-1}
-              data-highlighted={flat.indexOf(m) === hl}
-              title={STR.modelPicker.tierMeta.replace("{tier}", tierBadge(m.tier)).replace("{ctx}", formatCtxWindow(m.ctxWindow))}
-              onPointerMove={() => setHl(flat.indexOf(m))}
-              onFocus={() => setHl(flat.indexOf(m))}
-              onClick={() => props.onPick(m.registryId)}
-            >
-              <span className="mi-name">{m.label}</span>
-              <span className="sub">
-                {/* 窗口要说人话：光一个「512.0k」没人知道这是上下文窗口（STR.modelPicker.ctxWindow）。 */}
-                {m.ctxWindow !== undefined ? STR.modelPicker.ctxWindow.replace("{n}", formatCtxWindow(m.ctxWindow)) : ""}
-              </span>
-              {m.vision === true && (
-                <span className="v-badge" title={STR.modelPicker.visionTip}>
-                  <Eye size={10} aria-hidden="true" />
-                  <span>{STR.modelPicker.visionBadge}</span>
-                </span>
-              )}
-              {m.registryId === props.value && <span className="check">✓</span>}
+      {pane === "root" && (
+        <div className="mp-cells">
+          <button type="button" ref={modelCellRef} className="mp-cell" onClick={() => setPane("model")}>
+            <span className="mp-cell-label">{STR.modelPicker.menuModel}</span>
+            <span className="mp-cell-value">{shortModelName(props.value, props.options)}</span>
+            <ChevronRight size={12} aria-hidden="true" />
+          </button>
+          {wantEffort && (
+            <button type="button" ref={effortCellRef} className="mp-cell" onClick={() => setPane("effort")}>
+              <span className="mp-cell-label">{STR.modelPicker.effortLabel}</span>
+              <span className="mp-cell-value">{supported ? levelLabel : STR.modelPicker.unsupportedNote}</span>
             </button>
-          ))}
-        </div>
-      ))}
-      {groups.length === 0 && (
-        <div className="pop-label">
-          {query.trim() === "" ? STR.modelPicker.noModels : STR.modelPicker.noMatch.replace("{q}", query.trim())}
+          )}
+          {warn && (
+            <button type="button" className="menu-item mp-warn" onClick={() => props.onOpenSettings?.()}>
+              <span>⚠ {props.keyNotice}</span>
+            </button>
+          )}
+          {props.onOpenSettings !== undefined && (
+            <div className="mp-foot">
+              <button type="button" className="menu-item" onClick={() => props.onOpenSettings?.()}>
+                <Settings size={12} aria-hidden="true" />
+                <span>{STR.modelPicker.manage}</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
-      </div>
-      <div className="mp-controls">
-      {wantEffort && (
+      {pane === "model" && (
         <>
-          <div className="menu-sep" />
-          {/* 运行中注记只在真有可调的东西时出现（未声明支持的模型不谎称「思考程度可调」）。 */}
-          {modelsDisabled && supported && <div className="menu-note">{STR.modelPicker.runningNote}</div>}
-          <div className="th-head">
-            <span className="pop-label">{STR.modelPicker.effortLabel}</span>
-            {supported && declared !== undefined && declared.length > 1 && (
-              <button
-                type="button"
-                className="th-custom"
-                aria-expanded={editingEfforts}
-                onClick={() => { setEditingEfforts(!editingEfforts); }}
-              >
-                <SlidersHorizontal size={11} aria-hidden="true" />
-                {editingEfforts ? STR.modelPicker.effortDone : STR.modelPicker.effortCustom}
-              </button>
+          {showSearch && (
+            <div className="mp-search">
+              <Search size={14} aria-hidden="true" />
+              <input
+                ref={searchRef}
+                type="text"
+                role="combobox"
+                aria-expanded="true"
+                aria-autocomplete="list"
+                aria-controls={listId}
+                aria-activedescendant={flat[hl] === undefined || modelsDisabled ? undefined : optionId(hl)}
+                aria-label={STR.modelPicker.searchAria}
+                placeholder={STR.modelPicker.searchPlaceholder}
+                value={query}
+                onChange={(e) => { setQuery(e.target.value); setHl(0); }}
+              />
+              {query !== "" && (
+                <button
+                  type="button"
+                  className="mp-search-clear"
+                  aria-label={STR.modelPicker.searchClear}
+                  onClick={() => { setQuery(""); searchRef.current?.focus(); }}
+                >
+                  <X size={12} aria-hidden="true" />
+                </button>
+              )}
+            </div>
+          )}
+          <div id={listId} className="mp-models" role="listbox" aria-label={STR.modelPicker.menuAria} ref={listRef}>
+            {groups.map((g, gi) => (
+              <div key={g.provider} className={"mp-group" + (gi > 0 ? " separated" : "")}>
+                {/* 组头显示人话标签（ProviderInfo.providers）；没登记在册就显示原 id。 */}
+                <div className="mp-group-label">{props.providerLabels?.get(g.provider) ?? g.provider}</div>
+                {g.models.map((m) => (
+                  <button
+                    key={m.registryId ?? "model"}
+                    type="button"
+                    role="option"
+                    id={optionId(flat.indexOf(m))}
+                    aria-selected={m.registryId === props.value}
+                    className="menu-item"
+                    disabled={modelsDisabled}
+                    tabIndex={showSearch ? -1 : 0}
+                    data-highlighted={flat.indexOf(m) === hl}
+                    title={STR.modelPicker.tierMeta.replace("{tier}", tierBadge(m.tier)).replace("{ctx}", formatCtxWindow(m.ctxWindow))}
+                    onPointerMove={() => setHl(flat.indexOf(m))}
+                    onFocus={() => setHl(flat.indexOf(m))}
+                    onClick={() => props.onPick(m.registryId)}
+                  >
+                    <span className="mi-name">{m.label}</span>
+                    {m.vision === true && (
+                      <span className="v-badge" title={STR.modelPicker.visionTip}>
+                        <Eye size={10} aria-hidden="true" />
+                        <span>{STR.modelPicker.visionBadge}</span>
+                      </span>
+                    )}
+                    {m.registryId === props.value && <span className="check">✓</span>}
+                  </button>
+                ))}
+              </div>
+            ))}
+            {groups.length === 0 && (
+              <div className="pop-label mp-empty" role="status">
+                {query.trim() === "" ? STR.modelPicker.noModels : STR.modelPicker.noMatch.replace("{q}", query.trim())}
+              </div>
             )}
           </div>
-          {!editingEfforts ? (
-            <div
-              className="th-row"
-              role="group"
-              aria-label={STR.modelPicker.effortGroupAria}
-              ref={effortRef}
-              tabIndex={-1}
-              data-effort-anchor="true"
-              // 不支持时挂一个标记：CSS 据此撤掉「选中态」的浮起高亮（fail-visible，不谎称可调）。
-              data-unsupported={supported ? undefined : "true"}
-            >
+        </>
+      )}
+      {pane === "effort" && (
+        <div className="mp-effort" ref={effortRef} tabIndex={-1} role="listbox" aria-label={STR.modelPicker.effortAria} data-unsupported={supported ? undefined : "true"}>
+          {/* 运行中注记只在真有可调的东西时出现（未声明支持的模型不谎称「思考程度可调」）。 */}
+          {modelsDisabled && supported && <div className="menu-note">{STR.modelPicker.runningNote}</div>}
+          {supported ? (
+            <>
               {levels.map((lv) => (
                 <button
                   key={lv.id}
                   type="button"
+                  role="option"
                   data-e={lv.id}
                   title={lv.hint}
-                  aria-pressed={level === lv.id}
-                  disabled={!supported}
-                  onClick={() => { props.onThinkingChange?.(lv.id); }}
-                >{lv.short}</button>
+                  aria-selected={level === lv.id}
+                  className="menu-item"
+                  onClick={() => { props.onThinkingChange?.(lv.id); props.onClose?.(); }}
+                >
+                  <span className="mi-name">{lv.short}</span>
+                  {level === lv.id && <span className="check">✓</span>}
+                </button>
               ))}
-            </div>
-          ) : (
+              {declared !== undefined && declared.length > 1 && (
+                <div className="mp-foot">
+                  <button type="button" className="menu-item th-custom" aria-expanded={editingEfforts}
+                    onClick={() => { setEditingEfforts(!editingEfforts); }}>
+                    <SlidersHorizontal size={12} aria-hidden="true" />
+                    <span>{editingEfforts ? STR.modelPicker.effortDone : STR.modelPicker.effortCustom}</span>
+                  </button>
+                </div>
+              )}
+              {editingEfforts && (
             <div className="th-edit" role="group" aria-label={STR.modelPicker.effortEditAria}>
               <p className="th-edit-note">{STR.modelPicker.effortEditNote.replace("{levels}", declaredIds.filter((id) => id !== "off").join(" / ") || STR.modelPicker.effortUndeclared)}</p>
               <div className="th-edit-list">
@@ -727,12 +847,13 @@ export function ModelMenu(props: {
                 {STR.modelPicker.effortReset}
               </button>
             </div>
-          )}
-          {!supported && (
+              )}
+            </>
+          ) : (
             <>
               {/* 只有一句明说（ADR-0009：fail-visible，不谎称可调）；「这家没提供思考能力」收进折叠里，
                   不再在它旁边摆第三句话——展开后 whyBody 把机制讲全。 */}
-              <div className="th-off" role="status">{STR.modelPicker.unsupportedNote}</div>
+              <div className="mp-empty" role="status">{STR.modelPicker.unsupportedNote}</div>
               <details className="th-why">
                 <summary className="th-info">
                   <Info size={12} className="th-info-ico" aria-hidden="true" />
@@ -745,17 +866,8 @@ export function ModelMenu(props: {
               </details>
             </>
           )}
-        </>
-      )}
-      {props.onOpenSettings !== undefined && (
-        <div className="mp-foot">
-          <button type="button" className="menu-item" onClick={() => props.onOpenSettings?.()}>
-            <Settings size={12} />
-            <span>{STR.modelPicker.manage}</span>
-          </button>
         </div>
       )}
-      </div>
     </Popover>
   );
 }

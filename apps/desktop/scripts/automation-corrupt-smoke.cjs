@@ -95,13 +95,15 @@ async function main() {
     return {
       banner: banner?.innerText ?? '',
       empty: page.innerText.includes('还没有定时任务'),
-      createEnabled: [...page.querySelectorAll('button')].some((b) => b.textContent.includes('新建任务') && !b.disabled),
+      // 2026-11-04 业主截图形制：空态换成 hero 卡——创建入口是「创建定时任务」下拉
+      // （旧「新建任务」工具行在该分支已不存在）。两条名字都认：恢复路径活的判据不变。
+      createEnabled: [...page.querySelectorAll('button')].some((b) => (b.textContent.includes('新建任务') || b.textContent.includes('创建定时任务')) && !b.disabled),
     };
   })()`);
   check("横幅点名坏档文件与原因", state.banner.includes("调度任务文件损坏") && state.banner.includes("automations.json") && state.banner.includes("JSON 解析失败"), state.banner);
   check("横幅说清写路径会被拒（不是只报错）", state.banner.includes("新建、修改、删除任务都会被拒绝") && state.banner.includes("本次不覆盖"), state.banner);
   check("空态仍在：警告是叠加说明，不是替代空态", state.empty === true, state);
-  check("「新建任务」仍可点：修好文件后靠一次成功写入清掉横幅（不是死路）", state.createEnabled === true, state);
+  check("「创建定时任务」入口仍可点：修好文件后靠一次成功写入清掉横幅（不是死路）", state.createEnabled === true, state);
   await pause(250);
   writeFileSync(join(out, "01-automation-corrupt.png"), (await win.webContents.capturePage()).toPNG());
   check("全程无渲染层控制台错误", errors.length === 0, errors);

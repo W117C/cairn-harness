@@ -1,12 +1,12 @@
-// 记忆系统页（项目层/全局层主题浏览、MEMORY.md 索引渲染、导出与删除）。
-import { Fragment, useState } from "react";
+// 记忆系统页（2026-11-05 重做：内容前置卡片网格 —— Mem0/Letta 的开源记忆 UI 语言：
+// 正文前两行直接上卡，元信息退为卡脚；层别徽标随卡走。搜索/筛选/排序/导出/详情抽屉/删除全保留）。
+import { Fragment, useEffect, useState } from "react";
 import { BookOpen, Brain } from "lucide-react";
 import type { MemorySnapshot } from "../../../../../src/main/ipc-protocol";
 import { renderInline } from "../markdown";
-import { bodyLines, fullTime, indexLines, memoryExportMarkdown, memoryRows, relativeTime } from "../memory-view";
+import { bodyLines, fullTime, indexLines, memoryExportMarkdown, memoryRows, memorySemanticGroup, relativeTime } from "../memory-view";
 import { PAGE_CONTEXT_ITEMS } from "../navigation";
 import { useNow } from "../useNow";
-import { activates } from "./a11y-activate";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { PageFrame } from "./PageFrame";
 import { EmptyState } from "./settings-ui";
@@ -34,11 +34,14 @@ export function MemoryPane(props: {
   const filter = props.filter ?? localFilter;
   const setFilter = props.onFilter ?? setLocalFilter;
   const sorted = memoryRows(memory, query, filter, sortByName);
-  // 「全部」下按层分组：24 条同一权重堆在一起读不出边界。筛选到单层时不摆组头（那行会被读成重复）。
+  // 「全部」下按语义分组：同类主题挨在一起，层别仍由卡片徽标表达；筛选到单层时不重复组头。
   const grouped = filter === "all";
   const [selLayer, selTopic] = sel === null ? [null, null] : [sel.slice(0, sel.indexOf(":")), sel.slice(sel.indexOf(":") + 1)];
-  const selected = selLayer === null ? null : (selLayer === "project" ? memory.project : memory.global).topics.find((t) => t.topic === selTopic) ?? null;
+  const selected = sorted.find((row) => row.layer === selLayer && row.topic.topic === selTopic)?.topic ?? null;
   const selectedLayer = selLayer === "project" ? memory.project : memory.global;
+  useEffect(() => {
+    if (sel !== null && selected === null) setSel(null);
+  }, [sel, selected]);
   const exportMemory = async (): Promise<void> => {
     setExportBusy(true);
     setNotice(null);
@@ -108,37 +111,42 @@ export function MemoryPane(props: {
       </div>
       <div className="ap-actions-row"><Notice text={notice} /></div>
       <div className={"ap-split" + (selected !== null ? " has-drawer" : "")}>
-        <div className="ap-list memory-list">
+        <div className="memory-grid">
           {sorted.length === 0 && <div className="ap-empty">没有匹配的主题</div>}
           {sorted.map((r, index) => (
             <Fragment key={`${r.layer}:${r.topic.topic}`}>
-              {grouped && (index === 0 || sorted[index - 1]?.layer !== r.layer) && (
-                <div className="ap-group-label">
-                  {r.layer === "project" ? "项目层" : "全局层"} · {String(sorted.filter((x) => x.layer === r.layer).length)}
+              {grouped && (index === 0 || memorySemanticGroup(sorted[index - 1]!.topic) !== memorySemanticGroup(r.topic)) && (
+                <div className="ap-group-label memory-grid-label">
+                  {memorySemanticGroup(r.topic)} · {String(sorted.filter((x) => memorySemanticGroup(x.topic) === memorySemanticGroup(r.topic)).length)}
                 </div>
               )}
-              <div
-                className={"ap-item" + (sel === `${r.layer}:${r.topic.topic}` ? " on" : "")}
+              {/* 内容前置卡（Mem0 语言）：正文前两行直接上卡，元信息退为卡脚——点开才有详情。 */}
+              <button type="button"
+                className={"memory-card" + (sel === `${r.layer}:${r.topic.topic}` ? " on" : "")}
+                aria-label={`查看记忆主题 ${r.topic.topic}`}
                 onClick={() => setSel(`${r.layer}:${r.topic.topic}`)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => { if (activates(e)) { e.preventDefault(); setSel(`${r.layer}:${r.topic.topic}`); } }}
               >
-                {/* H（2026-10-16）：名称单行省略；F：元信息走相对时间（悬停给完整时间）。
-                    层别只在「全部」的组头读，行内不再重复同一枚徽标。 */}
-                <span className="memory-title" title={r.topic.topic}><BookOpen size={14} aria-hidden="true" /><span className="nm">{r.topic.topic}</span></span>
-                <span className="sub" title={fullTime(r.topic.modified)}>
-                  {r.topic.type === "project" ? "项目" : r.topic.type === "global" ? "全局" : r.topic.type}
-                  {" · "}
-                  {String(r.topic.bytes)} B · {relativeTime(r.topic.modified, now)}
+                <span className="memory-card-head">
+                  <BookOpen size={14} aria-hidden="true" />
+                  <span className="nm" title={r.topic.topic}>{r.topic.topic}</span>
+                  <span className="memory-layer-pill">{r.layer === "project" ? "项目" : "全局"}</span>
                 </span>
-                {r.topic.body.trim() !== "" && <span className="memory-preview">{bodyLines(r.topic.body)[0]}</span>}
-              </div>
+                <span className="memory-card-body">
+                  {r.topic.body.trim() === "" ? <span className="memory-card-none">暂无正文</span>
+                    : bodyLines(r.topic.body).slice(0, 2).map((line, i) => (
+                      <span key={String(i)} className="memory-card-line">{renderInline(line, false, "text")}</span>
+                    ))}
+                </span>
+                <span className="memory-card-foot" title={fullTime(r.topic.modified)}>
+                  {relativeTime(r.topic.modified, now)} · {String(r.topic.bytes)} B
+                </span>
+              </button>
             </Fragment>
           ))}
         </div>
         {selected !== null && (
           <Drawer
+            key={sel}
             title={selected.topic}
             sub={`${selLayer === "project" ? "项目层" : "全局层"} · ${String(selected.bytes)} B · ${relativeTime(selected.modified, now)}`}
             subTitle={fullTime(selected.modified)}

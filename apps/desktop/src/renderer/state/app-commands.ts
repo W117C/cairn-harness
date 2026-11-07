@@ -115,12 +115,17 @@ export function useAppCommands(deps: AppCommandsDeps) {
     const onKey = (e: KeyboardEvent): void => {
       const h = hotkeysRef.current;
       // 浮层在不在 ⇒ 快捷键一律不动作（与菜单路径**同一道门**，见 command-gate.ts）。
-      if (overlayBlocked(readGateInput(h.paletteOpen))) return;
+      const gate = readGateInput(h.paletteOpen);
+      if (overlayBlocked(gate)) return;
       if (e.key === "Escape") {
         // 站点授权弹层自己吃 Esc（2026-10-18）：全局这里让路，否则按 Esc 想关弹层会顺带停掉本轮。
         if (document.querySelector('.bp-permit[role="alertdialog"]') !== null) return;
         // 自持 Esc 的就地编辑（排队项）：Esc 只取消这次编辑，不许被智慧停止吃掉（捕获阶段先到这里）。
-        if (readGateInput(h.paletteOpen).escOwnsTarget) return;
+        if (gate.escOwnsTarget) return;
+        // 侧栏搜索 / 浏览器地址栏 / 设置搜索等二级输入框：Esc 归字段自己。
+        // 全局监听在 capture 阶段先跑，若不在这里让路，一次 Esc 会既清空搜索又停掉整轮。
+        // Composer 是唯一例外——它的 Esc 语义就是停止本轮（菜单开着时由下面的浮层分支先让路）。
+        if (gate.editableTarget && !gate.composerTarget) return;
         if (h.pluginSidebarOpen) { e.preventDefault(); h.closePluginSidebar(); return; }
         // Esc 智慧停止（§7.3 禁令的正面写法）：浮层优先——开着菜单/弹层/速查表/目录时 Esc 只关它，不动运行。
         // capture 阶段检查：此刻菜单还开着，能可靠判定；等冒泡时 Radix 已把它关了。
@@ -133,7 +138,7 @@ export function useAppCommands(deps: AppCommandsDeps) {
         if (h.gatePending) return;
         // 侧栏是常驻 `role=listbox`（收起时 display:none 也照样命中），不能把它当「浮层开着」。
         // 只让真正会出现的浮层短路：侧栏排除后，Esc 才能按速查表承诺停掉本轮。
-        if (document.querySelector(".pop.show, .pop-rd, [role='menu'][data-state='open'], [role='listbox']:not(.sidenav)") !== null) return;
+        if (document.querySelector(".pop.show, .pop-rd, .slash-menu, .mention-menu, [role='menu'][data-state='open'], [role='listbox']:not(.sidenav)") !== null) return;
         if (h.running && h.activeId !== null) { e.preventDefault(); h.cancelRun(h.activeId); }
         return;
       }

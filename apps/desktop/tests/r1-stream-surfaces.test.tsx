@@ -48,10 +48,20 @@ describe("审批卡：pending 态可识别、可聚焦", () => {
     expect(html).toContain('aria-label="工具调用决策卡片: write_file"');
   });
 
-  it("样式：pending 用陶土半透明边 + 一层暖光，不靠整卡变色", () => {
+  it("样式：pending 与澄清/方案卡共用同一骨架；risk 只换语义描边与徽标", () => {
     const css = read("../src/renderer/styles.css");
-    expect(css).toMatch(/\.card\[data-status="pending_approval"\]\s*\{[^}]*border-color:\s*hsl\(var\(--accent-brand\) \/ 50%\)/s);
-    expect(css).toMatch(/\.card\[data-status="pending_approval"\]\s*\{[^}]*0 4px 16px hsl\(var\(--accent-brand\) \/ 12%\)/s);
+    const pending = /\.card\[data-status="pending_approval"\]\s*\{([^}]*)\}/s.exec(css)?.[1] ?? "";
+    expect(pending).toContain("--gate-border: hsl(var(--color-danger) / 45%)");
+    expect(pending).toContain("--gate-accent: hsl(var(--color-danger))");
+    expect(pending).toContain("--gate-note-surface: hsl(var(--color-danger) / 8%)");
+    expect(pending).toContain("box-shadow: var(--shadow-gate)");
+    // 旧「陶土半透明边 + 一层暖光」是局部字面量，体检后不许回到卡片上。
+    const oldGlow = /0 4px 16px hsl\(var\(--accent-brand\) \/ 12%\)/;
+    expect(pending).not.toMatch(oldGlow);
+    expect(oldGlow.test("0 4px 16px hsl(var(--accent-brand) / 12%)"), "反向自证：旧写法要能被这条正则抓到").toBe(true);
+    // 三卡一致的抬升面与高度帽：审批不再比另外两张重一档。
+    expect(css).toMatch(/\.card\s*\{[^}]*background:\s*var\(--gate-surface\)/s);
+    expect(css).toMatch(/\.zone-gate > \*\s*\{[^}]*max-height:\s*min\(62vh, 520px\)/s);
   });
 });
 

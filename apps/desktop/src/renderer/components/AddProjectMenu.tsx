@@ -49,14 +49,15 @@ export function AddProjectMenu(props: {
     setFolderError(null);
     void props.onPickDirectory().then((picked) => {
       if (picked === null) return;
-      void props.onAddProject(picked).catch((err: unknown) => {
-        setFolderError(err instanceof Error ? err.message : String(err));
-      });
+      return props.onAddProject(picked);
+    }).catch((err: unknown) => {
+      setFolderError(err instanceof Error ? err.message : String(err));
     });
   };
 
   const submitClone = async (e: FormEvent): Promise<void> => {
     e.preventDefault();
+    if (cloneBusy) return;
     const url = cloneUrl.trim();
     if (url === "") { setCloneError(STR.addProject.cloneUrlLabel); return; }
     if (cloneParent === null) { setCloneError(STR.addProject.cloneLocationUnset); return; }
@@ -80,7 +81,7 @@ export function AddProjectMenu(props: {
         onOpenChange={(open) => { if (open) loadRecent(); }}
       >
         <DropdownMenu.Trigger asChild>
-          <button className="add-project-btn" title={STR.addProject.titleTip}>
+          <button className="add-project-btn" title={STR.addProject.titleTip} disabled={cloneBusy}>
             <FolderPlus size={13} />
             {STR.addProject.title}
           </button>
@@ -118,7 +119,10 @@ export function AddProjectMenu(props: {
                     className="menu-item"
                     disabled={already}
                     title={p.path}
-                    onSelect={() => { void props.onAddProject(p.path).catch(() => undefined); }}
+                    onSelect={() => {
+                      setFolderError(null);
+                      void props.onAddProject(p.path).catch((err: unknown) => { setFolderError(err instanceof Error ? err.message : String(err)); });
+                    }}
                   >
                     <span>{p.name}{already ? ` · ${STR.addProject.recentAdded}` : ""}</span>
                     <span className="sub">{p.path}</span>
@@ -134,10 +138,10 @@ export function AddProjectMenu(props: {
 
       {/* 克隆表单（菜单内联展开后落面板）：URL + 选择位置 + 预览；零路径手输。 */}
       {cloneOpen && (
-        <form className="clone-form" onSubmit={(e) => void submitClone(e)}>
+        <form className="clone-form" aria-busy={cloneBusy} onSubmit={(e) => void submitClone(e)}>
           <div className="clone-head">
             <span>{STR.addProject.clone}</span>
-            <button type="button" className="iconbtn sm" aria-label={STR.addProject.cloneCancel} title={STR.addProject.cloneCancel} onClick={() => { setCloneOpen(false); setCloneError(null); }}>
+            <button type="button" className="iconbtn sm" aria-label={STR.addProject.cloneCancel} title={STR.addProject.cloneCancel} disabled={cloneBusy} onClick={() => { setCloneOpen(false); setCloneError(null); }}>
               <X size={12} />
             </button>
           </div>
@@ -146,6 +150,7 @@ export function AddProjectMenu(props: {
             aria-label={STR.addProject.cloneUrlLabel}
             placeholder={STR.addProject.cloneUrlPlaceholder}
             value={cloneUrl}
+            disabled={cloneBusy}
             onChange={(e) => { setCloneUrl(e.target.value); }}
           />
           <div className="clone-row">
@@ -153,8 +158,12 @@ export function AddProjectMenu(props: {
               type="button"
               className="mini-btn"
               title={STR.addProject.clonePickLocation}
+              disabled={cloneBusy}
               onClick={() => {
-                void props.onPickDirectory().then((picked) => { if (picked !== null) setCloneParent(picked); });
+                setCloneError(null);
+                void props.onPickDirectory().then((picked) => { if (picked !== null) setCloneParent(picked); }).catch((err: unknown) => {
+                  setCloneError(STR.addProject.cloneLocationFailed.replace("{reason}", err instanceof Error ? err.message : String(err)));
+                });
               }}
             >
               {STR.addProject.clonePickLocation}

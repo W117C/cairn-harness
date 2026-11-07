@@ -44,17 +44,20 @@ function focusableWithin(surface: HTMLElement): HTMLElement[] {
 type ModalSurfaceProps = Omit<HTMLAttributes<HTMLDivElement>, "role" | "aria-modal" | "aria-label" | "tabIndex"> & {
   label: string;
   onClose: () => void;
+  onEscapeKeyDown?: (event: KeyboardEvent) => void;
   initialFocusRef?: RefObject<HTMLElement | null>;
   returnFocusRef?: RefObject<HTMLElement | null>;
 };
 
 export function ModalSurface(props: ModalSurfaceProps): React.JSX.Element {
-  const { label, onClose, initialFocusRef, returnFocusRef, className, children, ...rest } = props;
+  const { label, onClose, onEscapeKeyDown, initialFocusRef, returnFocusRef, className, children, ...rest } = props;
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const closeRef = useRef(onClose);
+  const escapeRef = useRef(onEscapeKeyDown);
   const initialRef = useRef(initialFocusRef);
   const returnRef = useRef(returnFocusRef);
   closeRef.current = onClose;
+  escapeRef.current = onEscapeKeyDown;
   initialRef.current = initialFocusRef;
   returnRef.current = returnFocusRef;
 
@@ -69,10 +72,13 @@ export function ModalSurface(props: ModalSurfaceProps): React.JSX.Element {
     const onKey = (e: KeyboardEvent): void => {
       if (MODAL_STACK[MODAL_STACK.length - 1] !== surface) return;
       if (e.key === "Escape") {
+        // Let the topmost surface consume Escape locally before dismissing it.
+        escapeRef.current?.(e);
+        const canceled = e.defaultPrevented;
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
-        closeRef.current();
+        if (!canceled) closeRef.current();
         return;
       }
       if (e.key !== "Tab") return;

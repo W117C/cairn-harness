@@ -66,16 +66,18 @@ describe("快捷键静默死点（F6/F7 + F5）", () => {
 describe("⌘⇧E 的落点（不再与 ⌘⇧I 完全同路）", () => {
   it("信号层：effort → pickerFocus=effort；model → model；用户点开复位 model", () => {
     expect(composer).toContain('setPickerFocus(sig.kind === "effort" ? "effort" : "model");');
-    expect(composer).toContain('onUserOpen={() => setPickerFocus("model")}');
+    expect(composer).toContain('onUserOpen={() => setPickerFocus(undefined)}');
     expect(composer).toContain("initialFocus={pickerFocus}");
   });
 
-  it("菜单层：effort 首帧聚焦思考分段（禁用时聚焦分组本身），带可驱动锚点", () => {
-    expect(picker).toContain('if (props.initialFocus !== "effort") { searchRef.current?.focus(); return; }');
-    expect(picker).toContain('box.querySelector<HTMLButtonElement>("button:not(:disabled)") ?? box');
-    expect(picker).toContain('data-effort-anchor="true"');
-    expect(picker).toContain("target.focus({ preventScroll: true });");
-    expect(picker).toContain('target.scrollIntoView({ block: "nearest" });');
+  it("菜单层：⌘⇧I 直落模型面聚焦搜索，⌘⇧E 直落思考面聚焦当前档（2026-11-04 DeepSeek 两级面板）", () => {
+    // 打开落点由面板初值决定：effort 优先，未选模型（演示）直落模型面，其余 = root 面。
+    expect(picker).toContain('props.initialFocus === "effort" ? "effort"');
+    expect(picker).toContain('props.initialFocus === "model" || props.value === null ? "model"');
+    // 模型面聚焦搜索（⌘⇧I）；思考面聚焦当前档那一行（⌘⇧E）。
+    expect(picker).toContain("searchRef.current?.focus({ preventScroll: true });");
+    expect(picker).toContain(".focus({ preventScroll: true })");
+    expect(picker).toContain('.scrollIntoView({ block: "nearest" });');
   });
 });
 

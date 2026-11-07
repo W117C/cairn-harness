@@ -102,7 +102,10 @@ async function main() {
   const navAfter = await js(`document.querySelector('.sp-nav-item.on')?.textContent ?? ''`);
   check("点后切到「联网搜索」分区", navAfter.includes("联网搜索"), navAfter);
   const bodyAfter = await js(`document.querySelector('.sp-body')?.innerText ?? ''`);
-  check("分区正文是搜索设置（不是空白）", bodyAfter.includes("搜索服务"), bodyAfter.slice(0, 80));
+  // 2026-11-07 脚本漂移订正：原断言找「搜索服务」——那是旧版 API Key 行描述
+  // 「从搜索服务获取密钥…」的残影（该描述已在设置改版中移除，HEAD 无 keyDescription）。
+  // 改钉首行行标签「启用联网搜索」：它是该分区恒渲染的稳定短语，语义（跳到的是搜索设置正文）不变。
+  check("分区正文是搜索设置（不是空白）", bodyAfter.includes("启用联网搜索"), bodyAfter.slice(0, 80));
   writeFileSync(join(out, "02-after-doctor-jump.png"), (await win.webContents.capturePage()).toPNG());
   check("全程无渲染层控制台错误", errors.length === 0, errors);
 

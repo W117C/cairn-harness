@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import type { EvolveReport } from "../../../src/main/ipc-protocol";
 import { EvolvePanel, type EvolvePanelState } from "../src/renderer/components/settings/EvolvePanel";
 import { SECTIONS } from "../src/renderer/components/settings-nav";
+import { STR } from "../src/renderer/strings";
 
 const report: EvolveReport = {
   v: 1,
@@ -340,12 +341,19 @@ describe("EvolvePanel", () => {
     expect(panelSrc).toContain('section === "evolve"');
     expect(panelSrc).toContain("<EvolveSection />");
     const panelFile = readFileSync(fileURLToPath(new URL("../src/renderer/components/settings/EvolvePanel.tsx", import.meta.url)), "utf8");
-    expect(panelFile).toContain("冻结进化？");
-    expect(panelFile).toContain("解除进化冻结？");
-    expect(panelFile).toContain("撤销这条全局经验？");
-    expect(panelFile).toContain("恢复这条全局经验？");
-    expect(panelFile).toContain("冻结全局经验？");
-    expect(panelFile).toContain("解除全局冻结？");
-    expect(panelFile).toContain("不会写技能候选");
+    // 2026-11-07 strings 整批收编：确认对话框文案进 STR.evolve（源文引 STR；值面钉在这里，六个确认 + 横幅）。
+    expect(panelFile).toContain("STR.evolve.evolveFreezeTitle");
+    expect(panelFile).toContain("STR.evolve.evolveUnfreezeTitle");
+    expect(panelFile).toContain("STR.evolve.revokeConfirmTitle");
+    expect(panelFile).toContain("STR.evolve.restoreConfirmTitle");
+    expect(panelFile).toContain("STR.evolve.freezeGlobalTitle");
+    expect(panelFile).toContain("STR.evolve.unfreezeGlobalTitle");
+    expect(STR.evolve.evolveFreezeTitle).toBe("冻结进化？");
+    expect(STR.evolve.evolveUnfreezeTitle).toBe("解除进化冻结？");
+    expect(STR.evolve.revokeConfirmTitle).toBe("撤销这条全局经验？");
+    expect(STR.evolve.restoreConfirmTitle).toBe("恢复这条全局经验？");
+    expect(STR.evolve.freezeGlobalTitle).toBe("冻结全局经验？");
+    expect(STR.evolve.unfreezeGlobalTitle).toBe("解除全局冻结？");
+    expect(STR.evolve.frozenBanner).toContain("不会写技能候选");
   });
 });

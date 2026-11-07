@@ -464,7 +464,9 @@ describe("批 6：样式哨兵（主题选项卡/段落样式）", () => {
     expect(styles).not.toContain(".theme-thumb");
   });
   it(".ss-banner 样式在（信息/警告两 tone）", () => {
-    expect(styles).toMatch(/\.ss-banner\.warn \{[^}]*color-risk/);
+    expect(styles).toMatch(/\.ss-banner\.warn \{[^}]*semantic-warning-border/);
+    expect(styles).toMatch(/\.ss-banner\.warn \{[^}]*semantic-warning-surface/);
+    expect(styles).toMatch(/\.ss-banner \{[^}]*semantic-info-surface/);
   });
 });
 describe("许可证状态一行话（四态全显式）", () => {

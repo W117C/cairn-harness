@@ -67,7 +67,7 @@ async function main() {
   };
   const projectCalls = () => js(`window.__cairnProjectCalls()`);
 
-  await win.loadFile(join(__dirname, "../dist/index.html"));
+  await win.loadFile(process.env.CAIRN_RENDERER_ENTRY ?? join(__dirname, "../dist/index.html"));
   await pause(1400);
   await waitFor(() => js(`!!document.querySelector('.group-head')`), "project group");
 

@@ -1,5 +1,8 @@
 // 应用页各面板共享的轻量壳件（卡片、详情抽屉、操作回执条）。
 import { Check, CircleDashed } from "lucide-react";
+import { useLayoutEffect, useRef } from "react";
+import { isCompositionEnter } from "../ime";
+import { STR } from "../strings";
 
 /** 双列卡片网格（图标 + 名称 + 一句话描述 + 右侧动作）——Codex 自定义页的卡片形制。 */
 export function PaneCard(props: {
@@ -22,14 +25,37 @@ export function PaneCard(props: {
 }
 
 export function Drawer(props: { title: string; sub?: string; subTitle?: string; onClose: () => void; children: React.ReactNode }): React.JSX.Element {
+  const drawerRef = useRef<HTMLElement | null>(null);
+  const closeRef = useRef<HTMLButtonElement | null>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    const drawer = drawerRef.current;
+    const active = document.activeElement;
+    if (drawer === null) return;
+    if (active instanceof HTMLElement && !drawer.contains(active) && drawer.parentElement?.contains(active)) openerRef.current = active;
+    drawer.scrollIntoView({ block: "nearest", inline: "nearest" });
+    closeRef.current?.focus({ preventScroll: true });
+  }, []);
+  const close = () => {
+    props.onClose();
+    const opener = openerRef.current;
+    if (opener?.isConnected && opener.closest("[inert]") === null) opener.focus();
+  };
   return (
-    <aside className="ap-drawer" aria-label="详情">
+    <aside className="ap-drawer" ref={drawerRef} aria-label={`${props.title}详情`} onKeyDown={(event) => {
+      if (event.key !== "Escape" || event.defaultPrevented || isCompositionEnter(event, null)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+    }}>
       <div className="ap-drawer-head">
-        <span className="nm">{props.title}</span>
-        <button className="mini-btn" onClick={props.onClose}>关闭</button>
+        <span className="nm" title={props.title}>{props.title}</span>
+        <button ref={closeRef} className="mini-btn" aria-label={STR.design.drawerClose} onClick={close}>关闭</button>
       </div>
-      {props.sub !== undefined && <div className="ap-drawer-sub" title={props.subTitle}>{props.sub}</div>}
-      <div className="ap-drawer-body">{props.children}</div>
+      <div className="ap-drawer-scroll" role="region" aria-label="详情内容" tabIndex={0}>
+        {props.sub !== undefined && <div className="ap-drawer-sub" title={props.subTitle}>{props.sub}</div>}
+        <div className="ap-drawer-body">{props.children}</div>
+      </div>
     </aside>
   );
 }

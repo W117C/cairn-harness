@@ -158,7 +158,9 @@ describe("④ App 哨兵（键位 → 面板）", () => {
   it("面板打开时 App 全局快捷键让路，不穿透改背景状态", () => {
     // 2026-10-20：改钉「走共享门」（command-gate.ts 的 overlayBlocked）——
     // 行为判据在 tests/command-gate.test.ts（真 DOM）；这里钉 App 的快捷键路径接上了那道门。
-    expect(appSrc).toContain("overlayBlocked(readGateInput(");
+    // 2026-11-05：门输入改为先读一次（`const gate = …`），Esc 分支还要复用
+    // `escOwnsTarget`/`composerTarget`——仍是同一道门，只是不再内联嵌套。
+    expect(appSrc).toMatch(/const gate = readGateInput\([^;]*\);\s*if \(overlayBlocked\(gate\)\) return;/);
   });
 
   it("命令面板向辅助技术声明模态对话框，而不只是视觉遮罩", () => {

@@ -61,6 +61,7 @@ export function NewProjectDialog(props: {
   const nameError = validateProjectName(name, props.existingNames);
   const showNameError = name.trim() !== "" && nameError !== null;
   const previewParent = parentDir ?? STR.newProject.defaultParent;
+  const close = () => { if (!busy) props.onClose(); };
   /** 回车 = 提交（按钮同一条路；busy / 校验失败时不动，错误照样上屏）。 */
   const submit = () => {
     if (busy) return;
@@ -79,17 +80,18 @@ export function NewProjectDialog(props: {
     );
   };
   return (
-    <div className="modal-backdrop" role="presentation" onClick={props.onClose}>
+    <div className="modal-backdrop" role="presentation" onClick={close}>
       <ModalSurface
         className="modal-card modal-wide"
         label={STR.newProject.title}
-        onClose={props.onClose}
+        onClose={close}
+        aria-busy={busy}
         initialFocusRef={nameInput}
         onClick={(e) => { e.stopPropagation(); }}
       >
         <div className="modal-head">
           <span>{STR.newProject.title}</span>
-          <button className="iconbtn sm" aria-label={STR.common.cancel} title={STR.common.cancel} onClick={props.onClose}>
+          <button className="iconbtn sm" aria-label={STR.common.cancel} title={STR.common.cancel} disabled={busy} onClick={close}>
             <X size={13} />
           </button>
         </div>
@@ -107,6 +109,7 @@ export function NewProjectDialog(props: {
                 tabIndex={templateId === t.id ? 0 : -1}
                 data-on={templateId === t.id}
                 title={t.description}
+                disabled={busy}
                 onClick={() => { setTemplateId(t.id); }}
                 onKeyDown={(e) => {
                   const current = props.templates.findIndex((template) => template.id === templateId);
@@ -136,6 +139,7 @@ export function NewProjectDialog(props: {
             aria-label={STR.newProject.nameLabel}
             placeholder={STR.newProject.namePlaceholder}
             value={name}
+            disabled={busy}
             onChange={(e) => { setName(e.target.value); setError(null); }}
             onKeyDown={(e) => { if (e.key === "Enter" && !isCompositionEnter(e, null)) { e.preventDefault(); submit(); } }}
           />
@@ -150,8 +154,12 @@ export function NewProjectDialog(props: {
               type="button"
               className="mini-btn"
               title={STR.newProject.locationHint}
+              disabled={busy}
               onClick={() => {
-                void props.onPickDirectory().then((picked) => { if (picked !== null) setParentDir(picked); });
+                setError(null);
+                void props.onPickDirectory().then((picked) => { if (picked !== null) setParentDir(picked); }).catch((err: unknown) => {
+                  setError(STR.newProject.locationFailed.replace("{reason}", err instanceof Error ? err.message : String(err)));
+                });
               }}
             >
               {STR.newProject.locationChange}
@@ -163,7 +171,7 @@ export function NewProjectDialog(props: {
 
         {error !== null && <div className="form-error" role="alert">{error}</div>}
         <div className="modal-foot">
-          <button className="mini-btn" title={STR.common.cancel} onClick={props.onClose}>{STR.common.cancel}</button>
+          <button className="mini-btn" title={STR.common.cancel} disabled={busy} onClick={close}>{STR.common.cancel}</button>
           <button
             className="mini-btn primary"
             title={STR.newProject.title}

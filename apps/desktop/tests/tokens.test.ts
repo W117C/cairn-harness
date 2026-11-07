@@ -343,6 +343,16 @@ describe("样式层纪律与四态", () => {
     expect(tokens).toMatch(/--mode-auto:\s*hsl\(var\(--color-mode-auto\)\);/);
   });
 
+  it("上下文容量六桶：亮暗都是三元组，组件用 hsl(var()) 消费", () => {
+    const dark = themeBlock("dark");
+    for (const key of ["messages", "tools", "skills", "memory", "system", "other"]) {
+      expect(themeBlock("light")).toMatch(new RegExp(`--ctx-seg-${key}:\\s*[\\d.]+\\s+[\\d.]+%\\s+[\\d.]+%;`));
+      expect(dark).toMatch(new RegExp(`--ctx-seg-${key}:\\s*[\\d.]+\\s+[\\d.]+%\\s+[\\d.]+%;`));
+      expect(styles).toMatch(new RegExp(`\\.ctx-seg-${key}\\s*\\{\\s*background:\\s*hsl\\(var\\(--ctx-seg-${key}\\)\\);`));
+    }
+    expect(themeBlock("light")).not.toMatch(/--ctx-seg-[a-z]+:\s*hsl\(/);
+  });
+
   it("紧凑控件族有按下态（:active）", () => {
     for (const sel of [".iconbtn:active", ".mini-btn:active", ".ctl:active", ".menu-item:active", ".session:active"]) {
       expect(styles).toContain(sel);

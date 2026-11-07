@@ -28,6 +28,7 @@ import { type QueuedSend } from "../send-queue";
 import type { WorkspaceSession } from "../sessions-view";
 import type { SlashSkill } from "../slash";
 import { STR } from "../strings";
+import { runKey } from "../state/session-identity";
 import { type ThemePref } from "../theme";
 import type { StickyScroll } from "../useStickyScroll";
 import { type ViewMode } from "../view-mode";
@@ -77,7 +78,7 @@ interface AppToolbarProps {
   running?: boolean;
   phaseLabel?: string;
   elapsedSec?: number;
-  steps?: number;
+  runSteps?: number;
   todos?: TodoProjection | null;
 }
 
@@ -179,10 +180,11 @@ export function renderAppToolbar(deps: AppToolbarProps) {
         <div className="tb-cluster">
           {/* 工作状态 pill（2026-11-04 截图右上角）：当前任务/阶段一行，点开进程面板。 */}
           <WorkStatusPill
+            key={runKey(activeWorkspace, activeId)}
             running={deps.running === true}
             phaseLabel={deps.phaseLabel ?? ""}
             elapsedSec={deps.elapsedSec ?? 0}
-            steps={deps.steps ?? 0}
+            steps={deps.runSteps ?? 0}
             todos={deps.todos ?? null}
           />
           {/* 对话目录（v7.2 长对话导航）：2026-10-17 从流内浮片迁入会话条

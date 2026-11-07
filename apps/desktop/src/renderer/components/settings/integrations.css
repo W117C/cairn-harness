@@ -1,0 +1,229 @@
+.integrations {
+  display: grid;
+  gap: var(--space-md);
+  min-width: 0;
+}
+.integrations-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm) var(--space-lg);
+}
+.integrations-toolbar h2,
+.integrations-title {
+  width: fit-content;
+  max-width: 100%;
+  margin: 0;
+  color: hsl(var(--text-000));
+  font-size: var(--fs-heading-lg);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.integrations-toolbar p,
+.integrations-note {
+  margin: var(--space-xs) 0 0;
+  color: hsl(var(--text-300));
+  font-size: var(--fs-caption-sm);
+  line-height: 1.6;
+}
+.integrations .mini-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: 32px;
+  justify-self: start;
+}
+.integrations-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-block: 1px solid var(--hairline);
+}
+.integrations-list li + li { border-top: 1px solid var(--hairline); }
+.integrations-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: 58px;
+  padding: var(--space-sm);
+  border-radius: var(--radius-sm);
+  text-align: left;
+}
+.integrations-item:hover { background: hsl(var(--bg-200)); }
+.integrations-item:focus-visible,
+.integrations :is(button, summary, input, select, textarea):focus-visible {
+  outline: 2px solid hsl(var(--accent-control));
+  outline-offset: -2px;
+}
+.integrations-item-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 32px;
+  min-height: 32px;
+  border-radius: var(--radius-sm);
+  background: hsl(var(--bg-200));
+  color: hsl(var(--text-300));
+}
+.integrations-item-main {
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 3px;
+}
+.integrations-item-title,
+.integrations-item-secondary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.integrations-item-title {
+  color: hsl(var(--text-000));
+  font-size: var(--fs-body-md);
+  font-weight: var(--fw-medium);
+}
+.integrations-item-secondary,
+.integrations-status,
+.integrations-chevron {
+  color: hsl(var(--text-300));
+  font-size: var(--fs-caption-sm);
+}
+.integrations-status { flex: none; }
+.integrations-chevron { flex: none; }
+.integrations .ss-empty { border-block: 1px solid var(--hairline); }
+.integrations-path {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  color: hsl(var(--text-300));
+  font-size: var(--fs-caption-sm);
+}
+.integrations-path > span { display: grid; flex: 1 1 220px; gap: 3px; overflow-wrap: anywhere; min-width: 0; }
+.integrations code {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
+}
+/* 2026-11-05：Claude 的 Markdown 行内代码是暗红字（--dsh-claude-inline-code-fg #943333）。
+   MCP/Hooks 设置里的 <code> 是路径、服务器名、命令值，不是 prose 引用——沿用暗红会让
+   「配置文件 /Users/…/mcp.json」看起来像一条报错。这里按值样式收回中性色芯片。 */
+body[data-dsh-claude-style] .integrations code {
+  color: hsl(var(--text-000));
+  background: hsl(var(--bg-200));
+  border-radius: var(--radius-xs);
+  padding: 1px 5px;
+}
+.integrations-details {
+  display: grid;
+  margin: 0;
+  border-block: 1px solid var(--hairline);
+}
+.integrations-details > div {
+  display: grid;
+  grid-template-columns: minmax(72px, 28%) minmax(0, 1fr);
+  gap: var(--space-sm);
+  padding: var(--space-sm) 0;
+}
+.integrations-details > div + div { border-top: 1px solid var(--hairline); }
+.integrations-details dt { color: hsl(var(--text-300)); }
+.integrations-details dd {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.integrations-form {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-md);
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+.integrations-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: var(--space-md);
+}
+.integrations-field { display: grid; align-content: start; gap: var(--space-xs); min-width: 0; }
+.integrations-field label { font-weight: var(--fw-medium); }
+.integrations-field small { color: hsl(var(--text-300)); font-size: var(--fs-caption-sm); line-height: 1.5; }
+.integrations-field .ss-field[data-w="full"] { max-width: none; }
+.integrations-field textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 64px;
+  padding: var(--space-sm) var(--space-md);
+  resize: vertical;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-field);
+  background: var(--fill-field);
+  color: hsl(var(--text-000));
+  font: var(--fs-caption-sm) / 1.5 var(--mono);
+}
+.integrations-advanced {
+  padding: var(--space-xs) 0;
+  border-block: 1px solid var(--hairline);
+}
+.integrations-advanced summary {
+  min-height: 32px;
+  padding-block: var(--space-xs);
+  color: hsl(var(--text-200));
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+}
+.integrations-advanced > :not(summary) { margin: var(--space-sm) 0; }
+.integrations-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-xs);
+}
+.integrations-actions > .danger-text { margin-right: auto; }
+.integrations-handlers { display: grid; gap: var(--space-sm); }
+.integrations-handlers h3 {
+  margin: 0;
+  color: hsl(var(--text-200));
+  font-size: var(--fs-body-md);
+  font-weight: var(--fw-medium);
+}
+.integrations-handler {
+  display: grid;
+  gap: var(--space-sm);
+  padding-block: var(--space-sm);
+  border-top: 1px solid var(--hairline);
+}
+.integrations-handler-readonly {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  color: hsl(var(--text-300));
+}
+.integrations-handler-list { display: grid; gap: var(--space-xs); margin: 0; padding-left: var(--space-lg); }
+.integrations-handler-list li { padding-block: var(--space-xs); }
+.integrations-handler-list code { display: block; margin-top: var(--space-xs); white-space: pre-wrap; }
+.integrations-feedback,
+.integrations-loading {
+  padding: var(--space-sm);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  background: hsl(var(--bg-200));
+  color: hsl(var(--text-200));
+  font-size: var(--fs-caption-sm);
+  overflow-wrap: anywhere;
+}
+.integrations-feedback.error { color: hsl(var(--color-danger-ink)); }
+@container (max-width: 380px) {
+  .integrations-item { gap: var(--space-xs); padding-inline: var(--space-xs); }
+  .integrations-item-icon { flex-basis: 28px; min-height: 28px; }
+  .integrations-item .ss-badge { padding-inline: var(--space-xs); }
+}

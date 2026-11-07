@@ -122,13 +122,14 @@ export function countToolSteps(events: readonly AgentEvent[]): number {  let ste
   return steps;
 }
 
-/** 本轮步数（2026-10-18）：最后一个 user_message 之后的 tool_call 数——状态条要的是“这一轮做了几步”。
+/** 本轮步数：最后一个主会话起轮消息之后的 tool_call 数；轮中插话不切轮。
  *  不能直接拿 countToolSteps（那是整条会话的累计）。工头子流程不计（与累计口径同一谓词）。 */
 export function countRunSteps(events: readonly AgentEvent[]): number {
   // 找不到 user_message 时返回 0，而不是把整条会话的历史步数冒充成本轮——状态条宁可空着。
   let start = events.length;
   for (let i = events.length - 1; i >= 0; i -= 1) {
-    if (events[i]!.type === "user_message") { start = i + 1; break; }
+    const event = events[i]!;
+    if (event.type === "user_message" && !isWorkerSubflowEvent(event) && event.origin?.kind !== "steering") { start = i + 1; break; }
   }
   let steps = 0;
   for (let i = start; i < events.length; i += 1) {

@@ -1,10 +1,12 @@
 /* Settings keeps the workbench palette; spacing and alignment carry its hierarchy. */
 .sp-page .sp-shell { grid-template-columns: 208px minmax(0, 1fr); }
-.sp-page .sp-nav { background: hsl(var(--bg-200)); padding: 20px 12px 16px; gap: 3px; }
-.sp-page .sp-nav-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px 10px 10px; }
+.sp-page .sp-nav { background: hsl(var(--bg-200)); padding: 20px 12px 16px; gap: 3px; overflow: hidden; }
+.sp-page .sp-nav-head { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px 10px 10px; }
 .sp-page .sp-nav-title { font-size: var(--fs-body-lg); }
 .sp-page .sp-back { margin: 0; }
-.sp-page .sp-nav-search { height: 32px; margin-bottom: 8px; padding: 0 8px; }
+.sp-page .sp-nav-search { height: 32px; margin-bottom: 8px; padding: 0 2px 0 8px; }
+.sp-page .sp-nav-search-x { width: 28px; height: 28px; border-radius: var(--radius-xs); }
+.sp-page .sp-nav-sections { flex: 1; min-height: 0; overflow-y: auto; }
 .sp-page .sp-nav-item { min-height: 34px; height: auto; padding: 7px 10px; font-size: var(--fs-body-sm); text-align: left; }
 .sp-page .sp-nav-group + .sp-nav-group { margin-top: 12px; }
 .sp-page .sp-nav-label { padding: 4px 10px 6px; }

@@ -9,7 +9,7 @@
 //   2026-11-03：页脚用户菜单整体下架——设置/外观/用量/关于搬到全局左轨底部的头像入口
 //     （components/AccountMenu.tsx），侧栏只保留会话上下文。
 // 文案一律走 STR（strings.ts——源文扫描判卷钉死）；图标 = lucide（ADR 0003）；会话行菜单 = Radix。
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { readMotionPref, setMotionPref, type MotionPref } from "../state/motion-pref";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Archive, Check, ChevronRight, Filter, Folder, GitBranch, Loader2, MoreHorizontal, Pencil, Pin, Plus, Search, X } from "lucide-react";
@@ -29,6 +29,8 @@ import { useNow } from "../useNow";
 import { ModalSurface } from "./ModalSurface";
 import { AddProjectMenu } from "./AddProjectMenu";
 import { SessionFilterMenu } from "./SessionFilterMenu";
+import { menuNavIndex } from "./popover-keys";
+import { toast } from "../toast";
 import "./sidebar-filter.css";
 
 /** 会话筛选（2026-10-25）：词表/纯函数在 sessions-view.ts，侧栏此前硬编码 filter:"all"。
@@ -344,19 +346,51 @@ function ProjectContextMenu(props: {
   onRemove: () => void;
 }): React.JSX.Element {
   const ref = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    const onDown = (e: MouseEvent): void => {
-      if (ref.current !== null && !ref.current.contains(e.target as Node)) props.onClose();
+  const closeRef = useRef(props.onClose);
+  closeRef.current = props.onClose;
+  const [position, setPosition] = useState(props.at);
+  useLayoutEffect(() => {
+    const surface = ref.current;
+    if (surface === null) return;
+    // 原生顶层避免通知卡盖住操作；开关状态仍由当前组件管理。
+    surface.setAttribute("popover", "manual");
+    surface.showPopover();
+    const place = (): void => {
+      const menu = ref.current;
+      if (menu === null) return;
+      setPosition({
+        x: Math.max(8, Math.min(props.at.x, window.innerWidth - menu.offsetWidth - 8)),
+        y: Math.max(8, Math.min(props.at.y, window.innerHeight - menu.offsetHeight - 8)),
+      });
     };
-    const onKey = (e: KeyboardEvent): void => { if (e.key === "Escape") props.onClose(); };
+    place();
+    window.addEventListener("resize", place);
+    return () => {
+      window.removeEventListener("resize", place);
+      if (surface.isConnected && surface.matches(":popover-open")) surface.hidePopover();
+    };
+  }, [props.at.x, props.at.y]);
+  useEffect(() => {
+    const menu = ref.current;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    menu?.querySelector<HTMLButtonElement>("button")?.focus();
+    const onDown = (e: MouseEvent): void => {
+      if (menu !== null && !menu.contains(e.target as Node)) closeRef.current();
+    };
+    const onKey = (e: KeyboardEvent): void => { if (e.key === "Escape") closeRef.current(); };
     window.addEventListener("mousedown", onDown);
     window.addEventListener("keydown", onKey);
-    return () => { window.removeEventListener("mousedown", onDown); window.removeEventListener("keydown", onKey); };
-  }, [props]);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+      if (previous?.isConnected && (document.activeElement === document.body || menu?.contains(document.activeElement))) previous.focus();
+    };
+  }, []);
   const item = (label: string, tip: string, run: () => void, danger = false): React.JSX.Element => (
     <button
       className={"menu-item" + (danger ? " danger-text" : "")}
       role="menuitem"
+      tabIndex={-1}
       title={tip}
       onClick={() => { props.onClose(); run(); }}
     >
@@ -368,7 +402,17 @@ function ProjectContextMenu(props: {
       ref={ref}
       className="pop show ctx-menu"
       role="menu"
-      style={{ left: Math.min(props.at.x, window.innerWidth - 220), top: props.at.y }}
+      style={{ left: position.x, top: position.y }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); props.onClose(); return; }
+        if (e.key === "Tab") { props.onClose(); return; }
+        const items = [...e.currentTarget.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]')];
+        const next = menuNavIndex(e.key, items.indexOf(document.activeElement as HTMLButtonElement), items.length);
+        if (next === null) return;
+        e.preventDefault();
+        e.stopPropagation();
+        items[next]?.focus();
+      }}
     >
       {item(STR.projectMenu.reveal, STR.projectMenu.revealTip, props.onReveal)}
       {item(STR.projectMenu.rename, STR.projectMenu.renameTip, props.onRename)}
@@ -393,6 +437,7 @@ export function ProjectSettingsDialog(props: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const nameInput = useRef<HTMLInputElement | null>(null);
+  const close = () => { if (!busy) props.onClose(); };
   /** 回车 = 保存（按钮同一条路）；空名给错误、不关面板。 */
   const submit = () => {
     if (busy) return;
@@ -402,21 +447,22 @@ export function ProjectSettingsDialog(props: {
     setError(null);
     void props.onSave({ name: trimmed, defaultLocation: location }).then(
       () => { props.onClose(); },
-      (err: unknown) => { setError(err instanceof Error ? err.message : String(err)); setBusy(false); },
+      (err: unknown) => { setError(STR.projectSettings.failed.replace("{reason}", err instanceof Error ? err.message : String(err))); setBusy(false); },
     );
   };
   return (
-    <div className="modal-backdrop" role="presentation" onClick={props.onClose}>
+    <div className="modal-backdrop" role="presentation" onClick={close}>
       <ModalSurface
         className="modal-card"
         label={STR.projectSettings.title}
-        onClose={props.onClose}
+        onClose={close}
+        aria-busy={busy}
         initialFocusRef={nameInput}
         onClick={(e) => { e.stopPropagation(); }}
       >
         <div className="modal-head">
           <span>{STR.projectSettings.title}</span>
-          <button className="iconbtn sm" aria-label={STR.projectSettings.close} title={STR.projectSettings.close} onClick={props.onClose}>
+          <button className="iconbtn sm" aria-label={STR.projectSettings.close} title={STR.projectSettings.close} disabled={busy} onClick={close}>
             <X size={13} />
           </button>
         </div>
@@ -425,6 +471,7 @@ export function ProjectSettingsDialog(props: {
           <input
             ref={nameInput}
             value={name}
+            disabled={busy}
             onChange={(e) => { setName(e.target.value); }}
             aria-label={STR.projectSettings.nameLabel}
             onKeyDown={(e) => { if (e.key === "Enter" && !isCompositionEnter(e, null)) { e.preventDefault(); submit(); } }}
@@ -437,8 +484,12 @@ export function ProjectSettingsDialog(props: {
             <button
               className="mini-btn"
               title={STR.projectSettings.locationHint}
+              disabled={busy}
               onClick={() => {
-                void props.onPickDirectory().then((picked) => { if (picked !== null) setLocation(picked); });
+                setError(null);
+                void props.onPickDirectory().then((picked) => { if (picked !== null) setLocation(picked); }).catch((err: unknown) => {
+                  setError(STR.newProject.locationFailed.replace("{reason}", err instanceof Error ? err.message : String(err)));
+                });
               }}
             >
               {STR.projectSettings.change}
@@ -448,14 +499,14 @@ export function ProjectSettingsDialog(props: {
         </div>
         {error !== null && <div className="form-error" role="alert">{error}</div>}
         <div className="modal-foot">
-          <button className="mini-btn" title={STR.common.cancel} onClick={props.onClose}>{STR.common.cancel}</button>
+          <button className="mini-btn" title={STR.common.cancel} disabled={busy} onClick={close}>{STR.common.cancel}</button>
           <button
             className="mini-btn primary"
             title={STR.projectRename.save}
             disabled={busy}
             onClick={submit}
           >
-            {busy ? STR.common.creating : STR.projectRename.save}
+            {busy ? STR.projectSettings.saving : STR.projectRename.save}
           </button>
         </div>
       </ModalSurface>
@@ -550,6 +601,11 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
   };
   const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
   const [renamingProject, setRenamingProject] = useState<{ id: string; value: string } | null>(null);
+  const renameProject = (project: ProjectRecord, name: string): void => {
+    void props.onUpdateProject(project, { name }).catch((err: unknown) => {
+      toast.error(STR.projectRename.failed.replace("{reason}", err instanceof Error ? err.message : String(err)));
+    });
+  };
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; project: ProjectRecord } | null>(null);
   const [settingsFor, setSettingsFor] = useState<ProjectRecord | null>(null);
   // 侧栏会话搜索（2026-10-18 接通）：筛选纯函数与词表（filterSessions / SESSION_FILTERS）
@@ -873,7 +929,7 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
                         if (e.key === "Enter" && !isCompositionEnter(e, null)) {
                           e.preventDefault();
                           const v = renamingProject.value.trim();
-                          if (v !== "" && v !== project.name) void props.onUpdateProject(project, { name: v });
+                          if (v !== "" && v !== project.name) renameProject(project, v);
                           setRenamingProject(null);
                         } else if (e.key === "Escape") {
                           e.preventDefault();
@@ -882,7 +938,7 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
                       }}
                       onBlur={() => {
                         const v = renamingProject.value.trim();
-                        if (v !== "" && project !== null && v !== project.name) void props.onUpdateProject(project, { name: v });
+                        if (v !== "" && project !== null && v !== project.name) renameProject(project, v);
                         setRenamingProject(null);
                       }}
                     />
@@ -1001,6 +1057,8 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
             void props.onPickDirectory().then((picked) => {
               if (picked !== null) return props.onRelocateProject(project, picked);
               return undefined;
+            }).catch((err: unknown) => {
+              toast.error(STR.projectMenu.relocateFailed.replace("{reason}", err instanceof Error ? err.message : String(err)));
             });
           }}
           onRemove={() => { void props.onRemoveProject(ctxMenu.project); }}

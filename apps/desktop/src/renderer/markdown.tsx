@@ -8,6 +8,7 @@ import { Fragment, memo, useEffect, useRef, useState } from "react";
 import { Check, Copy, Image as ImageIcon } from "lucide-react";
 import { STR } from "./strings";
 import { ImageLightbox } from "./components/ImageLightbox";
+import { isWebLink, requestBrowserOpen } from "./browser-link";
 
 export type Block =
   | { type: "heading"; level: number; text: string }
@@ -189,7 +190,7 @@ const URL_TAIL = /[.,;:!?。，、；：！？)】》」』]+$/;
  *  历史正文一个字都不多包 ⇒ DOM 与改动前同形。
  *  key 用该次调用内的词序：词**长出来**时（"wor" → "world"）节点不重挂 ⇒ 动画不重播；
  *  新词出现 = 新节点 ⇒ 动画只播一次。 */
-export function renderInline(text: string, arrival?: boolean): React.ReactNode[] {
+export function renderInline(text: string, arrival?: boolean, links: "interactive" | "text" = "interactive"): React.ReactNode[] {
   const out: React.ReactNode[] = [];
   let last = 0;
   let key = 0;
@@ -201,6 +202,10 @@ export function renderInline(text: string, arrival?: boolean): React.ReactNode[]
       out.push(<span className="md-word" key={`w${String(key++)}`}>{part}</span>);
     }
   };
+  const pushLink = (url: string, label: string): void => {
+    if (links === "text") { pushText(label); return; }
+    out.push(<a key={key++} href={url} target="_blank" rel="noreferrer" onClick={(e) => { if (!isWebLink(url)) return; e.preventDefault(); requestBrowserOpen(url); }}>{label}</a>);
+  };
   for (const m of text.matchAll(INLINE)) {
     const idx = m.index ?? 0;
     if (idx > last) pushText(text.slice(last, idx));
@@ -211,16 +216,17 @@ export function renderInline(text: string, arrival?: boolean): React.ReactNode[]
     else if (tok.startsWith("*")) out.push(<em key={key++}>{tok.slice(1, -1)}</em>);
     else if (tok.startsWith("http")) {
       // 裸 URL（2026-10-18）：模型常直接贴地址；尾部标点留给正文，不进 href。
+      // 链接直达侧栏浏览器（2026-11-05 业主）：http(s) 点击拦下走 browser 窗格，不再跳系统浏览器。
       const url = tok.replace(URL_TAIL, "");
       const tail = tok.slice(url.length);
-      out.push(<a key={key++} href={url} target="_blank" rel="noreferrer">{url}</a>);
+      pushLink(url, url);
       if (tail !== "") out.push(tail);
     }
     else {
       const cut = tok.indexOf("](");
       const label = tok.slice(1, cut);
       const href = tok.slice(cut + 2, -1);
-      out.push(<a key={key++} href={href} target="_blank" rel="noreferrer">{label}</a>);
+      pushLink(href, label);
     }
     last = idx + tok.length;
   }

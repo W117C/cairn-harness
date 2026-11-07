@@ -30,7 +30,7 @@ import { decideLastSessionRestore,parseLastSession,serializeLastSession,type Las
 import { changedFileCount } from "../changed-files";
 import { nextPermissionMode } from "../permission-labels";
 import { usePermissionConfirm } from "./use-permission-confirm";
-import { countRunSteps,countToolSteps,deliveryTrail,formatRevertNotice,mergeSessionSnapshot,projectStream,turnDelivery,usageAggregate,usageSummary } from "../projections";
+import { deliveryTrail,formatRevertNotice,mergeSessionSnapshot,projectStream,turnDelivery,usageAggregate,usageSummary } from "../projections";
 import { type QuickStartInput } from "../quick-starts";
 import type { SurfaceError } from "../surface-error";
 import { composerLockReason,fromSessionQueueEntries,type QueuedSend } from "../send-queue";
@@ -413,7 +413,16 @@ export function useWorkbenchModel() {
   useEmptySurfaceEffects({ showEmpty, activeWorkspace, setEmptyData, emptyCache, sessionsLoaded, sessionsRef, composerZoneRef, prevEmptyRect });
 
     const refreshProviderInfo = useCallback(() => {
-    return window.agent.getProviderInfo().then(setProviderInfo);
+    // 「静默丢弃要出声」（对齐第十八波 CLI 门迟到决议的出声纪律）：provider-info 解析失败
+    // （如窗口工作区切走清空了自定义 provider 注册表，settings.provider 指的厂家不在场 ⇒ IPC
+    // 抛「未知主会话 provider」）此前被调用方 void 掉——模型 chip 挂着旧名、选择器列表空、
+    // 无任何解释，用户要等发送时才见错。现在：失败 = 诚实降级（info 落 null，选择器走空列表、
+    // 芯片回落原始 id）+ 一条可见通知；与 SettingsPanel 的 .catch(() => setPvInfo(null)) 降级
+    // 同式，但多出声这一步。
+    return window.agent.getProviderInfo().then(setProviderInfo).catch((err: unknown) => {
+      setProviderInfo(null);
+      setLastNotice(`主会话模型目录不可用：${err instanceof Error ? err.message : String(err)}`);
+    });
   }, []);
 
   const refreshProviderKeys = useCallback(() => {
@@ -472,6 +481,9 @@ export function useWorkbenchModel() {
   }, []);
 
   const openSession = useCallback((id: string, workspace?: string) => {
+    // 从插件/记忆/自动化页打开会话时，chat 面此刻是 hidden+inert；先回到 chat，
+    // 否则命令面板关了、会话也开了，用户眼前却什么都没发生（2026-11-05 审计）。
+    openDestination("chat");
     activate(id);
     // 显式 workspace 优先（跨项目同名 id）：不给才按 id 查；两个都对上才认，绝不退回同名 id。
     const sessionWs = workspace ?? findSessionByRef(sessionsRef.current, id)?.workspace ?? null;
@@ -537,7 +549,7 @@ export function useWorkbenchModel() {
       setSessionLoadIssue(failures.length === 0 ? null : { seq, message: failures.join("\n") });
       setQueueLoading(false);
     });
-  }, [activate, setLastError, setQueueLocal, touchWorkspace]);
+  }, [activate, openDestination, setLastError, setQueueLocal, touchWorkspace]);
 
   const sessionLoadError = activeId !== null && sessionLoadIssue?.seq === openSeq.current
     ? sessionLoadIssue.message : null;
@@ -573,6 +585,13 @@ export function useWorkbenchModel() {
     setLastError, setLastNotice, setDraftRemap, draftRemapSeq, setEvents, setSessionView, setQueueLoading,
     openSeq, activeWorkspaceRef, touchWorkspace, runningSet, setArchiveConfirm, setDeleteConfirm,
   });
+  // 新任务同样要从目的地页回到 chat：⌘N / 命令面板 / 侧栏「新任务」共用一个出口，
+  // 否则在插件/记忆/自动化页按 ⌘N 只会清空一个当前不可见的聊天面。
+  const newSessionInChat = useCallback(() => {
+    openDestination("chat");
+    newSession();
+  }, [newSession, openDestination]);
+  newSessionRef.current = newSessionInChat;
   // 消息级动作簇（Phase 2 · 批 2.3）：分叉 / 撤回（编辑并重发）/ 朗读 / 压缩 / 目标动作 / 快照还原。
   // 撤回（编辑）前停生成：cancelRunHeal 声明在后，经 ref 晚绑（revealInspectorRef 同款）。
   const cancelRunHealRef = useRef<((sid: string) => void) | null>(null);
@@ -760,18 +779,11 @@ export function useWorkbenchModel() {
   // 这样后台会话的排队不因切换会话而丢失，自动派发也只认原会话。
   const { queueSaving, queueSaveFailed, setQueueFor, send, sendTo, sendWithGoal, handleRetryLast, resumeQueue, resumeQueueFor, cancelRunHeal } = useRunQueue({ setQueueLocal, queueWrites, queueDirty, setLastError, sendQueue, setStoppedIds, runningSet, lastDeltaAt, runGen, runStartBySession, force, thinkingBySession, pendingThinking, modeRef, selections, activeId, editCtxRef, setEditCtx, askById, setLastNotice, queueSeq, setPendingSend, activeWorkspace, setActiveWorkspace, activate, refreshSessions, setDraftRestore, draftRestoreSeq, compactNow, activeIdRef, eventsRef });
   cancelRunHealRef.current = cancelRunHeal; // 撤回（编辑）晚绑
-    const { lastError, lastNotice, runningActive, modelWaiting, pendingClarify, pendingPlan, askForActive, phase, stopped, phaseLabel, chosen, pickerValue } = useRunReadings({ sessionErrors, activeId, sessionNotices, runningSet, setElapsedSec, runStartBySession, events, askBySid, stoppedIds, lastDeltaAt, selections, providerInfo, activeWorkspace });
+  const { lastError, lastNotice, runningActive, modelWaiting, pendingClarify, pendingPlan, askForActive, phase, stopped, phaseLabel, chosen, pickerValue, chosenCtx, steps, runSteps } = useRunReadings({ sessionErrors, activeId, sessionNotices, runningSet, setElapsedSec, runStartBySession, events, askBySid, stoppedIds, lastDeltaAt, selections, providerInfo, activeWorkspace });
   useSessionPrefsHydration({ sessions, selections, thinking: thinkingBySession, force });
     const usage = usageAggregate(events);
   // 头像菜单「用量统计」面板的数据（批 130）：当前会话口径，纯投影 ⇒ 判卷可测。
   const usageStats = useMemo(() => usageSummary(events), [events]);
-  // 状态条数据：步数（主会话 tool_call 计数）与所选模型窗口（上下文水位）。
-  const steps = countToolSteps(events);
-  const runSteps = countRunSteps(events);
-  const chosenCtx = (() => {
-    const spec = providerInfo?.models.find((m) => m.id === pickerValue);
-    return spec?.ctxWindow;
-  })();
   // 变更审阅指示器（蓝本 §3.6）：改动出现即顶栏徽标亮数（去重文件数）。
   const fileCount = useMemo(() => changedFileCount(events), [events]);  // 来源视图：分叉会话的转录 = 祖先前缀 + 本地有效历史 + 快照之后的实时增量。
   // 非分叉会话保持旧路径（events 原样进投影，字节不变）。
@@ -891,7 +903,7 @@ export function useWorkbenchModel() {
     setFindOpen(true);
     findRef.current?.focus();
   }, []);
-  useAppCommands({ togglePane, closeLastPane, newSession, cycleSession, cycleView, openComposerMenu, toggleSidebar, togglePluginSidebar, closePluginSidebar, pluginSidebarOpen, cancelRunHeal, runningActive, activeId, cheatOpen, toggleCheat, closeCheat, ctrlTabCycle, composerMenuBlock, askForActive, pendingClarify, pendingPlan, requestPickElement, outlineOpen, setOutlineOpen, stick, toggleInspector, toggleFocusMode, handleOpenPalette, pickAndAddProject, setSettingsSection, setSettingsOpen, paletteOpen, findOpen, setFindOpen, closeFind, startBarRename, findStep, closeSessionToHome, cycleSessionOrToast, handlePaletteAction, openFindBar, findRef, setDragOverApp, projectsRef, handleAddProject });
+  useAppCommands({ togglePane, closeLastPane, newSession: newSessionInChat, cycleSession, cycleView, openComposerMenu, toggleSidebar, togglePluginSidebar, closePluginSidebar, pluginSidebarOpen, cancelRunHeal, runningActive, activeId, cheatOpen, toggleCheat, closeCheat, ctrlTabCycle, composerMenuBlock, askForActive, pendingClarify, pendingPlan, requestPickElement, outlineOpen, setOutlineOpen, stick, toggleInspector, toggleFocusMode, handleOpenPalette, pickAndAddProject, setSettingsSection, setSettingsOpen, paletteOpen, findOpen, setFindOpen, closeFind, startBarRename, findStep, closeSessionToHome, cycleSessionOrToast, handlePaletteAction, openFindBar, findRef, setDragOverApp, projectsRef, handleAddProject });
 
     // v6 交付卡：同一份投影同时供卡片与"最后一轮"判定（恢复上一版只对最后一轮有意义）。
   const deliveries = useMemo(() => turnDelivery(events), [events]);
@@ -982,7 +994,7 @@ export function useWorkbenchModel() {
     toggleFocusMode,
     sidebarCollapsed,
     toggleSidebar,
-    newSession,
+    newSession: newSessionInChat,
     handleOpenPalette,
     openPane,
     setSettingsSection,

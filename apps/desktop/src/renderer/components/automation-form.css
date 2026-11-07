@@ -42,3 +42,15 @@
   .automation-list .ap-item { flex-wrap: wrap; }
   .automation-list .ap-item .r { width: 100%; }
 }
+
+.automation-views { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
+.idle-task-section { display: grid; gap: var(--space-md); }
+.idle-task-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: start; gap: var(--space-sm); }
+.idle-task-heading h2 { margin: 0; font-size: var(--fs-body-lg); }
+.idle-task-heading p { margin: var(--space-xs) 0 0; overflow-wrap: anywhere; }
+.idle-task-list { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--hairline); }
+.idle-task-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: start; gap: var(--space-sm); padding: var(--space-sm) 0; border-bottom: 1px solid var(--hairline); }
+.idle-task-row details { flex: 1 1 200px; min-width: 0; }
+.idle-task-row summary { cursor: pointer; overflow-wrap: anywhere; }
+.idle-task-row p { overflow-wrap: anywhere; }
+.idle-task-actions { display: flex; flex-wrap: wrap; gap: var(--space-xs); }

@@ -3,7 +3,7 @@ import type { Dispatch,MutableRefObject,SetStateAction } from 'react';
 // useRunReadings: extracted without changing event or callback behavior.
 import { useEffect, useMemo } from "react";
 import type { AgentEvent,AskPayload,ProviderInfo } from "../../../../../src/main/ipc-protocol";
-import { deriveRunPhase,elapsedSecondsFor,hasAssistantTextThisRun,pendingClarifyOf,pendingPlanOf,runPhaseLabel } from "../projections";
+import { countRunSteps,countToolSteps,deriveRunPhase,elapsedSecondsFor,hasAssistantTextThisRun,pendingClarifyOf,pendingPlanOf,runPhaseLabel } from "../projections";
 import { waitingForModel } from "../derived/model-waiting";
 import type { SurfaceError } from "../surface-error";
 
@@ -59,9 +59,12 @@ export function useRunReadings(deps: RunReadingsDeps) {
   const phaseLabel = runPhaseLabel({ phase, stopped, running: runningActive, hasAnswerText, answerQuiet });
   const chosen = activeId !== null ? selections.current.get(runKey(activeWorkspace, activeId)) : undefined;
   const pickerValue = chosen !== undefined ? chosen : (providerInfo?.modelId ?? null);
+  const chosenCtx = providerInfo?.models.find((model) => model.id === pickerValue)?.ctxWindow;
+  const steps = countToolSteps(events);
+  const runSteps = countRunSteps(events);
 
   const startedAt = runStartBySession.current.get(activeId ?? "");
   const blocked = askForActive !== null || pendingClarify !== null || pendingPlan !== null;
   const modelWaiting = useMemo(() => waitingForModel({ events, running: runningActive, startedAt, blocked }), [events, runningActive, startedAt, blocked]);
-  return { lastError, lastNotice, runningActive, modelWaiting, pendingClarify, pendingPlan, askForActive, phase, stopped, phaseLabel, chosen, pickerValue };
+  return { lastError, lastNotice, runningActive, modelWaiting, pendingClarify, pendingPlan, askForActive, phase, stopped, phaseLabel, chosen, pickerValue, chosenCtx, steps, runSteps };
 }

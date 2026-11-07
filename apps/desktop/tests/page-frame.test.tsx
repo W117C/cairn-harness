@@ -20,6 +20,8 @@ describe("PageFrame", () => {
     expect(html).toContain('aria-label="搜索插件"');
     expect(html).toContain('<select');
     expect(html).toContain('<option value="all" selected="">全部</option>');
+    expect(html).toContain('class="page-frame-filter-chips"');
+    expect(html).toContain('aria-pressed="true"');
     expect(html).toContain("content");
   });
 

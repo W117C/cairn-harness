@@ -1,5 +1,6 @@
 import type { UsageLedgerAnalyticsPayload, UsageLedgerBucketPayload } from "../../../../../../src/main/ipc-protocol";
 import { formatTokens } from "../../derived/format-tokens";
+import { STR } from "../../strings";
 
 export type UsageMetrics = Omit<UsageLedgerBucketPayload, "day" | "model">;
 export type UsageDay = UsageMetrics & { day: string; sessions: number; rounds: number; toolSteps: number };
@@ -66,12 +67,12 @@ export function usageCsv(period: ReturnType<typeof usagePeriod>): string {
     return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
   };
   const rows: (string | number)[][] = [
-    ["日期", "输入Token", "输出Token", "缓存读取Token", "用量记录", "输入缺测", "输出缺测"],
+    [STR.usageCsv.date, STR.usageCsv.inputTokens, STR.usageCsv.outputTokens, STR.usageCsv.cacheRead, STR.usageCsv.usageCount, STR.usageCsv.inputMissing, STR.usageCsv.outputMissing],
   ];
   for (const day of period.days) {
     rows.push([day.day, day.inputTokens, day.outputTokens, day.cacheReadTokens, day.usageCount, day.usageCount - day.inputMeasured, day.usageCount - day.outputMeasured]);
   }
   const t = period.totals;
-  rows.push(["合计", t.inputTokens, t.outputTokens, t.cacheReadTokens, t.usageCount, t.usageCount - t.inputMeasured, t.usageCount - t.outputMeasured]);
+  rows.push([STR.usageCsv.total, t.inputTokens, t.outputTokens, t.cacheReadTokens, t.usageCount, t.usageCount - t.inputMeasured, t.usageCount - t.outputMeasured]);
   return rows.map((row) => row.map(esc).join(",")).join("\n") + "\n";
 }

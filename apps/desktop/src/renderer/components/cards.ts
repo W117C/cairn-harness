@@ -89,6 +89,9 @@ export function describeAsk(ask: { tool?: string; args?: Record<string, unknown>
     return { title: "应用补丁", ...(head !== undefined ? { subject: head } : {}), body: patch ?? JSON.stringify(args) };
   }
   if (tool === "web_fetch") return { title: "访问网络", subject: s(args.url) };
+  if (tool === "browser_navigate") return { title: "打开浏览器页面", subject: s(args.url) };
+  if (tool === "browser_snapshot") return { title: "读取浏览器页面" };
+  if (tool === "browser_pick") return { title: "查找网页元素", body: s(args.selector) };
   if (tool === "web_search") {
     // 端点必须在卡上（2026-10-19 独立评审追出）：端点不在模型给的 args 里
     // （它来自工作区的 `.agent/config.json`）⇒ 卡上只有 `{"query":"…"}`，人不知道这次要把

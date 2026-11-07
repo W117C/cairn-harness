@@ -46,6 +46,10 @@ async function main(): Promise<void> {
   const actions: { path: string; action: string }[] = [];
   ipcMain.handle(INVOKE_CHANNELS.protocolVersion, () => IPC_PROTOCOL_VERSION);
   ipcMain.handle(INVOKE_CHANNELS.getSettings, () => ({ theme: 'system' }));
+  // v33 窗口可见上报（workbench.ts 挂载即 fire-and-forget）：生产主进程在 index.ts 注册了
+  // reportViewing；本桩此前没跟上 ⇒ 渲染层一挂载就吃一条 unhandled rejection，
+  // 被「渲染无控制台错误」那条判据当场抓红。桩收下即可（ smoke 不消费上报值）。
+  ipcMain.handle(INVOKE_CHANNELS.reportViewing, () => ({ ok: true }));
   ipcMain.handle(INVOKE_CHANNELS.workspaceListDir, async (_event, path: string) => {
     const n = (dirCalls.get(path) ?? 0) + 1; dirCalls.set(path, n);
     if (path === '01-delayed' && n === 1) return new Promise<ListDirPayload>(done => pendingDirs.push(done));

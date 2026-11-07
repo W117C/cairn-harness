@@ -68,7 +68,7 @@ async function main() {
   };
   const capCalls = () => js(`window.__cairnSettingsCalls().filter((p) => p.scheduleConcurrencyCap !== undefined).map((p) => p.scheduleConcurrencyCap)`);
 
-  await win.loadFile(join(__dirname, "../dist/index.html"));
+  await win.loadFile(process.env.CAIRN_RENDERER_ENTRY ?? join(__dirname, "../dist/index.html"));
   await pause(1400);
 
   await openSettings();

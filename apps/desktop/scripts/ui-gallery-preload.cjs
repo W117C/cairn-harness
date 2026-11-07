@@ -110,6 +110,8 @@ const SETTINGS = {
   // 字号档 / 尺寸档同理缺不得：真主进程装载时会把非法值兜回 md/2（settings.ts:282·284），
   // 夹具缺这两个键会让设置·通用页的两排分段控件**一档都不亮**（分段控件自查当场红）。
   textSize: "md", uiSize: "2",
+  // 个性化（2026-11-05）：迁移/个性化两页都读这一格；缺键会让「已保存」回读成 undefined。
+  customInstructions: "",
 };
 
 /** 设置读写的活体状态（2026-10-30）：真主进程 setSettings 回**合并后**的设置。
@@ -365,6 +367,63 @@ const stub = {
     });
   },
   doctor: reply({ ok: true, report: DOCTOR_REPORT }),
+  // 2026-11-05 设置面新增的四组读接口。这里给的是**能渲染出内容**的夹具，不是空对象：
+  // 空对象会让页面在 .map/.length 上抛错，设置逐页自查会把「证人缺料」读成「产品崩了」。
+  subagentSettingsList: reply({
+    concurrencyCap: 4,
+    roles: [
+      { invoke: "implement", description: "", source: "builtin" },
+      { invoke: "review", description: "", source: "builtin" },
+      { invoke: "test", description: "", source: "builtin" },
+      { invoke: "review-checker", description: "审查变更并给出验证步骤。", source: "cairn", file: "review-checker.md" },
+      { invoke: "claude-helper", description: "Claude Code 里的自定义角色。", source: "claude" },
+    ],
+    warnings: [],
+  }),
+  subagentSettingsRead: reply({
+    markdown: "---\ndescription: 审查变更\n---\n找出可能的回归并给出验证步骤。",
+    revision: "role-rev-1",
+  }),
+  subagentSettingsSave: reply(undefined),
+  subagentSettingsRemove: reply(undefined),
+  mcpUserConfig: reply({
+    ok: true, path: "/Users/demo/.cairn/mcp.json", revision: "mcp-rev-1",
+    servers: [
+      { name: "filesystem", config: { command: "npx", args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"] } },
+      { name: "search", config: { url: "https://example.com/mcp", type: "http", headers: { Authorization: "Bearer demo" } } },
+    ],
+    errors: [],
+  }),
+  mcpUserSave: reply({ ok: true, revision: "mcp-rev-2" }),
+  mcpUserProbe: reply({ ok: true, tools: ["read_file", "write_file", "list_directory"], toolCount: 3 }),
+  hooksUserConfig: reply({
+    ok: true, path: "/Users/demo/.cairn/hooks.json", revision: "hooks-rev-1",
+    hooks: {
+      SessionStart: [{ hooks: [{ type: "command", command: "echo 'cairn session start'" }] }],
+      PreToolUse: [{ matcher: "run_shell", hooks: [{ type: "command", command: ["/usr/bin/true", "--dry-run"] }] }],
+    },
+    errors: [],
+  }),
+  hooksUserSave: reply({ ok: true, revision: "hooks-rev-2" }),
+  settingsPreviewMigration: reply({
+    id: "preview-demo",
+    items: [
+      { id: "instructions", kind: "instructions", name: "CLAUDE.md · 全局指令", status: "ready", detail: "3 段，约 420 字" },
+      { id: "mcp-filesystem", kind: "mcp", name: "filesystem", status: "collision", detail: "Cairn 已有同名服务器，导入时保留现有配置" },
+      { id: "mcp-search", kind: "mcp", name: "search", status: "ready", detail: "HTTP 服务器" },
+      { id: "hooks", kind: "unsupported", name: "Hooks", status: "unsupported", detail: "暂不支持迁移 Hooks，可在 Hooks 页手动添加" },
+    ],
+  }),
+  settingsApplyMigration: reply({ imported: ["instructions", "mcp-search"], skipped: [{ id: "mcp-filesystem", detail: "同名保留" }] }),
+  idleTaskList: reply({
+    workspace: "/tmp/demo-ws",
+    tasks: [
+      { id: "01JA2B3C4D5E6F7G8H9J0K1M2N", name: "整理本周笔记", prompt: "把本周的会话笔记整理成摘要", permissionTier: "workspace-write", status: "queued", timeZone: "Asia/Shanghai", createdAt: new Date(now - 3_600_000).toISOString(), updatedAt: new Date(now - 3_600_000).toISOString() },
+      { id: "01JA2B3C4D5E6F7G8H9J0K1M2P", name: "汇总竞品动态", prompt: "汇总竞品本周更新", permissionTier: "read-only", status: "succeeded", timeZone: "Asia/Shanghai", createdAt: new Date(now - 7_200_000).toISOString(), updatedAt: new Date(now - 6_000_000).toISOString(), sessionId: "s-idle-demo" },
+    ],
+  }),
+  idleTaskEnqueue: reply({ ok: true }),
+  idleTaskUpdate: reply({ ok: true }),
   getSettings: reply(() => ({ ...settingsState })),
   setSettings: (patch) => {
     cairnSettingsCalls.push(patch);
@@ -1236,6 +1295,14 @@ if (process.argv.includes("--cairn-same-id-workspace-fixture")) {
   }
 }
 
+// 工作进度验收：两个会话各有历史清单，便于检查键盘切换时的状态归属。
+if (process.argv.includes("--cairn-work-status-fixture")) {
+  stub.listSessions = reply([DEMO_SESSION, DEMO_SESSION_2]);
+  stub.openSession = async (id) => ({ events: [...EVENTS, {
+    type: "todo_updated", callId: `history-${id}`,
+    items: [{ text: id === "s1" ? "上一轮核对任务" : "另一会话的任务", state: "done" }],
+  }] });
+}
 // 工作台工具验收专用：让超长标题走正常 rename 回程，不用缺省 {} 冒充合法结果。
 if (process.argv.includes("--cairn-workbench-fixture")) {
   stub.renameSession = async (id, title) => {
@@ -1248,6 +1315,22 @@ if (process.argv.includes("--cairn-workbench-fixture")) {
 // Agent OS shell smoke: synthetic populated/empty/read-error snapshots remain isolated to this window.
 if (process.argv.includes("--cairn-agent-os-fixture")) {
   let mode = "data";
+  const memory = process.argv.includes("--cairn-long-memory-fixture") ? {
+    ...MANY_MEMORY_SNAPSHOT,
+    project: {
+      ...MANY_MEMORY_SNAPSHOT.project,
+      topics: MANY_MEMORY_SNAPSHOT.project.topics.map((topic, index) => {
+        if (index === 1) return { ...topic, body: "[核对记录](http://localhost:5147/notes)" };
+        if (index !== 0) return topic;
+        return {
+          ...topic,
+          body: Array.from({ length: 60 }, (_, line) => line === 2
+            ? "[检查说明](http://localhost:5147/audit)"
+            : `第 ${line + 1} 行：运行检查并记录可复现结果。`).join("\n"),
+        };
+      }),
+    },
+  } : MANY_MEMORY_SNAPSHOT;
   stub.getState = () => new Promise((resolveState, rejectState) => {
     setTimeout(() => {
       if (mode === "error") {
@@ -1256,7 +1339,7 @@ if (process.argv.includes("--cairn-agent-os-fixture")) {
       }
       resolveState({
         plugins: PLUGIN_SNAPSHOT,
-        memory: mode === "empty" ? EMPTY_MEMORY_SNAPSHOT : MANY_MEMORY_SNAPSHOT,
+        memory: mode === "empty" ? EMPTY_MEMORY_SNAPSHOT : memory,
         worktree: { workspace: "/tmp/demo-ws", orphans: [], details: [] },
       });
     }, 30);
@@ -1278,6 +1361,13 @@ if (process.argv.includes("--cairn-agent-os-fixture")) {
     },
     mode: () => mode,
   });
+}
+
+if (process.argv.includes("--cairn-long-memory-fixture")) {
+  const bounds = {};
+  stub.browserOpen = async () => ({ ok: true });
+  stub.browserBounds = async (id, rect) => { bounds[id] = rect; };
+  contextBridge.exposeInMainWorld("__cairnBrowserBounds", () => Object.values(bounds));
 }
 
 // 编排控制面夹具（orchestration-controls-smoke.cjs 专用；不进产品链路）：
@@ -1390,6 +1480,98 @@ if (process.argv.includes("--cairn-open-recovery-fixture")) {
     resolveQueue: (index) => queues[index].resolve({ items: [{ text: queues[index].id + " 持久队列", attachments: [] }] }),
     rejectOpen: (index) => opens[index].reject(new Error("EIO: 无法读取会话正文 /tmp/demo-ws/.agent/sessions/" + opens[index].id + ".jsonl")),
     rejectQueue: (index) => queues[index].reject(new Error("发送队列损坏：/tmp/" + "很长的项目目录/".repeat(16) + "queue.json")),
+  });
+}
+
+if (process.argv.includes("--cairn-form-recovery-fixture")) {
+  const readSettings = stub.getSettings;
+  const writeSettings = stub.setSettings;
+  const pending = [];
+  let failRead = false, failWakeWrite = false, holdInstructions = false, holdWake = false;
+  settingsState.keepAwake = false;
+  stub.getSettings = () => failRead ? Promise.reject(new Error("夹具：设置读取失败")) : readSettings();
+  stub.setSettings = (patch) => {
+    if (Object.hasOwn(patch, "keepAwake") && failWakeWrite) return Promise.reject(new Error("夹具：唤醒设置保存失败"));
+    if ((Object.hasOwn(patch, "customInstructions") && holdInstructions) || (Object.hasOwn(patch, "keepAwake") && holdWake)) {
+      return new Promise((resolve, reject) => pending.push({ patch, resolve, reject }));
+    }
+    return writeSettings(patch);
+  };
+  contextBridge.exposeInMainWorld("__cairnFormRecovery", {
+    failRead: (value) => { failRead = value === true; },
+    failWakeWrite: (value) => { failWakeWrite = value === true; },
+    holdInstructions: (value) => { holdInstructions = value === true; },
+    holdWake: (value) => { holdWake = value === true; },
+    pending: () => pending.length,
+    settleNext: async (ok) => {
+      const request = pending.shift();
+      if (!request) throw Error("没有待结算的设置写入");
+      if (!ok) { request.reject(new Error("夹具：保存失败")); return; }
+      try { request.resolve(await writeSettings(request.patch)); } catch (error) { request.reject(error); }
+    },
+  });
+}
+
+// 项目入口恢复检查：仅操纵内存中的回包，不创建、克隆或登记真实目录。
+if (process.argv.includes("--cairn-project-entry-fixture")) {
+  const records = [{ id: "p1", name: "demo-ws", path: "/tmp/demo-ws", defaultLocation: "/tmp/demo-ws", createdAt: now, updatedAt: now }];
+  const recent = { id: "old", name: "历史项目", path: "/tmp/history-project", defaultLocation: "/tmp/history-project", createdAt: now, updatedAt: now, removedAt: now };
+  const pending = [], updates = [];
+  let failPick = false, failAdd = false, holdUpdate = false, picked = "/tmp/project-entry-parent";
+  // blank 由 WorkbenchView 添加；接口只返回模板，避免画廊旧桩制造重复 radio。
+  stub.projectTemplates = reply([{ id: "static-site", name: "展示网页", description: "项目入口检查模板", runKind: "static" }]);
+  stub.listProjects = (options) => Promise.resolve(options?.includeRemoved ? [...records, recent] : [...records]);
+  stub.pickDirectory = () => failPick ? Promise.reject(new Error("夹具：目录选择失败")) : Promise.resolve(picked);
+  const updateRecord = (input) => {
+    const at = records.findIndex((r) => r.path === input.path);
+    const record = { id: input.path, name: input.path.split("/").at(-1), defaultLocation: input.path, createdAt: now, updatedAt: now, ...records[at], ...input };
+    if (at < 0) records.push(record); else records[at] = record;
+    return record;
+  };
+  stub.addProject = async (input) => {
+    cairnProjectCalls.push({ kind: "addProject", input });
+    if (failAdd) throw new Error("夹具：项目登记失败");
+    if (holdUpdate) return new Promise((resolve, reject) => updates.push({ input, resolve, reject }));
+    return updateRecord(input);
+  };
+  stub.relocateProject = async (id, path) => {
+    cairnProjectCalls.push({ kind: "relocateProject", id, path });
+    const at = records.findIndex((r) => r.id === id);
+    if (at < 0) throw new Error("夹具：找不到项目");
+    const previous = records[at];
+    records[at] = { ...previous, path, defaultLocation: previous.defaultLocation === previous.path ? path : previous.defaultLocation };
+    return records[at];
+  };
+  const hold = (kind, input) => {
+    cairnProjectCalls.push({ kind, input });
+    return new Promise((resolve, reject) => pending.push({ kind, input, resolve, reject }));
+  };
+  stub.createProject = (input) => hold("createProject", input);
+  stub.projectCreateFromTemplate = (input) => hold("projectCreateFromTemplate", input);
+  stub.gitClone = (input) => hold("gitClone", input);
+  stub.projectDiagnose = reply({ verdict: "supported", runKind: "static", form: "static-html", summary: "夹具：静态项目", reasons: ["合成入口 index.html"] });
+  contextBridge.exposeInMainWorld("__cairnProjectEntry", {
+    failPick: (value) => { failPick = value === true; },
+    failAdd: (value) => { failAdd = value === true; },
+    holdUpdate: (value) => { holdUpdate = value === true; },
+    pendingUpdates: () => updates.length,
+    settleUpdate: (ok) => {
+      const request = updates.shift();
+      if (!request) throw Error("没有待结算的项目设置");
+      if (!ok) { request.reject(new Error("夹具：项目更新失败")); return; }
+      request.resolve(updateRecord(request.input));
+    },
+    pick: (value) => { picked = value; },
+    pending: () => pending.map(({ kind, input }) => ({ kind, input })),
+    settleNext: (ok) => {
+      const request = pending.shift();
+      if (!request) throw Error("没有待结算的项目操作");
+      if (!ok) { request.reject(new Error("夹具：项目操作失败")); return; }
+      const name = request.input.name ?? "cloned-project";
+      const path = `${request.input.parentDir ?? "/tmp/project-entry-parent"}/${name}`;
+      if (request.kind !== "gitClone") records.push({ id: path, name, path, defaultLocation: path, createdAt: now, updatedAt: now });
+      request.resolve({ ok: true, name, path });
+    },
   });
 }
 

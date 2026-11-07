@@ -1,6 +1,14 @@
-import { AlertTriangle, Download, Puzzle, Star, WifiOff } from "lucide-react";
+// 插件发现（2026-11-05 业主裁：市场对齐开源 ZCode 的 PluginStoreCard 语言）：
+// 双列卡片网格：40px 能力方块 + 名称/版本/来源徽标 + 单行描述 + 能力行；
+// 未安装 → 「安装」胶囊钮（忙时转圈）；已安装 → 启停 Switch + 悬停露出的卸载（走确认弹窗）。
+// 收藏保留（ZCode 没有此物，Cairn 既有功能不丢），同样悬停露出。
+// 判卷锚不动：data-catalog-state / data-plugin-row="discover" / data-plugin-id。
+import { AlertTriangle, Download, Loader2, Puzzle, Star, Trash2, WifiOff } from "lucide-react";
+import { useState } from "react";
 import type { PluginRowView } from "../../derived/plugins";
 import type { PluginsMarketplaceState } from "../../state/plugins-marketplace";
+import { ConfirmDialog } from "../ConfirmDialog";
+import { Switch } from "../Switch";
 import { PLUGIN_CATEGORY_LABEL, sourceKindLabel } from "./labels";
 
 function capabilityText(row: PluginRowView): string {
@@ -16,48 +24,74 @@ function DiscoverRow(props: {
   onSelect: (id: string) => void;
   onInstall: (id: string) => void;
   onFavorite: (id: string) => void;
+  onUninstall: (row: PluginRowView) => void;
+  onToggle: (row: PluginRowView, enabled: boolean) => void;
+  busy: boolean;
   mutationBlocked: boolean;
 }): React.JSX.Element {
-  const disabled = props.mutationBlocked
-    || props.row.state === "name-conflict"
-    || props.row.state === "unmanaged"
-    || props.row.installed !== null;
+  const row = props.row;
+  const disabled = props.busy || props.mutationBlocked || row.state === "name-conflict" || row.state === "unmanaged";
+  const installed = row.installed !== null;
+  const enabled = row.installed?.enabled === true;
   return (
-    <article className="plugin-discover-row" data-plugin-row="discover" data-plugin-id={props.row.id}>
-      <button type="button" className="plugin-discover-main" onClick={() => { props.onSelect(props.row.id); }}>
-        <span className="plugin-mark" aria-hidden="true"><Puzzle size={17} /></span>
-        <span className="plugin-row-copy">
-          <strong>{props.row.name}</strong>
-          <span>{props.row.summary}</span>
-        </span>
-        <span className="plugin-row-meta">
-          <span>{sourceKindLabel(props.row.sourceKind)}</span>
-          <span>{props.row.version ?? "版本未声明"}</span>
-          <span>{capabilityText(props.row)}</span>
+    <article className="plugin-store-card" data-plugin-row="discover" data-plugin-id={row.id}>
+      <button type="button" className="plugin-store-main" onClick={() => { props.onSelect(row.id); }}>
+        <span className="plugin-mark lg" aria-hidden="true"><Puzzle size={20} /></span>
+        <span className="plugin-store-copy">
+          <span className="plugin-store-title">
+            <strong>{row.name}</strong>
+            {row.version !== null && <span className="plugin-pill">{row.version}</span>}
+            <span className="plugin-pill subtle">{sourceKindLabel(row.sourceKind)}</span>
+          </span>
+          <span className="plugin-store-desc">{row.summary}</span>
+          <span className="plugin-store-meta">{capabilityText(row)}</span>
         </span>
       </button>
-      <button
-        type="button"
-        className="plugin-icon-btn plugin-favorite"
-        aria-label={props.row.favorite ? `取消收藏 ${props.row.name}` : `收藏 ${props.row.name}`}
-        title={props.row.favorite ? "取消收藏" : "收藏"}
-        aria-pressed={props.row.favorite}
-        onClick={() => { props.onFavorite(props.row.id); }}
-      >
-        <Star size={15} fill={props.row.favorite ? "currentColor" : "none"} aria-hidden="true" />
-      </button>
-      {props.row.installed === null && (
+      <div className="plugin-store-actions">
         <button
           type="button"
-          className="plugin-row-action"
-          aria-label={`安装 ${props.row.name}`}
-          title={props.row.state === "name-conflict" ? "存在同名插件" : "安装"}
-          disabled={disabled}
-          onClick={() => { props.onInstall(props.row.id); }}
+          className="plugin-icon-btn plugin-hover-act"
+          aria-label={row.favorite ? `取消收藏 ${row.name}` : `收藏 ${row.name}`}
+          title={row.favorite ? "取消收藏" : "收藏"}
+          aria-pressed={row.favorite}
+          onClick={() => { props.onFavorite(row.id); }}
         >
-          <Download size={15} aria-hidden="true" />
+          <Star size={14} fill={row.favorite ? "currentColor" : "none"} aria-hidden="true" />
         </button>
-      )}
+        {installed ? (
+          <>
+            <Switch
+              checked={enabled}
+              busy={props.busy}
+              disabled={props.mutationBlocked || row.state === "name-conflict" || row.state === "unmanaged"}
+              label={`启用 ${row.name}`}
+              onChange={(next) => { props.onToggle(row, next); }}
+            />
+            <button
+              type="button"
+              className="plugin-icon-btn plugin-danger plugin-hover-act"
+              aria-label={`卸载 ${row.name}`}
+              title="卸载"
+              disabled={disabled}
+              onClick={() => { props.onUninstall(row); }}
+            >
+              <Trash2 size={14} aria-hidden="true" />
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="plugin-pill-btn"
+            aria-label={`安装 ${row.name}`}
+            title={row.state === "name-conflict" ? "存在同名插件" : "安装"}
+            disabled={disabled}
+            onClick={() => { props.onInstall(row.id); }}
+          >
+            {props.busy ? <Loader2 size={13} className="spin" aria-hidden="true" /> : <Download size={13} aria-hidden="true" />}
+            安装
+          </button>
+        )}
+      </div>
     </article>
   );
 }
@@ -67,12 +101,15 @@ export interface PluginDiscoverProps {
   readonly rows: readonly PluginRowView[];
   readonly showShelves: boolean;
   readonly mutationBlocked: boolean;
+  /** 有作业在跑（ZCode StoreCard 的 spinner/禁用口径）。 */
+  readonly busy?: boolean;
 }
 
 export function PluginDiscover(props: PluginDiscoverProps): React.JSX.Element {
   const catalog = props.state.catalog;
   const entries = catalog.catalog?.entries ?? [];
   const stale = catalog.origin === "cache" || catalog.stale;
+  const [uninstall, setUninstall] = useState<PluginRowView | null>(null);
   const renderRow = (row: PluginRowView): React.JSX.Element => (
     <DiscoverRow
       key={row.id}
@@ -80,6 +117,9 @@ export function PluginDiscover(props: PluginDiscoverProps): React.JSX.Element {
       onSelect={(id) => { props.state.select(id); }}
       onInstall={(id) => { void props.state.installPlugin(id, props.state.workspace === null ? "user" : "project"); }}
       onFavorite={props.state.toggleFavorite}
+      onUninstall={setUninstall}
+      onToggle={(row, next) => { void props.state.setPluginEnabled(row, next); }}
+      busy={props.busy === true}
       mutationBlocked={props.mutationBlocked}
     />
   );
@@ -167,6 +207,20 @@ export function PluginDiscover(props: PluginDiscoverProps): React.JSX.Element {
         <section className="plugin-shelf" aria-label={props.showShelves ? "全部插件" : "筛选结果"}>
           <div className="plugin-shelf-rows">{props.rows.map(renderRow)}</div>
         </section>
+      )}
+      {uninstall !== null && (
+        <ConfirmDialog
+          title={`卸载「${uninstall.name}」？`}
+          note="将删除插件包、信任记录、配置和已保存的敏感值。"
+          confirmLabel="卸载"
+          danger
+          onClose={() => { setUninstall(null); }}
+          onConfirm={() => {
+            const row = uninstall;
+            setUninstall(null);
+            void props.state.uninstallPlugin(row);
+          }}
+        />
       )}
     </section>
   );

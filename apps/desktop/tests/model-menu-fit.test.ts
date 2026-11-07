@@ -46,10 +46,13 @@ describe("模型菜单高度", () => {
     expect(picker).toContain("getComputedStyle(el).overflowX");
     expect(picker).toContain("maxHeight: props.maxHeight");
     const css = readRendererFile("components/model-menu.css");
-    // 水平夹取用的是同一个宽度：CSS 改了宽度而 JS 常量没跟，右沿又会算错。
-    expect(css).toContain(`width: min(${MODEL_MENU_WIDTH}px, calc(100vw - 24px))`);
+    // 2026-11-04 起 CSS 走 DeepSeek 的 fit-content 宽（240–420 夹取）；JS 侧 MODEL_MENU_WIDTH
+    // 只做右沿夹取的保守假设——夹取只会把菜单往左推，不会越出窗口。
+    expect(css).toContain("width: fit-content;");
+    expect(css).toContain("min-width: min(240px, calc(100vw - 24px))");
+    expect(css).toContain("max-width: min(420px, calc(100vw - 24px))");
     expect(css).toMatch(/\.mp-pop \.mp-models\s*\{[^}]*min-height: 0;[^}]*overflow-y: auto/s);
     expect(css).toMatch(/\.pop\.mp-pop\.show\s*\{[^}]*overflow: hidden/s);
-    expect(css).toContain(".mp-pop .mp-controls { flex: none;");
+    expect(css).toContain(".mp-pop .mp-effort");
   });
 });

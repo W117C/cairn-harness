@@ -78,6 +78,7 @@ describe("菜单的思考段按**当前模型声明的档**出", () => {
         onThinkingChange={() => undefined}
         thinkingSupported
         thinkingLevels={["off", "medium"]}
+        initialFocus="effort"
         {...over}
       />,
     );
@@ -92,18 +93,19 @@ describe("菜单的思考段按**当前模型声明的档**出", () => {
 
   it("档位可自定义：声明了多档的模型出现「自定义」入口，未声明的不出现", () => {
     const multi = render({ thinkingLevels: ["off", "low", "high"] });
-    expect(multi).toContain('class="th-custom"');
+    expect(multi).toContain('class="menu-item th-custom"');
     expect(multi).toContain("自定义");
     const none = render({ thinkingLevels: undefined, thinkingSupported: false });
-    expect(none).not.toContain('class="th-custom"');
+    expect(none).not.toContain('class="menu-item th-custom"');
   });
 
-  it("模型没声明 ⇒ 沿用四档但整段禁用（fail-visible，不谎称可调）", () => {
+  it("模型没声明 ⇒ 思考面空态（fail-visible，不摆假按键）", () => {
     const html = render({ thinkingLevels: undefined, thinkingSupported: false });
-    expect(html).toContain('data-e="high"');
-    expect(html).toContain("disabled");
-    // 不支持 ⇒ 分段挂标记：CSS 据此撤掉「选中」的浮起高亮（ADR-0009：fail-visible）
+    expect(html).not.toContain('data-e="high"'); // 没有可摆的档位行（不摆假按键）
+    expect(html).not.toContain("disabled"); // 也没有被禁用的行——是空态不是禁用
+    // 不支持 ⇒ 面板挂标记：读屏/样式据此知道这是「不可调」的说明面（ADR-0009）
     expect(html).toContain('data-unsupported="true"');
+    expect(html).toContain("当前模型不支持思考强度");
     const ok = render({ thinkingLevels: ["off", "medium"], thinkingSupported: true });
     expect(ok).not.toContain('data-unsupported="true"');
   });
@@ -130,17 +132,16 @@ describe("芯片显示的是**当前档**（既有契约：显示的 = 发出去
         onChange={() => undefined}
       />,
     );
-    // 显示层不许偷换：芯片上写「· 思考 强」＝用户设的那一档＝真正发出去的那一档。
+    // 显示层不许偷换：芯片上写「· 思考 high」＝用户设的那一档＝真正发出去的那一档。
     // 归位由**状态更新**完成（下面的 effect / pick 两条路径），不是显示层换字。
-    expect(html).toContain("· 思考 强");
+    expect(html).toContain("· 思考 high");
   });
 });
 
-describe("不支持态的视觉：分段留着，但不许装成能拧的选中控件", () => {
-  it("override 落在 model-menu.css（styles.css 的基线不动），选中态的高亮/浮起全撤", () => {
-    expect(menuCss).toMatch(/\.mp-pop \.th-row\[data-unsupported="true"\] button\[aria-pressed="true"\]\s*\{[^}]*background:\s*transparent[^}]*box-shadow:\s*none/s);
-    // 基线那条（styles.css）仍在原处：menu-unify 的判据靠它，组件层只做**限定范围**的覆盖
-    expect(css).toMatch(/\.th-row button\[aria-pressed="true"\]\s*\{[^}]*background:\s*hsl\(var\(--bg-elevated\)\)/s);
+describe("不支持态的视觉：思考面是空态说明，不摆假按键", () => {
+  it("override 落在 model-menu.css（styles.css 的基线不动）", () => {
+    // 新结构下「不支持」是空态（没有分段可覆盖）；这条钉住组件层 CSS 的落点不变
+    expect(menuCss).toContain(".mp-pop .mp-effort");
   });
 });
 

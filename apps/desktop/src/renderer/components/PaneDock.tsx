@@ -62,6 +62,9 @@ function BrowserPane(props: {
   /** 窗格标签是否在前台。非前台时原生视图必须收成零矩形（隐藏父容器管不到 WebContentsView）。 */
   active: boolean;
   initialUrl?: string;
+  /** 聊天链接直达（2026-11-05 业主）：{url, seq} 目标，seq 前进时导航**活动标签**——
+   *  走 go() 的站点授权闸（本地免问、外站首访询问），与地址栏导航同一条闸道。 */
+  openTarget?: { url: string; seq: number };
   /** 元素选择信号（App ⌘⇧S 递增；seq 变化触发一次）。 */
   pickSignal?: number;
   /** 选中结果回调（文进输入框；App 侧拼装）。 */
@@ -166,6 +169,19 @@ function BrowserPane(props: {
     if (vid !== null) openIn(vid, target);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.initialUrl]);
+
+  // 聊天链接直达（2026-11-05 业主）：seq 只前进——同一 seq 重放（StrictMode 重挂、父级重渲）
+  // 不动作；seq 前进 = 新一击。导航走 go()，与地址栏共用站点授权闸；活动标签恒存在（挂载即有 t0）。
+  const openTargetSeqRef = useRef(0);
+  useEffect(() => {
+    const t = props.openTarget;
+    if (t === undefined || t.url === "") return;
+    if (openTargetSeqRef.current >= t.seq) return;
+    openTargetSeqRef.current = t.seq;
+    setUrlDraft(t.url);
+    go(activeKeyRef.current, t.url);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.openTarget]);
 
   // 切换标签：旧视图零矩形（隐藏），新视图同步容器矩形。
   const lastActiveRef = useRef<string | null>(null);
@@ -349,6 +365,9 @@ function BrowserPane(props: {
 
   return (
     <div className="browser-pane">
+      {/* 2026-11-04 业主：单标签时不再叠第二条 tab 条——外层「浏览器」窗格标签已表明身份，
+          再来一条「新标签页 ×」纯属重复。≥2 个标签时 tab 条才出现，「+」也随之回到条上。 */}
+      {tabs.length > 1 ? (
       <div className="bp-tabs" role="tablist" aria-label="浏览器标签页">
         {tabs.map((t) => (
           <div key={t.key} className={`bp-tab${t.key === activeKey ? " on" : ""}`}>
@@ -370,6 +389,7 @@ function BrowserPane(props: {
           <Plus size={12} />
         </button>
       </div>
+      ) : null}
       <div className="bp-toolbar">
         <button className="iconbtn sm" aria-label="后退" disabled={actState?.canGoBack !== true} onClick={() => nav("back")}><ArrowLeft size={14} /></button>
         <button className="iconbtn sm" aria-label="前进" disabled={actState?.canGoForward !== true} onClick={() => nav("forward")}><ArrowRight size={14} /></button>
@@ -405,6 +425,10 @@ function BrowserPane(props: {
             {props.maximized === true ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
           </button>
         )}
+        {/* 单标签态（tab 条隐藏时）「+」落在工具行里，新标签入口不因条隐藏而消失。 */}
+        {tabs.length === 1 ? (
+          <button className="iconbtn sm" aria-label="新标签页" title="新标签页" onClick={addTab}><Plus size={14} /></button>
+        ) : null}
         <DropdownMenu.Root onOpenChange={setMenuOpen}>
           <DropdownMenu.Trigger asChild>
             <button className="iconbtn sm" aria-label="浏览器菜单" title="浏览器菜单"><MoreHorizontal size={13} /></button>
@@ -803,6 +827,10 @@ export function PaneDock(props: {
   onSessionPreviewResume?: () => void;
   /** v6 预览地址：browser 窗格就绪后自动导航到这里（缺省 = 只显示手动地址栏）。 */
   browserUrl?: string;
+  /** 聊天链接直达（2026-11-05 业主）：markdown http(s) 链接点击 → WorkbenchView 推来的目标
+   *  {url, seq}；seq 前进 = 新一击，浏览器标签切前台并导航**活动标签**（走站点授权闸）。 */
+  browserLinkTarget?: { url: string; seq: number };
+  browserVisible?: boolean;
   /** v7 当前会话 id（sidechat 窗格的父会话面；缺省 = 旁路空态提示先开会话）。 */
   sessionId?: string | null;
   workspace?: string | null;
@@ -852,18 +880,27 @@ export function PaneDock(props: {
     const scroller = navItemsRef.current;
     const tab = activeTabRef.current;
     if (scroller === null || tab === null) return;
-    const raf = window.requestAnimationFrame(() => {
+    const reveal = (behavior: ScrollBehavior): void => {
       const pad = 4;
-      const left = tab.offsetLeft;
-      const right = left + tab.offsetWidth;
+      const bounds = scroller.getBoundingClientRect();
+      const tabBounds = tab.getBoundingClientRect();
+      const left = scroller.scrollLeft + tabBounds.left - bounds.left;
+      const right = left + tabBounds.width;
       const viewLeft = scroller.scrollLeft;
       const viewRight = viewLeft + scroller.clientWidth;
-      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      const behavior: ScrollBehavior = reduced ? "auto" : "smooth";
+      if (scroller.clientWidth === 0) return;
       if (left < viewLeft + pad) scroller.scrollTo({ left: Math.max(0, left - pad), behavior });
       else if (right > viewRight - pad) scroller.scrollTo({ left: right - scroller.clientWidth + pad, behavior });
+    };
+    const raf = window.requestAnimationFrame(() => {
+      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      reveal(reduced || document.documentElement.dataset.reduceMotion === "true" ? "instant" : "smooth");
     });
-    return () => window.cancelAnimationFrame(raf);
+    // 打开上下文侧栏或拖窄面板时，active/tabsSig 不变，仍需把关闭按钮带回视口。
+    const observer = new ResizeObserver(() => reveal("instant"));
+    observer.observe(scroller);
+    observer.observe(tab);
+    return () => { window.cancelAnimationFrame(raf); observer.disconnect(); };
   }, [active, tabsSig]);
   // 标签条横向溢出时，左缘那枚标签会被**拦腰切开**（仓库证据：.tmp/sweep/pane-tabs-smoke.out
   // 01-eight-panes-active-visible.png，激活标签在末尾 ⇒ scrollLeft>0 ⇒ 首个「变更」只剩半个字）。
@@ -880,10 +917,19 @@ export function PaneDock(props: {
     return () => scroller.removeEventListener("scroll", sync);
   }, [tabsSig]);
   const closePane = (kind: PaneKind): void => {
+    const last = props.tabs.length === 1;
     props.onClose(kind);
+    if (last) {
+      // 关掉最后一格时整个 PaneDock 会卸载，navRef 里的剩余标签不存在；
+      // 焦点要回到打开窗格的工具栏入口，不能掉到 document.body（2026-11-05 审计）。
+      const opener = document.querySelector<HTMLElement>('[data-workbench-changes="true"]')
+        ?? document.querySelector<HTMLElement>('[aria-label="工作台工具"]');
+      opener?.focus();
+      return;
+    }
     // 关闭按钮卸载后将焦点交给剩余窗格，避免键盘用户掉回文档起点。
     window.requestAnimationFrame(() => {
-      navRef.current?.querySelector<HTMLButtonElement>(".pane-nav-item")?.focus();
+      navRef.current?.querySelector<HTMLButtonElement>('.pane-nav-item[aria-pressed="true"]')?.focus();
     });
   };
   useEffect(() => {
@@ -896,6 +942,11 @@ export function PaneDock(props: {
   useEffect(() => {
     if (props.paneTarget !== undefined) setFocusedPane(props.paneTarget.kind);
   }, [props.paneTarget]);
+  // 聊天链接直达（2026-11-05 业主）：链接点击 = 显式导航，浏览器标签必须切前台（同 paneTarget 语义；
+  // 否则用户手动聚焦过别的窗格时，新链接会把页面加载到身后的浏览器标签里）。
+  useEffect(() => {
+    if (props.browserLinkTarget !== undefined) setFocusedPane("browser");
+  }, [props.browserLinkTarget]);
   useEffect(() => {
     if (props.fileTarget !== undefined) setFocusedPane("file");
   }, [props.fileTarget]);
@@ -988,6 +1039,9 @@ export function PaneDock(props: {
               <RenderErrorBoundary variant="inline">
               {kind === "changes" && (
                 <ChangesPane
+                  // 评注与展开位按会话隔离：不换 key 时，A 会话的行级评论会跟着切到 B，
+                  // ⌘Enter 一提交就发进 B 的新一轮（2026-11-05 审计抓到的跨会话串话）。
+                  key={props.sessionId ?? "no-session"}
                   events={props.events}
                   {...(props.onReview !== undefined ? { onReview: props.onReview } : {})}
                   {...(props.changesFocus !== undefined ? { focus: props.changesFocus } : {})}
@@ -1005,11 +1059,12 @@ export function PaneDock(props: {
               {kind === "terminal" && <TerminalPane />}
               {kind === "browser" && (
                 <BrowserPane
-                  active={kind === active}
+                  active={kind === active && props.browserVisible !== false}
                   maximized={maximized && kind === active}
                   onToggleMaximize={toggleMaximize}
                   {...(props.onOpen !== undefined ? { onOpenPane: (target: PaneKind) => { props.onOpen?.(target); setFocusedPane(target); } } : {})}
                   {...(props.browserUrl !== undefined ? { initialUrl: props.browserUrl } : {})}
+                  {...(props.browserLinkTarget !== undefined ? { openTarget: props.browserLinkTarget } : {})}
                   {...(props.pickSignal !== undefined ? { pickSignal: props.pickSignal } : {})}
                   {...(props.onPickResult !== undefined ? { onPickResult: props.onPickResult } : {})}
                 />

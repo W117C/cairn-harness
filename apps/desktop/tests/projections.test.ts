@@ -523,7 +523,18 @@ describe("countRunSteps（状态条的本轮步数）", () => {
     expect(countRunSteps(events)).toBe(1);
   });
 
-  it("工头子流程不计；没有 user_message 时返回 0（不冒充历史）", () => {
+  it("worker 的消息和工具调用不影响主会话步数", () => {
+    const events = [
+      { type: "user_message", content: "核对两处" },
+      { type: "tool_call", callId: "main-1" },
+      { type: "user_message", content: "核对其中一处", agent_id: "worker-1" },
+      { type: "tool_call", callId: "worker-1-call", agent_id: "worker-1" },
+      { type: "tool_call", callId: "main-2" },
+    ] as unknown as AgentEvent[];
+    expect(countRunSteps(events)).toBe(2);
+  });
+
+  it("没有 user_message 时返回 0（不冒充历史）", () => {
     const events = [
       { type: "tool_call", callId: "c1" },
       { type: "tool_call", callId: "c2", agent_id: "worker-1" },

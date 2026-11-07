@@ -30,7 +30,8 @@ import { Popover, usePopoverDismiss, useMenuKeyboard } from "./Popover";
 import { mentionBreadcrumb, parseMentionQuery, replaceMentionToken } from "../mention";
 import { isCompositionEnter } from "../ime";
 import { useComposerOverlaySlot } from "../composer-overlays";
-import { formatBytes } from "../derived/format-bytes";
+import { baseNameOf, fileIconKind, filePathOf, formatSize, showQueueButton } from "./composer-helpers";
+export { fileIconKind, formatSize, showQueueButton } from "./composer-helpers";
 import { STR } from "../strings";
 import { slashItems, slashMatches, type SlashSkill } from "../slash";
 import { DRAFTS_KEY, HOME_DRAFT_KEY, draftKeyFor, sessionIdOfDraftKey } from "../drafts";
@@ -41,37 +42,6 @@ import type { ComposerLockReason } from "../send-queue";
 
 /** @ 模糊搜索的 debounce（P2-4：输入停顿 120ms 才发通道查询）。 */
 const MENTION_DEBOUNCE_MS = 120;
-
-/** 拖放路径（蓝本 §3.1）：走 preload 的 webUtils 桥（pathForFile）；桥缺席（旧 preload）返回
- *  null——不造假路径（宁可不加引用，也不添一条主进程必拒的伪路径）。 */
-function filePathOf(file: File): string | null {
-  const api = window.agent as unknown as { pathForFile?: (f: File) => string };
-  try {
-    const p = api.pathForFile?.(file);
-    return p !== undefined && p !== "" ? p : null;
-  } catch {
-    return null;
-  }
-}
-
-/** 加入队列钮的显隐判据（纯函数，判卷锚）：运行中且**有话说**才出现——
- *  空输入下只留打断钮，不摆一枚禁用的灰钟（v7.1 业主裁；旧形态是常驻 + disabled）。 */
-export function showQueueButton(running: boolean, canSend: boolean): boolean {
-  return running && canSend;
-}
-
-/** 附件 chip 图标分类（纯函数，判卷锚）：图片族按扩展名认，其余文件兜底（目录由 kind 决定）。 */
-export function fileIconKind(name: string): "image" | "file" {
-  const dot = name.lastIndexOf(".");
-  const ext = dot >= 0 ? name.slice(dot + 1).toLowerCase() : "";
-  return ["png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "bmp", "svg", "avif"].includes(ext) ? "image" : "file";
-}
-
-/** 附件小字大小（拿不到不显；B/KB/MB 人话刻度——纯函数）。实现见 `derived/format-bytes.ts`
- *  （第 924 页：与日志窗同一把尺；此前这里对 512 字节只写裸数 "512"）。 */
-export function formatSize(n: number): string {
-  return formatBytes(n) ?? STR.composer.dash;
-}
 
 /** 渲染层附件条目：RunAttachmentReference + 展示字段（size 拿不到不显；outside = 项目外挂盾牌）。
  *  发送前经 stripRenderFields 剥回 RunAttachmentReference 形状——主进程协议面不动。 */
@@ -84,8 +54,6 @@ interface AttachmentItem extends RunAttachmentReference {
 export function stripRenderFields(list: readonly AttachmentItem[]): RunAttachmentReference[] {
   return list.map((a) => ({ path: a.path, kind: a.kind, explicit: a.explicit }));
 }
-
-const baseNameOf = (p: string): string => p.slice(p.lastIndexOf("/") + 1);
 
 // 草稿持久化（2026-10-18）：localStorage 在渲染层已有先例（侧栏宽度/浏览器白名单）。
 // 只存文本草稿；附件不落盘（路径可能失效，不能让下次启动带着一堆已删除的文件）。
@@ -580,6 +548,12 @@ export function Composer(props: {
   const canSend = !disabled && text.trim() !== "";
   // 想下一条（第二十四遍）：建议不再常驻——空框空闲时只摆 Tab 键帽（发现性）；按 Tab 才出手。
   const suggestArmed = props.onSuggestNext !== undefined && !disabled && !props.running && text === "";
+  // 斜杠命令异色（2026-11-05 业主裁）：输入以 /cmd 开头时命令 token 上品牌色、正文保持常规色，
+  // 镜像层 + textarea 文字透明只留光标（同格同字距，选区/组字照常）。
+  const slashMatch = text.match(/^\/([a-zA-Z][\w:-]*)/);
+  const slashCmd = slashMatch === null
+    ? null
+    : { token: slashMatch[0], rest: text.slice(slashMatch[0].length) };
   const [suggesting, setSuggesting] = useState(false);
   const [suggestNote, setSuggestNote] = useState<string | null>(null);
   // ＋菜单「引用最近文件」子菜单开合（内联展开，不套第二层弹层）。
@@ -587,9 +561,9 @@ export function Composer(props: {
   // 快捷键开菜单信号（蓝本 §3.6 ⌘⇧I/M/E）：perm → 权限档；model/effort → 单芯片菜单（透传 openSeq）。
   const lastMenuSignal = useRef(0);
   const [pickerOpenSeq, setPickerOpenSeq] = useState(0);
-  // 打开落点（2026-10-18）：⌘⇧I 与 ⌘⇧E 都开同一个单芯片菜单，但承诺不同——
-  // I 是「找模型」（聚焦搜索框），E 是「拧思考档」（滚到并聚焦强度分段）。
-  const [pickerFocus, setPickerFocus] = useState<"model" | "effort">("model");
+  // 打开落点（2026-11-04 随 DeepSeek 两级面板更新）：⌘⇧I 直落模型面（搜索聚焦）、⌘⇧E 直落思考面；
+  // undefined = 普通点击开 → root 面板（模型/思考强度两枚 cell），与 DeepSeek 官方一致。
+  const [pickerFocus, setPickerFocus] = useState<"model" | "effort" | undefined>("model");
   useEffect(() => {
     const sig = props.menuSignal;
     if (sig === undefined || sig === null || sig.seq === lastMenuSignal.current) return;
@@ -619,7 +593,9 @@ export function Composer(props: {
     const context = pickedElementContext(pickedElements);
     const typed = text.trim();
     const outgoing = context === "" ? typed : typed === "" ? context : `${context}\n\n${typed}`;
-    props.onSend(outgoing, stripRenderFields(attachments), opts?.forceQueue);
+    // 打断并发送必须先入队：onSend 在运行中默认会尝试「插话」进当前轮，随后 onCancel 把
+    // 这一轮打断——插进去的那句话跟着这轮一起消失。forceQueue 让这句话排到轮后，由收束链派发。
+    props.onSend(outgoing, stripRenderFields(attachments), opts?.forceQueue === true || opts?.interrupt === true);
     const sent = typed;
     if (sent !== "") {
       const hist = historyRef.current.get(draftKeyRef.current) ?? [];
@@ -751,13 +727,15 @@ export function Composer(props: {
         }}
       >
         {/* 运行状态条（2026-10-18）：phaseLabel/elapsed/steps 三件此前只传不用——用户看得到停止键，
-            却看不到“在等审批 / 思考中 / 已停止”，也看不到跑了多久。仅在跑或已停时占位。 */}
+            却看不到“在等审批 / 思考中 / 已停止”，也看不到跑了多久。仅在跑或已停时占位。
+            2026-11-05：live region 只包相位文案；elapsed 每秒变化，若容器整体 aria-live，读屏会
+            每秒播报一次「思考中 3s/4s/5s」，把真正要说的状态淹没。 */}
         {(props.running || props.stopped) && (
-          <div className="cc-phase" role="status" aria-live="polite">
+          <div className="cc-phase">
             <span className="cc-phase-dot" data-running={props.running ? "true" : "false"} aria-hidden="true" />
-            <span>{props.phaseLabel}</span>
-            {props.running && <span className="cc-phase-dim">{String(props.elapsedSec)}s</span>}
-            {(props.runSteps ?? 0) > 0 && <span className="cc-phase-dim">{String(props.runSteps)} 步</span>}
+            <span role="status" aria-live="polite">{props.phaseLabel}</span>
+            {props.running && <span className="cc-phase-dim" aria-hidden="true">{String(props.elapsedSec)}s</span>}
+            {(props.runSteps ?? 0) > 0 && <span className="cc-phase-dim" aria-hidden="true">{String(props.runSteps)} 步</span>}
           </div>
         )}
         {/* C-37 斜杠菜单（内置两条 + 工作区 loose skills；2026-10-18 接通 §8 #14） */}
@@ -857,7 +835,15 @@ export function Composer(props: {
           </div>
         )}
         <div className="row2">
+          <div className="composer-text-stack">
+          {slashCmd !== null && (
+            <div className="composer-mirror" aria-hidden="true">
+              <span className="composer-cmd">{slashCmd.token}</span>
+              {slashCmd.rest}
+            </div>
+          )}
           <textarea
+            className={slashCmd !== null ? "mirrored" : undefined}
             data-composer-input="true"
             ref={taRef}
             rows={1}
@@ -1002,9 +988,10 @@ export function Composer(props: {
               if (composing.current) return;
               e.preventDefault();
               // ⌘/Ctrl+Enter：运行中=打断并发送（入队后打断）；空闲时与回车同义。
-              submit(e.metaKey || e.ctrlKey ? { interrupt: true } : undefined);
+              submit(e.metaKey || e.ctrlKey ? { interrupt: true, forceQueue: true } : undefined);
             }}
           />
+          </div>
           {suggestArmed && (
             <span className="suggest-kbd" title={STR.composer.suggestionKbdTip} aria-hidden="true">Tab</span>
           )}
@@ -1139,7 +1126,7 @@ export function Composer(props: {
             {...(props.configuredProviders !== undefined ? { configuredProviders: props.configuredProviders } : {})}
             openSeq={pickerOpenSeq}
             initialFocus={pickerFocus}
-            onUserOpen={() => setPickerFocus("model")}
+            onUserOpen={() => setPickerFocus(undefined)}
             // 开合由 Composer 的浮层槽持有（第 752 页）：模型菜单与用量环/附件/权限同带互斥，
             // 不许同屏叠放。
             open={overlayLayer === "model"}

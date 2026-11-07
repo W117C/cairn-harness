@@ -124,6 +124,22 @@ describe("greetingFor（问候语按时段 + 组内轮换）", () => {
     expect(greetingFor(23, () => 0)).toBe(STR.empty.greetingEvening[0]);
   });
 
+  it("语气固定：四档共用任务导向短句，组内仍轮换且不做时段寒暄", () => {
+    const morning = STR.empty.greetingMorning;
+    expect(new Set(morning).size).toBeGreaterThan(1);
+    for (const [name, group] of [
+      ["深夜", STR.empty.greetingNight],
+      ["早上", STR.empty.greetingMorning],
+      ["下午", STR.empty.greetingAfternoon],
+      ["晚上", STR.empty.greetingEvening],
+    ] as const) {
+      expect(group, name).toEqual(morning);
+      for (const phrase of group) {
+        expect(phrase).not.toMatch(/好|辛苦|休息|早呀|午安/);
+      }
+    }
+  });
+
   it("越界小时数也落在合理档（取模防 NaN/负值造成空串）", () => {
     expect(greetingFor(24, () => 0)).toBe(STR.empty.greetingNight[0]);
     expect(greetingFor(-1, () => 0)).toBe(STR.empty.greetingEvening[0]);

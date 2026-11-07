@@ -12,11 +12,6 @@
   font: inherit;
 }
 
-.plugins-workspace :focus-visible {
-  outline: 2px solid hsl(var(--accent-control));
-  outline-offset: 2px;
-}
-
 .plugin-command,
 .plugin-primary,
 .plugin-secondary,
@@ -518,7 +513,9 @@
 
 .plugin-sheet {
   position: fixed;
-  top: 48px;
+  /* 应用标题栏是 38px（styles.css .app grid-template-rows）；48px 会在抽屉上方
+     留一条 10px 的底层页面缝，既像被裁掉的头也能点到后面。 */
+  top: 38px;
   right: 0;
   bottom: 0;
   z-index: 90;
@@ -637,30 +634,6 @@
 .plugin-mono {
   font-family: var(--mono);
   font-size: var(--fs-caption-xs);
-}
-
-.plugin-capability-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.plugin-capability-grid > div {
-  min-width: 0;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 4px;
-  padding: 7px 8px;
-  border: 1px solid var(--hairline);
-  border-radius: 5px;
-  color: hsl(var(--text-400));
-  font-size: var(--fs-caption-xs);
-}
-
-.plugin-capability-grid strong {
-  color: hsl(var(--text-100));
-  font-variant-numeric: tabular-nums;
 }
 
 .plugin-warning-line,
@@ -783,10 +756,6 @@
     font-size: var(--fs-body-sm);
   }
 
-  .plugin-capability-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .plugin-import-popover {
     right: auto;
     left: 0;
@@ -798,4 +767,128 @@
   .plugin-skeleton-row {
     animation: none;
   }
+}
+
+/* ---- 2026-11-05 业主裁：市场对齐开源 ZCode PluginStoreCard ----
+   双列卡片网格（发现页）+ 卡片行（已安装页）：40px 能力方块 + 名称/版本/来源徽标 +
+   单行描述 + 能力行；动作区：安装胶囊钮 / 启停 Switch + 悬停露出的次要动作（收藏/更新/卸载）。 */
+.plugin-discover .plugin-shelf-rows {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 0 10px;
+}
+
+.plugin-store-card {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 8px;
+  border-radius: var(--radius-md);
+  transition: background var(--t-instant);
+}
+
+.plugin-store-card:hover { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover)); }
+
+.plugin-store-main {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.plugin-mark.lg { width: 40px; height: 40px; border-radius: 9px; }
+
+.plugin-store-copy { min-width: 0; flex: 1 1 auto; display: flex; flex-direction: column; gap: 2px; }
+
+.plugin-store-title { min-width: 0; display: flex; align-items: center; gap: 6px; }
+
+.plugin-store-title strong {
+  min-width: 0;
+  overflow: hidden;
+  color: hsl(var(--text-000));
+  font-size: var(--fs-body-md);
+  font-weight: var(--fw-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 描边徽标（与 MCP/模型弹窗同族：h-5 描边胶囊）。 */
+.plugin-pill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  background: hsl(var(--bg-100));
+  color: hsl(var(--text-300));
+  font-size: var(--fs-caption-2xs);
+  line-height: 1;
+}
+.plugin-pill.subtle { border-color: transparent; background: hsl(var(--bg-200)); }
+.plugin-pill.warn { color: hsl(var(--color-risk, var(--accent-brand))); }
+
+.plugin-store-desc {
+  min-width: 0;
+  overflow: hidden;
+  color: hsl(var(--text-300));
+  font-size: var(--fs-caption-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plugin-store-meta { min-width: 0; overflow: hidden; color: hsl(var(--text-400)); font-size: var(--fs-caption-2xs); text-overflow: ellipsis; white-space: nowrap; }
+
+.plugin-store-actions { flex: none; display: flex; align-items: center; gap: 6px; }
+
+/* 悬停露出的次要动作（收藏 / 更新 / 卸载）：卡片 hover 或键盘聚焦时才出现，ZCode 同款。 */
+.plugin-store-card .plugin-hover-act { opacity: 0; transition: opacity var(--t-fast); }
+.plugin-store-card:hover .plugin-hover-act,
+.plugin-store-card:focus-within .plugin-hover-act { opacity: 1; }
+@media (hover: none) {
+  .plugin-store-card .plugin-hover-act { opacity: 1; }
+}
+
+/* 安装胶囊钮（ZCode 的 rounded-full secondary）。 */
+.plugin-pill-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 12px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  background: hsl(var(--bg-100));
+  color: hsl(var(--text-000));
+  font-size: var(--fs-caption-sm);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+}
+.plugin-pill-btn:hover:not(:disabled) { background: hsl(var(--bg-200)); }
+.plugin-pill-btn:disabled { opacity: 0.55; cursor: default; }
+
+.spin { animation: spin var(--t-spin) infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 详情抽屉的能力徽标行（2026-11-05）：替代六格大卡——非零能力才出格，全零收成一行小字。 */
+.plugin-capability-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* 详情抽屉的导入 CTA（2026-11-05）：主行动作提到正文顶部，按钮与说明同一行呼吸。 */
+.plugin-import-cta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--hairline);
 }

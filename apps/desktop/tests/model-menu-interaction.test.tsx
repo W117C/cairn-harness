@@ -30,14 +30,20 @@ describe("模型弹层的空间与键盘语义", () => {
     expect(worst, "弹层选边与空间不一致：" + worst).toBe("");
   });
 
-  it("搜索框关联独立列表与当前焦点行，思考控件不属于列表", () => {
+  it("搜索框关联独立列表与当前焦点行（DeepSeek 规则：>4 个模型才出搜索）", () => {
+    const six = [
+      { registryId: "a", provider: "deepseek", label: "Model A", ctxWindow: 128000, tier: "standard" },
+      { registryId: "b", provider: "deepseek", label: "Model B" },
+      { registryId: "c", provider: "deepseek", label: "Model C" },
+      { registryId: "d", provider: "deepseek", label: "Model D" },
+      { registryId: "e", provider: "deepseek", label: "Model E" },
+      { registryId: "f", provider: "deepseek", label: "Model F" },
+    ];
     const html = renderToStaticMarkup(<ModelMenu
-      options={[
-        { registryId: "a", provider: "deepseek", label: "Model A", ctxWindow: 128000, tier: "standard" },
-        { registryId: "b", provider: "deepseek", label: "Model B" },
-      ]}
-      value="b" onPick={() => undefined} thinkingSupported onThinkingChange={() => undefined}
+      options={six}
+      value="b" onPick={() => undefined} initialFocus="model"
     />);
+    // >4 个模型 ⇒ 搜索行出现，combobox 关联独立列表与当前焦点行
     expect(html).toContain('role="combobox"');
     const list = html.match(/id="([^"]+)" class="mp-models" role="listbox"/);
     expect(list).not.toBeNull();
@@ -46,8 +52,13 @@ describe("模型弹层的空间与键盘语义", () => {
     expect(active).not.toBeNull();
     expect(html).toContain(`id="${active![1]}"`);
     expect(html).toMatch(/data-highlighted="true"[^>]*><span class="mi-name">Model B/);
-    expect(html.indexOf('class="mp-controls"')).toBeGreaterThan(html.indexOf('class="mp-models"'));
-    expect(html).not.toContain('class="th-hint"');
     expect(html).toContain('title="标准 · 窗口 128.0k"');
+    // ≤4 个模型 ⇒ 无搜索行（目录短，不需要搜）
+    const few = renderToStaticMarkup(<ModelMenu
+      options={[six[0]!, six[1]!, six[2]!, six[3]!]}
+      value="b" onPick={() => undefined} initialFocus="model"
+    />);
+    expect(few).not.toContain('role="combobox"');
+    expect(few).toContain('role="listbox"');
   });
 });

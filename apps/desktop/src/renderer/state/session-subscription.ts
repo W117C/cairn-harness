@@ -4,7 +4,7 @@ import { useCallback,useEffect } from "react";
 import type { AgentEvent,AskPayload,ProjectRecord } from "../../../../../src/main/ipc-protocol";
 import { isMainSessionTerminalEvent } from "../projections";
 import { isSessionEndDistillAsk,type QueuedSend } from "../send-queue";
-import { isStaleForActive, runKey } from "./session-identity";
+import { isStaleForActive, markBackgroundRunning, runKey } from "./session-identity";
 
 interface SessionSubscriptionDeps {
   refreshSessions: () => Promise<void>;
@@ -92,9 +92,9 @@ export function useSessionSubscription(deps: SessionSubscriptionDeps) {
         force((n) => n + 1);
       }
       if (sid && sid !== activeIdRef.current) {
-        // 后台会话仍在跑：只在非终态时点亮（终态刚在上面摘过，别又补上）
-        if (!terminal) runningSet.current.add(statusKey!);
-        force((n) => n + 1);
+        // 后台会话仍在跑：只在 0→1 时点亮并重渲染（终态刚在上面摘过，别又补上）。
+        // 其余 delta/tool/usage 事件不 force：否则后台每来一个 token 都重画整棵工作台。
+        if (!terminal && markBackgroundRunning(runningSet.current, statusKey!)) force((n) => n + 1);
         return;
       }
       setEvents((prev) => [...prev, e]);

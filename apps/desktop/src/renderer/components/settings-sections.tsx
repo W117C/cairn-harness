@@ -1169,3 +1169,6 @@ export function ShortcutsSection(): React.JSX.Element {
     </SettingsSection>
   );
 }
+
+export { McpSection, mcpDraftFrom, mcpDraftPayload, MCP_EMPTY_DRAFT, type McpDraft } from "./settings/McpSection";
+export { HooksSection } from "./settings/HooksSection";

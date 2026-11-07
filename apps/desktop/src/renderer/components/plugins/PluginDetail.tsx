@@ -4,22 +4,13 @@ import {
   Download,
   Power,
   PowerOff,
-  ShieldAlert,
   Star,
   Trash2,
   X,
 } from "lucide-react";
 import type { PluginRowView } from "../../derived/plugins";
 import { ConfirmDialog } from "../ConfirmDialog";
-
-const CAPABILITY_LABEL = {
-  skills: "技能",
-  commands: "命令",
-  agents: "智能体",
-  hooks: "hooks",
-  mcp: "MCP",
-  lsp: "LSP",
-} as const;
+import { PluginCapabilities } from "./PluginCapabilities";
 
 export interface PluginDetailProps {
   readonly row: PluginRowView;
@@ -30,6 +21,9 @@ export interface PluginDetailProps {
   readonly onUpdate: () => Promise<void> | void;
   readonly onEnabled: (enabled: boolean) => Promise<void> | void;
   readonly onUninstall: () => Promise<void> | void;
+  /** 未托管插件的出路（2026-11-05 业主裁）：一键按 runtime.root 导入为托管插件（走既有审查流）。
+   *  缺席 = 不出这一格（旧调用面不受影响）。 */
+  readonly onImportLocal?: (sourcePath: string) => void;
   readonly onConfigure: (values: Record<string, string>) => Promise<void> | void;
 }
 
@@ -85,6 +79,23 @@ export function PluginDetail(props: PluginDetailProps): React.JSX.Element {
         </header>
 
         <div className="plugin-sheet-body">
+          {installed === null && props.row.catalogEntry === null && props.row.runtime !== null && props.onImportLocal !== undefined && (
+            /* 2026-11-05 业主裁「这个很丑」：主动作沉在满高抽屉的底部 = 上面一屏空白。
+               导入是未托管插件的唯一出路 ⇒ 提到正文顶部，主行动作先行。 */
+            <div className="plugin-import-cta">
+              <button
+                type="button"
+                className="plugin-primary"
+                disabled={disabled}
+                title={`把 ${props.row.runtime.root} 导入为托管插件（走同一道审查流）`}
+                onClick={() => { props.onImportLocal?.(props.row.runtime!.root); }}
+              >
+                <Download size={15} aria-hidden="true" />
+                导入为托管插件
+              </button>
+              <span className="plugin-muted">导入后才有启停 / 更新 / 卸载；未托管态只有读取面。</span>
+            </div>
+          )}
           {props.row.catalogEntry !== null && (
             <section className="plugin-review-section">
               <h3>概述</h3>
@@ -125,11 +136,10 @@ export function PluginDetail(props: PluginDetailProps): React.JSX.Element {
             {props.row.capabilities === null ? (
               <div className="plugin-muted">未扫描</div>
             ) : (
-              <div className="plugin-capability-grid">
-                {Object.entries(props.row.capabilities).map(([kind, count]) => (
-                  <div key={kind}><span>{CAPABILITY_LABEL[kind as keyof typeof CAPABILITY_LABEL]}</span><strong>{count}</strong></div>
-                ))}
-              </div>
+              /* 2026-11-05 业主裁「设计有问题」：六格大卡零值也占一格 = 空壳泛滥。
+                 改紧凑徽标行——非零能力出徽标，全零收成一行小字（不摆空壳）。
+                 与安装审查共用 PluginCapabilities，避免同一组数字两套形状。 */
+              <PluginCapabilities capabilities={props.row.capabilities} />
             )}
           </section>
 
@@ -140,7 +150,8 @@ export function PluginDetail(props: PluginDetailProps): React.JSX.Element {
                 ? <div className="plugin-muted">未声明额外权限</div>
                 : <ul className="plugin-plain-list">{props.row.catalogEntry.permissions.map((permission) => <li key={permission}>{permission}</li>)}</ul>
             ) : (
-              <div className="plugin-warning-line"><ShieldAlert size={15} aria-hidden="true" /><span>未提供签名权限清单</span></div>
+              /* 2026-11-05 业主裁「这个很丑」：目录外来源本就没有签名清单，这是常态不是告警。 */
+              <div className="plugin-muted">未声明权限清单（目录外来源为常态）</div>
             )}
           </section>
 
@@ -187,6 +198,7 @@ export function PluginDetail(props: PluginDetailProps): React.JSX.Element {
           )}
         </div>
 
+        {(installed !== null || props.row.catalogEntry !== null) && (
         <footer className="plugin-sheet-footer plugin-detail-actions">
           {installed === null && props.row.catalogEntry !== null && (
             <button type="button" className="plugin-primary" disabled={disabled} onClick={() => { void props.onInstall(); }}>
@@ -211,6 +223,7 @@ export function PluginDetail(props: PluginDetailProps): React.JSX.Element {
             </>
           )}
         </footer>
+        )}
       </aside>
       {confirmUninstall && (
         <ConfirmDialog

@@ -112,7 +112,7 @@ describe("设置页返回（2026-10-21，评审后修正）", () => {
 
   it("返回在 ModalSurface 内部（工具栏是 sibling，会被 isolateOutside 标成 inert）", () => {
     expect(panel).toContain('className="sp-back"');
-    expect(panel).toContain('aria-label="关闭设置（Esc）"');
+    expect(panel).toContain('aria-label={STR.settingsPanel.closeAria}');
     // 返回按钮必须出现在 <ModalSurface> 与 </ModalSurface> 之间
     const surface = panel.indexOf("<ModalSurface");
     const close = panel.indexOf('className="sp-back"');

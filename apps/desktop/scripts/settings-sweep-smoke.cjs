@@ -14,7 +14,7 @@ const { tmpdir } = require("node:os");
 
 const profile = mkdtempSync(join(tmpdir(), "cairn-settings-sweep-profile-"));
 app.setPath("userData", profile);
-nativeTheme.themeSource = "light";
+nativeTheme.themeSource = process.env.CAIRN_SETTINGS_THEME === "dark" ? "dark" : "light";
 app.on("quit", () => { rmSync(profile, { recursive: true, force: true }); });
 const out = process.argv[2] ? resolve(process.argv[2]) : mkdtempSync(join(tmpdir(), "cairn-settings-sweep-"));
 mkdirSync(out, { recursive: true });
@@ -28,7 +28,8 @@ async function main() {
   const starts = [...body.matchAll(/^\s{2}(\w+)\??\s*[(<]/gm)];
   const members = starts.map((m, i) => ({ name: m[1], isArray: /Promise<[^>]*\[\]/.test(body.slice(m.index, starts[i + 1]?.index ?? body.length)) }));
   const win = new BrowserWindow({
-    width: 1440, height: 900, show: false,
+    width: process.env.CAIRN_SETTINGS_NARROW === "1" ? 880 : 1440,
+    height: process.env.CAIRN_SETTINGS_NARROW === "1" ? 640 : 900, show: false,
     webPreferences: {
       backgroundThrottling: false,
       offscreen: true,
@@ -73,6 +74,7 @@ async function main() {
       const body = document.querySelector('.sp-body');
       const text = (body?.innerText ?? '').trim();
       return {
+        overflow: body !== null && body.scrollWidth > body.clientWidth + 1,
         textLen: text.length,
         boundary: text.includes('这一块加载失败'),
         renderError: !!document.querySelector('.sp-body .render-error'),
@@ -84,11 +86,23 @@ async function main() {
   }
   const broken = results.filter((r) => !r.clicked || r.boundary || r.renderError || r.textLen === 0);
   check("每个分区都能点开、正文非空、无渲染错误边界", broken.length === 0, broken);
+  check("设置分区没有横向溢出", results.every((r) => !r.overflow), results.filter((r) => r.overflow));
+
+  await pointerOn(`[...document.querySelectorAll('.sp-nav-item')].find((el) => el.textContent.trim() === '子 Agent')`);
+  const roles = await js(`document.querySelector('.agent-role-section')?.innerText ?? ''`);
+  check("三个内置角色均显示用途说明", ['在专属工作树中实现任务。', '只读审查变更并给出结论。', '只读核对测试和验证证据。'].every((text) => roles.includes(text)), roles);
 
   await pointerOn(`[...document.querySelectorAll('.sp-nav-item')].find((el) => el.textContent.trim() === '进化')`);
-  await waitFor(() => js(`document.querySelector('.sp-body')?.innerText.includes('Episode')`), "evolve report rendered");
+  await waitFor(() => js(`document.querySelector('.sp-body')?.innerText.includes('经验沉淀')`), "evolve report rendered");
+  // 2026-11-05：报告正文已改成证据/沉淀/预算的分区，原始计数串收进「技术详情」折叠。
+  // 判据不跟着折叠退化——点开它再读 Episode / playbook / 预算容量 三行，否则这条会变成
+  // 「只要页面标题在就算过」的恒真断言。
+  await js(`document.querySelector('.sp-body .sp-tech > summary')?.click()`);
+  await pause(200);
   const evolve = await js(`document.querySelector('.sp-body')?.innerText ?? ''`);
-  check("进化分区渲染出报告（Episode / playbook / 预算）", evolve.includes("Episode") && evolve.includes("经验 playbook") && evolve.includes("预算"), { text: evolve.slice(0, 200) });
+  check("进化分区渲染出报告（证据分区 + 技术详情 Episode / playbook / 预算容量）",
+    evolve.includes("经验沉淀") && evolve.includes("Episode") && evolve.includes("playbook") && evolve.includes("预算容量"),
+    { text: evolve.slice(0, 200) });
   writeFileSync(join(out, "01-evolve.png"), (await win.webContents.capturePage()).toPNG());
 
   const globalRead = await js(`(() => {

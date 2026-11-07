@@ -69,7 +69,11 @@ describe("通道名表完整性", () => {
     // v34：＋doctor（桌面「运行诊断」：复用 CLI 检查核）⇒ 125。
     // v35：＋sessionPrefsSet（会话级模型/思考档持久化）⇒ 126。
     // v52：＋lspStatus（读 LSP 状态）⇒ 140。
-    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(140);
+    // 2026-11-05 业主裁「参考开源项目 ZCode」：＋mcpUserConfig/mcpUserSave/mcpUserProbe
+    // （用户级 MCP 服务器管理：配置读写 + 单台真握手探测）⇒ 143。
+    // 2026-11-05 「继续」：＋hooksUserConfig/hooksUserSave（用户级 hooks 管理面读写）⇒ 145。
+    // v53：角色 4 项、迁移 2 项、闲时任务 3 项、后台命令 2 项。
+    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(156);
     const keys = Object.keys(INVOKE_CHANNELS) as (keyof typeof INVOKE_CHANNELS)[];
     expect(keys.length).toBeGreaterThan(0);
     for (const key of keys) expect(INVOKE_CHANNELS[key]).toBeTruthy();
@@ -216,6 +220,24 @@ describe("通道名表完整性", () => {
       "providerSave",
       // 2026-10-24 业主：自定义供应商在右详情就地编辑——已装配置的预填数据面（只读）。
       "providerCustomList",
+      // 2026-11-05 业主裁：用户级 MCP 服务器管理（ZCode 独立管理对应面）——配置读写 + 单台探测。
+      "mcpUserConfig",
+      "mcpUserSave",
+      "mcpUserProbe",
+      // 2026-11-05 「继续」：用户级 hooks（生命周期钩子管理面读写）。
+      "hooksUserConfig",
+      "hooksUserSave",
+      "subagentSettingsList",
+      "subagentSettingsRead",
+      "subagentSettingsSave",
+      "subagentSettingsRemove",
+      "settingsPreviewMigration",
+      "settingsApplyMigration",
+      "idleTaskList",
+      "idleTaskEnqueue",
+      "idleTaskUpdate",
+      "backgroundTaskList",
+      "backgroundTaskStop",
       // ③：新建项目（建同名文件夹 + 登记），三面同步直接接真。
       "createProject",
       // 恢复闭环：发送队列 sidecar 读回与覆盖写。

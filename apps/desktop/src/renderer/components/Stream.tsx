@@ -324,7 +324,7 @@ function AssistantActions(props: { text: string; eventId: number; eventRef?: Eve
   const running = props.actions.running === true;
   return (
     <span className="row-actions" data-cds="MessageActions" data-saving={props.actions.annotationPending?.(anchor) === true}>
-      <button className="row-action" aria-label="复制这行输出" title="复制" onClick={() => onCopyText?.(props.text)}>
+      <button className="row-action" aria-label="复制这行输出" data-hint="复制" onClick={() => onCopyText?.(props.text)}>
         <Copy size={12} />
       </button>
       {onPin !== undefined && (
@@ -334,7 +334,7 @@ function AssistantActions(props: { text: string; eventId: number; eventRef?: Eve
           aria-pressed={pinned}
           disabled={pinBusy}
           aria-busy={pinBusy}
-          title={pinned ? "已置顶（再点取消）" : "置顶：钉在会话大纲里，长对话好找"}
+          data-hint={pinned ? "已置顶（再点取消）" : "置顶：钉在会话大纲里，长对话好找"}
           onClick={() => onPin(anchor, !pinned)}
         >{pinBusy ? <Loader2 size={12} /> : <Pin size={12} />}</button>
       )}
@@ -343,7 +343,7 @@ function AssistantActions(props: { text: string; eventId: number; eventRef?: Eve
         <button
           className="row-action"
           aria-label={`撤回第 ${String(props.round)} 轮的文件改动`}
-          title="撤回：把这一轮改过的文件还原"
+          data-hint="撤回：把这一轮改过的文件还原"
           onClick={() => onRevertTurn(props.round)}
         ><History size={12} /></button>
       )}
@@ -351,7 +351,7 @@ function AssistantActions(props: { text: string; eventId: number; eventRef?: Eve
         <button
           className="row-action"
           aria-label={`从第 ${String(props.round)} 轮分叉新会话`}
-          title="分叉：从该轮起新建会话，原会话不动"
+          data-hint="分叉：从该轮起新建会话，原会话不动"
           onClick={() => onBranch(props.round)}
         ><GitBranch size={12} /></button>
       )}
@@ -361,7 +361,7 @@ function AssistantActions(props: { text: string; eventId: number; eventRef?: Eve
         aria-pressed={current === "up"}
         disabled={feedbackBusy}
         aria-busy={feedbackBusy}
-        title={current === "up" ? "已赞（再点撤销）" : "赞"}
+        data-hint={current === "up" ? "已赞（再点撤销）" : "赞"}
         onClick={() => onFeedback?.(anchor, current === "up" ? null : "up")}
       >{feedbackBusy ? <Loader2 size={12} /> : <ThumbsUp size={12} />}</button>
       <button
@@ -370,7 +370,7 @@ function AssistantActions(props: { text: string; eventId: number; eventRef?: Eve
         aria-pressed={current === "down"}
         disabled={feedbackBusy}
         aria-busy={feedbackBusy}
-        title={current === "down" ? "已踩（再点撤销）" : "踩"}
+        data-hint={current === "down" ? "已踩（再点撤销）" : "踩"}
         onClick={() => onFeedback?.(anchor, current === "down" ? null : "down")}
       >{feedbackBusy ? <Loader2 size={12} /> : <ThumbsDown size={12} />}</button>
     </span>
@@ -418,7 +418,7 @@ export function ThinkingLive(props: { seq: number; thinking?: string; running?: 
           <BrainCircuit className="think-icon" size={14} aria-hidden="true" />
           <span className="think-label">{running ? "思考中" : "思考记录"}</span>
           {running && <span className="think-live" aria-hidden="true"><CairnLoader /></span>}
-          {elapsed !== null && <span className="think-elapsed" aria-live="polite" title="本次在界面中观察到的时长，不代表完整思考耗时">{elapsed}s</span>}
+          {elapsed !== null && <span className="think-elapsed" role="timer" aria-label={`已思考 ${String(elapsed)} 秒`} title="本次在界面中观察到的时长，不代表完整思考耗时">{elapsed}s</span>}
         </span>
         {!open && hasBody && <span className="think-preview">{truncateSummary(props.thinking!, 120)}</span>}
       </button>
@@ -538,7 +538,7 @@ const UserRowView = memo(function UserRowView({ actions, canFold, flash, eventRe
       {(actions?.onCopyText !== undefined || actions?.onBranch !== undefined || actions?.onEditRound !== undefined || actions?.onToggleFold !== undefined) && (
         <span className="row-actions" data-cds="MessageActions">
           {actions?.onCopyText !== undefined && (
-            <button className="row-action" aria-label="复制这条消息" title="复制" onClick={() => actions.onCopyText?.(userMessageCopy(r.text, r.attachments))}>
+            <button className="row-action" aria-label="复制这条消息" data-hint="复制" onClick={() => actions.onCopyText?.(userMessageCopy(r.text, r.attachments))}>
               <Copy size={12} />
             </button>
           )}
@@ -546,7 +546,7 @@ const UserRowView = memo(function UserRowView({ actions, canFold, flash, eventRe
             <button
               className="row-action"
               aria-label={`撤回第 ${String(r.round)} 轮消息（停止生成，放回输入框，可改后重发）`}
-              title="撤回：停止生成，这条消息放回输入框——改完再发，原会话保留"
+              data-hint="撤回：停止生成，这条消息放回输入框——改完再发，原会话保留"
               onClick={() => actions.onEditRound?.(r.round, r.text)}
             ><Undo2 size={12} /></button>
           )}
@@ -554,7 +554,7 @@ const UserRowView = memo(function UserRowView({ actions, canFold, flash, eventRe
             <button
               className="row-action"
               aria-label={`从这条消息分叉新会话（到第 ${String(r.round)} 轮）`}
-              title="分叉：从该轮起新建会话，原会话不动"
+              data-hint="分叉：从该轮起新建会话，原会话不动"
               onClick={() => actions.onBranch?.(r.round)}
             ><GitBranch size={12} /></button>
           )}
@@ -562,7 +562,7 @@ const UserRowView = memo(function UserRowView({ actions, canFold, flash, eventRe
             <button
               className="row-action"
               aria-label={`还原第 ${String(r.round)} 轮改动过的文件`}
-              title={`还原第 ${String(r.round)} 轮的文件改动`}
+              data-hint="还原：把这一轮改过的文件还原"
               onClick={() => actions.onRevertTurn?.(r.round)}
             ><History size={12} /></button>
           )}
@@ -570,7 +570,7 @@ const UserRowView = memo(function UserRowView({ actions, canFold, flash, eventRe
             <button
               className="row-action"
               aria-label={`折叠第 ${String(r.round)} 轮`}
-              title="折叠这一轮（收成一行）"
+              data-hint="折叠这一轮（收成一行）"
               onClick={() => actions.onToggleFold?.(r.round)}
             ><ChevronUp size={12} /></button>
           )}

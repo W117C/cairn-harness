@@ -4,6 +4,7 @@
 // 界面用两侧事实合成：环境变量在位（envProviders）+ 设置页已存（stored）。
 import type { DoctorCheck, DoctorReport } from "../../../../../../src/main/doctor";
 import type { SectionId } from "../../app-controls";
+import { STR } from "../../strings";
 
 export interface DoctorKeyStatus {
   available: boolean;
@@ -22,15 +23,15 @@ export interface DoctorRow {
 }
 
 const LABELS: Record<DoctorCheck["id"], string> = {
-  node: "Node",
-  keys: "凭据",
-  tiers: "模型档位",
-  sandbox: "沙箱",
-  workspace: "工作区",
-  settings: "设置文件",
-  sessions: "会话数据",
-  search: "联网搜索",
-  trust: "插件信任面",
+  node: STR.doctor.labelNode,
+  keys: STR.doctor.labelKeys,
+  tiers: STR.doctor.labelTiers,
+  sandbox: STR.doctor.labelSandbox,
+  workspace: STR.doctor.labelWorkspace,
+  settings: STR.doctor.labelSettings,
+  sessions: STR.doctor.labelSessions,
+  search: STR.doctor.labelSearch,
+  trust: STR.doctor.labelTrust,
 };
 
 function cut(check: DoctorCheck): DoctorRow {
@@ -49,21 +50,21 @@ export function doctorRows(report: DoctorReport, keys: DoctorKeyStatus | null): 
   return report.checks.map((check) => {
     if (check.id !== "keys") return cut(check);
     if (keys === null) {
-      return { ...cut(check), label: "凭据（仅环境变量）", detail: `${check.detail}（设置页密钥状态读取失败，本次只查了环境变量）` };
+      return { ...cut(check), label: STR.doctor.keysEnvOnly, detail: `${check.detail}${STR.doctor.keysReadFailNote}` };
     }
     const stored = [...keys.stored];
     const env = [...(keys.envProviders ?? [])];
     const ok = keys.envActive || stored.length > 0;
     const parts: string[] = [];
-    if (env.length > 0) parts.push(`环境变量在位：${env.join("、")}`);
-    if (stored.length > 0) parts.push(`设置页已存 ${String(stored.length)} 家：${stored.join("、")}`);
+    if (env.length > 0) parts.push(STR.doctor.envActive + env.join("、"));
+    if (stored.length > 0) parts.push(STR.doctor.storedCount.replace("{n}", String(stored.length)) + stored.join("、"));
     return {
       id: "keys",
-      label: "凭据",
+      label: STR.doctor.labelKeys,
       ok,
       fatal: false,
-      detail: ok ? parts.join("；") : "环境变量与设置页都没有可用凭据",
-      ...(ok ? {} : { hint: "到「模型与 Provider」保存一把密钥；或用 demo 通道零凭据看流程" }),
+      detail: ok ? parts.join("；") : STR.doctor.noCredentials,
+      ...(ok ? {} : { hint: STR.doctor.keysHint }),
     };
   });
 }
@@ -74,8 +75,8 @@ export function doctorRows(report: DoctorReport, keys: DoctorKeyStatus | null): 
 export function doctorVerdictText(report: DoctorReport, rows: readonly DoctorRow[]): string {
   const failing = rows.filter((r) => !r.ok).length;
   return failing === 0
-    ? `总档：${report.verdict}（${String(rows.length)} 项全过）`
-    : `总档：${report.verdict}（${String(failing)} 项要处理）`;
+    ? STR.doctor.verdictPass.replace("{verdict}", report.verdict).replace("{n}", String(rows.length))
+    : STR.doctor.verdictFailing.replace("{verdict}", report.verdict).replace("{n}", String(failing));
 }
 
 /**
@@ -114,15 +115,15 @@ export function doctorReportText(input: {
   rows: readonly DoctorRow[];
 }): string {
   const lines = [
-    "Cairn 诊断报告",
-    `版本：${input.version ?? "未知"}`,
-    `生成时间：${input.generatedAt}`,
+    STR.doctor.reportTitle,
+    STR.doctor.reportVersion + (input.version ?? STR.doctor.reportVersionUnknown),
+    STR.doctor.reportGenerated + input.generatedAt,
     input.verdict,
     "",
   ];
   for (const row of input.rows) {
     lines.push(`${row.ok ? "[✓]" : "[✗]"} ${row.label}：${row.detail}`);
-    if (row.hint !== undefined) lines.push(`    提示：${row.hint}`);
+    if (row.hint !== undefined) lines.push(STR.doctor.reportHint + row.hint);
   }
   return lines.join("\n") + "\n";
 }

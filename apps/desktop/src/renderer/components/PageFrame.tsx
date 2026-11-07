@@ -28,11 +28,13 @@ export function PageFrame(props: PageFrameProps): React.JSX.Element {
   return (
     <section className="page-frame">
       <header className="page-frame-head">
-        <h1 className="page-frame-title">
-          {props.title}
-          {props.titleAccent !== undefined && <span className="page-frame-title-accent"> {props.titleAccent}</span>}
-        </h1>
-        {props.subtitle !== undefined && <p className="page-frame-subtitle">{props.subtitle}</p>}
+        <div className="page-frame-heading">
+          <h1 className="page-frame-title">
+            {props.title}
+            {props.titleAccent !== undefined && <span className="page-frame-title-accent"> {props.titleAccent}</span>}
+          </h1>
+          {props.subtitle !== undefined && <p className="page-frame-subtitle">{props.subtitle}</p>}
+        </div>
         <div className="page-frame-actions">
           {props.actions}
           {props.search !== undefined && (
@@ -45,6 +47,19 @@ export function PageFrame(props: PageFrameProps): React.JSX.Element {
                 onChange={(event) => { props.search?.onChange(event.target.value); }}
               />
             </label>
+          )}
+          {filters.length > 0 && props.onFilter !== undefined && props.inlineFilter !== true && (
+            <div className="page-frame-filter-chips" role="group" aria-label="筛选">
+              {filters.map((filter) => (
+                <button
+                  type="button"
+                  key={filter.id}
+                  className={"page-frame-chip" + (selectedFilter === filter.id ? " on" : "")}
+                  aria-pressed={selectedFilter === filter.id}
+                  onClick={() => { props.onFilter?.(filter.id); }}
+                >{filter.label}</button>
+              ))}
+            </div>
           )}
           {filters.length > 0 && props.onFilter !== undefined && (
             <select

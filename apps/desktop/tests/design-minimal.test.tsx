@@ -112,8 +112,10 @@ describe("次级说明不许替布局说话（2026-11-01 第 866 页 · 业主�
   it("行、分区和页面的 desc 不许复述标题", () => {
     const pairs = [...descs.matchAll(/(?:label|title)=\{?"([^"]{2,})"\s+desc=\{?"([^"]{2,})"/g)];
     // 2026-11-04 本批撤掉 telemetryDesc（徽章「未收集」已经说完）⇒ 成对样本 8→7。
+    // 2026-11-07 strings 整批收编把 personalization 页 desc 收进 STR.settingsPanel.personalizationDesc
+    //（desc 值面照旧，源文不再有字面量对）⇒ 成对样本 7→6。
     // 这是防空转的下限，不是产品断言；只准跟着 desc 总量一起调低，不许为了让红变绿加回来。
-    expect(pairs.length, "至少要真扫到成对的 label+desc，否则这条判卷是空转的").toBeGreaterThanOrEqual(7);
+    expect(pairs.length, "至少要真扫到成对的 label+desc，否则这条判卷是空转的").toBeGreaterThanOrEqual(6);
     const echoes = pairs.filter(([, label, desc]) => desc.includes(label.slice(0, 4))).map(([, l, d]) => `${l} → ${d}`);
     expect(echoes, "次级说明在复述行标签：" + echoes.join(" ｜ ")).toEqual([]);
   });

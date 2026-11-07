@@ -1,5 +1,6 @@
 // 进化分区容器：取当前窗口工作区的 EvolveReport；卸载后的迟到响应不回写。
 import { useCallback, useEffect, useRef, useState } from "react";
+import { STR } from "../../strings";
 import { EvolvePanel, type EvolvePanelState } from "./EvolvePanel";
 
 export function EvolveSection(): React.JSX.Element {
@@ -45,7 +46,7 @@ export function EvolveSection(): React.JSX.Element {
       const result = await window.agent.evolveActivate(id);
       if (current === generation.current) {
         setState({ status: "ready", report: result.report });
-        if (!result.ok) setActionError(result.reason ?? "激活被拒");
+        if (!result.ok) setActionError(result.reason ?? STR.evolveSection.activateRejected);
       }
     } catch (failure) {
       const message = failure instanceof Error ? failure.message : String(failure);
@@ -62,7 +63,7 @@ export function EvolveSection(): React.JSX.Element {
       const result = await window.agent.evolveDormant(id);
       if (current === generation.current) {
         setState({ status: "ready", report: result.report });
-        if (!result.ok) setActionError(result.reason ?? "转休眠被拒");
+        if (!result.ok) setActionError(result.reason ?? STR.evolveSection.dormantRejected);
       }
     } catch (failure) {
       const message = failure instanceof Error ? failure.message : String(failure);
@@ -79,7 +80,7 @@ export function EvolveSection(): React.JSX.Element {
       const result = await window.agent.evolveGlobalRevoke(id);
       if (current === generation.current) {
         setState({ status: "ready", report: result.report });
-        if (!result.ok) setActionError(result.reason ?? "撤销被拒");
+        if (!result.ok) setActionError(result.reason ?? STR.evolveSection.revokeRejected);
       }
     } catch (failure) {
       const message = failure instanceof Error ? failure.message : String(failure);
@@ -96,7 +97,7 @@ export function EvolveSection(): React.JSX.Element {
       const result = await window.agent.evolveGlobalActivate(id);
       if (current === generation.current) {
         setState({ status: "ready", report: result.report });
-        if (!result.ok) setActionError(result.reason ?? "恢复被拒");
+        if (!result.ok) setActionError(result.reason ?? STR.evolveSection.restoreRejected);
       }
     } catch (failure) {
       const message = failure instanceof Error ? failure.message : String(failure);

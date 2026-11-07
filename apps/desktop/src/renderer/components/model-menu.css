@@ -1,71 +1,137 @@
-/* 搜索与控制区固定，仅模型列表滚动。 */
+/* 2026-11-04 业主裁：模型菜单对齐 DeepSeek 官方 harness（ui-model-selection）的视觉规格。
+   卡片 fit-content（240–420 夹取）、高 ≤360、内衬 4px；行 34px、圆角、名称行 + 尾随 ✓；
+   组头吸顶；选中行不铺色（✓ 就是选中的记号）；搜索 >4 个模型才出现（带清除 ×）。 */
+
+/* 卡片：fit-content 宽（窄窗夹到 100vw-24px），不再固定 344px。 */
 .pop.mp-pop.show {
   display: flex;
   flex-direction: column;
-  width: min(344px, calc(100vw - 24px));
-  min-width: 0;
-  max-width: calc(100vw - 24px);
-  padding: 6px;
+  width: fit-content;
+  min-width: min(240px, calc(100vw - 24px));
+  max-width: min(420px, calc(100vw - 24px));
+  padding: 4px;
   overflow: hidden;
   border-radius: var(--radius-pop);
 }
+
+/* root 面板：「模型 / 思考强度」两枚 cell（label + 当前值 + 右尖括号），DeepSeek 的根面。 */
+.mp-pop .mp-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  min-width: 100%;
+  height: 34px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: hsl(var(--text-000));
+  font-size: var(--fs-body-sm);
+  text-align: left;
+  cursor: default;
+}
+.mp-pop .mp-cell:hover { background: hsl(var(--bg-200)); }
+.mp-pop .mp-cell-label { flex: 0 0 auto; white-space: nowrap; }
+.mp-pop .mp-cell-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  color: hsl(var(--text-400));
+}
+.mp-pop .mp-cell svg { flex: 0 0 auto; color: hsl(var(--text-400)); }
+
+/* key 未配置提示行（root 底部）；「管理模型」与上方用细线分开，读成「去另一处」。 */
+.mp-pop .mp-foot {
+  margin-top: 2px;
+  padding-top: 4px;
+  border-top: 1px solid var(--hairline);
+}
+.mp-pop .mp-foot .menu-item {
+  min-height: 30px;
+  color: hsl(var(--text-300));
+  font-size: var(--fs-caption-sm);
+}
+
+/* 搜索行：模型面顶部，无底线的胶囊输入；清除 × 绝对定位右侧。 */
 .mp-pop .mp-search {
   flex: none;
+  position: relative;
+  display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 4px 5px;
-  padding: 2px 6px 6px;
-  color: hsl(var(--text-300));
-  border-bottom: 1px solid var(--hairline);
+  margin: 2px 0 3px;
+  padding: 0 4px;
+  color: hsl(var(--text-400));
 }
 .mp-pop .mp-search input {
   min-width: 0;
-  height: 34px;
-  padding: 0;
+  flex: 1 1 auto;
+  height: 30px;
+  padding: 0 26px 0 0;
   border: 0;
-  border-radius: 0;
+  border-radius: var(--radius-sm);
   background: transparent;
   box-shadow: none;
   color: hsl(var(--text-100));
-  font-size: var(--fs-body-sm);
+  font-size: var(--fs-caption-sm);
 }
-.mp-pop .mp-search:focus-within { border-color: hsl(var(--text-300)); }
+.mp-pop .mp-search input::placeholder { color: hsl(var(--text-400)); }
+.mp-pop .mp-search-clear {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: hsl(var(--text-300));
+  cursor: default;
+}
+.mp-pop .mp-search-clear:hover { background: hsl(var(--bg-200)); color: hsl(var(--text-000)); }
+
+/* 列表：仅列表滚动。 */
 .mp-pop .mp-models {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
-  padding: 2px 0 4px;
+  padding: 0 0 2px;
 }
+/* 组头吸顶（DeepSeek MenuGroup）：滚动时钉在卡顶，底色与卡片同面。 */
 .mp-pop .mp-group-label {
-  padding: 10px 10px 4px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 8px 8px 4px;
+  background: hsl(var(--bg-000));
   color: hsl(var(--text-400));
   font-size: var(--fs-caption-xs);
   font-weight: var(--fw-semibold);
   letter-spacing: 0.02em;
 }
-.mp-pop .mp-group-label .g-dot { display: none; }
-.mp-pop .mp-group.separated {
-  margin-top: 5px;
-  padding-top: 5px;
-  border-top: 1px solid var(--hairline);
-}
-.mp-pop .menu-item { gap: 8px; min-height: 38px; padding: 7px 10px; border-radius: var(--radius-sm); }
+/* 分组之间不画线（DeepSeek：组头本身就是分隔），只留呼吸空隙。 */
+.mp-pop .mp-group.separated { margin-top: 4px; }
+
+.mp-pop .menu-item { gap: 6px; min-height: 34px; padding: 5px 8px; border-radius: var(--radius-sm); }
 .mp-pop [role="option"] { font-size: var(--fs-body-sm); }
 .mp-pop [role="option"][data-highlighted="true"] { background: hsl(var(--bg-200)); }
-/* 当前选中与键盘高亮是两件事：选中行带品牌色细边与淡底，高亮只换背景。
-   此前两者同色，点完一行后整个菜单像有两行被选中。 */
-.mp-pop [role="option"][aria-selected="true"] {
-  background: hsl(var(--accent-brand) / 7%);
-  box-shadow: inset 0 0 0 1px hsl(var(--accent-brand) / 22%);
-}
-.mp-pop [role="option"][aria-selected="true"][data-highlighted="true"] {
-  background: hsl(var(--accent-brand) / 11%);
-}
+.mp-pop .menu-item:focus-visible { background: hsl(var(--bg-200)); }
+/* 选中 = 尾随 ✓（DeepSeek：勾是选中的记号，不铺品牌色底）。 */
+.mp-pop [role="option"][aria-selected="true"] { background: transparent; box-shadow: none; }
+.mp-pop [role="option"][aria-selected="true"][data-highlighted="true"] { background: hsl(var(--bg-200)); }
 .mp-pop .menu-item[role="option"] .mi-name { flex: 1 1 auto; min-width: 0; max-width: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mp-pop [role="option"] .sub { margin-left: auto; font-size: var(--fs-caption-xs); white-space: nowrap; color: hsl(var(--text-300)); }
-/* 能力徽标：只画一个眼睛，用户读不出这是「图片」。给一段短文字，悬停再给完整说明。 */
+/* 能力徽标：眼睛 + 文字，悬停给完整说明（保留既有约定）。 */
 .mp-pop [role="option"] .v-badge {
   flex: none;
   display: inline-flex;
@@ -79,95 +145,46 @@
   font-size: var(--fs-caption-2xs);
   line-height: 1;
 }
+/* ✓：DeepSeek 是主色细勾，不是圆形徽章。 */
 .mp-pop [role="option"] .check {
   flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: hsl(var(--accent-brand));
-  color: #fff;
-  font-size: 10px;
+  width: 14px;
+  height: 14px;
+  background: transparent;
+  color: hsl(var(--text-000));
+  font-size: 12px;
   line-height: 1;
   font-weight: var(--fw-bold);
 }
-.mp-pop .mp-controls { flex: none; min-height: 0; }
-.mp-pop .mp-controls:empty { display: none; }
-.mp-pop .mp-controls > .pop-label { display: none; }
-/* 2026-11-02 真机：思考档四格此前像四个悬空文字——轨道底色 bg-200 与面板底色只差 2%，
-   亮色下几乎不可见。补一圈细描边，轨道在任何主题下都读得出来（选中段仍是 surface 白）。 */
-.mp-pop .th-row {
-  margin: 0 5px 5px; padding: 3px; gap: 2px;
+
+/* 思考面：档位 radio 行 + 底部「自定义」foot 行。 */
+.mp-pop .mp-effort { min-height: 0; display: flex; flex-direction: column; padding: 0 0 2px; }
+.mp-pop .mp-effort .menu-note { margin: 2px 4px 4px; font-size: var(--fs-caption-xs); }
+.mp-pop .mp-empty { padding: 10px 8px; color: hsl(var(--text-400)); font-size: var(--fs-caption-sm); }
+
+/* 档位自定义（收起不想看到的档）：编辑块沿用 chip 形态，落在思考面底部。 */
+.mp-pop .th-edit {
+  margin: 2px 4px 4px;
+  padding: 9px 10px 8px;
   border: 1px solid var(--hairline);
   border-radius: var(--radius-sm);
-  background: hsl(var(--bg-200));
-}
-.mp-pop .th-row button { min-height: 30px; padding: 4px 8px; }
-.mp-pop .th-row button[aria-pressed="true"] { box-shadow: none; }
-/* 底部动作区（2026-11-02）：与上方思考档用一条细线分开，read 成「去另一处」而不是菜单里
-   的又一行模型/档位。 */
-.mp-pop .mp-foot {
-  margin-top: 6px;
-  padding-top: 6px;
-  border-top: 1px solid var(--hairline);
-}
-.mp-pop .mp-foot .menu-item {
-  min-height: 32px;
-  color: hsl(var(--text-300));
-  font-size: var(--fs-caption-sm);
-  border-radius: var(--radius-sm);
-}
-.mp-pop .th-why { margin: 2px 8px 6px; }
-.mp-pop .th-why-body { max-height: 100px; overflow-y: auto; }
-.mp-pop .menu-note { font-size: var(--fs-caption-xs); }
-
-/* 思考档（2026-10-31）：标题行恢复可见——它现在承载「自定义」入口。
-   此前 `.mp-controls > .pop-label` 被整行藏掉，分段没有名字，用户只看到四格按钮。 */
-.mp-pop .th-head {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  margin: 2px 8px 4px;
-}
-.mp-pop .th-head .pop-label { display: block; margin: 0; }
-.mp-pop .th-custom {
-  display: inline-flex; align-items: center; gap: 4px;
-  min-height: 28px; padding: 0 6px; border-radius: var(--radius-xs);
-  color: hsl(var(--text-300)); font-size: var(--fs-caption-xs);
-  transition: background var(--t-instant), color var(--t-instant);
-}
-.mp-pop .th-custom:hover { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover)); color: hsl(var(--text-000)); }
-.mp-pop .th-row button { flex: 1 1 0; min-width: 44px; border-radius: 5px; }
-.mp-pop .th-row button[aria-pressed="true"] {
-  background: hsl(var(--bg-000));
-  box-shadow: 0 1px 2px rgb(0 0 0 / 6%), inset 0 0 0 1px var(--hairline-strong);
-  color: hsl(var(--text-000));
-}
-/* 「不支持思考强度」态（2026-11-01 真机订正 · ADR-0009 fail-visible，不谎称可调）：
-   分段**留着**（说明这项能力存在），但不许看起来像个能拧的选中控件——选中段的高亮底、
-   浮起阴影、加粗全撤掉，只留中性轨道 + 次级文字。aria-pressed 仍如实标着当前档（off）：
-   改的是视觉，不是事实。 */
-.mp-pop .th-row[data-unsupported="true"] button[aria-pressed="true"] {
-  background: transparent;
-  border-color: transparent;
-  box-shadow: none;
-  color: hsl(var(--text-200));
-  font-weight: var(--fw-regular);
-}
-/* 折叠体里两段话（原因 + 机制）：段间距自己管，不吃 UA 的 p 默认外边距。 */
-.mp-pop .th-why-body p { margin: 0; }
-.mp-pop .th-why-body p + p { margin-top: 4px; }
-.mp-pop .th-edit {
-  margin: 0 5px 6px; padding: 9px 10px 8px;
-  border: 1px solid var(--hairline); border-radius: var(--radius-sm);
   background: hsl(var(--bg-100));
 }
 .mp-pop .th-edit-note { margin: 0 0 8px; color: hsl(var(--text-300)); font-size: var(--fs-caption-xs); line-height: 1.55; }
 .mp-pop .th-edit-list { display: flex; flex-wrap: wrap; gap: 6px; }
 .mp-pop .th-edit-chip {
-  display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 9px;
-  border: 1px solid var(--hairline); border-radius: var(--radius-pill);
-  color: hsl(var(--text-300)); font-size: var(--fs-caption-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  color: hsl(var(--text-300));
+  font-size: var(--fs-caption-sm);
   transition: border-color var(--t-instant), background var(--t-instant), color var(--t-instant);
 }
 .mp-pop .th-edit-chip:hover { border-color: var(--hairline-strong); color: hsl(var(--text-000)); }
@@ -177,15 +194,33 @@
   color: hsl(var(--text-000));
 }
 .mp-pop .th-edit-box {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 12px; height: 12px; border-radius: 3px;
-  border: 1px solid var(--hairline-strong); font-size: 9px; line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--hairline-strong);
+  font-size: 9px;
+  line-height: 1;
 }
 .mp-pop .th-edit-chip[aria-checked="true"] .th-edit-box {
-  border-color: hsl(var(--accent-brand)); background: hsl(var(--accent-brand)); color: #fff;
+  border-color: hsl(var(--accent-brand));
+  background: hsl(var(--accent-brand));
+  color: #fff;
 }
 .mp-pop .th-reset {
-  margin-top: 9px; padding: 0; border: 0; background: none;
-  color: hsl(var(--text-300)); font-size: var(--fs-caption-xs); text-decoration: underline;
+  margin-top: 9px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: hsl(var(--text-300));
+  font-size: var(--fs-caption-xs);
+  text-decoration: underline;
 }
 .mp-pop .th-reset:hover { color: hsl(var(--text-000)); }
+.mp-pop .th-why { margin: 2px 8px 6px; }
+.mp-pop .th-why-body { max-height: 100px; overflow-y: auto; }
+.mp-pop .th-why-body p { margin: 0; }
+.mp-pop .th-why-body p + p { margin-top: 4px; }
+.mp-pop .menu-note { font-size: var(--fs-caption-xs); }

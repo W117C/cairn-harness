@@ -17,6 +17,7 @@ import { readAppSurface } from "./helpers/app-surface";
 
 // 2026-11-03：变更窗格本体已从 PaneDock 抽至 ChangesPane.tsx（行帽拆分批），判卷锚跟着走。
 const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/ChangesPane.tsx", import.meta.url)), "utf8");
+const dockSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/PaneDock.tsx", import.meta.url)), "utf8");
 const css = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
 
 describe("变更窗格 · 分栏审阅器", () => {
@@ -63,5 +64,9 @@ describe("变更窗格 · 分栏审阅器", () => {
     expect(surface).toContain("const selected = (() => {");
     // 右栏的标题用选中文件的路径与动作徽标
     expect(surface).toContain("selected.file.path");
+  });
+
+  it("⑦ 切会话必须重挂变更窗格：评注/展开位不许跨会话串话", () => {
+    expect(dockSrc).toContain('key={props.sessionId ?? "no-session"}');
   });
 });

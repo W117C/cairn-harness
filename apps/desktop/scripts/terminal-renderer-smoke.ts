@@ -42,6 +42,9 @@ async function main(){
   activeHost=host;
   app.on('will-quit',()=>host.killAll());
   ipcMain.handle(INVOKE_CHANNELS.getSettings,()=>({theme:'light'}));
+  // v33 窗口可见上报（workbench.ts 挂载即 fire-and-forget）：生产主进程已注册；本桩此前没跟上
+  // ⇒ 渲染层挂载即吃三条 unhandled rejection，被「渲染无控制台错误」当场抓红。桩收下即可。
+  ipcMain.handle(INVOKE_CHANNELS.reportViewing,()=>({ok:true}));
   ipcMain.handle(INVOKE_CHANNELS.protocolVersion,()=>reportedVersion);
   ipcMain.handle(INVOKE_CHANNELS.terminalStart,async(event)=>{
     const owner=BrowserWindow.fromWebContents(event.sender);

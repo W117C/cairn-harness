@@ -1,0 +1,22 @@
+.background-commands {
+  margin-bottom: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: hsl(var(--bg-000));
+  color: hsl(var(--text-100));
+  font-size: var(--fs-body-sm);
+}
+
+.background-commands summary { cursor: pointer; }
+.background-commands ul {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-sm) 0 0;
+  max-height: min(34vh, 280px);
+  overflow: auto;
+}
+.background-commands li + li { border-top: 1px solid var(--hairline); margin-top: var(--space-sm); padding-top: var(--space-sm); }
+.background-command-row { display: flex; gap: var(--space-sm); align-items: center; margin-bottom: var(--space-xs); }
+.background-command-row code { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.background-commands pre { margin: var(--space-xs) 0; padding: var(--space-sm); background: hsl(var(--bg-100)); white-space: pre-wrap; overflow-wrap: anywhere; }

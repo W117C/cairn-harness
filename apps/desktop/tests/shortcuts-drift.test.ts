@@ -39,7 +39,7 @@ const WITNESSES: Record<string, { file: "app" | "composer"; needles: string[] }>
   "⌘↑ / ⌘↓": { file: "app", needles: ['case "ArrowUp"', "h.jumpTop()", 'case "ArrowDown"', "h.jumpBottom()"] },
   Tab: { file: "composer", needles: ['e.key === "Tab" && !e.shiftKey', "props.onSuggestNext"] },
   Enter: { file: "composer", needles: ['e.key !== "Enter"', "submit("] },
-  "⌘↩": { file: "composer", needles: ["e.metaKey || e.ctrlKey ? { interrupt: true }"] },
+  "⌘↩": { file: "composer", needles: ["e.metaKey || e.ctrlKey ? { interrupt: true, forceQueue: true }"] },
   "⌘.": { file: "app", needles: ['case "Period"', "h.cancelRun(h.activeId)"] },
   Esc: { file: "app", needles: ['e.key === "Escape"', "h.cancelRun(h.activeId)"] },
 };

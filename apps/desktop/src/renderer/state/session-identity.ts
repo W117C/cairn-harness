@@ -48,6 +48,14 @@ export function runKey(workspace: string | null | undefined, sessionId: string):
   return sessionKeyOf(workspace, sessionId) ?? sessionId;
 }
 
+/** 后台会话的非终态事件只点亮一次运行灯。
+ *  返回 true = 0→1 的转变（调用方需要重渲染）；false = 已经在跑（不要再按 token 频率 force 整棵树）。 */
+export function markBackgroundRunning(running: Set<string>, key: string): boolean {
+  if (running.has(key)) return false;
+  running.add(key);
+  return true;
+}
+
 /** 注释锚点（反馈/置顶）：本地行只有 eventId，祖先行带来源引用。 */
 export interface AnchoredEvent { eventId: number; eventRef?: EventRef }
 

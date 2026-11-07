@@ -11,24 +11,25 @@ import { useState } from "react";
 import type { EvolveReport } from "../../../../../../src/main/ipc-protocol";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { Badge, Banner, SettingsRow, SettingsSection } from "../settings-ui";
+import { STR } from "../../strings";
 
 /** 经验状态/类型的人话标签（2026-11-02）：数据面仍是 active/candidate/lesson/pitfall，
  *  界面只做呈现层映射；未登记的键原样显示，不编造。 */
 const STATUS_LABEL: Record<string, string> = {
-  active: "已生效",
-  candidate: "候选",
-  retired: "已退役",
-  rejected: "已拒绝",
+  active: STR.evolve.statusActive,
+  candidate: STR.evolve.statusCandidate,
+  retired: STR.evolve.statusRetired,
+  rejected: STR.evolve.statusRejected,
 };
 const KIND_LABEL: Record<string, string> = {
-  lesson: "经验教训",
-  pitfall: "易错点",
+  lesson: STR.evolve.kindLesson,
+  pitfall: STR.evolve.kindPitfall,
 };
 const CANDIDATE_STATUS_LABEL: Record<string, string> = {
-  candidate: "待评估",
-  promoted: "已晋升",
-  rejected: "已拒绝",
-  passed: "已通过",
+  candidate: STR.evolve.candCandidate,
+  promoted: STR.evolve.candPromoted,
+  rejected: STR.evolve.candRejected,
+  passed: STR.evolve.candPassed,
 };
 
 export type EvolvePanelState =
@@ -42,7 +43,7 @@ function countEntries(map: Record<string, number>): [string, number][] {
 
 function counts(map: Record<string, number>): string {
   const entries = countEntries(map);
-  return entries.length === 0 ? "无" : entries.map(([key, value]) => key + "×" + String(value)).join("、");
+  return entries.length === 0 ? STR.evolve.none : entries.map(([key, value]) => key + "×" + String(value)).join("、");
 }
 
 /** 计数小片：给人读的一格一个数（标签 + 值）；CJK 词不许折行（CSS 保 nowrap）。 */
@@ -65,7 +66,7 @@ function CountChips(props: { items: { key: string; value: number; unit?: string 
 function TechDetails(props: { lines: { key: string; raw: string }[] }): React.JSX.Element {
   return (
     <details className="sp-tech">
-      <summary>技术详情</summary>
+      <summary>{STR.evolve.techDetails}</summary>
       <div className="sp-tech-body">
         {props.lines.map((line) => (
           <div className="sp-tech-line" key={line.key}>
@@ -79,13 +80,13 @@ function TechDetails(props: { lines: { key: string; raw: string }[] }): React.JS
 }
 
 function budgetSource(source: EvolveReport["budget"]["source"]): string {
-  return source === "file" ? "文件配置" : source === "invalid" ? "坏档，已回缺省" : "缺省";
+  return source === "file" ? STR.evolve.budgetSourceFile : source === "invalid" ? STR.evolve.budgetSourceInvalid : STR.evolve.budgetSourceDefault;
 }
 
 function findingLabel(reason: string): string {
-  if (reason === "expired") return "已过期";
-  if (reason === "negative") return "负证据（本库+证据库）";
-  if (reason === "conflict") return "同触发冲突";
+  if (reason === "expired") return STR.evolve.findingExpired;
+  if (reason === "negative") return STR.evolve.findingNegative;
+  if (reason === "conflict") return STR.evolve.findingConflict;
   return reason;
 }
 
@@ -118,13 +119,13 @@ export function EvolvePanel(props: {
     <div className="ss-page">
       {/* 头与内容列都跟其它设置分区同形（SettingsPage）：此前这里只有裸 h1，
           少了 .ss-content ⇒ settings-refinement.css 的「分区之间一条细线」从不生效。 */}
-      <header className="ss-head"><h1 className="ss-title">进化</h1></header>
+      <header className="ss-head"><h1 className="ss-title">{STR.evolve.title}</h1></header>
       <div className="ss-content">
-        {state.status === "loading" && <p className="sp-note" role="status">正在读取进化报告…</p>}
+        {state.status === "loading" && <p className="sp-note" role="status">{STR.evolve.loading}</p>}
         {state.status === "error" && (
           <div className="sp-note err" role="alert">
-            <p>读取失败：{state.error.trim() || "未知原因"}</p>
-            <button type="button" className="mini-btn" onClick={props.onRetry}>重试</button>
+            <p>{STR.evolve.loadFailedPrefix}{state.error.trim() || STR.common.unknownError}</p>
+            <button type="button" className="mini-btn" onClick={props.onRetry}>{STR.common.retry}</button>
           </div>
         )}
         {state.status === "ready" && (
@@ -183,157 +184,160 @@ function EvolveReportBody(props: {
       raw: `success ${String(episodes.byOutcome.success)} / failure ${String(episodes.byOutcome.failure)} / unknown ${String(episodes.byOutcome.unknown)}；verify green ${String(episodes.byVerify.green)} / red ${String(episodes.byVerify.red)} / none ${String(episodes.byVerify.none)}`,
     },
     {
-      key: "未知面",
-      raw: `judge 未测 ${String(episodes.unknownReasons.judge)}；verify 未跑 ${String(episodes.unknownReasons.verify)}；user 未测 ${String(episodes.unknownReasons.user)}`,
+      key: STR.evolve.rawUnknown,
+      raw: [STR.evolve.rawJudgeUntested.replace("{n}", String(episodes.unknownReasons.judge)), STR.evolve.rawVerifyUnrun.replace("{n}", String(episodes.unknownReasons.verify)), STR.evolve.rawUserUntested.replace("{n}", String(episodes.unknownReasons.user))].join("；"),
     },
     {
-      key: "成本",
-      raw: `主面 ${String(episodes.cost.mainTokens)} token；worker ${String(episodes.cost.workerTokens)}；可定价 ${String(episodes.cost.pricedRuns)} / 不可定价 ${String(episodes.cost.unpricedRuns)}`,
+      key: STR.evolve.rawCost,
+      raw: STR.evolve.rawMainTokens.replace("{n}", String(episodes.cost.mainTokens)) + "；" + STR.evolve.rawWorkerTokens.replace("{n}", String(episodes.cost.workerTokens)) + "；" + STR.evolve.rawPriced.replace("{n}", String(episodes.cost.pricedRuns)) + " / " + STR.evolve.rawUnpriced.replace("{n}", String(episodes.cost.unpricedRuns)),
     },
     {
       key: "playbook",
-      raw: `状态：${counts(playbook.byStatus)}；类型：${counts(playbook.byKind)}；冲突 ${String(playbook.conflicts)}；过期 ${String(playbook.expired)}；负证据 ${String(playbook.negative)}；可激活 ${String(playbook.activatable.length)}${playbook.activatable.length === 0 ? "" : "（" + playbook.activatable.slice(0, 2).join("、") + (playbook.activatable.length > 2 ? " 等" : "") + "）"}；坏行 ${String(playbook.badLines)}；拒单 ${String(playbook.refusals)}`,
+      raw: [STR.evolve.rawStatusCounts.replace("{s}", counts(playbook.byStatus)), STR.evolve.rawKindCounts.replace("{k}", counts(playbook.byKind)), STR.evolve.rawConflict.replace("{n}", String(playbook.conflicts)), STR.evolve.rawExpired.replace("{n}", String(playbook.expired)), STR.evolve.rawNegative.replace("{n}", String(playbook.negative)), STR.evolve.rawActivatable.replace("{n}", String(playbook.activatable.length)) + (playbook.activatable.length === 0 ? "" : "（" + playbook.activatable.slice(0, 2).join("、") + (playbook.activatable.length > 2 ? STR.evolve.rawActivatableEllipsis : "") + "）"), STR.evolve.rawBadLines.replace("{n}", String(playbook.badLines)), STR.evolve.rawRefusals.replace("{n}", String(playbook.refusals))].join("；"),
     },
     {
-      key: "候选",
-      raw: `状态：${counts(report.candidates.byStatus)}`,
+      key: STR.evolve.rawCandidates,
+      raw: STR.evolve.rawStatusCounts.replace("{s}", counts(report.candidates.byStatus)),
     },
     {
-      key: "预算容量",
-      raw: `playbook ${String(report.budget.budget.maxPlaybookEntries)}；实验 ${String(report.budget.budget.maxExperiments)}；候选 ${String(report.budget.budget.maxCandidates)}`,
+      key: STR.evolve.rawBudget,
+      raw: ["playbook " + String(report.budget.budget.maxPlaybookEntries), STR.evolve.rawExperiments.replace("{n}", String(report.budget.budget.maxExperiments)), STR.evolve.rawCandidatesCount.replace("{n}", String(report.budget.budget.maxCandidates))].join("；"),
     },
   ];
   return (
     <>
       {report.frozen && (
         <Banner tone="warn">
-          STOP 冻结中：不会注入经验、不会晋升候选、不会写技能候选；可在「治理」里解除冻结。
+          {STR.evolve.frozenBanner}
         </Banner>
       )}
       {props.actionError !== undefined && <p className="sp-note err" role="alert">{props.actionError}</p>}
-      <SettingsSection title="证据">
-        <SettingsRow label="记录总数">
-          <Badge>{String(episodes.total)} 条</Badge>
+      <SettingsSection title={STR.evolve.evidenceTitle}>
+        <SettingsRow label={STR.evolve.recordTotal}>
+          <Badge>{String(episodes.total)}{STR.evolve.entryUnit}</Badge>
         </SettingsRow>
-        <SettingsRow label="结果分布">
+        <SettingsRow label={STR.evolve.outcomeLabel}>
           <CountChips items={[
-            { key: "成功", value: episodes.byOutcome.success },
-            { key: "失败", value: episodes.byOutcome.failure },
-            { key: "未分类", value: episodes.byOutcome.unknown },
+            { key: STR.evolve.chipSuccess, value: episodes.byOutcome.success },
+            { key: STR.evolve.chipFailure, value: episodes.byOutcome.failure },
+            { key: STR.evolve.chipUnclassified, value: episodes.byOutcome.unknown },
           ]} />
         </SettingsRow>
-        <SettingsRow label="自校验">
+        <SettingsRow label={STR.evolve.verifyLabel}>
           <CountChips items={[
-            { key: "绿", value: episodes.byVerify.green },
-            { key: "红", value: episodes.byVerify.red },
-            { key: "无", value: episodes.byVerify.none },
+            { key: STR.evolve.chipGreen, value: episodes.byVerify.green },
+            { key: STR.evolve.chipRed, value: episodes.byVerify.red },
+            { key: STR.evolve.chipNone, value: episodes.byVerify.none },
           ]} />
         </SettingsRow>
-        <SettingsRow label="未知面">
+        <SettingsRow label={STR.evolve.unknownLabel}>
           <CountChips items={[
             // 2026-11-02：界面说人话（判分/自校验/用户反馈），原始 judge/verify/user 仍留在技术详情。
-            { key: "判分未测", value: episodes.unknownReasons.judge },
-            { key: "自校验未跑", value: episodes.unknownReasons.verify },
-            { key: "用户反馈未测", value: episodes.unknownReasons.user },
+            { key: STR.evolve.chipJudgeUntested, value: episodes.unknownReasons.judge },
+            { key: STR.evolve.chipVerifyUnrun, value: episodes.unknownReasons.verify },
+            { key: STR.evolve.chipUserUntested, value: episodes.unknownReasons.user },
           ]} />
         </SettingsRow>
-        <SettingsRow label="成本">
+        <SettingsRow label={STR.evolve.costLabel}>
           <CountChips items={[
-            { key: "主面", value: episodes.cost.mainTokens, unit: "token" },
-            { key: "子代理", value: episodes.cost.workerTokens, unit: "token" },
+            { key: STR.evolve.chipMain, value: episodes.cost.mainTokens, unit: "token" },
+            { key: STR.evolve.chipWorker, value: episodes.cost.workerTokens, unit: "token" },
           ]} />
         </SettingsRow>
-        <SettingsRow label="计价">
+        <SettingsRow label={STR.evolve.pricingLabel}>
           <CountChips items={[
-            { key: "可定价", value: episodes.cost.pricedRuns },
-            { key: "不可定价", value: episodes.cost.unpricedRuns },
+            { key: STR.evolve.chipPriced, value: episodes.cost.pricedRuns },
+            { key: STR.evolve.chipUnpriced, value: episodes.cost.unpricedRuns },
           ]} />
         </SettingsRow>
         <TechDetails lines={rawLines} />
       </SettingsSection>
 
-      <SettingsSection title="经验沉淀" hint="候选不注入">
-        <SettingsRow label="条目总数">
-          <Badge>{String(playbook.total)} 条</Badge>
+      <SettingsSection title={STR.evolve.playbookTitle} hint={STR.evolve.playbookHint}>
+        <SettingsRow label={STR.evolve.entryTotal}>
+          <Badge>{String(playbook.total)}{STR.evolve.entryUnit}</Badge>
         </SettingsRow>
-        <SettingsRow label="状态">
+        <SettingsRow label={STR.evolve.statusRow}>
           <CountChips items={countEntries(playbook.byStatus).map(([key, value]) => ({ key: STATUS_LABEL[key] ?? key, value }))} />
         </SettingsRow>
-        <SettingsRow label="类型">
+        <SettingsRow label={STR.evolve.kindRow}>
           <CountChips items={countEntries(playbook.byKind).map(([key, value]) => ({ key: KIND_LABEL[key] ?? key, value }))} />
         </SettingsRow>
-        <SettingsRow label="需要处理" desc="冲突、过期、负证据与过门可激活的条目。">
+        <SettingsRow label={STR.evolve.attentionLabel} desc={STR.evolve.attentionDesc}>
           <CountChips items={[
-            { key: "冲突", value: playbook.conflicts },
-            { key: "过期", value: playbook.expired },
-            { key: "负证据", value: playbook.negative },
-            { key: "可激活", value: playbook.activatable.length },
-            { key: "坏行", value: playbook.badLines },
-            { key: "拒单", value: playbook.refusals },
+            { key: STR.evolve.chipConflict, value: playbook.conflicts },
+            { key: STR.evolve.chipExpired, value: playbook.expired },
+            { key: STR.evolve.chipNegative, value: playbook.negative },
+            { key: STR.evolve.chipActivatable, value: playbook.activatable.length },
+            { key: STR.evolve.chipBadLines, value: playbook.badLines },
+            { key: STR.evolve.chipRefusals, value: playbook.refusals },
           ]} />
-          <Badge tone={playbook.conflicts === 0 ? "ok" : "neutral"}>{playbook.conflicts === 0 ? "无冲突" : "有冲突"}</Badge>
+          <Badge tone={playbook.conflicts === 0 ? "ok" : "neutral"}>{playbook.conflicts === 0 ? STR.evolve.noConflict : STR.evolve.hasConflict}</Badge>
         </SettingsRow>
       </SettingsSection>
 
-      <SettingsSection title="可激活经验" hint={report.frozen ? "冻结中" : "人工确认后生效"}>
+      <SettingsSection title={STR.evolve.activatableTitle} hint={report.frozen ? STR.evolve.hintFrozen : STR.evolve.hintManual}>
         {report.activationCandidates.length === 0
-          ? <p className="sp-note">没有过门候选（需要对照组实验证据）。</p>
+          ? <p className="sp-note">{STR.evolve.noActivatable}</p>
           : report.activationCandidates.map((candidate) => (
             <SettingsRow
               key={candidate.id}
               label={candidate.body.length > 80 ? candidate.body.slice(0, 80) + "…" : candidate.body}
             >
               <Badge tone="ok">
-                {KIND_LABEL[candidate.kind] ?? candidate.kind} · 风险差 {candidate.riskDiff === null ? "—" : candidate.riskDiff.toFixed(2)}
-                {" · "}{String(candidate.trials)} 场 · 证据 {String(candidate.evidence)}
+                {STR.evolve.badgeActivatable
+                  .replace("{kind}", KIND_LABEL[candidate.kind] ?? candidate.kind)
+                  .replace("{risk}", candidate.riskDiff === null ? "—" : candidate.riskDiff.toFixed(2))
+                  .replace("{trials}", String(candidate.trials))
+                  .replace("{evidence}", String(candidate.evidence))}
               </Badge>
               {props.onActivate !== undefined && !report.frozen && (
                 <button
                   type="button"
                   className="mini-btn"
                   disabled={props.activateBusyId === candidate.id}
-                  aria-label={"激活经验 " + candidate.id}
+                  aria-label={STR.evolve.activateAria.replace("{id}", candidate.id)}
                   onClick={() => { setActivateTarget(candidate.id); }}
-                >{props.activateBusyId === candidate.id ? "写入中…" : "激活"}</button>
+                >{props.activateBusyId === candidate.id ? STR.evolve.writing : STR.evolve.activate}</button>
               )}
             </SettingsRow>
           ))}
       </SettingsSection>
 
-      <SettingsSection title="负证据经验" hint={report.frozen ? "冻结中" : "人工确认后转 dormant"}>
+      <SettingsSection title={STR.evolve.negativeTitle} hint={report.frozen ? STR.evolve.hintFrozen : STR.evolve.hintDormant}>
         {report.negativeCandidates.length === 0
-          ? <p className="sp-note">没有达到负证据门的 active 经验。</p>
+          ? <p className="sp-note">{STR.evolve.noNegative}</p>
           : report.negativeCandidates.map((candidate) => (
             <SettingsRow
               key={candidate.id}
               label={candidate.body.length > 80 ? candidate.body.slice(0, 80) + "…" : candidate.body}
             >
               <Badge tone="neutral">
-                {candidate.kind} · 观测 {String(candidate.successes)}/{String(candidate.trials)}
+                {STR.evolve.badgeNegative.replace("{kind}", candidate.kind).replace("{s}", String(candidate.successes)).replace("{t}", String(candidate.trials))}
               </Badge>
               {props.onDormant !== undefined && !report.frozen && (
                 <button
                   type="button"
                   className="mini-btn"
                   disabled={props.dormantBusyId === candidate.id}
-                  aria-label={"转休眠 " + candidate.id}
+                  aria-label={STR.evolve.dormantAria.replace("{id}", candidate.id)}
                   onClick={() => { setDormantTarget(candidate.id); }}
-                >{props.dormantBusyId === candidate.id ? "写入中…" : "转休眠"}</button>
+                >{props.dormantBusyId === candidate.id ? STR.evolve.writing : STR.evolve.dormant}</button>
               )}
             </SettingsRow>
           ))}
       </SettingsSection>
 
       <SettingsSection
-        title="全局经验"
-        hint={report.global.frozen ? "全局 STOP 冻结中" : "owner 晋升 · 跨 workspace"}
+        title={STR.evolve.globalTitle}
+        hint={report.global.frozen ? STR.evolve.hintGlobalFrozen : STR.evolve.hintGlobal}
       >
         {report.global.total === 0
-          ? <p className="sp-note">没有全局经验。</p>
+          ? <p className="sp-note">{STR.evolve.noGlobal}</p>
           : report.global.entries.map((entry) => {
             const finding = report.global.findings.find((item) => item.id === entry.id);
-            const observation = "本库观测 " + String(entry.successes) + "/" + String(entry.trials)
-              + "；证据库观测 " + String(entry.evidenceSuccesses) + "/" + String(entry.evidenceTrials);
+            const observation = STR.evolve.observation.replace("{s}", String(entry.successes)).replace("{t}", String(entry.trials))
+              .replace("{es}", String(entry.evidenceSuccesses)).replace("{et}", String(entry.evidenceTrials));
             return (
               <SettingsRow
                 key={entry.id}
@@ -343,68 +347,67 @@ function EvolveReportBody(props: {
                   : observation + "；" + findingLabel(finding.reason) + "：" + finding.detail}
               >
                 <Badge tone={entry.status === "active" && finding === undefined ? "ok" : "neutral"}>
-                  {entry.kind} · {entry.status} · {String(entry.workspaces)} 库 / {String(entry.evidence)} 证据
+                  {STR.evolve.badgeGlobal.replace("{kind}", entry.kind).replace("{status}", entry.status)
+                    .replace("{w}", String(entry.workspaces)).replace("{e}", String(entry.evidence))}
                 </Badge>
                 {props.onRevokeGlobal !== undefined && entry.status === "active" && !report.global.frozen && (
                   <button
                     type="button"
                     className="mini-btn"
                     disabled={props.globalBusyId === entry.id}
-                    aria-label={"撤销全局经验 " + entry.id}
+                    aria-label={STR.evolve.revokeAria.replace("{id}", entry.id)}
                     onClick={() => { setRevokeTarget(entry.id); }}
-                  >{props.globalBusyId === entry.id ? "撤销中…" : "撤销"}</button>
+                  >{props.globalBusyId === entry.id ? STR.evolve.revoking : STR.evolve.revoke}</button>
                 )}
                 {props.onRestoreGlobal !== undefined && entry.status === "dormant" && !report.global.frozen && (
                   <button
                     type="button"
                     className="mini-btn"
                     disabled={props.restoreBusyId === entry.id}
-                    aria-label={"恢复全局经验 " + entry.id}
+                    aria-label={STR.evolve.restoreAria.replace("{id}", entry.id)}
                     onClick={() => { setRestoreTarget(entry.id); }}
-                  >{props.restoreBusyId === entry.id ? "恢复中…" : "恢复"}</button>
+                  >{props.restoreBusyId === entry.id ? STR.evolve.restoring : STR.evolve.restore}</button>
                 )}
               </SettingsRow>
             );
           })}
         {report.global.badLines > 0 && (
           <p className="sp-note err" role="alert">
-            全局账坏行 {String(report.global.badLines)} 条（已跳过；账本保留）
+            {STR.evolve.badLinesNote.replace("{n}", String(report.global.badLines))}
           </p>
         )}
         <SettingsRow
-          label={report.global.frozen ? "全局已冻结（STOP）" : "全局未冻结"}
-          desc={report.global.frozen
-            ? "所有 workspace 的全局经验停止注入与撤销；解冻后恢复。"
-            : "冻结会立即停止所有 workspace 的全局经验注入与撤销；随时可解冻。"}
+          label={report.global.frozen ? STR.evolve.globalFrozenLabel : STR.evolve.globalUnfrozenLabel}
+          desc={report.global.frozen ? STR.evolve.globalFrozenDesc : STR.evolve.globalUnfrozenDesc}
         >
           {props.onSetGlobalFrozen !== undefined && (
             <button
               type="button"
               className="mini-btn"
               disabled={props.globalFrozenBusy === true}
-              aria-label={report.global.frozen ? "解除全局冻结" : "冻结全局经验"}
+              aria-label={report.global.frozen ? STR.evolve.unfreezeGlobalAria : STR.evolve.freezeGlobalAria}
               onClick={() => { setConfirmGlobalFreeze(true); }}
-            >{props.globalFrozenBusy === true ? "写入中…" : report.global.frozen ? "解冻" : "冻结"}</button>
+            >{props.globalFrozenBusy === true ? STR.evolve.writing : report.global.frozen ? STR.evolve.unfreeze : STR.evolve.freeze}</button>
           )}
         </SettingsRow>
       </SettingsSection>
 
-      <SettingsSection title="快环提醒" hint="Episode 证据">
-        <SettingsRow label={`${String(report.nudges.episodes)} 场 · ${String(report.nudges.ids)} 条经验`}>
+      <SettingsSection title={STR.evolve.nudgesTitle} hint={STR.evolve.hintEpisode}>
+        <SettingsRow label={STR.evolve.nudgesLabel.replace("{e}", String(report.nudges.episodes)).replace("{n}", String(report.nudges.ids))}>
           <Badge tone={report.nudges.episodes === 0 ? "neutral" : "ok"}>
-            {report.nudges.episodes === 0 ? "无命中" : "有命中"}
+            {report.nudges.episodes === 0 ? STR.evolve.noHit : STR.evolve.hasHit}
           </Badge>
         </SettingsRow>
       </SettingsSection>
 
-      <SettingsSection title="实验" hint="passed 只建议晋升">
+      <SettingsSection title={STR.evolve.experimentsTitle} hint={STR.evolve.hintPassed}>
         {report.experiments.length === 0
-          ? <p className="sp-note">还没有实验。</p>
+          ? <p className="sp-note">{STR.evolve.noExperiments}</p>
           : report.experiments.map((experiment) => (
             <SettingsRow
               key={experiment.id}
               label={experiment.id}
-              desc={`${experiment.candidateRef} · control ${String(experiment.nControl)} / treatment ${String(experiment.nTreatment)}`}
+              desc={STR.evolve.experimentDesc.replace("{ref}", experiment.candidateRef).replace("{c}", String(experiment.nControl)).replace("{t}", String(experiment.nTreatment))}
             >
               <Badge tone={experiment.analysisStatus === "passed" ? "ok" : "neutral"}>
                 {experiment.analysisStatus ?? experiment.status}
@@ -414,49 +417,47 @@ function EvolveReportBody(props: {
           ))}
       </SettingsSection>
 
-      <SettingsSection title="候选" hint="无 holdout 不晋升">
-        <SettingsRow label="候选总数">
+      <SettingsSection title={STR.evolve.candidatesTitle} hint={STR.evolve.hintNoHoldout}>
+        <SettingsRow label={STR.evolve.candidatesTotal}>
           <CountChips items={[
-            { key: "合计", value: report.candidates.total },
+            { key: STR.evolve.totalChip, value: report.candidates.total },
             ...countEntries(report.candidates.byStatus).map(([key, value]) => ({ key: CANDIDATE_STATUS_LABEL[key] ?? key, value })),
           ]} />
-          <Badge tone="neutral">档案</Badge>
+          <Badge tone="neutral">{STR.evolve.archiveChip}</Badge>
         </SettingsRow>
       </SettingsSection>
 
-      <SettingsSection title="预算" hint={budgetSource(report.budget.source)}>
+      <SettingsSection title={STR.evolve.budgetTitle} hint={budgetSource(report.budget.source)}>
         <SettingsRow
-          label="注入"
-          desc={`最多 ${String(report.budget.budget.maxInjectedEntries)} 条 / ${String(report.budget.budget.maxInjectedChars)} 字符`}
+          label={STR.evolve.injectLabel}
+          desc={STR.evolve.injectDesc.replace("{n}", String(report.budget.budget.maxInjectedEntries)).replace("{m}", String(report.budget.budget.maxInjectedChars))}
         >
-          <Badge tone="neutral">每次装配</Badge>
+          <Badge tone="neutral">{STR.evolve.perAssembly}</Badge>
         </SettingsRow>
-        <SettingsRow label="容量">
+        <SettingsRow label={STR.evolve.capacityLabel}>
           <CountChips items={[
-            { key: "经验容量", value: report.budget.budget.maxPlaybookEntries },
-            { key: "实验", value: report.budget.budget.maxExperiments },
-            { key: "候选", value: report.budget.budget.maxCandidates },
+            { key: STR.evolve.capacityEntries, value: report.budget.budget.maxPlaybookEntries },
+            { key: STR.evolve.chipExperiments, value: report.budget.budget.maxExperiments },
+            { key: STR.evolve.rawCandidates, value: report.budget.budget.maxCandidates },
           ]} />
-          <Badge tone="neutral">上限</Badge>
+          <Badge tone="neutral">{STR.evolve.capChip}</Badge>
         </SettingsRow>
         {report.budget.detail !== null && <p className="sp-note">{report.budget.detail}</p>}
       </SettingsSection>
 
-      <SettingsSection title="治理" hint="人工开关">
+      <SettingsSection title={STR.evolve.governanceTitle} hint={STR.evolve.hintManualSwitch}>
         <SettingsRow
-          label={report.frozen ? "已冻结（STOP）" : "未冻结"}
-          desc={report.frozen
-            ? "不注入经验、不晋升候选、不写技能候选；解冻后恢复。"
-            : "冻结会立即停止经验注入、候选晋升与技能候选写入；随时可解冻。"}
+          label={report.frozen ? STR.evolve.frozenLabel : STR.evolve.unfrozenLabel}
+          desc={report.frozen ? STR.evolve.frozenDesc : STR.evolve.unfrozenDesc}
         >
           {props.onSetFrozen !== undefined && (
             <button
               type="button"
               className="mini-btn"
               disabled={props.frozenBusy === true}
-              aria-label={nextFrozen ? "冻结进化" : "解除进化冻结"}
+              aria-label={nextFrozen ? STR.evolve.freezeAria : STR.evolve.unfreezeEvolveAria}
               onClick={() => { setConfirmFreeze(true); }}
-            >{props.frozenBusy === true ? "写入中…" : nextFrozen ? "冻结" : "解冻"}</button>
+            >{props.frozenBusy === true ? STR.evolve.writing : nextFrozen ? STR.evolve.freeze : STR.evolve.unfreeze}</button>
           )}
         </SettingsRow>
       </SettingsSection>
@@ -466,11 +467,11 @@ function EvolveReportBody(props: {
         if (candidate === undefined) return null;
         return (
           <ConfirmDialog
-            title="把这条经验转休眠？"
-            note={"转 dormant 后基线注入与快环都不再用它；观测 "
-              + String(candidate.successes) + "/" + String(candidate.trials)
-              + " 场成功。需要时可经激活门重新回到 active。\n" + candidate.body}
-            confirmLabel="转休眠"
+            title={STR.evolve.dormantConfirmTitle}
+            note={STR.evolve.dormantConfirmNote
+              .replace("{s}", String(candidate.successes)).replace("{t}", String(candidate.trials))
+              .replace("{body}", candidate.body)}
+            confirmLabel={STR.evolve.dormant}
             onClose={() => { setDormantTarget(null); }}
             onConfirm={() => {
               const id = candidate.id;
@@ -486,12 +487,13 @@ function EvolveReportBody(props: {
         if (candidate === undefined) return null;
         return (
           <ConfirmDialog
-            title="激活这条经验？"
-            note={"激活后基线注入会使用它（对照组 riskDiff "
-              + (candidate.riskDiff === null ? "—" : candidate.riskDiff.toFixed(2))
-              + "，" + String(candidate.trials) + " 场，证据 " + String(candidate.evidence) + " 条）。\n"
-              + candidate.body}
-            confirmLabel="激活"
+            title={STR.evolve.activateConfirmTitle}
+            note={STR.evolve.activateConfirmNote
+              .replace("{risk}", candidate.riskDiff === null ? "—" : candidate.riskDiff.toFixed(2))
+              .replace("{trials}", String(candidate.trials))
+              .replace("{evidence}", String(candidate.evidence))
+              .replace("{body}", candidate.body)}
+            confirmLabel={STR.evolve.activate}
             onClose={() => { setActivateTarget(null); }}
             onConfirm={() => {
               const id = candidate.id;
@@ -504,11 +506,11 @@ function EvolveReportBody(props: {
 
       {confirmGlobalFreeze && props.onSetGlobalFrozen !== undefined && (
         <ConfirmDialog
-          title={report.global.frozen ? "解除全局冻结？" : "冻结全局经验？"}
+          title={report.global.frozen ? STR.evolve.unfreezeGlobalTitle : STR.evolve.freezeGlobalTitle}
           note={report.global.frozen
-            ? "解除后所有 workspace 恢复全局经验注入与撤销。"
-            : "冻结后所有 workspace 的全局经验停止注入，也不能撤销；局部经验与 workspace STOP 不受影响。随时可解冻。"}
-          confirmLabel={report.global.frozen ? "解除冻结" : "冻结"}
+            ? STR.evolve.unfreezeGlobalNote
+            : STR.evolve.freezeGlobalNote}
+          confirmLabel={report.global.frozen ? STR.evolve.unfreezeConfirmLabel : STR.evolve.freeze}
           onClose={() => { setConfirmGlobalFreeze(false); }}
           onConfirm={() => {
             const next = !report.global.frozen;
@@ -523,9 +525,9 @@ function EvolveReportBody(props: {
         if (entry === undefined) return null;
         return (
           <ConfirmDialog
-            title="恢复这条全局经验？"
-            note={"恢复前会复核 ≥3 个 workspace 的存储证据；失效会拒绝并保持 dormant。\n" + entry.body}
-            confirmLabel="恢复"
+            title={STR.evolve.restoreConfirmTitle}
+            note={STR.evolve.restoreConfirmNote.replace("{body}", entry.body)}
+            confirmLabel={STR.evolve.restore}
             onClose={() => { setRestoreTarget(null); }}
             onConfirm={() => {
               const id = entry.id;
@@ -541,9 +543,9 @@ function EvolveReportBody(props: {
         if (entry === undefined) return null;
         return (
           <ConfirmDialog
-            title="撤销这条全局经验？"
-            note={"撤销后所有 workspace 都不再注入它；全局账保留 dormant 记录，需要时可重新评估。\n" + entry.body}
-            confirmLabel="撤销"
+            title={STR.evolve.revokeConfirmTitle}
+            note={STR.evolve.revokeConfirmNote.replace("{body}", entry.body)}
+            confirmLabel={STR.evolve.revoke}
             onClose={() => { setRevokeTarget(null); }}
             onConfirm={() => {
               const id = entry.id;
@@ -556,11 +558,11 @@ function EvolveReportBody(props: {
 
       {confirmFreeze && props.onSetFrozen !== undefined && (
         <ConfirmDialog
-          title={nextFrozen ? "冻结进化？" : "解除进化冻结？"}
+          title={nextFrozen ? STR.evolve.evolveFreezeTitle : STR.evolve.evolveUnfreezeTitle}
           note={nextFrozen
-            ? "冻结后不会注入经验、不会晋升候选、不会写技能候选；证据与报告只读保留。随时可解冻。"
-            : "解除后恢复经验注入、候选晋升与技能候选写入。"}
-          confirmLabel={nextFrozen ? "冻结" : "解除冻结"}
+            ? STR.evolve.evolveFreezeNote
+            : STR.evolve.evolveUnfreezeNote}
+          confirmLabel={nextFrozen ? STR.evolve.freeze : STR.evolve.unfreezeConfirmLabel}
           onClose={() => { setConfirmFreeze(false); }}
           onConfirm={() => { setConfirmFreeze(false); props.onSetFrozen?.(nextFrozen); }}
         />
