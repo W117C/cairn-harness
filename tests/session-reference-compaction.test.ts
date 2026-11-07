@@ -195,8 +195,10 @@ describe("分叉会话的压缩生产端产出来源形式", () => {
 
     await writeSession(root, "child", [...local, event]);
     const after = await readSessionView({ workspace: ws, sessionId: "child" }, root);
-    const body = text(projectViewContext(after));
+    const messages = projectViewContext(after);
+    const body = text(messages);
     expect(body).toContain("overflow 紧急截断");
-    expect(body).not.toContain("PARENT_SUMMARY");
+    expect(body.split("PARENT_SUMMARY")).toHaveLength(2);
+    expect(messages.filter((message) => message.content?.includes("[系统操作·上下文压缩摘要]"))).toHaveLength(1);
   });
 });

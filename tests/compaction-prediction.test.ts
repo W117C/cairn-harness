@@ -165,8 +165,8 @@ async function waitForPredictionUsage(logPath: string): Promise<Extract<AgentEve
   throw new Error("prediction usage was not recorded");
 }
 
-async function drain(provider: ReturnType<typeof createSessionProvider>): Promise<void> {
-  for await (const _event of provider.stream([], [])) {
+async function drain(provider: ReturnType<typeof createSessionProvider>, signal?: AbortSignal): Promise<void> {
+  for await (const _event of provider.stream([], [], signal ? { signal } : undefined)) {
     // Direct provider use: the loop normally owns event persistence.
   }
 }
@@ -228,7 +228,78 @@ describe("session provider predictive compaction", () => {
     }
   });
 
+  // #34：预测摘要挂起时，run 取消必须能立刻收束，且不把取消后的 usage/候选落进事件流。
+  it("预测摘要收到 signal；等待中取消不落 usage、不采纳候选", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "compaction-prediction-abort-"));
+    try {
+      const logPath = join(dir, "session.jsonl");
+      const initial = warmEvents();
+      const config = smallConfig();
+      const log = createEventLog(logPath);
+      for (const event of initial) await log.append(event);
+      await log.close?.();
+
+      const controller = new AbortController();
+      let started: (() => void) | null = null;
+      let summarizerCalls = 0;
+      let sawSignal = false;
+      const waiting = new Promise<void>((resolve) => { started = resolve; });
+      const summarizer = async (input: { signal?: AbortSignal }): Promise<{ text: string; usage: { inputTokens: number; outputTokens: number } }> => {
+        summarizerCalls++;
+        sawSignal = input.signal === controller.signal;
+        started?.();
+        await new Promise<void>((resolve) => {
+          if (input.signal?.aborted) return resolve();
+          input.signal?.addEventListener("abort", () => resolve(), { once: true });
+        });
+        return { text: SUMMARY, usage: { inputTokens: 99, outputTokens: 9 } };
+      };
+      async function* mainTransport() { yield { type: "assistant_delta" as const, callId: "main", text: "ok" }; }
+      const provider = createSessionProvider(logPath, {
+        workspace: dir,
+        map: false,
+        transport: mainTransport,
+        compaction: { summarizer, config, prediction: { enabled: true, startRatio: 0.8, maxAgeMs: 60_000 } },
+      });
+
+      // 第一轮：预热区只起预测任务，不进入 auto 触发；把 signal 递进 startPrediction。
+      const first = drain(provider, controller.signal);
+      await first;
+      await waiting;
+      expect(summarizerCalls).toBe(1);
+      expect(sawSignal, "预测摘要没拿到本轮 signal").toBe(true);
+
+      // 第二轮把估算推到 auto 档：它必须 await 挂起的 predictionTask；取消后立刻返回。
+      const grow = createEventLog(logPath);
+      await grow.append({ type: "assistant_message", content: "d".repeat(600) });
+      await grow.close?.();
+      const second = drain(provider, controller.signal);
+      let cancelled: unknown = null;
+      // 主请求链在轮界按取消收束（throwIfAborted）：判的是「立刻收束」而不是「假装成功」。
+      const secondFinished = second.then(
+        () => "done" as const,
+        (err: unknown) => { cancelled = err; return "cancelled" as const; },
+      );
+      await new Promise((r) => setTimeout(r, 10));
+      const startedWait = Date.now();
+      controller.abort();
+      await expect(Promise.race([
+        secondFinished,
+        new Promise<string>((r) => setTimeout(() => r("timeout"), 1_000)),
+      ])).resolves.toBe("cancelled");
+      expect(cancelled, "取消必须沿 run 信号上抛，不许被吞成正常收场").toBeTruthy();
+      expect(Date.now() - startedWait, "取消后不该等摘要器返回").toBeLessThan(900);
+      await new Promise((r) => setTimeout(r, 20));
+      const final = await replay(logPath);
+      expect(final.filter((e) => e.type === "usage" && e.source === "compaction_prediction")).toEqual([]);
+      expect(final.filter((e) => e.type === "compaction")).toEqual([]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("rejects an expired candidate, accounts its usage, and falls back synchronously", async () => {
+
     const dir = await mkdtemp(join(tmpdir(), "compaction-prediction-expired-"));
     try {
       const logPath = join(dir, "session.jsonl");

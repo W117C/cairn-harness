@@ -17,6 +17,7 @@ import {
   keepFirstSet,
   runCompaction,
   selectCut,
+  selectMicroPrune,
   serializeConversation,
   shouldCompact,
 } from "../src/agent/compaction";
@@ -326,6 +327,50 @@ describe("质量闸与降级链", () => {
 });
 
 describe("overflow 紧急半分截断", () => {
+  it("截断面不动摘要器的失败计数（成败都不代偿、不清零、不停用）", async () => {
+    // 计数不变量「只归摘要器面」对 overflow 同样成立：「无可安全摘除」是截断面的无可摘，
+    // 不是摘要器坏了——旧实现两次这样的 overflow 就把摘要器停用（锅扣错了面）；
+    // 反过来截断成功也不得把摘要器的失败连击清零（截断面不替摘要器证明健康）。
+    const overflow = { trigger: "overflow" as const, reason: "hard_buffer" as const };
+    // 只有无保护余地的最小会话才让截断面走到 failed：assistant 单例可摘 ⇒ target=0 → null。
+    const noDrop: AgentEvent[] = [user(GOAL), say("开始")];
+    const failing = new CompactionCoordinator({ summarizer: async () => { throw new Error("boom"); } });
+    const f1 = await failing.maybeCompact(noDrop, overflow);
+    expect(f1 && !f1.ok && f1.kind).toBe("failed"); // 无可安全摘除（selectTruncation null）
+    expect(failing.failureCount).toBe(0);
+    const f2 = await failing.maybeCompact(noDrop, overflow);
+    expect(f2 && !f2.ok && f2.kind).toBe("failed");
+    expect(failing.summarizerDisabled).toBe(false); // 两次 overflow failed 不停用摘要器
+    // 截断成功不清零：先让摘要器真败一拍（auto 路重试 1 次后仍败 ⇒ 连击 1），
+    // 再用可摘的会话走一次成功的 overflow，连击必须原样保留。
+    const autoEvents: AgentEvent[] = [
+      user(GOAL),
+      say("开始"),
+      call("t1", "read_file", { path: "src/todo.ts" }),
+      result("t1", "x".repeat(800)),
+      call("t2", "write_file", { path: "src/todo.ts", content: "y" }),
+      result("t2", "done"),
+      say("完成"),
+    ];
+    const mixed = new CompactionCoordinator({
+      summarizer: (() => Promise.reject(new Error("boom"))) as never,
+      config: { ...TINY },
+    });
+    await mixed.maybeCompact(autoEvents, { trigger: "auto", reason: "threshold" });
+    expect(mixed.failureCount).toBe(1); // 摘要器自己的连击（重试 1 次后仍败计 1）
+    const truncEvents: AgentEvent[] = [
+      user(GOAL), // 1
+      call("t1", "read_file", { path: "a.ts" }), // 2
+      result("t1", "r1"), // 3
+      call("t2", "read_file", { path: "b.ts" }), // 4
+      result("t2", "r2"), // 5
+      say("收尾"), // 6
+    ];
+    const ok = await mixed.maybeCompact(truncEvents, overflow);
+    expect(ok && ok.ok).toBe(true);
+    expect(mixed.failureCount).toBe(1); // 截断成功不代偿
+  });
+
   it("不调摘要器；整单元丢最旧一半；keep-first 与最近 user 消息保留", async () => {
     let summarizerCalls = 0;
     const events: AgentEvent[] = [
@@ -417,6 +462,46 @@ describe("手动 /compact 与压缩卡", () => {
     expect(outcome.event.summary).toContain("## Relevant Files");
     expect(outcome.event.summary).toContain("src/a.ts"); // 事件 5（write src/b.ts）在 tail 预算内，不进压缩范围
     expect(outcome.event.summary).not.toContain("src/b.ts");
+  });
+
+  it("程序化 Files 兜底认全编辑族：edit_file（改）与 apply_patch（新建/删除/改名）不再缺席（2026-11-05 补口）", async () => {
+    const events: AgentEvent[] = [
+      user(GOAL),
+      say("开始"),
+      // 结果体拉大把编辑事件推进压缩范围（tail 预算只有 200 token，装不下这么多）。
+      call("t1", "edit_file", { path: "src/edited.ts", old_string: "a", new_string: "b" }),
+      result("t1", "x".repeat(1600)),
+      call("t2", "apply_patch", {
+        patch: [
+          "*** Begin Patch",
+          "*** Add File: src/added.ts",
+          "+x",
+          "*** Delete File: src/deleted.ts",
+          "*** Update File: src/renamed-before.ts",
+          "*** Move to: src/renamed-after.ts",
+          "@@",
+          "-a",
+          "+b",
+          "*** End Patch",
+        ].join("\n"),
+      }),
+      result("t2", "x".repeat(1600)),
+      say("完成"),
+    ];
+    const noFiles = SHORT_SUMMARY.split("## Relevant Files")[0].trim();
+    const outcome = await runCompaction({
+      events,
+      trigger: "auto",
+      reason: "threshold",
+      summarizer: createMockSummarizer(noFiles),
+      config: TINY,
+    });
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) throw new Error(outcome.why);
+    expect(outcome.event.summary).toContain("src/edited.ts（改");
+    expect(outcome.event.summary).toContain("src/added.ts（新建");
+    expect(outcome.event.summary).toContain("src/deleted.ts（删除");
+    expect(outcome.event.summary).toContain("src/renamed-after.ts（改名");
   });
 });
 
@@ -590,5 +675,156 @@ describe("摘要输入不含子流（§4.4.4 在折叠面上的那一半）", ()
     const assistantLines = text.split("\n").filter((l) => l.startsWith("[Assistant]"));
     expect(assistantLines.length).toBeGreaterThan(0);
     expect(assistantLines.some((l) => l.includes("前半句后半句"))).toBe(false);
+  });
+});
+
+// ---- V2 微压缩（2026-11-05，对标 CC microcompact，自研口径）----
+describe("V2 微压缩：确定性工具对修剪", () => {
+  const MICRO = {
+    ...TINY,
+    microTargetRatio: 0.5,
+    microMinFreedTokens: 10,
+    tailMinTokens: 20,
+    tailMaxTokens: 60,
+  };
+
+  function bigPair(id: string, chars: number): AgentEvent[] {
+    return [call(id, "read_file", { path: "src/big" + id + ".ts" }), result(id, "x".repeat(chars))];
+  }
+
+  it("selectMicroPrune 只整对收 tool_call/result：无孤儿 call、用户轮次与 tail 完好", () => {
+    const events: AgentEvent[] = [
+      user(GOAL),
+      ...bigPair("a", 400),
+      say("中间的助手轮不收"),
+      ...bigPair("b", 400),
+      ...bigPair("c", 400),
+      user("最新指令"),
+    ];
+    const ctx = {
+      availableTokens: 500,
+      factor: 4,
+      keepFirst: keepFirstSet(events),
+      excluded: new Set<number>(),
+      tailIds: [] as number[],
+      lastUserMsgId: 7,
+      units: atomicUnits(events),
+    };
+    const plan = selectMicroPrune(events, { ...DEFAULT_COMPACTION_CONFIG, ...MICRO }, ctx, 450);
+    expect(plan).not.toBeNull();
+    const pruned = new Set(plan!.compressedIds);
+    // 用户轮次（1、9）与助手轮次（4）永不收
+    expect(pruned.has(1)).toBe(false);
+    expect(pruned.has(4)).toBe(false);
+    expect(pruned.has(9)).toBe(false);
+    // 整对收：result 被收则它的 call 同收（不产生孤儿）；tail 之外最旧的一对先收
+    for (const id of pruned) {
+      const e = events[id - 1]!;
+      if (e.type === "tool_result") expect(pruned.has(id - 1)).toBe(true);
+    }
+    expect(pruned.has(2) && pruned.has(3)).toBe(true);
+  });
+
+  it("selectMicroPrune：释放不足 microMinFreedTokens 判 null（不值得刷卡）", () => {
+    const events: AgentEvent[] = [user(GOAL), ...bigPair("a", 10)];
+    const ctx = {
+      availableTokens: 5000,
+      factor: 4,
+      keepFirst: keepFirstSet(events),
+      excluded: new Set<number>(),
+      tailIds: [] as number[],
+      lastUserMsgId: 1,
+      units: atomicUnits(events),
+    };
+    const plan = selectMicroPrune(events, { ...DEFAULT_COMPACTION_CONFIG, ...MICRO }, ctx, 30);
+    expect(plan).toBeNull();
+  });
+
+  it("runCompaction deterministic：事件如实记 reason=micro_prune，digest 含统计与聚合", async () => {
+    const events: AgentEvent[] = [
+      user(GOAL),
+      ...bigPair("a", 400),
+      ...bigPair("b", 400),
+      user("最新指令"),
+    ];
+    const outcome = await runCompaction({
+      events,
+      trigger: "auto",
+      reason: "micro_prune",
+      deterministic: true,
+      config: { ...DEFAULT_COMPACTION_CONFIG, ...MICRO },
+    });
+    if (!outcome.ok) throw new Error("应成功: " + outcome.why);
+    expect(outcome.event.reason).toBe("micro_prune");
+    expect(outcome.event.summary).toContain("[确定性微压缩]");
+    expect(outcome.event.summary).toContain("## Pruned Tool Calls");
+    expect(outcome.event.summary).toContain("read_file");
+    const projected = projectContext([...events, outcome.event]);
+    const contents = projected.map((m) => m.content ?? "");
+    expect(contents.some((c) => c.includes("[确定性微压缩]"))).toBe(true);
+    expect(contents.some((c) => c.includes("src/big") || c.includes("read_file"))).toBe(true);
+    expect(contents.some((c) => c === GOAL)).toBe(true);
+  });
+
+  it("runCompaction deterministic：无可修剪时被拒（不静默、不落流）", async () => {
+    const events: AgentEvent[] = [user(GOAL), say("只有对话没有工具对")];
+    const outcome = await runCompaction({
+      events,
+      trigger: "auto",
+      reason: "micro_prune",
+      deterministic: true,
+      config: { ...DEFAULT_COMPACTION_CONFIG, ...MICRO },
+    });
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) expect(outcome.kind).toBe("rejected");
+  });
+
+  it("协调器三层链：摘要被拒 → 确定性修剪兜底；摘要停用 → 修剪直接接管；摘要成功 → 不走修剪", async () => {
+    const events: AgentEvent[] = [
+      user(GOAL),
+      ...bigPair("a", 400),
+      ...bigPair("b", 400),
+      user("最新指令"),
+    ];
+    const decision = { trigger: "auto" as const, reason: "threshold" as const };
+    // (1) 摘要成功 → 不走修剪
+    const okCoordinator = new CompactionCoordinator({
+      config: { ...DEFAULT_COMPACTION_CONFIG, ...MICRO },
+      summarizer: createMockSummarizer(SHORT_SUMMARY),
+    });
+    const okOutcome = await okCoordinator.maybeCompact(events, decision, {});
+    expect(okOutcome?.ok).toBe(true);
+    if (okOutcome?.ok) expect(okOutcome.event.reason).toBe("threshold");
+    // (2) 摘要被拒（空摘要）→ 修剪兜底，事件 reason=micro_prune；失败计数不被微压缩代偿
+    const emptyCoordinator = new CompactionCoordinator({
+      config: { ...DEFAULT_COMPACTION_CONFIG, ...MICRO },
+      summarizer: createMockSummarizer(""),
+    });
+    const microOutcome = await emptyCoordinator.maybeCompact(events, decision, {});
+    expect(microOutcome?.ok).toBe(true);
+    if (microOutcome?.ok) expect(microOutcome.event.reason).toBe("micro_prune");
+    expect(emptyCoordinator.failureCount).toBe(0);
+    // (3) 摘要器抛错 ×2 → 停用；下一击确定性修剪直接接管（旧口径是 return null 干等 overflow）
+    const failing = new CompactionCoordinator({
+      config: { ...DEFAULT_COMPACTION_CONFIG, ...MICRO },
+      summarizer: (() => Promise.reject(new Error("boom"))) as never,
+    });
+    const f1 = await failing.maybeCompact(events, decision, {});
+    expect(f1?.ok).toBe(true); // 第一次失败即被修剪兜底
+    expect(failing.failureCount).toBe(1); // 计数只记摘要器失败；修剪成功不代偿也不清零
+    const f2 = await failing.maybeCompact(events, decision, {});
+    expect(f2?.ok).toBe(true);
+    expect(failing.failureCount).toBe(2);
+    // (4) 停用后：修剪接管，事件 reason=micro_prune
+    const disabled = new CompactionCoordinator({
+      config: { ...DEFAULT_COMPACTION_CONFIG, ...MICRO },
+      summarizer: (() => Promise.reject(new Error("boom"))) as never,
+    });
+    await disabled.maybeCompact(events, decision, {});
+    await disabled.maybeCompact(events, decision, {});
+    expect(disabled.summarizerDisabled).toBe(true);
+    const third = await disabled.maybeCompact(events, decision, {});
+    expect(third?.ok).toBe(true);
+    if (third?.ok) expect(third.event.reason).toBe("micro_prune");
   });
 });
