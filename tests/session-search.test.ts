@@ -90,6 +90,26 @@ describe("会话全文检索 · 命中与语料口径", () => {
     expect(result.matches).toEqual([]);
   });
 
+  it("worker 子流（agent_id）的正文不进语料：用户在主转录里看不到它", () => {
+    const corpus = visibleTextOf([
+      { type: "user_message", content: "主会话的话" },
+      { type: "assistant_delta", callId: "w1", text: "worker internal secret", agent_id: "worker-1" },
+      { type: "assistant_message", content: "worker final report", agent_id: "worker-1" },
+      { type: "assistant_message", content: "主会话的回答" },
+    ] as unknown as AgentEvent[]);
+    expect(corpus.map((m) => m.text)).toEqual(["主会话的话", "主会话的回答"]);
+  });
+
+  it("搜索同样排除 worker 子流：agent_id 行里的词不算命中", async () => {
+    await writeSession("worker-only", [
+      { type: "session_meta" },
+      { type: "user_message", content: "主会话" },
+      { type: "assistant_message", content: "worker 内部 紫罗兰", agent_id: "worker-1" } as unknown as AgentEvent,
+    ]);
+    const result = expectOk(await searchSessions({ root, query: "紫罗兰" }));
+    expect(result.matches).toEqual([]);
+  });
+
   it("assistant_delta 按 callId 合并：跨两段片段的关键词仍命中，且只算一条消息", async () => {
     await writeSession("streamed", [
       { type: "session_meta" },

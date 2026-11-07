@@ -338,7 +338,9 @@ export type SummaryAnchor = { before: import("./session-ref").EventRef } | { end
 export interface CompactionCommon {
   type: "compaction";
   trigger: "auto" | "manual" | "overflow";
-  reason: "threshold" | "hard_buffer" | "user_request";
+  /** V2 微压缩（2026-11-05）：无 LLM 的确定性工具对修剪（摘要器停用/被拒时的中层兜底）。
+   *  与 threshold（LLM 摘要）语义分开记：卡片与口径按 reason 如实显示，不把修剪说成摘要。 */
+  reason: "threshold" | "hard_buffer" | "user_request" | "micro_prune";
   summary: string;
   tokens_before: number;
   tokens_after: number;

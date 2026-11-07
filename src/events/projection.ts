@@ -139,9 +139,13 @@ function projectRaw(events: readonly AgentEvent[]): RawProjection {
   return { kept, patch, boundary };
 }
 
-/** 有效历史 + 各事件在原文件里的 1-based 行号（来源视图用）。
- *  与 `effectiveEvents` 同一份投影：控制记录照旧过滤，只是**不重编号**——
- *  拼接后数组的下标不是任何文件的物理行号。 */
+/** 有效事件 + 原行号，保留控制记录，给 `session_meta_update` 这类声明读侧用。
+ *  与 `effectiveEntries` 同一份回退解释：回退之后的事件一律丢弃；控制记录虽不进消息历史，
+ *  却仍是「这一轮按什么判」的合法凭据。拼接后数组的下标不是任何文件的物理行号。 */
+export function effectiveControlEntries(events: readonly AgentEvent[]): ProjectedEvent[] {
+  return projectRaw(events).kept.map((k) => ({ event: k.event, eventId: k.id }));
+}
+
 export function effectiveEntries(events: readonly AgentEvent[]): ProjectedEvent[] {
   return projectRaw(events).kept
     .filter((k) => !isMetaUpdate(k.event))

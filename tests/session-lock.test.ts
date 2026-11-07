@@ -69,12 +69,52 @@ describe("会话运行锁", () => {
     try {
       const logPath = join(dir, "s.jsonl");
       expect(await sessionRunLockHeld(logPath), "缺文件不该算被占用").toBe(false);
-      await writeFile(`${logPath}.lock`, JSON.stringify({ pid: process.pid, nonce: "x", startedAt: "2026-01-01T00:00:00.000Z" }) + "\n", "utf8");
+      // 锁的写入时刻必须晚于本进程启动：写早了会被新判据读成「PID 已被复用」。
+      await writeFile(`${logPath}.lock`, JSON.stringify({ pid: process.pid, nonce: "x", startedAt: new Date().toISOString() }) + "\n", "utf8");
       expect(await sessionRunLockHeld(logPath), "活进程持有却看不到 ⇒ 删除/改名会截断在跑的转录").toBe(true);
       await writeFile(`${logPath}.lock`, JSON.stringify({ pid: 2_147_483_647, nonce: "dead", startedAt: "2026-01-01T00:00:00.000Z" }) + "\n", "utf8");
       expect(await sessionRunLockHeld(logPath), "死 pid 算占用 ⇒ 崩溃遗留会永远挡住删除").toBe(false);
       await writeFile(`${logPath}.lock`, "{oops", "utf8");
       expect(await sessionRunLockHeld(logPath), "坏锁内容按无有效持有者处理（acquire 也会把它当陈旧锁清掉）").toBe(false);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("活 pid 但启动晚于锁 ⇒ PID 已被复用，按陈旧锁处理（只读检查与获取同一判据）", async () => {
+    const dir = await tempDir();
+    try {
+      const logPath = join(dir, "s.jsonl");
+      const lockTime = new Date(Date.now() - 60_000).toISOString();
+      // 用本进程的 pid：它一定活着，这样 sessionRunLockHeld 走到 PID 复用判据而不是「已死」短路。
+      await writeFile(`${logPath}.lock`, JSON.stringify({ pid: process.pid, nonce: "old", startedAt: lockTime }) + "\n", "utf8");
+      const later = Date.parse(lockTime) + 30_000; // 当前占用该 pid 的进程比锁晚启动 ⇒ 不是写锁的人
+      expect(await sessionRunLockHeld(logPath, { processStartedAt: async () => later })).toBe(false);
+
+      const acquired = await acquireSessionRunLock(logPath, {
+        pid: 456, isAlive: () => true, processStartedAt: async () => later,
+      });
+      expect(acquired.ok, acquired.ok ? undefined : acquired.error).toBe(true);
+      if (acquired.ok) await acquired.lock.release();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("活 pid 且启动早于锁 ⇒ 真持有者仍在跑，拒绝抢占", async () => {
+    const dir = await tempDir();
+    try {
+      const logPath = join(dir, "s.jsonl");
+      const lockTime = new Date(Date.now() - 60_000).toISOString();
+      await writeFile(`${logPath}.lock`, JSON.stringify({ pid: process.pid, nonce: "live", startedAt: lockTime }) + "\n", "utf8");
+      const earlier = Date.parse(lockTime) - 30_000;
+      expect(await sessionRunLockHeld(logPath, { processStartedAt: async () => earlier })).toBe(true);
+
+      const acquired = await acquireSessionRunLock(logPath, {
+        pid: 456, isAlive: () => true, processStartedAt: async () => earlier,
+      });
+      expect(acquired.ok).toBe(false);
+      if (!acquired.ok) expect(acquired.error).toContain(`pid ${process.pid}`);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

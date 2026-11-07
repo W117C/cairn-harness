@@ -24,6 +24,23 @@ const logHandleChain = new Map<string, Promise<FileHandle>>();
 /** 尾部反向扫描上限：64MB。旧值 1MB 对一条超大 tool_result（>1MB）不够——扫描会停在上限、
  *  走「补换行隔离」分支，下一次 append 就把坏行升级成中段坏行（会话永久打不开）。 */
 const TAIL_SCAN_CAP = 64 << 20;
+/** 识别「完整但缺换行」尾事件的最大解析字节。超过它的尾段不做 JSON.parse（避免为一条坏尾
+ *  吃掉无界内存）；这类文件本来就会走「不猜边界」的隔离分支。 */
+const COMPLETE_TAIL_PARSE_MAX = 16 << 20;
+
+/** 尾段是否是一条完整的、已知类型的事件（与 append 的写入口径一致）。 */
+function isCompleteEventText(text: string): boolean {
+  const trimmed = text.trim();
+  if (trimmed === "") return false;
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    if (parsed === null || typeof parsed !== "object") return false;
+    const type = (parsed as { type?: unknown }).type;
+    return typeof type === "string" && Object.hasOwn(KNOWN_TYPES, type);
+  } catch {
+    return false;
+  }
+}
 
 /** 半写尾行修复（只在新开句柄时做，= 跨进程续写的唯一入口）：
  *  进程被硬杀在单次 `write` 中途时，文件尾可能留下**半条 JSON**。读者侧一直按「尾部半写可丢」
@@ -69,6 +86,20 @@ async function repairPartialTail(path: string, fh: FileHandle): Promise<void> {
   // 与分支二的区别只在于"我们知不知道该裁在哪儿"，不在于文件大小。
   if (cut === null && pos === 0) cut = 0;
   if (cut !== null) {
+    // 先别急着裁：写入可能已经完成，只是最后那条事件还没等到换行（崩溃窗口在 JSON 之后、
+    // 换行之前）。这种尾段 replay() 能完整读出来；裁掉它等于把一条已可见的事件从历史里删除，
+    // 后续事件 id 也跟着前移。只有「解析不成一条已知事件」的尾段才是真正的半写。
+    if (size - cut <= COMPLETE_TAIL_PARSE_MAX) {
+      const tail = Buffer.allocUnsafe(size - cut);
+      await fh.read(tail, 0, tail.length, cut);
+      if (isCompleteEventText(tail.toString("utf8"))) {
+        await fh.write("\n");
+        console.warn(
+          `[events] 检测到完整尾事件缺少换行：已补换行保留（${String(size - cut)} 字节，不裁剪）：${path}`,
+        );
+        return;
+      }
+    }
     await fh.truncate(cut);
     console.warn(
       `[events] 检测到半写尾行（上次写入未完成，多半是被硬杀在写中途）：已丢弃未成行的 ${String(size - cut)} 字节并续写：${path}`,

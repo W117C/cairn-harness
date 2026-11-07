@@ -17,6 +17,7 @@ import {
   eventRefKey, isEventRef, isSessionRef, sameEventRef, sameSession, sessionRefKey,
 } from "../src/events/session-ref";
 import { forkPointInView, readSessionView } from "../src/events/session-view";
+import { projectViewContext } from "../src/agent/session-view-context";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((r) => rm(r, { recursive: true, force: true }))); });
@@ -211,6 +212,35 @@ describe("未收尾请求与 worker 分域", () => {
     // raw 仍然逐字保留（视图不是 raw 的替代品），父的在飞行还在自己文件里。
     expect(view.localEvents.map((e) => e.type)).toEqual(["session_meta", "tool_call"]);
     expect((await replay(parent)).length).toBe(4);
+  });
+
+  it("分叉链读当前轮验收声明：父 session_meta、子 session_meta_update 覆盖；坏声明不复活旧判据", async () => {
+    const { ws, root } = await workspace();
+    const parent = await writeSession(root, "parent", [
+      { type: "session_meta", verify: { commands: ["pnpm parent-test"] } } as AgentEvent,
+      user("P1"), assistant("PA"),
+    ]);
+    await writeSession(root, "child", [
+      forkMeta(parent, 3, "parent"),
+      { type: "session_meta_update", patch: {}, verify: { commands: ["pnpm child-test"], note: "child contract" } } as AgentEvent,
+      user("CHILD_USER"),
+    ]);
+    const view = await readSessionView({ workspace: ws, sessionId: "child" }, root);
+    expect(view.verify).toEqual({ commands: ["pnpm child-test"], note: "child contract" });
+    const projected = projectViewContext(view).map((m) => String(m.content ?? "")).join("\n");
+    expect(projected).toContain("Task Acceptance Contract");
+    expect(projected).toContain("pnpm child-test");
+
+    await writeSession(root, "broken", [
+      forkMeta(parent, 3, "parent"),
+      { type: "session_meta_update", patch: {}, verify: { commands: [] } } as AgentEvent,
+      user("BROKEN_USER"),
+    ]);
+    const broken = await readSessionView({ workspace: ws, sessionId: "broken" }, root);
+    expect(broken.verify).toBeUndefined();
+    const brokenText = projectViewContext(broken).map((m) => String(m.content ?? "")).join("\n");
+    expect(brokenText).not.toContain("Task Acceptance Contract");
+    expect(brokenText).not.toContain("pnpm parent-test");
   });
 });
 

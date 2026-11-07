@@ -7,10 +7,11 @@
 // 祖先各自按自己的 raw 边界截、各自应用控制记录；父前缀里未收尾的请求不继承。
 import { realpath } from "node:fs/promises";
 import { join } from "node:path";
-import { effectiveEntries } from "./projection";
+import { effectiveControlEntries, effectiveEntries } from "./projection";
 import { SessionReplayError, resolveSessionChain, unfinishedIndexes, type SessionChainFile } from "./session";
 import type { EventRef, SessionRef } from "./session-ref";
-import type { AgentEvent } from "./types";
+import { findEffectiveVerifyDeclaration } from "./verify-declaration";
+import { isNumericCompaction, type AgentEvent, type VerifyDeclaration } from "./types";
 
 export interface SessionViewEntry {
   event: AgentEvent;
@@ -25,6 +26,8 @@ export interface SessionView {
   entries: SessionViewEntry[];
   /** 本地文件的 raw 事件（与 `replay(localPath)` 相等）。 */
   localEvents: AgentEvent[];
+  /** 当前视图最后一轮用户消息之前的有效任务判据；坏声明不生效，缺席 = 没声明。 */
+  verify?: VerifyDeclaration;
 }
 
 function sliced(file: SessionChainFile): AgentEvent[] {
@@ -57,12 +60,40 @@ export async function readSessionView(session: SessionRef, sessionsRoot: string)
       (isLocal ? local : inherited).push(entry);
     }
   }
-  // 父前缀里的未收尾请求不继承；本地自己的在飞请求照常保留（与 replaySession 同口径）。
+  // 父链各文件先按自己的回退/压缩解释，再把「有效控制记录 + 合成表行号」交给同一份判据窗口函数。
+  // `effectiveEntries` 会摘掉 session_meta_update，而声明正写在那里；故声明面单独用
+  // `effectiveControlEntries`，视图的历史入口仍用原来的过滤结果。
   const drop = unfinishedIndexes(inherited.map((e) => e.event));
+  const chainEvents: AgentEvent[] = [];
+  const chainExcluded = new Set<number>();
+  for (const file of chain) {
+    const raw = sliced(file);
+    const offset = chainEvents.length;
+    const entries = effectiveControlEntries(raw);
+    // 压缩记录里的 id 是**该文件 raw 行号**；effectiveControlEntries 会去掉回退标记，
+    // 所以要按它保留的 eventId 映射到合成表的 1-based 位置，不能用 raw 行号直接顶替。
+    const byRawId = new Map(entries.map((entry, at) => [entry.eventId, offset + at + 1]));
+    // M3c：worker 子流的压缩事件（agent_id 在场）不参与排除集——它的 id 是 worker 内存态
+    // 事件序，经 byRawId 映射会对主表错摘主事件（含承载声明的 session_meta），与
+    // agent/context.ts#excludedIds 同一条口径，不各写一份「谁是 worker」的判定。
+    for (const e of raw) {
+      if (e.type !== "compaction" || !isNumericCompaction(e)) continue;
+      if (typeof (e as { agent_id?: unknown }).agent_id === "string" &&
+          (e as { agent_id?: unknown }).agent_id !== "") continue;
+      for (const id of e.compressed_event_ids) {
+        const mapped = byRawId.get(id);
+        if (mapped !== undefined) chainExcluded.add(mapped);
+      }
+    }
+    for (const entry of entries) chainEvents.push(entry.event);
+  }
+  const effective = findEffectiveVerifyDeclaration(chainEvents, chainEvents.length, chainExcluded);
+  const verify = effective?.declaration;
   return {
     session,
     entries: [...inherited.filter((_, i) => !drop.has(i)), ...local],
     localEvents: sliced(chain[chain.length - 1]!),
+    ...(verify === undefined ? {} : { verify }),
   };
 }
 

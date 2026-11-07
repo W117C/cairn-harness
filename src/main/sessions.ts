@@ -163,8 +163,10 @@ function rememberLineCount(p: string, entry: LineCountEntry): void {
   lineCounts.set(p, entry);
 }
 
-/** 一个会话文件的行数：未变则复用，长大只读追加段，首次/换 inode/被截断才整份扫。 */
-async function countSessionLines(p: string, st: { ino: number; size: number }): Promise<number> {
+/** 一个会话文件的行数：未变则复用，长大只读追加段，首次/换 inode/被截断才整份扫。
+ *  `st` 是调用方**先前**取的 stat；冷读可能读到其后追加的字节 ⇒ 水位按实际读到的字节数记，
+ *  不能按 stat.size 夹回去（否则下一次增量会把同一段再加一遍）。 */
+export async function countSessionLines(p: string, st: { ino: number; size: number }): Promise<number> {
   const cached = lineCounts.get(p);
   if (cached && cached.ino === st.ino && cached.size === st.size) {
     return cached.closed + (cached.tail.trim().length > 0 ? 1 : 0);
@@ -183,7 +185,7 @@ async function countSessionLines(p: string, st: { ino: number; size: number }): 
     }
   }
   const raw = await readFile(p, "utf8"); // 首访/重建/截断：整份扫一次（此后只走上面两支）
-  const { entry, lines } = foldSegments(0, raw, st.size, st.ino);
+  const { entry, lines } = foldSegments(0, raw, Buffer.byteLength(raw, "utf8"), st.ino);
   rememberLineCount(p, entry);
   return lines;
 }

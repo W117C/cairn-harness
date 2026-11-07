@@ -263,6 +263,29 @@ export class SessionMetadataRepository {
     return await this.mutate(id, (record) => ({ ...record, title }));
   }
 
+  /** 自动命名专用：在**单个入队操作内**完成「读当前标题 → 真标题才写」，消除外层 find（直读，
+   *  不进写队列）与并发懒建 mutate（markViewed/markActive 同拍懒建 title=id 占位记录）的竞态
+   *  （2026-11-07 判卷实锤：autoTitle 的 find 读到懒建前空态 → create 撞「已存在」→ 标题丢失）。
+   *  语义与 autoTitleFirstMessage 原三步逐字同参：已有真标题（title ≠ id）不动；占位题（= id）
+   *  换真标题；缺记录 = 懒建并落真标题（mutate 的懒建语义，非空会话不会走到这——调用方已闸）。 */
+  async ensureTitle(id: string, title: string): Promise<SessionMetadataRecord> {
+    assertSessionId(id);
+    assertTitle(title);
+    return await this.enqueue(async () => {
+      const state = await this.load();
+      const now = this.timestamp();
+      const current: SessionMetadataRecord = Object.prototype.hasOwnProperty.call(state.sessions, id)
+        ? state.sessions[id]
+        : { id, title: id, pinned: false, archived: false, createdAt: now, updatedAt: now };
+      const next: SessionMetadataRecord = current.title === id ? { ...current, title, updatedAt: now } : current;
+      if (next !== current) {
+        state.sessions[id] = next;
+        await this.persist(state);
+      }
+      return cloneMetadata(next);
+    });
+  }
+
   async assignProject(id: string, projectId: string | null): Promise<SessionMetadataRecord> {
     if (projectId !== null && !isProjectId(projectId)) throw new Error(`会话 projectId 非法: ${JSON.stringify(projectId)}`);
     return await this.mutate(id, (record) => {

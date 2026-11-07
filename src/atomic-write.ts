@@ -23,7 +23,7 @@ export async function writeFileAtomic(path: string, text: string, opts: { mode?:
   await mkdir(dirname(path), { recursive: true });
   const tmp = tmpPathFor(path);
   try {
-    await writeFile(tmp, text, "utf8");
+    await writeFile(tmp, text, { encoding: "utf8", mode: opts.mode });
     if (opts.mode !== undefined) await chmod(tmp, opts.mode).catch(() => undefined);
     await rename(tmp, path);
   } catch (err) {

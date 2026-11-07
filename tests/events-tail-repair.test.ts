@@ -51,6 +51,23 @@ describe("repairPartialTail：硬杀后的续写", () => {
     }
   });
 
+  it("完整但缺换行的尾事件：补换行保留，不当作半写裁掉", async () => {
+    // 崩溃窗口在 JSON 之后、换行之前：replay() 已经能读到这条事件；下一次 append 不能把它删掉。
+    writeFileSync(path, line(1), "utf8"); // 合法事件，但无结尾换行
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const log = createEventLog(path);
+      await log.append(EV(2));
+      const warnText = warn.mock.calls.map((c) => String(c[0])).join("\n");
+      expect(warnText).toContain("完整尾事件缺少换行");
+      expect(warnText).not.toContain("已丢弃未成行的");
+      const events = await replay(path);
+      expect(events.map((e) => (e as { content: string }).content)).toEqual(["第 1 条", "第 2 条"]);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("正常文件（以换行收尾）零打扰：不告警、旧字节逐字不动、追加只加不改", async () => {
     const goodPrefix = line(1) + "\n";
     writeFileSync(path, goodPrefix, "utf8");

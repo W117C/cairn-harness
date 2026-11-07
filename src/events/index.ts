@@ -49,5 +49,7 @@ export {
   eventRefKey, isEventRef, isSessionRef, sameEventRef, sameSession, sessionRefKey,
 } from "./session-ref";
 export type { EventRef, SessionRef } from "./session-ref";
+export type { EffectiveVerifyDeclaration } from "./verify-declaration";
+export { findEffectiveVerifyDeclaration, isVerifyDeclaration, declarationExcludedIds } from "./verify-declaration";
 export { forkPointInView, readSessionView } from "./session-view";
 export type { ForkPointInView, SessionView, SessionViewEntry } from "./session-view";

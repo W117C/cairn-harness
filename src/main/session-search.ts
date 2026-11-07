@@ -81,6 +81,11 @@ class VisibleCorpus {
   private readonly deltaRef = new Map<string, EventRef | undefined>();
 
   push(event: AgentEvent, ref?: EventRef): void {
+    // worker 子流的事件也落在主会话 JSONL 里（带 agent_id）；它们不是用户在主转录里看到的话。
+    // 可见性过滤必须在按 type 分支**之前**：assistant_message/assistant_delta 本身没有 agent 类型，
+    // 只有这个可选字段能区分主流与 worker。
+    const agentId = (event as { agent_id?: unknown }).agent_id;
+    if (agentId !== undefined && agentId !== null) return;
     if (event.type === "user_message" || event.type === "assistant_message") {
       this.flushDeltas();
       this.messages.push({ kind: event.type, text: event.content, ...(ref !== undefined ? { ref } : {}) });

@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  countSessionLines,
   createSession,
   createSidechatSession,
   deleteSession,
@@ -59,6 +60,16 @@ describe("会话列表存储（M1e：JSONL 即会话）", () => {
     const list = await listSessions(root);
     expect(list.map((s) => s.id)).toContain("测试会话");
     expect(list.find((s) => s.id === "测试会话")?.lines).toBe(2);
+  });
+
+  it("冷读行数按实际读到的字节记水位：stat 后追加不会在下一次列表双计", async () => {
+    const p = join(root, "drift.jsonl");
+    await writeFile(p, "a\nb\n", "utf8");
+    const stale = await stat(p);
+    await appendFile(p, "c\n", "utf8"); // stat 之后才落盘的字节
+    expect(await countSessionLines(p, { ino: stale.ino, size: stale.size })).toBe(3);
+    const fresh = await stat(p);
+    expect(await countSessionLines(p, { ino: fresh.ino, size: fresh.size }), "第二次列表把已计入的 c 行又加了一遍").toBe(3);
   });
 
   it("置顶/反馈 sidecar 不算会话（首行形状判定，不误伤同名真会话）", async () => {
