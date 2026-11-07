@@ -1,13 +1,24 @@
-import { type Tool, type ToolResult } from "./base.js";
+import { ToolError, type Tool, type ToolResult } from "./base.js";
 import { annotateExecCause } from "../agent/verify.js";
 import { killGroup, sanitizedEnv, spawnTracked } from "./process.js";
 import { createOutputRing } from "./output-ring.js";
 import { shellRedirectReceipt, snapshotShellRedirects } from "./snapshot.js";
+import { backgroundTasksFor } from "./background-tasks.js";
 
 // 输出上限 32KB；只在 ctx.workspace 下执行；超时 60s 强杀。
 // 超限后的「头 + 尾环」截断在 output-ring（与 verify 共用——两处都得留住尾部结论）。
 const SHELL_OUTPUT_LIMIT = 32 * 1024;
 const SHELL_TIMEOUT_MS = 60_000;
+
+/** `.agent/` 是系统区（权限/记忆/插件配置）。重定向目标那条闸只看 `>`/`>>` 的操作数，
+ *  `tee` / `cp` / `sed -i` / `python -c "open('.agent/...','w')"` 都不产生重定向 ⇒ 旧实现
+ *  根本看不见。这里在 spawn 前做一道保守的词法闸：命令串里出现 `.agent` 路径段就整条拒跑。
+ *  认不出目标的写面宁可不跑，也不让一条 shell 命令改写自己的权限/信任表。 */
+function assertShellCommandNotAgentArea(command: string): void {
+  if (/(^|[\\/'"\s])\.agent([\\/'"\s]|$)/iu.test(command)) {
+    throw new ToolError("run_shell: .agent/ 是系统区（权限/记忆/插件配置），命令里出现 .agent 路径一律拒跑");
+  }
+}
 
 export const run_shell: Tool = {
   name: "run_shell",
@@ -16,6 +27,7 @@ export const run_shell: Tool = {
     if (typeof command !== "string" || command.trim().length === 0) {
       throw new Error("run_shell: command 参数必须是非空字符串");
     }
+    assertShellCommandNotAgentArea(command);
     // #99：重定向覆写在**跑之前**留一份原件——三个内容写工具一直有这一格，`> file` 这一面绕得开它。
     // 排在 spawn 之前是有意的：先拍后跑，拍不到的那一条只在回执里点名，命令照跑（不改审批语义）。
     // 这里唯一的「拒」是 `.agent/` 那条既有地板（assertNotAgentArea 抛出 ⇒ 命令根本没 spawn）。
@@ -23,6 +35,20 @@ export const run_shell: Tool = {
       callId: ctx.callId,
       enabled: ctx.snapshot !== false, // worker 写侧显式关掉（worktree 天然可回滚），与三个内容写工具同口径
     });
+    // 后台档（2026-11-05 · 对标 ZCode/Claude 的后台任务三件套）：快照纪律照旧（先拍后跑），
+    // spawn 不等待，立即把任务号交回模型（task_output 读 / task_stop 停）。
+    // 审批语义不变：还是 run_shell 这一格门；后台只是执行形态，不是绕门的后门。
+    if (args.background === true) {
+      if (ctx.signal?.aborted) return { ok: false, output: "[cancelled] 会话已取消，工具没有执行" };
+      const { id } = backgroundTasksFor(ctx).start(command, ctx.workspace, ctx.signal, ctx.backgroundShellLaunch);
+      // 重定向回执与前台同一只函数：后台命令跑 30 分钟、覆写文件时，模型也要看得到
+      // 「覆盖前快照」的指针，而不是只有 snapshotId 一个裸号（前台路径同一纪律）。
+      return {
+        ok: true,
+        output: `后台任务已启动：${id} —— 用 task_output（{"task_id":"${id}"}）读输出；task_stop 停止。命令：${command}` + shellRedirectReceipt(plan),
+        ...(plan.ids.length > 0 ? { snapshotId: plan.ids[0]! } : {}),
+      };
+    }
     return await new Promise<ToolResult>((settle) => {
       const ring = createOutputRing(SHELL_OUTPUT_LIMIT);
       let timedOut = false;
@@ -61,9 +87,12 @@ export const run_shell: Tool = {
       };
       // env 消毒：spawn 不传 env 会继承 process.env，而主进程把 BYOK key 写进了
       // process.env.CAIRN_API_KEY —— 一条 `env` 就能把明文 key 读进事件流（P1-1）。
-      const handle = spawnTracked("bash", ["-c", command], {
+      // 前台沙箱（foregroundShellLaunch，同审批面）：直接 spawn sandbox-exec + 参数表，
+      // 命令串保持模型原文（`.agent` 闸与快照面看到的都是用户命令，宿主包装不进闸）。
+      const launch = ctx.foregroundShellLaunch;
+      const handle = spawnTracked(launch?.executable ?? "bash", launch?.args ?? ["-c", command], {
         cwd: ctx.workspace,
-        env: sanitizedEnv(),
+        env: launch?.env ?? sanitizedEnv(),
         timeoutMs: SHELL_TIMEOUT_MS,
         onTimeout: () => {
           timedOut = true;

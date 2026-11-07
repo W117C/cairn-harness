@@ -36,6 +36,14 @@ export interface ExternalReadGrant {
 export interface ToolContext {
   /** 工具执行的工作区（绝对路径）。 */
   workspace: string;
+  /** 会话日志定位跨 worktree 保持稳定，用于隔离后台命令。 */
+  sessionLogPath?: string;
+  /** 仅由通过审批的沙箱启动路径设置。 */
+  backgroundShellLaunch?: { executable: string; args: string[]; env: NodeJS.ProcessEnv };
+  /** 前台沙箱启动（与 backgroundShellLaunch 同形、同一审批面）：run_shell 用它替代
+   *  `bash -c <包装串>` 的 spawn 形状。命令串保持**模型原文**——`.agent` 词法闸与重定向
+   *  快照都只看用户命令，宿主加的沙箱包装（profile 里有工作区路径）不再被误伤。 */
+  foregroundShellLaunch?: { executable: string; args: string[]; env: NodeJS.ProcessEnv };
   /** 项目外附件的**本轮**读取白名单。只有这里的精确路径（目录则含整棵子树）能被
    *  read_file / read_image 打开；不复制文件、不修改文件、不持久化。 */
   externalReadGrants?: readonly ExternalReadGrant[];
@@ -102,10 +110,14 @@ export interface ToolResult {
   hold?: HarnessHoldReason;
 }
 
-/** 本仓静态工具名的唯一事实源：联合类型与名字表同源（加一个工具只改这一行）。 */
+/** 本仓静态工具名的唯一事实源：联合类型与名字表同源（加一个工具只改这一行）。
+ *  2026-11-05 后台任务三件套：run_shell(background:true) 起后台、task_output 读、task_stop 停
+ *  （对标 ZCode 的 bash-background / task-output / task-stop 家族）。
+ *  2026-11-06 +git_read：只读三合一（status/diff/log），零写权零 shell。 */
 export const TOOL_NAMES = [
   "read_file", "write_file", "edit_file", "apply_patch", "run_shell", "grep", "glob", "lsp",
   "clarify", "propose_plan", "verify", "read_image", "render_image", "todo_write",
+  "task_output", "task_stop", "git_read", "calc", "list_dir", "read_doc",
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];
@@ -121,7 +133,7 @@ export const CC_TOOL_ALIAS: Record<string, ToolName> = {
 export function resolveToolName(raw: string): ToolName | null {
   const t = raw.trim().toLowerCase();
   if ((TOOL_NAMES as readonly string[]).includes(t)) return t as ToolName;
-  return CC_TOOL_ALIAS[t] ?? null;
+  return Object.hasOwn(CC_TOOL_ALIAS, t) ? CC_TOOL_ALIAS[t]! : null;
 }
 
 export interface Tool {

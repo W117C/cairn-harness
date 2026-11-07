@@ -114,6 +114,18 @@ describe("G-B 注入工具三面对账", () => {
     expect(bad).toEqual([]);
   });
 
+  it("后台读/停工具在只读档仍与执行白名单对齐：不写仓库，规格面不许比执行面少", () => {
+    for (const mode of ["read-only", "auto"] as const) {
+      const specs = new Set(gateToolSpecs(mode).map((s) => s.function.name));
+      for (const name of ["task_output", "task_stop"]) {
+        expect(specs.has(name), `${name} 在 ${mode} 档模型面缺失，会被会话闸判成 unknown tool`).toBe(true);
+        expect(isKnownToolName(name), `${name} 必须仍登记在权限事实源`).toBe(true);
+      }
+    }
+    // 反向证人：只读档不能起后台任务；少了这一条，上面的「保留读/停工具」会被误读成「可写档」。
+    expect(gateToolSpecs("read-only").some((s) => s.function.name === "run_shell")).toBe(false);
+  });
+
   it("只读档的摘除面与声明一致（只查静态表：运行期注入项由各自的开关管）", () => {
     for (const s of INJECTED_TOOLS.filter((x) => x.specFace === "static")) {
       expect(gateToolSpecs("read-only").some((t) => t.function.name === s.name)).toBe(s.reachableWhenReadOnly);

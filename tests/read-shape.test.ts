@@ -169,6 +169,8 @@ describe("read_file 一次多份（第 477 页）", () => {
   it("模型面把 paths 写进 read_file 的规格（不然这条原语模型看不见）", () => {
     const spec = gateToolSpecs().find((s) => s.function.name === "read_file");
     expect(JSON.stringify(spec)).toContain('"paths"');
+    const schema = spec?.function.parameters as { required?: string[] } | undefined;
+    expect(schema?.required ?? [], "path 与 paths 二选一由工具执行面硬判；schema 不该把 path 写成恒必填").not.toContain("path");
     expect(spec?.function.description, "说明里要讲什么时候用它——这支原语存在的理由就是省步数").toContain("paths");
   });
 

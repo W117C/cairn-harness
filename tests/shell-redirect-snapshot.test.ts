@@ -107,6 +107,18 @@ describe("#99 run_shell 重定向覆写的覆盖前快照", () => {
     expect(await stat(join(ws, ".agent", "snapshots", "planted2.txt")).catch(() => null)).toBeNull();
   });
 
+  it("④b 非重定向写（tee / cp / sed -i / python）也拒 .agent：不能只堵 > 与 >>", async () => {
+    for (const command of [
+      "printf x | tee .agent/permissions.json",
+      "cp /tmp/payload .agent/permissions.always.json",
+      "sed -i '' 's/a/b/' .agent/permissions.json",
+      "python3 -c \"open('.agent/permissions.json','w').write('x')\"",
+    ]) {
+      await expect(runCmd(command), command).rejects.toThrow(/\.agent/u);
+    }
+    expect(await stat(join(ws, ".agent", "permissions.json")).catch(() => null), "拒 = 命令根本没跑").toBeNull();
+  });
+
   it("⑤ 目标在工作区外 ⇒ 不拍（快照根是工作区相对路径，够不着），但必须出声且不拦命令", async () => {
     const outsidePath = join(dirname(ws), "outside-99-target.txt");
     outside = outsidePath;

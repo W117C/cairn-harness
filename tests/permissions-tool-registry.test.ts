@@ -82,6 +82,10 @@ const GOLDEN: Readonly<Record<string, Golden>> = {
   // todo_write（2026-11-04 工作状态面板）：无用户数据副作用（只写会话日志）⇒ 与 clarify 同族，
   // 五档全部放行不出卡；只读档同样在面（清单是过程数据，不是写盘）。
   todo_write: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  // task_output / task_stop（2026-11-05 后台任务三件套）：读任务输出 / 进程组组杀——
+  // 无用户数据副作用，与 todo_write/clarify 同族，五档放行不出卡。
+  task_output: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  task_stop: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
   wait_for_agents: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
   cancel_agents: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
   send_agent: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
@@ -125,6 +129,19 @@ const GOLDEN: Readonly<Record<string, Golden>> = {
   web_search: ["ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "approve/L3-mode"],
   // 出网：web_fetch 与 web_search 同形；完全允许档按档放行（旧口径"出网永不免批"作废）。
   web_fetch: ["ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "approve/L3-mode"],
+  // 2026-11-06 只读 git 三合一：spawn 固定 argv、零写权、不出网 ⇒ 全档放行（含只读档），
+  // 与 glob/read_file 家族同形。
+  git_read: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  // 2026-11-06 第三批小件：纯解析器与目录 stat，零写权零出网 ⇒ 与 git_read 同形。
+  calc: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  list_dir: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  // 2026-11-06 文档读取：zip/zlib 原生解析，只读不出网 ⇒ 同形。
+  read_doc: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  // 2026-11-06 浏览器驾驶三件：navigate 与 web_fetch 同族（模型发起外部页面加载，出网面）
+  // ⇒ 实测对齐 web_fetch 行；snapshot/pick 只内省已加载页面 ⇒ 与只读家族同形。
+  browser_navigate: ["ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "approve/L3-mode"],
+  browser_snapshot: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  browser_pick: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
 };
 
 describe("M7 · 工具名登记册", () => {
