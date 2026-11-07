@@ -29,6 +29,7 @@ import { Installer } from "./installer";
 import { GrantsStore } from "./grants";
 import { CanaryController } from "./canary";
 import type { RegistryIndex } from "./registry";
+import { experienceEfficacy, loadEpisodes, type ExperienceEfficacyRow } from "../evolve/episode-store";
 
 /** 自动档执行者的账面 actor（registry 的 assertActor 规矩：可读、非空、有界）。 */
 export const ASSESS_ACTOR = "evolution-assess-v1";
@@ -56,6 +57,9 @@ export interface AssessInputs {
   workflowHits: WorkflowGraduation[];
   canaryFindings: CanaryFinding[];
   registeredWorkflowIds: ReadonlySet<string>;
+  /** 按经验条目的效果对账表（2026-11-06 调研批）：runAssess 从 Episode 账现算；
+   *  缺省（纯函数直调的判卷）= 空 = 报告不带这一格。只进报告，不驱动动作。 */
+  experienceEfficacy?: ExperienceEfficacyRow[];
 }
 
 export type AssessFinding =
@@ -70,6 +74,8 @@ export interface AssessReport {
   ts: number;
   tier: AutonomyTier;
   findings: AssessFinding[];
+  /** 效果对账表（注入数降序，帽 20 行）：观测面——晋升/退役要不要看它、怎么用，是下一步的决策。 */
+  experienceEfficacy: ExperienceEfficacyRow[];
 }
 
 /** 一版 staged 包是不是「全门绿」（注册时定格的 declaredGates 每道都有 pass 结论）。 */
@@ -119,7 +125,7 @@ export function assess(inputs: AssessInputs, tier: AutonomyTier, ts: number): As
       findings.push({ kind: "canary-lesson", id: c.id, state: c.state, detail: "候选 " + c.candidateVersion + " 观察期" + (c.degradationRules.length > 0 ? "命中 " + c.degradationRules.join("、") : "退化回退") + "——同方向提案需先解释为何这次不同" });
     }
   }
-  return { version: 1, ts, tier, findings };
+  return { version: 1, ts, tier, findings, experienceEfficacy: inputs.experienceEfficacy?.slice(0, 20) ?? [] };
 }
 
 /** 读盘上 canary 档的最小三格（坏档只丢那一条——同账本坏行纪律）。 */
@@ -179,10 +185,17 @@ export async function runAssess(workspace: string): Promise<AssessRunResult | nu
       workflowHits: await graduationCandidates(workspace),
       canaryFindings: await readCanaryFindings(workspace),
       registeredWorkflowIds: new Set(Object.keys(index.bundles)),
+      experienceEfficacy: experienceEfficacy(await loadEpisodes(workspace)),
     },
     (await loadAutonomy(workspace)).tier,
     Date.now(),
   );
+  // 效果对账出声（观测面）：注入≥3 次从未绿过的条目是退役候选——但退役是动作，先给数据等人裁决。
+  const neverGreen = report.experienceEfficacy.filter((r) => r.injected >= 3 && r.success === 0);
+  if (report.experienceEfficacy.length > 0) {
+    console.warn("[assess] 经验效果对账：注入过 " + String(report.experienceEfficacy.length) + " 条"
+      + (neverGreen.length > 0 ? "；注入≥3 次从未绿 " + String(neverGreen.length) + " 条（退役候选，待批）" : ""));
+  }
   let reportPath: string | null = null;
   try {
     reportPath = assessReportPathFor(workspace);

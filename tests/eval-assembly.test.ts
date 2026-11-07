@@ -13,6 +13,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS } from "../src/main/settings";
 import {
+  BENCH_FACE_ONLY,
+  BENCH_FACE_ONLY_KNOBS,
   BENCH_KNOBS,
   assemblyOverrides,
   assemblyRows,
@@ -231,6 +233,17 @@ describe("loop-eval 的装配接线", () => {
   it("读数每一格自带装配面：JSON 里不许只剩 autoVerifyBeat 一个孤零零的 false", () => {
     expect(evalSrc).toContain("assembly: ASSEMBLY_FACE");
     expect(evalSrc).toContain("assembly: string;");
+  });
+
+  it("验收契约投影是 face-only 声明：不进缺省开关表，也不许在读数里沉默", () => {
+    // 放进 BENCH_KNOBS 会被「表里的键必须对应产品缺省开的键」当成假存量。
+    expect(Object.keys(BENCH_KNOBS)).not.toContain("taskAcceptanceContract");
+    expect(BENCH_FACE_ONLY_KNOBS.taskAcceptanceContract?.face).toBe("off-here");
+    expect(BENCH_FACE_ONLY).toContain("taskAcceptanceContract:off-here");
+    expect(evalSrc).toContain("BENCH_FACE_ONLY");
+    expect(evalSrc).toContain("assembly: ASSEMBLY_FACE");
+    // 反向证人：把这一列从装配串拿掉，下面这条同一谓词的断言就会红。
+    expect([renderAssemblyFace(PLAIN), BENCH_FACE_ONLY].filter(Boolean).join(" ")).toContain("taskAcceptanceContract:off-here");
   });
 
   /* 闸补的拍数：口径在 `lib/eval-validity` 的 `autoVerifyBeats`，跑器只许吃它算出来的那个值。

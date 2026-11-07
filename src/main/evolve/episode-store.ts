@@ -363,6 +363,33 @@ export function summarizeEpisodes(loaded: LoadedEpisodes): EpisodeSummary {
   };
 }
 
+// ---- 按经验条目的效果对账（2026-11-06 自进化调研批）----
+// Episode 账早已带「这一场注入了哪几条经验」（assignment sidecar，arm=none 的基线注入也记账）
+// 与本场结局（outcome.final success/failure/unknown），但汇总面此前只有**全局**计数——
+// 晋升/退役的决策面缺**每条**证据：哪条经验注入了 N 次、跟着几绿几红。
+// 纯函数，观测口径：分母 = 注入过的条目（没注入不进表），结局用 outcome.final（用户信号已并入）。
+export interface ExperienceEfficacyRow {
+  id: string;
+  injected: number;
+  success: number;
+  failure: number;
+  unknown: number;
+}
+
+export function experienceEfficacy(loaded: LoadedEpisodes): ExperienceEfficacyRow[] {
+  const byId = new Map<string, ExperienceEfficacyRow>();
+  for (const episode of loaded.episodes) {
+    for (const id of episode.assignment.injectedExperienceIds) {
+      const row = byId.get(id) ?? { id, injected: 0, success: 0, failure: 0, unknown: 0 };
+      row.injected += 1;
+      row[episode.outcome.final] += 1;
+      byId.set(id, row);
+    }
+  }
+  // 稳定排序：注入多的在前；同注入数按 id 字典序（同输入同输出，可判卷）。
+  return [...byId.values()].sort((a, b) => (b.injected - a.injected) || (a.id < b.id ? -1 : 1));
+}
+
 /** 人读的 facts 面。所有「不可测」都显式出现，不折成 0。 */
 export function formatEpisodeSummary(summary: EpisodeSummary): string {
   const classes = Object.entries(summary.byClass)
