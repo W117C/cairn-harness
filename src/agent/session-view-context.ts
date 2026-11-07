@@ -12,6 +12,7 @@ import {
   type AgentEvent, type CompactionEvent, type EventRef, type SessionView, type SessionViewEntry,
 } from "../events";
 import { projectContext, type ContextMessage } from "./context";
+import { acceptanceContractNote } from "./acceptance-contract";
 
 const fail = (message: string): never => { throw new Error(`来源视图投影失败（fail closed）：${message}`); };
 
@@ -201,5 +202,8 @@ export function projectViewContext(
   replacements?: ReadonlyMap<string, string>,
 ): ContextMessage[] {
   const resolved = compileView(view, replacements);
-  return projectContext(resolved.events, resolved.replacements);
+  const note = view.verify === undefined ? null : acceptanceContractNote(view.verify);
+  // 视图已按来源链判过当前轮声明：无论有没有，都不让 projectContext 再从合成事件里猜一遍，
+  // 否则被回退/坏声明清掉的旧判据会借合成 session_meta 复活。
+  return projectContext(resolved.events, resolved.replacements, { acceptanceNote: note });
 }

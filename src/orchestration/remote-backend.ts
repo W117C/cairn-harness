@@ -188,6 +188,7 @@ export function createRemoteExecutionBackend(options: RemoteExecutionBackendOpti
           signal: controller.signal,
         }).then(async (response) => {
           if (!response.ok) throw parseRemoteError(await responseJson(response), response.status);
+          if (!completed && !controller.signal.aborted) await request.onProgress?.();
         }).catch((error: unknown) => {
           if (completed || controller.signal.aborted) return;
           heartbeatFailure = new RemoteExecutionUncertainError(

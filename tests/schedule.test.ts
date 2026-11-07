@@ -247,6 +247,22 @@ describe("M4a 双轨存储", () => {
     expect(tail.filter((k) => !keys.has(k))).toEqual([]);
   });
 
+  it("journal 跨进程写锁：另一实例持锁时 append 不落盘，释放后照常写入", async () => {
+    const file = join(dir, "journal-cross-process.jsonl");
+    const lock = join(dir, "automations-journal.lock");
+    const at = new Date("2026-09-12T02:00:00.000Z").toISOString();
+    // 模拟另一个活进程：锁内容就是本测试进程的 pid（processLiveness 会读成 alive）。
+    await writeFile(lock, String(process.pid), "utf8");
+    const pending = appendJournalEntry(file, {
+      task_id: "t", occurrence_key: "cross-1", due_at: at, decision: "triggered", at,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    await expect(readFile(file, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    await rm(lock, { force: true });
+    await pending;
+    expect((await readJournalFile(file)).entries.map((e) => e.occurrence_key)).toEqual(["cross-1"]);
+  });
+
   // X2（P0-A 同族）：journal 改常驻句柄后，收敛（read 快照 → rename 覆盖写）必须让旧句柄失效
   // ——rename 之后旧句柄指向已被覆盖的旧 inode，后续写入会静默丢失（丢的正是"该 occurrence
   // 已决"的唯一凭据，重启后重复补跑）。当前实现里 resolveHandle 的 inode 校验已能捕获该覆盖，
@@ -267,6 +283,22 @@ describe("M4a 双轨存储", () => {
     expect(entries).toHaveLength(4_005);
     const keys = new Set(entries.map((e) => e.occurrence_key));
     expect(post.filter((k) => !keys.has(k))).toEqual([]); // 后写的 5 条一条不丢
+  });
+
+  it("journal 压缩保留每个任务最后一条已决账：稀疏任务不被全局窗口挤掉", async () => {
+    const file = join(dir, "journal-watermark.jsonl");
+    const at = new Date("2026-09-12T02:00:00.000Z").toISOString();
+    const rows: string[] = [
+      JSON.stringify({ task_id: "sparse", occurrence_key: "sparse:last", due_at: at, decision: "triggered", at }),
+    ];
+    for (let i = 0; i < 10_001; i++) {
+      rows.push(JSON.stringify({ task_id: "noisy", occurrence_key: "noisy-" + String(i), due_at: at, decision: "skipped", reason: "too-old", at }));
+    }
+    await writeFile(file, rows.join("\n") + "\n", "utf8");
+    const kept = await compactJournalIfLarge(file);
+    expect(kept).toBeGreaterThan(4_000); // 4000 条窗口 + sparse 的那一条
+    const { entries } = await readJournalFile(file);
+    expect(entries.some((e) => e.task_id === "sparse" && e.occurrence_key === "sparse:last"), "稀疏任务的已决水位被压缩丢掉了").toBe(true);
   });
 });
 
@@ -316,6 +348,27 @@ describe("M4a next-run 计算（croner + 锚点步进）", () => {
     expect(occ).toHaveLength(12); // +5min … +60min
     expect(occ[0]!.toISOString()).toBe("2026-09-12T00:05:00.000Z");
     expect(occurrencesBetween(iv, new Date("2026-09-12T00:00:00Z"), new Date("2026-09-12T00:03:00Z"))).toHaveLength(0);
+  });
+
+  it("custom 在东十区按墙钟日步进：everyDays>1 不因时区偏移提前一天", () => {
+    // 悉尼 2026-01-01 09:00 = 2025-12-31T22:00Z（夏令时 +11）。锚点必须是墙钟 1 月 1 日，
+    // 不是把 instant 再减一次偏移后的 12 月 31 日。
+    const c2 = def({
+      schedule: { kind: "custom", everyDays: 2, time: "09:00" },
+      timeZone: "Australia/Sydney",
+      createdAt: "2026-01-01T09:00:00+11:00",
+    });
+    expect(nextOccurrence(c2, new Date("2026-01-01T00:00:00Z"))?.toISOString()).toBe("2026-01-02T22:00:00.000Z");
+    const c7 = def({
+      schedule: { kind: "custom", everyDays: 7, time: "09:00" },
+      timeZone: "Australia/Sydney",
+      createdAt: "2026-01-01T09:00:00+11:00",
+    });
+    expect(nextOccurrence(c7, new Date("2026-01-01T00:00:00Z"))?.toISOString()).toBe("2026-01-07T22:00:00.000Z");
+    // 对照：UTC 的同一相位保持不变（修时区不改变原口径）。after 取在锚点之后，
+    // 才能看到 everyDays 的步进；取在锚点之前时下一拍就是当天 09:00。
+    const u = def({ schedule: { kind: "custom", everyDays: 2, time: "09:00" }, timeZone: "UTC", createdAt: "2026-01-01T09:00:00Z" });
+    expect(nextOccurrence(u, new Date("2026-01-01T10:00:00Z"))?.toISOString()).toBe("2026-01-03T09:00:00.000Z");
   });
 
   it("formatLocal 输出任务时区墙钟", () => {
@@ -779,6 +832,23 @@ describe("tick 拒绝护栏（P1 回归）", () => {
       throw new Error("boom-manual");
     };
     await expect(s.tick()).rejects.toThrow("boom-manual");
+  });
+
+  it("stop→start 重启：抖动期内的 tick 不吃上一轮的 firstTickDone（启动判定语义必须重新走）", async () => {
+    // firstTickDone 残留 ⇒ 重启后的第一个常规 tick 直接进常规触发路：catchUp=skip 的任务
+    // 在停止期间错过的 occurrence 会被真跑（违背「对齐不补跑」的属主意图）。
+    // 抖动给 10min（验收时钟不动）：interval/手动 tick 都先于 startup tick ⇒ 可判定。
+    const { s } = makeScheduler({ jitterMs: () => 600_000 });
+    await s.start();
+    const created = await s.upsert(base({ createdAt: CREATED }));
+    if (!created.ok) throw new Error(created.errors.join("；"));
+    await s.tick({ startup: true }); // ① 第一轮启动判定完成
+    s.stop();
+    await s.start(); // ② 重启：装载重跑；firstTickDone 必须随 start 复位
+    const report = await s.tick(); // ③ 抖动期内：必须空转，等启动判定
+    expect(report.considered).toBe(0);
+    expect(report.startup).toBe(false);
+    s.stop();
   });
 });
 

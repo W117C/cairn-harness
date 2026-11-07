@@ -1,4 +1,5 @@
 /** Versioned orchestration data. Runtime authority is the existing session event log. */
+export const ORCHESTRATION_LEASE_MS = 300_000;
 export type Verdict = "pass" | "fail" | "unverifiable";
 export type EvidenceState = "verified" | "failed" | "stale" | "absent";
 export type TaskPhase = "planned" | "queued" | "running" | "verifying" | "merging" | "done" | "failed" | "cancelled" | "paused" | "needs_you";
@@ -206,6 +207,8 @@ export interface ExecutionRequest {
   request_id: string;
   context: ContextPacket;
   signal: AbortSignal;
+  /** Trusted adapters report durable work or acknowledged, deadline-bounded remote liveness; never a local timer alone. */
+  onProgress?: () => Promise<void>;
 }
 export interface ExecutionResult {
   agent_id: string;

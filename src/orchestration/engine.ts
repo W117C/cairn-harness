@@ -4,6 +4,7 @@ import { decideRuntimeControl, expandRuntimeFlow, runtimeGroups } from "./contro
 import { OrchestrationStore } from "./store";
 import { parsePlan } from "./validate";
 import { nextActions } from "./schedule";
+import { ORCHESTRATION_LEASE_MS } from "./types";
 import type {
   ControlCommand,
   ExecutionBackend,
@@ -230,8 +231,19 @@ export class OrchestrationEngine {
       let started = 0;
       for (const action of actions) {
         if (action.kind === "cancel") {
+          const observedPlan = own(current.plans, action.plan_id);
+          const observedTask = observedPlan ? own(observedPlan.tasks, action.task_id) : undefined;
+          if (observedPlan?.phase !== "cancelled") {
+            // Progress can append outside the command queue after this tick's snapshot.
+            const latest = await this.view();
+            const latestPlan = own(latest.plans, action.plan_id);
+            const latestTask = latestPlan ? own(latestPlan.tasks, action.task_id) : undefined;
+            if (!observedTask?.run_id || latestTask?.run_id !== observedTask.run_id ||
+                latestTask.lease_expires_at === undefined || latestTask.lease_expires_at > Date.now() ||
+                ["done", "failed", "cancelled", "paused"].includes(latestTask.phase)) continue;
+          }
           let aborted = false;
-          for (const run of this.active.values()) if (run.request.plan.plan_id === action.plan_id && run.request.task.task_id === action.task_id) { run.controller.abort(); aborted = true; }
+          for (const run of this.active.values()) if (run.request.plan.plan_id === action.plan_id && run.request.plan.version === action.version && run.request.task.task_id === action.task_id && run.request.run_id === observedTask?.run_id) { run.controller.abort(); aborted = true; }
           if (!aborted) {
             const p = own(current.plans, action.plan_id); const t = p ? own(p.tasks, action.task_id) : undefined;
             if (t && !["done", "failed", "cancelled"].includes(t.phase)) {
@@ -261,7 +273,8 @@ export class OrchestrationEngine {
             budget: { usd: Math.max(0, t.task.budget.usd - t.spent_usd) } }, signal: controller.signal,
         };
         const stamp: OrchestrationStamp = { schema_version: 1, plan_id: p.plan.plan_id, version: p.plan.version, task_id: t.task.task_id, run_id: runId,
-          attempt: t.attempt + 1, phase: "running", actor: "kernel", request_id: runId, reserved_usd: request.context.budget.usd, lease_expires_at: Date.now() + 300_000 };
+          attempt: t.attempt + 1, phase: "running", actor: "kernel", request_id: runId, reserved_usd: request.context.budget.usd,
+          lease_expires_at: Math.min(Date.now() + ORCHESTRATION_LEASE_MS, request.task.deadline_ms ?? Infinity) };
         await this.append({ type: "agent_spawned", agent_id: "orch:" + runId, parent_event_id: p.source_event_id, mode: t.task.lane === "read" ? "read" : "write",
           task: t.task.goal, max_turns: p.plan.agents.find(s => s.agent_spec_id === t.task.agent_spec)!.max_turns, permission_mode: t.task.lane === "read" ? "read-only" : "default", resources: t.task.write_scopes, orchestration: stamp });
         const active: ActiveRun = { request, controller, promise: Promise.resolve() };
@@ -281,6 +294,19 @@ export class OrchestrationEngine {
       ...(reason ? { reason } : {}), orchestration: { ...stamp, actor: "kernel", phase } });
   }
   private async execute(request: ExecutionRequest, stamp: OrchestrationStamp): Promise<void> {
+    let progressOpen = true;
+    let lastRenewedAt = stamp.lease_expires_at! - ORCHESTRATION_LEASE_MS;
+    const backendRequest: ExecutionRequest = { ...request, onProgress: async () => {
+      const now = Date.now();
+      if (!progressOpen || request.signal.aborted || now >= stamp.lease_expires_at! || now - lastRenewedAt < 60_000) return;
+      const expiresAt = Math.min(now + ORCHESTRATION_LEASE_MS, request.task.deadline_ms ?? Infinity);
+      if (expiresAt <= stamp.lease_expires_at!) return;
+      lastRenewedAt = now;
+      stamp = { ...stamp, lease_expires_at: expiresAt };
+      // Do not join the command queue: cancellation waits for this executor to stop.
+      await this.append({ type: "agent_status", agent_id: "orch:" + stamp.run_id, status: "running", ts: now,
+        orchestration: { ...stamp, actor: "kernel", phase: "running" } });
+    } };
     let charged = 0;
     let recorded = 0;
     let backendReturned = false;
@@ -307,7 +333,7 @@ export class OrchestrationEngine {
       const unsupported = this.options.backend.supports(request.task, spec);
       if (unsupported) { await this.status(stamp, "failed", unsupported); return; }
       request.signal.throwIfAborted();
-      const result: ExecutionResult = await this.options.backend.execute(request);
+      const result: ExecutionResult = await this.options.backend.execute(backendRequest);
       backendReturned = true;
       cost(result.spent_usd); charged += result.spent_usd;
       nonempty(result.agent_id, "producer agent_id"); nonempty(result.revision, "revision");
@@ -320,7 +346,7 @@ export class OrchestrationEngine {
         orchestration: { ...stamp, phase: "verifying", actor: "producer", revision: result.revision, spent_usd: result.spent_usd, evidence: "absent", producer_id: result.agent_id,
           output: { artifacts: result.artifacts, evidence: result.evidence } } });
       recorded += result.spent_usd;
-      const verified: VerificationResult = await this.options.backend.verify({ ...request, context: { ...request.context, budget: { usd: request.context.budget.usd - charged } } }, result);
+      const verified: VerificationResult = await this.options.backend.verify({ ...backendRequest, context: { ...request.context, budget: { usd: request.context.budget.usd - charged } } }, result);
       cost(verified.spent_usd); charged += verified.spent_usd;
       if (charged > request.context.budget.usd) throw new Error("verifier exceeded reserved budget");
       if (verified.verifier_id === result.agent_id) throw new Error("producer cannot verify its own result");
@@ -332,16 +358,18 @@ export class OrchestrationEngine {
           verdict: pass ? "pass" : verified.verdict === "unverifiable" ? "unverifiable" : "fail", evidence: pass ? "verified" : "failed", checks: verified.checks, spent_usd: verified.spent_usd } });
       recorded += verified.spent_usd;
       request.signal.throwIfAborted();
-      if (!pass) { await this.status(stamp, verified.verdict === "unverifiable" ? "needs_you" : "failed", "independent verification: " + verified.verdict); return; }
+      if (!pass) { progressOpen = false; await this.status(stamp, verified.verdict === "unverifiable" ? "needs_you" : "failed", "independent verification: " + verified.verdict); return; }
       if (request.task.contract.effect !== "none") {
-        if (!this.options.backend.deliver) { await this.status(stamp, "needs_you", "backend has no controlled delivery"); return; }
+        if (!this.options.backend.deliver) { progressOpen = false; await this.status(stamp, "needs_you", "backend has no controlled delivery"); return; }
         await this.status(stamp, "merging");
-        const delivered = await this.options.backend.deliver(request, result);
+        const delivered = await this.options.backend.deliver(backendRequest, result);
         if (delivered.revision !== result.revision) throw new Error("delivery revision changed after verification");
         await this.append({ type: "agent_status", agent_id: "orch:" + stamp.run_id, status: "running", orchestration: { ...stamp, actor: "delivery", phase: "merging", revision: delivered.revision } });
       }
+      progressOpen = false;
       await this.status({ ...stamp, revision: result.revision }, "done");
     } catch (error) {
+      progressOpen = false;
       await recordLateResult();
       // A user/kernel cancellation has no reported cost yet; do not turn the whole remaining
       // reservation into spend (that makes a cancelled task unretryable). A real backend error

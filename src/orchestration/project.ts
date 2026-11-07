@@ -1,4 +1,5 @@
 import type { AgentEvent, CardActionEvent, VerifyResultEvent } from "../events/types";
+import { ORCHESTRATION_LEASE_MS } from "./types";
 import { expandRuntimeFlow, runtimeGroups } from "./control-node";
 import { writeScopesConflict } from "./schedule";
 import { parsePlan } from "./validate";
@@ -252,6 +253,19 @@ export function projectOrchestration(events: readonly AgentEvent[]): Orchestrati
     }
     if ((event.type === "agent_result" || event.type === "agent_status") && event.agent_id !== task.agent_id) {
       anomaly(id, "agent identity does not match run"); continue;
+    }
+    if (event.type === "agent_status" && stamp.phase === "running" && event.status === "running") {
+      const now = event.ts;
+      const expiresAt = stamp.lease_expires_at;
+      if (stamp.actor !== "kernel" || !["approved", "paused"].includes(plan.phase) ||
+          !["running", "verifying", "merging"].includes(task.phase) ||
+          typeof now !== "number" || !Number.isFinite(now) || task.lease_expires_at === undefined || now >= task.lease_expires_at ||
+          typeof expiresAt !== "number" || !Number.isFinite(expiresAt) || expiresAt <= task.lease_expires_at ||
+          expiresAt > now + ORCHESTRATION_LEASE_MS || expiresAt > (task.task.deadline_ms ?? Infinity)) {
+        anomaly(id, "invalid or expired lease renewal"); continue;
+      }
+      task.lease_expires_at = expiresAt;
+      continue;
     }
     const receiptKey = JSON.stringify([runKey, stamp.actor, event.type]);
     if ((event.type === "agent_result" || event.type === "verify_result") && receipts.has(receiptKey)) {

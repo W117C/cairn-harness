@@ -10,6 +10,7 @@ import { createEventLog, type AgentEvent } from "../events";
 import { TOOLS, type Tool, type ToolResult } from "../tools";
 import type { AskGate } from "./ask-gate";
 import { isUnattendedTier, validateAutomation } from "./automations";
+import type { IdleTaskResult, IdleTaskSnapshot } from "./idle-tasks";
 import {
   loadAutomationsFile,
   normalizeHistoryFilter,
@@ -68,6 +69,8 @@ export function initScheduler(opts: {
   clock?: () => number;
   jitterMs?: () => number;
   cap?: number;
+  isAgentBusy?: () => boolean;
+  isIdleWorkspaceAvailable?: (workspace: string) => boolean;
 }): void {
   // 单调真值先置（下面那句 `if (scheduler) return` 的幂等路径也要认）：这一句之后
   // `installTimeAutomationFace` 在本进程余生都判真，五件的说明书就一直在两面挂着。
@@ -84,6 +87,8 @@ export function initScheduler(opts: {
     runSession: makeScheduledExecutor(ws),
     ...(opts.clock ? { clock: opts.clock } : {}),
     ...(opts.jitterMs ? { jitterMs: opts.jitterMs } : {}),
+    ...(opts.isAgentBusy ? { isAgentBusy: opts.isAgentBusy } : {}),
+    ...(opts.isIdleWorkspaceAvailable ? { isIdleWorkspaceAvailable: opts.isIdleWorkspaceAvailable } : {}),
     getCap: () => scheduleCapCache,
     // 装载警告（如 automations.json 损坏）必须有人收：没有 onWarn 时 Scheduler.warn 是空操作，
     // `cairn --serve` 会在「坏档 + 空清单」上静默跑。CLI 写 stderr；桌面主进程进日志。
@@ -143,7 +148,7 @@ export function scheduledRunCount(): number {
 export function makeScheduledExecutor(workspace: string): TriggerExecutor {
   return (args) => {
     scheduledRunsInFlight += 1;
-    return D().runSession(workspace, args).finally(() => {
+    return D().runSession(args.workspace ?? workspace, args).finally(() => {
       scheduledRunsInFlight = Math.max(0, scheduledRunsInFlight - 1);
     });
   };
@@ -153,6 +158,19 @@ export async function handleScheduleSnapshot(rawFilter?: unknown): Promise<Sched
   // 筛选值来自渲染层的下拉框（跨进程输入面）；合法性与归一都在 scheduler 那一处（防第二份谓词）
   if (!scheduler) return { tasks: [], history: [], running: 0, queued: 0, cap: scheduleCapCache, startupDone: false, tzNotes: {}, warnings: [], definitionsCorrupt: false };
   return scheduler.snapshot(normalizeHistoryFilter(rawFilter));
+}
+
+export async function handleIdleTaskList(workspace?: string): Promise<IdleTaskSnapshot> {
+  if (!scheduler) throw new Error("本地调度器尚未启动");
+  return scheduler.idleTaskSnapshot(workspace);
+}
+
+export async function handleIdleTaskEnqueue(raw: unknown, workspace?: string): Promise<IdleTaskResult> {
+  return scheduler?.enqueueIdleTask(raw, workspace) ?? { ok: false, error: "本地调度器尚未启动" };
+}
+
+export async function handleIdleTaskUpdate(id: unknown, action: unknown, workspace?: string): Promise<IdleTaskResult> {
+  return scheduler?.updateIdleTask(id, action, workspace) ?? { ok: false, error: "本地调度器尚未启动" };
 }
 
 export async function handleScheduleUpsert(raw: unknown, form = true): Promise<{ ok: boolean; error?: string }> {

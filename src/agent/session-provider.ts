@@ -99,7 +99,7 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
           "（该批准不继承给 worker）。offset/limit 按 1-based 行号取片段，给目录路径则列条目，二进制拒读。" +
           "**要一次看多份小文件（十几支源码/测试）就用 `paths` 数组**：一次调用交回多份，总量仍是同一道 50KB 帽——" +
           "一轮一支读会整段吃掉步数预算。" +
-          "何时用：要用或改某段代码之前先读原文——替换时拼的那个原文字符串要从这里拿，不能凭记忆手打。" +
+          "何时用：改动代码前必读目标区域原文——替换时拼的那个原文字符串要从这里拿（前后包含 3–5 行确保唯一），不能凭记忆手打；大文件善用 offset/limit 定位，避免撑爆上下文。" +
           "按内容找位置用 grep，按文件名形状找用 glob，别拿它遍历目录。整文件读一次通常比多次小范围读便宜；已在上下文里的内容不必重读。",
         parameters: obj(
           {
@@ -112,7 +112,9 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
             offset: { type: "number", description: "起始行（1-based，缺省 1）" },
             limit: { type: "number", description: "最多读取行数（缺省 2000）" },
           },
-          ["path"],
+          // `path` 与 `paths` 二选一由工具执行面硬拒二者同给/都不给；规格面不能把 path 写成恒必填，
+          // 否则模型按说明书发 `paths` 时 schema 先自相矛盾。
+          [],
         ),
       },
     },
@@ -150,7 +152,7 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
         name: "grep",
         description:
           "按正则搜工作区内容（ripgrep 语法，忽略大小写写 (?i) 前缀）；按文件分组返回，上限 100 命中。" +
-          "何时用：找符号在哪定义、哪里被调用、定位报错原文——改代码前要现场就靠它。按文件名形状找用 glob，读已知路径用 read_file。" +
+          "何时用：找符号在哪定义、哪里被调用、定位报错原文——改代码前要现场就靠它；善用 context 参数（1–5）直接带出周围行上下文。按文件名形状找用 glob，读已知路径用 read_file。" +
           "搜含 ( . $ [ 的串（路径、报错原文、函数调用形状）必须给 fixed_strings，否则会被正则语义曲解或直接报错。",
         parameters: obj(
           {
@@ -187,6 +189,70 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
     {
       type: "function",
       function: {
+        name: "git_read",
+        description:
+          "只读 git 三合一（零写权、不经 shell）：op=status 看工作区改动清单与当前分支（porcelain）；" +
+          "op=diff 看对 HEAD 的未提交改动（unified=2，可用 path 收窄到单文件，untracked 不在内）；" +
+          "op=log 看最近 20 条 commit。" +
+          "何时用：开工前看仓库状态、改完核对改动面、查「这文件最近谁动过」。写向 git 操作（add/commit/checkout）不在本工具范围，走 shell 命令按权限闸审批。",
+        parameters: obj(
+          {
+            op: { type: "string", description: "status（改动清单）| diff（未提交 diff）| log（最近 20 条）" },
+            path: { type: "string", description: "仅 diff：收窄到单个文件（workspace 相对）" },
+          },
+          ["op"],
+        ),
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "calc",
+        description:
+          "确定性算术（零近似）：数字与 + - * / % ** 括号、一元负号、pi/e 常量；除零/模零显式报错。" +
+          "何时用：预算、测量、统计、单位换算这类要数字精确的场景——别自己心算，算术交给它。",
+        parameters: obj(
+          {
+            expression: { type: "string", description: "算术表达式（如 (128000-8192)*0.8/4；只接受数字与运算符）" },
+          },
+          ["expression"],
+        ),
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "list_dir",
+        description:
+          "单层目录总览：条目名 + 类型（/目录 @软链）+ 大小 + 修改时间，帽 200 条。" +
+          "何时用：开工摸底看结构、找「最近改过的文件」。递归找文件用 glob，按内容找用 grep——本工具不递归。",
+        parameters: obj(
+          {
+            path: { type: "string", description: "目录（workspace 相对，缺省工作区根）" },
+          },
+          [],
+        ),
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "read_doc",
+        description:
+          "文档读取：pdf / docx / xlsx → 纯文本（按文件内容判型，不是按扩展名）。" +
+          "pdf 是 best-effort 文本层——扫描件/加密件会明说失败；docx 保段落与制表，xlsx 读首表前 500 行。" +
+          "何时用：用户给了一份文档要你读——无需外部命令，直接读。",
+        parameters: obj(
+          {
+            path: { type: "string", description: "文档路径（workspace 相对；项目外附件走已批准的 grant）" },
+          },
+          ["path"],
+        ),
+      },
+    },
+    {
+      type: "function",
+      function: {
         name: "lsp",
         description:
           "LSP 查询（需工作区 .agent/lsp.json 配置；未配置时返回明确不可用原因）：" +
@@ -218,7 +284,7 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
           "精确字符串替换：把 old_string 换成 new_string。old_string 必须唯一匹配（多处命中会报错并给出处数），确要全改加 replace_all: true。" +
           "何时用：改已有文件里已知位置的少数几处——它只付改动的字节，是改已有文件的**首选**。" +
           "何时不用：新建文件用 write_file；改动跨多处或多文件、要一笔原子落地用 apply_patch；一个文件要改的地方多到重抄更省时也用 write_file。" +
-          "old_string 要从 read_file 或 grep 的 context 里复制原文，别凭记忆手打——差一个空格就不匹配。",
+          "old_string 必须从 read_file 或 grep 的 context 里复制真实上下文行（前后保留 3–5 行以确保全局唯一匹配），严禁盲改或凭记忆手打——差一个空格换行就不匹配。",
         parameters: obj(
           {
             path: { type: "string", description: "workspace 相对路径（绝对路径或越出工作区一律拒绝）" },
@@ -273,8 +339,12 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
           "在工作区内执行 bash 命令（同步、有超时；出网与危险命令受权限层与沙箱管辖）。" +
           "何时用：仓库自己的工具链——跑测试、构建、lint、git 只读查询、装依赖。" +
           "何时不用：读文件用 read_file、按内容找用 grep、按文件名找用 glob、改文件用 edit_file/apply_patch/write_file、跑项目验证用 verify——专用工具进上下文更省、权限面更清晰。" +
-          "不要用它绕过被拒的工具；不要丢交互式或长期驻留的命令进来。",
-        parameters: obj({ command: { type: "string" } }, ["command"]),
+          "严禁拼接不可信输入，不要用它绕过被拒的工具；不要丢交互式或长期驻留的命令进来。" +
+          "background:true = 后台跑（立即返回任务号，task_output 读输出、task_stop 停止）——dev server、长测试、watcher 用这一档。",
+        parameters: obj({
+          command: { type: "string" },
+          background: { type: "boolean" },
+        }, ["command"]),
       },
     },
     {
@@ -282,10 +352,10 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
       function: {
         name: "clarify",
         description:
-          "任务有歧义时向用户提问（1–4 个问题，每问 2–4 个选项或允许自由补充）。" +
-          "何时用：需求有实质歧义，且不同解释会导出不同实现——猜错的返工比问一轮贵。" +
-          "何时不用：能从仓库查明的先自己查（read_file/grep/glob）；只是要让用户批计划用 propose_plan；不要拿它请求权限或确认常规操作。" +
-          "问题要具体到用户能一句话选完；能并成 1 问就别拆成 3 问。",
+          "任务有实质歧义时向用户提问（1–4 个问题，每问 2–4 个选项或允许自由补充）。" +
+          "何时用：需求有不可调和的实质歧义，且不同解释会导出截然不同的实现方向——猜错的返工比问一轮贵。" +
+          "何时不用：能从仓库查明或通过只读探索推导出的绝不提问（用 read_file/grep/glob 自行求证）；禁止拿它询问「你能帮我做X吗」这种行动授权（用户指示即行动授权）；不要拿它确认常规操作。" +
+          "问题必须高度具体并附带推荐选项，使用户能一句话单选或快速决策；能并成 1 问就绝不拆成多问。",
         parameters: obj(
           {
             questions: {
@@ -318,10 +388,10 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
       function: {
         name: "propose_plan",
         description:
-          "写文件前提交方案等用户批准；批准前 write_file/run_shell 会被权限层拒绝。" +
-          "何时用：任何要改盘的活开工前。方案要具体到「文件 + 动作 + 做法 + 怎么验」，让用户批的是一个可复核的成品，而不是一个还没想清的意图。" +
-          "何时不用：纯只读调研不必提方案；需求本身还有歧义，先用 clarify 把问题问掉再提。" +
-          "先把已授权且可逆的准备做完再请求批准，别拿半成品占用户一轮。",
+          "多文件/结构性改动或验收未定时才提交方案等用户批准；方案未批准前 write_file/run_shell 会被权限层拒绝。" +
+          "何时用：多文件/结构性改动、方向或验收未定，需先明确文件、做法与验收口径；方案批准后仍按当前权限档逐次执行。" +
+          "何时不用：单一明确的小改动直接做并 verify；需求本身还有歧义，先用 clarify 把问题问掉再提。" +
+          "先自主做完所有已授权且可逆的只读探查，方案包含具体改动与明确验收口径，让用户审批具体成果而非抽象意图。",
         parameters: obj(
           {
             goal: { type: "string" },
@@ -355,9 +425,9 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
       function: {
         name: "verify",
         description:
-          "按仓库 verify 配置跑 lint/test 并判定通过与否；通过则本轮任务收束，失败回传报错继续修。" +
-          "何时用：每一处写盘改动完成之后、宣布完成之前——它是唯一能证明「代码真的能跑」的动作。" +
-          "何时不用：本轮没有写盘改动就不必跑（没有可验的东西）。",
+          "按仓库 verify 配置跑 lint/test 并判定通过与否；通过则本轮任务收束，失败回传报错继续针对机理修复。" +
+          "何时用：改动完成之后、宣布完成之前——它是唯一能证明「代码真的能跑」的客观证据；失败时必须深入研读断言红字与根因，严禁未改代码原地盲跑。" +
+          "何时不用：本轮没有改动或验证诉求就不必跑。",
         parameters: obj({}, []),
       },
     },
@@ -586,6 +656,28 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
         ),
       },
     },
+    // 后台任务三件套（2026-11-05 · 对标 ZCode 的 task-output / task-stop）：
+    // run_shell(background:true) 起后台，这两枚读输出/停止。读向工具，只读档不摘。
+    {
+      type: "function",
+      function: {
+        name: "task_output",
+        description:
+          "读取后台任务的累计输出与状态（看进度/收日志）。" +
+          "给出任务号（如 bg_1）；dev server、长测试起后台后用这一枚看日志。",
+        parameters: obj({ task_id: { type: "string", description: "后台任务号（后台命令返回的 bg_N）" } }, ["task_id"]),
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "task_stop",
+        description:
+          "停止一个后台任务（进程组组杀，不留孤儿）。给出任务号（如 bg_1）；" +
+          "任务完成使命或跑错了要重来时用。",
+        parameters: obj({ task_id: { type: "string", description: "后台任务号" } }, ["task_id"]),
+      },
+    },
   ];
   // 定时任务五件的规格与实现同在（实现在 agent-runner 的 installAutomationTools，
   // 调度器没起来时它们自己 fail-closed）——以前只有实现，模型面上一个都没有 ⇒ 发不出去。
@@ -605,6 +697,10 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
       s.function.name !== "list_agents" &&
       s.function.name !== "resume_agent" &&
       s.function.name !== "close_agent" &&
+      // 后台读/停两件（2026-11-06 对齐执行面）：toolTableFor 判它们非写向（task_output 只读输出，
+      // task_stop 是运维动作不写仓库），执行层在只读档放行 ⇒ 模型面必须跟上（判卷 session-tools
+      // 钉着「specs ⊇ toolTableFor」）。只读档起不了后台任务（run_shell 是写向），但停/读一个
+      // 已存在的任务不写任何东西。
       !AUTOMATION_TOOL_NAMES.includes(s.function.name),
     ));
   }
@@ -615,7 +711,7 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
  *  而这两把在只读档连面都不在 ⇒ 那句话对该档是在描述一个它拿不到的能力，正是同类事故第四次（前三次：glob 逃生口／
  *  maxFiles 死参数／prune 附件）。这里只换需要换的那一把的描述，其余逐字沿用同一份源——与 `systemPromptFor` 同一套纪律。 */
 const READ_ONLY_DESCRIPTIONS: Readonly<Record<string, string>> = {
-  propose_plan: "提交方案等用户批准；本档不装配写文件与跑命令的工具，方案是给用户的交付物，不由本会话执行",
+  propose_plan: "提交方案等用户批准；本档不装配写文件与跑命令的工具，方案是给用户的交付物，自主完成只读探查后呈现具体发现与修复建议，不由本会话执行",
 };
 
 function readOnlyDescriptions(specs: GlmToolSpec[]): GlmToolSpec[] {
@@ -946,6 +1042,11 @@ export function createSessionProvider(
     model?: string;
     /** Explicit effort reaches transport; native off differs from an unspecified upstream default. */
     thinking?: ThinkingEffort;
+    /** 逐请求的思考档策略（质量档）：按当前 run 的事件与轮次决定这一拍用哪档。
+     *  返回 undefined 时回落到 `thinking`；缺省不传 = 逐字旧行为（每拍同一档）。
+     *  为什么放在 provider 而不在 loop：档位是 wire 参数，只有真正发请求的这一刻
+     *  才知道「当前是规划、执行还是返修」；在 loop 里定档会退化成整轮一个值。 */
+    thinkingPolicy?: (ctx: { round: number; events: readonly AgentEvent[] }) => ThinkingEffort | undefined;
     /** 调用方**已经解析好**的模型窗口（如 `--model` 自由档位合成 spec 上的那个）。
      *  `opts.model` 那条查表的路只认得表内模型；自由档位的名字按定义不在表里，查表恒为 undefined ⇒
      *  窗口得由调用方递进来，否则这一路的预算只能吃 `DEFAULT_COMPACTION_CONFIG` 的硬编码。 */
@@ -1218,9 +1319,11 @@ export function createSessionProvider(
     overhead: AssemblyOverhead,
     view: SessionView | undefined,
     config: CompactionConfig,
+    signal?: AbortSignal,
   ): void => {
     const prediction = opts.compaction?.prediction;
     if (!coordinator || !opts.compaction || prediction?.enabled !== true || coordinator.summarizerDisabled) return;
+    if (signal?.aborted) return;
     if (!shouldStartCompactionPrediction({
       estimateTokens: estimate,
       config,
@@ -1231,13 +1334,19 @@ export function createSessionProvider(
     const baseEventCount = snapshot.length;
     const startedAt = Date.now();
     predictionTask = (async () => {
+      // 两道 abort 复查：任务启动前可能已被取消；predict 等上游摘要返回期间也可能被取消。
+      // 取消后不把这条预测的 usage 落进事件流，更不把过期候选交给下一轮采纳。
+      signal?.throwIfAborted();
       const outcome = await coordinator.predict([...snapshot], {
         overhead,
         ...(view !== undefined ? { view } : {}),
         config,
+        ...(signal ? { signal } : {}),
       });
+      signal?.throwIfAborted();
       if (!outcome?.ok) return;
       const event = outcome.event;
+      signal?.throwIfAborted();
       if (event.usage) {
         await appendInternalEvent({
           type: "usage",
@@ -1247,6 +1356,7 @@ export function createSessionProvider(
           model: event.model ?? predictionModelKey,
         });
       }
+      signal?.throwIfAborted();
       const adopted = { ...event } as CompactionEvent;
       delete adopted.usage;
       predictionCandidate = {
@@ -1257,6 +1367,8 @@ export function createSessionProvider(
         createdAt: startedAt,
       };
     })().catch((error) => {
+      // run 取消不是预测失败：不要把预期的 DOMException 当异常告警刷屏。
+      if (signal?.aborted) return;
       console.warn("[compaction] predictive summary failed; synchronous fallback remains available:", error);
     }).finally(() => {
       predictionTask = null;
@@ -1399,10 +1511,20 @@ export function createSessionProvider(
         });
         const predictionConfig: CompactionConfig = { ...budgetConfig(), ...(amortize ?? {}) };
         if (decision === null) {
-          startPrediction(events, estimate, overhead, view, predictionConfig);
+          startPrediction(events, estimate, overhead, view, predictionConfig, call?.signal);
         }
         if (decision?.trigger === "auto" && predictionTask !== null) {
-          await predictionTask;
+          // 预测摘要挂起时取消必须立即收束：任务自身带 signal 会自行 unwind，
+          // 但这一轮不该等它；后续 throwIfAborted / streamFn 负责终止主请求链。
+          if (call?.signal && !call.signal.aborted) {
+            await Promise.race([
+              predictionTask,
+              new Promise<void>((resolve) => call.signal!.addEventListener("abort", () => resolve(), { once: true })),
+            ]);
+          } else {
+            await predictionTask;
+          }
+          call?.signal?.throwIfAborted();
         }
         let adoptedOutcome: Awaited<ReturnType<CompactionCoordinator["maybeCompact"]>> = null;
         if (decision?.trigger === "auto" && predictionCandidate !== null) {
@@ -1466,8 +1588,17 @@ export function createSessionProvider(
         ...(surfaceNoteText ? { surfaceNote: surfaceNoteText } : {}),
         ...(opts.attachmentContext ? { attachmentContext: opts.attachmentContext } : {}),
         ...(ephemeralUserTurn !== "" ? { ephemeralUserTurn } : {}),
-        ...(pendingImages.length > 0 ? { ephemeralImages: pendingImages } : {}),
-        ...(opts.ephemeralImages !== undefined ? { ephemeralImages: opts.ephemeralImages } : {}),
+        // 两条识图时机**合并**而不是同键覆盖：imageChannel 是「loop 何时读到，下一轮就附」的活盒子，
+        // opts.ephemeralImages 是「调用方自己算好的一次性块」（provider-assembly 把两条都透传，
+        // 注释明言是两条不同的时机）——旧形状后一个 spread 静默吃掉前一个（潜伏：今天还没有
+        // 生产者同时用两条，但形状一留，未来第一个同时用的调用方就会无声丢图）。
+        // 两条识图时机**合并**而不是同键覆盖：imageChannel 是「loop 何时读到，下一轮就附」的活盒子，
+        // opts.ephemeralImages 是「调用方自己算好的一次性块」（provider-assembly 把两条都透传，
+        // 注释明言是两条不同的时机）——旧形状后一个 spread 静默吃掉前一个（潜伏：今天还没有
+        // 生产者同时用两条，但形状一留，未来第一个同时用的调用方就会无声丢图）。
+        ...(pendingImages.length > 0 || opts.ephemeralImages !== undefined
+          ? { ephemeralImages: [...pendingImages, ...(opts.ephemeralImages ?? [])] }
+          : {}),
       });
       // 压缩重写代价的**实测**（不是估算）：本轮装配与上一轮比，头部仍然逐字相同的那段占多少。
       // 只有本轮真的压过才记账——prune/skill 重挂造成的抖动不归这条策略管（它们各有判据）。
@@ -1497,8 +1628,9 @@ export function createSessionProvider(
       // 先把它们留在盒里，用户点「重试」时同一批帧还能再送一次（take 语义见 image-channel.ts）。
       opts.imageChannel?.take();
       call?.signal?.throwIfAborted();
+      const effort = opts.thinkingPolicy?.({ round, events }) ?? opts.thinking;
       yield* (opts.transport ?? streamGlm)(msgs, { ...(opts.model ? { model: opts.model } : {}),
-        ...(opts.thinking !== undefined ? { reasoningEffort: opts.thinking } : {}),
+        ...(effort !== undefined ? { reasoningEffort: effort } : {}),
         ...(opts.solpi?.meter ? { metering: { meter: opts.solpi.meter, category: "main" as const } } : {}) }, tools, call);
       successfulRequests++;
       opts.solpi?.sent(msgs, events);

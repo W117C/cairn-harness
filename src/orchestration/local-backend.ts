@@ -21,7 +21,7 @@ export interface LocalProviderContext { role: "producer" | "verifier"; agent_id:
 /** A bounded factory is trusted host code: its adapter MUST enforce the declared monetary upper bound, including internal retries. */
 export interface LocalProviderConfig { create(context: LocalProviderContext): Provider | Promise<Provider>; cost: { kind: "scripted" } | { kind: "bounded"; max_call_usd: number }; }
 /** The host supplies an actual OS sandbox; commands never fall back to a bare shell. */
-export interface TrustedCommandSandbox { run(options: { command: string; cwd: string; timeout_ms: number; signal: AbortSignal }): Promise<{ exitCode: number | null; output: string; assertions: number }>; }
+export interface TrustedCommandSandbox { run(options: { command: string; cwd: string; timeout_ms: number; signal: AbortSignal; onProgress?: () => Promise<void> }): Promise<{ exitCode: number | null; output: string; assertions: number }>; }
 export interface LocalBackendOptions { workspace: string; dataDir: string; producer: LocalProviderConfig; verifier: LocalProviderConfig; commandSandbox?: TrustedCommandSandbox; }
 
 type FileState = { hash: string; mode: number };
@@ -258,10 +258,10 @@ export function createLocalBackend(options: LocalBackendOptions): ExecutionBacke
       abort(request.signal);
       const cost = costOf(config);
       await reserve(request, record, cost); // Retain the upper bound even for missing usage, errors or cancellation.
-      yield* provider.stream([{ role: "system", content: `Role: ${role}. Available tools: ${JSON.stringify(surface.names)}. Stay within the supplied task and file capability. ${role === "verifier" ? 'Return only JSON {"verdict":"pass"|"fail"|"unverifiable","revision":"the supplied revision"} after independently inspecting the artifacts.' : "Report the actual work performed."}` }, ...messages], surface.specs, call);
+      yield* provider.stream([{ role: "system", content: `Role: ${role}. Available tools: ${JSON.stringify(surface.names)}. Stay within the supplied task and file capability. ${role === "verifier" ? 'Inspect artifacts independently using available read tools before issuing a verdict. Return only JSON {"verdict":"pass"|"fail"|"unverifiable","revision":"the supplied revision"} after independently inspecting the artifacts.' : "Execute the task step by step within scope, verify changes, and report the actual work performed."}` }, ...messages], surface.specs, call);
     } };
     try {
-      await runWithPlanScope(() => runLoop({ provider: wrapped, events: { async append(event) { await log.append(event); events.push(event); } }, workspace: root, mode: "auto", interactive: false, maxSteps: specFor(request).max_turns, userMessage: prompt, tools: surface.tools, allowedTools: surface.names, signal: request.signal, agentId: id, autoVerify: false, deliveryRepair: false, truncationRepair: false }));
+      await runWithPlanScope(() => runLoop({ provider: wrapped, events: { async append(event) { await log.append(event); events.push(event); await request.onProgress?.(); } }, workspace: root, mode: "auto", interactive: false, maxSteps: specFor(request).max_turns, userMessage: prompt, tools: surface.tools, allowedTools: surface.names, signal: request.signal, agentId: id, autoVerify: false, deliveryRepair: false, truncationRepair: false }));
       abort(request.signal);
     } finally { await log.close?.(); }
     // 真实 provider 只发 assistant_delta；assistant_message 是 mock/脚本通道的聚合形态。
@@ -324,7 +324,7 @@ export function createLocalBackend(options: LocalBackendOptions): ExecutionBacke
           if (!options.commandSandbox) detail = "command has no trusted sandbox; never executed";
           else if (!Number.isFinite(check.timeout_ms) || check.timeout_ms <= 0 || !check.run.trim()) { verdict = "fail"; detail = "invalid command acceptance"; }
           else {
-            const output = await options.commandSandbox.run({ command: check.run, cwd: join(record.directory, "overlay"), timeout_ms: check.timeout_ms, signal: request.signal });
+            const output = await options.commandSandbox.run({ command: check.run, cwd: join(record.directory, "overlay"), timeout_ms: check.timeout_ms, signal: request.signal, ...(request.onProgress ? { onProgress: request.onProgress } : {}) });
             if (output.exitCode !== 0) verdict = "fail";
             else verdict = Number.isInteger(output.assertions) && output.assertions > 0 ? "pass" : "unverifiable";
             detail = redactSecrets(output.output).text;
@@ -339,7 +339,11 @@ export function createLocalBackend(options: LocalBackendOptions): ExecutionBacke
       await assertRevision(record);
       let independent: Verdict = "unverifiable";
       try {
-        const report = JSON.parse(verified.summary) as { verdict?: Verdict; revision?: string };
+        let text = verified.summary.trim();
+        const start = text.indexOf("{");
+        const end = text.lastIndexOf("}");
+        if (start !== -1 && end > start) text = text.slice(start, end + 1);
+        const report = JSON.parse(text) as { verdict?: Verdict; revision?: string };
         if (report.revision !== record.revision) independent = "fail";
         else if (["pass", "fail", "unverifiable"].includes(report.verdict ?? "")) independent = report.verdict!;
       } catch { /* malformed independent report cannot pass */ }

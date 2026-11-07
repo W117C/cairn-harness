@@ -374,7 +374,7 @@ export interface VerifyHook {
   maxAttempts?: number;
   /** 目标仓库有没有可验面（verify 命令非空）。false ⇒ harness 的自动验证拍整段跳过：
    *  没东西可验还回注「未找到 verify 配置」= 白烧一轮模型调用。缺省视为有面。 */
-  surface?(): Promise<boolean>;
+  surface?(signal?: AbortSignal): Promise<boolean>;
   run(signal?: AbortSignal): Promise<VerifyOutcome>;
 }
 
@@ -444,12 +444,14 @@ export function createVerifyHook(
   };
   return {
     maxAttempts: opts.maxAttempts,
-    surface: async () => {
+    surface: async (signal?: AbortSignal) => {
+      // 已经取消的 run 不发信任卡：直接判「无可验面」，不造一张没人收的卡。
+      if (signal?.aborted) return false;
       const { config } = await loadConfig();
       // 类型面也算「有可验面」：只有 tsconfig 的仓库此前被判成没面 ⇒ harness 整段跳过 verify，
       // 而它其实能验（M5 交付物 1 的另一半：补上的面要真的被跑到，不能只躺在配置里）。
       if (verifyCommands(config).length === 0) return false;
-      const d = await trustOf();
+      const d = await trustOf(signal);
       if (!d.run) {
         console.warn(d.reason);
         return false; // fail-closed：宁可这一拍不验，也不执行未经授权的仓库命令

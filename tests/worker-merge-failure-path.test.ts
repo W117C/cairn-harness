@@ -61,6 +61,7 @@ function harness(): { wmr: WorkerMergeReview; owners: Set<string>; emitted: Agen
     markAgentOwner: () => {},
     runWorker: async () => {},
     releaseWorkerMemory: () => {},
+    rootSignal: new AbortController().signal,
   });
   return { wmr, owners, emitted };
 }

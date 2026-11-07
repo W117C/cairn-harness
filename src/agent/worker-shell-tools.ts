@@ -223,9 +223,10 @@ export const shell_rw: Tool = makeShellRw();
  *  M3b：mode=write 时补写面规格（write_file/edit_file/shell_rw/remember）——spawn_agent 与
  *  run_shell/merge/commit 依旧根本不在表内（合并权只在 git 面板）。 */
 export function workerToolSpecs(mode: "read" | "write" = "read", opts: { impactAnalysis?: boolean } = {}): GlmToolSpec[] {
+  // 2026-11-06 两表都 +git_read：worker 调查「上游改了什么」高频；零写权零 shell（与 shell_ro 同档）。
   const allow = mode === "write"
-    ? new Set<string>(["read_file", "grep", "glob", "lsp", "write_file", "edit_file", "remember"])
-    : new Set<string>(["read_file", "grep", "glob", "lsp"]);
+    ? new Set<string>(["read_file", "grep", "glob", "lsp", "write_file", "edit_file", "remember", "git_read"])
+    : new Set<string>(["read_file", "grep", "glob", "lsp", "git_read"]);
   const specs = gateToolSpecs().filter((s) => allow.has(s.function.name)).map((spec) =>
     spec.function.name === "remember"
       ? { ...spec, function: { ...spec.function, description: REMEMBER_SPEC_DESCRIPTION } }

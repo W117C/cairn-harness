@@ -1,10 +1,16 @@
 import { readFile } from "node:fs/promises";
-import type { ModelOutput } from "../providers";
+import type { ModelOutput, ProviderCall } from "../providers";
 import { streamGlm, type GlmMessage, type GlmToolSpec } from "../providers/glm";
 
 // ---- worker 模型口（可注入：fixture 脚本明卷 / GLM 暗卷） ----
 
-export type WorkerModel = ((messages: GlmMessage[], tools: GlmToolSpec[]) => AsyncIterable<ModelOutput>) & {
+/** 一次 worker 模型调用的可取消参数。与 RegistryWorkerModel 的第三参同形（`call` 包一层），
+ *  这样 `toWorkerModel` 产出的适配器可以直接被 worker 编排器调用；缺省时保持旧的两参调用。 */
+export interface WorkerCallOptions {
+  call?: ProviderCall;
+}
+
+export type WorkerModel = ((messages: GlmMessage[], tools: GlmToolSpec[], options?: WorkerCallOptions) => AsyncIterable<ModelOutput>) & {
   /** W3②：「这一路不拨号、不付钱」的自述标记。只有 `scriptedWorkerModel` 打它——
    *  编排器的价格标签据此缺席（demo/checks 的冻结剧本若也报 $x，就是拿 0 用量冒充实付）。 */
   scripted?: true;
@@ -15,7 +21,8 @@ export type WorkerModel = ((messages: GlmMessage[], tools: GlmToolSpec[]) => Asy
 };
 
 /** 缺省 worker 模型：GLM 会话型（模型侧自持上下文口径与 sidechat/M2c-2 一致）。 */
-export const defaultWorkerModel: WorkerModel = (messages, tools) => streamGlm(messages, {}, tools);
+export const defaultWorkerModel: WorkerModel = (messages, tools, options) =>
+  streamGlm(messages, {}, tools, options?.call);
 
 /** 脚本化 worker 模型（明卷）：按序吐出，跑完即停；capture 收集每轮真实上下文（canary 验收用）。 */
 export function scriptedWorkerModel(script: ModelOutput[], capture?: GlmMessage[][]): WorkerModel {

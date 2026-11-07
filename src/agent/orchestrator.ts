@@ -13,7 +13,8 @@ import { replay } from "../events";
 import type { ModelOutput, Provider } from "../providers";
 import { glmDefaultModelName, type GlmMessage, type GlmToolSpec } from "../providers/glm";
 import { envKeyOf } from "../providers/env-keys";
-import { effectiveModelTable, findSpecByNameOrId, resolveModel, toWorkerModel, type ModelTier } from "../providers/registry";
+import { effectiveModelTable, findSpecByNameOrId, resolveModel, type ModelTier } from "../providers/registry";
+import { toWorkerModel } from "../providers/worker-adapters";
 import { routeFor, TIER_ORDER as MODEL_TIER_ORDER } from "../routing/policy";
 import type { ToolResult } from "../tools/base";
 import { glob } from "../tools/glob";
@@ -23,18 +24,6 @@ import { remember } from "../tools/remember";
 import { runLoop } from "./loop";
 import { redactEventForLog } from "../events";
 import { DELIVERY_GUARD_CALL_ID, EMPTY_RUN_DELIVERY } from "./delivery-guard";
-import { projectContext, type ContextMessage } from "./context";
-import {
-  DEFAULT_COMPACTION_CONFIG,
-  estimateContextTokens,
-  estimateTokens,
-  calibrateFactor,
-  runCompaction,
-  shouldCompact,
-  withModelBudget,
-  type CompactionConfig,
-  type Summarizer,
-} from "./compaction";
 import {
   dependsOnCycle,
   type FrozenStage,
@@ -66,6 +55,8 @@ import { frozenJudgePathSet } from "../frozen";
 // 常量与纯函数按职责抽到同级轻模块（同 provider-key-inject 的先例：抽实现、原路径留公开面，
 // importer 与变异锚点不必跟着改）。本地引用走 import，公开面由文件尾的 re-export 维持逐字不变。
 import { ApprovalsChainsSupervise } from "./orchestrator-approvals";
+import { createWorkerProvider } from "./worker-runtime";
+import { WorkerFinish } from "./worker-finish";
 import { BudgetCascadeBandit } from "./orchestrator-budget";
 import { WorkerMergeReview } from "./worker-merge";
 import { MAX_CONCURRENT_WORKERS, READ_MODE_MAX_TURNS, SPAWN_MODES, WORKER_TOOL_TABLE, WRITE_WORKER_TOOL_TABLE, workerBudgetConfig, workerToolTable } from "./orchestrator-config";
@@ -175,6 +166,10 @@ export class Orchestrator {
   private readonly deferredSpawns = new Map<string, { callId: string; args: SpawnArgs; dependsOn: string[] }>();
   /** pipeline 链（callId → 链状态；stages 批准后冻结，重复请求 = 变更请求被拒）。 */
   private readonly chains = new Map<string, PipelineChain>();
+  /** `waitAll` 的空闲等待者：worker 的 `closed` 全部翻真时同步放行，替代 25ms 轮询。 */
+  private readonly idleWaiters = new Set<() => void>();
+  /** 终态收束箱：构造期注入活引用与跨模块回调（见 worker-finish.ts）。 */
+  private wf!: WorkerFinish;
 
   constructor(opts: OrchestratorOptions) {
     this.approvalTimeoutMs = opts.approvalTimeoutMs ?? 120_000;
@@ -264,6 +259,24 @@ export class Orchestrator {
       markAgentOwner: (agentId) => agentOwners.set(agentId, this),
       runWorker: (w) => this.runWorker(w),
       releaseWorkerMemory: (w) => this.releaseWorkerMemory(w),
+      rootSignal: this.root.signal, // 评审重启消费（B3 同族：拒绝已取消会话的重启 + 重挂监听）
+    });
+    this.wf = new WorkerFinish({
+      emit: this.opts.emit,
+      workspace: this.opts.workspace,
+      rootSignal: this.root.signal,
+      safeMode: this.safeMode,
+      pendingApprovals: this.pendingApprovals,
+      diffVersions: this.diffVersions,
+      wmr: this.wmr,
+      rewardBandit: (w, status) => this.rewardBandit(w, status),
+      subagentHook: (w, event) => this.subagentHook(w, event),
+      resolveTerminalWaiters: (id, status, result) => this.resolveTerminalWaiters(id, status, result),
+      resolveDependents: (id, status) => this.resolveDependents(id, status),
+      notifyIdleIfIdle: () => this.notifyIdleIfIdle(),
+      dropAgentOwner: (id) => agentOwners.delete(id),
+      dropApprovalOwner: (id) => approvalOwners.delete(id),
+      hasMergeOwner: (id) => mergeOwners.has(id),
     });
   }
 
@@ -884,6 +897,7 @@ export class Orchestrator {
       handle.finished = true;
       handle.closed = true;
       handle.controller.abort();
+      this.notifyIdleIfIdle();
       return { ok: false, output: "spawn_agent: 事件落流失败，已回滚：" + (err instanceof Error ? err.message : String(err)) };
     }
     for (const w2 of symlinkWarnings) {
@@ -1182,6 +1196,10 @@ export class Orchestrator {
     await this.opts.emit({
       type: "agent_message",
       agent_id: w.agentId,
+      // 线程装饰由构造器 emit 包装器统一补（agent_message 属装饰族）；这里的明写与同族出口对齐，
+      // 判卷钉住的是包装器的保证（变异核对：摘掉本行仍绿 = 装饰确实在中央出口）。
+      ...workerThreadFields(w),
+      // 线程化会话里这条卡片会脱离 worker 线程（投影按 thread_id 分组），同族出口各抄一份的形状。
       kind: "progress",
       text: "[stuck] 疑似卡死：" + detail + "。人决定：继续（resume 清除卡死态）或取消（既有取消链）。worker 已在事件边界暂停。",
     } as AgentEvent);
@@ -1214,11 +1232,30 @@ export class Orchestrator {
     }
   }
 
+  /** 只在最后一个活跃 worker 的 `closed` 翻真时放行 `waitAll`；超时仍按既有契约静默返回。 */
+  private notifyIdleIfIdle(): void {
+    if (this.activeCount() !== 0) return;
+    for (const wake of [...this.idleWaiters]) wake();
+  }
+
   async waitAll(timeoutMs = 30_000): Promise<void> {
-    const deadline = Date.now() + timeoutMs;
-    while (this.activeCount() > 0 && Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, 25));
-    }
+    if (this.activeCount() === 0) return;
+    await new Promise<void>((resolve) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const done = (): void => {
+        if (timer !== undefined) clearTimeout(timer);
+        this.idleWaiters.delete(done);
+        resolve();
+      };
+      this.idleWaiters.add(done);
+      // 登记后复查：消除「检查 activeCount → 登记 waiter」之间 worker 已收队而无人通知的缝。
+      if (this.activeCount() === 0) {
+        done();
+        return;
+      }
+      timer = setTimeout(done, Math.max(0, timeoutMs));
+      timer.unref?.();
+    });
   }
 
   // ---- 内部：worker 运行体 ----
@@ -1429,34 +1466,19 @@ export class Orchestrator {
     }
   }
 
+  /** 终态收束漏斗：finishInner 的整箱实现住在 worker-finish.ts，
+   *  奖励回灌 / SubagentStop / 异常时放行等待方 / closed 通知留在编排器本体——
+   *  这四处是跨模块生命周期契约，也是既有变异锚点盯的落点。 */
   private async finish(w: WorkerHandle, status: "done" | "failed" | "cancelled", reason?: string): Promise<void> {
     try {
-      await this.finishInner(w, status, reason);
-      // M5b 步骤 9：终态事件已落流 → 回灌奖励（学习侧信道：best-effort，内部自吞错误，不阻断收束）
+      await this.wf.finishInner(w, status, reason);
       await this.rewardBandit(w, status);
-      // §9.5 SubagentStop：排在终态事件全部落流之后——审计型钩子要读得到这份产出。
-      // 位置即「每 worker 恰好一次」：三条调用路（done/failed/cancelled）互斥，
-      // 且 finishInner 有 w.finished 幂等闸兜住重入；w.closed 尚未置真，进程不会在钩子中途退出。
       await this.subagentHook(w, "SubagentStop");
     } catch (err) {
-      // 收尾中途抛（emit 落盘失败 / 窗口已销毁 / diff 流水炸）⇒ lastResult 再也挂不上来。
-      // 必须放行等待方与后环，否则这是一次**永挂**：finished 已真 → cancelAgent 拒绝、
-      // finishInner 幂等闸短路，而 waitForAgentTerminal 没有超时。判它 failed（拿不出终态
-      // 产出就是没过），并把错误照旧上抛给 runWorker 的 catch-all——不新增吞错误的路。
       if (!w.terminalResolved) {
         w.terminalResolved = true;
-        // **终态要改口**（2026-10-19 独立评审追出的 HIGH）：`finishInner` 在发 done 之前就把
-        // `w.terminalStatus = "done"` 盖上了；`emit(doneResult)` 一抛（磁盘满 / 事件形状非法），
-        // 后面那几行（lastResult / terminalResolved / resolveTerminalWaiters）全被跳过 ⇒
-        // ① 终态仍读成 "done" ⇒ 父会话拿到 `{"status":"done","summary":""}` ——
-        //    **一句"成功但没有产出"的谎**（那正是 terminal-sync-window 那组判据要防的东西）；
-        // ② 耐久日志里只有 agent_status:done、没有 agent_result ⇒ 重启后 interruptedWorkers
-        //    看见终态就返回 [] ⇒ 永远补不上 failed(interrupted) ⇒ 僵尸 worker；
-        // ③ `agentOwners` 与内存回收（下面两行）被跳过 ⇒ 路由表里永远留着这个 agent
-        //    ⇒ 崩溃恢复的过滤器（`orchestratorForAgent(id) === null`）跳过它 ⇒ 救不回来。
-        // 这里把三样都补齐：终态改口成 failed、路由表摘掉、内存回收照做。
         w.terminalStatus = "failed";
-        w.lastResult = undefined; // 拿不出产出就是没有产出（不装一份空报告）
+        w.lastResult = undefined;
         this.resolveTerminalWaiters(w.agentId, "failed", null);
         this.resolveDependents(w.agentId, "failed");
         agentOwners.delete(w.agentId);
@@ -1467,200 +1489,15 @@ export class Orchestrator {
       throw err;
     } finally {
       w.closed = true;
+      this.notifyIdleIfIdle();
     }
   }
 
-  private async finishInner(w: WorkerHandle, status: "done" | "failed" | "cancelled", reason?: string): Promise<void> {
-    if (w.finished) return;
-    w.finished = true;
-    w.closed = false;
-    w.terminalStatus = status;
-    if (w.stuckTimer !== null) {
-      clearTimeout(w.stuckTimer);
-      w.stuckTimer = null;
-    }
-    for (const [id, p] of this.pendingApprovals) {
-      if (p.agentId === w.agentId) {
-        clearTimeout(p.timer);
-        p.cleanup?.();
-        approvalOwners.delete(id);
-        this.pendingApprovals.delete(id);
-        p.resolve({ approved: false, scope: "once", note: "worker 已终态（" + status + "）" });
-      }
-    }
-    const ts = Date.now();
-    if (status === "cancelled") {
-      if (w.mode === "write") await this.wmr.cleanupWrite(w, "cancelled");
-      await this.opts.emit({
-        type: "agent_status",
-        agent_id: w.agentId,
-        ...workerThreadFields(w),
-        status: "cancelled",
-        ...(reason ? { reason } : {}),
-        ts,
-      } as AgentEvent);
-      await this.wmr.emitSyntheticResult(w, {
-        ok: false,
-        body: { agent_id: w.agentId, status: "cancelled", reason: reason ?? "用户取消" },
-      });
-      // M3c：sequencer 同步点 + 依赖链（cancelled 也是依赖失败——后环不静默跳过）
-      w.terminalResolved = true; // 无 result 也要放行等待方：否则 sequencer 永挂（cancel 分支本就不发 agent_result）
-      this.resolveTerminalWaiters(w.agentId, "cancelled", null);
-      this.resolveDependents(w.agentId, "cancelled");
-      agentOwners.delete(w.agentId);
-      this.releaseWorkerMemory(w);
-      return;
-    }
-    const report = lastAssistantText(w.events) ?? "";
-    const scanned = scanModelOutput(report).text;
-    const clipped = clipWorkerSummary(scanned);
-    if (status === "done") {
-      // ---- M3b write mode：done → diff 快照 + 安全 gate 流水（先于 agent_result，面板先有 diff）----
-      let diff: { stat: string; patch: string; files: string[] } | null = null;
-      let llmNote = "";
-      if (w.mode === "write" && w.worktree && w.baseCommit) {
-        diff = await worktreeDiff(worktreePathFor(this.opts.workspace, w.agentId), w.baseCommit).catch(() => null);
-        if (diff !== null && this.safeMode !== "off") {
-          llmNote = await this.wmr.emitWorkerDiffSecurity(w, diff);
-        }
-        if (diff !== null) await this.wmr.emitWorkerDiffSnapshot(w, diff, llmNote);
-      }
-      await this.opts.emit({
-        type: "agent_message",
-        agent_id: w.agentId,
-        ...workerThreadFields(w),
-        kind: "report",
-        text: clipped.text,
-      } as AgentEvent);
-      await this.opts.emit({
-        type: "agent_status",
-        agent_id: w.agentId,
-        ...workerThreadFields(w),
-        status: "done",
-        ts,
-      } as AgentEvent);
-      const filesChanged = diff?.files ?? [];
-      const diffRef = w.mode === "write" && w.worktree && w.baseCommit ? w.worktree + "@" + w.baseCommit : undefined;
-      // W4b：只在本次真改过文件时标证据（没写代码就无所谓「跑过了」）。
-      const evidence = filesChanged.length > 0 ? workerVerificationEvidence(w.events) : undefined;
-      // W3②：钱与证据同桌——「这份交付花了多少、跑没跑过测试」两条都得是机器可读的。
-      const spent = spentUsdFor(w.price, w.usage);
-      const spentFields = spent ? { spent_usd: spent.usd, price_calibrated: spent.calibrated } : {};
-      const doneResult: Extract<AgentEvent, { type: "agent_result" }> = {
-        type: "agent_result",
-        agent_id: w.agentId,
-        ...workerThreadFields(w),
-        status: "done",
-        summary: clipped.text,
-        ...(clipped.truncated ? { summary_truncated: true } : {}),
-        artifacts: {
-          report: clipped.text,
-          ...(filesChanged.length > 0 ? { files_changed: filesChanged } : {}),
-          ...(diffRef ? { diff_ref: diffRef } : {}),
-          ...(evidence ? { verified: evidence } : {}),
-          ...spentFields,
-        },
-        usage: { inputTokens: w.usage.inputTokens, outputTokens: w.usage.outputTokens },
-        tool_stats: { ...w.toolStats },
-      } as Extract<AgentEvent, { type: "agent_result" }>;
-      await this.opts.emit(doneResult);
-      // M3c：sequencer 同步点 + 依赖链（done 唤醒后环，事件驱动无轮询）
-      w.lastResult = doneResult;
-      w.terminalResolved = true;
-      this.resolveTerminalWaiters(w.agentId, "done", doneResult);
-      this.resolveDependents(w.agentId, "done");
-      await this.wmr.emitSyntheticResult(w, {
-        ok: true,
-        body: {
-          agent_id: w.agentId,
-          status: "done",
-          summary: clipped.text,
-          ...(clipped.truncated ? { summary_truncated: true } : {}),
-          artifacts: {
-            report: clipped.text,
-            ...(filesChanged.length > 0 ? { files_changed: filesChanged } : {}),
-            ...(diffRef ? { diff_ref: diffRef } : {}),
-            ...(evidence ? { verified: evidence } : {}),
-            ...spentFields,
-          },
-          usage: { ...w.usage },
-          tool_stats: { ...w.toolStats },
-        },
-      });
-    } else {
-      if (w.mode === "write") await this.wmr.cleanupWrite(w, "failed");
-      // failed：错误永不冒充结果——status/reason 分型；max_turns 附 partial 报告（§4.4.8 闸门）
-      await this.opts.emit({
-        type: "agent_status",
-        agent_id: w.agentId,
-        ...workerThreadFields(w),
-        status: "failed",
-        reason,
-        ts,
-      } as AgentEvent);
-      const failedSpent = spentUsdFor(w.price, w.usage);
-      const failedResult: Extract<AgentEvent, { type: "agent_result" }> = {
-        type: "agent_result",
-        agent_id: w.agentId,
-        ...workerThreadFields(w),
-        status: "failed",
-        ...(reason ? { reason } : {}),
-        summary: clipped.text,
-        ...(clipped.truncated ? { summary_truncated: true } : {}),
-        // 失败的 worker 同样付过钱——「花了 $0.01 没拿到东西」正是判分工值不值的分子，缺席就等于免费失败。
-        artifacts: {
-          report: clipped.text,
-          ...(failedSpent ? { spent_usd: failedSpent.usd, price_calibrated: failedSpent.calibrated } : {}),
-        },
-        usage: { inputTokens: w.usage.inputTokens, outputTokens: w.usage.outputTokens },
-        tool_stats: { ...w.toolStats },
-      } as Extract<AgentEvent, { type: "agent_result" }>;
-      await this.opts.emit(failedResult);
-      // M3c：sequencer 同步点 + 依赖链（failed → 后环 dependency_failed，不静默跳过）
-      w.lastResult = failedResult;
-      w.terminalResolved = true;
-      this.resolveTerminalWaiters(w.agentId, "failed", failedResult);
-      this.resolveDependents(w.agentId, "failed");
-      await this.wmr.emitSyntheticResult(w, {
-        ok: false,
-        body: {
-          agent_id: w.agentId,
-          status: "failed",
-          ...(reason ? { reason } : {}),
-          summary: clipped.text,
-          usage: { ...w.usage },
-          tool_stats: { ...w.toolStats },
-        },
-      });
-    }
-    agentOwners.delete(w.agentId);
-    this.releaseWorkerMemory(w);
-  }
-
-  /** B7（审查）：终态资源回收——root abort 监听器摘除（once 监听不触发即永久驻留，长会话单调增长）
-   *  + 子流内存态裁剪（w.events 是 handle 的内存大头）。handle 本体保留：依赖链 terminalStatus 查询 /
-   *  合并控制塔 / 评审重启都要读终态 handle（直接 workers.delete 会砍断这三条路由）。
-   *  评审重启（injectComment：write 且合并决策未决）需要 w.events 作上下文——只在不可重启态
-   *  （read worker，或 write 已过合并决策点）裁剪。幂等，可多处调用。 */
+  /** 薄委托：终态资源回收（root abort 摘除 + 内存态裁剪 + diff 版本计数同门槛）。 */
   private releaseWorkerMemory(w: WorkerHandle): void {
-    if (w.onRootAbort) {
-      this.root.signal.removeEventListener("abort", w.onRootAbort);
-      w.onRootAbort = undefined;
-    }
-    if (w.mode !== "write" || !mergeOwners.has(w.agentId)) {
-      w.events.length = 0;
-      // P2-8（审查）：diff 版本计数同批回收（diffVersions 以 agentId 为键、只增不减，见
-      // worker-merge.ts 的 diffVersion）。**与 w.events 同门槛**：write worker 合并决策未决时可被
-      // injectComment 评审重启（第二次 done → diff v2），该计数必须跨重启存活——否则 v2 会被重置回 v1。
-      // 只在不可重启态（read worker / write 已过合并决策点）回收，泄漏被 cleanupWrite 兜底。
-      this.diffVersions.delete(w.agentId);
-    }
+    this.wf.releaseWorkerMemory(w);
   }
 
-  // ---- M3b 合并控制塔（§4.3/§4.4.5：合并唯一出口 = git 面板；本组方法只被 card_action 协议路由调用）----
-  // 三枚薄委托，实现整箱在 worker-merge.ts。
-
-  /** 薄委托：批准合并（唯一出口的登记校验 / gate 二次确认 / commit → merge --no-ff → 清理在 worker-merge.ts）。 */
   async mergeWorker(agentId: string, opts: { force?: boolean } = {}): Promise<{ ok: boolean; error?: string }> {
     return await this.wmr.mergeWorker(agentId, opts);
   }
@@ -1689,95 +1526,6 @@ export class Orchestrator {
 
 // ---- 模块级辅助（纯函数为主） ----
 
-/** worker 会话型 provider：忽略 loop 传入 messages，每轮从 worker 内存态事件现拼上下文（sidechat 同构）。
- *  M3c：worker 压缩（§7.5）挂在每轮组装前——超阈值走同一 runCompaction 链路（零第二套摘要实现），
- *  compaction 事件进 worker 内存态（投影生效）+ 落主流（agent_id 归因）+ 摘要 usage 计入该 worker。 */
-export interface WorkerCompactionRuntime {
-  agentId: string;
-  config: CompactionConfig;
-  summarizer?: Summarizer;
-  toolsSchemaChars: number;
-  /** 压缩事件落流口（主流 emit；agent_id 已在事件上）。 */
-  onCompaction: (e: AgentEvent) => Promise<void>;
-  /** 摘要调用 usage 归因（§7.5 计入 usage(agent_id)，§4.4.10 不破例）。 */
-  onUsage: (u: { inputTokens: number; outputTokens: number }) => void;
-}
-
-export function createWorkerProvider(opts: {
-  readEvents: () => AgentEvent[];
-  system: GlmMessage[];
-  model?: WorkerModel;
-  tools?: GlmToolSpec[];
-  signal?: AbortSignal;
-  /** M3c：worker 压缩运行时（缺省 undefined = 不压缩——既有路径字节不变）。 */
-  compaction?: WorkerCompactionRuntime;
-}): Provider {
-  const tools = opts.tools ?? workerToolSpecs();
-  return {
-    stream(): AsyncIterable<ModelOutput> {
-      return runOneRound();
-    },
-  };
-  async function* runOneRound(): AsyncGenerator<ModelOutput> {
-    if (opts.signal?.aborted) throw new WorkerCancelled();
-    // B9（审查）：每轮只投影一次——压缩估算与消息组装共用同一投影，压缩真正发生时才重投影
-    //（旧实现估算投影一次、组装再投影一次，O(n)×2/轮）。跨轮增量投影留位第三批：compaction
-    // 追加会使既有投影整体失效（excludedIds/summary_offset 改写历史），增量折叠需显式失效语义。
-    const events = opts.readEvents();
-    const factor = calibrateFactor(events);
-    let projected: ContextMessage[] = projectContext(events);
-    if (opts.compaction) {
-      const compacted = await maybeCompactWorkerEvents(opts.compaction, events, projected, factor, opts.system);
-      if (compacted) {
-        projected = projectContext(opts.readEvents());
-      }
-    }
-    const msgs: GlmMessage[] = [...opts.system, ...(projected as GlmMessage[])];
-    const model = opts.model ?? defaultWorkerModel;
-    yield* model(msgs, tools);
-    if (opts.signal?.aborted) throw new WorkerCancelled();
-  }
-}
-
-/** worker 子流压缩（§7.5）：估算（system+工具 schema 全量计入）→ shouldCompact → runCompaction。
- *  成功：compaction 事件（agent_id 归因）进 worker 内存态 + 落主流；摘要 usage 追加 usage(agent_id) 事件。
- *  B9：投影由调用方传入（每轮一次）；返回是否发生了压缩（调用方据此重投影）。 */
-async function maybeCompactWorkerEvents(
-  c: WorkerCompactionRuntime,
-  events: AgentEvent[],
-  projected: ContextMessage[],
-  factor: number,
-  system: GlmMessage[],
-): Promise<boolean> {
-  const systemChars = system.reduce((n, m) => n + (m.content?.length ?? 0), 0);
-  const estimate = estimateContextTokens(projected, { systemChars, toolSchemaChars: c.toolsSchemaChars }, factor);
-  const decision = shouldCompact(estimate, c.config);
-  if (!decision) return false;
-  const outcome = await runCompaction({
-    events,
-    trigger: decision.trigger,
-    reason: decision.reason,
-    ...(decision.trigger !== "overflow" && c.summarizer ? { summarizer: c.summarizer } : {}),
-    config: c.config,
-  });
-  if (!outcome.ok) return false; // 压缩失败不阻断 worker（下一轮重判；overflow 兜底仍在）
-  // worker 内存态推入**不带 agent_id** 的压缩事件（worker 投影生效，keep_first=task+context 由
-  // system 块结构性保障）；落主流时才加 agent_id 归因（主投影按 agent_id 跳过 worker 压缩事件，
-  // 其 compressed_event_ids 是 worker 内存态序号，对主流照搬会错误摘除主事件——context.isWorkerCompaction）。
-  events.push(outcome.event);
-  await c.onCompaction({ ...outcome.event, agent_id: c.agentId } as AgentEvent);
-  if (outcome.event.usage) {
-    c.onUsage(outcome.event.usage);
-    await c.onCompaction({
-      type: "usage",
-      inputTokens: outcome.event.usage.inputTokens,
-      outputTokens: outcome.event.usage.outputTokens,
-      agent_id: c.agentId,
-    } as AgentEvent);
-  }
-  return true;
-}
-
 // ---- 公开面（拆分后不变）：以下符号的实现住在轻模块里，本文件按原路径继续导出 ----
 export {
   MAX_CONCURRENT_WORKERS, MAX_PIPELINE_STAGES, ORCHESTRATOR_STUCK_CONFIG, READ_MODE_MAX_TURNS,
@@ -1804,3 +1552,4 @@ export { globIntersects, semanticConflictsVia } from "./lease-conflicts";
 export { findToolCallEventId } from "./call-id-index";
 export { WORKER_SYSTEM, WORKER_WRITE_SYSTEM, buildWorkerSystemMessages, lastAssistantText } from "./worker-prompt";
 export { buildWorkerToolTable } from "./worker-tool-table";
+export { createWorkerProvider, type WorkerCompactionRuntime } from "./worker-runtime";

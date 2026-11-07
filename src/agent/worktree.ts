@@ -353,9 +353,20 @@ export async function removeWorktree(root: string, agentId: string, opts: { keep
     await git(root, "worktree", "remove", "--force", rel);
     removed = true;
   } catch (err) {
+    // 物理删除兜底前必须确认这**真的是一棵 worktree**：listWorktreeDirs 只按 `wt-` 前缀收目录，
+    // 用户自己在 .agents/wt-<id> 放的普通目录也会被孤儿扫描列出来。没有这道闸，点一次「清理」
+    // 就会 rm -rf 掉不属于我们的文件。
+    const wtPath = worktreePathFor(root, agentId);
+    if (!(await isWorktreeRoot(wtPath))) {
+      return {
+        removed: false,
+        branchDeleted: false,
+        error: (err instanceof Error ? err.message : String(err)) + " / 该目录不是已登记的 git worktree，拒绝物理删除：" + wtPath,
+      };
+    }
     // git 不认的残留（目录还在但 worktree 元数据已丢）→ 物理删除兜底（fail-visible）
     try {
-      await rm(worktreePathFor(root, agentId), { recursive: true, force: true });
+      await rm(wtPath, { recursive: true, force: true });
       await git(root, "worktree", "prune").catch(() => {});
       removed = true;
     } catch (err2) {

@@ -46,6 +46,12 @@ export const INJECTED_TOOLS: readonly InjectedToolSurface[] = [
   { name: "web_search", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: true, mainSessionSideEffect: false },
   // 插件 skill：实例面在 agent-runner 里 `table["skill"] =`，规格走运行期（插件装载了才有）
   { name: "skill", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
+  // 浏览器驾驶三件（2026-11-06 业主①）：桌面注册了才注入（registerBrowserAgentTools），
+  // worker 面不给（子代理不该驾驶用户的浏览器）。navigate 与 web_fetch 同族（模型发起
+  // 外部页面加载，GOLDEN 实测对齐 web_fetch 行）；snapshot/pick 只内省已加载页面。
+  { name: "browser_navigate", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: true, mainSessionSideEffect: false },
+  { name: "browser_snapshot", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: true, mainSessionSideEffect: false },
+  { name: "browser_pick", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: true, mainSessionSideEffect: false },
   // MCP 服务器级懒加载的三个元工具：只改 active 集，不执行外部工具 ⇒ 只读档也保留。
   { name: "mcp_list", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: true, mainSessionSideEffect: false },
   { name: "mcp_activate", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: true, mainSessionSideEffect: false },

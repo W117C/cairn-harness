@@ -104,6 +104,11 @@ export interface PluginRuntimeOptions {
   pluginDataRoot: string;
   /** 信任决议存储路径（项目级插件；缺省不持久 = 全部 pending）。 */
   trustFile?: string;
+  /** 用户级 MCP 配置路径（<appData>/mcp.json；ZCode 独立管理对应面）。给了就读取并合成虚拟插件
+   *  user-mcp（user 作用域恒 trusted）；缺省 = 不读。 */
+  userMcpConfigPath?: string;
+  /** 用户级 hooks 配置路径（<appData>/hooks.json）。给了就读取并合成虚拟插件 user-hooks；缺省 = 不读。 */
+  userHooksConfigPath?: string;
   /** hook 权限档（类型取自 `permissions/modes`，不再自己抄一份 union）。 */
   mode?: PermissionMode;
   /** 会话标识：透传给 hook 引擎进 stdin JSON（§9.5）。缺省 = 该字段不进 JSON，不伪造。 */
@@ -345,6 +350,8 @@ export class PluginRuntime {
       projectSkillsDir: opts.projectSkillsDir ?? projectSkillsRootOf(opts.workspace),
       ...(opts.looseRoots ? { looseRoots: opts.looseRoots } : {}),
       foreignSources: opts.foreignSources ?? defaultForeignSources(opts.workspace, opts.home),
+      ...(opts.userMcpConfigPath ? { userMcpConfigPath: opts.userMcpConfigPath } : {}),
+      ...(opts.userHooksConfigPath ? { userHooksConfigPath: opts.userHooksConfigPath } : {}),
       trustStatus: (abs, fp, bounded) => trust.statusSync(abs, fp, bounded),
     });
     const rt = new PluginRuntime(manifest, opts);

@@ -26,7 +26,11 @@ describe("接线面：goal-drift 不是孤儿模块（2026-10-02 接进 runAgent
   const runner = readFileSync(resolve(import.meta.dirname, "../src/main/agent-runner.ts"), "utf8");
   const readings = readFileSync(resolve(import.meta.dirname, "../src/main/post-run-readings.ts"), "utf8");
   // 装配根里那一次调用；新模块里那一处判据调用点（措辞断言要围绕它取窗口）。
-  const emitCallIdx = runner.indexOf("await emitPostRunReadings({");
+  // 2026-11-06 读数改有界等待 + 未完转注册尾工（业主「输出完了动效还在跑」第二笔，
+  // 11-04 沉淀轮同族）：本地读数帽内等齐（判卷/e2e 契约零变化），反思 LLM 越帽才转后台。
+  const emitCallIdx = runner.indexOf("emitPostRunReadings({");
+  const boundedAwaitIdx = runner.indexOf("await Promise.race([readingsDone");
+  const tailRegisterIdx = runner.indexOf("registerSessionTailWork(opts.logPath, readingsDone");
   const driftCallIdx = readings.indexOf("goalDriftFindings(assistantTurnsFromEvents(");
 
   it("真 import 了 goal-drift 的判据（不是抄第二份）", () => {
@@ -38,8 +42,13 @@ describe("接线面：goal-drift 不是孤儿模块（2026-10-02 接进 runAgent
     expect(imp?.[0]).toContain("goalDriftCell");
   });
 
-  it("读数点落在 runAgent 的收束路径上（runLoop 跑完之后、返回事件之前）", () => {
+  it("读数点落在 runAgent 的收束路径上（runLoop 跑完之后、返回事件之前，有界等待 + 未完转尾工）", () => {
     expect(emitCallIdx, "runAgent 收束路径上必须真调一次收尾读数").toBeGreaterThan(-1);
+    // 2026-11-06：收尾读数有界等待（本地读数毫秒级，帽内等齐），反思 LLM 越帽转注册尾工——
+    // 缺任一半，动效要么被反思拖住、要么本地读数静默丢页（failed-run-still-ledgers 的反面）。
+    expect(boundedAwaitIdx, "读数必须有界等待（Promise.race 帽）").toBeGreaterThan(-1);
+    expect(tailRegisterIdx, "未完部分必须转注册尾工（registerSessionTailWork）").toBeGreaterThan(-1);
+    expect(tailRegisterIdx).toBeGreaterThan(boundedAwaitIdx);
     // 收束在 runLoop 之后：调用点必须在 runLoop 调用点之后
     const loopIdx = runner.lastIndexOf("runLoop(");
     expect(loopIdx).toBeGreaterThan(-1);

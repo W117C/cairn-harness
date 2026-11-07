@@ -200,4 +200,31 @@ describe("取消在流、日志和钩子等待后仍须生效", () => {
     expect(verify).toHaveBeenCalledTimes(1);
     expect(log.filter((event) => event.type === "verify_result")).toMatchObject([{ ok, auto: true }]);
   });
+
+  it("可验面探测收到本场 run 的 signal：取消后不启动验证命令", async () => {
+    const controller = new AbortController();
+    const log: AgentEvent[] = [];
+    const verify = vi.fn(async () => ({ ok: true as const, results: [] }));
+    const seenSignals: (AbortSignal | undefined)[] = [];
+    await runLoop({
+      ...base, signal: controller.signal, autoVerify: true,
+      events: { async append(event) { log.push(event); } },
+      provider: { async *stream() {
+        yield write;
+        yield done;
+      } },
+      tools: { write_file: { name: "write_file", async run() { return { ok: true, output: "written" }; } } },
+      verify: {
+        surface: async (signal?: AbortSignal) => {
+          seenSignals.push(signal);
+          controller.abort();
+          return true;
+        },
+        run: verify,
+      },
+    });
+    expect(seenSignals).toEqual([controller.signal]);
+    expect(verify).not.toHaveBeenCalled();
+    expect(log.some((event) => event.type === "verify_result")).toBe(false);
+  });
 });
