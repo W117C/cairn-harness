@@ -11,13 +11,21 @@
 // closure），**零新增依赖**。
 //
 // 产物：release/Cairn.app（可直接双击；arm64 上必须 ad-hoc 签名——改过 bundle 的原件签名已失效，
-// 不重签会被 SIGKILL）与 release/Cairn.dmg（hdiutil；未公证，首次打开右键 → 打开，或 xattr -cr）。
+// 不重签会被 SIGKILL）与 release/Cairn.dmg（hdiutil；未公证，首次打开流程见 docs/desktop-preview.md）。
 // 验收：CAIRN_SMOKE=1 跑打包后的二进制走完真窗口冒烟（与开发态同一份判据，见 main/index.ts）。
+import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, rmdirSync, statSync, writeFileSync } from "node:fs";
+import { createReadStream, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, rmdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, sep } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { fileURLToPath } from "node:url";
+
+async function sha256(path) {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(path)) hash.update(chunk);
+  return hash.digest("hex");
+}
 
 const desktopDir = dirname(dirname(fileURLToPath(import.meta.url))); // apps/desktop
 const repoRoot = join(desktopDir, "..", "..");
@@ -92,7 +100,7 @@ try {
 
   // ③ 运行期布局：Resources/app = 仓库布局的运行期子集。
   //    package.json 的 "main" 指 entry.cjs；dependencies 带上根包全部生产依赖 + tsx（loader 本体，
-  //    devDep 但运行期要用）——④ 的 npm install 按这份清单装出真实文件的完整 closure。
+  //    devDep 但运行期要用）——④ 的 npm ci 按运行锁装出真实文件的完整 closure。
   const appRes = join(appDir, "Contents", "Resources", "app");
   mkdirSync(appRes, { recursive: true });
   const appPkg = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8"));
@@ -100,6 +108,7 @@ try {
     // name 会成为 safeStorage 的钥匙串条目名（「<name> Safe Storage」）——用 cairn，
     // 用户在钥匙串/系统弹窗里看到的就是 Cairn，不是内部包名（2026-10-06 实测弹窗 "cairn-desktop-runtime Safe Storage"）。
     name: "cairn",
+    version: appPkg.version,
     private: true,
     main: "apps/desktop/src/main/entry.cjs",
     dependencies: { ...appPkg.dependencies, tsx: appPkg.devDependencies.tsx },
@@ -121,8 +130,20 @@ try {
   cpSync(join(repoRoot, "apps", "desktop", "dist-electron"), join(appRes, "apps", "desktop", "dist-electron"), { recursive: true });
   cpSync(join(repoRoot, "apps", "desktop", "package.json"), join(appRes, "apps", "desktop", "package.json"));
 
-  // ④ 运行期 node_modules：npm 装出真实文件的完整闭包（pnpm 的符号链接布局进不了 .app）。
-  run("npm", ["install", "--omit=dev", "--no-audit", "--no-fund", "--loglevel=error"], { cwd: appRes });
+  // ④ 按版本控制中的运行锁安装真实文件，禁止打包时重新解析依赖。
+  const runtimeLockPath = join(desktopDir, "runtime", "package-lock.json");
+  const runtimeLock = JSON.parse(readFileSync(runtimeLockPath, "utf8"));
+  const lockedRoot = runtimeLock.packages?.[""];
+  if (runtimeLock.lockfileVersion !== 3 || lockedRoot?.version !== runtimePkg.version ||
+      !isDeepStrictEqual(lockedRoot?.dependencies, runtimePkg.dependencies)) {
+    throw new Error("运行依赖锁与声明不一致，请按 docs/desktop-preview.md 更新并验证运行锁");
+  }
+  cpSync(runtimeLockPath, join(appRes, "package-lock.json"));
+  run("npm", ["ci", "--omit=dev", "--no-audit", "--no-fund", "--loglevel=error"], { cwd: appRes });
+
+  // 记录本次实际解析出的依赖，缺失时不交付不可追溯的产物。
+  // 运行锁独立受版本控制；不宣称与 pnpm 开发依赖图逐项相同。
+  const runtimeLockSha256 = await sha256(join(appRes, "package-lock.json"));
 
   // Electron 的嵌套 bundle 由内向外签名，避免旧签名缺少资源封印。
   for (const target of codeSigningTargets(appDir)) {
@@ -162,6 +183,21 @@ try {
   if (!existsSync(archivePath) || !statSync(archivePath).isFile() || statSync(archivePath).size === 0) {
     throw new Error("发行归档未生成或为空");
   }
+  const archiveSha256 = await sha256(archivePath);
+  const manifestPath = join(stagingDir, "release.json");
+  const manifest = {
+    schemaVersion: 1,
+    version: appPkg.version,
+    buildHost: { platform: process.platform, arch: process.arch },
+    electron: JSON.parse(readFileSync(join(dirname(dirname(electronDist)), "package.json"), "utf8")).version,
+    signing: "ad-hoc",
+    notarized: false,
+    runtimeLockSha256,
+    archive: { name: archiveName, bytes: statSync(archivePath).size, sha256: archiveSha256 },
+  };
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+  writeFileSync(join(stagingDir, "SHA256SUMS"),
+    `${archiveSha256}  ${archiveName}\n${await sha256(manifestPath)}  release.json\n`);
   const currentRelease = lstatSync(releaseDir);
   if (currentRelease.dev !== releaseIdentity.dev || currentRelease.ino !== releaseIdentity.ino) {
     throw new Error("目标目录已被替换，停止发布");

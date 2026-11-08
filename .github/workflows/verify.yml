@@ -63,8 +63,7 @@ jobs:
       - name: full test suite
         # 同一套核心测试，固定两个 worker；命令与本地可复现入口同源。
         run: pnpm test:capped
-      - name: desktop tests
-        run: pnpm --filter cairn-desktop test
+      # desktop-test 在下方认证门集合中执行一次，包含桌面测试与边界检查。
       # 快门面 = CERT_GATES 那 25 道，逐字点名（`pnpm gates` 不加参数跑的是 GATES 全集，比认证面慢、面也不同）。
       # 道数由 `tests/ci-cert-face-parity.test.ts` 钉：两份名单必须逐字相等，且**今天还在生效的**标注必须等于条数。
       # 这一行从前**排除**过两道已知红：gate-check 的 H7 与 mutate-needles-check 的 4 支失针锚点。

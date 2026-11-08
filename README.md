@@ -396,6 +396,7 @@ worker 要联网只能回主会话发。
 - `scripts/` — headless 闸（`pnpm gates` 全跑，清单在 `scripts/gate-manifest.ts`，即事实源）
 
 安装依赖后，运行 `pnpm --filter cairn-desktop build` 构建桌面应用。
+本地安装包构建、校验和与首次打开说明见[桌面预览包](docs/desktop-preview.md)。
 
 **桌面层**曾于 2026-09-27（`69fbb0d`）整体移除，2026-10-02 起以 M1 切片重新入库于 `apps/desktop/`，
 此后持续接线：**94 个 invoke 通道**（现读 `apps/desktop/src/main/channels.ts` 的 `INVOKE_CHANNELS`；

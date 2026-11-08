@@ -132,6 +132,8 @@ GEMINI.md
 # .venv/ 861 支、.rivet/ 13 支、var/ 5 支。口径与 `.serena/`、`.qoder/` 那一族相同——
 # **只掐掉「随仓库分发」这一条通路**，文件仍在本地盘。
 apps/desktop/release/
+# Temporary staging contains the same generated bundles as release/.
+/apps/desktop/.cairn-package-*/
 apps/desktop/preview/dist/
 
 # python venv（解释器＋site-packages），`python -m venv .venv` 可重建。
