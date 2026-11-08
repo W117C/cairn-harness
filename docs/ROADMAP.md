@@ -3,9 +3,11 @@
 候选分支的后续产品化工作见 [产品化四项执行清单](superpowers/plans/2026-11-08-productization.md)。
 该清单是本地方案，未改变下文历史盘点的远端状态，也未变更现行门禁；签名身份暂缓。
 
-更新日期：2026-10-26（Asia/Shanghai）。本页是带日期的远端盘点与待办入口；
+更新日期：2026-11-08（Asia/Shanghai）。本页是带日期的远端盘点与待办入口；
 默认分支的当前实现见 [STATE.md](../STATE.md)，实时运行结果见 [Actions](https://github.com/W117C/cairn-harness/actions)。
-PR #2、#3、#8、#13 已合并；本批根目录修正基于 `main@2fa56173141291959013539c2b9a5a9ae9f3bf7d`，不代表本地开发线成果已上传。
+PR #2、#3、#8、#13 已合并；2026-11-08 本地集成分支 `integration/main-dev-20261108`
+已把 main 的 PR #18/#19 与公开候选打包批合入开发线，现役分支关系见
+[仓库状态与分支](REPOSITORY-STATUS.md)；远端 main 未改写、未推送。
 
 ## 分支各放什么
 
