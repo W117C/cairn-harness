@@ -2,7 +2,7 @@
 
 ## 范围
 
-- 构建/工作树：`integration-main-dev-20261108` 工作树（集成 `main` + 公开候选打包批之后的待提交树）。
+- 构建/提交：`integration-main-dev-20261108` 集成 tip（`da9555a5`，含 main + 公开候选打包批）。
 - 平台：macOS 27.2 / arm64；Node v24.19.0；pnpm 11.21.0。
 - 凭据来源：本机 `~/.config/cairn/env`（`CAIRN_ENDPOINT` / `CAIRN_MODEL` / `CAIRN_API_KEY`）。
   凭据值不写入本文件、日志或仓库。
