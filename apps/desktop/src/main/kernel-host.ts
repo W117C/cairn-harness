@@ -628,6 +628,10 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       // ⇒ 权限表/记忆/配置/会话根仍是同一份（这正是「配置跨面共享」那一环，缺了隔离会话就成活孤岛）。
       const runWs = (await isSessionIsolated(ws, sessionId)) ? sessionWorktreePath(ws, sessionId) : ws;
       if (await externalDrift(logPath)) return { ok: false, accepted: false, error: DRIFT_ERROR };
+      // canonical controller 覆盖 run 与审计收束：旧 run 的 idle 尚未写完时不接受下一代。
+      // 否则 core 已释放日志、旧 finally 仍在写 sidecar，可能把新 run 标成空闲。
+      const existing = runControllers.get(sessionId);
+      if (existing !== undefined) return { ok: false, accepted: false, error: existing.workspace === ws ? "session already running or being deleted" : OTHER_WORKSPACE_RUN };
       const controller = new AbortController();
       runControllers.set(sessionId, { controller, workspace: ws });
       runStartedAt.set(sessionId, Date.now());
