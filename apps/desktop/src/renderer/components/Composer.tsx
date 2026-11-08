@@ -830,6 +830,8 @@ export function Composer(props: {
               attachFromFiles(files);
             }}
             onKeyDown={(e) => {
+              // Let the input method confirm its candidate before handling Enter.
+              if (e.key === "Enter" && (composing.current || e.nativeEvent.isComposing || e.keyCode === 229)) return;
               // Esc 先收浮层（2026-10-18）：斜杠/mention 开着时 Esc 只关菜单，不动草稿。
               // 不依赖“有命中”——加载中/零命中的 mention 也要能 Esc 掉。
               if (e.key === "Escape") {

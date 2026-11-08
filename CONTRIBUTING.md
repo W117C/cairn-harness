@@ -25,6 +25,8 @@ Cairn 目前处于 **B1 内测**阶段，交付面只有 CLI（桌面端不在 v
 | 包管理器 | pnpm（版本由 `packageManager` 字段单点声明） | `package.json` |
 | 凭据 | 只走环境变量，不落文件 | 见 §7 |
 
+开发和运行测试建议使用 Node 24。仓库锁定的 pnpm 11.21.0 需要 Node 22.13 或更高版本。
+
 ```sh
 git clone https://github.com/W117C/cairn-harness.git
 cd cairn-harness

@@ -8,13 +8,13 @@
 [![node](https://img.shields.io/badge/node-%3E%3D20.11%20%3C25-5FA04E?logo=node.js)](https://nodejs.org)
 [![pnpm](https://img.shields.io/badge/pnpm-11.21.0-F69220?logo=pnpm)](https://pnpm.io)
 
-**一句话**：给 AI 编码 agent 用的**可审计运行时**——每一步都留痕，事后能重放、能分叉、能审计；
-写操作默认 fail-closed，没人应答时当场拒绝，而不是静默放行。
+Cairn 是一个面向软件项目的 AI 编码助手，提供命令行和桌面开发入口。它在本地工作区运行任务，记录可重放的事件，供使用者查看工具操作、分叉会话和审计过程。权限控制管理工具操作，无人应答的审批请求会被拒绝。
 
-内核侧**没有构建步骤**：克隆下来装完依赖就有一条 `cairn` 命令。
-桌面壳是另一条路，`apps/desktop/` 下走 Electron + Vite，需要单独构建（见[仓库结构](#仓库结构)）。
+> **当前阶段：受邀内测。** 当前公开版本的交付入口是 CLI，桌面应用位于 `apps/desktop/`，需要从源码单独构建。复制、运行和修改须遵守[内测许可证](LICENSE)。版本记录见 [Releases](https://github.com/W117C/cairn-harness/releases)。
 
-当前分支职责、未完成事项、待开工与优化项见 [项目路线与仓库状态](docs/ROADMAP.md)。
+[CLI 快速开始](#30-秒上手) · [零凭据演示](#零凭据试一下--provider-demo读之前先看这段) · [桌面构建](#仓库结构) · [开发与验证](#开发与验证) · [问题反馈](SUPPORT.md) · [安全问题](SECURITY.md)
+
+分支职责和待完成事项见[项目路线与仓库状态](docs/ROADMAP.md)。
 
 ---
 
@@ -43,7 +43,7 @@
 
 ## 30 秒上手
 
-需要 Node `>=20.11 <25`（以 `package.json` 的 `engines` 为准）与 pnpm。
+项目声明的 Node 运行范围为 `>=20.11 <25`。以下安装步骤使用仓库锁定的 pnpm 11.21.0，运行 pnpm 需要 Node `>=22.13 <25`。开发和运行测试建议使用 Node 24。
 
 ```sh
 git clone https://github.com/W117C/cairn-harness.git
@@ -394,6 +394,8 @@ worker 要联网只能回主会话发。
 - `src/main/` — electron-free 的应用服务（装配根）
 - `apps/desktop/` — 桌面壳（Electron + React + Vite；独立构建，判卷与边界闸已进根门与 CI）
 - `scripts/` — headless 闸（`pnpm gates` 全跑，清单在 `scripts/gate-manifest.ts`，即事实源）
+
+安装依赖后，运行 `pnpm --filter cairn-desktop build` 构建桌面应用。
 
 **桌面层**曾于 2026-09-27（`69fbb0d`）整体移除，2026-10-02 起以 M1 切片重新入库于 `apps/desktop/`，
 此后持续接线：**94 个 invoke 通道**（现读 `apps/desktop/src/main/channels.ts` 的 `INVOKE_CHANNELS`；

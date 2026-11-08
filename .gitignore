@@ -91,6 +91,9 @@ docs/facts/
 .worktrees/
 .superpowers/
 
+# Chromium user profiles produced by the desktop permission smoke contain runtime state.
+/outputs/desktop-permission-2026-11-03/profile*/
+
 # vitest JSON reporter 产物（本仓零消费者；2026-10-03 实测 .vitest/json/output.json 无人读）
 .vitest/
 
