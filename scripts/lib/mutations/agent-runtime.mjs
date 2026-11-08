@@ -102,7 +102,7 @@ export const MUTATIONS = [
     src: "src/agent/stuck.ts",
     test: "tests/tool-result-malformed.test.ts",
     desc: "观察摘要直接 .slice 信任 output 是字符串 ⇒ 工具返回 {ok:true}（缺 output）时 `undefined.slice` 抛 TypeError，**把整轮任务打死**——为一条诊断读数赔掉整轮是本末倒置",
-    apply: (s) => s.replace('  if (typeof output === "string") return output.slice(0, 200);', "  return (output as string).slice(0, 200);"),
+    apply: (s) => s.replace('  return toolOutputText(output).slice(0, 200);', "  return (output as string).slice(0, 200);"),
     expectFail: "★ 缺 output（`{ok:true}`）⇒ 不许炸整轮，且回执可读",
   },
   {
@@ -1782,8 +1782,8 @@ export const MUTATIONS = [
     desc: "撞帽路不再补那一拍 ⇒ 被帽砍掉的 run 又回到「一条 verify 证据都没有」。#69 的原形状"
       + "（真模型面实测 5/43≈12% 整趟跑废，且这批恰是写得最多、最可能失败的那一批）",
     apply: (s) => s.replace(
-      "      if (opts.verify && opts.autoVerify === true && wroteThisRun && (firstBeat || repairBeat)) {",
-      "      if (!capReached && opts.verify && opts.autoVerify === true && wroteThisRun && (firstBeat || repairBeat)) {",
+      "      if (opts.verify && opts.autoVerify === true && wroteThisRun && (firstBeat || repairBeat || qualityRefresh)) {",
+      "      if (!capReached && opts.verify && opts.autoVerify === true && wroteThisRun && (firstBeat || repairBeat || qualityRefresh)) {",
     ),
     expectFail: "撞帽 + 写过盘 + 开闸 ⇒ 恰一拍 auto 证据落流，且 run 照旧抛错（帽没被藏起来）",
   },

@@ -37,10 +37,7 @@ export const MUTATIONS = [
     src: "src/atomic-write.ts",
     test: "tests/secrets.test.ts",
     desc: "去掉 rename：tmp 写完不落定（崩溃即丢密文）",
-    apply: (s) => s.replace(
-      '    await writeFile(tmp, text, { encoding: "utf8", mode: opts.mode });\n    if (opts.mode !== undefined) await chmod(tmp, opts.mode).catch(() => undefined);\n    await rename(tmp, path);',
-      '    await writeFile(tmp, text, { encoding: "utf8", mode: opts.mode });\n    if (opts.mode !== undefined) await chmod(tmp, opts.mode).catch(() => undefined);',
-    ),
+    apply: (s) => s.replace("    await rename(tmp, path);\n", ""),
     expectFail: "原子写：经 tmp→rename 落盘，成功后无 .tmp 残留",
   },
   {
@@ -48,10 +45,7 @@ export const MUTATIONS = [
     src: "src/atomic-write.ts",
     test: "tests/secrets.test.ts",
     desc: "tmp+rename 退回裸 writeFile（写中途崩溃截断密文存储）",
-    apply: (s) => s.replace(
-      '    await writeFile(tmp, text, { encoding: "utf8", mode: opts.mode });\n    if (opts.mode !== undefined) await chmod(tmp, opts.mode).catch(() => undefined);\n    await rename(tmp, path);',
-      '    await writeFile(path, text, { encoding: "utf8", mode: opts.mode });',
-    ),
+    apply: (s) => s.replace("  const tmp = tmpPathFor(path);\n", "  const tmp = path;\n"),
     expectFail: "原子写：经 tmp→rename 落盘，成功后无 .tmp 残留",
   },
   {
@@ -495,7 +489,7 @@ export const MUTATIONS = [
     src: "src/atomic-write.ts",
     test: "tests/secrets.test.ts",
     desc: "rename 失败不清理临时文件 ⇒ 崩溃残留堆在插件数据目录里，且下一次「写入中断自愈」清的是别人的名字",
-    apply: (s) => s.replace("    await unlink(tmp).catch(() => {});\n", ""),
+    apply: (s) => s.replace("    if (created) await unlink(tmp).catch(() => {});\n", ""),
     expectFail: "写失败时 tmp 被清理，且不截断既有密文存储",
   },
     /* ── 辅助对话面板（§10.8，10fece3）：形状由 vm 切片判，八条各钉一个「看得见但说谎」的落点 ── */
