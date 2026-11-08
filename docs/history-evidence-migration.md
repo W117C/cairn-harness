@@ -8,7 +8,7 @@
 ## 归档
 
 - 最终归档目录：`/Users/ze/Downloads/Cairn-archives/2026-11-08-5d3de6b8-dmehpqut/`
-- 源提交：`5d3de6b8f85aac72d0c9184e70b399c1de52ab48`（集成 tip，含开发线全部 `outputs/`）
+- 源提交：`5d3de6b8f85aac72d0c9184e70b399c1de52ab48`（归档时的集成候选快照，含开发线全部 `outputs/`；之后的 docs/打包修复不改变该快照）
 - 早期快照：`/Users/ze/Downloads/Cairn-archives/2026-11-08-8d798077-blqzz0c6/`
   记录公开候选合并前的 3186 个文件；最终归档覆盖集成后的 5593 个文件，二者不互相替代。
 - 文件：
