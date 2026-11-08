@@ -230,24 +230,26 @@ async function packageDesktop(options) {
     }
     cpSync(join(repoRoot, "docs/macos-trial.md"), join(staging, "安装说明.md"));
     writeFileSync(join(staging, "build-info.json"), JSON.stringify(buildInfo, null, 2) + "\n");
-    const archiveName = existsSync(join(staging, "Cairn.dmg")) ? "Cairn.dmg" : "Cairn-macOS.zip";
-    const archivePath = join(staging, archiveName);
-    const archiveSha256 = await sha256(archivePath);
-    const dependencyLockPath = join(appRes, "pnpm-lock.yaml");
-    cpSync(join(repoRoot, "pnpm-lock.yaml"), dependencyLockPath);
-    const dependencyLockSha256 = await sha256(dependencyLockPath);
-    const electronVersion = JSON.parse(readFileSync(join(desktopDir, "node_modules/electron/package.json"), "utf8")).version;
-    const releaseManifest = buildReleaseManifest({
-      version: source.version, platform: process.platform, arch: process.arch,
-      electronVersion, archiveName, archiveSha256, archiveBytes: statSync(archivePath).size,
-      dependencyLockSha256, ...sourceProvenance,
-    });
-    writeFileSync(join(staging, "release.json"), JSON.stringify(releaseManifest, null, 2) + "\n");
-    const releaseSha256 = await sha256(join(staging, "release.json"));
-    writeFileSync(join(staging, "SHA256SUMS"), checksumLines([
-      { name: archiveName, sha256: archiveSha256 },
-      { name: "release.json", sha256: releaseSha256 },
-    ]));
+    if (options.archive) {
+      const archiveName = existsSync(join(staging, "Cairn.dmg")) ? "Cairn.dmg" : "Cairn-macOS.zip";
+      const archivePath = join(staging, archiveName);
+      const archiveSha256 = await sha256(archivePath);
+      const dependencyLockPath = join(appRes, "pnpm-lock.yaml");
+      cpSync(join(repoRoot, "pnpm-lock.yaml"), dependencyLockPath);
+      const dependencyLockSha256 = await sha256(dependencyLockPath);
+      const electronVersion = JSON.parse(readFileSync(join(desktopDir, "node_modules/electron/package.json"), "utf8")).version;
+      const releaseManifest = buildReleaseManifest({
+        version: source.version, platform: process.platform, arch: process.arch,
+        electronVersion, archiveName, archiveSha256, archiveBytes: statSync(archivePath).size,
+        dependencyLockSha256, ...sourceProvenance,
+      });
+      writeFileSync(join(staging, "release.json"), JSON.stringify(releaseManifest, null, 2) + "\n");
+      const releaseSha256 = await sha256(join(staging, "release.json"));
+      writeFileSync(join(staging, "SHA256SUMS"), checksumLines([
+        { name: archiveName, sha256: archiveSha256 },
+        { name: "release.json", sha256: releaseSha256 },
+      ]));
+    }
     if (occupied(options.out)) throw new Error(`目标已存在：${options.out}；保留已有产物`);
     renameSync(staging, options.out);
     console.log(`[package] 完成（已验证打包态）：${join(options.out, "Cairn.app")}`);
