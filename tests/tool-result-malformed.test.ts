@@ -82,6 +82,22 @@ describe("工具返回畸形结构：不炸、不糊、分得开", () => {
     const r = await runOne({ ok: true, output: "" });
     expect(r.toolContent).toBe("");
   });
+
+  it("非字符串回执转换后仍经过密钥脱敏", async () => {
+    const secret = "sk-AAAAAAAAAAAAAAAA1111";
+    const r = await runOne({ ok: true, output: { key: secret } });
+    expect(r.threw).toBe("");
+    expect(r.toolContent).not.toContain(secret);
+    expect(JSON.stringify(r.events)).not.toContain(secret);
+  });
+
+  it("环形正文进入整轮时也能留下可读回执", async () => {
+    const output: Record<string, unknown> = {};
+    output.self = output;
+    const r = await runOne({ ok: true, output });
+    expect(r.threw).toBe("");
+    expect(r.toolContent).toContain("无法序列化");
+  });
 });
 
 describe("stuckObservationOf 的取料面（崩溃点本体）", () => {

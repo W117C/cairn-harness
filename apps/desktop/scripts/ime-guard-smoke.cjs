@@ -170,8 +170,13 @@ async function main() {
   writeFileSync(join(out, "checks.json"), JSON.stringify(checks, null, 2));
   const failed = checks.filter((c) => !c.ok);
   console.log(`读数：${checks.length} 条，${checks.length - failed.length} 绿 / ${failed.length} 红 → ${out}`);
-  if (failed.length > 0) process.exitCode = 1;
   win.destroy();
+  rmSync(profile, { recursive: true, force: true });
+  app.exit(failed.length > 0 ? 1 : 0);
 }
 
-main().catch((err) => { console.error("ime-guard-smoke failed:", err); process.exitCode = 1; });
+main().catch((err) => {
+  console.error("ime-guard-smoke failed:", err);
+  rmSync(profile, { recursive: true, force: true });
+  app.exit(1);
+});

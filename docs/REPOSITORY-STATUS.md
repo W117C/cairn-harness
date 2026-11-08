@@ -1,21 +1,24 @@
 # 仓库状态与分支
 
-核对日期：2026-11-04（Asia/Shanghai）。对象是 `/Users/ze/Downloads/Cairn/cairn`；同级 staging、备份与研究目录未纳入内容修改或删除。
+核对日期：2026-11-08（Asia/Shanghai）。对象是 `/Users/ze/.codex/worktrees/cairn-public-candidate/cairn` 与集成分支；同级 staging、备份与研究目录未纳入内容修改或删除。
 这是现役入口。旧整理记录见[历史快照](../archive/repository-status-before-2026-11-02.md)。
 
 ## 当前结论
 
-- 开发基线为 `fix/spec-summary-double-count`（本地 tip 含 2026-11-04 清理三笔，未推送）；远端同名分支仍在 `f2606542`。
-- 共享工作树已清空：此前多会话留下的在飞改动经一次落库提交入库，依据是当时工作树上的两套套件与根类型检查全绿，不是逐笔审阅每个改动。
-- 开发线与 `origin/main` 双向分叉。只读 merge-tree 预演给出约 30 个冲突文件，含 `pnpm-lock.yaml`、`package.json`、`.github/workflows/verify.yml` 与核心源文件；因此**不在主树上直接合并**。
-- 本轮新增：任务自带判据（`--verify`）、`env-fs` 归因、失败路径读数、`verify-census` 命令、拒单文案统一。
+- 集成分支 `integration/main-dev-20261108` 已把 `main` 的 PR #18/#19 合入开发线（`22942160`），
+  再合公开候选 `8d798077` 的打包与预览面；冲突按「安全实现取较新者、功能面保留双方」处理。
+- `product/public-candidate-20261108` 保留公开门面与打包构建；最终收口以集成 tip 为准，未推送、未发布。
+- 开发线与 `origin/main` 双向分叉已消除（集成提交同时包含双方祖先）；`main` 本身未改写，发布 tag 未动。
+- 历史材料归档见 [`docs/history-evidence-migration.md`](history-evidence-migration.md)。
 
 ## 本地分支处置
 
 | 分支 | 当前关系 | 决定 |
 | --- | --- | --- |
-| `main` | 与 `origin/main` 一致 | 保留；主线基准 |
-| `fix/spec-summary-double-count` | 活跃开发线，已推送；与 main 分叉 | 保留；等隔离集成 |
+| `main` | 与 `origin/main` 一致（`2e6ccd28`） | 保留；主线基准 |
+| `fix/spec-summary-double-count` | 活跃开发线，已推送；与 main 分叉 | 保留；作为集成来源 |
+| `integration/main-dev-20261108` | 开发线 + main 安全/漂移修复 + 公开候选打包面 | 保留；当前集成候选 |
+| `product/public-candidate-20261108` | 公开门面与打包批；可快进到集成 tip | 保留；公开候选 |
 | `rescue/code-scanning-closure-wip-20261104` | 清理前从 code-scanning worktree 收编的未提交改动（1 笔） | 保留；未经判卷，未合入任何线 |
 | `rescue/wip-20261025` | 相对主线与开发线均有独有提交 | 保留；救援快照 |
 
@@ -48,8 +51,10 @@
 
 ## 下一步
 
-- 在隔离工作区做 dev → main 集成，顺序：`pnpm-lock.yaml` / `package.json` / CI 配置 → `src/main` → `src/agent` → `apps/desktop`。
-- 集成分支判据：两套套件 + 根 typecheck + `docs-check`；任一项红不进 `main`。
+- 对集成 tip 跑 core/desktop/typecheck/boundary/build 与现行门禁；两条已知基线红（`gated-tools` / `runner-gates`）
+  在 `ccf35864` 同红，不能当作本批回归，也不能当作本批已修。
+- 集成 tip 通过后，在隔离工作区把 `product/public-candidate-20261108` 快进到同一提交；不直接改 `main`，不推送、不发布。
+- 真实 provider 验收被账户实名认证阻塞，证据见 `outputs/real-provider-2026-11-08/`；认证完成后重跑。
 
 ## 读数与新旧
 

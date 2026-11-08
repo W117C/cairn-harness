@@ -8,8 +8,9 @@
 [![node](https://img.shields.io/badge/node-%3E%3D20.11%20%3C25-5FA04E?logo=node.js)](https://nodejs.org)
 [![pnpm](https://img.shields.io/badge/pnpm-11.21.0-F69220?logo=pnpm)](https://pnpm.io)
 
-**一句话**：给 AI 编码 agent 用的**可审计运行时**——每一步都留痕，事后能重放、能分叉、能审计；
-写操作默认 fail-closed，没人应答时当场拒绝，而不是静默放行。
+Cairn 是一个面向软件项目的 AI 编码助手，提供命令行和桌面开发入口。它在本地工作区运行任务，记录可重放的事件，供使用者查看工具操作、分叉会话和审计过程。权限控制管理工具操作，无人应答的审批请求会被拒绝。
+
+> **当前阶段：受邀内测。** 当前公开版本的交付入口是 CLI，桌面应用位于 `apps/desktop/`，需要从源码单独构建。复制、运行和修改须遵守[内测许可证](LICENSE)。版本记录见 [Releases](https://github.com/W117C/cairn-harness/releases)。
 
 内核侧**没有构建步骤**：克隆下来装完依赖就有一条 `cairn` 命令。
 桌面壳是另一条路，`apps/desktop/` 下走 Electron + Vite，需要单独构建（见「桌面应用（macOS）」）。
@@ -24,6 +25,8 @@ export OPENAI_API_KEY=<你的 key>
 ./bin/cairn.mjs "把 tests 里失败的那个用例修好"
 ```
 
+[CLI 快速开始](#30-秒上手) · [零凭据演示](#零凭据试一下--provider-demo读之前先看这段) · [桌面构建](#仓库结构) · [开发与验证](#开发与验证) · [问题反馈](SUPPORT.md) · [安全问题](SECURITY.md)
+
 > 本包是 `"private": true`，**不经 npm 分发**：没有 `npm install -g cairn` 这条路。上面是克隆仓库后的用法——
 > tsx 是运行依赖，源码经 tsx 通道直接跑；桌面包也使用同一条 loader 路径。
 
@@ -31,7 +34,7 @@ export OPENAI_API_KEY=<你的 key>
 
 ## 安装
 
-本包不发布 npm（`private: true`），装法是克隆仓库后跑安装脚本：
+项目声明的 Node 运行范围为 `>=20.11 <25`。以下安装步骤使用仓库锁定的 pnpm 11.21.0，运行 pnpm 需要 Node `>=22.13 <25`。开发和运行测试建议使用 Node 24。
 
 ```sh
 git clone https://github.com/W117C/cairn-harness.git
@@ -142,8 +145,8 @@ pnpm bench -- --only B1-bugfix-crossfile
 # 接着上一次那条会话跑（不抹掉之前的转录）
 ./bin/cairn.mjs --session cli-1756289123456 "接着刚才那个往下做"
 
-# 装成命令（npm link；本包未发布，见上）
-npx cairn --help
+# 查看命令帮助
+./bin/cairn.mjs --help
 ```
 
 ### 零凭据试一下：`--provider demo`（**读之前先看这段**）
@@ -228,7 +231,7 @@ key 从环境变量读，**缺 key 会明确报错退出，不会静默换一家
 ```sh
 export OPENAI_BASE_URL=https://api.deepseek.com/v1
 export OPENAI_API_KEY=<deepseek key>
-npx cairn "..."
+./bin/cairn.mjs "..."
 ```
 
 `OPENAI_BASE_URL` 给到 `/v1` 这一层就行，缺 `/chat/completions` 会自动补；已经带全的写法也照样认。
@@ -239,7 +242,7 @@ npx cairn "..."
 ```sh
 export OPENAI_BASE_URL=https://openrouter.ai/api/v1
 export OPENAI_API_KEY=<key>
-npx cairn --provider openai --model stealth/space-bunny-alpha "..."
+./bin/cairn.mjs --provider openai --model stealth/space-bunny-alpha "..."
 ```
 
 `--model` 是显式 opt-in：它不进档位表，因此**不参与 bandit 路由**；预算闸查不到它的价时按既有口径惰掉并明写，
@@ -247,7 +250,7 @@ npx cairn --provider openai --model stealth/space-bunny-alpha "..."
 高估会撞远端 400。指向小窗或网关模型时用 `--ctx-window <n>` 申报真实窗口（只配 `--model` 用）：
 
 ```sh
-npx cairn --provider openai --model some/small-model --ctx-window 32768 "..."
+./bin/cairn.mjs --provider openai --model some/small-model --ctx-window 32768 "..."
 ```
 
 没给 `--provider` 时按上表顺序找第一个配了 key 的；一个都没配 ⇒ exit 2 并告诉你要设哪个变量。

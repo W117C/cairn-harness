@@ -2,7 +2,7 @@
 // pnpm deploy supplies a locked, isolated production dependency tree; no second npm resolution.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { createReadStream, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -65,6 +65,32 @@ export function packagedSmokePassed(result) {
     && /^\[cairn-smoke\] PASS in \d+ ms\r?$/m.test(result.stdout ?? "");
 }
 
+async function sha256(path) {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(path)) hash.update(chunk);
+  return hash.digest("hex");
+}
+
+/** 发行清单：把「这份归档是什么、由谁构建、依赖锁是哪一份」写成可核对的单一文件。 */
+export function buildReleaseManifest(input) {
+  return {
+    schemaVersion: 1,
+    version: input.version,
+    buildHost: { platform: input.platform, arch: input.arch },
+    electron: input.electronVersion,
+    signing: "ad-hoc",
+    notarized: false,
+    archive: { name: input.archiveName, sha256: input.archiveSha256, bytes: input.archiveBytes },
+    runtimeLockSha256: input.dependencyLockSha256,
+    sourceCommit: input.sourceCommit,
+    sourceDirty: input.sourceDirty,
+  };
+}
+
+export function checksumLines(entries) {
+  return entries.map((entry) => `${entry.sha256}  ${entry.name}\n`).join("");
+}
+
 export function pruneRuntimeState(root, allowedFixturePaths) {
   const visit = (directory, inAgent = false) => {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -113,7 +139,7 @@ function optionsOf(args) {
   return options;
 }
 
-function packageDesktop(options) {
+async function packageDesktop(options) {
   if (occupied(options.out)) throw new Error(`目标已存在：${options.out}；请用 --out 选择新目录，已有产物不会被覆盖`);
   if (process.platform !== "darwin") throw new Error("当前打包入口支持 macOS；请在 macOS 构建 Cairn.app");
   const electronDist = [join(desktopDir, "node_modules/electron/dist/Electron.app"), join(repoRoot, "node_modules/electron/dist/Electron.app")]
@@ -204,6 +230,24 @@ function packageDesktop(options) {
     }
     cpSync(join(repoRoot, "docs/macos-trial.md"), join(staging, "安装说明.md"));
     writeFileSync(join(staging, "build-info.json"), JSON.stringify(buildInfo, null, 2) + "\n");
+    const archiveName = existsSync(join(staging, "Cairn.dmg")) ? "Cairn.dmg" : "Cairn-macOS.zip";
+    const archivePath = join(staging, archiveName);
+    const archiveSha256 = await sha256(archivePath);
+    const dependencyLockPath = join(appRes, "pnpm-lock.yaml");
+    cpSync(join(repoRoot, "pnpm-lock.yaml"), dependencyLockPath);
+    const dependencyLockSha256 = await sha256(dependencyLockPath);
+    const electronVersion = JSON.parse(readFileSync(join(desktopDir, "node_modules/electron/package.json"), "utf8")).version;
+    const releaseManifest = buildReleaseManifest({
+      version: source.version, platform: process.platform, arch: process.arch,
+      electronVersion, archiveName, archiveSha256, archiveBytes: statSync(archivePath).size,
+      dependencyLockSha256, ...sourceProvenance,
+    });
+    writeFileSync(join(staging, "release.json"), JSON.stringify(releaseManifest, null, 2) + "\n");
+    const releaseSha256 = await sha256(join(staging, "release.json"));
+    writeFileSync(join(staging, "SHA256SUMS"), checksumLines([
+      { name: archiveName, sha256: archiveSha256 },
+      { name: "release.json", sha256: releaseSha256 },
+    ]));
     if (occupied(options.out)) throw new Error(`目标已存在：${options.out}；保留已有产物`);
     renameSync(staging, options.out);
     console.log(`[package] 完成（已验证打包态）：${join(options.out, "Cairn.app")}`);
@@ -218,7 +262,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   catch (error) { console.error(`[package] ${error.message}`); process.exitCode = 2; }
   if (options?.help) console.log("Cairn macOS package: --out <new-directory> [--no-archive]\nBuilds, signs and smoke-tests the app before publishing; existing output is preserved.");
   else if (options) {
-    try { packageDesktop(options); }
+    try { await packageDesktop(options); }
     catch (error) { console.error(`[package] FAIL: ${error.message}`); process.exitCode = 1; }
   }
 }
