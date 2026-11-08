@@ -20,8 +20,3 @@ trim_trailing_whitespace = false
 insert_final_newline = false
 trim_trailing_whitespace = false
 indent_size = 2
-
-# ── 取料面：证据文件，按原样保存（内容被门逐字比对） ──
-[outputs/**]
-insert_final_newline = false
-trim_trailing_whitespace = false

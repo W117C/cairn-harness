@@ -4,7 +4,7 @@
 #   · 锁文件是**事实源**——依赖更新走 PR，不直接改 `pnpm-lock.yaml`。
 #   · pnpm 的版本**单点声明**在 package.json 的 packageManager 字段，
 #     Dependabot 不去动它（动了会与 pnpm/action-setup 的读法打架）。
-#   · `outputs/` 与 `fixtures/` 不参与更新（历史证据与判卷输入）。
+#   · `fixtures/` 是判卷输入，不参与依赖更新。
 
 version: 2
 

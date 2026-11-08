@@ -29,13 +29,13 @@ tests/                         @W117C
 # ── 身份面与现行层文档 ──
 README.md                      @W117C
 LICENSE                        @W117C
+LICENSING.md                   @W117C
+NOTICE                         @W117C
 CHANGELOG.md                   @W117C
 AGENTS.md                      @W117C
-STATE.md                       @W117C
 docs/                          @W117C
 .github/                       @W117C
 
-# ── 取料面与夹具：历史证据与判卷输入，不接受直接改动 ──
-# 改这里等于改判卷依据；要改先在 docs/adr/ 里落一条裁决。
-outputs/                       @W117C
+# ── 判卷输入与夹具：改这里等于改判卷依据 ──
+# 要改先在 docs/adr/ 里落一条裁决。
 fixtures/                      @W117C

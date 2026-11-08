@@ -57,5 +57,5 @@ pnpm --filter cairn-desktop exec electron scripts/layout-smoke.cjs
 - 现有 `autoVerify` 是运行时钩子，默认开启不证明这次开发改动已验过；`autoVerifyRepair` 默认关闭。回执必须能对上本次内容。
 - scoped 测试、模拟 provider、合成 AgentApi、真实 Electron、真实 provider 是不同覆盖面，报告时明确区分。
 - 不为拿一份绿日志反复重跑失败，先保留并解释首个失败；怀疑负载时用定向低并发复测。
-- `outputs/` 只存本轮必要的 `.md`/`.json`/`.log` 等证据；不要复制 TS 源码进去，证据面也会被 typecheck。
+- 证据只写本轮必要的 `.md`/`.json`/`.log`，放在本次工作区的 `.tmp/` 或用户指定目录；不要复制 TS 源码进去。
 - 本 skill 被发现、信任和成功展开，不等于真实模型会自主选择它，更不证明能提升多少质量。需要另做有基线的真实任务评估。

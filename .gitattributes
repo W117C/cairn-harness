@@ -24,7 +24,6 @@
 # 数这一笔的增删行数，`-diff` 会把取料面判成二进制 ⇒ 行数不计入 ⇒
 # 「删除占比」这一格读到的就不是同一个量了。**一个看起来无害的
 # .gitattributes 改动，会让一道门安静地量到别的东西。**
-outputs/** -text
 
 # ── 锁文件：由包管理器生成。仍然保留 diff（要能看见锁文件的变化） ──
 pnpm-lock.yaml linguist-generated=true
