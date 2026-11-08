@@ -46,6 +46,6 @@ shasum -a 256 -c SHA256SUMS
 当前只进行无需签名身份的 ad-hoc 签名，没有 Developer ID 签名和 Apple 公证。
 从网络下载后，macOS 可能阻止首次运行。确认来源可信后，按 Apple 的
 [官方首次打开说明](https://support.apple.com/en-us/102445)操作；不要求关闭系统全局安全保护。
-实际下载、干净用户环境、真实 provider、升级与恢复仍需按[预览版验收清单](superpowers/plans/2026-11-08-productization.md)逐项验证。
+实际下载、干净用户环境、真实 provider、升级与恢复仍需按发布前验收清单逐项验证。
 
 反馈请提供版本、系统/架构、失败步骤和脱敏错误信息。不要提交 API key、完整私人会话或浏览器配置。

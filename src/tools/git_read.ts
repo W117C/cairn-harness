@@ -123,11 +123,12 @@ export const git_read: Tool = {
     if (op !== "log") {
       // clean/process 过滤器独立于 diff driver；检查含 include 的有效配置并明确拒绝。
       // macOS 还有进程沙箱兜住配置在两次 Git 调用之间被改写的窗口。
-      const filters = await runGit(["config", "--null", "--name-only", "--get-regexp", "^filter\\..*\\.(clean|process)$"], ctx.workspace);
+      const filters = await runGit(["config", "--local", "--get-regexp", "^filter\\..*\\.(clean|process)$"], ctx.workspace);
       if (filters.code === 0) {
         return { ok: false, output: "git_read: 仓库配置了可执行的 Git clean/process 过滤器，无法安全比较工作区" };
       }
-      if (filters.code !== 1 || filters.stderr !== "") {
+      const outsideRepo = filters.code === 128 && /--local can only be used inside a git repository/i.test(filters.stderr);
+      if (!outsideRepo && (filters.code !== 1 || filters.stderr !== "")) {
         return { ok: false, output: "git_read: 无法确认 Git 过滤器配置，已拒绝比较工作区" };
       }
     }

@@ -51,7 +51,7 @@ export OPENAI_API_KEY=<你的 key>
 桌面壳在 `apps/desktop/`（Electron + React + Vite），与 CLI 共用 `src/main/` 服务。
 当前构建是 ad-hoc 签名、未公证的开发者预览。
 
-![Cairn 首页：项目选择、任务输入与演示模式](assets/readme/cairn-home.png)
+![Cairn 首页（演示环境）：项目选择、任务输入与演示模式](assets/readme/cairn-home.png)
 
 ![关于与更新：版本、构建来源、许可证与偏好备份](assets/readme/cairn-settings-about.png)
 
