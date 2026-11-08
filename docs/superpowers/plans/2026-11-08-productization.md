@@ -121,8 +121,9 @@
   （提交 `22942160`），再合公开候选 `8d798077`；冲突逐个按「安全实现取较新者、功能面保留双方」处理。
   集成采用 `pnpm deploy --prod` 的生产依赖锁，保留公开候选的 `release.json` 与 `SHA256SUMS`；
   `apps/desktop/runtime/package-lock.json` 与 npm 专用打包测试不再进入最终树，理由是不再使用 `npm ci`。
-- 证据归档：`outputs/` 全量归档到仓外 `Cairn-archives/2026-11-08-8d798077-*`，逐文件 SHA-256 与解包回读通过；
-  `inventory.jsonl` 给出 2534 条留仓、153 条待改链、499 条待隐私审阅的分类。源文件未删；删除仍需业主按文件确认。
+- 证据归档：集成 tip 的 `outputs/` 全量归档到仓外 `Cairn-archives/2026-11-08-5d3de6b8-*`，
+  5593 个文件逐文件 SHA-256 与解包回读通过；`inventory.jsonl` 给出 3701 条引用留仓、1892 条待隐私审阅。
+  合并前的 3186 文件快照另存 `2026-11-08-8d798077-*`。源文件未删；删除仍需业主按文件确认。
 - 真实 provider：`--doctor` 通过，但 `provider-check.ts` 在建立流时收到 HTTP 403
   `IDENTITY_VERIFICATION_REQUIRED`（账户实名认证未完成）；调用②、真实任务与跨机器验收未执行。
   证据在 `outputs/real-provider-2026-11-08/`，不把本次尝试写成真实模型通过。

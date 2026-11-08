@@ -7,8 +7,10 @@
 
 ## 归档
 
-- 归档目录：`/Users/ze/Downloads/Cairn-archives/2026-11-08-8d798077-blqzz0c6/`
-- 源提交：`8d7980775e6a9b10da591a9520fd787905ba9338`（公开候选分支）
+- 最终归档目录：`/Users/ze/Downloads/Cairn-archives/2026-11-08-5d3de6b8-dmehpqut/`
+- 源提交：`5d3de6b8f85aac72d0c9184e70b399c1de52ab48`（集成 tip，含开发线全部 `outputs/`）
+- 早期快照：`/Users/ze/Downloads/Cairn-archives/2026-11-08-8d798077-blqzz0c6/`
+  记录公开候选合并前的 3186 个文件；最终归档覆盖集成后的 5593 个文件，二者不互相替代。
 - 文件：
   - `evidence.tar.gz`：`outputs/` 全量 + `PROGRESS.md` + `scripts/docs-check.ts` +
     `scripts/replay/corpus.ts` + `tsconfig.evidence.json`
@@ -16,7 +18,7 @@
   - `summary.json`：归档摘要与分类计数
   - `SHA256SUMS`：归档与清单的校验值
 - 核对方式：`tar -xzf evidence.tar.gz` 解包到独立临时目录，逐文件回读并与 Git blob / 源文件比对；
-  `shasum -a 256 -c SHA256SUMS` 全 `OK`。全部 3186 个 `outputs/` 文件均通过。
+  `shasum -a 256 -c SHA256SUMS` 全 `OK`。全部 5593 个 `outputs/` 文件均通过。
 
 ## 分类
 
@@ -24,8 +26,8 @@
 
 - `retain-dependent`：被台账 D-9/D-11、证据 TypeScript 编译面、replay 语料或源码/测试词法引用点名——
   **必须留仓**，迁移会打断现行门禁。
-- `review-document-links`：只被文档链接/正文点名，未发现执行消费者——待文档改链后可迁出。
-- `review-unreferenced`：未发现静态消费者——仍需隐私审阅与业主确认后才能迁出。
+- `referenced`：被台账、文档或源码/测试以路径或目录 token 点名——保守留仓。
+- `review-unreferenced`：未发现静态消费者（1892 条）——仍需隐私审阅与业主确认后才能迁出。
 
 `blockers` 字段逐条记录命中原因；`privacy_review` 当前为 `not-performed`，`removal_authorized` 为 `false`。
 
