@@ -30,6 +30,8 @@
 - `review-unreferenced`：未发现静态消费者（1892 条）——仍需隐私审阅与业主确认后才能迁出。
 
 `blockers` 字段逐条记录命中原因；`privacy_review` 当前为 `not-performed`，`removal_authorized` 为 `false`。
+对 1892 条 `review-unreferenced` 做过一次正则预扫（不代替人工审阅）：389 条含 `/Users/` 主目录路径，
+6 条命中密钥形状；删除前必须逐条处理，不能把「未引用」当成「可公开」。
 
 ## 边界
 
