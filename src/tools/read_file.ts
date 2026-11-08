@@ -1,6 +1,6 @@
-import { open, readFile, readdir, stat } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { resolveReadTarget, ToolError, type Tool, type ToolContext, type ToolResult } from "./base.js";
+import { assertContainedPathIdentity, captureContainedPath, openContainedFile, openVerifiedFile, resolveReadTarget, ToolError, type Tool, type ToolContext, type ToolResult } from "./base.js";
 import { byteCapNotice, clipLine } from "./cap-notice.js";
 import { headWithinBytes, utf8PrefixEnd } from "./output-ring.js";
 import { prefetchLsp } from "./lsp.js";
@@ -16,16 +16,40 @@ const BATCH_LIMIT_BYTES = 50 * 1024;
 // 一个 GB 级文件（日志/打包产物/数据库转储）会把 Electron 主进程读爆。
 const LARGE_FILE_PREFIX_BYTES = 16 * 1024 * 1024;
 
-/** 只读文件前 bytes 字节（大文件路径用；返回可能被截断的 Buffer）。 */
-async function readPrefix(abs: string, bytes: number): Promise<Buffer> {
-  const fh = await open(abs, "r");
-  try {
-    const buf = Buffer.allocUnsafe(bytes);
-    const { bytesRead } = await fh.read(buf, 0, bytes, 0);
-    return buf.subarray(0, bytesRead);
-  } finally {
-    await fh.close();
+/** 只读句柄的最小面（判卷用假句柄直接量分配上限）。 */
+export interface PrefixReadHandle {
+  read(buffer: Buffer, offset: number, length: number, position: number): Promise<{ bytesRead: number }>;
+}
+
+export interface PrefixRead {
+  buf: Buffer;
+  oversized: boolean;
+  grewDuringRead: boolean;
+}
+
+/** Read at most one byte beyond the fstat size (capped at 16 MiB + 1).
+ * A small file that grows after fstat therefore still gets a bounded read,
+ * and the extra byte is used only as a growth witness. */
+export async function readRegularFilePrefix(
+  fh: PrefixReadHandle,
+  initialSize: number,
+): Promise<PrefixRead> {
+  const safeInitial = Math.max(0, Math.min(initialSize, LARGE_FILE_PREFIX_BYTES));
+  const buffer = Buffer.allocUnsafe(safeInitial + 1);
+  let bytesRead = 0;
+  while (bytesRead < buffer.length) {
+    const read = await fh.read(buffer, bytesRead, buffer.length - bytesRead, bytesRead);
+    if (read.bytesRead === 0) break;
+    bytesRead += read.bytesRead;
   }
+  const oversized = initialSize > LARGE_FILE_PREFIX_BYTES;
+  const grewDuringRead = !oversized && bytesRead > safeInitial;
+  const visibleBytes = oversized ? Math.min(bytesRead, LARGE_FILE_PREFIX_BYTES) : Math.min(bytesRead, safeInitial);
+  return {
+    buf: buffer.subarray(0, visibleBytes),
+    oversized,
+    grewDuringRead,
+  };
 }
 
 // 二进制嗅探：出现 NUL 即拒读；不可打印字节（除少数常见空白）占比 >30% 也拒读。
@@ -77,9 +101,14 @@ async function readOne(ctx: ToolContext, rel: string, offsetRaw: unknown, limitR
   const display = target.display;
 
   // 目录路径：列条目（目录读不了内容，但列条目是有用的输出）。
-  const st = await stat(abs).catch(() => null);
-  if (st?.isDirectory()) {
-    const entries = await readdir(abs);
+  const inspected = target.external
+    ? await stat(abs).then((s) => ({ path: abs, stat: s })).catch(() => null)
+    : await captureContainedPath(ctx.workspace, abs, "read_file").catch(() => null);
+  if (inspected?.stat.isDirectory()) {
+    const entries = await readdir(inspected.path);
+    if (!target.external) {
+      await assertContainedPathIdentity(ctx.workspace, inspected.path, "read_file", { path: inspected.path, stat: inspected.stat });
+    }
     const sorted = entries.sort().map((e) => e + "/");
     // 目录同样要受行/字节帽约束：旧实现把整目录条目 join 后直接返回，5 万项直接吃光上下文
     // 且不给 truncated 信号（批量读复用本函数时同样无帽）。
@@ -98,15 +127,29 @@ async function readOne(ctx: ToolContext, rel: string, offsetRaw: unknown, limitR
   // 大文件只读前缀（stat 已在上面取过，零额外系统调用）。
   // 前缀边界可能切断一个多字节 UTF-8 序列，末尾会解码成替换字符——输出已显式声明截断，
   // 不影响语义；这里不做额外修补，避免误改文件本身合法的 U+FFFD。
-  const oversized = (st?.size ?? 0) > LARGE_FILE_PREFIX_BYTES;
-  let buf: Buffer;
+  let opened;
   try {
-    buf = oversized ? await readPrefix(abs, LARGE_FILE_PREFIX_BYTES) : await readFile(abs);
-  } catch {
+    opened = target.external
+      ? await openVerifiedFile(abs, "read_file")
+      : await openContainedFile(ctx.workspace, abs, "read_file");
+  } catch (error) {
+    // 安全闸抛出的 ToolError 没有 errno（越界/句柄不可信）⇒ 原样透传，别折成「文件不存在」。
+    if (error instanceof ToolError && (error as NodeJS.ErrnoException).code === undefined) throw error;
     // 近名建议只对工作区相对路径有意义：项目外批准清单里没有「同目录候选」这层语义。
     const suggestions = target.external ? [] : await nearNameSuggestions(ctx.workspace, rel);
     const hint = suggestions.length ? "（近名建议: " + suggestions.join(", ") + "）" : "";
     throw new ToolError("read_file: 文件不存在或不可读: " + display + hint);
+  }
+  let buf: Buffer;
+  let oversized: boolean;
+  try {
+    const openedStat = opened.stat;
+    if (!openedStat.isFile()) throw new ToolError("read_file: 不是常规文件: " + display);
+    const read = await readRegularFilePrefix(opened.fh, openedStat.size);
+    buf = read.buf;
+    oversized = read.oversized;
+  } finally {
+    await opened.fh.close().catch(() => undefined);
   }
   if (looksBinary(buf)) {
     throw new ToolError("read_file: 疑似二进制文件，拒绝按文本读取: " + display);

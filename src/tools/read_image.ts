@@ -1,6 +1,5 @@
-import { readFile, stat } from "node:fs/promises";
 import { basename } from "node:path";
-import { resolveReadTarget, type Tool, type ToolResult } from "./base.js";
+import { openContainedFile, openVerifiedFile, resolveReadTarget, type Tool, type ToolResult } from "./base.js";
 
 /** 识图工具：把工作区内的一张图片读成 data URL，作为多模态内容块进上下文。
  *
@@ -52,21 +51,42 @@ export const read_image: Tool = {
     // （realpath 比对，批准后把文件换成指向别处的软链也不会被跟随）。
     const target = await resolveReadTarget(ctx.workspace, rel.trim(), "read_image", ctx.externalReadGrants);
     const abs = target.abs;
-    let st;
+    let opened;
     try {
-      st = await stat(abs);
+      opened = target.external
+        ? await openVerifiedFile(abs, "read_image")
+        : await openContainedFile(ctx.workspace, abs, "read_image");
     } catch {
       throw new Error("read_image: 文件不存在或不可读: " + rel);
     }
-    if (!st.isFile()) throw new Error("read_image: 不是文件: " + rel);
-    if (st.size > MAX_IMAGE_BYTES) {
-      throw new Error(
-        "read_image: 图片超过 " + String(Math.floor(MAX_IMAGE_BYTES / 1024 / 1024)) + "MB 帽（实际 " +
-          String(Math.ceil(st.size / 1024 / 1024)) + "MB）——先缩到帽内再读，或分块描述你要看的部分",
-      );
+    let buf: Buffer;
+    let size: number;
+    try {
+      const st = opened.stat;
+      if (!st.isFile()) throw new Error("read_image: 不是文件: " + rel);
+      if (st.size > MAX_IMAGE_BYTES) {
+        throw new Error(
+          "read_image: 图片超过 " + String(Math.floor(MAX_IMAGE_BYTES / 1024 / 1024)) + "MB 帽（实际 " +
+            String(Math.ceil(st.size / 1024 / 1024)) + "MB）——先缩到帽内再读，或分块描述你要看的部分",
+        );
+      }
+      if (st.size === 0) throw new Error("read_image: 空文件不是图片: " + rel);
+      buf = Buffer.allocUnsafe(st.size);
+      let offset = 0;
+      while (offset < buf.length) {
+        const { bytesRead } = await opened.fh.read(buf, offset, buf.length - offset, offset);
+        if (bytesRead === 0) break;
+        offset += bytesRead;
+      }
+      if (offset !== st.size) throw new Error("read_image: 文件在读取期间发生变化: " + rel);
+      const after = await opened.fh.stat();
+      if (after.dev !== st.dev || after.ino !== st.ino || after.size !== st.size || after.mtimeMs !== st.mtimeMs) {
+        throw new Error("read_image: 文件在读取期间发生变化: " + rel);
+      }
+      size = st.size;
+    } finally {
+      await opened.fh.close().catch(() => undefined);
     }
-    if (st.size === 0) throw new Error("read_image: 空文件不是图片: " + rel);
-    const buf = await readFile(abs);
     const mime = sniffImageMime(buf);
     if (mime === null) {
       throw new Error(
@@ -78,7 +98,7 @@ export const read_image: Tool = {
     return {
       ok: true,
       // output 是给人/日志看的摘要；真正进上下文的是下面这个结构化块。
-      output: "[image] " + basename(rel) + "（" + mime + "，" + String(st.size) + " 字节）已作为图片内容块附上",
+      output: "[image] " + basename(rel) + "（" + mime + "，" + String(size) + " 字节）已作为图片内容块附上",
       images: [{ type: "image", dataUrl }],
       // 用户面引用（同 render_image）：图片只进模型上下文，聊天里是看不见的。
       // 项目外路径不属于工作区产物面，界面无法按 workspacePathAction 打开 ⇒ 不产 artifact。

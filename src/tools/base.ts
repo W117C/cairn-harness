@@ -279,6 +279,35 @@ export async function openContainedFile(
   }
 }
 
+/** Open an already-approved path outside the workspace and bind the handle to
+ * the named inode. The grant decision belongs to resolveReadTarget; this only
+ * makes sure the bytes come from the file that was approved. */
+export async function openVerifiedFile(abs: string, label: string): Promise<ContainedOpen> {
+  let fh: FileHandle | undefined;
+  let target: string;
+  try {
+    target = await realpath(abs);
+  } catch {
+    throw new ToolError(`${label}: 路径不存在或不可解析: ${abs}`);
+  }
+  try {
+    fh = await open(target, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
+    const opened = await fh.stat();
+    const named = await stat(target);
+    if (!sameFileIdentity(opened, named)) {
+      throw new ToolError(`${label}: 路径在打开与复核之间发生变化，拒绝使用不可信句柄: ${abs}`);
+    }
+    return { fh, path: target, stat: opened };
+  } catch (error) {
+    await fh?.close().catch(() => undefined);
+    if (error instanceof ToolError) throw error;
+    const wrapped = new ToolError(`${label}: 路径无法安全打开: ${abs}`);
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== undefined) Object.assign(wrapped, { code });
+    throw wrapped;
+  }
+}
+
 export interface ContainedPathIdentity {
   path: string;
   stat: Stats;

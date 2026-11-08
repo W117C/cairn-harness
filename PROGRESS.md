@@ -37478,3 +37478,31 @@ main 的信任模型要求「指纹与装载消费同一份字节快照」，不
 
 **边界**：`plugins/trust` / `plugins/discover` 仍未切到 `pluginSnapshot`；`evolution/canary`
 的锁段未动；桌面写路径未验。本页只声明上述读数。
+
+## 2026-11-08 · 第 1044 页：安全移植第 4 笔——读路径绑定稳定句柄
+
+本页把 `read_file` / `read_image` 的「stat 之后按路径重读」改成「同一句柄 fstat + 读」，
+并把项目外已批准附件的读取也绑到同一个句柄上。动因是 main 安全线的读路径修复：
+检查与读取之间换掉路径，旧写法会把检查过的名字读成另一份字节。
+
+**改动**：
+- `src/tools/base.ts` 增加 `openVerifiedFile`：项目外路径先 realpath，再以
+  `O_NOFOLLOW` 打开，fstat 与命名 inode 复核一致才交出句柄。工作区内继续走
+  `openContainedFile`。
+- `src/tools/read_file.ts`：移植 `readRegularFilePrefix`（按 fstat 大小分配，
+  多读 1 字节作增长见证）；`readOne` 改用句柄 fstat + 有界读；目录列举对工作区路径
+  捕获并复核目录身份。外部批准目录仍按 grant 面列目录。
+- `src/tools/read_image.ts`：句柄 fstat 判类型/大小，按大小读满，读完再用同一句柄
+  fstat 复核 dev/ino/size/mtime；不再 `stat` 后 `readFile(abs)`。
+
+**判卷**：
+- `tests/read-shape.test.ts` 新增 main 的 growth 用例：`readRegularFilePrefix(fake, 4)`
+  只分配 5 字节并报告 `grewDuringRead=true`——在 1 passed。
+- 读路径相关 5 个文件：45 passed（read-shape、read-image、read-external-grant、
+  loop-external-grant、loop-user-attachments）。
+- 全量 capped：7,949 passed / 2 failed；两条仍是基线 `ccf35864` 同红的
+  `gated-tools` / `runner-gates`。
+- `typecheck`：0 条报错。
+
+**边界**：`read_image` 没有新增「读取中途换文件」的注入用例（本页不声称有）；
+`trust` / `discover` / `canary` 仍未动；桌面读路径未验。
