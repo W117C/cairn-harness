@@ -3,6 +3,7 @@
 // 两边的 frontmatter 默认值（name 回退文件名、description 缺省空串）迟早漂。
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { snapshotIsDirectory, snapshotListDirectory, snapshotReadText, type PluginSnapshot } from "./snapshot";
 import { fmString, parseFrontmatter } from "./frontmatter";
 import type { AgentRoleEntry, PromptCommandEntry, SkillEntry } from "./types";
 
@@ -11,13 +12,24 @@ export async function dirExists(p: string): Promise<boolean> {
 }
 
 /** 装载一个 skill 条目（容器内或散装）；frontmatter name/description 缺省回退目录名。 */
-export async function loadSkillEntry(plugin: string | null, dirName: string, dir: string): Promise<SkillEntry | null> {
+export async function loadSkillEntry(
+  plugin: string | null,
+  root: string,
+  dirName: string,
+  dir: string,
+  snapshot?: PluginSnapshot,
+): Promise<SkillEntry | null> {
   const path = join(dir, "SKILL.md");
-  let text: string;
-  try {
-    text = await readFile(path, "utf8");
-  } catch {
-    return null;
+  let text: string | null;
+  if (snapshot) {
+    text = snapshotReadText(root, path, snapshot);
+    if (text === null) return null;
+  } else {
+    try {
+      text = await readFile(path, "utf8");
+    } catch {
+      return null;
+    }
   }
   const { frontmatter, body } = parseFrontmatter(text);
   const resources = await readSkillResources(dir);
@@ -65,27 +77,41 @@ async function readSkillResources(dir: string): Promise<{ path: string; bytes: n
 }
 
 /** skills/<name>/SKILL.md 整个目录的条目（目录不存在 = 空表）。 */
-export async function readSkillEntries(root: string, dirName: string, plugin: string | null): Promise<SkillEntry[]> {
+export async function readSkillEntries(
+  root: string,
+  dirName: string,
+  plugin: string | null,
+  snapshot?: PluginSnapshot,
+): Promise<SkillEntry[]> {
   const skillsRoot = join(root, dirName);
-  if (!(await dirExists(skillsRoot))) return [];
+  const names = snapshot
+    ? (snapshotIsDirectory(root, skillsRoot, snapshot) ? snapshotListDirectory(root, skillsRoot, snapshot) : [])
+    : (await dirExists(skillsRoot) ? await readdir(skillsRoot) : []);
   const out: SkillEntry[] = [];
-  for (const dir of (await readdir(skillsRoot)).sort()) {
+  for (const dir of names.sort()) {
     const abs = join(skillsRoot, dir);
-    if (!(await dirExists(abs))) continue;
-    const entry = await loadSkillEntry(plugin, dir, abs);
+    if (snapshot ? !snapshotIsDirectory(root, abs, snapshot) : !(await dirExists(abs))) continue;
+    const entry = await loadSkillEntry(plugin, root, dir, abs, snapshot);
     if (entry) out.push(entry);
   }
   return out;
 }
 
 /** commands/*.md → PromptCommandEntry（模板正文与 frontmatter 均为插件契约原样）。 */
-export async function readCommandEntries(root: string, dirName: string, plugin: string | null): Promise<PromptCommandEntry[]> {
+export async function readCommandEntries(
+  root: string,
+  dirName: string,
+  plugin: string | null,
+  snapshot?: PluginSnapshot,
+): Promise<PromptCommandEntry[]> {
   const commandsRoot = join(root, dirName);
-  if (!(await dirExists(commandsRoot))) return [];
+  const names = snapshot
+    ? (snapshotIsDirectory(root, commandsRoot, snapshot) ? snapshotListDirectory(root, commandsRoot, snapshot) : [])
+    : (await dirExists(commandsRoot) ? await readdir(commandsRoot) : []);
   const out: PromptCommandEntry[] = [];
-  for (const f of (await readdir(commandsRoot)).sort()) {
+  for (const f of names.sort()) {
     if (!f.endsWith(".md")) continue;
-    const entry = await readCommandFile(join(commandsRoot, f), f.slice(0, -3), plugin);
+    const entry = await readCommandFile(root, join(commandsRoot, f), f.slice(0, -3), plugin, snapshot);
     if (entry) out.push(entry);
   }
   return out;
@@ -107,7 +133,7 @@ export async function readCommandEntriesDeep(root: string, dirName: string, plug
         continue;
       }
       if (!ent.isFile() || !ent.name.endsWith(".md")) continue;
-      const entry = await readCommandFile(abs, prefix + ent.name.slice(0, -3), plugin);
+      const entry = await readCommandFile(root, abs, prefix + ent.name.slice(0, -3), plugin);
       if (entry) out.push(entry);
     }
   };
@@ -115,9 +141,15 @@ export async function readCommandEntriesDeep(root: string, dirName: string, plug
   return out;
 }
 
-async function readCommandFile(abs: string, name: string, plugin: string | null): Promise<PromptCommandEntry | null> {
-  let text: string;
-  try { text = await readFile(abs, "utf8"); } catch { return null; }
+async function readCommandFile(
+  root: string,
+  abs: string,
+  name: string,
+  plugin: string | null,
+  snapshot?: PluginSnapshot,
+): Promise<PromptCommandEntry | null> {
+  const text = snapshot ? snapshotReadText(root, abs, snapshot) : await readFile(abs, "utf8").catch(() => null);
+  if (text === null) return null;
   const { frontmatter, body } = parseFrontmatter(text);
   return {
     plugin,
@@ -130,14 +162,21 @@ async function readCommandFile(abs: string, name: string, plugin: string | null)
 }
 
 /** agents/*.md → AgentRoleEntry（name 缺省回退文件名）。 */
-export async function readAgentEntries(root: string, dirName: string, plugin: string): Promise<AgentRoleEntry[]> {
+export async function readAgentEntries(
+  root: string,
+  dirName: string,
+  plugin: string,
+  snapshot?: PluginSnapshot,
+): Promise<AgentRoleEntry[]> {
   const agentsRoot = join(root, dirName);
-  if (!(await dirExists(agentsRoot))) return [];
+  const names = snapshot
+    ? (snapshotIsDirectory(root, agentsRoot, snapshot) ? snapshotListDirectory(root, agentsRoot, snapshot) : [])
+    : (await dirExists(agentsRoot) ? await readdir(agentsRoot) : []);
   const out: AgentRoleEntry[] = [];
-  for (const f of (await readdir(agentsRoot)).sort()) {
+  for (const f of names.sort()) {
     if (!f.endsWith(".md")) continue;
     const abs = join(agentsRoot, f);
-    const text = await readFile(abs, "utf8").catch(() => "");
+    const text = snapshot ? snapshotReadText(root, abs, snapshot) ?? "" : await readFile(abs, "utf8").catch(() => "");
     const { frontmatter, body } = parseFrontmatter(text);
     out.push({
       plugin,

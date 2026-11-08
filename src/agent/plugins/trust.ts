@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { readFile, rm, readdir, stat, lstat } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
 import { writeFileAtomic } from "../../atomic-write";
+import { pluginSnapshot } from "./snapshot";
 
 export type TrustState = "trusted" | "declined" | "pending";
 
@@ -54,7 +55,8 @@ export interface PluginFingerprint {
  *  E2（审查）：walk 按 Dirent 判定软链——软链既不入指纹也不静默跳过，直接标记 bounded（加载侧
  *  跟随软链而指纹不 follow 的组合 = 「信任后新增软链 .mcp.json」绕过面）。 */
 export async function pluginFingerprintEx(root: string): Promise<PluginFingerprint> {
-  return await fingerprintDirs(root, [root]);
+  const snapshot = await pluginSnapshot(root);
+  return { fp: snapshot.fp, bounded: snapshot.bounded };
 }
 
 /** 只绑定根下若干相对目录的指纹（外部声明式来源用）：opencode/pi 的根目录里还可能有
