@@ -37427,3 +37427,21 @@ Error: 未知主会话 provider: agnes-ai（内置 5 家，或在 .agent/provide
 
 **边界**：这是 8 笔安全/供应链移植中的第 1 笔；`plugins/trust`、`plugins/discover`、
 `evolution/canary` 三处是架构分叉，按 C.4 的 `redesign` 路径另办，不在本页冒充已修。
+
+## 2026-11-08 · 第 1042 页：安全移植第 2 笔——插件字节快照原件
+
+本页把 main 安全线的 `src/agent/plugins/snapshot.ts` 原件移植到 0.2.0 开发线。
+它不是一笔独立的行为修复，而是后续 `plugins/trust` / `plugins/discover` 重新接线的**前置原件**：
+main 的信任模型要求「指纹与装载消费同一份字节快照」，不能指纹读完再按路径重读。
+
+**判卷先行**：`tests/plugin-snapshot-encoding.test.ts` 原样移植，3 条全过——
+① 文件名里的换行不能与「多一个可执行配置」撞同一指纹；② `.git/config` 是软链时
+`bounded=true`（不可批准）；③ POSIX 文件名里的字面反斜杠不能被路径分隔符归一化吞掉。
+
+**验证**：
+- `tests/plugin-snapshot-encoding.test.ts`：3 passed。
+- `node --import tsx scripts/typecheck.ts`：通过，0 条报错。
+
+**边界（必须明说）**：本页只入库原件与判卷，**没有**把 `trust.ts` / `discover.ts` 切到
+`pluginSnapshot`；开发线当前的指纹仍走 `pluginFingerprintEx` 的旧 walk。接线是下一笔
+`redesign`，不在本页冒充已完成。
