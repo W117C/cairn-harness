@@ -6,7 +6,8 @@
 // 打桩那句"可回取"只在附件**真的落在工作区内**时才交路径（#33）：生产的附件目录在会话日志旁边，
 // 而 `read_file` 只收工作区相对路径 ⇒ 那种情形必须改口"模型侧读不到"，不许递一个走不通的地址。
 import { createHash } from "node:crypto";
-import { access, mkdir, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { mkdir, open } from "node:fs/promises";
 import { join } from "node:path";
 import { workspaceUsablePath } from "./recall-path";
 import type { AgentEvent } from "../events";
@@ -139,23 +140,35 @@ export function isPruneExempt(
 }
 
 /** 附件名安全化：sessionId/callId 都可能来自模型侧输入，直接拼路径会被 `../` 越出
- *  attachmentsDir（目录穿越）。清洗到安全字符集，再用原值 sha1 前 8 位防碰撞
+ *  attachmentsDir（目录穿越）。清洗到安全字符集，再用 SHA-256 前缀防碰撞
  *  （清洗会把不同原值映射到同一串，如 "a/b" 与 "a:b"）。 */
 function safeSegment(raw: string, maxLen: number): string {
   return raw.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, maxLen);
 }
 
+const ATTACHMENT_DIGEST_HEX = 16;
+
+function attachmentDigest(raw: string): string {
+  return createHash("sha256").update(raw).digest("hex").slice(0, ATTACHMENT_DIGEST_HEX);
+}
+
 /** 某会话的附件名前缀（删除会话时按前缀清理；与 attachmentName 同一套清洗，别抄第二份）。
- *  带 sessionId 的 sha1 前 8 位：只按前 32 字符清洗会让两个长会话名共用命名空间。 */
+ *  带 sessionId 的 SHA-256 前缀：只按前 32 字符清洗会让两个长会话名共用命名空间。 */
 export function attachmentPrefixFor(sessionId: string): string {
+  return `${safeSegment(sessionId, 32)}-${attachmentDigest(sessionId)}-`;
+}
+
+/** 旧版 8 位 SHA-1 前缀，只用于迁移/清理既有附件；新写入一律走
+ *  `attachmentPrefixFor` 的 SHA-256 口径。 */
+export function legacyAttachmentPrefixFor(sessionId: string): string {
+  // Compatibility lookup for old filenames; new names use SHA-256.
   const digest = createHash("sha1").update(sessionId).digest("hex").slice(0, 8);
   return `${safeSegment(sessionId, 32)}-${digest}-`;
 }
 
-/** 原文回取：附件文件名（sha1 前缀防碰撞 + 清洗后的 sessionId/callId）。 */
+/** 原文回取：附件文件名（SHA-256 前缀防碰撞 + 清洗后的 sessionId/callId）。 */
 function attachmentName(sessionId: string, callId: string): string {
-  const digest = createHash("sha1").update(callId).digest("hex").slice(0, 8);
-  return `${attachmentPrefixFor(sessionId)}${digest}-${safeSegment(callId, 64)}.txt`;
+  return `${attachmentPrefixFor(sessionId)}${attachmentDigest(callId)}-${safeSegment(callId, 64)}.txt`;
 }
 
 /**
@@ -260,13 +273,24 @@ export async function writePruneAttachments(
       const e = events[id - 1];
       if (e.type !== "tool_result") continue;
       const file = join(attachmentsDir, attachmentName(sessionId, e.callId));
-      // 已存在即跳过：assemble() 每次模型调用都跑，重写 = 白 IO 且把 mtime 冲成"刚刚写过"。
-      // 附件正文与事件日志里是同一段原文（append-only 日志本就存着），落这里只为给模型一个可指的路径。
+      // 独占创建把「不存在」与「写入」合成一步：并发 assemble 不会互相覆盖，也不会
+      // 跟随预先放在附件位置上的软链。EEXIST 是正常的幂等命中。
+      let fh;
       try {
-        await access(file);
-        continue;
-      } catch { /* 不存在（或被清理）→ 重写 */ }
-      await writeFile(file, e.output, "utf8");
+        fh = await open(
+          file,
+          constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0),
+          0o600,
+        );
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === "EEXIST") continue;
+        throw err;
+      }
+      try {
+        await fh.writeFile(e.output, "utf8");
+      } finally {
+        await fh.close();
+      }
     }
   } catch (err) {
     console.debug("[prune] 附件写失败（回取不可用，不阻断）:", err instanceof Error ? err.message : String(err));

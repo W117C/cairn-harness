@@ -37,7 +37,7 @@ export type MemorySurfaceHit = "node:fs" | "fs/promises" | ".agent" | "MEMORY.md
 export function memorySurfaceHits(src: string): MemorySurfaceHit[] {
   const joined = stringLiterals(src).join("\n") + "\n";
   const hits: MemorySurfaceHit[] = [];
-  if (/node:fs(^|[^\w])/u.test(joined)) hits.push("node:fs");
+  if (/\bnode:fs(?!\w)/u.test(joined)) hits.push("node:fs");
   if (/(^|[^.\w])fs\/promises/u.test(joined)) hits.push("fs/promises");
   if (joined.includes(".agent")) hits.push(".agent");
   if (joined.includes("MEMORY.md")) hits.push("MEMORY.md");

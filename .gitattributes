@@ -1,0 +1,34 @@
+# 统一行尾与 diff 口径
+#
+# 仓库主体是跨平台开发的（macOS 为主，CI 也跑 macOS runner），
+# 行尾统一 LF，避免同一文件在不同机器上产生整文件 diff。
+
+* text=auto eol=lf
+
+# ── 二进制：不做行尾转换，也不参与 diff ──
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.ico  binary
+*.pdf  binary
+*.zip  binary
+*.gz   binary
+*.wasm binary
+*.node binary
+
+# ── 取料面（证据面）：只禁行尾转换，**不动 diff 口径** ──
+# 这些文件被门按字节比对，任何行尾转换都会让「证人」与「读数」对不上。
+# ⚠️ 这里刻意**不写** `-diff`：commit-shape 门用 `git diff-tree --numstat`
+# 数这一笔的增删行数，`-diff` 会把取料面判成二进制 ⇒ 行数不计入 ⇒
+# 「删除占比」这一格读到的就不是同一个量了。**一个看起来无害的
+# .gitattributes 改动，会让一道门安静地量到别的东西。**
+outputs/** -text
+
+# ── 锁文件：由包管理器生成。仍然保留 diff（要能看见锁文件的变化） ──
+pnpm-lock.yaml linguist-generated=true
+
+# ── 生成物 ──
+apps/desktop/dist/** linguist-generated=true
+apps/desktop/dist-electron/** linguist-generated=true

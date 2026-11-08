@@ -1,6 +1,8 @@
 // agent-subsystems 域的变异配置条目（2026-10-17 从 scripts/mutate-verify.mjs 按域拆出，见 PROGRESS 第 501 页）。
 // 每条 = 一处语义突变 + 期望被它杀死的具体用例标题。追加条目时放进对应域的文件；
 // **组间顺序不影响任何判据**（每条独立），同一文件内保持原顺序以便 diff。
+import { regexSource } from "./regex-source.mjs";
+
 export const MUTATIONS = [
   // ---- 能力 10 的评测数据层（src/agent/eval/task-set）：外部基准条目的"不许静默丢" ----
   // 这一族唯一的失败方式就是**分母悄悄地少了**：跑出来的成功率照样是个数，没人能看出它量的是半份数据集。
@@ -260,7 +262,10 @@ export const MUTATIONS = [
     src: "src/events/redact.ts",
     test: "tests/redact.test.ts",
     desc: "候选字符集含 `=` ⇒ `SESSION=<高熵>` 整串成为候选，mask() 只留前 4 字符，键名连同值一起吃掉（掩码产物读起来像原文被改坏了）",
-    apply: (s) => s.replace("/[A-Za-z0-9+/_-]{16,}={0,2}/g", "/[A-Za-z0-9+/=_-]{16,}/g"),
+    apply: (s) => s.replace(
+      regexSource("[A-Za-z0-9+/_-]{16,}={0,2}", "g"),
+      regexSource("[A-Za-z0-9+/=_-]{16,}", "g"),
+    ),
     expectFail: "赋值式：值掩掉、键名逐字留着",
   },
   {

@@ -36,7 +36,7 @@ function useEnv(name: string, value: string | undefined): void {
 }
 
 afterEach(async () => {
-  setAppHooks({ onEvent: undefined });
+  setAppHooks({ onAppend: undefined, onAppendFailed: undefined, onEvent: undefined });
   if (dir) await rm(dir, { recursive: true, force: true });
   dir = undefined;
   for (const [k, v] of Object.entries(savedEnv)) {
@@ -80,6 +80,19 @@ describe("手动压缩的产品路径（handleCompact）", () => {
     const p = res.cardPayload ?? {};
     expect(Number(p.tokensBefore)).toBeGreaterThan(Number(p.tokensAfter));
     expect(Number(p.compressedCount)).toBeGreaterThan(0);
+  });
+
+  it("归因钩子先于 append，推送钩子只在成功落盘后触发", async () => {
+    demoMode();
+    const { a } = await twoSessions();
+    const order: string[] = [];
+    Reflect.apply(setAppHooks, undefined, [{
+      onAppend: () => { order.push("append"); },
+      onEvent: () => { order.push("event"); },
+    }]);
+
+    expect((await handleCompact({ sessionId: a })).ok).toBe(true);
+    expect(order).toEqual(["append", "event"]);
   });
 
   it("压的是 sessionId 那条，不是「本进程最后跑过的」那条", async () => {

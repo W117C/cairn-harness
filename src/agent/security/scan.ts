@@ -28,8 +28,6 @@ export {
   type RedactResult,
 } from "../../events";
 import {
-  SECRET_PATTERNS,
-  findHighEntropyTokens,
   redactSecrets,
   secretFindings,
   DEFAULT_ENTROPY,

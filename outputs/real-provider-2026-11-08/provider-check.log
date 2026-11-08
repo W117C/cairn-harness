@@ -1,0 +1,14 @@
+[provider:check] 调用①：纯文本流式（无 tools，stream=true + 默认模型）
+/Users/ze/Downloads/Cairn/.worktrees/integration-main-dev-20261108/src/providers/retry.ts:199
+      throw new Error(`${o.label} 请求失败 HTTP ${String(res.status)}: ${text.slice(0, 300)}`);
+            ^
+
+Error: GLM 请求失败 HTTP 403: {"code":"IDENTITY_VERIFICATION_REQUIRED","message":"请先完成实名认证后继续使用","data":{"reasonCode":"IDENTITY_UNVERIFIED","nextAction":"verify","identityStatus":"unverified","identityCohort":"legacy","identityEntry":"/account/identity","deadlineAt":"2026-10-15T06:41:28.000Z"},"traceId":"trace_0f0cde46-7e93-454b
+    at establishStream (/Users/ze/Downloads/Cairn/.worktrees/integration-main-dev-20261108/src/providers/retry.ts:199:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async streamOnce (/Users/ze/Downloads/Cairn/.worktrees/integration-main-dev-20261108/src/providers/openai.ts:337:19)
+    at async streamOpenAI (/Users/ze/Downloads/Cairn/.worktrees/integration-main-dev-20261108/src/providers/openai.ts:490:3)
+    at async streamGlm (/Users/ze/Downloads/Cairn/.worktrees/integration-main-dev-20261108/src/providers/glm.ts:95:3)
+    at async <anonymous> (/Users/ze/Downloads/Cairn/.worktrees/integration-main-dev-20261108/scripts/provider-check.ts:44:22)
+
+Node.js v24.19.0

@@ -50,6 +50,28 @@ describe("D7 覆盖前快照", () => {
     );
   });
 
+  it("空文件不占快照", async () => {
+    const ws = await freshWorkspace();
+    await writeFile(join(ws, "empty.txt"), "");
+    const r = await write_file.run({ path: "empty.txt", content: "filled\n" }, ctxOf(ws, "call-empty"));
+    expect(r.ok).toBe(true);
+    expect(r.snapshotId).toBeUndefined();
+    expect(existsSync(join(ws, ".agent", "snapshots")), "空文件没有值得保留的原件").toBe(false);
+  });
+
+  it("跨块复制保持逐字节一致", async () => {
+    const ws = await freshWorkspace();
+    const rel = "large.bin";
+    const original = Buffer.allocUnsafe(2 * 1024 * 1024 + 37);
+    for (let i = 0; i < original.length; i++) original[i] = (i * 31 + 7) & 0xff;
+    await writeFile(join(ws, rel), original);
+
+    const r = await write_file.run({ path: rel, content: "replaced\n" }, ctxOf(ws, "call-large"));
+    expect(r.ok).toBe(true);
+    expect(r.snapshotId).toBeTypeOf("string");
+    expect((await readFile(join(ws, r.snapshotId as string))).equals(original)).toBe(true);
+  });
+
   it("edit_file 同口径：快照指向替换前的原文", async () => {
     const ws = await freshWorkspace();
     const rel = "c.ts";

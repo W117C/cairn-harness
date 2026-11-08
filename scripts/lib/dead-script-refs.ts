@@ -6,8 +6,9 @@
  *
  *  判据一律纯函数（同 docs-check 的口径）：输入文件表 → 输出 findings，不触真实仓库；
  *  真实取料只发生在本模块导出的 `collectScriptRefs`，由下面的真仓用例消费。 */
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { join } from "node:path";
+import { readTextFileSnapshotSync } from "./file-snapshot";
 
 /** 已删/不在盘的引用要就地承认：同一行带上「已删」或「未入库」字样即可放行（登记式豁免，不许静默）。 */
 const ACK = /已删|未入库|不再存在/;
@@ -57,12 +58,13 @@ export function findDeadScriptRefs(
 export function collectScriptRefs(root: string): { path: string; text: string }[] {
   const acc: { path: string; text: string }[] = [];
   const walk = (dir: string): void => {
-    for (const name of readdirSync(dir)) {
-      if (name === "node_modules" || name.startsWith(".")) continue;
-      const p = join(dir, name);
-      const st = statSync(p);
-      if (st.isDirectory()) walk(p);
-      else if (/\.(ts|tsx|mts|mjs)$/.test(name)) acc.push({ path: p.slice(root.length + 1), text: readFileSync(p, "utf8") });
+    for (const ent of readdirSync(dir, { withFileTypes: true })) {
+      if (ent.name === "node_modules" || ent.name.startsWith(".")) continue;
+      const p = join(dir, ent.name);
+      if (ent.isDirectory()) walk(p);
+      else if (ent.isFile() && /\.(ts|tsx|mts|mjs)$/.test(ent.name)) {
+        acc.push({ path: p.slice(root.length + 1), text: readTextFileSnapshotSync(p).text });
+      }
     }
   };
   for (const top of ["src", "scripts"]) walk(join(root, top));

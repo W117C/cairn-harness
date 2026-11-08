@@ -67,7 +67,7 @@ export function commentSummary(src: string): string {
  *  拉丁/数字词按 `[A-Za-z_][A-Za-z0-9_]{2,}`（≥3 字符，转小写）。
  *  路径也进语料 ⇒ 问句里写 `sandbox.ts` 时 `sandbox` 这一刀能对上文件名。
  *  区间用转义写：BMP 常用汉字＋扩展 A＋兼容表意文字，避免把区间端点写成字面字符后被复制粘贴磨掉。 */
-const CJK_RUN_RE = /[一-鿿㐀-䶿豈-﫿]{2,}/gu;
+const CJK_RUN_RE = /[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]{2,}/gu;
 export function tokensOf(text: string): string[] {
   const out = new Set<string>();
   for (const run of text.match(CJK_RUN_RE) ?? []) {

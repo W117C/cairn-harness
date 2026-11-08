@@ -11,7 +11,7 @@ import { parseRunAttachment, type RunAttachmentReference } from "./run-attachmen
 import type { SessionMetadataRecord, SessionMetadataRepository } from "./session-metadata";
 import { isSessionLogBusy, markSessionMutating, unmarkSessionMutating } from "./session-liveness";
 import { sessionRunLockHeld } from "./session-lock";
-import { attachmentPrefixFor } from "../agent/prune";
+import { attachmentPrefixFor, legacyAttachmentPrefixFor } from "../agent/prune";
 import { sessionPreferencesPath } from "./session-preferences";
 import { isRecord } from "../is-record";
 import { MAX_SESSION_ID_LENGTH } from "./session-id";
@@ -619,10 +619,11 @@ async function renameSessionUnlocked(
   // 裁剪附件按会话 id 命名：不随重命名迁移的话，之后删除新 id 只清新前缀，旧文件永久残留。
   try {
     const pruneDir = join(root, "prune-attachments");
-    const fromPrefix = attachmentPrefixFor(oldId);
+    const fromPrefixes = [attachmentPrefixFor(oldId), legacyAttachmentPrefixFor(oldId)];
     const toPrefix = attachmentPrefixFor(newName);
     for (const name of await readdir(pruneDir)) {
-      if (name.startsWith(fromPrefix)) {
+      const fromPrefix = fromPrefixes.find((prefix) => name.startsWith(prefix));
+      if (fromPrefix !== undefined) {
         await rename(join(pruneDir, name), join(pruneDir, toPrefix + name.slice(fromPrefix.length)));
       }
     }

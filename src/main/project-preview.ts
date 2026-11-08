@@ -198,7 +198,7 @@ export type PreviewFailureStage = "spec" | "prepare" | "start" | "ready";
 /** 认得「直接预览一个 HTML 文件」的扩展名。
  *
  *  为什么要这一支（2026-10-15 桌面端会话读数）：agent 交付了一个单文件 HTML
- *  （仓库根的 pelican-bicycle.html），点「打开预览」得到的是 spec 阶段失败
+ *  （当时生成的单文件 HTML），点「打开预览」得到的是 spec 阶段失败
  *  「这个文件夹不是 Cairn 模板项目（缺 .cairn/project.json）」+「去用模板新建一个」。
  *  对一个**已经写完的单文件交付物**，那句建议是错的方向——用户要的是"看一眼我写的东西"。
  *  而静态服务本来就能serve任意文件，缺的只是入口认这条路。 */

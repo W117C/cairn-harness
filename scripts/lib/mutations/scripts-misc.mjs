@@ -1,6 +1,8 @@
 // scripts-misc 域的变异配置条目（2026-10-17 从 scripts/mutate-verify.mjs 按域拆出，见 PROGRESS 第 501 页）。
 // 每条 = 一处语义突变 + 期望被它杀死的具体用例标题。追加条目时放进对应域的文件；
 // **组间顺序不影响任何判据**（每条独立），同一文件内保持原顺序以便 diff。
+import { regexSource } from "./regex-source.mjs";
+
 export const MUTATIONS = [
 
   // ── 文档预算门 / 耗时账本 / 可判性闸（spec §7；判据全是纯函数，内存字符串进 findings 出）
@@ -1259,7 +1261,7 @@ export const MUTATIONS = [
     src: "scripts/docs-check.ts",
     test: "tests/docs-check.test.ts",
     desc: "新形状没登记进抽取表 ⇒ 门自己报的那一格永远进不了「可比对」，凭证里那句墙钟还是手抄的（第 266 页那支严格式同族）",
-    apply: (s) => s.replace("  /本趟墙钟 ([0-9]+(?:\\.[0-9]+)?)s/u,\n", ""),
+    apply: (s) => s.replace("  " + regexSource("本趟墙钟 ([0-9]+(?:\\.[0-9]+)?)s", "u") + ",\n", ""),
     expectFail: "严格式认「本趟墙钟」那一档：门自己报的那一格要能进对账面，散文里说墙钟不算（第 267 页）",
   },
   {

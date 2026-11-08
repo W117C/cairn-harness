@@ -3,7 +3,7 @@
 // 真实门在本模块的工具包装里 —— 复用 src/permissions 的 checkPermission，语义与 M0 一致：
 // read-only 拒副作用 / default 询问（UI 批准才执行）/ auto 放行；沙箱不可用时写工具强制逐条审批。
 import { readFileSync } from "node:fs";
-import { rm, mkdir, realpath, appendFile } from "node:fs/promises";
+import { rm, appendFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { basename, dirname, join, resolve } from "node:path";
@@ -34,7 +34,7 @@ import { probeEnvironment, renderEnvironmentFacts } from "../agent/quality/env-f
 import { qualityToolTable } from "../agent/quality/tools";
 import { notesDigest } from "../agent/quality/notes";
 import { createActionFusion } from "../agent/action-fusion";
-import { SolpiRuntime, privateSessionDirectory, removePrivateSessionData, observationRecallSpec, solpiEnabled, type SolpiFlags } from "../agent/solpi-runtime";
+import { SolpiRuntime, privateSessionDirectory, observationRecallSpec, solpiEnabled, type SolpiFlags } from "../agent/solpi-runtime";
 import { createUsageAttributor } from "../agent/usage-attribution";
 import { isSessionLogBusy, markSessionRunLive, unmarkSessionRunLive } from "./session-liveness";
 // 既有消费者（compact 等）从这里取；唯一实现在 session-liveness（删除/重命名也共用）。
@@ -50,11 +50,11 @@ import { createCurrentSessionSearchHistoryTool, searchHistorySpec } from "../too
 import { makeWebFetch, webFetch, type WebFetchDeps } from "../tools/web_fetch";
 import { loadSearchConfig, makeWebSearch, webSearchSpec, type SearchConfig } from "../tools/web-search";
 import { run_shell } from "../tools/run_shell";
-import type { AgentEvent, ClarifyAnswerMap, EventLog, GoalTurnOrigin } from "../events";
+import type { AgentEvent, EventLog, GoalTurnOrigin } from "../events";
 import { frozenJudgePathSet } from "../frozen";
 import { createEventLog, redactEventForLog, replay } from "../events";
 // goal 模式：判据与投影全在纯函数面（src/agent/goal.ts），这里只做「读事件流 → 问它 → 落流 → 起下一轮」。
-import { GOAL_TURN_CAP_MAX, goalReminder, goalStopDecision, goalWindowSpend, parseGoalSpec, projectGoal, type GoalView } from "../agent/goal";
+import { GOAL_TURN_CAP_MAX, projectGoal } from "../agent/goal";
 // 收束后的三支观测读数（目标漂移 / cost-per-progress / 自进化）2026-10-17 搬去
 // `./post-run-readings.ts`：判据仍住在各自的纯模块（goal-drift / cost-per-progress / evolution），
 // 那边只做「读事件流 → 问它 → 印一行」，不新增事件类型。
@@ -70,20 +70,17 @@ import { registeredBrowserAgentTools, BROWSER_AGENT_SPECS } from "../agent/brows
 import { activeContentPackNote } from "./evolution/activation-host";
 // 落流前的文本扫描表（`goal_stopped.reason` 已在表上）：异常原文是外部文本，而这条写入点不经
 // loop 那份 redactEventForLog，扫它就得取这张现成的表，不在这里再抄一遍「哪个字段该擦」。
-import { scanStreamEvent } from "../agent/worker-projection";
-import { checkPermission, enterPlanRunScope, getPlanState, planGateBlocks, rememberDecision, seedPendingPlanFromEvents, type PermissionMode } from "../permissions";
+import { enterPlanRunScope, getPlanState, planGateBlocks, rememberDecision, seedPendingPlanFromEvents, type PermissionMode } from "../permissions";
 import {
   evaluate,
-  isNetworkCommandCall,
   loadPermissionRules,
   type PermissionRule,
   newAutonomySession,
-  type AskScope,
 } from "../permissions";
 import { globalPermissionsPath } from "../permissions/rules";
 import { type ProviderKind } from "./settings";
 import { getLastWorkspace, setRunWorkspace } from "./runner-workspace";
-import { createSession, pathOf, sessionExists, type SessionInfo } from "./sessions";
+import { pathOf, sessionExists } from "./sessions";
 import { validateThinkingEffort } from "../providers/capabilities";
 import type { ModelOutput, Provider } from "../providers";
 import { customProviderById, isFreeformModelId, withCustomProviders } from "../providers/registry";
@@ -114,12 +111,11 @@ import {
 import { TOOLS, type Tool, type ToolResult } from "../tools";
 import { remember } from "../tools/remember";
 import type { ToolName } from "../tools/base";
-import { initMemoryHome, type TopicEntry } from "../agent/memory/store";
-import { runSessionEndDistill } from "../agent/memory/distill";
 export { initMemoryHome } from "../agent/memory/store"; // shell 启动时注入 userData/memory
+import { runSessionEndDistill } from "../agent/memory/distill";
 import { AskGate } from "./ask-gate";
 import type { AskOutcomePayload, AskPayload, RunRequest } from "./ipc-protocol";
-import { checkSandbox, networkProfileFor, runInSandbox, type SandboxStatus } from "./sandbox";
+import { checkSandbox, runInSandbox, type SandboxStatus } from "./sandbox";
 import { resolveRoutingFlags, type RoutingFlagOverrides } from "./routing-flags";
 import { PluginRuntime, trustFilePathOf, setCurrentPluginRuntime, currentPluginRuntime, expandPromptCommand, expandSkillInvocation, commandInvokeName, skillInvokeName } from "../agent/plugins";
 // `TrustStore` 从**实现文件**取，不从 `../agent/plugins` 取：那边是 `export { … } from "./trust"`
@@ -161,24 +157,23 @@ import { acquireSessionRunLock, type SessionRunLock } from "./session-lock";
 import { buildSessionOrchestrator, ensureSessionOrchestrator, setSessionAssemblyDeps, workerShellRunnerFor } from "./session-assembly";
 export { workerShellRunnerFor };
 import {
-  automationsScheduled, handleScheduleSnapshot, initScheduler, installAutomationTools,
+  automationsScheduled, initScheduler, installAutomationTools,
   scheduleDataDir, schedulerEverStarted, setSchedulerRuntimeDeps, startScheduler, stopScheduler, updateScheduleCap,
 } from "./scheduler-runtime";
 import {
   emitGoalEvent, emitGoalStoppedOnThrow, goalNextTurn, setGoalHandlerDeps,
 } from "./goal-handlers";
 import {
-  handleSidechatAsk, handleSidechatCreate, handleSidechatPromote, handleSidechatState, runSidechatDemo,
+  runSidechatDemo,
   setSidechatHandlerDeps,
 } from "./sidechat-handlers";
-import { compactSessionLog, firePreCompactHook, resolveSafeMode, runSecurityReportHook } from "./compact-and-report";
+import { compactSessionLog, firePreCompactHook, runSecurityReportHook } from "./compact-and-report";
 import { currentWorkspace, pluginRuntimeOpts, setPluginSnapshot, setStateHandlerDeps } from "./state-handlers";
 import {
   denied, gatedTool, installPluginTools, pluginToolSpecsFromRuntime, resolveLivePluginTool, sessionToolFace, setToolGateDeps,
   type CardExtra,
 } from "./tool-gates";
 import {
-  handleAgentDecide, handleCardAction, handleClarifySubmit, handlePlanDecide, handleRunCancel,
   setCardActionDeps,
 } from "./card-action-handlers";
 // 演示/剧本通道的**数据面**（fixtures 路径 + 剧本枚举 + demo worker 装配）2026-10-17 搬去
@@ -186,7 +181,7 @@ import {
 // 是导出 API（`tests/usage-attribution.test.ts` 按原路径 import），所以下面**再导出**一次——
 // 那条 `export … from` 只对外可见、**不进本地作用域**，故 上面 import、这里 export 两条都要
 // （本文件 system-prompt 那次搬迁踩过同一个坑，见下面 M10 那段注释）。
-import { DEFAULT_WORKSPACE, MOCK_FIXTURE, loadDemoWorkerModels, scriptedMainModelPath } from "./demo-scripted";
+import { DEFAULT_WORKSPACE, loadDemoWorkerModels, scriptedMainModelPath } from "./demo-scripted";
 export { scriptedMainModelPath };
 // provider 装配面（`resolveProviderKind` + `createProvider`）2026-10-17 搬去 `./provider-assembly.ts`
 // （结构债审查报告 #2 的第二缝）。`resolveProviderKind` 是导出 API（`settings-handlers` 与桌面层
@@ -207,7 +202,7 @@ setSettingsHostDeps({
 // 随本笔搬成 import 之后值已固定，这里保留闭包写法只为不让两处形状分叉）。
 setSchedulerRuntimeDeps({
   defaultWorkspace: () => DEFAULT_WORKSPACE,
-  onEvent: (e) => hooks.onEvent?.(e),
+  onEvent: (e, logPath) => hooks.onEvent?.(e, logPath),
   runSession: (workspace, args) =>
     handleAgentRun({ message: args.message, mode: args.mode }, {
       sessionId: args.sessionId, workspace, unattended: true, signal: args.signal,
@@ -218,13 +213,13 @@ setSchedulerRuntimeDeps({
 
 // goal 面同理（实现住 ./goal-handlers）：事件推送与价键派生按回调注入，其余依赖它自己 import。
 setGoalHandlerDeps({
-  onEvent: (e) => hooks.onEvent?.(e),
+  onEvent: (e, logPath) => hooks.onEvent?.(e, logPath),
   budgetPriceKeyOf: (selection) => budgetPriceKeyOf(selection),
 });
 
 // sidechat 面同理（实现住 ./sidechat-handlers）：事件推送 / 最近 run 日志 / 当前工作区三处活状态注入。
 setSidechatHandlerDeps({
-  onEvent: (e) => hooks.onEvent?.(e),
+  onEvent: (e, logPath) => hooks.onEvent?.(e, logPath),
   lastLogPath: () => lastLogPath,
   currentWorkspace: () => currentWorkspace(),
 });
@@ -258,7 +253,7 @@ setSessionAssemblyDeps({
   activeOrchestrator: () => activeOrchestrator,
   setActiveOrchestrator: (o) => { activeOrchestrator = o; },
   lastLogPath: () => lastLogPath,
-  onEvent: (e) => hooks.onEvent?.(e),
+  onEvent: (e, logPath) => hooks.onEvent?.(e, logPath),
   sandboxState: () => sandboxState,
   orchestratorExtras: (sandbox, runModel, trust, over) => orchestratorExtras(sandbox, runModel, trust, over),
 });
@@ -515,7 +510,9 @@ async function orchestratorExtras(
 }
 
 interface Hooks {
-  onEvent?: (e: AgentEvent) => void;
+  onAppend?: (e: AgentEvent, logPath?: string) => void | (() => void);
+  onAppendFailed?: (e: AgentEvent, logPath?: string) => void;
+  onEvent?: (e: AgentEvent, logPath?: string) => void;
   onAsk?: (p: AskPayload) => void;
   onAskOutcome?: (p: AskOutcomePayload) => void;
 }
@@ -564,11 +561,23 @@ export async function handleCompact(
   const loaded = workspace !== null ? loadCustomProviders(workspace) : { kind: "absent" as const, path: "" };
   const providers = loaded.kind === "ok" ? loaded.derived : [];
   const log = createEventLog(logPath);
+  const sessionId = over.sessionId ?? basename(logPath, ".jsonl");
   try {
     return await withCustomProviders(providers, customProviderKeyForRun, async () => {
       const res = await compactSessionLog(
         logPath!,
-        async (e) => { await log.append(e); hooks.onEvent?.(e); },
+        async (e) => {
+          const hookEvent = { ...e, session_id: sessionId } as AgentEvent;
+          const commit = hooks.onAppend?.(hookEvent, logPath);
+          try {
+            await log.append(e);
+          } catch (error) {
+            hooks.onAppendFailed?.(hookEvent, logPath);
+            throw error;
+          }
+          commit?.();
+          hooks.onEvent?.(hookEvent, logPath);
+        },
         currentPluginRuntime()?.hooks,
       );
       return { ok: res.ok, error: res.error, cardPayload: res.cardPayload };
@@ -948,6 +957,8 @@ export interface RunOptions extends SolpiFlags, ImpactOptions {
   webFetchDeps?: WebFetchDeps;
   /** M1e：会话模式 —— 日志 append 到既有会话（不 rm）。缺省 false（旧行为：fresh 日志）。 */
   sessionId?: string;
+  onAppend?: (e: AgentEvent) => void | (() => void);
+  onAppendFailed?: (e: AgentEvent) => void;
   onEvent?: (e: AgentEvent) => void;
   /** 缺省 = 非交互（ask 按 deny，fail-closed，与 M0 一致）。 */
   askGate?: AskGate;
@@ -1289,7 +1300,15 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
         // 那道闸就静默空转了），所以**日志自己擦**（log.append 内部）⇒ 任何新写的出口
         // 都不可能"忘了擦"（旧形状把擦除藏在 loop 里，新出口漏了没人会报错）。
         usageAttribution.stamp(e); // 落盘前先盖：live 与盘必须是同一个对象（同 events 盖 ts 的口径）
-        await log!.append(e);
+        const hookEvent = opts.sessionId === undefined ? e : ({ ...e, session_id: opts.sessionId } as AgentEvent);
+        const commit = opts.onAppend?.(hookEvent);
+        try {
+          await log!.append(e);
+        } catch (error) {
+          opts.onAppendFailed?.(hookEvent);
+          throw error;
+        }
+        commit?.();
         if (!parentFinished && !(e as { agent_id?: string }).agent_id && e.type === "verify_result") solpi?.meter?.recordVerification({ id: `${e.callId}:${e.attempt}`, ok: e.ok, elapsedMs: null }); // worker 子流不进父验证计量（同投影同口径）
         // 出站面（推给渲染层的那一份）也擦：日志自己擦的是"写进盘的那一份"，
         // 推出去的那一份是另一条出口，同样不能带明文。
@@ -1981,6 +2000,8 @@ export interface RunOverrides
   logPath?: string;
   /** M1e：会话模式 —— run 追加到该会话（不 rm 日志），消息落该会话 JSONL。 */
   sessionId?: string;
+  onAppend?: (e: AgentEvent) => void | (() => void);
+  onAppendFailed?: (e: AgentEvent) => void;
   onEvent?: (e: AgentEvent) => void;
   /** S3 信任闸：本 run 的工作区 verify 命令可否被自动补拍执行。**缺省即拒绝**——
    *  verify 命令 100% 来自仓库自带文件，而那条执行路径上没有权限判定。 */
@@ -2250,12 +2271,25 @@ async function runValidatedRequest(
         evidenceReceipts: (await store().get()).evidenceReceipts,
         economicCompaction: (await store().get()).economicCompaction,
         autoVerifyRepair: (await store().get()).autoVerifyRepair,
+        onAppend: (e) => {
+          const hookEvent = sessionId === undefined ? e : ({ ...e, session_id: sessionId } as AgentEvent);
+          const commits = [over.onAppend?.(hookEvent), hooks.onAppend?.(hookEvent, logPath)]
+            .filter((commit): commit is () => void => typeof commit === "function");
+          return () => {
+            for (const commit of commits) commit();
+          };
+        },
+        onAppendFailed: (e) => {
+          const hookEvent = sessionId === undefined ? e : ({ ...e, session_id: sessionId } as AgentEvent);
+          over.onAppendFailed?.(hookEvent);
+          hooks.onAppendFailed?.(hookEvent, logPath);
+        },
         onEvent: (e) => {
           over.onEvent?.(e);
           // F1（审查 P1-14）：agent:event 是全局通道——事件载荷带 session_id，renderer 按当前
           // 会话过滤（定时/后台 run 的事件不再串进用户正看的会话）。仅标记 UI 推送面，
           // JSONL 落盘内容不变（pipeline 已 append 原事件）；无 sessionId 的旧脚本路径不带标记。
-          hooks.onEvent?.(sessionId !== undefined ? ({ ...e, session_id: sessionId } as AgentEvent) : e);
+          hooks.onEvent?.(sessionId !== undefined ? ({ ...e, session_id: sessionId } as AgentEvent) : e, logPath);
         },
         // #96：`noAnswerer`（cli.ts 在非 TTY 那一路翻的槽）以前只喂 goal 续跑闸，这一行不认它
         // ⇒ 管道形状照样拿交互面那只门去"等人答"，而没有任何人会答：每条写向停 60s。

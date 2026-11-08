@@ -54,6 +54,17 @@ export const MUTATIONS = [
     ),
     expectFail: "原子写：经 tmp→rename 落盘，成功后无 .tmp 残留",
   },
+  {
+    id: "atomic-tmp-follows-preseeded-symlink",
+    src: "src/atomic-write.ts",
+    test: "tests/atomic-write.test.ts",
+    desc: "临时文件丢掉排他/不跟随标志 ⇒ 预先占位的软链把原子写变成任意目标覆写",
+    apply: (s) => s.replace(
+      "constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0)",
+      "constants.O_WRONLY | constants.O_CREAT",
+    ),
+    expectFail: "临时名被预占为软链时 fail closed，不写穿到链接目标",
+  },
   // ---- 方案门（tests/plan-gate.test.ts 此前零锚点：判据最重的一支权限门，全靠断言自己守自己）----
   {
     id: "plan-gate-unapproved-proposal-stops-blocking",

@@ -25,7 +25,6 @@ import { pathToFileURL } from "node:url";
 import {
   IDENTITY_DEBTS,
   classifyDivergence,
-  differsOnlyByWallClock,
   diffJsonPaths,
   reproducibleVerdict,
   stripObservation,

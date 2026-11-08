@@ -24,7 +24,7 @@
  *  用法：`node --import tsx scripts/anim-geometry-check.ts <file.html|file.svg> […]`
  *  退出码 0 = 全过；1 = 有发现（每条带 文件:行）；2 = 用法错（没有参数不假装干净）。
  */
-import { readFileSync, statSync } from "node:fs";
+import { readTextFileSnapshotSync } from "./lib/file-snapshot";
 import { isAbsolute, resolve } from "node:path";
 
 interface Finding {
@@ -188,12 +188,7 @@ function rotateFor(text: string, index: number): [string | undefined, number] | 
 function checkFile(abs: string, rel: string): void {
   let text: string;
   try {
-    const st = statSync(abs);
-    if (!st.isFile()) {
-      findings.push({ file: rel, line: 1, what: "不是文件" });
-      return;
-    }
-    text = readFileSync(abs, "utf8");
+    text = readTextFileSnapshotSync(abs).text;
   } catch (err) {
     findings.push({ file: rel, line: 1, what: "读不到：" + (err instanceof Error ? err.message : String(err)) });
     return;

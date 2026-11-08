@@ -1,12 +1,25 @@
 # Cairn — 可重放的 agent harness
 
-一个事件溯源（event-sourced）的 agent 内核：每一步都落成 JSONL 事件，因此**同一份日志可以被重放、分叉、审计**。
-内核侧没有构建步骤——克隆下来 `npm install` 完就有一条 `cairn` 命令；
-桌面壳是另一条路，`apps/desktop/` 下走 Electron + Vite，需要单独构建（见「这个仓库是什么」）。
+> 一个事件溯源（event-sourced）的 agent 内核：每一步都落成 JSONL 事件，因此**同一份日志可以被重放、分叉、审计**。
+
+[![verify](https://github.com/W117C/cairn-harness/actions/workflows/verify.yml/badge.svg?branch=main)](https://github.com/W117C/cairn-harness/actions/workflows/verify.yml)
+[![release](https://img.shields.io/github/v/release/W117C/cairn-harness?label=release&color=blue)](https://github.com/W117C/cairn-harness/releases)
+[![license](https://img.shields.io/badge/license-%E4%B8%93%E6%9C%89-proprietary-blue)](./LICENSE)
+[![node](https://img.shields.io/badge/node-%3E%3D20.11%20%3C25-5FA04E?logo=node.js)](https://nodejs.org)
+[![pnpm](https://img.shields.io/badge/pnpm-11.21.0-F69220?logo=pnpm)](https://pnpm.io)
+
+**一句话**：给 AI 编码 agent 用的**可审计运行时**——每一步都留痕，事后能重放、能分叉、能审计；
+写操作默认 fail-closed，没人应答时当场拒绝，而不是静默放行。
+
+内核侧**没有构建步骤**：克隆下来装完依赖就有一条 `cairn` 命令。
+桌面壳是另一条路，`apps/desktop/` 下走 Electron + Vite，需要单独构建（见「桌面应用（macOS）」）。
+当前分支职责、未完成事项与优化项见 [项目路线与仓库状态](docs/ROADMAP.md)，
+仓库与分支的现役入口见 [仓库状态与分支](docs/REPOSITORY-STATUS.md)。
 
 ```sh
-git clone <this-repo> && cd cairn-harness
-npm install                       # CLI 走 tsx 通道（运行依赖）
+git clone https://github.com/W117C/cairn-harness.git
+cd cairn-harness
+pnpm install --frozen-lockfile
 export OPENAI_API_KEY=<你的 key>
 ./bin/cairn.mjs "把 tests 里失败的那个用例修好"
 ```
@@ -21,7 +34,8 @@ export OPENAI_API_KEY=<你的 key>
 本包不发布 npm（`private: true`），装法是克隆仓库后跑安装脚本：
 
 ```sh
-git clone <this-repo> && cd cairn-harness
+git clone https://github.com/W117C/cairn-harness.git
+cd cairn-harness
 ./scripts/install.sh        # 按 package.json 的 engines 判 Node 版本；pnpm 在则 pnpm install，否则 npm install
 ./bin/cairn.mjs --doctor    # 环境自检：Node / 凭据在位 / 沙箱 / 工作区可写 / 设置与会话数据面（坏档点名文件；不回显密钥值）
 ./bin/cairn.mjs --version   # 打印版本（cairn <version>）
@@ -47,17 +61,18 @@ git clone <this-repo> && cd cairn-harness
 ![关于与更新：版本、构建来源、许可证与偏好备份](assets/readme/cairn-settings-about.png)
 
 ```sh
-pnpm install
+pnpm install --frozen-lockfile
 pnpm --filter cairn-desktop build     # preload + renderer + typecheck
 pnpm --filter cairn-desktop smoke     # 真窗口启动冒烟（不跑模型）
+pnpm --filter cairn-desktop package   # 生成 apps/desktop/release/（含 release.json 与 SHA256SUMS）
+# 等价旧入口（仍支持；release-* 目录在 .gitignore 内）：
 node apps/desktop/scripts/package.mjs --out apps/desktop/release-$(date +%Y%m%d)
-node apps/desktop/scripts/install-smoke.mjs apps/desktop/release-$(date +%Y%m%d)/Cairn.dmg
 ```
 
 打包脚本会先 `build`，再用打包后的 `Cairn.app` 跑一次真窗口冒烟；**只有冒烟通过才产出目录**。`install-smoke.mjs` 再把 DMG 挂起来、把 app 复制到临时目录（模拟拖进 Applications）跑同一套冒烟，证明离开 release 目录也能启动。
 产物含 `Cairn.app`、`Cairn.dmg`（`hdiutil` 不可用时回退 `Cairn-macOS.zip`）、`build-info.json`
 （版本、lock 哈希、`packagedSmoke: passed`、签名方式、构建时间）。DMG 内是 `Cairn.app` +
-`Applications` 快捷方式与安装说明，打开后直接拖进去即可。当前保留 ad-hoc 封装，暂不做 Developer ID 签名或 Apple 公证；换机器的单应用隔离处置、架构要求、密钥配置与手工升级见 [macOS 内测安装说明](docs/macos-trial.md)。`build-info.json` 另记录 `sourceCommit` / `sourceDirty`，含未提交修改的包不会冒充干净提交。
+`Applications` 快捷方式与安装说明，打开后直接拖进去即可。当前保留 ad-hoc 封装，暂不做 Developer ID 签名或 Apple 公证；换机器的单应用隔离处置、架构要求、密钥配置与手工升级见 [macOS 内测安装说明](docs/desktop-preview.md)。`build-info.json` 另记录 `sourceCommit` / `sourceDirty`，含未提交修改的包不会冒充干净提交。
 
 发布更新清单：
 

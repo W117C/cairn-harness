@@ -1,6 +1,6 @@
 // Run-local SoL-Pi integration. Archives are redacted TEXT, never raw process bytes.
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, realpath, stat, lstat, chmod, writeFile, readFile, rename, rm } from "node:fs/promises";
+import { mkdir, realpath, stat, lstat, chmod, writeFile, rename, rm } from "node:fs/promises";
 import { dirname, join, relative, isAbsolute } from "node:path";
 import type { AgentEvent } from "../events";
 import type { Tool, ToolResult } from "../tools";

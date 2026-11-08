@@ -1,5 +1,5 @@
 // render_image 判卷：三道闸（界内+可渲染类型 / Chrome 缺席 fail-closed / PNG 复核与帽）
-// + 一次**真渲染**（用本仓那份 pelican-bicycle.html，1.2s 出图）证明这条路不是空壳。
+// + 一次**真渲染**（用本仓那份 fixtures/artifacts/cycling-animation.html，1.2s 出图）证明这条路不是空壳。
 //
 // 为什么值得一次真渲染：识图回路此前的失败模式是**静默的**——模型在回执里看到
 // 「已附上」而请求体里没有图。静默失败只有真跑一遍才看得见。
@@ -209,12 +209,12 @@ describe("权限面：render_image 与 lsp 同族（执行进程、不改盘、�
   });
 });
 
-describe("真渲染（用本仓那份 pelican-bicycle.html）", () => {
+describe("真渲染（用本仓那份 fixtures/artifacts/cycling-animation.html）", () => {
   it("Chrome 在 ⇒ 1.2s 量级出图，且是一张真的 PNG", async () => {
-    const html = join(process.cwd(), "pelican-bicycle.html");
+    const html = join(process.cwd(), "fixtures/artifacts/cycling-animation.html");
     if (!existsSync(html)) return; // 文件不在（被清掉）就不硬跑这一格
     const tool = makeRenderImage(); // 真 findChrome + 真 shoot
-    const r = await tool.run({ path: "pelican-bicycle.html", width: 400 }, { workspace: process.cwd() });
+    const r = await tool.run({ path: "fixtures/artifacts/cycling-animation.html", width: 400 }, { workspace: process.cwd() });
     // 本机没装 Chrome 时这一格如实跳过，不假装通过
     if (!r.ok) { expect(r.output).toContain("Chrome"); return; }
     expect(r.images).toHaveLength(1);

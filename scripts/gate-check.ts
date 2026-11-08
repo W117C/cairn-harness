@@ -7,7 +7,7 @@
 //   暗卷（任务 6，有 key 才跑）：真实 GLM 跑同一任务，断言模型至少各调一次 clarify 与 propose_plan；
 //     无 key → 退出码 0 并打印「暗卷跳过（无 CAIRN_API_KEY）」
 // 任一断言失败 → 退出码非 0。
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
 import { vitestSummary } from "./lib/vitest-summary";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";

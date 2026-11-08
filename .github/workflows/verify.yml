@@ -10,12 +10,26 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+
+# 并发组：同一个 ref 上只留最新的一趟在跑，旧的被取消。
+# 为什么加这一格（2026-10-25）：本仓每趟 verify 要跑完整判卷 + 25 道快门，
+# 连续推送时会叠出好几趟并行——重复的是同一份树，浪费的是计费分钟。
+# 取消的是**被取代**的那一趟，不是最新那趟：最新那趟仍会跑完并给出读数。
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# 最小权限：这道门只需要读仓库（checkout + 跑判卷）。
+# 历史上 workflows 默认拿到写权限，那是**能用上但用不到**的权限面。
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: macos-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # 全量历史（2026-10-12 第一次 CI 自评抓到的洞）：本仓判卷里有五处**吃 git 历史**——
           # docs-check 的 D-5（PROGRESS.md 引了 445 个提交 sha，逐个核可达）、
@@ -28,7 +42,7 @@ jobs:
       # 原始 commit 对象（原 SHA 不变），供 D-5 查身份；不宣称恢复了整条历史或代码快照。
       - name: restore archived citation objects
         run: git unpack-objects < archive/git-citation-records-2026-11-01.pack
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         # 第 475 页：**这一格刻意不写 `with: version:`**——版本只住在 package.json 的 `packageManager`
         # 里（现读 `pnpm@11.21.0`），action 自己会去读它。两处同时写会被 action 直接判红
         # （`Multiple versions of pnpm specified`，10-13 那趟实测），那比"漂"更早暴露，但也更冤：
@@ -36,7 +50,7 @@ jobs:
         # （9 读 package.json 的 `pnpm` 字段、11 读 `pnpm-workspace.yaml`，11 对前者只印 warning 就忽略）
         # ⇒ 差一个大版本，同一份锁文件在两处会被解释成两种配置，CI 上直接
         # `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH`。
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           # bench 逐名规格在 Node 24 生成；22 缺省 TAP、24 缺省 spec，含换行的名称不同。
           # 与当前开发/打包运行时对齐，不改冻结靶子或逐名规格。
@@ -45,7 +59,15 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: typecheck
         run: pnpm typecheck
+      - name: Electron runtime matches installed package
+        timeout-minutes: 5
+        env:
+          ELECTRON_RUN_AS_NODE: "1"
+        run: >-
+          pnpm --filter cairn-desktop exec electron -e
+          'const assert = require("node:assert/strict"); const expected = require("electron/package.json").version; assert.equal(process.versions.electron, expected); console.log(JSON.stringify(process.versions));'
       - name: full test suite
+        # 同一套核心测试，固定两个 worker；命令与本地可复现入口同源。
         run: pnpm test:capped
       - name: desktop tests
         run: pnpm --filter cairn-desktop test

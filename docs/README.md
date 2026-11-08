@@ -17,6 +17,8 @@ D-4 no append-to-refute, D-5 `STATE.md` names a real commit).
 Useful entry points:
 
 - [`REPOSITORY-STATUS.md`](REPOSITORY-STATUS.md) — current repository/branch map, active worktrees, integration gaps, cleanup status, and links to historical evidence
+- [`ROADMAP.md`](ROADMAP.md) — branch roles, unfinished work, queued work, and optimization priorities
+- [`history-evidence-migration.md`](history-evidence-migration.md) — 2026-11-08 `outputs/` archive, per-file inventory, restore verification, and deletion boundary
 - `src/agent/loop.ts` — agent loop
 - `src/tools/` — tool implementations
 - `src/providers/` — provider adapters

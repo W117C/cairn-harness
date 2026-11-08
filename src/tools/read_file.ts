@@ -1,5 +1,5 @@
 import { readdir, stat } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import { assertContainedPathIdentity, captureContainedPath, openContainedFile, openVerifiedFile, resolveReadTarget, ToolError, type Tool, type ToolContext, type ToolResult } from "./base.js";
 import { byteCapNotice, clipLine } from "./cap-notice.js";
 import { headWithinBytes, utf8PrefixEnd } from "./output-ring.js";
@@ -65,7 +65,10 @@ function looksBinary(buf: Buffer): boolean {
 
 // 未命中时给最多 3 个近名建议：同目录前缀匹配优先，其次同扩展名。
 async function nearNameSuggestions(workspace: string, rel: string): Promise<string[]> {
-  const dir = dirname(join(workspace, rel));
+  const lexicalDir = dirname(join(workspace, rel));
+  const inspected = await captureContainedPath(workspace, lexicalDir, "read_file").catch(() => null);
+  if (inspected === null || !inspected.stat.isDirectory()) return [];
+  const dir = inspected.path;
   const base = basename(rel);
   let entries: string[];
   try {
@@ -88,8 +91,8 @@ async function nearNameSuggestions(workspace: string, rel: string): Promise<stri
     .sort((a, b) => b.score - a.score || a.e.localeCompare(b.e))
     .slice(0, 3)
     .map((x) => x.e);
-  const dirRel = dir === workspace ? "" : dir.slice(workspace.length + 1) + "/";
-  return scored.map((e) => dirRel + e);
+  const dirRel = relative(workspace, dir).replaceAll("\\", "/");
+  return scored.map((e) => (dirRel === "" ? e : dirRel + "/" + e));
 }
 
 /** 读**一份**：单份路径的全部现存语义（目录、二进制、大文件前缀、行/字节帽、offset/limit 提示）

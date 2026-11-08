@@ -88,11 +88,11 @@
   "devDependencies": {
     "@types/node": "^26.5.0",
     "typescript": "^5.9.3",
-    "vitest": "^5.0.0"
+    "vitest": "^5.0.5"
   },
   "dependencies": {
     "tsx": "^4.23.13",
-    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@vscode/ripgrep": "^1.18.0",
     "croner": "^10.0.1",
     "smol-toml": "1.9.0",

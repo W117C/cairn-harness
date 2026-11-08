@@ -25,7 +25,7 @@
  *  用法：`node --import tsx scripts/svg-figure-check.ts <file.svg|file.html> […]`
  *  退出码 0 = 全过；1 = 有发现（每条带 文件:行）；2 = 用法错。
  */
-import { readFileSync, statSync } from "node:fs";
+import { readTextFileSnapshotSync } from "./lib/file-snapshot";
 import { isAbsolute, resolve } from "node:path";
 
 interface Finding {
@@ -72,16 +72,13 @@ function viewBoxOf(text: string): { w: number; h: number } | null {
 function checkFile(abs: string, rel: string): void {
   let text: string;
   try {
-    const st = statSync(abs);
-    if (!st.isFile()) {
-      findings.push({ file: rel, line: 1, what: "不是文件" });
-      return;
-    }
+    const snapshot = readTextFileSnapshotSync(abs);
+    const st = snapshot.stat;
     if (st.size === 0) {
       findings.push({ file: rel, line: 1, what: "空文件——没有可交付的内容" });
       return;
     }
-    text = readFileSync(abs, "utf8");
+    text = snapshot.text;
   } catch (err) {
     findings.push({ file: rel, line: 1, what: "读不到：" + (err instanceof Error ? err.message : String(err)) });
     return;
@@ -179,7 +176,7 @@ function checkFile(abs: string, rel: string): void {
   }
 
   // ---- ①②：两个轮子 = 两组**同心圆**里半径最大的那两个 ----
-  // 为什么不能按「最大的两个圆」取：实测误报（本仓 pelican-bicycle.html，17 条假红）——
+  // 为什么不能按「最大的两个圆」取：实测误报（本仓 fixtures/artifacts/cycling-animation.html，17 条假红）——
   // 那份图里最大的圆是**太阳** r=70，而两个真实的轮子是 r=70 的轮圈 + r=60 的胎面 + r=7 的轮毂
   // （同心）。按"最大两个圆"取，会拿到「太阳 + 一个轮圈」，于是报
   // 「半径不等 / 圆心距 0 几乎重合」——把一份正确的产物判成 17 条错。

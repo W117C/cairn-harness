@@ -1,0 +1,56 @@
+# CodeQL 分析 core、desktop、CLI 与门禁源码。仓库公开后可用；与 verify 的功能回归分别取证。
+# main 推送与面向 main 的 PR 自动运行，保留手动入口；告警需逐项核对，不替代运行验证。
+name: codeql
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: analyze (javascript-typescript)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # 与 verify 同一条理由：本仓判卷吃 git 历史（见 verify.yml 的注释）。
+          fetch-depth: 0
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+          build-mode: none
+          # 本仓没有自建编译产物，JavaScript/TypeScript 走的是**无构建**分析面。
+          # 这是 CodeQL 对 JS/TS 的官方推荐形态：不需要 npm run build。
+          queries: security-and-quality
+          # 分析面覆盖两处运行时：内核（electron-free）与桌面壳。
+          # 两者在同一棵树里，所以 config 只声明路径，不拆 job。
+          config: |
+            paths:
+              - src
+              - apps/desktop/src
+              - bin
+              - scripts
+            paths-ignore:
+              - outputs
+              - fixtures
+              - archive
+              - node_modules
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:javascript-typescript"

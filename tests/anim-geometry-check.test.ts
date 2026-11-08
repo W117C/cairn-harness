@@ -10,7 +10,7 @@
  *      实测踩过：一份用 requestAnimationFrame 写的产物（全文 0 个 `<animate>`）拿到了全绿，
  *      而那份产物的「IK」是把小腿按大腿同一个角度旋转再固定偏移，根本没有膝关节。
  *      「没解析到」与「数据没问题」在退出码上同形，等于给了一条绕过整把尺的免费通道；
- *   ③ **好标本仍绿**——本仓那份 pelican-bicycle.html 是已知正确的（脚贴踏板偏差 0.001px），
+ *   ③ **好标本仍绿**——本仓那份 fixtures/artifacts/cycling-animation.html 是已知正确的（脚贴踏板偏差 0.001px），
  *      它必须退 0，否则这把尺在把正确产物判红。
  *
  *  断言一律走子进程（这就是 verify 调用它的方式），不在进程里 import 后调 main——那样测不到退出码。 */
@@ -99,8 +99,8 @@ const goodLeg = (phaseDeg: number): string =>
   });
 
 describe("正向：好标本必须退 0", () => {
-  it("本仓那份 pelican-bicycle.html（已知正确：脚贴踏板偏差 0.001px）", () => {
-    const r = run(["pelican-bicycle.html"]);
+  it("本仓那份 fixtures/artifacts/cycling-animation.html（已知正确：脚贴踏板偏差 0.001px）", () => {
+    const r = run(["fixtures/artifacts/cycling-animation.html"]);
     expect(r.code).toBe(0);
   });
 
