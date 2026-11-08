@@ -128,7 +128,10 @@ export const git_read: Tool = {
         return { ok: false, output: "git_read: 仓库配置了可执行的 Git clean/process 过滤器，无法安全比较工作区" };
       }
       const outsideRepo = filters.code === 128 && /--local can only be used inside a git repository/i.test(filters.stderr);
-      if (!outsideRepo && (filters.code !== 1 || filters.stderr !== "")) {
+      // git config --get-regexp 的 1 就是「没有匹配」；stderr 里的提示不影响这个
+      // 分支，否则 CI 的 Git 环境会把干净仓库误判成无法确认。128 只在非 git 仓出现，
+      // 交给后面的 status 统一报「不在 git 仓库内」。
+      if (!outsideRepo && filters.code !== 1) {
         return { ok: false, output: "git_read: 无法确认 Git 过滤器配置，已拒绝比较工作区" };
       }
     }
