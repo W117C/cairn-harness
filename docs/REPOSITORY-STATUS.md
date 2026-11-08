@@ -18,7 +18,7 @@
 | `main` | 与 `origin/main` 一致（`2e6ccd28`） | 保留；主线基准 |
 | `fix/spec-summary-double-count` | 活跃开发线，已推送；与 main 分叉 | 保留；作为集成来源 |
 | `integration/main-dev-20261108` | 开发线 + main 安全/漂移修复 + 公开候选打包面 | 保留；当前集成候选 |
-| `product/public-candidate-20261108` | 公开门面与打包批；可快进到集成 tip | 保留；公开候选 |
+| `product/public-candidate-20261108` | 公开门面与打包批；已快进到集成 tip `c0ba4c21` | 保留；公开候选 |
 | `rescue/code-scanning-closure-wip-20261104` | 清理前从 code-scanning worktree 收编的未提交改动（1 笔） | 保留；未经判卷，未合入任何线 |
 | `rescue/wip-20261025` | 相对主线与开发线均有独有提交 | 保留；救援快照 |
 
