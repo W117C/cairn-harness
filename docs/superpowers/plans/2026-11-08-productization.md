@@ -126,5 +126,11 @@
 - 真实 provider：`--doctor` 通过，但 `provider-check.ts` 在建立流时收到 HTTP 403
   `IDENTITY_VERIFICATION_REQUIRED`（账户实名认证未完成）；调用②、真实任务与跨机器验收未执行。
   证据在 `outputs/real-provider-2026-11-08/`，不把本次尝试写成真实模型通过。
+- 判卷（集成 tip `f465f66f`）：core `7977` 条中 `7975` 过、`2` 条仍是 `ccf35864` 同红的
+  `gated-tools` / `runner-gates`；桌面 `332` 文件 / `2298` 条全绿；根 typecheck 0；renderer-layer、
+  desktop-boundary、docs-check 全绿；桌面 build 通过。
+- 门禁：`scripts/gates.ts --direct` 跑到 `head-cert-check` 时红（认证树同套判卷 2 条基线红，
+  因此 25 道认证面红）；`mutate-verify` 未跑完（超时终止）。证据见
+  `outputs/head-cert-f465f66-2026-11-08-1217/provenance.md`；不把这次门禁写成全绿。
 - 未完成：清单二第 3、4、6 项（隐私审阅、实际迁出、消费者改链）、清单四的跨机器与真实模型项、
-  清单三的最终 HEAD 门禁。
+  清单三的最终 HEAD 门禁全绿。

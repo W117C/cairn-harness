@@ -1,8 +1,8 @@
 # Cairn / DSH —— 现态
 
-rev: ed36023c
+rev: f465f66f
 
-核对日期：2026-11-08（Asia/Shanghai）。`rev` 是集成分支开工基线；本轮把 `main` 的 PR #18/#19
+核对日期：2026-11-08（Asia/Shanghai）。`rev` 是现役集成分支基线；本轮把 `main` 的 PR #18/#19
 与公开候选的打包批合入开发线，提交后以新 tip 为现役基线。仓库与分支入口见
 [仓库状态与分支](docs/REPOSITORY-STATUS.md)；历史与证据在 `PROGRESS.md`、`outputs/`、`archive/`，
 本页只写状态与下一步。
