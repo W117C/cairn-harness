@@ -48,5 +48,6 @@ rev: 2ce852b6
 
 - 本页所在工作树已跑根 typecheck；core/desktop 全量与 `docs-check` 的读数按对应提交现跑，
   不把历史认证转移到新树。
-- `pnpm gates` / `head-cert-check` / `mutate-verify` 量的是提交，未提交前不引用；提交后补跑再登记。
+- `head-cert-check` 在 `f6bece63` 上 25/25 道绿（core `7977/7977`，证据 `outputs/head-cert-f6bece6-2026-11-08-1307/`）；
+  完整 `mutate-verify` 变异跑未执行，不引用其全绿。
 - 离屏假 API 截图与几何读数证明版式与状态属性；真机观感（字体渲染、拖拽、Radix 菜单手感）归业主目验。

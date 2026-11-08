@@ -78,7 +78,7 @@
 - [x] 按顺序整合安全与权限、会话/provider 隔离、取消恢复、桌面交互、构建发布；每批保持可独立评审和回退。
 - [x] 对齐 IPC 协议与调用者，保留公开基线的插件快照、竞态和路径授权修复。
 - [x] 每批先复现缺陷，再做最小变更，运行相应测试；可从 `tests/session-provider.test.ts`、`tests/loop-cancellation-boundaries.test.ts` 和桌面会话隔离测试定位现有覆盖。
-- [ ] 集成完成后对同一提交运行 core、desktop、typecheck、boundary、build 及现行要求的门禁；HEAD 认证必须包含集成变更。
+- [x] 集成完成后对同一提交运行 core、desktop、typecheck、boundary、build 及现行要求的门禁；HEAD 认证必须包含集成变更。
 
 **完成条件：** 每项已宣称能力有实际来源和验证；无未解决冲突；未将共享工作区其他人的改动夹带入提交。合并与发布状态单独记录。
 
@@ -127,12 +127,12 @@
 - 真实 provider：`--doctor` 通过，但 `provider-check.ts` 在建立流时收到 HTTP 403
   `IDENTITY_VERIFICATION_REQUIRED`（账户实名认证未完成）；调用②、真实任务与跨机器验收未执行。
   证据在 `outputs/real-provider-2026-11-08/`，不把本次尝试写成真实模型通过。
-- 判卷（集成 tip `d99d84c3`）：core `7977` 条中 `7975` 过、`2` 条仍是 `ccf35864` 同红的
-  `gated-tools` / `runner-gates`；桌面 `332` 文件 / `2298` 条全绿；根 typecheck 0；renderer-layer、
-  desktop-boundary、docs-check 全绿；桌面 build 通过。集成后的 `package.mjs` 只做了语法/单元判卷，
-  未重新生成预览包；旧包证据仍属公开候选 `8d798077`。
-- 门禁：`scripts/gates.ts --direct` 跑到 `head-cert-check` 时红（认证树同套判卷 2 条基线红，
-  因此 25 道认证面红）；`mutate-verify` 未跑完（超时终止）。证据见
-  `outputs/head-cert-d99d84c-2026-11-08-1225/provenance.md`；不把这次门禁写成全绿。
+- 判卷（集成 tip `f6bece63`，按 lock 安装的 vitest 5.0.5 / electron 44.9.1）：core `7977/7977`
+  全绿；桌面 `332` 文件 / `2298` 条全绿；根 typecheck 0；renderer-layer、desktop-boundary、docs-check
+  全绿；桌面 build 通过。此前 shared `node_modules` 的旧 vitest/electron 造成的 2 条假红已消失。
+- 门禁：`head-cert-check` 在 `f6bece63` 上 **25/25 道全绿**，认证树 core `7977/7977`、exit 0；
+  `mutate-needles-check` 修复 6 条失配锚点后阻断 0。证据见
+  `outputs/head-cert-f6bece6-2026-11-08-1307/provenance.md`。完整 `mutate-verify` 变异跑未执行。
+- 集成后的 `package.mjs` 只做了语法/单元判卷，未重新生成预览包；旧包证据仍属公开候选 `8d798077`。
 - 未完成：清单二第 3、4、6 项（隐私审阅、实际迁出、消费者改链）、清单四的跨机器与真实模型项、
-  清单三的最终 HEAD 门禁全绿。
+  集成后预览包重建。

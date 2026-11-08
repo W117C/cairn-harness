@@ -55,9 +55,9 @@
 
 ## 下一步
 
-- 对集成 tip 跑 core/desktop/typecheck/boundary/build 与现行门禁；两条已知基线红（`gated-tools` / `runner-gates`）
-  在 `ccf35864` 同红，不能当作本批回归，也不能当作本批已修。
-- 集成 tip 通过后，在隔离工作区把 `product/public-candidate-20261108` 快进到同一提交；不直接改 `main`，不推送、不发布。
+- 集成 tip `f6bece63` 已跑：core `7977/7977`、桌面 `332` 文件 / `2298` 条、typecheck、boundary、docs-check、
+  desktop build 全绿；`head-cert-check` 25/25 道绿。完整 `mutate-verify` 变异跑未执行。
+- `product/public-candidate-20261108` 已快进到集成 tip；未直接改 `main`，未推送、未发布。
 - 真实 provider 验收被账户实名认证阻塞，证据见 `outputs/real-provider-2026-11-08/`；认证完成后重跑。
 
 ## 读数与新旧
