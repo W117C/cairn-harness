@@ -21,6 +21,9 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
+        with:
+          # head-import-face 这类产品门会对比 HEAD 与 HEAD~1；浅克隆会把它误读成 null。
+          fetch-depth: 2
       - uses: pnpm/action-setup@v6
         # Version comes from package.json#packageManager only — do not add a second copy here.
       - uses: actions/setup-node@v7
