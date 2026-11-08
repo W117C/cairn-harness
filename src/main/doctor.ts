@@ -14,9 +14,11 @@ import { ENV_KEYED_PROVIDERS, PROVIDER_ENV_KEYS } from "../providers/env-keys";
 import { effectiveModelTable, specsByTier } from "../providers/registry";
 import { loadSearchConfig } from "../tools/web-search";
 import { checkSandbox, type SandboxStatus } from "./sandbox";
+import { SettingsStore } from "./settings";
+import { SessionMetadataRepository } from "./session-metadata";
 
 export interface DoctorCheck {
-  id: "node" | "keys" | "tiers" | "sandbox" | "workspace" | "search" | "trust";
+  id: "node" | "keys" | "tiers" | "sandbox" | "workspace" | "settings" | "sessions" | "search" | "trust";
   ok: boolean;
   detail: string;
   /** 只有 node 版本这一项可能是 true（spec：环境级阻断 exit 1）；其余项只报不红。 */
@@ -149,6 +151,12 @@ export interface TrustFaceFacts {
   entries: { trusted: number; declined: number } | null;
 }
 
+/** 用户数据面（设置文件 / 会话元数据）的三态：缺席不是病，读不出要报。 */
+export type DoctorFileFace =
+  | { kind: "absent"; path: string }
+  | { kind: "ok"; path: string }
+  | { kind: "broken"; path: string; message: string };
+
 export interface DoctorFacts {
   nodeVersion: string;
   engines: string;
@@ -156,6 +164,11 @@ export interface DoctorFacts {
   keyPresence: Record<string, boolean>;
   sandbox: SandboxStatus;
   workspaceWritable: boolean;
+  /** 与运行期同路径：<ws>/.agent/settings.json（坏档 = 设置全部不生效的根因）。 */
+  settingsFace: DoctorFileFace;
+  /** <ws>/.agent/sessions/session-metadata.json（坏档 = 桌面会话列表整片读不出来）。 */
+  sessionsFace: DoctorFileFace;
+
   search: SearchReadout;
   tierCounts: { total: number; cheap: number; standard: number; strong: number };
   trust: TrustFaceFacts;
@@ -236,6 +249,50 @@ export function trustFaceCheck(t: TrustFaceFacts): DoctorCheck {
   };
 }
 
+/** 设置/会话两个用户数据面的共同渲染：缺席 = ok（新工作区），坏档 = ✗ 非致命（只报不阻断）。 */
+function fileFaceCheck(
+  id: "settings" | "sessions",
+  face: DoctorFileFace,
+  copy: { absent: string; ok: string; broken: (face: { path: string; message: string }) => string; hint: string },
+): DoctorCheck {
+  if (face.kind === "broken") {
+    return { id, ok: false, fatal: false, detail: copy.broken(face), hint: copy.hint };
+  }
+  return { id, ok: true, fatal: false, detail: face.kind === "ok" ? copy.ok : copy.absent };
+}
+
+/** 设置文件：与 CLI/桌面同一个首读判定（SettingsStore.get + loadIssue），不另写一份解析。 */
+async function readSettingsFace(path: string): Promise<DoctorFileFace> {
+  const store = new SettingsStore(path);
+  await store.get();
+  const issue = store.loadIssue();
+  return issue === null ? { kind: "ok", path } : { kind: "broken", path, message: issue.message };
+}
+
+/** 会话元数据：与桌面列表同一个仓库判定（list() 抛 = 坏档）；缺文件 = 还没建会话。
+ *  先看目录本身可写位：只读挂载下运行与压缩都会撞锁，这是「会话」这一面的第一个事实。 */
+async function readSessionsFace(root: string): Promise<DoctorFileFace> {
+  const path = join(root, "session-metadata.json");
+  try {
+    await access(root, constants.W_OK);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { kind: "absent", path };
+    return { kind: "broken", path: root, message: `会话目录不可写：${error instanceof Error ? error.message : String(error)}` };
+  }
+  try {
+    await stat(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { kind: "absent", path };
+    return { kind: "broken", path, message: error instanceof Error ? error.message : String(error) };
+  }
+  try {
+    await new SessionMetadataRepository(path).list();
+    return { kind: "ok", path };
+  } catch (error) {
+    return { kind: "broken", path, message: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 export function collectDoctorChecks(f: DoctorFacts): DoctorCheck[] {
   const checks: DoctorCheck[] = [];
   const range = parseEngines(f.engines);
@@ -257,11 +314,14 @@ export function collectDoctorChecks(f: DoctorFacts): DoctorCheck[] {
     id: "keys",
     ok: present.length > 0,
     fatal: false,
+    // 计数与环境变量名都从 ENV_KEYED_PROVIDERS 现读——DeepSeek 入表后「四个」成了谎报，
+    // 而这里恰是用户排查「为什么没拨号」的第一站。
     detail: present.length > 0
       ? "缺省将拨 " + present[0] + "（" + PROVIDER_ENV_KEYS[present[0]] + " 在位）" +
         (missing.length > 0 ? "；未设：" + missing.map((p) => PROVIDER_ENV_KEYS[p]).join(" ") : "")
-      : "四个 provider key 全部未设",
-    hint: present.length > 0 ? undefined : "export OPENAI_API_KEY=<key>；或 --provider demo 零凭据看流程（预录剧本，不拨号）",
+      : String(ENV_KEYED_PROVIDERS.length) + " 个 provider key 全部未设（" +
+        ENV_KEYED_PROVIDERS.map((p) => PROVIDER_ENV_KEYS[p]).join(" / ") + "）",
+    hint: present.length > 0 ? undefined : "export DEEPSEEK_API_KEY=<key>（或其它家）；或 --provider demo 零凭据看流程（预录剧本，不拨号）",
   });
   checks.push({
     id: "tiers",
@@ -284,6 +344,19 @@ export function collectDoctorChecks(f: DoctorFacts): DoctorCheck[] {
     detail: f.workspaceWritable ? "工作区可写" : "工作区不可写（W_OK 不过）",
     hint: f.workspaceWritable ? undefined : "检查 --workspace 指向与磁盘权限",
   });
+  checks.push(fileFaceCheck("settings", f.settingsFace, {
+    absent: "还没有设置文件（按缺省运行）",
+    ok: "设置文件可读",
+    broken: (face) => `设置文件读不了：${face.path}（${face.message}）`,
+    hint: "修好或删除该文件后重跑；桌面设置页也会出同一条横幅",
+  }));
+  checks.push(fileFaceCheck("sessions", f.sessionsFace, {
+    absent: "还没有会话（会话目录未建）",
+    ok: "会话元数据可读",
+    // 仓库的原句已带路径与出路（第 770 页），不再前缀第二遍。
+    broken: (face) => face.message.includes(face.path) ? face.message : `会话元数据损坏：${face.path}（${face.message}）`,
+    hint: "按原句里的去处处理后重跑本命令（桌面会同步显示同一问题）",
+  }));
   checks.push({
     id: "search",
     ok: f.search.kind !== "broken",
@@ -350,6 +423,22 @@ async function readTrustFace(env: NodeJS.ProcessEnv, home: string): Promise<Trus
   return { root, source, dirState, dirMode, storeState, entries };
 }
 
+/** 桌面端入口（v34）：有工作区才跑；没工作区返回可操作的错误，不让诊断读错根。
+ *  错误一律折成 `{ok:false}`——About 面板按「失败可重试」呈现，不把异常抛给 IPC。 */
+export async function runDoctorForWorkspace(
+  workspace: string | null,
+  inject: Partial<DoctorFacts> = {},
+): Promise<{ ok: true; report: DoctorReport } | { ok: false; error: string }> {
+  if (workspace === null || workspace.trim() === "") {
+    return { ok: false, error: "先在当前窗口打开一个项目，再运行诊断" };
+  }
+  try {
+    return { ok: true, report: await runDoctor(workspace, inject) };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 /** IO 壳：收齐七项事实再进纯核。inject 只为判卷开（生产零参调用，判卷用它替换沙箱探测等机器态）。 */
 export async function runDoctor(workspace: string, inject: Partial<DoctorFacts> = {}): Promise<DoctorReport> {
   const pkg = JSON.parse(
@@ -372,6 +461,8 @@ export async function runDoctor(workspace: string, inject: Partial<DoctorFacts> 
       () => true,
       () => false,
     ),
+    settingsFace: await readSettingsFace(join(workspace, ".agent", "settings.json")),
+    sessionsFace: await readSessionsFace(join(workspace, ".agent", "sessions")),
     search,
     tierCounts: {
       // 有效表：内置 + 已装自定义（doctor 报的是"你现在有哪些档位"，漏掉自定义家会低报）

@@ -37,6 +37,14 @@ export function withVerifyCauseNote(output: string, cause: VerifyCause): string 
   return output + "\n" + note;
 }
 
+/** 文件系统权限红：运行器连自己的临时目录都写不了（沙箱、只读挂载、EPERM/EACCES）。
+ *
+ *  **这是文案匹配的第二处例外**，理由与 `PKG_MANAGER_OWN_ERROR_LINE` 同族：这条红不是模型的代码错，
+ *  而结构信号里没有"fs 权限"这一格（退出码 1 与普通测试失败无法区分）。实测证据见
+ *  `outputs/task-carried-verify-2026-11-04/INCIDENTS.md` 事故 1：判成 `code` 后模型去改本来正确的代码，
+ *  烧到 maxSteps 中止。宁可有这一条窄例外，也不让环境账记到模型头上。 */
+export const FS_PERMISSION_DENIED_LINE = /\b(?:EPERM|EACCES)\b[^\n]*\b(?:operation not permitted|permission denied)\b/i;
+
 /** 一次失败命令的归因：**全部来自已有判定**（超时布尔 / 退出码 / pnpm 自有错误码行），缺省 `code`。
  *  `not-run` 排在 127 与 pnpm 之前、`timeout` 之后：超时那一路 `exitCode` 常常也是 null，
  *  但"跑不完"比"没跑完"更具体，先认它。 */
@@ -45,6 +53,7 @@ export function classifyVerifyFailure(f: { timedOut: boolean; exitCode: number |
   if (f.exitCode === null) return "not-run";
   if (f.exitCode === 127) return "toolchain-missing";
   if (PKG_MANAGER_OWN_ERROR_LINE.test(f.output)) return "pkg-manager";
+  if (FS_PERMISSION_DENIED_LINE.test(f.output)) return "env-fs";
   return "code";
 }
 
@@ -91,8 +100,13 @@ export interface VerifyConfig {
   timeoutMs?: number;
 }
 
+/** 判据来源（spec 2026-11-04）：声明 > 仓库配置 > 探测。`none` = 没有可验面。 */
+export type VerifySource = "task" | "config" | "probed" | "none";
+
 export interface VerifyOutcome {
   ok: boolean;
+  /** 这一拍用的判据从哪来；缺席 = 旧调用点构造的结果（读侧不猜来源）。 */
+  source?: VerifySource;
   results: VerifyCommandResult[];
   /** 非空＝这一轮**没有真的跑**任何命令，原因已说清（信任闸拒绝）。
    *  调用方必须把它与「跑了但红」分开处理：前者不是失败证据，不该烧模型的修复额度。
@@ -111,8 +125,9 @@ export const DEFAULT_VERIFY_TIMEOUT_MS = 60_000;
  *  上一轮刚把非 npm 仓库的验证面探测出来，若还按 60s 掐，等于把一条死路换了个方向——
  *  模型只会连续收到「超时」并烧光 verify 额度。 */
 export const PROBED_LANG_TIMEOUT_MS = 300_000;
-const MIN_VERIFY_TIMEOUT_MS = 1_000;
-const MAX_VERIFY_TIMEOUT_MS = 900_000;
+/** 判据声明的超时上下限：解析层（verify-plan）与仓库配置读入共用这一份，不各抄一遍。 */
+export const MIN_VERIFY_TIMEOUT_MS = 1_000;
+export const MAX_VERIFY_TIMEOUT_MS = 900_000;
 /** 从第几拍起，「重复」提示升级为「换策略」（第 2 拍只说重复，逐字不变——见 repeatDigestNote）。 */
 export const ESCALATE_REPEAT_ATTEMPT = 3;
 
@@ -307,8 +322,13 @@ export function verifyCommands(config: VerifyConfig): string[] {
 }
 
 /** 执行一轮 verify：逐条跑 lint/test 命令，全绿才 ok。 */
-export async function runVerifyOutcome(repoDir: string, exec: ExecFn = defaultExec, signal?: AbortSignal): Promise<VerifyOutcome> {
-  const { config, source } = await loadVerifyConfig(repoDir);
+export async function runVerifyOutcome(
+  repoDir: string,
+  exec: ExecFn = defaultExec,
+  signal?: AbortSignal,
+  resolved?: { config: VerifyConfig; source: VerifySource },
+): Promise<VerifyOutcome> {
+  const { config, source } = resolved ?? (await loadVerifyConfig(repoDir));
   const commands = verifyCommands(config);
   if (commands.length === 0) {
     return {
@@ -343,7 +363,7 @@ export async function runVerifyOutcome(repoDir: string, exec: ExecFn = defaultEx
       });
     }
   }
-  return { ok: results.every((r) => r.ok), results };
+  return { ok: results.every((r) => r.ok), results, source };
 }
 
 /** loop 的 verify 反射循环钩子：上限可配（缺省 3 次），耗尽即停。 */
@@ -351,7 +371,7 @@ export interface VerifyHook {
   maxAttempts?: number;
   /** 目标仓库有没有可验面（verify 命令非空）。false ⇒ harness 的自动验证拍整段跳过：
    *  没东西可验还回注「未找到 verify 配置」= 白烧一轮模型调用。缺省视为有面。 */
-  surface?(): Promise<boolean>;
+  surface?(signal?: AbortSignal): Promise<boolean>;
   run(signal?: AbortSignal): Promise<VerifyOutcome>;
 }
 
@@ -384,6 +404,9 @@ export function createVerifyHook(
     exec?: ExecFn;
     trustedRepo?: boolean;
     trustResolver?: VerifyTrustResolver;
+    /** 已解析的判据（spec 2026-11-04）：给了就不再去仓库里读配置。
+     *  这是任务声明唯一进入执行面的通道；不给 = 逐字旧行为。 */
+    resolved?: { config: VerifyConfig; source: VerifySource };
   } = {},
 ): VerifyHook {
   const trusted = opts.trustedRepo ?? false;
@@ -396,10 +419,13 @@ export function createVerifyHook(
    *  于是「批准但落盘失败」这一场后续几拍按已问过处理，缺的那一拍 fail-closed 拒）。 */
   const alreadyAsked = new Set<string>();
   /** 把命令来源折成信任闸认得的 provenance：`loadVerifyConfig` 的两个来源都是仓库自带文件。 */
+  const loadConfig = async (): Promise<{ config: VerifyConfig; source: VerifySource }> =>
+    opts.resolved ?? (await loadVerifyConfig(repoDir));
   const trustOf = async (signal?: AbortSignal): Promise<VerifyTrustDecision> => {
-    const { config, source } = await loadVerifyConfig(repoDir);
+    const { config, source } = await loadConfig();
     const commands = verifyCommands(config);
     const provenance: VerifyProvenance =
+      // 任务声明是人手输入的（不是仓库里的文件），provenance 记 host：不冒充仓库自带判据的信任面。
       source === "config" ? "repo-config" : source === "probed" ? "repo-probed" : "host";
     if (trusted) return verifyTrustDecision({ provenance, commands, trusted: true });
     // 空面根本没有可验东西，不是信任问题（`surface()` 那层另有专门的判据）⇒ 不查表也不问人。
@@ -415,12 +441,14 @@ export function createVerifyHook(
   };
   return {
     maxAttempts: opts.maxAttempts,
-    surface: async () => {
-      const { config } = await loadVerifyConfig(repoDir);
+    surface: async (signal?: AbortSignal) => {
+      // 已经取消的 run 不发信任卡：直接判「无可验面」，不造一张没人收的卡。
+      if (signal?.aborted) return false;
+      const { config } = await loadConfig();
       // 类型面也算「有可验面」：只有 tsconfig 的仓库此前被判成没面 ⇒ harness 整段跳过 verify，
       // 而它其实能验（M5 交付物 1 的另一半：补上的面要真的被跑到，不能只躺在配置里）。
       if (verifyCommands(config).length === 0) return false;
-      const d = await trustOf();
+      const d = await trustOf(signal);
       if (!d.run) {
         console.warn(d.reason);
         return false; // fail-closed：宁可这一拍不验，也不执行未经授权的仓库命令
@@ -430,7 +458,7 @@ export function createVerifyHook(
     run: async (signal?: AbortSignal) => {
       const d = await trustOf(signal);
       if (!d.run) return { ok: false, results: [], skipped: d.reason };
-      return runVerifyOutcome(repoDir, opts.exec, signal);
+      return runVerifyOutcome(repoDir, opts.exec, signal, opts.resolved);
     },
   };
 }

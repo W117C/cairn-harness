@@ -1,3 +1,6 @@
 dist/
 dist-electron/
 node_modules/
+
+# performance-smoke 运行产物（可用参数重定向，随时可再生成）
+performance.json

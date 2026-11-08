@@ -104,6 +104,23 @@ describe("remember：权限门（任务2 无权限不落盘）", () => {
     expect(existsSync(join(ws, ".agent", "memory", "glob.md"))).toBe(false);
   });
 
+  // 回归（2026-10-21 独立评审）：remember 的审批口此前不带 ctx.signal ⇒ run 取消后
+  // 这张卡仍驻留到 60s 看门狗，会话在中间一直挂着。信号必须从工具上下文原样递到 ask。
+  it("审批等待带上运行取消信号（取消不再等 60s 超时）", async () => {
+    const abort = new AbortController();
+    let seen: AbortSignal | undefined;
+    const gated = createGatedRemember({
+      getMode: () => "default",
+      isPlanBlocked: () => false,
+      getAsk: () => async (_args, signal) => { seen = signal; return false; },
+    });
+    await gated.run(
+      { scope: "global", kind: "memory", type: "user", topic: "sig", content: "x" },
+      { workspace: ws, signal: abort.signal },
+    );
+    expect(seen).toBe(abort.signal);
+  });
+
   it("read-only 档项目层也拒（免批只放宽 default/guided 的卡，不放宽只读禁写）", async () => {
     const ro = createGatedRemember({ getMode: () => "read-only", isPlanBlocked: () => false, getAsk: () => undefined });
     const r = await ro.run({ scope: "project", kind: "memory", type: "user", topic: "ro-proj", content: "x" }, ctx());

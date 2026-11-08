@@ -50,7 +50,7 @@ export const MUTATIONS = [
     // 在源里出现两次（put 与 delete）。第一版只写那一行 ⇒ 针脚体检报「命中 2 处，需人工复认」。
     // 连下一行一起写才唯一（`isProviderId` 那一支只有 put 有）。
     // 标题必须逐字等于桌面判卷里那条用例名（近似标题 ⇒ 选择子零命中＝vacuous，第 483/490 页栽过两次）。
-    apply: (s) => s.replace("  if (!backend) return { ok: false, error: PROVIDER_KEY_NO_BACKEND_ERROR };\n  if (!isProviderId(provider)) return { ok: false, error: \"未知 provider：\" + provider + \"（白名单：\" + PROVIDER_IDS.join(\"/\") + \"）\" };", "  // 变异：fail-closed 那支摘掉"),
+    apply: (s) => s.replace("  if (!backend || !backend.isAvailable()) return { ok: false, error: PROVIDER_KEY_NO_BACKEND_ERROR };\n  if (!isProviderId(provider)) return { ok: false, error: \"未知 provider：\" + provider + \"（白名单：\" + PROVIDER_IDS.join(\"/\") + \"）\" };", "  // 变异：fail-closed 那支摘掉"),
     expectFail: "fail-closed：safeStorage 不可用 ⇒ 装配拒绝 + set 拒绝不落明文（目录零文件）；未装配后端同判",
   },
   {
@@ -189,7 +189,7 @@ export const MUTATIONS = [
     src: "src/main/sessions.ts",
     test: "tests/sessions.test.ts",
     desc: "会话名 trim 检查被拆（前后空白的名字合法，列表显示与文件名不一致）",
-    apply: (s) => s.replace("name.trim() === name", "true"),
+    apply: (s) => s.replace("if (name.trim() !== name) return \"会话名首尾不能有空白\";", "if (false) return \"会话名首尾不能有空白\";"),
     expectFail: "前后空白的名字非法（trim 规则）",
   },
   {
@@ -197,7 +197,7 @@ export const MUTATIONS = [
     src: "src/main/sessions.ts",
     test: "tests/sessions.test.ts",
     desc: "会话名字符集闸整条拆除（路径分隔/控制字符/点号全放行 → 目录穿越与伪装名）",
-    apply: (s) => s.split("\n").map((l) => (l.includes("name.trim() === name") ? "  return true;" : l)).join("\n"),
+    apply: (s) => s.split("\n").map((l) => (l.includes("会话名不得含") ? "  return null;" : l)).join("\n"),
     expectFail: "控制字符 / 点号开头的名字非法",
   },
   {
@@ -332,7 +332,7 @@ export const MUTATIONS = [
     src: "src/main/agent-runner.ts",
     test: "tests/verify-exec-sandbox.test.ts",
     desc: "沙箱出口把 timeoutMs 丢掉 ⇒ 语言探测的 300s 在发货缺省路径上不生效，冷编译照旧被 60s 掐死",
-    apply: (s) => s.replace("const res = await run(mapped, { cwd, ...(timeoutMs ? { timeoutMs } : {}) });", "const res = await run(mapped, { cwd });"),
+    apply: (s) => s.replace("const res = await run(mapped, { cwd, ...(timeoutMs ? { timeoutMs } : {}), ...(signal ? { signal } : {}) });", "const res = await run(mapped, { cwd, ...(signal ? { signal } : {}) });"),
     expectFail: "超时透传给 runInSandbox；未给时不写这个键（沿用沙箱自己的缺省，不越权改写）",
   },
   {
@@ -602,7 +602,7 @@ export const MUTATIONS = [
     src: "src/main/agent-runner.ts",
     test: "tests/goal-continue.test.ts",
     desc: "run 入口只看 settings、丢掉 runtime override ⇒ 调用方（IPC 覆盖 / 测试 / 将来的按会话武装）说了不算",
-    apply: (s) => s.replace("planRequired: over.planRequired ?? (await store().get()).planRequiredByDefault,", "planRequired: (await store().get()).planRequiredByDefault,"),
+    apply: (s) => s.replace("planRequired: over.planRequired ?? req.planRequired ?? (await store().get()).planRequiredByDefault,", "planRequired: req.planRequired ?? (await store().get()).planRequiredByDefault,"),
     expectFail: "unattended + 武装方案门 ⇒ 拒因来自方案门而不是无人值守闸，盘上不留痕（J3：不是被忽略）",
   },
   {
@@ -619,8 +619,8 @@ export const MUTATIONS = [
     test: "tests/compact-wiring.test.ts",
     desc: "手动压缩只推不落盘（历史原样）⇒ 压缩卡当场看得见、下一次 run 重放又是全文：花一次摘要的钱换个零效果。演示那条支用会话管线，所以它红着门也绿",
     apply: (s) => s.replace(
-      "      const commit = hooks.onAppend?.(hookEvent, logPath);\n      try {\n        await log.append(e);\n      } catch (error) {\n        hooks.onAppendFailed?.(hookEvent, logPath);\n        throw error;\n      }\n      commit?.();\n      hooks.onEvent?.(hookEvent, logPath);",
-      "      hooks.onEvent?.(hookEvent, logPath);",
+      "          const commit = hooks.onAppend?.(hookEvent, logPath);\n          try {\n            await log.append(e);\n          } catch (error) {\n            hooks.onAppendFailed?.(hookEvent, logPath);\n            throw error;\n          }\n          commit?.();\n          hooks.onEvent?.(hookEvent, logPath);",
+      "          hooks.onEvent?.(hookEvent, logPath);",
     ),
     expectFail: "压缩事件既上屏**也**落盘：只推不写就是花一次摘要钱换个零效果",
   },
@@ -682,8 +682,8 @@ export const MUTATIONS = [
     id: "sbx-network-escort-ors-conditions",
     src: "src/main/sandbox.ts",
     test: "tests/sandbox.test.ts",
-    desc: "三条取用条件由 && 退化成 || ⇒ auto 档没问过人工也拿到网络（§11.4 红线「网络全开不是免批条件」被构造性违反）",
-    apply: (s) => s.replace('return input.wantsNetwork && input.asked && input.approved ? "allow" : "deny";', 'return input.wantsNetwork || input.asked || input.approved ? "allow" : "deny";'),
+    desc: "人工审批取用条件由 && 退化成 || ⇒ 非完全允许档没问过人工或未被批准也拿到网络（§11.4 红线被构造性违反）",
+    apply: (s) => s.replace('  return input.asked && input.approved ? "allow" : "deny";', '  return input.asked || input.approved ? "allow" : "deny";'),
     expectFail: "真值表：三条条件缺一即 deny，全齐才 allow",
   },
   {
@@ -813,7 +813,7 @@ export const MUTATIONS = [
     src: "src/main/agent-runner.ts",
     test: "tests/goal-continue.test.ts",
     desc: "盘上的 planRequiredByDefault 到不了主会话 ⇒ 设置里那句「每轮先出计划」是装饰（J3 那格给的是 override，照绿）",
-    apply: (s) => s.replace("planRequired: over.planRequired ?? (await store().get()).planRequiredByDefault,", "planRequired: over.planRequired ?? false,"),
+    apply: (s) => s.replace("planRequired: over.planRequired ?? req.planRequired ?? (await store().get()).planRequiredByDefault,", "planRequired: over.planRequired ?? req.planRequired ?? false,"),
     expectFail: "settings.planRequiredByDefault=true ⇒ 生产入口自己就该拒写，且拒因来自方案门",
   },
   {
@@ -821,7 +821,7 @@ export const MUTATIONS = [
     src: "src/main/agent-runner.ts",
     test: "tests/goal-continue.test.ts",
     desc: "那一行改成「只读 settings」⇒ 调用方显式传的 planRequired 被吞（J3 那格的武装态从此失效，闸不再说话）",
-    apply: (s) => s.replace("planRequired: over.planRequired ?? (await store().get()).planRequiredByDefault,", "planRequired: (await store().get()).planRequiredByDefault,"),
+    apply: (s) => s.replace("planRequired: over.planRequired ?? req.planRequired ?? (await store().get()).planRequiredByDefault,", "planRequired: (await store().get()).planRequiredByDefault,"),
     expectFail: "unattended + 武装方案门 ⇒ 拒因来自方案门而不是无人值守闸，盘上不留痕（J3：不是被忽略）",
   },
   {
@@ -1108,7 +1108,7 @@ export const MUTATIONS = [
     desc: "装配面退回「缺省落 os.tmpdir()」⇒ 信任表与插件 userConfig 一起回到会被回收、"
       + "且在共享 runner 上目录名固定可猜的那一顶（别的本机用户预建 plugin-trust.json 即免审批激活）。"
       + "纯函数那条判卷分辨不出这个：它只问取值式，不问谁在用它",
-    apply: (s) => s.replace(`    pluginDataRoot: pluginDataRootOf(process.env, homedir()),`, `    pluginDataRoot: process.env.M2E_PLUGIN_DATA ?? join(tmpdir(), "m2e-plugin-data"),`),
+    apply: (s) => s.replace(`  const pluginDataRoot = pluginDataRootOf(process.env, homedir());`, `  const pluginDataRoot = process.env.M2E_PLUGIN_DATA ?? "/tmp/m2e-plugin-data";`),
     expectFail: "⑦ 那一条接的是 pluginDataRootOf 连入参，且同一行不再出现临时区",
   },
   // ---- 第 432 页：`--doctor` 第七项（信任与插件数据落点）----
@@ -1163,10 +1163,10 @@ export const MUTATIONS = [
     id: "doctor-trust-check-computed-not-pushed",
     src: "src/main/doctor.ts",
     test: "tests/doctor.test.ts",
-    desc: "纯核算出来了却没接进清单 ⇒ 第七项在报告里彻底消失，而判卷里那 12 条用例照绿（恒真的接线），"
+    desc: "纯核算出来了却没接进清单 ⇒ trust 在报告里彻底消失，而判卷里那 12 条用例照绿（恒真的接线），"
       + "这一格只有把 push 摘掉才看得见它本来在不在",
     apply: (s) => s.replace(`  checks.push(trustFaceCheck(f.trust));\n`, ``),
-    expectFail: "固定清单＝七项，顺序即渲染顺序，第七项是 trust（第 432 页带进来的那一格）",
+    expectFail: "固定清单＝九项，顺序即渲染顺序（settings/sessions 插在 workspace 之后，trust 仍是最后一项）",
   },
   // ---- 第 438 页：CLI 上的插件/skill 发现面与信任决议（#7 的 ②＋①）----
   {
@@ -1195,5 +1195,91 @@ export const MUTATIONS = [
       `    return { state: "ok", trusted: 0, declined: 0 };`,
     ),
     expectFail: "文件不在 = absent",
+  },
+  // 自进化面此前**零**变异锚点（2026-10-22 审计实读：scripts/lib/mutations/* 里指向
+  // src/main/evolution/* 的条目 0 条）——而这一族恰好是「零阈值 ⇒ 零证据也够」那一族。
+  // 下面三条把 canary 的门槛三面（开档/读档/判决）各钉一钉：门槛必须是 ≥1 的整数。
+  {
+    id: "canary-max-samples-threshold-not-validated",
+    src: "src/main/evolution/canary.ts",
+    test: "tests/evolution-canary.test.ts",
+    desc: "开档时不验 maxSamples（0 或小数都收）⇒ 零门槛让「conclusiveSamples(0) >= maxSamples(0)」成立 ⇒ 第一个 none 样本（一个 verify 拍都没有）就把候选判成 promoted，零证据被读成「证据够了」",
+    apply: (s) => s.replace("(!Number.isInteger(spec.maxSamples) || spec.maxSamples < 1)", "(false)"),
+    expectFail: "maxSamples 不是 ≥1 的整数 ⇒ 拒绝开档（零门槛 = 没有证据也算够了）",
+  },
+  {
+    id: "canary-max-consecutive-failures-threshold-not-validated",
+    src: "src/main/evolution/canary.ts",
+    test: "tests/evolution-canary.test.ts",
+    desc: "开档时不验 maxConsecutiveFailures（0 也收）⇒ 零连败门槛让「consecutiveFailures(0) >= 0」在**第一个**样本就成立 ⇒ 健康候选被当场判成退化并回退",
+    apply: (s) => s.replace("(!Number.isInteger(spec.maxConsecutiveFailures) || spec.maxConsecutiveFailures < 1)", "(false)"),
+    expectFail: "maxSamples 不是 ≥1 的整数 ⇒ 拒绝开档（零门槛 = 没有证据也算够了）",
+  },
+  {
+    id: "canary-record-threshold-not-validated",
+    src: "src/main/evolution/canary.ts",
+    test: "tests/evolution-canary.test.ts",
+    desc: "读回盘上观察档时不验门槛（.agent/canary/<id>.json 是人/模型可写的文件）⇒ 零门槛档被当成合法档带进判决",
+    apply: (s) => s.replace("!Number.isInteger(v) || v < 1", "false"),
+    expectFail: "盘上观察档的门槛是 0 ⇒ 读不动（不晋升，也不折成「没有档」）",
+  },
+  {
+    id: "registry-replay-drops-own-declared-gates",
+    src: "src/main/evolution/registry.ts",
+    test: "tests/evolution-kernel.test.ts",
+    desc: "重建（重放账本）时不把**账本自己定格的 declaredGates** 并进 knownGates ⇒ 生产读面（src 侧不抄门名单，那份是空集）拿空 knownGates 去卡这些门 ⇒ 一份完全合法的账本被判死（RegistryLogCorruptError）⇒ content-pack 注入与 canary 收束 tick 同时熄火，且每次重建都撞同一行（**自愈不了**）",
+    apply: (s) => s.replace("replayGates.add(gate);", "replayGates.delete(gate);"),
+    expectFail: "索引丢了要重建 ⇒ 重建不许因为门名单把账本判死（注入结果与索引新鲜时逐字节一致）",
+  },
+  /* 第 998 页：激活门的全局作用域。旧写法一条万能阻断把三种情况压成一句"无法跨库核验"，
+   *  而跨库核验自第 911–912 页就存在 ⇒ 能走通的路被永久堵死，读者也分不清"没验/没过/验不了"。 */
+  {
+    id: "evolve-gate-blocks-global-unconditionally",
+    src: "src/main/evolve/activation.ts",
+    test: "tests/evolve-activation-global-scope.test.ts",
+    desc: "核验过了也照样阻断 ⇒ 退回旧行为：业主显式晋升过的全局经验永远激活不了",
+    apply: (s) => s.replace("if (opts.globalCheck === undefined) {", "if (true) {"),
+    expectFail: "端到端：三个真证据库的全局条目，激活门放它到 dry-run",
+  },
+  {
+    id: "evolve-gate-reason-says-cannot-verify",
+    src: "src/main/evolve/activation.ts",
+    test: "tests/evolve-activation-global-scope.test.ts",
+    desc: "把「没人验」再说成「验不了」 ⇒ 读者以为这是一条能力边界，不会去补核验",
+    apply: (s) => s.replace(
+      "detail: \"全局作用域需要 ≥3 个 workspace 的可测证据：这次调用没带跨库核验结果，门不替没验过的条目背书（fail-closed）\",",
+      "detail: \"全局作用域需要 ≥3 个 workspace 的证据与显式全局晋升；当前门无法跨库核验（fail-closed）\",",
+    ),
+    expectFail: "没带核验结果 ⇒ 仍阻断，但说的是「这次没验」，不是「验不了」",
+  },
+  {
+    id: "evolve-gate-drops-verify-reason",
+    src: "src/main/evolve/activation.ts",
+    test: "tests/evolve-activation-global-scope.test.ts",
+    desc: "核验给出的实测理由被换回万能阻断 ⇒ 差几个库这种可行动信息丢了",
+    apply: (s) => s.replace(
+      'out.push({ code: "global-scope", detail: "全局作用的证据核验没过：" + opts.globalCheck.reason });',
+      'out.push({ code: "global-scope", detail: "全局作用域需要 ≥3 个 workspace 的证据与显式全局晋升（fail-closed）" });',
+    ),
+    expectFail: "核验没过 ⇒ 用核验给出的实测理由，不再套用万能阻断",
+  },
+  {
+    id: "evolve-activate-path-skips-verification",
+    src: "src/main/evolve/activation.ts",
+    test: "tests/evolve-activation-global-scope.test.ts",
+    desc: "产品激活路径不算核验就交给门 ⇒ 与只读预览面给出两套答案（而且全局经验一律点不亮）",
+    apply: (s) => s.replace("    ? await verifyGlobalEvidence(entry.globalEvidence ?? [])", "    ? undefined"),
+    expectFail: "端到端反向：证据只有两个库 ⇒ 照样拒，且理由给的是实测数",
+  },
+  {
+    id: "evolve-report-face-skips-verification",
+    src: "src/main/evolve/report.ts",
+    test: "tests/evolve-activation-global-scope.test.ts",
+    desc: "报告面的可激活清单不做核验 ⇒ 面板上那条全局经验永远「差一道门」，与 CLI/激活路径不一致",
+    apply: (s) => s.replace(
+      'const globalForActivation = playbook.entries.filter((entry) => entry.status !== "active" && entry.scope.workspace === "*");',
+      "const globalForActivation: ExperienceEntry[] = [];",
+    ),
+    expectFail: "报告与 CLI 两个面读的是同一份核验（不各写一套「为什么不行」）",
   },
 ];

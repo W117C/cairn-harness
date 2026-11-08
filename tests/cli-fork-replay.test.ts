@@ -9,7 +9,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -182,16 +182,17 @@ describe("真跑 bin：--replay 只读 / --fork 不污染原历史 / 中断后�
     const r = cli(ws, ["--provider", "demo", "--mode", "auto", "--fork", "seed2", "--from", "1", "换条路重跑"]);
     expect([0, 1], "demo 剧本里有失败工具调用 ⇒ 允许 exit 1；2 是用法错，不许").toContain(r.status);
     expect(r.stderr).toContain("已分叉：seed2 前 1 轮");
+    expect(r.stderr).toContain("指针，不复制父事件");
     const target = join(ws, ".agent", "sessions", "seed2-f1.jsonl");
     expect(existsSync(target), "新会话文件必须落在 sessions/<id>-f<轮>.jsonl").toBe(true);
     expect(sha(src), "源会话只读：sha256 逐字节不变").toBe(srcBefore);
-    // 前缀逐字节：新日志前 lastIncluded 行 == 源日志前 lastIncluded 行
-    const srcLines = readFileSync(src, "utf8").split("\n");
+    // 指针分叉：子会话 **raw** 只有首行血缘，不复制父事件；显示序靠来源视图展开。
     const newLines = readFileSync(target, "utf8").split("\n");
-    expect(newLines.slice(0, point.lastIncluded)).toEqual(srcLines.slice(0, point.lastIncluded));
-    expect(newLines[point.lastIncluded]).toContain('"session_meta"');
-    expect(newLines[point.lastIncluded]).toContain("branch_of");
-    expect(newLines.length, "分叉后必须还有新跑的事件（新任务已作为第 2 轮跑上去）").toBeGreaterThan(point.lastIncluded + 2);
+    expect(newLines[0]).toContain('"session_meta"');
+    expect(newLines[0]).toContain('"fork"');
+    expect(JSON.parse(newLines[0]!) as { fork: { from_session_path: string; boundary_event_id: number; from_session_id?: string } })
+      .toMatchObject({ fork: { from_session_path: realpathSync(src), boundary_event_id: point.lastIncluded, from_session_id: "seed2" } });
+    expect(readFileSync(target, "utf8"), "父事件不得被复制进子文件").not.toContain("第 1 轮回复");
     // 续跑：接着新会话再跑一轮，源会话仍不变
     const r2 = cli(ws, ["--provider", "demo", "--mode", "auto", "--session", "seed2-f1", "再来一轮"]);
     expect([0, 1]).toContain(r2.status);
@@ -205,7 +206,7 @@ describe("真跑 bin：--replay 只读 / --fork 不污染原历史 / 中断后�
     await seedSession(ws, "seed3", 2);
     const bad = cli(ws, ["--provider", "demo", "--mode", "auto", "--fork", "seed3", "--from", "9", "x"]);
     expect(bad.status).toBe(2);
-    expect(bad.stderr).toContain("超出会话轮数");
+    expect(bad.stderr).toMatch(/超出可见历史|超出会话轮数/);
     const first = cli(ws, ["--provider", "demo", "--mode", "auto", "--fork", "seed3", "--from", "2", "先占住"]);
     expect([0, 1]).toContain(first.status);
     const again = cli(ws, ["--provider", "demo", "--mode", "auto", "--fork", "seed3", "--from", "2", "再占一次"]);

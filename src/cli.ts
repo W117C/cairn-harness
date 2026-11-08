@@ -17,13 +17,13 @@
 // 「存在 ≠ 接线」不是比喻：那 17 个入口一直都在，只是没人搭那层壳。
 //
 // 刻意不做的事：不引新依赖、不加构建步骤、不碰 src/agent 与 src/tools。
-// 目录名叫 deepseek harness，但 `src/` 里 "deepseek" 出现 0 次——DeepSeek 走
-// OPENAI_BASE_URL 就通（见 README）。
+// 目录名叫 deepseek harness：DeepSeek 自 2026-10-25 起是内置家（providers/deepseek.ts，
+// export DEEPSEEK_API_KEY 即通），不再需要借 OPENAI_BASE_URL 走兼容通道。
 
 import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
-import { existsSync, readFileSync } from "node:fs";
-import { mkdir, rename, rm, appendFile } from "node:fs/promises";
+import { constants, existsSync, readFileSync } from "node:fs";
+import { access, mkdir, rename, rm, appendFile, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { argsDigest, firstLine, forkPointOf, forkSessionName, formatReplay } from "./agent/fork-cli";
 import {
@@ -49,12 +49,17 @@ import {
   handleRunCancel,
   initSandbox,
   pluginRuntimeOpts,
+  scheduledTaskCount,
   serveScheduler,
   setAppHooks,
+  waitForSessionTailWork,
 } from "./main/agent-runner";
 import { initSessionsDir } from "./main/session-handlers";
-import { initSettingsStore } from "./main/settings-handlers";
-import { isValidSessionName, pathOf } from "./main/sessions";
+import { acquireSessionRunLock, type SessionRunLock } from "./main/session-lock";
+import { createProductFork } from "./main/session-repository";
+import { getSettings, initSettingsStore, settingsLoadIssue } from "./main/settings-handlers";
+import { isValidSessionName, listSessions, pathOf, sessionIdProblem } from "./main/sessions";
+import { SessionMetadataRepository } from "./main/session-metadata";
 import type { SandboxStatus } from "./main/sandbox";
 import { renderDoctor, runDoctor } from "./main/doctor";
 import { PluginRuntime, pendingPlugins, trustFilePathOf } from "./agent/plugins";
@@ -74,7 +79,7 @@ import {
   wrapProvidersFile,
   type DiscoveredRow,
 } from "./providers/provider-draft";
-import { installCustomProviders, installedCustomProviders } from "./providers/registry";
+import { PROVIDER_IDS, installCustomProviders, installedCustomProviders } from "./providers/registry";
 import { providerKindFromEnv, resolveMainModel, type MainModelSelection } from "./main/provider-runtime";
 import type { ProviderKind } from "./main/settings";
 import { envKeyOf } from "./providers/env-keys";
@@ -91,8 +96,10 @@ import {
   findPhantomDelivery,
 } from "./agent/delivery-guard";
 import {
+  createEventLog,
   forkSession,
   isEnvVerifyCause,
+  readSessionView,
   mergeAssistantDeltas,
   replay,
   type AgentEvent,
@@ -102,8 +109,10 @@ import {
   type PlanProposal,
   type ToolResultEvent,
   type VerifyCause,
+  type VerifyDeclaration,
 } from "./events";
-import { GATE_VERDICTS, type PermissionMode } from "./permissions";
+import { validateVerifyDeclaration } from "./agent/verify-plan";
+import { GATE_VERDICTS, PERMISSION_MODES, type PermissionMode } from "./permissions";
 
 /** 权限层的负向结果：门直接拦（未执行）、被问过但没批成、无人值守拒。 */
 const BLOCKING_VERDICTS: ReadonlySet<string> = new Set(
@@ -223,8 +232,6 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const PKG = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { version: string };
 const PKG_VERSION = PKG.version;
 
-const PERMISSION_MODES: readonly PermissionMode[] = ["read-only", "default", "guided", "auto"];
-
 // ---- 退出码（照 scripts/gym-run.ts：2 = 用法错，1 = 跑了但没成，0 = 成）----
 const EXIT_OK = 0;
 const EXIT_FAILED = 1;
@@ -237,15 +244,74 @@ class ConfigError extends Error {}
 
 const argv = process.argv.slice(2);
 
+const VALUE_FLAGS = [
+  "--mode", "--provider", "--model", "--ctx-window", "--workspace", "--message", "--log",
+  "--session", "--goal", "--max-turns", "--max-usd", "--replay", "--fork", "--from",
+  "--discover", "--key-env", "--protocol", "--provider-name", "--label",
+  // 插件面那两条是**取值型**旗标：名字不进这张表就会被当位置参数，于是
+  // `cairn --trust-plugin graphflow` 读成「工作区 = graphflow、任务 = 空」——批准错对象比拒了还坏。
+  "--trust-plugin", "--decline-plugin",
+  // 任务自带判据（spec 2026-11-04）：可重复，`--verify "cmd"` 与 `--verify="cmd"` 都收。
+  "--verify",
+];
+
+// 标准 `--` 结束选项：之后一律按位置参数（任务文本以 `-` / `--` 开头时唯一的传法）。
+// 旗标解析只看分隔符之前；否则 `cairn -- "--fix 某处"` 会被未知旗标闸拦下（实测）。
+const sepIndex = argv.indexOf("--");
+const rawFlagArgv = sepIndex === -1 ? argv : argv.slice(0, sepIndex);
+const trailingArgv = sepIndex === -1 ? [] : argv.slice(sepIndex + 1);
+// `--flag=value`：等号形式是**显式值**（值可以以 `--` 开头：`--message=--差量`）。
+// 展开后值不留在 token 流里 ⇒ 既不会被未知旗标闸拦，也不会污染位置参数。
+const explicitFlags = new Map<string, string>();
+const flagArgv: string[] = [];
+for (const token of rawFlagArgv) {
+  const eq = token.indexOf("=");
+  if (token.startsWith("--") && eq > 2) {
+    const flag = token.slice(0, eq);
+    if (VALUE_FLAGS.includes(flag)) { explicitFlags.set(flag, token.slice(eq + 1)); continue; }
+  }
+  flagArgv.push(token);
+}
+
+/** 全部合法 `--` 旗标。打错一枚（`--sessoin`）不许悄悄变成位置参数——
+ *  `--sessoin s1 hi` 会被读成「工作区 = s1、任务 = hi」，在错的工作区新开一条会话。 */
+const KNOWN_FLAGS = new Set([
+  "--help", "--version", "--doctor",
+  "--mode", "--provider", "--model", "--ctx-window", "--workspace", "--message", "--log",
+  "--session", "--goal", "--max-turns", "--max-usd", "--replay", "--fork", "--from",
+  "--discover", "--key-env", "--protocol", "--provider-name", "--label", "--allow-local", "--json",
+  "--compact", "--unattended", "--auto-verify", "--quality", "--delivery-repair", "--serve",
+  "--bandit", "--no-bandit", "--cascade", "--no-cascade",
+  "--plugins", "--trust-plugin", "--decline-plugin",
+  "--sessions", "--verify",
+]);
+
 /** flag 给了却没带值 = 用法错误。照 gym-run 的 pick()：静默按缺省跑会让打错的 flag 假装生效。 */
 function pick(flag: string): string | null {
-  const i = argv.indexOf(flag);
+  if (explicitFlags.has(flag)) return explicitFlags.get(flag)!;
+  const i = flagArgv.indexOf(flag);
   if (i < 0) return null;
-  const v = argv[i + 1];
+  const v = flagArgv[i + 1];
   if (v === undefined || v.startsWith("--")) {
     throw new UsageError(`${flag} 需要一个值（收到：${v === undefined ? "缺省" : v}）`);
   }
   return v;
+}
+
+/** 同一个旗标出现多次时全收（`--verify a --verify b`）。`pick` 只取第一枚，判据要全收。 */
+function pickAll(flag: string): string[] {
+  const out: string[] = [];
+  if (explicitFlags.has(flag)) out.push(explicitFlags.get(flag)!);
+  for (let i = 0; i < flagArgv.length; i++) {
+    if (flagArgv[i] !== flag) continue;
+    const v = flagArgv[i + 1];
+    if (v === undefined || v.startsWith("--")) {
+      throw new UsageError(`${flag} 需要一个值（收到：${v === undefined ? "缺省" : v}）`);
+    }
+    out.push(v);
+    i++;
+  }
+  return out;
 }
 
 interface DiscoverRequest {
@@ -291,6 +357,10 @@ interface Options {
   goal: GoalSpec | null;
   unattended: boolean;
   autoVerify: boolean;
+  /** 质量档（`--quality`）：强制绿验、最小工具面、环境事实、分阶段思考档。 */
+  quality: boolean;
+  /** 任务自带判据（spec 2026-11-04）：`--verify <cmd>` 可重复；null = 没给（旧行为）。 */
+  verifyDeclaration: VerifyDeclaration | null;
   /** M5b 路由开关覆盖（`--bandit/--no-bandit`、`--cascade/--no-cascade`）。空对象 = 一枚都没给
    *  ⇒ 递进 over 后一个键都不多（等价于今天）。 */
   routingOverrides: RoutingFlagOverrides;
@@ -301,14 +371,21 @@ interface Options {
   /** `--plugins`／`--trust-plugin`／`--decline-plugin`：插件与 skill 的发现面及其信任决议。
    *  三条都不跑模型、不落会话；`null` = 一枚都没给（普通任务那一路）。 */
   plugins: PluginCliRequest | null;
+  /** `--sessions`：只读列出当前工作区的会话（id / 标题 / 行数 / 时间 / 会话级模型）后退出。 */
+  sessions: boolean;
 }
 
 function parseArgs(): Options | "help" | "version" | "doctor" {
-  // 这两个旗标不看其余 argv：给了就分派后退出（--version 打一行；--doctor 只做环境自检，
+  // 这两个旗标不看其余参数：给了就分派后退出（--version 打一行；--doctor 只做环境自检，
   // 不跑模型也不要求任务描述）。放在 --help 之前，免得被后面的用法校验拦下。
-  if (argv.includes("--version")) return "version";
-  if (argv.includes("--doctor")) return "doctor";
-  if (argv.includes("--help") || argv.includes("-h")) return "help";
+  if (flagArgv.includes("--version")) return "version";
+  if (flagArgv.includes("--doctor")) return "doctor";
+  if (flagArgv.includes("--help") || flagArgv.includes("-h")) return "help";
+
+  const unknownFlag = flagArgv.find((a) => a.startsWith("--") && !KNOWN_FLAGS.has(a));
+  if (unknownFlag !== undefined) {
+    throw new UsageError(`未知选项：${unknownFlag.split("=")[0]}（-h 看全部选项）`);
+  }
 
   const modeRaw = pick("--mode") ?? "default";
   if (!PERMISSION_MODES.includes(modeRaw as PermissionMode)) {
@@ -317,16 +394,19 @@ function parseArgs(): Options | "help" | "version" | "doctor" {
   const mode = modeRaw as PermissionMode;
 
   // 位置参数：**一个 = 任务描述**（工作区取 cwd），**两个 = 工作区 + 任务描述**。
-  // flag 的值不算位置参数（`--mode` 的 "auto" 不是工作区）——按「前一个 token 是取值型 flag」剔除。
-  const VALUE_FLAGS = [
-    "--mode", "--provider", "--model", "--ctx-window", "--workspace", "--message", "--log",
-    "--session", "--goal", "--max-turns", "--max-usd", "--replay", "--fork", "--from",
-    "--discover", "--key-env", "--protocol", "--provider-name", "--label",
-    // 插件面那两条是**取值型**旗标：名字不进这张表就会被当位置参数，于是
-    // `cairn --trust-plugin graphflow` 读成「工作区 = graphflow、任务 = 空」——批准错对象比拒了还坏。
-    "--trust-plugin", "--decline-plugin",
-  ];
-  const positional = argv.filter((a, i) => !a.startsWith("--") && !VALUE_FLAGS.includes(argv[i - 1] ?? ""));
+  // flag 的值不算位置参数（`--mode` 的 "auto" 不是工作区）——按「前一个 token 是取值型 flag」剔除；
+  // 等号形式的值不进 token 流，天然不占位。
+  // 缺值要在「需要任务描述」之前点名：`cairn --session` 只给了一枚旗标，
+  // 用户该看到的是「--session 需要一个值」，不是一句把他引向任务描述的错。
+  for (const flag of VALUE_FLAGS) {
+    if (explicitFlags.has(flag)) continue;
+    if (!flagArgv.includes(flag)) continue;
+    const value = flagArgv[flagArgv.indexOf(flag) + 1];
+    if (value === undefined || value.startsWith("--")) {
+      throw new UsageError(`${flag} 需要一个值（收到：${value === undefined ? "缺省" : value}）`);
+    }
+  }
+  const positional = [...trailingArgv, ...flagArgv.filter((a, i) => !a.startsWith("--") && !VALUE_FLAGS.includes(flagArgv[i - 1] ?? ""))];
   if (positional.length > 2) {
     throw new UsageError(`位置参数最多两个（工作区 + 任务描述），收到 ${String(positional.length)} 个：${positional.join(" / ")}`);
   }
@@ -335,7 +415,7 @@ function parseArgs(): Options | "help" | "version" | "doctor" {
     throw new UsageError("--workspace 与位置参数重复给工作区，二者只能取一");
   }
   const workspaceArg = flagWorkspace ?? (positional.length === 2 ? positional[0]! : process.cwd());
-  const compact = argv.includes("--compact");
+  const compact = flagArgv.includes("--compact");
   const message = pick("--message") ?? (positional.length === 2 ? positional[1] : positional[0]);
 
   // ---- 第 438 页：插件／skill 的发现面与信任决议（`--plugins`、`--trust-plugin`、`--decline-plugin`）----
@@ -352,9 +432,20 @@ function parseArgs(): Options | "help" | "version" | "doctor" {
       ? { mode: "decide", name: trustFlag, trusted: true }
       : declineFlag !== null
         ? { mode: "decide", name: declineFlag, trusted: false }
-        : argv.includes("--plugins")
+        : flagArgv.includes("--plugins")
           ? { mode: "list" }
           : null;
+  // `--sessions`：只读列举会话，不跑任务。和其他「要做点什么」的旗标同用一律拒——
+  // 让它抢跑等于把用户的任务悄悄吃掉，而退码还是 0。
+  const sessionsMode = flagArgv.includes("--sessions");
+  if (sessionsMode) {
+    const conflict = ["--replay", "--discover", "--serve", "--compact", "--fork", "--goal", "--plugins", "--trust-plugin", "--decline-plugin", "--log"]
+      .find((flag) => flagArgv.includes(flag));
+    if (conflict !== undefined) throw new UsageError(`--sessions 是只读列举，不能与 ${conflict} 同用`);
+    if (message !== undefined && message !== "") {
+      throw new UsageError(`--sessions 不接受任务描述：去掉「${message}」`);
+    }
+  }
   if (plugins !== null && message !== undefined && message !== "") {
     // 三条都是「看面／记决议」，不是「跑任务」。带着任务描述时**必须拒**：
     // 让插件面抢跑就是把用户的任务悄悄吃掉，而退码还是 0。
@@ -362,9 +453,10 @@ function parseArgs(): Options | "help" | "version" | "doctor" {
   }
 
   // `--replay` 也免给任务（它只读日志）——但复用它自己的 pick 会让「--replay 缺值」在这里
-  // 先撞成一句含混的用法错；用 argv.includes 放行、把缺值留给下面那处 pick 去点名。
-  if ((message === undefined || message === "") && !compact && !argv.includes("--replay") && !argv.includes("--discover") && plugins === null) {
-    throw new UsageError("需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay 不用给）");
+  // 先撞成一句含混的用法错；用 includes 放行、把缺值留给下面那处 pick 去点名。
+  if ((message === undefined || message === "") && !compact && !flagArgv.includes("--replay") && !flagArgv.includes("--discover")
+    && !flagArgv.includes("--serve") && plugins === null && !sessionsMode) {
+    throw new UsageError("需要一个任务描述：cairn <任务>（或 --message <任务>；只有 --compact / --replay / --serve / --discover / --sessions 不用给）");
   }
 
   // provider 的三个原始 flag **只收不解析**：解析推迟到 main() 里 replay 分支之后。
@@ -376,7 +468,7 @@ function parseArgs(): Options | "help" | "version" | "doctor" {
   const modelFlag = pick("--model");
   const ctxWindowFlag = pick("--ctx-window");
 
-  const unattended = argv.includes("--unattended");
+  const unattended = flagArgv.includes("--unattended");
 
   // ---- `--discover`：探测一个地址有哪些模型，再配目录参数生成可粘贴的配置 ----
   // 它是**显式 opt-in** 的网络动作（探测默认关：不该在你只是想看帮助时先把钥匙发出去）。
@@ -393,16 +485,24 @@ function parseArgs(): Options | "help" | "version" | "doctor" {
           keyEnv: pick("--key-env"),
           protocol: protocolRaw as DiscoveryProtocol | null,
           model: pick("--model"),
-          json: argv.includes("--json"),
+          json: flagArgv.includes("--json"),
           label: pick("--label"),
           providerId: pick("--provider-name"),
-          allowLocal: argv.includes("--allow-local"),
+          allowLocal: flagArgv.includes("--allow-local"),
         };
+  // 只在探测面生效的旗标：没有 --discover 时给了也不会生效。静默忽略 = 让旗标假装生效。
+  if (discoverBaseURL === null) {
+    const stray = ["--key-env", "--protocol", "--label", "--provider-name", "--allow-local", "--json"]
+      .find((flag) => flagArgv.includes(flag));
+    if (stray !== undefined) {
+      throw new UsageError(`${stray} 只配合 --discover 用；单独给会被拒绝`);
+    }
+  }
   const workspace = resolve(ROOT, workspaceArg);
   const flagLog = pick("--log");
   const flagSession = pick("--session");
   if (flagSession !== null && !isValidSessionName(flagSession)) {
-    throw new UsageError(`--session 非法会话名：${flagSession}（不得含 / \\ . 或控制字符，≤80）`);
+    throw new UsageError(`--session 非法会话名：${flagSession}（${sessionIdProblem(flagSession) ?? "未知原因"}）`);
   }
   const goal = parseGoal();
   if (goal !== null && compact) {
@@ -426,7 +526,7 @@ function parseArgs(): Options | "help" | "version" | "doctor" {
       if (on) throw new UsageError(`--replay 只读日志、不跑模型：与 ${flag} 不能同时给`);
     }
     if (!isValidSessionName(replayId)) {
-      throw new UsageError(`--replay 非法会话名：${replayId}（不得含 / \\ . 或控制字符，≤80）`);
+      throw new UsageError(`--replay 非法会话名：${replayId}（${sessionIdProblem(replayId) ?? "未知原因"}）`);
     }
     if (message !== undefined && message !== "") {
       throw new UsageError("--replay 只读日志、不跑模型：不用给任务描述");
@@ -442,7 +542,7 @@ function parseArgs(): Options | "help" | "version" | "doctor" {
   }
   if (forkSource !== null) {
     if (!isValidSessionName(forkSource)) {
-      throw new UsageError(`--fork 非法会话名：${forkSource}（不得含 / \\ . 或控制字符，≤80）`);
+      throw new UsageError(`--fork 非法会话名：${forkSource}（${sessionIdProblem(forkSource) ?? "未知原因"}）`);
     }
     if (flagSession !== null) throw new UsageError("--fork 自带会话来源，与 --session 重复");
     if (flagLog !== null) throw new UsageError("--fork 落新会话（<ws>/.agent/sessions/），与 --log 不能同时给");
@@ -464,7 +564,7 @@ function parseArgs(): Options | "help" | "version" | "doctor" {
   // ---- M4 路线图：--serve 常驻调度（调度器真入口；二选一取常驻而非 goal 内 cron，
   // 理由与代价在台账 258 页：Scheduler 本就是常驻语义——tick 60s/补跑 7 天/并发闸，
   // goal 轮内塞 cron 会把 wall-clock 语义塞进模型驱动的节拍里）----
-  const serve = argv.includes("--serve");
+  const serve = flagArgv.includes("--serve");
   if (serve) {
     const conflicts: [string, boolean][] = [
       ["--goal", goal !== null],
@@ -493,7 +593,7 @@ function parseArgs(): Options | "help" | "version" | "doctor" {
 
   // M5b 路由开关：解析走纯函数（main/routing-flags），矛盾旗标一正一反同时给 ⇒ 在这里拒跑退 2，
   // 而不是让后一枚赢（同 `--replay` 那族口径：两枚都在时读数不知道自己跑在哪副装配上）。
-  const routingParsed = parseRoutingFlags(argv);
+  const routingParsed = parseRoutingFlags(flagArgv);
   if (!routingParsed.ok) throw new UsageError(routingParsed.error);
 
   return {
@@ -511,12 +611,52 @@ function parseArgs(): Options | "help" | "version" | "doctor" {
     logPath,
     goal,
     unattended,
-    autoVerify: argv.includes("--auto-verify"),
+    autoVerify: flagArgv.includes("--auto-verify"),
+    quality: flagArgv.includes("--quality"),
+    verifyDeclaration: (() => {
+      const commands = pickAll("--verify");
+      return commands.length === 0 ? null : { commands };
+    })(),
     routingOverrides: routingParsed.overrides,
-    serve: argv.includes("--serve"),
+    serve: flagArgv.includes("--serve"),
     discover,
     plugins,
+    sessions: sessionsMode,
   };
+}
+
+/** `--sessions` 的输出面：只读、无凭据也跑。元数据坏了照列文件事实（坏档不当成零会话）。 */
+export async function printWorkspaceSessions(workspace: string): Promise<number> {
+  const dir = join(workspace, ".agent", "sessions");
+  let metadataById = new Map<string, Awaited<ReturnType<SessionMetadataRepository["get"]>>>();
+  let metadataWarning: string | null = null;
+  try {
+    const repo = new SessionMetadataRepository(join(dir, "session-metadata.json"));
+    const records = await repo.list();
+    metadataById = new Map(records.map((record) => [record.id, record]));
+  } catch (err) {
+    metadataWarning = err instanceof Error ? err.message : String(err);
+  }
+  const list = await listSessions(dir, metadataById);
+  if (metadataWarning !== null) {
+    process.stderr.write(paint(YELLOW, `[cairn] 会话元数据读不了（只列文件事实）：${metadataWarning}\n`));
+  }
+  if (list.length === 0) {
+    process.stdout.write(`还没有会话（${dir}）\n`);
+    return EXIT_OK;
+  }
+  process.stdout.write(`会话（${String(list.length)} 条，${dir}）：\n`);
+  for (const s of list) {
+    const flags = [
+      s.pinned === true ? "置顶" : null,
+      s.archived === true ? "已归档" : null,
+      s.model !== undefined ? `模型 ${s.model}` : null,
+      s.thinking !== undefined ? `思考 ${s.thinking}` : null,
+    ].filter((f): f is string => f !== null).join(" · ");
+    const when = new Date(s.mtimeMs).toLocaleString();
+    process.stdout.write(`  ${s.id}  ${s.title ?? ""}  ${String(s.lines)} 行  ${when}${flags === "" ? "" : "  " + flags}\n`);
+  }
+  return EXIT_OK;
 }
 
 function parseGoal(): GoalSpec | null {
@@ -580,10 +720,10 @@ function resolveProviderSelection(flagProvider: string | undefined, flagModel?: 
     // 落 demo 等于拿一段预录剧本冒充真跑：用户看到「跑完了」，实际什么都没发生。
     // demo 必须显式 `--provider demo`（它是个演示档，不是缺 key 时的兜底）。
     //
-    // 顺序：**内置四家在前、自定义家在后**。理由不是偏好，是稳定：内置那四家的先后是一份写死的
+    // 顺序：**内置家在前、自定义家在后**。理由不是偏好，是稳定：内置那四家的先后是一份写死的
     // 产品裁决（见注释上文的「否则加一个 provider 就静默改默认」），把自定义家插进去会让老用户
     // 的默认通道因为他新加了一个 provider 而改变。自定义家之间按**配置文件里的书写顺序**，可预期。
-    for (const kind of ["glm", "openai", "anthropic", "gemini"] as const) {
+    for (const kind of PROVIDER_IDS) {
       const envName = envKeyOf(kind);
       if (envName !== null && (process.env[envName] ?? "").trim() !== "") {
         return forward(kind);
@@ -593,13 +733,13 @@ function resolveProviderSelection(flagProvider: string | undefined, flagModel?: 
       const value = (process.env[custom.apiKeyEnv] ?? "").trim();
       if (value !== "") return forward(custom.id);
     }
-    const names = (["glm", "openai", "anthropic", "gemini"] as const)
+    const names = PROVIDER_IDS
       .map((k) => envKeyOf(k))
       .filter((n): n is string => n !== null)
       .join(" / ");
     const custom = installedCustomProviders();
     const customHint =
-      "  DeepSeek 走 OpenAI 兼容通道：export OPENAI_BASE_URL=https://api.deepseek.com/v1\n" +
+      "  DeepSeek（V4.1 Flash）：export DEEPSEEK_API_KEY=<你的 key>（缺省模型 deepseek-flash）\n" +
       (custom.length > 0
         ? `  你已声明自定义 provider：${custom.map((p) => `${p.id}（需要 ${p.apiKeyEnv}）`).join("、")}\n`
         : "");
@@ -709,6 +849,16 @@ export function renderEvent(e: AgentEvent): string | null {
 //     这个 throw 会从 notify 一路冒到工具执行里，被 loop 记成「工具失败：readline was closed」
 //     ——一次没人应答的审批，伪装成模型写盘失败。必须吞掉并转成拒绝。
 //     （`rl.closed` 运行时存在但不在 @types/node 的 Interface 上，所以自己跟踪。）
+/** 审批门/方案门的输入→决议映射（纯函数，业主 2026-11-07 裁决：回车=拒绝）。
+ *  旧形状 `a !== "n"` 把空回车和一切打错的字都当批准——默认不安全（误触放行写操作）。
+ *  三档：y/yes ⇒ 批准一次；a/all ⇒ 批准 + 本会话内同类；其余（含空回车）⇒ 拒绝。 */
+export function approvalDecisionFor(answer: string): { approved: boolean; scope: "once" | "session_kind" } {
+  const a = answer.trim().toLowerCase();
+  if (a === "a" || a === "all") return { approved: true, scope: "session_kind" };
+  if (a === "y" || a === "yes") return { approved: true, scope: "once" };
+  return { approved: false, scope: "once" };
+}
+
 function promptForApproval(
   rl: ReturnType<typeof createInterface>,
   isClosed: () => boolean,
@@ -719,11 +869,14 @@ function promptForApproval(
   try {
     rl.question(
       `\n${color ? YELLOW : ""}批准？${color ? RESET : ""} ${req.tool} ${argsDigest(req.args)}${risk}${why}\n` +
-      `  [y] 批准一次  [a] 本会话内同类批准  [n] 拒绝  > `,
+      `  [y] 批准一次  [a] 本会话内同类批准  [n] 拒绝（回车=拒绝） > `,
       (answer) => {
-        const a = answer.trim().toLowerCase();
-        const scope = a === "a" || a === "all" ? "session_kind" : "once";
-        handleAgentDecide(req.askId, a !== "n" && a !== "no", scope);
+        const { approved, scope } = approvalDecisionFor(answer);
+        const ok = handleAgentDecide(req.askId, approved, scope);
+        // 迟到的输入必须出声（与 submitClarify 的「无人等待」同一纪律）：交互审批 60s 无响应已
+        // 按拒绝收束（AskGate 缺省超时），用户对着死卡打 y 却毫无反馈 = 最难查的一类静默。
+        // 60s 超时本身是业主 2026-11-07 裁决定案：维持按拒绝收束（与 clarify/plan 无限等的不对称接受）。
+        if (!ok) process.stderr.write(paint(YELLOW, "[cairn] 该审批已超时或已被处理（默认 60s 无响应按拒绝收束），本次输入未生效\n"));
         if (!isClosed()) rl.prompt();
       },
     );
@@ -747,9 +900,14 @@ function decidePlan(approved: boolean, callId: string): void {
   // handlePlanDecide 是 async（决议要经会话管线落盘），调用点却都在同步回调里。
   // fire-and-forget 没问题——propose_plan 挂的是 waitApproval，decide 只是解挂它。
   // 但落盘那一 await 可能抛，而没人接的 promise 拒绝会直接打崩进程。
-  handlePlanDecide(approved, callId).catch((err: unknown) => {
-    process.stderr.write(paint(RED, `[cairn] 方案决议落盘失败：${err instanceof Error ? err.message : String(err)}\n`));
-  });
+  // 迟到的决议（run 已推进/中止 ⇒ settle false）同样要出声——静默吞掉 = 用户对着死卡打字没反馈。
+  handlePlanDecide(approved, callId)
+    .then((ok) => {
+      if (!ok) process.stderr.write(paint(YELLOW, "[cairn] 该方案卡已失效或已被处理（会话已推进/中止），本次输入未生效\n"));
+    })
+    .catch((err: unknown) => {
+      process.stderr.write(paint(RED, `[cairn] 方案决议落盘失败：${err instanceof Error ? err.message : String(err)}\n`));
+    });
 }
 
 /** 方案门在 CLI 上该给出什么决议（纯函数，可单测）。
@@ -765,7 +923,7 @@ function decidePlan(approved: boolean, callId: string): void {
  *   · 交互终端 —— 问人（"ask"，调用方走 rl.question）；
  *   · 管道/CI 且非 auto —— fail-closed 拒绝（"reject"）。 */
 export function planDecisionFor(input: { mode: PermissionMode; ask: boolean }): "approve" | "ask" | "reject" {
-  if (input.mode === "auto") return "approve";
+  if (input.mode === "auto" || input.mode === "full-access") return "approve";
   return input.ask ? "ask" : "reject";
 }
 
@@ -799,9 +957,9 @@ function promptForPlan(
     return;
   }
   try {
-    rl.question(`${header}  [y] 批准  [n] 拒绝  > `, (answer) => {
-      const a = answer.trim().toLowerCase();
-      decidePlan(a !== "n" && a !== "no", callId);
+    rl.question(`${header}  [y] 批准  [n] 拒绝（回车=拒绝） > `, (answer) => {
+      // 业主 2026-11-07 裁决：回车=拒绝，与审批门同一份映射（approvalDecisionFor）。
+      decidePlan(approvalDecisionFor(answer).approved, callId);
       if (!isClosed()) rl.prompt();
     });
   } catch {
@@ -1024,10 +1182,11 @@ function printHelp(): void {
   cairn --session <id> --compact    手动压缩那条会话后退出
   cairn --fork <id> --from <n> <任务>  分叉：保留前 n 轮（含），新任务作为第 n+1 轮跑在**新会话** <id>-f<n> 上
   cairn --replay <id>               只读回放这条会话的决策链（不跑模型）
+  cairn --sessions                  列出当前工作区的会话（id / 标题 / 行数 / 时间 / 会话级模型）
 
 选项：
-  --mode <档>          read-only | default | guided | auto（默认 default = 逐次审批）
-  --provider <哪家>    glm | openai | anthropic | gemini | demo（默认：按已配置的 key 推断）
+  --mode <档>          read-only | default | guided | auto | full-access（默认 default = 逐次审批）
+  --provider <哪家>    glm | openai | anthropic | gemini | deepseek | demo（默认：按已配置的 key 推断）
                        demo = 预录剧本：零凭据、不拨号，但与你给的任务无关
                        （固定演「读→写 src/todo.ts→跑测试」），台词「任务完成」也是剧本的一部分，
                        结论请看退出码。想量能力用 pnpm bench，别用 demo。
@@ -1036,9 +1195,11 @@ function printHelp(): void {
                        缺省取档位表里最小的那个，对更小的模型是高估 ⇒ 撞远端 400。
                        指向小窗/网关模型时请显式给。
   --session <id>       接着这条会话跑（缺省新开一条 cli-<时间戳>）
+  --message <任务>     与位置参数等价（给包装脚本用）；也可写 --message=<任务>，值可带前导 --
   --fork <id>          分叉源会话（配合 --from）：原会话只读、新会话 <id>-f<n>，事件溯源本来就是这么设计的
   --from <n>           保留前 n 轮（含）再分叉；「轮」以 user_message 为界
   --replay <id>        回放决策链（每行一条事件、带 gate 判定与验证结果）后退出，不跑模型、不改日志
+  --sessions           只读列出当前工作区的会话（id / 标题 / 行数 / 时间 / 会话级 model/thinking）后退出
   --goal "<目标>"       给这条会话设目标：一轮收束后按判据自动续跑，不达标就再来一轮
   --serve               常驻调度模式：启动定时任务调度器（tick 60s，补跑 7 天），不跑单次会话
   --max-turns <n>      目标轮次上限（配 --goal）
@@ -1047,6 +1208,7 @@ function printHelp(): void {
   --log <路径>         事件日志落盘位置（与 --goal / --session 互斥，见下）
   --unattended         无人值守：一切审批 fail-closed 拒绝（不给交互门）
   --auto-verify        收束前补一拍验证（模型没自调 verify 时）
+  --quality            质量档，写盘后必须通过验证才能成功收束
   --delivery-repair    交付断言落红后再要一轮补做（幽灵文件 / 空输出；缺省关）
   --bandit             本会话开「路由 bandit」：每轮可能换模型档位，改花钱行为（--no-bandit 显式关；都不给=按设置）
   --cascade            本会话开「级联升档」：客观判据不过时升一档重跑，多花一遍钱（--no-cascade 显式关；都不给=按设置）
@@ -1061,6 +1223,9 @@ function printHelp(): void {
                        配合：--key-env <变量名>（默认由地址推）｜--protocol openai|anthropic|gemini
                              --model <名字>（只挑一条）｜--provider-name <id>｜--allow-local｜--json
   -h, --help           本帮助
+  --                   之后的 token 一律按位置参数（任务以 - 或 -- 开头时用：
+                       cairn --provider demo -- "--以破折号开头的任务"）
+  取值型旗标也可写 --flag=value（值以 - 开头时只有这一种写法：--message=--差量）
 
 退出码：0 成功 / 1 跑完但失败 / 2 用法错
 
@@ -1229,6 +1394,31 @@ async function runPluginFace(req: PluginCliRequest, workspace: string): Promise<
   }
 }
 
+/** 会话目录可写性（不建目录）：只读挂载 / 他人所有的目录会让锁与事件都写不进去。
+ *  不在这里报的话，用户看到的是「运行失败：EACCES … cli-….jsonl.lock」——一句没有出路的系统错误。 */
+async function sessionDirWriteProblem(dir: string): Promise<string | null> {
+  try {
+    await access(dir, constants.W_OK);
+    return null;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; // 还没建：后面的 mkdir 会建
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
+/** 工作区路径的**形状**校验（不建目录）。ENOENT = 还没建，放行给后面的 mkdir；
+ *  其余错误（普通文件挡路 / 无权限 / 符号链接成环）都该以「工作区不可用」出现，
+ *  而不是被 providers.json 的读取失败冒充成「配置有问题」。 */
+async function workspacePathProblem(path: string): Promise<string | null> {
+  try {
+    const info = await stat(path);
+    return info.isDirectory() ? null : "它是一个普通文件，不是目录";
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
 async function main(): Promise<number> {
   let opts: Options | "help" | "version" | "doctor";
   try {
@@ -1252,12 +1442,18 @@ async function main(): Promise<number> {
   // ---- 产品化 B1：`--doctor` 环境自检（不跑模型、不落日志）----  // 工作区只认写得对的 --workspace <值>，其余一律按 cwd——doctor 本身不该因为 argv 另有毛病而炸，
   // 所以不走 pick()（它对缺值抛 UsageError）。
   if (opts === "doctor") {
-    const wsIdx = argv.indexOf("--workspace");
-    const wsFlag = wsIdx >= 0 ? argv[wsIdx + 1] : undefined;
+    const wsIdx = flagArgv.indexOf("--workspace");
+    const wsFlag = wsIdx >= 0 ? flagArgv[wsIdx + 1] : undefined;
     const ws = wsFlag !== undefined && !wsFlag.startsWith("--") ? wsFlag : process.cwd();
     const report = await runDoctor(ws);
     process.stdout.write(renderDoctor(report));
     return report.exitCode;
+  }
+
+  const workspaceProblem = await workspacePathProblem(opts.workspace);
+  if (workspaceProblem !== null) {
+    process.stderr.write(paint(RED, `[cairn] 工作区路径不可用：${opts.workspace}（${workspaceProblem}）\n`));
+    return EXIT_USAGE;
   }
 
   // ---- 第 438 页：`--plugins` 列发现面／`--trust-plugin`、`--decline-plugin` 落一条信任决议 ----
@@ -1284,10 +1480,30 @@ async function main(): Promise<number> {
       process.stderr.write(paint(RED, `[cairn] 读日志失败：${err instanceof Error ? err.message : String(err)}\n`));
       return EXIT_FAILED;
     }
-    process.stdout.write(formatReplay(events) + "\n");
+    // 指针分叉：显示序号不是 raw id。先打来源视图（每行属于哪个文件、哪个物理行），再回放有效历史。
+    let provenance = "";
+    const head = events[0];
+    if (head !== undefined && head.type === "session_meta" && head.fork !== undefined) {
+      try {
+        const view = await readSessionView(
+          { workspace: opts.workspace, sessionId: opts.replayId },
+          join(opts.workspace, ".agent", "sessions"),
+        );
+        events = view.entries.map((entry) => entry.event);
+        const rows = view.entries.map((entry, index) =>
+          `#${String(index + 1)} = ${entry.ref.sessionId} 第 ${String(entry.ref.eventId)} 行${entry.inherited ? "（继承）" : ""}`);
+        provenance = "[cairn] 来源视图（父前缀 + 本地；**显示序号 ≠ raw 行号**）：\n" + rows.join("\n") + "\n\n";
+      } catch (error) {
+        process.stderr.write(paint(YELLOW, `[cairn] 来源视图不可读（按 raw 回放）：${error instanceof Error ? error.message : String(error)}\n`));
+      }
+    }
+    process.stdout.write(provenance + formatReplay(events) + "\n");
     process.stdout.write(paint(DIM, `\n会话日志：${path}（${String(events.length)} 条事件）\n`));
     return EXIT_OK;
   }
+
+  // `--sessions`：只读列举，不碰 provider / 沙箱 / 设置（没配 key 的机器也要能查会话 id）。
+  if (opts.sessions) return await printWorkspaceSessions(opts.workspace);
 
   // 自定义 provider（`.agent/providers.json`）：必须在 provider 解析**之前**装上。
   // 顺序不是风格问题：装上之前 `--provider deepseek` 会被判成未知家 —— 配置写得再对也不通，
@@ -1307,7 +1523,11 @@ async function main(): Promise<number> {
     for (const warning of custom.warnings) process.stderr.write(paint(YELLOW, `[cairn] ⚠️ ${warning}\n`));
   }
 
-  // provider 解析：M0A_PROVIDER 显式覆盖优先，其次 settings，最后按已配置的 key 推断。
+  // provider 解析：旗标/env 显式覆盖 → key 探测（内置家按 PROVIDER_IDS 固定序，自定义家按配置书写序）。
+  // **settings 的 provider/model 不参与 CLI 的通道选择**（resolveProviderSelection 从第一天起就传
+  // settingsModel:""，见 resolveProviderSelection 内的 forward）——settings 那一格是桌面面
+  // resolveRunModel(settings, …) 的输入；CLI 的通道控制在 --provider/--model 旗标。
+  // （2026-11-07 评审订正：原文「其次 settings」与实现自诞生起不符——注释不许描述不存在的步骤。）
   // 推断顺序写死在这里而不是「挑第一个有的」——否则加一个 provider 就静默改默认。
   // 门的位置也在这一行说话：**放在 replay 之后**（回放不碰 provider，没 key 也得能看日志）；
   // `--compact` 与目标轮要主模型，解析照旧发生在起跑前。ConfigError 同样 exit 2，但不打「用法」行。
@@ -1323,8 +1543,23 @@ async function main(): Promise<number> {
   // ---- 应用壳（§1）：这三行是 CLI 从「直接调 runAgent」变成「走装配入口」的全部前提 ----
   // 顺序有讲究：settings 与 sessions 必须先于任何 handler（它们各自在未初始化时抛或回落
   // 到 /tmp 假档），沙箱自检的最后一份结果正好是 `handleAgentRun` 读的那份（只自检一次）。
-  initSettingsStore(join(opts.workspace, ".agent", "settings.json"));
-  initSessionsDir(join(opts.workspace, ".agent", "sessions"));
+  const settingsPath = join(opts.workspace, ".agent", "settings.json");
+  const sessionsDir = join(opts.workspace, ".agent", "sessions");
+  initSettingsStore(settingsPath);
+  initSessionsDir(sessionsDir);
+  // 运行与压缩都要往会话目录写（锁文件、事件、压缩记录）；写不进去时先给一句产品话。
+  const sessionsWrite = await sessionDirWriteProblem(sessionsDir);
+  if (sessionsWrite !== null) {
+    process.stderr.write(paint(RED, `[cairn] 会话目录不可写：${sessionsDir}（${sessionsWrite}）\n`));
+    process.stderr.write(paint(DIM, "[cairn] 检查 .agent/sessions 的目录权限（只读挂载 / 属主不是当前用户）\n"));
+    return EXIT_USAGE;
+  }
+  // 设置文件坏了不许静默用缺省：先读一次，把首读结论说出来（用户以为的设置没生效，他得知道）。
+  await getSettings();
+  const settingsIssue = settingsLoadIssue();
+  if (settingsIssue !== null) {
+    process.stderr.write(paint(YELLOW, `[cairn] 设置文件未生效：${settingsPath}（${settingsIssue.message}）——本轮按缺省设置继续；修好或删掉它再跑\n`));
+  }
   const sandbox: SandboxStatus = await initSandbox();
   if (!sandbox.available) {
     process.stderr.write(paint(YELLOW, `[cairn] 沙箱不可用（${sandbox.reason ?? "未自检通过"}）——run_shell 将不过 Seatbelt\n`));
@@ -1334,7 +1569,8 @@ async function main(): Promise<number> {
   // 放在应用壳之后：触发的会话（handleAgentRun）依赖 settings/sessions/沙箱这三样先就位。
   if (opts.serve) {
     const handle = await serveScheduler({ workspace: opts.workspace });
-    process.stdout.write(paint(GREEN, `[cairn] 调度器已启动（workspace ${opts.workspace}；tick 60s，补跑 7 天，并发闸 ≤2；Ctrl-C 退出）\n`));
+    const taskCount = scheduledTaskCount();
+    process.stdout.write(paint(GREEN, `[cairn] 调度器已启动（workspace ${opts.workspace}；tick 60s，补跑 7 天，并发闸 ≤2；已装载 ${String(taskCount)} 个任务${taskCount === 0 ? "；本工作区还没有定时任务（在桌面端「定时任务」页添加）" : ""}；Ctrl-C 退出）\n`));
     process.on("SIGINT", () => {
       handle.stop();
       process.stdout.write("\n[cairn] 调度器已停止\n");
@@ -1344,51 +1580,40 @@ async function main(): Promise<number> {
     return EXIT_OK; // 不可达
   }
 
-  await mkdir(dirname(opts.logPath), { recursive: true });
+  // 工作区/日志目录建不出来时给一句产品话，不让 ENOENT/EACCES 以堆栈形式冒到用户面前。
+  const logDir = dirname(opts.logPath);
+  try {
+    await mkdir(logDir, { recursive: true });
+  } catch (error) {
+    process.stderr.write(paint(RED, `[cairn] 无法准备工作区目录：${logDir}（${error instanceof Error ? error.message : String(error)}）\n`));
+    process.stderr.write(paint(DIM, "[cairn] 检查这条路径是否可写、路径上有没有普通文件挡路\n"));
+    return EXIT_USAGE;
+  }
 
   // ---- M8：`--fork` 的落点动作（读源日志 → 算分叉点 → 写新会话；源会话只读，字节不变）----
   if (opts.fork !== null) {
-    const sessionsDir = join(opts.workspace, ".agent", "sessions");
-    const srcPath = pathOf(sessionsDir, opts.fork.source);
-    let srcEvents: AgentEvent[];
-    try {
-      srcEvents = await replay(srcPath);
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-        process.stderr.write(paint(RED, `[cairn] 源会话不存在：${opts.fork.source}（看了 ${srcPath}）\n`));
-        return EXIT_FAILED;
-      }
-      process.stderr.write(paint(RED, `[cairn] 读源会话失败：${err instanceof Error ? err.message : String(err)}\n`));
-      return EXIT_FAILED;
-    }
-    const point = forkPointOf(srcEvents, opts.fork.round);
-    if ("error" in point) {
-      process.stderr.write(paint(RED, `[cairn] 分叉点非法：${point.error}\n`));
-      return EXIT_USAGE;
-    }
     const newId = forkSessionName(opts.fork.source, opts.fork.round);
     if (!isValidSessionName(newId)) {
       process.stderr.write(paint(RED, `[cairn] 分叉出的会话名非法（多半过长）：${newId}\n`));
       return EXIT_USAGE;
     }
-    const target = pathOf(sessionsDir, newId);
-    if (existsSync(target)) {
-      process.stderr.write(paint(RED, `[cairn] 目标会话已存在：${newId}（换 --from 或先删掉它；**不覆盖**既有转录）\n`));
+    const created = await createProductFork(
+      { workspace: opts.workspace, sessionId: opts.fork.source },
+      opts.fork.round,
+      { workspace: opts.workspace, sessionId: newId },
+    );
+    if (!created.ok) {
+      process.stderr.write(paint(RED, `[cairn] 分叉失败：${created.error}\n`));
       return EXIT_USAGE;
     }
-    // forkSession 写的一定是 `<dir>/events.jsonl`，而 CLI 的会话文件命名是 `<id>.jsonl`——
-    // 先写 scrub 目录再 rename：两边各守各的命名纪律，也不给 sessions 目录留半成品。
-    const scratch = join(sessionsDir, ".fork-" + newId);
-    const made = await forkSession(srcPath, String(point.lastIncluded), scratch);
-    await rename(made.eventsPath, target);
-    await rm(scratch, { recursive: true, force: true });
     process.stderr.write(
       paint(
         DIM,
-        `[cairn] 已分叉：${opts.fork.source} 前 ${String(opts.fork.round)} 轮（共 ${String(point.totalRounds)} 轮）→ 新会话 ${newId}；原会话只读未动\n`,
+        `[cairn] 已分叉：${opts.fork.source} 前 ${String(opts.fork.round)} 轮（共 ${String(created.totalRounds)} 轮）→ 新会话 ${newId}；` +
+        `父边界 = ${created.parent.sessionId} 第 ${String(created.boundaryEventId)} 行（指针，不复制父事件）\n`,
       ),
     );
-    opts = { ...opts, sessionId: newId, logPath: target };
+    opts = { ...opts, sessionId: newId, logPath: created.eventsPath };
   }
 
   // 交互面能不能真的接上人：stdin 不是 TTY（管道 / CI / 重定向）时没人能答审批。
@@ -1497,7 +1722,28 @@ async function main(): Promise<number> {
     }
   }
 
+  // CLI 的一整轮（goal_set → run → 交付断言 / diff 审阅）全程持有会话锁：
+  // 否则 goal_set 会在锁外先落（实测：会话被占用时仍写 goal_set，然后才报运行失败），
+  // 收束旁路同样会插进别人的转录。
+  let cliLock: SessionRunLock | null = null;
   try {
+    // 续跑一条已存在的会话前先验日志：非尾部坏行会让事件 id 与 1-based 行号错位。
+    // 此前这种日志要等到 tool 已经写盘、收束读数时才炸——副作用落了盘，转录却接不上。
+    // 坏行只许在尾部（replay 对尾部坏行本就降级容错）；验不过就不开始这一轮。
+    if (opts.wireSession && existsSync(opts.logPath)) {
+      try {
+        await replay(opts.logPath);
+      } catch (error) {
+        process.stderr.write(paint(RED, `[cairn] 无法续跑这条会话：${error instanceof Error ? error.message : String(error)}\n`));
+        return EXIT_FAILED;
+      }
+    }
+    const acquiredLock = await acquireSessionRunLock(opts.logPath);
+    if (!acquiredLock.ok) {
+      process.stderr.write(paint(RED, `[cairn] 运行失败：${acquiredLock.error}\n`));
+      return EXIT_FAILED;
+    }
+    cliLock = acquiredLock.lock;
     // --goal 必须**先于** handleAgentRun 写进同一份 JSONL：续跑判据是 run 收束时 projectGoal
     // 重放这条日志读出来的，run 里再设就晚一轮。
     if (opts.goal !== null) {
@@ -1514,6 +1760,18 @@ async function main(): Promise<number> {
       for (const c of g.clamped ?? []) {
         process.stderr.write(paint(YELLOW, `[cairn] 目标参数已收敛：${c}\n`));
       }
+    }
+
+    // 任务自带判据（spec 2026-11-04）：与 `--goal` 同一时序——**先于** handleAgentRun 落进同一份 JSONL，
+    // 否则「这一轮按什么判」只活在内存里，重放看不见。坏声明当场拒，不带着它开工。
+    if (opts.verifyDeclaration !== null) {
+      const checked = validateVerifyDeclaration(opts.verifyDeclaration);
+      if (!checked.ok) {
+        process.stderr.write(paint(RED, `[cairn] --verify 声明无效：${checked.error}\n`));
+        return EXIT_USAGE;
+      }
+      await createEventLog(opts.logPath).append({ type: "session_meta_update", patch: {}, verify: checked.value });
+      opts.verifyDeclaration = checked.value;
     }
 
     const r = await handleAgentRun(
@@ -1542,10 +1800,12 @@ async function main(): Promise<number> {
         // 拆成两个槽就是为了不翻转上面那半：沉淀留开，只有续跑停。
         ...(!interactive ? { noAnswerer: true as const } : {}),
         ...(opts.autoVerify ? { autoVerify: true } : {}),
+        ...(opts.quality ? { quality: true } : {}),
+        ...(opts.verifyDeclaration === null ? {} : { verifyDeclaration: opts.verifyDeclaration }),
         // 能力 12 交付断言的返修环（`--delivery-repair`）：承诺了没落盘时再要一轮去补做。
         // 与 `--auto-verify` 不共享旗标：那一支接的是 verify 拍出的代码红，
         // 而恰恰是「一个字节都没写」的趟走不到收束闸，才需要这一支独立接住。
-        ...(argv.includes("--delivery-repair") ? { deliveryRepair: true } : {}),
+        ...(flagArgv.includes("--delivery-repair") ? { deliveryRepair: true } : {}),
         // M5b 路由开关（`--bandit/--no-bandit`、`--cascade/--no-cascade`）：空对象 ⇒ 一个键都不多，
         // 与「这两枚旗标存在前」逐字同形。真值由 agent-runner 与 settings 合（resolveRoutingFlags）。
         ...opts.routingOverrides,
@@ -1557,8 +1817,13 @@ async function main(): Promise<number> {
         // 定时任务是长驻进程语义（tick 60s / 补跑 7 天 / 并发闸 ≤2），CLI 是一次性进程。
         // 装上那五个工具，模型看得见就会去建，然后每次都撞「调度器未初始化」白烧一轮审批。
         automationTools: false,
+        // 锁由本层整轮持有（含 goal_set 与收束旁路）：装配入口不再自己取/放。
+        ...(cliLock !== null ? { sessionLock: cliLock } : {}),
       },
     );
+    // 这一趟是否真的开始过：被会话锁 / 信封校验拒在门外时，收束后的旁路（交付断言、diff 审阅）
+    // 一律不许再写同一份日志——那正是「锁住了却还插一条」的漏洞。
+    const runStarted = r.ok || r.notStarted !== true;
     if (!r.ok) {
       process.stderr.write(paint(RED, `[cairn] 运行失败：${r.error ?? "未知原因"}\n`));
       tally.errorEvents += 1;
@@ -1571,7 +1836,7 @@ async function main(): Promise<number> {
     // 所以把收口立在**这一层**（run 结果的消费者）：不管这一趟是走完的、崩的、
     // 还是卡在门上被收走的，只要承诺过要造而盘上没有，就落一条红进事件日志。
     // 这是最后一道，也是唯一一道能覆盖「从未回到调用方」那一族的。
-    try {
+    if (runStarted) try {
       const seen = eventsForCurrentRun(await replay(opts.logPath));
       const already = seen.some((e) => e.type === "tool_result" && e.callId === DELIVERY_GUARD_CALL_ID);
       // 去重只约束“还要不要再写一条日志”；最终失败状态必须继续按当前工作区计算。
@@ -1581,16 +1846,17 @@ async function main(): Promise<number> {
       if (deliveryFailure) {
         if (!already) {
           const output = phantom !== null ? describePhantomDelivery(phantom) : EMPTY_RUN_DELIVERY;
-          await appendFile(
-            opts.logPath,
-            JSON.stringify({
+          const guardLog = createEventLog(opts.logPath);
+          try {
+            await guardLog.append({
               type: "tool_result",
               callId: DELIVERY_GUARD_CALL_ID,
               ok: false,
               output,
-            }) + "\n",
-            "utf8",
-          );
+            });
+          } finally {
+            await guardLog.close?.();
+          }
           const warning = phantom !== null
             ? `承诺要造的 ${phantom.missing.join("、")} 没有落盘（检查补齐，或说明实际阻塞点）`
             : "这一轮没有工具调用，也没有收尾消息（检查任务是否真正开始）";
@@ -1604,7 +1870,7 @@ async function main(): Promise<number> {
       console.warn("[delivery] 交付断言收口失败:", err instanceof Error ? err.message : String(err));
     }
     // M8 增量：跑完后的 worker diff 逐文件审阅（TTY 才弹；被 Ctrl-C 取消的轮次不弹）
-    if (!cancelling) {
+    if (runStarted && !cancelling) {
       try {
         await reviewWorkerDiffs(rl, () => rlClosed, opts);
       } catch (err) {
@@ -1616,6 +1882,8 @@ async function main(): Promise<number> {
     process.stderr.write(paint(RED, `[cairn] 运行失败：${msg}\n`));
     return EXIT_FAILED;
   } finally {
+    await waitForSessionTailWork(opts.logPath);
+    if (cliLock !== null) await cliLock.release();
     // 抛错退出时那一段已收到的正文照样该打出来——它正是判断「模型走到哪一步」的唯一线索。
     flushAssistantText();
     // 接回 killAllTrackedChildren：它零调用的原因是 Electron 入口被删，CLI 正是它的天然调用方。

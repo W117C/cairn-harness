@@ -7,24 +7,69 @@
 //
 // 三支共同的纪律（原文随块搬来，未改一字）：**只观测、不驱动任何决策**，所以只印 stderr、不落事件流
 // （落流要新增事件类型，而事件流是重放契约）；失败**不许静默**——「没量到」不许被读成「没问题」。
+// （闭环 v2 的两处例外都有各自的理由：反思位的 usage 照落流——花掉的 token 必须记账，
+// 与沉淀轮同一裁决；反思正文不落流——它的产物是补丁措辞，落在 evolution.json/账本里，不是对话。）
 import { assistantTurnsFromEvents, goalDriftCell, goalDriftFindings } from "../agent/goal-drift";
 import { costPerProgress } from "../agent/cost-per-progress";
 import { eventsForCurrentRun } from "../agent/delivery-guard";
-import { runEvolution } from "../agent/evolution";
+import { runEvolution, type ReflectFn } from "../agent/evolution";
+import { basename } from "node:path";
+import { recordEpisode } from "./evolve/episode-store";
+import { seedPlaybookFromLegacy } from "./evolve/playbook-store";
+import { tickCanaryFromSignals } from "./evolution/activation-host";
+import { distillWorkflows, writeWorkflows } from "../agent/memory/workflow";
+import { maybeGraduateWorkflows } from "./evolution/workflow-graduate";
+import { runAssess } from "./evolution/assess";
 import { replay, type AgentEvent } from "../events";
+import type { Provider } from "../providers";
 
 export interface PostRunReadingInput {
   logPath: string;
   workspace: string;
   /** 会话 id（自进化那一支的归属键）；缺席时退回 logPath。 */
   sessionId?: string;
+  /** 反思位（闭环 v2 · 批次 A2）：读真实轨迹改写本轮补丁措辞的 provider 构造口。
+   *  缺省不传 = 纯规则补丁（既有行为）。由装配根递进来（provider 闭包在那边）。 */
+  reflectProviderFor?: (instruction: string) => Provider;
+  /** 反思轮限时（判卷可调小）：到点返回 null ⇒ fail-open 回规则兜底。 */
+  reflectDeadlineMs?: number;
+  /** 尾工让位信号（2026-11-06）：读数转注册尾工后，下一场 run 入口让位（awaitSessionTailWork）
+   *  触发 abort ⇒ 反思竞速即刻返回 null（fail-open），不再占着让位等待。 */
+  signal?: AbortSignal;
+}
+
+/** 反思轮缺省限时：60s。反思是收尾读数的一支（fail-open），不该拖住任何等待它的东西。 */
+const REFLECT_DEADLINE_MS = 60_000;
+
+/** 在 fn 抛错时**先**落一次读数，再把原错抛出去；成功路径不动（收尾那次由调用方负责，不重复读）。
+ *
+ *  事故 `failed-run-still-ledgers`（outputs/task-carried-verify-2026-11-04/INCIDENTS.md）：
+ *  `maxSteps` 撞帽走的是 throw，`emitPostRunReadings` 在正常收尾路径上，于是**失败的跑一条账都没有**。
+ *  自进化面看到的全是幸存者——最该学习的样本恰好缺页。读数自己失败不许掩盖原错。
+ */
+export async function withPostRunReadingsOnThrow<T>(
+  fn: () => Promise<T>,
+  emit: () => Promise<void>,
+): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    try {
+      await emit();
+    } catch (readErr) {
+      console.warn("[post-run] 失败路径读数也失败（原错仍照抛）: " + (readErr instanceof Error ? readErr.message : String(readErr)));
+    }
+    throw err;
+  }
 }
 
 /** 收束时调一次。**任何一支失败都不抛**——它不参与这一场的结果。 */
 export async function emitPostRunReadings(input: PostRunReadingInput): Promise<void> {
-  let events: AgentEvent[];
+  let allEvents: AgentEvent[] = [];
+  let events: AgentEvent[] = [];
   try {
-    events = eventsForCurrentRun(await replay(input.logPath), { includeWorkers: true });
+    allEvents = await replay(input.logPath);
+    events = eventsForCurrentRun(allEvents, { includeWorkers: true });
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     console.warn("[goal-drift] 读数失败（这一格未检，不等于没有漂移）: " + reason);
@@ -66,13 +111,120 @@ export async function emitPostRunReadings(input: PostRunReadingInput): Promise<v
   } catch (err) {
     console.warn("[cost-per-progress] 读数失败（这一格未检）: " + (err instanceof Error ? err.message : String(err)));
   }
-  // 自进化闭环：抽信号 → 生补丁 → 落 .agent/evolution.json。失败不阻塞主流程。
+  // Episode 证据基座（Evolve P0）：只观测、不驱动决策；失败只出声，不阻塞主流程。
   try {
-    const evo = await runEvolution(events, input.workspace, input.sessionId ?? input.logPath);
+    await recordEpisode({
+      events: allEvents,
+      workspace: input.workspace,
+      sessionId: input.sessionId ?? basename(input.logPath, ".jsonl"),
+      logPath: input.logPath,
+    });
+  } catch (err) {
+    console.warn("[evolve] Episode 落盘失败（这一场没有证据，不影响主流程）: " + (err instanceof Error ? err.message : String(err)));
+  }
+  // 自进化闭环：抽信号 → 评旧账 → 生补丁（反思位可选改写）→ 过门 → 落盘。失败不阻塞主流程。
+  try {
+    const reflect: ReflectFn | undefined = input.reflectProviderFor === undefined
+      ? undefined
+      : async (req) => {
+          // 反思轮限时+让位（2026-11-06）：反射 provider 没有取消缝；读数转注册尾工后，挂死的反思
+          // 会让下一场 run 的让位等待吃满 120s 保险丝。到点/让位返回 null ⇒ runEvolution fail-open
+          // 回规则兜底（真 provider 慢 ≠ 丢账，规则补丁照落）。
+          const input_ = input;
+          return await Promise.race([
+            consumeReflectOutput(input_.reflectProviderFor!(req.instruction)),
+            new Promise<null>((resolve) => {
+              const t = setTimeout(() => resolve(null), input_.reflectDeadlineMs ?? REFLECT_DEADLINE_MS);
+              (t as { unref?: () => void }).unref?.();
+            }),
+            ...(input_.signal !== undefined
+              ? [new Promise<null>((resolve) => {
+                  if (input_.signal!.aborted) { resolve(null); return; }
+                  input_.signal!.addEventListener("abort", () => resolve(null), { once: true });
+                })]
+              : []),
+          ]);
+        };
+    const evo = await runEvolution(events, input.workspace, input.sessionId ?? input.logPath, reflect === undefined ? undefined : { reflect });
     if (evo.persistedTo !== null && evo.patches.length > 0) {
       console.warn("[evolution] 本跑产出 " + evo.patches.length + " 条策略补丁，已落 " + String(evo.persistedTo));
     }
+    // P1/P5：把最新补丁/记忆迁成 playbook candidate（只写 candidate，不注入）。
+    // 受 STOP 与 playbook 预算约束；迁移失败只出声，不影响收束。
+    try {
+      const seeded = await seedPlaybookFromLegacy(input.workspace);
+      if (seeded.added > 0) {
+        console.warn("[evolve] 本跑把 " + String(seeded.added) + " 条旧料迁入 playbook candidate");
+      }
+    } catch (err) {
+      console.warn("[evolve] playbook 迁移失败（不影响主流程）: " + (err instanceof Error ? err.message : String(err)));
+    }
+    // 观察期收束：工作区没有还开着的 canary 档 ⇒ 零行为；有档 ⇒ 用本轮同一份读数续档，
+    // 命中退化规则会在 CanaryController 内自动回退。失败只出声，不影响这一场的结果。
+    try {
+      const ticks = await tickCanaryFromSignals(input.workspace, evo.signals, input.sessionId ?? input.logPath);
+      for (const tick of ticks) {
+        if (tick.observation !== null) {
+          console.warn("[canary] " + tick.id + " · " + tick.outcome + " · state=" + tick.observation.state
+            + " · samples=" + String(tick.observation.samples));
+        }
+      }
+    } catch (err) {
+      console.warn("[canary] 观察期读数失败（不影响主流程）: " + (err instanceof Error ? err.message : String(err)));
+    }
+    // 正向打法蒸馏（批次 B1）：成功复现的工具组合 → project 记忆（落 .agent/memory/，
+    // 经 M7 索引/检索/强度账回注）。复现 < 2 次 ⇒ 零条目零写入。
+    try {
+      const workflows = distillWorkflows(events, input.logPath);
+      if (workflows.length > 0) {
+        const written = await writeWorkflows(input.workspace, workflows, new Date().toISOString());
+        console.warn("[workflow] 本跑蒸馏 " + String(written) + " 条打法（复现≥2 且收尾绿 verify）");
+      }
+    } catch (err) {
+      console.warn("[workflow] 打法蒸馏失败（不影响主流程）: " + (err instanceof Error ? err.message : String(err)));
+    }
+    // 打法毕业（批次 B2）+ 周期 Assess（批次 C2）：modules/ 缺席 ⇒ 各自零行为。
+    try {
+      for (const g of await maybeGraduateWorkflows(input.workspace)) {
+        if (g.outcome === "submitted") console.warn("[workflow-graduate] " + g.topic + " 已提为 content-pack 提案（staging 待门）");
+        else if (g.outcome === "refused") console.warn("[workflow-graduate] " + g.topic + " 提案被拒: " + String(g.detail));
+      }
+    } catch (err) {
+      console.warn("[workflow-graduate] 毕业检查失败（不影响主流程）: " + (err instanceof Error ? err.message : String(err)));
+    }
+    try {
+      const assess = await runAssess(input.workspace);
+      if (assess !== null && assess.report.findings.length > 0) {
+        const counts: Record<string, number> = {};
+        for (const f of assess.report.findings) counts[f.kind] = (counts[f.kind] ?? 0) + 1;
+        console.warn("[assess] 体检报告 " + String(assess.reportPath) + "：" + Object.entries(counts).map(([k, n]) => k + "×" + String(n)).join("、"));
+      }
+    } catch (err) {
+      console.warn("[assess] 体检失败（不影响主流程）: " + (err instanceof Error ? err.message : String(err)));
+    }
   } catch (err) {
     console.warn("[evolution] 读数/落盘失败（不影响主流程）: " + (err instanceof Error ? err.message : String(err)));
+  }
+}
+
+/** 反思位的流消费：只收正文（usage 已由 provider 内部记账面处理或随 provider 配置走；
+ *  工具调用一律忽略——反思轮不给工具面，模型若仍发起调用按无产出处理）。
+ *  有的 provider 会**同时**发 delta 流与合并后的 assistant_message——两边都收正文会翻倍
+ *  （parse 必炸 ⇒ 全拒 ⇒ 白花一次反思），所以有 delta 用 delta、没有才落 message。
+ *  正文剥 ```json 围栏后 parse；parse 不动 ⇒ 原文返回（parseReflectProposals 会全拒 → 规则兜底）。 */
+async function consumeReflectOutput(provider: Provider): Promise<unknown> {
+  let deltas = "";
+  let message: string | null = null;
+  for await (const out of provider.stream([], [])) {
+    if (out.type === "assistant_delta" && typeof out.text === "string") deltas += out.text;
+    else if (out.type === "assistant_message" && typeof out.content === "string") message = out.content;
+  }
+  const text = deltas.length > 0 ? deltas : message ?? "";
+  const trimmed = text.trim().replace(/^```(?:json)?\s*/u, "").replace(/\s*```$/u, "").trim();
+  if (trimmed.length === 0) return null;
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch {
+    return trimmed;
   }
 }

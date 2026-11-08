@@ -28,9 +28,13 @@ node -e '
 
 echo "[cairn] 装依赖（pnpm 在则 pnpm，否则 npm）……"
 if command -v pnpm >/dev/null 2>&1; then
+  if ! pnpm --version >/dev/null 2>&1; then
+    echo "[cairn] pnpm 无法启动，请检查 Node 与 pnpm 版本。开发和测试建议使用 Node 24。" >&2
+    exit 1
+  fi
   pnpm install
 else
-  echo "[cairn] 未找到 pnpm，退回 npm install。"
+  echo "[cairn] 未找到 pnpm，退回 npm install。npm 不使用 pnpm 锁文件，依赖版本可能不同。"
   npm install
 fi
 

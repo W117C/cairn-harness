@@ -5,7 +5,7 @@
 //   · autoMemory（默认 true）——每轮结束自动把结论写进记忆层，UI 关不掉；
 //   · impactAnalysis / promptCache（默认 true）——影响成本与行为，不可见；
 //   · maxBudgetUsd / budgetPricePerMTok（默认 0=关）——花费闸，没有入口；
-//   · telemetry（默认 false）——没有开关也没有披露；
+//   · telemetry 当前没有收集实现，只披露真实状态；
 //   · updateManifestUrl——**界面死胡同**：关于页永远显示「未配置更新源」，用户没地方填。
 //
 // 两条实现纪律（本判卷钉住）：
@@ -17,10 +17,15 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { parseBudgetField } from "../src/renderer/components/settings-sections";
+import { renderToStaticMarkup } from "react-dom/server";
+import { AdvancedSection, parseBudgetField, parseCapField } from "../src/renderer/components/settings-sections";
+import { lspSummary } from "../src/renderer/components/settings/LspStatusRow";
+import type { LspServerStatusEntry } from "../../../src/tools/lsp";
+import { DEFAULT_SETTINGS } from "../../../src/main/settings";
 import { SECTIONS } from "../src/renderer/components/settings-nav";
 
 const sectionsSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/settings-sections.tsx", import.meta.url)), "utf8");
+const lspSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/settings/LspStatusRow.tsx", import.meta.url)), "utf8");
 const panelSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/SettingsPanel.tsx", import.meta.url)), "utf8");
 
 describe("parseBudgetField（界面侧先拦，别让后端静默回退）", () => {
@@ -52,12 +57,37 @@ describe("parseBudgetField（界面侧先拦，别让后端静默回退）", () 
 });
 
 describe("高级段的字段真的接上了", () => {
-  it("五个字段都有控件（autoMemory / impactAnalysis / promptCache / maxBudgetUsd / budgetPricePerMTok / telemetry）", () => {
-    for (const key of ["autoMemory", "impactAnalysis", "promptCache", "telemetry"]) {
+  it("未实现的遥测能力只披露状态，不提供无效开关", () => {
+    const html = renderToStaticMarkup(<AdvancedSection settings={{ ...DEFAULT_SETTINGS, telemetry: true }} onSaveKey={() => undefined} />);
+    expect(html).toContain("未收集");
+    // 徽章「未收集」已经说完了，行下不再复述一句「当前版本不收集使用统计」（2026-11-04）。
+    expect(html).not.toContain("不收集使用统计");
+    expect(html).not.toContain('aria-label="允许匿名使用统计"');
+    expect(html).not.toContain('aria-label="匿名使用统计"');
+  });
+  it("各字段都有控件（记忆/成本/隐私 + 验证与子代理 + 定时并发）", () => {
+    for (const key of ["autoMemory", "impactAnalysis", "promptCache", "subagentTools", "autoVerify", "autoVerifyRepair"]) {
       expect(sectionsSrc, `${key} 缺控件`).toContain(`props.onSaveKey("${key}", next)`);
     }
     expect(sectionsSrc).toContain('props.onSaveKey("maxBudgetUsd", r.value)');
     expect(sectionsSrc).toContain('props.onSaveKey("budgetPricePerMTok", r.value)');
+    expect(sectionsSrc).toContain('props.onSaveKey("scheduleConcurrencyCap", r.value)');
+  });
+
+  it("高级段真的渲染出新增控件：三个开关 + 并发上限（默认值来自 settings，不另抄）", () => {
+    const html = renderToStaticMarkup(
+      <AdvancedSection settings={DEFAULT_SETTINGS} onSaveKey={() => undefined} />,
+    );
+    for (const label of ["子代理工具", "收束前补一拍验证", "验证红了自动返修一轮", "同时运行的定时会话上限"]) {
+      expect(html, `${label} 未渲染`).toContain(label);
+    }
+    expect(html).toContain('aria-label="同时运行的定时会话上限"');
+    expect(html).toContain(`value="${String(DEFAULT_SETTINGS.scheduleConcurrencyCap)}"`);
+    // 三枚开关的缺省态与 DEFAULT_SETTINGS 同源：subagentTools/autoVerify 开、autoVerifyRepair 关。
+    const sw = (label: string): string => html.match(new RegExp(`<button[^>]*aria-label="${label}"[^>]*>`))?.[0] ?? "";
+    expect(sw("子代理工具")).toContain('aria-checked="true"');
+    expect(sw("收束前补一拍验证")).toContain('aria-checked="true"');
+    expect(sw("验证红了自动返修一轮")).toContain('aria-checked="false"');
   });
 
   it("导航里有「高级」这一节（否则接好了也进不去）", () => {
@@ -70,11 +100,50 @@ describe("高级段的字段真的接上了", () => {
     expect(panelSrc).toContain("<AdvancedSection settings={settings} onSaveKey={saveSettingKey} />");
   });
 
-  it("走单键直调，不动 panelPatch 白名单（那份判卷钉死六键）", () => {
+  it("关闭设置前先提交焦点输入（Esc / 返回 / 遮罩走同一条 closeSettings）", () => {
+    expect(panelSrc).toContain("const closeSettings = () =>");
+    expect(panelSrc).toMatch(/active\.closest\("\.sp-page"\) !== null\) active\.blur\(\);/);
+    expect(panelSrc).toContain("onClose={closeSettings}");
+    expect(panelSrc).toContain("onClick={closeSettings}");
+  });
+
+  it("走单键直调，不动 panelPatch 白名单（那份判卷钉死五键）", () => {
     expect(panelSrc).toContain("const saveSettingKey = async");
     expect(panelSrc).toContain("window.agent.setSettings({ [key]: value })");
-    // 反向：白名单没有被顺手扩掉
-    expect(sectionsSrc).toContain('export const PANEL_PATCH_KEYS = ["provider", "model", "mode", "theme", "planRequiredByDefault", "locale"] as const;');
+    // 反向：白名单没有被顺手扩掉（planRequiredByDefault 2026-11-03 出列：方案模式由 agent 自判）
+    expect(sectionsSrc).toContain('export const PANEL_PATCH_KEYS = ["provider", "model", "mode", "theme", "locale"] as const;');
+  });
+});
+
+describe("语言服务器状态进桌面（协议 v52 的 lspStatus）", () => {
+  // 这条通道此前「主进程接了、渲染层零调用点」——invoke-consumer-census 一直红，
+  // 红的原因正是判卷要防的那件事：功能齐全但 UI 不可达。状态进「高级」段后它有了真消费者。
+  it("渲染层真的读那条通道，不是另写一份口径", () => {
+    // 状态行单独一个文件（settings-sections.tsx 已顶到 1200 行帽），断言跟着读那一份。
+    expect(lspSrc).toContain("window.agent.lspStatus()");
+    expect(lspSrc).toContain("<Badge>{lspSummary(lsp)}</Badge>");
+    // 高级段真的把它挂上了（否则行做出来没人渲染 = 又一处不可达）。
+    expect(sectionsSrc).toContain("<LspStatusRow />");
+  });
+
+  it("三种「没有可看的读数」分开说，不许糊成一个「无」", () => {
+    // 还没读到 / 读失败 / 没配置是三件事：第三种用户自己能去配，前两种不是他的话。
+    expect(lspSummary(null)).toBe("读取中…");
+    expect(lspSummary("unreadable")).toBe("读数失败");
+    expect(lspSummary({ enabled: false, trust: "not-configured", servers: [], configError: "" })).toBe("未配置");
+    expect(lspSummary({ enabled: true, trust: "trusted", servers: [], configError: "坏掉的 JSON" })).toBe("配置读不出");
+  });
+
+  it("台数与信任态都上屏（授权态是用户唯一能自己去改的那一格）", () => {
+    const entry = (id: string, state: LspServerStatusEntry["state"]): LspServerStatusEntry => ({
+      id, command: `x-${id}`, extensions: [".ts"], origin: "host", state,
+    });
+    const st = (trust: "trusted" | "pending" | "declined") => ({
+      enabled: true, trust, servers: [entry("a", "running"), entry("b", "not-started")], configError: "",
+    });
+    expect(lspSummary(st("trusted"))).toBe("2 台 · 已授权");
+    expect(lspSummary(st("pending"))).toBe("2 台 · 待授权");
+    expect(lspSummary(st("declined"))).toBe("2 台 · 已拒绝授权");
   });
 });
 
@@ -95,5 +164,27 @@ describe("更新源不再死胡同", () => {
 
   it("只在值真变了才写（避免每次失焦都写一笔 + 骗一次「已保存」）", () => {
     expect(sectionsSrc).toContain("if (next !== (props.updateManifestUrl ?? \"\")) props.onSaveManifest?.(next);");
+  });
+});
+
+describe("parseCapField（并发上限界面侧先拦）", () => {
+  it("1-8 的整数原样通过（含边界与空白）", () => {
+    expect(parseCapField("1")).toEqual({ ok: true, value: 1 });
+    expect(parseCapField("8")).toEqual({ ok: true, value: 8 });
+    expect(parseCapField(" 5 ")).toEqual({ ok: true, value: 5 });
+  });
+
+  it("空 / 0 / 9 / 小数 / 非数字一律拒（后端会静默回退 2，界面不许说已保存）", () => {
+    for (const bad of ["", "0", "9", "-1", "1.5", "abc"]) {
+      expect(parseCapField(bad).ok, `${bad} 应当被拒`).toBe(false);
+    }
+  });
+});
+
+describe("设置输入框：回车 = 提交（blur 触发既有校验/保存）", () => {
+  it("花费上限 / 单价 / 并发上限三个数字框都接了 Enter → blur", () => {
+    const enterBlur = 'onKeyDown={(e) => { if (e.key === "Enter" && !isCompositionEnter(e, null)) { e.preventDefault(); e.currentTarget.blur(); } }}';
+    const count = sectionsSrc.split(enterBlur).length - 1;
+    expect(count, "三个高级数字框 + 更新源输入框各一处").toBeGreaterThanOrEqual(4);
   });
 });

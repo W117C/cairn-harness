@@ -21,7 +21,7 @@ export interface BrowserState {
   pending?: { url: string };
 }
 
-interface Entry { view: WebContentsView }
+interface Entry { tabId: string; view: WebContentsView; owner: BrowserWindow }
 
 /** 一次导航的处置（纯函数面；判卷直接钉，不靠源码断言）。 */
 export type NavigationDecision =
@@ -40,7 +40,7 @@ export function hostAllowed(raw: string, allowedHosts: ReadonlySet<string>): boo
     const u = new URL(raw);
     if (u.protocol !== "http:" && u.protocol !== "https:") return false;
     const host = u.hostname.toLowerCase();
-    return host === "localhost" || host === "127.0.0.1" || host === "::1" || allowedHosts.has(host);
+    return host === "localhost" || host === "127.0.0.1" || host === "[::1]" || allowedHosts.has(host);
   } catch {
     return false;
   }
@@ -65,43 +65,75 @@ export class BrowserHost {
   /** 已授权站点（host）。只由 open() 的显式导航写入——渲染层在地址栏提交前已问过用户。 */
   private readonly allowedHosts = new Set<string>();
   private readonly entries = new Map<string, Entry>();
+  /** 活动标签跟踪（浏览器驾驶三件）：window.id → 最后一次拿到非零矩形的 entry key。 */
+  private readonly activeKeyByWin = new Map<number, string>();
+  private readonly observedOwners = new WeakSet<BrowserWindow>();
   constructor(
     private readonly getWindow: () => BrowserWindow | null,
-    private readonly push: (state: BrowserState) => void,
+    private readonly push: (state: BrowserState, owner?: BrowserWindow) => void,
   ) {}
 
-  private stateOf(id: string): BrowserState | null {
-    const e = this.entries.get(id);
-    if (e === undefined) return null;
+  private keyOf(id: string, win: BrowserWindow): string {
+    return `${String(win.id)}:${id}`;
+  }
+
+  private resolveKey(id: string, owner?: BrowserWindow | null): string | null {
+    if (owner !== undefined) {
+      if (owner === null || owner.isDestroyed()) return null;
+      const key = this.keyOf(id, owner);
+      return this.entries.has(key) ? key : null;
+    }
+    const fallback = this.getWindow();
+    if (fallback !== null && !fallback.isDestroyed()) {
+      const key = this.keyOf(id, fallback);
+      if (this.entries.has(key)) return key;
+    }
+    let matchedKey: string | null = null;
+    for (const [k, entry] of this.entries) {
+      if (entry.tabId === id) {
+        if (matchedKey !== null) return null; // 同名标签跨多窗并存且未传 owner 时不猜
+        matchedKey = k;
+      }
+    }
+    return matchedKey;
+  }
+
+  private stateByKey(key: string): { state: BrowserState; owner: BrowserWindow } | null {
+    const e = this.entries.get(key);
+    if (e === undefined || e.view.webContents.isDestroyed()) return null;
     const wc = e.view.webContents;
     return {
-      id,
-      url: wc.getURL(),
-      title: wc.getTitle(),
-      canGoBack: wc.navigationHistory.canGoBack(),
-      canGoForward: wc.navigationHistory.canGoForward(),
-      loading: wc.isLoading(),
+      owner: e.owner,
+      state: {
+        id: e.tabId,
+        url: wc.getURL(),
+        title: wc.getTitle(),
+        canGoBack: wc.navigationHistory.canGoBack(),
+        canGoForward: wc.navigationHistory.canGoForward(),
+        loading: wc.isLoading(),
+      },
     };
   }
 
-  private emit(id: string): void {
-    const s = this.stateOf(id);
-    if (s !== null) this.push(s);
+  private emitKey(key: string): void {
+    const cur = this.stateByKey(key);
+    if (cur !== null) this.push(cur.state, cur.owner);
   }
 
   /** 元素选择结果封进一次 browserState 推送（普通状态与 pick 并存；视图已关则丢弃）。 */
-  private pushPick(id: string, r: { ok: boolean; selector?: string; snippet?: string; url?: string; error?: string }): void {
-    const base = this.stateOf(id);
-    if (base === null) return;
+  private pushPickKey(key: string, r: { ok: boolean; selector?: string; snippet?: string; url?: string; error?: string }): void {
+    const cur = this.stateByKey(key);
+    if (cur === null) return;
     const pick = r.ok
       ? { ok: true, ...(r.selector !== undefined ? { selector: r.selector } : {}), ...(r.snippet !== undefined ? { snippet: r.snippet } : {}), ...(r.url !== undefined ? { url: r.url } : {}) }
       : { ok: false, ...(r.error !== undefined ? { error: r.error } : {}) };
-    this.push({ ...base, pick });
+    this.push({ ...cur.state, pick }, cur.owner);
   }
 
   /** 冒烟/判卷用：底层 webContents（只用于观察权限与导航，不供业务路径调用）。 */
-  webContentsForAudit(id: string): import("electron").WebContents | null {
-    return this.entries.get(id)?.view.webContents ?? null;
+  webContentsForAudit(id: string, owner?: BrowserWindow | null): import("electron").WebContents | null {
+    const key = this.resolveKey(id, owner);
+    return key === null ? null : (this.entries.get(key)?.view.webContents ?? null);
   }
 
   /** 渲染层授权清单全量同步（移除站点/忘记全部后，主进程的页内跳转闸必须立刻跟上）。 */
@@ -120,7 +152,7 @@ export class BrowserHost {
   }
 
   /** 创建（或复用后导航）某 id 的浏览器视图。 */
-  open(id: string, url: string): { ok: true } | { ok: false; error: string } {
+  open(id: string, url: string, owner: BrowserWindow | null = this.getWindow()): { ok: true } | { ok: false; error: string } {
     let host: string;
     try {
       const u = new URL(url);
@@ -131,11 +163,12 @@ export class BrowserHost {
     } catch {
       return { ok: false, error: `不是合法 URL：${url}` };
     }
-    // 地址栏提交前渲染层已经问过用户（sitePermissionFor）⇒ 这里把 host 记为授权。
+    const win = owner;
+    if (win === null || win.isDestroyed()) return { ok: false, error: "调用窗口已关闭（浏览器视图无处安放）" };
+    const key = this.keyOf(id, win);
+    let e = this.entries.get(key);
+    // 地址栏提交前渲染层已经问过用户；只有窗口归属有效时才记为授权。
     this.allowedHosts.add(host);
-    const win = this.getWindow();
-    if (win === null) return { ok: false, error: "主窗口不在（浏览器视图无处安放）" };
-    let e = this.entries.get(id);
     if (e === undefined) {
       const view = new WebContentsView({
         webPreferences: {
@@ -147,8 +180,17 @@ export class BrowserHost {
         },
       });
       win.contentView.addChildView(view);
-      e = { view };
-      this.entries.set(id, e);
+      e = { tabId: id, view, owner: win };
+      this.entries.set(key, e);
+      // 同一窗口不论开多少标签只订阅一次；窗口销毁不依赖 renderer 的卸载 IPC。
+      if (!this.observedOwners.has(win)) {
+        this.observedOwners.add(win);
+        win.once("closed", () => {
+          for (const [entryKey, entry] of [...this.entries.entries()]) {
+            if (entry.owner === win) this.closeByKey(entryKey);
+          }
+        });
+      }
       const wc = view.webContents;
       // 远端页面权限默认**全拒**：Electron 缺省会对 getUserMedia/geolocation/notifications/
       // clipboard-read 等请求自动批准，页内一行 JS 就能开摄像头/麦克风或读剪贴板。
@@ -159,14 +201,14 @@ export class BrowserHost {
       wc.on("will-navigate", (ev, target) => {
         if (this.targetAllowed(target)) return;
         ev.preventDefault();
-        const s = this.stateOf(id);
-        if (s !== null) this.push({ ...s, title: `已拦截跳转：${target}（未授权站点；需要时在地址栏重新输入）`, pending: { url: target } });
+        const cur = this.stateByKey(key);
+        if (cur !== null) this.push({ ...cur.state, title: `已拦截跳转：${target}（未授权站点；需要时在地址栏重新输入）`, pending: { url: target } }, cur.owner);
       });
       wc.on("will-redirect", (ev, target) => {
         if (this.targetAllowed(target)) return;
         ev.preventDefault();
-        const s = this.stateOf(id);
-        if (s !== null) this.push({ ...s, title: `已拦截重定向：${target}（未授权站点）`, pending: { url: target } });
+        const cur = this.stateByKey(key);
+        if (cur !== null) this.push({ ...cur.state, title: `已拦截重定向：${target}（未授权站点）`, pending: { url: target } }, cur.owner);
       });
       // 子框架（iframe）导航（2026-10-19 独立评审追出）：`will-navigate` / `will-redirect`
       // **只对主框架触发** ⇒ 页面里一个 `<iframe src="https://intranet.corp/">` 就能把未授权站点
@@ -194,11 +236,11 @@ export class BrowserHost {
         } catch { /* 非法 URL：拒绝 */ }
         return { action: "deny" };
       });
-      wc.on("did-navigate", () => { this.emit(id); });
-      wc.on("did-navigate-in-page", () => { this.emit(id); });
-      wc.on("did-start-loading", () => { this.emit(id); });
-      wc.on("did-stop-loading", () => { this.emit(id); });
-      wc.on("page-title-updated", () => { this.emit(id); });
+      wc.on("did-navigate", () => { this.emitKey(key); });
+      wc.on("did-navigate-in-page", () => { this.emitKey(key); });
+      wc.on("did-start-loading", () => { this.emitKey(key); });
+      wc.on("did-stop-loading", () => { this.emitKey(key); });
+      wc.on("page-title-updated", () => { this.emitKey(key); });
       wc.on("did-fail-load", (_e, errorCode, errorDescription, validatedURL, isMainFrame) => {
         // 只认主框架的失败（2026-10-19 独立评审追出）：Electron 的 did-fail-load 对**每个**帧都触发，
         // 而旧实现忽略 isMainFrame ⇒ 页面里一个加载失败的第三方 iframe（被拦的广告帧、
@@ -207,7 +249,7 @@ export class BrowserHost {
         // 而渲染层 `if (key === activeKeyRef.current && s.url !== "") setUrlDraft(s.url)`
         // 会照单全收 ⇒ 地址栏变成用户从没打开过的 URL（可以据此点进任意外站）。
         if (!isMainFrame) return;
-        this.push({ id, url: validatedURL, title: `加载失败：${errorDescription}（${String(errorCode)}）`, canGoBack: wc.navigationHistory.canGoBack(), canGoForward: wc.navigationHistory.canGoForward(), loading: false });
+        this.push({ id, url: validatedURL, title: `加载失败：${errorDescription}（${String(errorCode)}）`, canGoBack: wc.navigationHistory.canGoBack(), canGoForward: wc.navigationHistory.canGoForward(), loading: false }, win);
       });
       // v7 元素选择：页面持有焦点时渲染层收不到 ⌘⇧S（原生视图独立 webContents）——
       // 在本层捕获再走同一 pickElement，结果经 browserState.pick 推回渲染层。
@@ -215,54 +257,140 @@ export class BrowserHost {
         if (input.type !== "keyDown" || !input.meta || !input.shift || input.alt) return;
         if (input.key.toLowerCase() !== "s") return;
         ev.preventDefault();
-        void this.pickElement(id).then((r) => { this.pushPick(id, r); });
+        void this.pickElement(id, win).then((r) => { this.pushPickKey(key, r); });
       });
     }
     void e.view.webContents.loadURL(url).catch((err: unknown) => {
-      this.push({ id, url, title: `加载失败：${err instanceof Error ? err.message : String(err)}`, canGoBack: false, canGoForward: false, loading: false });
+      this.push({ id, url, title: `加载失败：${err instanceof Error ? err.message : String(err)}`, canGoBack: false, canGoForward: false, loading: false }, win);
     });
     return { ok: true };
   }
 
   /** 容器矩形（渲染层报告的窗口内像素坐标；宽高 ≤0 视为隐藏）。 */
-  setBounds(id: string, rect: { x: number; y: number; width: number; height: number }): void {
-    const e = this.entries.get(id);
+  setBounds(id: string, rect: { x: number; y: number; width: number; height: number }, owner?: BrowserWindow | null): void {
+    const key = this.resolveKey(id, owner);
+    if (key === null) return;
+    const e = this.entries.get(key);
     if (e === undefined) return;
     if (rect.width <= 0 || rect.height <= 0) {
       e.view.setVisible(false);
+      if (this.activeKeyByWin.get(e.owner.id) === key) this.activeKeyByWin.delete(e.owner.id);
       return;
     }
     e.view.setVisible(true);
     e.view.setBounds({ x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) });
+    // 活动标签跟踪（2026-11-06 浏览器驾驶三件）：非零矩形 = 用户正看着的那一张。
+    // 渲染层在标签切换/窗格开合时同步矩形（切走 = 零矩形），所以「最后一次非零」就是活动面。
+    this.activeKeyByWin.set(e.owner.id, key);
   }
 
-  navigate(id: string, action: "back" | "forward" | "reload"): void {
-    const e = this.entries.get(id);
+  private activeEntry(owner?: BrowserWindow | null): Entry | null {
+    const win = owner === undefined ? this.getWindow() : owner;
+    if (win === null || win.isDestroyed()) return null;
+    const key = this.activeKeyByWin.get(win.id);
+    if (key === undefined) return null;
+    const entry = this.entries.get(key);
+    return entry !== undefined && !entry.view.webContents.isDestroyed() ? entry : null;
+  }
+
+  /** 浏览器驾驶三件用：当前活动标签（用户看得见的那张）；窗格全关/全隐藏 ⇒ null。 */
+  activeTabId(owner?: BrowserWindow | null): string | null {
+    return this.activeEntry(owner)?.tabId ?? null;
+  }
+
+  /** browser_navigate 的执行端：先过与 will-navigate 同一把 host 闸（未授权拒，工具不借道越闸），
+   *  过闸后走 open() 的既有全链（视图复用/授权登记/加载失败推送）。活动标签不存在 ⇒ 拒。 */
+  agentNavigate(url: string, owner?: BrowserWindow | null): { ok: boolean; error?: string } {
+    const entry = this.activeEntry(owner);
+    if (entry === null) {
+      return { ok: false, error: "侧栏浏览器没有活动标签——先让用户打开浏览器窗格（⌘⇧B 或工具栏），再导航" };
+    }
+    if (!this.targetAllowed(url)) {
+      const host = (() => { try { return new URL(url).hostname; } catch { return url; } })();
+      return { ok: false, error: `站点未授权：${host}——授权走窗格地址栏的手动首访（弹卡允许后工具就能导航）` };
+    }
+    const opened = this.open(entry.tabId, url, entry.owner);
+    return opened.ok ? { ok: true } : opened;
+  }
+
+  /** browser_snapshot：当前页 URL/标题/可见文本（帽 8000 字符）。只内省，不发请求。 */
+  async snapshot(owner?: BrowserWindow | null): Promise<{ ok: boolean; url?: string; title?: string; text?: string; error?: string }> {
+    const e = this.activeEntry(owner);
+    if (e === null) return { ok: false, error: "侧栏浏览器没有活动标签——先让用户打开浏览器窗格" };
+    try {
+      const r = (await e.view.webContents.executeJavaScript(
+        "JSON.stringify({ title: document.title, url: location.href, text: (document.body && document.body.innerText ? document.body.innerText : '').slice(0, 8000) })",
+        false,
+      )) as string;
+      if (this.activeEntry(e.owner) !== e) return { ok: false, error: "活动标签已切换或隐藏" };
+      const parsed = JSON.parse(r) as { title?: string; url?: string; text?: string };
+      return {
+        ok: true,
+        ...(parsed.title !== undefined ? { title: parsed.title } : {}),
+        ...(parsed.url !== undefined ? { url: parsed.url } : {}),
+        ...(parsed.text !== undefined ? { text: parsed.text } : {}),
+      };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
+  /** browser_pick：按 CSS 选择器查元素（文本片段 + 标签名，帽 10 条）。只内省。 */
+  async pickBySelector(selector: string, max: number, owner?: BrowserWindow | null): Promise<{ ok: boolean; matches?: { text: string; tag: string }[]; error?: string }> {
+    const e = this.activeEntry(owner);
+    if (e === null) return { ok: false, error: "侧栏浏览器没有活动标签——先让用户打开浏览器窗格" };
+    // 选择器不原样拼进页面代码（页面上下文注入面）：JSON.stringify 成字符串字面量再进去。
+    const script =
+      "(() => { const sel = " + JSON.stringify(selector) + "; const cap = " + JSON.stringify(max) + ";" +
+      " try { return JSON.stringify([...document.querySelectorAll(sel)].slice(0, cap).map(el => ({ text: (el.textContent || '').trim().slice(0, 200), tag: el.tagName.toLowerCase() }))); }" +
+      " catch (e) { return JSON.stringify({ error: String(e && e.message || e) }); } })()";
+    try {
+      const r = (await e.view.webContents.executeJavaScript(script, false)) as string;
+      if (this.activeEntry(e.owner) !== e) return { ok: false, error: "活动标签已切换或隐藏" };
+      const parsed = JSON.parse(r) as { error?: string } | { text: string; tag: string }[];
+      if (!Array.isArray(parsed)) return { ok: false, error: parsed.error ?? "选择器执行失败" };
+      return { ok: true, matches: parsed };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
+  navigate(id: string, action: "back" | "forward" | "reload", owner?: BrowserWindow | null): void {
+    const key = this.resolveKey(id, owner);
+    if (key === null) return;
+    const e = this.entries.get(key);
     if (e === undefined) return;
     const wc = e.view.webContents;
     if (action === "back" && wc.navigationHistory.canGoBack()) wc.navigationHistory.goBack();
     else if (action === "forward" && wc.navigationHistory.canGoForward()) wc.navigationHistory.goForward();
     else if (action === "reload") wc.reload();
-    this.emit(id);
+    this.emitKey(key);
   }
 
-  close(id: string): void {
-    const e = this.entries.get(id);
+  private closeByKey(key: string): void {
+    const e = this.entries.get(key);
     if (e === undefined) return;
-    this.entries.delete(id);
+    this.entries.delete(key);
+    if (this.activeKeyByWin.get(e.owner.id) === key) this.activeKeyByWin.delete(e.owner.id);
     try {
-      this.getWindow()?.contentView.removeChildView(e.view);
-      e.view.webContents.close();
+      if (!e.owner.isDestroyed()) e.owner.contentView.removeChildView(e.view);
     } catch {
-      // 窗口已在关闭途中的竞态：吞掉（资源随窗口走）。
+      // 宿主关闭过程可能已摘除视图；仍须单独释放 webContents。
     }
+    if (!e.view.webContents.isDestroyed()) e.view.webContents.close();
+  }
+
+  close(id: string, owner?: BrowserWindow | null): void {
+    const key = this.resolveKey(id, owner);
+    if (key !== null) this.closeByKey(key);
   }
 
   /** v7 清除浏览数据（§2.4 ⋮ 菜单）：清独立干净 profile（persist:cairn-browser——所有 browser
    *  视图共此 partition）的存储与缓存；keepCookies=true 时保留 cookies（对齐「Keep cookies」的
    *  语义：清站点数据但保持登录态）。 */
-  clearData(id: string, keepCookies: boolean): Promise<{ ok: boolean; error?: string }> {
-    const e = this.entries.get(id);
+  clearData(id: string, keepCookies: boolean, owner?: BrowserWindow | null): Promise<{ ok: boolean; error?: string }> {
+    const key = this.resolveKey(id, owner);
+    const e = key === null ? undefined : this.entries.get(key);
     if (e === undefined) return Promise.resolve({ ok: false, error: "本标签页还没有视图（先打开一个网页）" });
     const ses = e.view.webContents.session;
     // appcache/websql 已从 Electron 的 storages 枚举移除（本版类型面实证）：不列不存在的存储。
@@ -277,8 +405,9 @@ export class BrowserHost {
   /** v7 元素选择（§3.6 ⌘⇧S）：页面内注入取色脚本——移动高亮、点击返回选择器与片段、Esc 取消。
    *  珊瑚高亮 = 标注色（annotation，§5.1 蓝只归链接信息强调；page 之上需要与任意页面底色区分的
    *  独立色相，devtools 同式惯例）。脚本随 promise 回收（click/Esc 任一出口必清 DOM 与监听）。 */
-  async pickElement(id: string): Promise<{ ok: boolean; selector?: string; snippet?: string; url?: string; error?: string }> {
-    const e = this.entries.get(id);
+  async pickElement(id: string, owner?: BrowserWindow | null): Promise<{ ok: boolean; selector?: string; snippet?: string; url?: string; error?: string }> {
+    const key = this.resolveKey(id, owner);
+    const e = key === null ? undefined : this.entries.get(key);
     if (e === undefined) return { ok: false, error: "本标签页还没有视图（先打开一个网页）" };
     try {
       const res = (await e.view.webContents.executeJavaScript(PICK_ELEMENT_SCRIPT, false)) as
@@ -290,7 +419,7 @@ export class BrowserHost {
   }
 
   closeAll(): void {
-    for (const id of [...this.entries.keys()]) this.close(id);
+    for (const key of [...this.entries.keys()]) this.closeByKey(key);
   }
 }
 

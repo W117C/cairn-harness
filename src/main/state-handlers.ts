@@ -6,8 +6,17 @@
 import { homedir } from "node:os";
 import { projectAgentPath } from "../app-data";
 import { replay } from "../events";
-import { PluginRuntime, currentPluginRuntime, pluginDataRootOf, type PluginPanelSnapshot } from "../agent/plugins";
-import { listWorktreeDirs, orphanWorktrees } from "../agent/worktree";
+import {
+  PluginRuntime,
+  currentPluginRuntime,
+  defaultForeignSources,
+  pluginDataRootOf,
+  userPluginsDirOf,
+  type PluginPanelSnapshot,
+} from "../agent/plugins";
+import { userHooksConfigPathOf, userMcpConfigPathOf } from "../agent/plugins/user-mcp";
+import { ownedWorktreeAgentIds } from "../agent/orchestrator";
+import { listWorktreeDirs, orphanWorktrees, worktreeDirty } from "../agent/worktree";
 import type { MemorySnapshot, SidechatPanelSnapshot } from "./ipc-protocol";
 import type { LicenseState } from "./license";
 import { memorySnapshot } from "./memory-handlers";
@@ -16,7 +25,8 @@ import type { SandboxStatus } from "./sandbox";
 import type { ScheduleSnapshot } from "./scheduler";
 import { handleScheduleSnapshot } from "./scheduler-runtime";
 import { handleSidechatState } from "./sidechat-handlers";
-import { getAppVersion, handleLicenseStatus, handleProviderKeyStatus, store } from "./settings-handlers";
+import { getAppVersion, getBuildInfo, getSettings, handleLicenseStatus, handleProviderKeyStatus, settingsLoadIssue, store } from "./settings-handlers";
+import type { SettingsLoadIssue } from "./settings";
 
 export interface StateHandlerDeps {
   /** 缺省靶子（装配根的 `WORKSPACE` 常量）。 */
@@ -108,7 +118,7 @@ export async function handleSkillBody(name: string, workspaceOverride: string | 
 }
 
 /** IPC "agent:state" 的处理函数。 */
-export async function handleAgentState(workspaceOverride: string | null = null): Promise<{ sandbox: SandboxStatus; memory?: MemorySnapshot; plugins?: PluginPanelSnapshot; sidechat?: SidechatPanelSnapshot; worktree?: { orphans: string[] }; schedule?: ScheduleSnapshot; license?: LicenseState; providerKeys?: { available: boolean; stored: string[]; envActive: boolean }; about?: { version: string } }> {
+export async function handleAgentState(workspaceOverride: string | null = null): Promise<{ sandbox: SandboxStatus; memory?: MemorySnapshot; plugins?: PluginPanelSnapshot; sidechat?: SidechatPanelSnapshot; worktree?: { workspace: string; orphans: string[]; details?: { name: string; dirty: boolean }[] }; schedule?: ScheduleSnapshot; license?: LicenseState; providerKeys?: { available: boolean; stored: string[]; envActive: boolean }; settingsIssue?: SettingsLoadIssue; about?: { version: string } }> {
   const memory = await optionalPanel(() => memorySnapshot(workspaceOverride));
   const plugins = await optionalPanel(async () => {
     // 工作区对不上就现发现：在档快照只服务它自己的项目（见 pluginSnapshotWorkspace）。
@@ -121,7 +131,16 @@ export async function handleAgentState(workspaceOverride: string | null = null):
   });
   const sidechat = await optionalPanel(handleSidechatState);
   // M3b 孤儿 worktree 扫描（§4.4.9：启动/会话重开语义 = state 拉取时现算；只列不自动删）
-  const worktree = await optionalPanel(async () => ({ orphans: await scanOrphanWorktrees(workspaceOverride ?? undefined) }));
+  const worktree = await optionalPanel(async () => {
+    const ws = workspaceOverride ?? (await currentWorkspace());
+    const orphans = await scanOrphanWorktrees(ws);
+    return {
+      workspace: ws,
+      orphans,
+      // 逐棵读「有没有未提交改动」：清理是不可逆动作，界面必须先说清会丢什么。
+      details: await Promise.all(orphans.map(async (name) => ({ name, dirty: await worktreeDirty(ws, name) }))),
+    };
+  });
   // M4a schedule 面板快照（真缺陷修复，半托截图路径抓出：schedule 通道挂了 IPC handler 但从未进 state 应答，
   // 面板 getState().schedule 恒 undefined → 任务列表/运行历史永久为空）
   const schedule = await optionalPanel(handleScheduleSnapshot);
@@ -130,7 +149,12 @@ export async function handleAgentState(workspaceOverride: string | null = null):
   // 面板只取三枚在场格（envProviders 归「能力在场性」通道，不进 state 应答）——显式收窄，同原实现。
   const providerKeys: { available: boolean; stored: string[]; envActive: boolean } | undefined =
     await optionalPanel(handleProviderKeyStatus);
-  return { sandbox: D().sandboxState(), memory, plugins, sidechat, worktree, schedule, license, providerKeys, about: { version: getAppVersion() } };
+  // 设置文件坏了要说出来（与 CLI 同一条首读结论）：读一次确保首读已发生，再取问题。
+  const settingsIssue = await optionalPanel(async () => {
+    await getSettings();
+    return settingsLoadIssue() ?? undefined;
+  });
+  return { sandbox: D().sandboxState(), memory, plugins, sidechat, worktree, schedule, license, providerKeys, settingsIssue, about: { version: getAppVersion(), ...(getBuildInfo() !== null ? { build: getBuildInfo() as NonNullable<ReturnType<typeof getBuildInfo>> } : {}) } };
 }
 
 /** M3b 孤儿 worktree 扫描（纯投影面）：.agents/wt-* 目录 − 事件流有终态/收尾记录的 agent。 */
@@ -143,6 +167,9 @@ export async function scanOrphanWorktrees(workspace?: string): Promise<string[]>
   return orphanWorktrees(
     dirs,
     events.map((e) => e as { type: string; agent_id?: string; status?: string; callId?: string }),
+    // 多会话共用一个 workspace：另一会话运行中/待合并的 worker 在本会话日志里没有终态，
+    // 不能因此进「可清理」面板（目录是 workspace 级，事件流是 session 级）。
+    new Set(ownedWorktreeAgentIds()),
   );
 }
 
@@ -169,12 +196,20 @@ export async function currentWorkspace(): Promise<string> {
  *  导出（第 438 页）是因为 `cairn --plugins` 也吃这一批根：CLI 若自己再拼一遍 env 与路径，
  *  它列出来的面可以和一次真 run 扫到的面不同——那正是「照着列表去批准」这条路最坏的失效。 */
 export function pluginRuntimeOpts(workspace: string): Omit<Parameters<typeof PluginRuntime.load>[0], "mode"> {
+  const pluginDataRoot = pluginDataRootOf(process.env, homedir());
   return {
-    ...(process.env.M2E_USER_PLUGINS ? { userPluginsDir: process.env.M2E_USER_PLUGINS } : {}),
+    userPluginsDir: process.env.M2E_USER_PLUGINS || userPluginsDirOf(pluginDataRoot),
     projectPluginsDir: projectAgentPath(workspace, "plugins"),
     ...(process.env.M2E_LOOSE_SKILLS ? { looseRoots: [process.env.M2E_LOOSE_SKILLS] } : {}),
+    // 外部声明式来源：项目级恒扫（.opencode/.pi/.agents/.qoder/.claude）；用户级目录只在装配面显式带 home。
+    // `M2E_FOREIGN_SOURCES=off` 关掉整顶——判卷要可复现，不能让结果取决于跑测试那台机器的 home。
+    foreignSources: process.env.M2E_FOREIGN_SOURCES === "off" ? [] : defaultForeignSources(workspace, homedir()),
+    // 用户级 MCP（ZCode 独立管理对应面）：<appData>/mcp.json 合成虚拟插件 user-mcp（恒 trusted）。
+    userMcpConfigPath: userMcpConfigPathOf(pluginDataRoot),
+    // 用户级 hooks：<appData>/hooks.json 合成虚拟插件 user-hooks（恒 trusted，跑在既有 HookEngine）。
+    userHooksConfigPath: userHooksConfigPathOf(pluginDataRoot),
     workspace,
-    pluginDataRoot: pluginDataRootOf(process.env, homedir()),
+    pluginDataRoot,
     ...(process.env.M2E_TRUST_FILE ? { trustFile: process.env.M2E_TRUST_FILE } : {}),
   };
 }

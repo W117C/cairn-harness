@@ -186,7 +186,7 @@ export function projectSession(events: readonly AgentEvent[]): SessionCounts {
         // 与 loop 的收束闸、worker-report 的 lastWrite 同一只谓词）。
         // 旧形状是在 tool_call 分支内联比 write_file/edit_file，两处都偏：
         // 少认 shell ⇒「假完成率」分子恒 0；多认失败的 write_file ⇒ 没落盘也算写过。
-        if (e.ok && !hasWorkerAttribution(call) && mayHaveWrittenDisk(call.name, call.args ?? {})) mainWrites++;
+        if ((e.ok || e.fusedWrite === true) && !hasWorkerAttribution(call) && mayHaveWrittenDisk(call.name, call.args ?? {})) mainWrites++;
         out.repeatOver++;
         const key = stuckActionOf(call.name, call.args) + "\n" + stuckObservationOf(e.output);
         if (seen.has(key)) out.repeats++; // 第 2 次及以后都算一次重复探测：每次都是整轮 token + 零新信息

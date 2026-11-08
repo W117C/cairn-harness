@@ -5,12 +5,13 @@
 // 注：automation_create 的 run 走权限门（currentSession fail-closed），这里收任务走
 // getScheduler().upsert（调度器自身入口）——工具面的「在场」单独断言，运行面归会话判卷。
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { getScheduler, serveScheduler, schedulerRunning } from "../src/main/agent-runner";
+import { Scheduler } from "../src/main/scheduler";
 import { TOOLS } from "../src/tools";
 
 const CLI_SRC = fileURLToPath(new URL("../src/cli.ts", import.meta.url));
@@ -63,10 +64,30 @@ describe("调度器接线（M4：--serve 常驻入口）", () => {
       .split("\n")
       .filter((l) => !l.trim().startsWith("//"))
       .join("\n");
-    expect(live, "桌面主进程必须常驻启动调度器（此前唯一生产入口在 CLI --serve，桌面端成空壳）").toMatch(
-      /serveScheduler\(\{\s*workspace\s*\}\)/,
-    );
+    const options = live.match(/serveScheduler\(\{([\s\S]*?)\}\)\.then/)?.[1];
+    expect(options, "桌面主进程必须常驻启动调度器").toBeDefined();
+    expect(options).toMatch(/workspace:\s*canonicalWorkspacePath\(workspace\)/);
+    expect(options).toMatch(/isAgentBusy:\s*\(\)\s*=>\s*host\.runningCount\(\)\s*>\s*0/);
+    expect(options).toMatch(/isIdleWorkspaceAvailable:\s*\(target\)\s*=>\s*host\.hasWorkspace\(target\)/);
     // 停表同样必须在（起点接线而退出不停 = timer 泄漏）
     expect(live).toMatch(/will-quit[\s\S]{0,80}stopDesktopScheduler/);
+  });
+
+  it("⑤ 闲时任务状态机：已取消的任务不能再暂停，且拒绝句说得出原因", async () => {
+    // 这句「当前状态不支持此操作」是用户可见的能力断言；promise-recall-inventory 的欠证人帽
+    // 要求它必须被一条判卷真的点过（不是把原句抄进注释，而是走一次真实状态迁移）。
+    const root = await mkdtemp(join(tmpdir(), "scheduler-idle-witness-"));
+    const scheduler = new Scheduler({
+      dataDir: root, sessionsDir: join(root, "sessions"), workspace: root,
+      clock: () => Date.parse("2026-11-05T08:00:00Z"), jitterMs: () => 0,
+      // 本地闲时队列只在给了 isAgentBusy 的宿主里启用；恒忙 = 永不分派，这条只验状态机。
+      isAgentBusy: () => true,
+      runSession: async () => ({ ok: true }),
+    });
+    expect(await scheduler.enqueueIdleTask({ name: "证人探针", prompt: "不执行", permissionTier: "workspace-write" })).toEqual({ ok: true });
+    const task = (await scheduler.idleTaskSnapshot()).tasks[0]!;
+    expect(await scheduler.updateIdleTask(task.id, "cancel")).toEqual({ ok: true });
+    expect(await scheduler.updateIdleTask(task.id, "pause")).toEqual({ ok: false, error: "当前状态不支持此操作" });
+    await rm(root, { recursive: true, force: true });
   });
 });

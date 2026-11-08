@@ -1,6 +1,6 @@
 // CX-02/CX-03：主会话与 worker 共用同一 model registry / capability map / provider adapter 路由。
 // 本模块只做选择与只读描述；网络调用仍由 providers/registry.ts 的 toWorkerModel 承担。
-import { envKeyOf, type EnvKeyedProvider } from "../providers/env-keys";
+import { envKeyOf, providerApiKey, type EnvKeyedProvider } from "../providers/env-keys";
 import { modelsForCurrentTable, type ProviderModelInfo } from "../providers/models";
 import {
   PROVIDER_IDS,
@@ -33,7 +33,7 @@ export interface ProviderInfo {
   keyConfigured: boolean;
 }
 
-/** 主会话可用的 provider id：内置四家有字面量提示，自定义家是运行时才知道的字符串
+/** 主会话可用的 provider id：内置家有字面量提示，自定义家是运行时才知道的字符串
  *  （`(string & {})` 保留字面量提示的同时允许任意 id —— 静态上无法枚举别人写在配置里的家）。 */
 export type MainProviderId = EnvKeyedProvider | (string & {});
 
@@ -53,6 +53,31 @@ export function selectionProviderId(selection: MainModelSelection): string {
   return selection.kind === "custom" ? selection.providerId : selection.kind;
 }
 
+/** 自进化「便宜档偏置」（闭环 v2 · 批次 A4）：上一轮读数说贵 ⇒ 主会话拨号向便宜方向降一档。
+ *
+ *  刻意的三条边界（每条都是「偏置不许越权」的一格）：
+ *  · **显式选择不动**：`modelExplicit`（用户在设置/请求里点名了模型）或 demo ⇒ 原样返回——
+ *    偏置只降「按缺省表选出来的」那一档，用户点名的档不归它管；
+ *  · **只降不升、只降一档**：沿 strong→standard→cheap 方向退一步，不跳档、绝不升档
+ *    （升档有自己的路：级联升级的客观判据，见 routing/cascade.ts）；
+ *  · **同家内找**：只在同一 provider（`selectionProviderId`）的档位表里找目标档 spec——
+ *    跨家换拨号是配置层的事，偏置不越这个权；目标档无 spec（该家没有更便宜的档）⇒ 原样返回。 */
+export function preferCheapSelection(selection: MainModelSelection): MainModelSelection {
+  if (selection.kind === "demo") return selection;
+  if (selection.modelExplicit) return selection;
+  const order: readonly ModelSpec["tier"][] = ["strong", "standard", "cheap"];
+  const idx = order.indexOf(selection.spec.tier);
+  if (idx < 0 || idx === order.length - 1) return selection; // 已是 cheap 或未知档：不动
+  const targetTier = order[idx + 1]!;
+  const demoted = effectiveModelTable().find(
+    (s) => s.tier === targetTier && s.provider === selectionProviderId(selection),
+  );
+  if (demoted === undefined) return selection;
+  return selection.kind === "custom"
+    ? { kind: "custom", providerId: selection.providerId, spec: demoted, modelExplicit: false }
+    : { kind: selection.kind, spec: demoted, modelExplicit: false };
+}
+
 /** 按 provider id 造一支选择：内置走字面量分支，自定义走 custom 分支。 */
 function selectionFor(provider: string, spec: ModelSpec, modelExplicit: boolean): MainModelSelection {
   return isBuiltinProviderId(provider)
@@ -69,9 +94,10 @@ const PROVIDER_LABELS: Record<EnvKeyedProvider, string> = {
   openai: "OpenAI",
   anthropic: "Anthropic",
   gemini: "Gemini",
+  deepseek: "DeepSeek",
 };
 
-/** provider 的展示名：内置四家有固定文案，自定义家用自己的 label，兜底回 id。
+/** provider 的展示名：内置家（含 DeepSeek）有固定文案，自定义家用自己的 label，兜底回 id。
  *  兜底不抛：label 只影响显示；真正的把关在 `isKnownProviderId`（未知 id 在那一步就拒了）。 */
 export function providerLabel(kind: string): string {
   const builtin = (PROVIDER_LABELS as Readonly<Record<string, string | undefined>>)[kind];
@@ -80,7 +106,7 @@ export function providerLabel(kind: string): string {
   return custom === undefined ? kind : custom.label;
 }
 
-/** 内置四家的 id（错误文案里点名用；从标签表派生，避免再抄一份字面量）。 */
+/** 内置家的 id（错误文案里点名用；从标签表派生，避免再抄一份字面量）。 */
 const PROVIDER_LABELS_KEYS = Object.keys(PROVIDER_LABELS);
 
 /** Empty env means "no override"; unknown non-empty values fail visibly instead of falling through. */
@@ -200,7 +226,7 @@ export function resolveMainModel(input: ResolveMainModelInput): MainModelSelecti
   }
 
   const provider = input.forcedKind ?? input.configuredKind;
-  if (!isKnownProviderId(provider)) throw new Error(`未知主会话 provider: ${provider}（内置四家，或在 .agent/providers.json 里声明并已装上的自定义家）`);
+  if (!isKnownProviderId(provider)) throw new Error(`未知主会话 provider: ${provider}（内置 ${String(PROVIDER_LABELS_KEYS.length)} 家，或在 .agent/providers.json 里声明并已装上的自定义家）`);
   const requested = input.settingsModel !== ""
     ? input.settingsModel
     : provider === "glm" ? input.legacyEnvModel : undefined;
@@ -235,7 +261,7 @@ export function providerKeyConfigured(
   if (kind === "demo") return false;
   const envName = envKeyOf(kind);
   if (envName === null) throw new Error(`Provider ${kind} 未登记 env key 映射`);
-  const value = env[envName];
+  const value = providerApiKey(kind, env);
   return typeof value === "string" && value.trim() !== "";
 }
 
@@ -282,7 +308,7 @@ export function buildProviderInfo(
   };
 }
 
-/** 已知的 provider 清单（内置四家 + 已装自定义家）。
+/** 已知的 provider 清单（内置家 + 已装自定义家）。
  *  为什么要有这一格：设置页的 provider 下拉原先是**渲染层写死的常量**
  *  （`PANEL_PROVIDER_KINDS`），所以用户新加的家里根本选不上它 —— 配了却切不过去，
  *  正是本仓点名过的「能力发货、入口不通」。清单必须跟注册表同源，所以由主进程铺出去。 */

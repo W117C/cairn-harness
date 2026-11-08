@@ -3,7 +3,7 @@
 // 改动文件去重计数。
 import { describe, expect, it } from "vitest";
 import type { AgentEvent } from "../../../src/events";
-import { changedFileCount, projectPlans, projectWorkers } from "../src/renderer/components/panes";
+import { changedFileCount, projectPlans, projectWorkers, workerCardAction } from "../src/renderer/components/panes";
 
 const ev = (e: unknown) => e as AgentEvent;
 
@@ -52,7 +52,7 @@ describe("projectWorkers：worker 四事件归组", () => {
       ev({ type: "agent_message", agent_id: "w1", kind: "progress", text: "跑测试" }),
       ev({ type: "agent_message", agent_id: "w1", kind: "report", text: "改好了" }),
       ev({ type: "agent_status", agent_id: "w1", status: "done", ts: 61000 }),
-      ev({ type: "agent_result", agent_id: "w1", status: "done", summary: "4/4 绿", artifacts: { files_changed: ["src/duration.ts"], verified: "verified", spent_usd: 0.12 }, usage: { inputTokens: 1200, outputTokens: 80 } }),
+      ev({ type: "agent_result", agent_id: "w1", status: "done", summary: "4/4 绿", artifacts: { files_changed: ["src/duration.ts"], diff_ref: ".agents/wt-w1@abc1234", verified: "verified", spent_usd: 0.12 }, usage: { inputTokens: 1200, outputTokens: 80 } }),
     ]);
     expect(out).toHaveLength(1);
     const w = out[0];
@@ -65,6 +65,9 @@ describe("projectWorkers：worker 四事件归组", () => {
     expect(w?.verified).toBe("verified");
     expect(w?.spentUsd).toBe(0.12);
     expect(w?.filesChanged).toEqual(["src/duration.ts"]);
+    // card_action 的 sourceEventId 必须是 agent_result 在会话流里的 1-based 行号（第 7 条）。
+    expect(w?.resultEventId).toBe(7);
+    expect(w?.diffRef).toBe(".agents/wt-w1@abc1234");
   });
 
   it("缺席不编：无 started 或 ended ⇒ 无时长；无 spent_usd ⇒ undefined（不是 0）", () => {
@@ -145,6 +148,16 @@ describe("composeReviewMessage", () => {
     expect(msg).toContain("- 第 8 行：删掉这行");
   });
 
+  it("键带侧别：删除侧写明「删除前」，新增侧不写（第 922 页）", async () => {
+    const { composeReviewMessage } = await import("../src/renderer/components/panes");
+    const msg = composeReviewMessage(new Map([
+      ["src/a.ts|old:2", "这段删掉"],
+      ["src/a.ts|new:2", "这行改名"],
+    ]));
+    expect(msg).toContain("- 第 2 行（删除前）：这段删掉");
+    expect(msg).toContain("- 第 2 行：这行改名");
+  });
+
   it("形状不合解析的键原样保留为兜底条目（不吞任何评论）", async () => {
     const { composeReviewMessage } = await import("../src/renderer/components/panes");
     const msg = composeReviewMessage(new Map([["weird-key", "自由评论"]]));
@@ -204,5 +217,13 @@ describe("sitePermissionFor", () => {
   it("解析失败按「要问」（宁可多问，不静默放行）", async () => {
     const { sitePermissionFor } = await import("../src/renderer/components/panes");
     expect(sitePermissionFor("不是地址", new Set())).toBe("ask");
+  });
+});
+describe("workerCardAction：合并/拒绝的 card_action 形状", () => {
+  it("sourceEventId 用 agent_result 行号，cardType=diff，targetAgentId 原样", () => {
+    expect(workerCardAction("w1", 7, "merge")).toEqual({
+      cardId: "worker-diff-w1", sourceEventId: 7, cardType: "diff", action: "merge", targetAgentId: "w1",
+    });
+    expect(workerCardAction("w1", 7, "reject").action).toBe("reject");
   });
 });

@@ -7,13 +7,24 @@
 //   - lsp 段补齐三项（此前只验「未启用报错」）：借 fixtures/lsp/stub-server.mjs 真跑 documentSymbol
 //     触发输出上限 + 截断提示，并核对相对路径输出；
 //   - 结语按**实际覆盖**打印（工具 × 三项的逐格勾选），不再打印与覆盖不符的笼统结论。
+import { mkdirSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
+
+// 隔离 LSP 运行态落盘目录：避免门禁向宿主真实 ~/.config/cairn/lsp-runtime 写入或在受限沙箱下报 EPERM。
+if (!process.env.CAIRN_LSP_HOME) process.env.CAIRN_LSP_HOME = join(tmpdir(), "dsh-tools-check-lsp-home");
+mkdirSync(process.env.CAIRN_LSP_HOME, { recursive: true });
+
 import { TOOLS } from "../src/tools";
+import { ToolError } from "../src/tools/base";
 import { edit_file } from "../src/tools/edit_file";
 import { closeAllLspClients, lsp, setLspTrustedRepos } from "../src/tools/lsp";
+import { todo_write } from "../src/tools/todo_write";
+import { backgroundTasksFor, forgetBackgroundTasks } from "../src/tools/background-tasks";
+import type { AgentEvent } from "../src/events";
 import type { ToolContext } from "../src/tools";
 
 let failures = 0;
@@ -52,9 +63,10 @@ function assertNoAbsPath(output: string, ws: string): boolean {
 console.log("== 工具注册表 ==");
 const names = Object.keys(TOOLS).sort();
 console.log("  注册工具:", names.join(", "));
-// M2 起 10 个；2026-10-15 加 read_image（识图，静态注册表同 read_file 的准入口径）⇒ 11。
-// M2 起 10 个；2026-10-15 加 read_image（识图）；2026-10-16 加 render_image（渲染 HTML/SVG 成 PNG）⇒ 12。
-check("注册表含 12 个工具", names.length === 12, "实际 " + String(names.length));
+// M2 起 10 个；2026-10-15 加 read_image（识图）；2026-10-16 加 render_image（渲染 HTML/SVG 成 PNG）；2026-11-04 加 todo_write（工作状态面板清单）⇒ 13。
+// 2026-11-05 加 task_output / task_stop（后台任务三件套，run_shell 的 background 档）⇒ 15。
+// 2026-11-06 加 git_read（只读三合一）⇒ 16；+calc（确定性算术）+ list_dir（目录总览）⇒ 18；+read_doc（文档读取）⇒ 19。
+check("注册表含 19 个工具", names.length === 19, "实际 " + String(names.length));
 
 console.log("\n== grep ==");
 {
@@ -272,9 +284,161 @@ console.log("\n== lsp（三项补齐：输出上限 / 截断提示 / 相对路�
   await rm(ws, { recursive: true, force: true });
 }
 
+console.log("\n== todo_write ==");
+{
+  const { ws, ctx } = await makeWs();
+  const emitted: AgentEvent[] = [];
+  const wiredCtx: ToolContext = { ...ctx, callId: "c-todo-1", emit: async (e) => { emitted.push(e); } };
+  let unWiredThrew = false;
+  try {
+    await todo_write.run({ items: [{ text: "检查门禁", state: "pending" }] }, ctx);
+  } catch (err) {
+    unWiredThrew = err instanceof ToolError;
+  }
+  check("未接线 emit/callId fail-closed 报错", unWiredThrew);
+  let overItemsThrew = false;
+  try {
+    const twentyOne = Array.from({ length: 21 }, (_, i) => ({ text: "项 " + String(i), state: "pending" }));
+    await todo_write.run({ items: twentyOne }, wiredCtx);
+  } catch (err) {
+    overItemsThrew = err instanceof ToolError;
+  }
+  check("① 入参上界：超过 20 项 fail-loud 拒收（不静默截断）", overItemsThrew);
+  na("todo_write ① 输出上限", "入参硬卡 ≤20 项 × ≤200 字，回执长度结构性有界（≤4.2KB），不存在无界输出面");
+  na("todo_write ② 截断提示", "同上：超限直接抛 ToolError 拒收而非截断，无需截断提示");
+  const okRes = await todo_write.run(
+    { items: [{ text: "对齐门禁", state: "done" }, { text: "拆分模块", state: "pending" }] },
+    wiredCtx,
+  );
+  const noAbs = okRes.ok && emitted.length === 1 && emitted[0]?.type === "todo_updated" && assertNoAbsPath(okRes.output, ws);
+  check("③ 相对路径与事件落流：回执含完成进度且无绝对路径", noAbs, "首行：" + okRes.output.split("\n")[0]);
+  mark("todo_write", 2, noAbs ? "✅" : "❌");
+  await rm(ws, { recursive: true, force: true });
+}
+
+console.log("\n== 新工具实测（git_read / read_doc / calc / list_dir） ==");
+{
+  const { ws, ctx } = await makeWs();
+  await mkdir(join(ws, "src"), { recursive: true });
+  await mkdir(join(ws, "sub"), { recursive: true });
+  const gitEnv = { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" };
+  const git = (args: string[]): void => { execFileSync("git", args, { cwd: ws, env: gitEnv, stdio: "pipe" }); };
+  git(["init", "-q"]);
+  await writeFile(join(ws, "a.ts"), "one\n", "utf8");
+  git(["add", "."]);
+  git(["commit", "-qm", "init"]);
+  await writeFile(join(ws, "a.ts"), "two\n", "utf8");
+  const status = await TOOLS.git_read.run({ op: "status" }, ctx);
+  const diff = await TOOLS.git_read.run({ op: "diff", path: "a.ts" }, ctx);
+  const log = await TOOLS.git_read.run({ op: "log" }, ctx);
+  check("git_read status/diff/log 真跑三支且只回 workspace 相对路径",
+    status.ok && status.output.includes("a.ts") && diff.ok && diff.output.includes("+two") &&
+    log.ok && log.output.includes("init") && [status, diff, log].every((r) => assertNoAbsPath(r.output, ws)),
+    "status: " + status.output.split("\n")[0]);
+  check("git_read 截断帽与越界保护（真工具调用）",
+    diff.output.length < 20_100 && (await TOOLS.git_read.run({ op: "push" }, ctx).catch((e: unknown) => e)) instanceof ToolError);
+
+  // 零依赖 zip 写入器（stored 成员）：与判卷夹具同形，只用于现场造 docx/xlsx。
+  const makeZip = (files: Record<string, string>): Buffer => {
+    const localParts: Buffer[] = [];
+    const centralParts: Buffer[] = [];
+    let offset = 0;
+    for (const [name, content] of Object.entries(files)) {
+      const data = Buffer.from(content, "utf8");
+      const n = Buffer.from(name, "utf8");
+      const local = Buffer.alloc(30);
+      local.writeUInt32LE(0x04034b50, 0);
+      local.writeUInt32LE(data.length, 18);
+      local.writeUInt16LE(n.length, 26);
+      localParts.push(local, n, data);
+      const central = Buffer.alloc(46);
+      central.writeUInt32LE(0x02014b50, 0);
+      central.writeUInt32LE(data.length, 20);
+      central.writeUInt16LE(n.length, 28);
+      central.writeUInt32LE(offset, 42);
+      centralParts.push(central, n);
+      offset += local.length + n.length + data.length;
+    }
+    const cd = Buffer.concat(centralParts);
+    const eocd = Buffer.alloc(22);
+    eocd.writeUInt32LE(0x06054b50, 0);
+    eocd.writeUInt16LE(Object.keys(files).length, 10);
+    eocd.writeUInt32LE(cd.length, 12);
+    eocd.writeUInt32LE(offset, 16);
+    return Buffer.concat([...localParts, cd, eocd]);
+  };
+  await writeFile(join(ws, "sample.docx"), makeZip({
+    "word/document.xml": "<w:document><w:body><w:p><w:r><w:t>第一段：A&amp;B</w:t><w:tab/><w:t>列二</w:t></w:r></w:p></w:body></w:document>",
+  }));
+  await writeFile(join(ws, "sample.xlsx"), makeZip({
+    "xl/workbook.xml": "<workbook/>",
+    "xl/sharedStrings.xml": "<sst><si><t>名称</t></si><si><t>价格</t></si></sst>",
+    "xl/worksheets/sheet1.xml": "<worksheet><sheetData><row><c t=\"s\"><v>0</v></c><c t=\"s\"><v>1</v></c></row><row><c t=\"s\"><v>0</v></c><c><v>42</v></c></row></sheetData></worksheet>",
+  }));
+  await writeFile(join(ws, "sample.pdf"), "%PDF-1.4\n1 0 obj\n<<>>\nstream\nBT (pdf text check) Tj ET\nendstream\nendobj\n%%EOF", "latin1");
+  await writeFile(join(ws, "long.docx"), makeZip({
+    "word/document.xml": "<w:document><w:body><w:p><w:r><w:t>" + "x".repeat(21_000) + "</w:t></w:r></w:p></w:body></w:document>",
+  }));
+  const docx = await TOOLS.read_doc.run({ path: "sample.docx" }, ctx);
+  const xlsx = await TOOLS.read_doc.run({ path: "sample.xlsx" }, ctx);
+  const pdf = await TOOLS.read_doc.run({ path: "sample.pdf" }, ctx);
+  const long = await TOOLS.read_doc.run({ path: "long.docx" }, ctx);
+  check("read_doc docx/xlsx/pdf 真读三类且正文不出绝对路径",
+    docx.ok && docx.output.includes("第一段：A&B\t列二") &&
+    xlsx.ok && xlsx.output.includes("名称\t42") &&
+    pdf.ok && pdf.output.includes("pdf text check") &&
+    [docx, xlsx, pdf].every((r) => assertNoAbsPath(r.output, ws)));
+  check("read_doc 输出帽：>20K 字符截断且明确说被截断",
+    long.ok && long.output.includes("[read_doc] 输出已截断") && long.output.length < 21_000);
+
+  const calc = await TOOLS.calc.run({ expression: "(128000-8192)*0.8/4" }, ctx);
+  const badCalc = await TOOLS.calc.run({ expression: "1; process.exit(1)" }, ctx).catch((e: unknown) => e);
+  check("calc 确定性算术 + 拒绝任意表达式（零 eval 面）",
+    calc.ok && calc.output.includes("23961.6") && badCalc instanceof ToolError, calc.output);
+  for (let i = 0; i < 201; i++) await writeFile(join(ws, "sub", "f" + String(i).padStart(3, "0") + ".txt"), "x", "utf8");
+  const listing = await TOOLS.list_dir.run({ path: "sub" }, ctx);
+  check("list_dir 单层 200 项帽 + 截断提示 + 相对路径",
+    listing.ok && listing.output.includes("201 项，截断到 200") && listing.output.includes("[list_dir] 已截断") &&
+    assertNoAbsPath(listing.output, ws), listing.output.split("\n")[0]);
+  await rm(ws, { recursive: true, force: true });
+}
+
+console.log("\n== task_output / task_stop（后台任务三件套） ==");
+{
+  const { ws, ctx } = await makeWs();
+  // 真后台任务两支：瞬时命令（跑完即终态）与长命令（读进行态后组杀）。
+  // 走注册表直调（run_shell → registry 的接线面由 vitest 棘轮钉）；命令串用数组拼。
+  const scopedCtx = { ...ctx, sessionLogPath: join(ws, "session.jsonl") };
+  const backgroundTasks = backgroundTasksFor(scopedCtx);
+  const echoCmd = ["echo", "bg-ok-marker"].join(" ");
+  const sleepCmd = ["sleep", "30"].join(" ");
+  const { id } = backgroundTasks.start(echoCmd, ws);
+  check("注册表起任务：立即返回 bg_N 任务号", id !== "", id);
+  await new Promise((r) => { setTimeout(r, 250); });
+  const readDone = await TOOLS.task_output.run({ task_id: id }, scopedCtx);
+  check("① task_output 读到输出与终态（退出码 0）", readDone.ok && readDone.output.includes("bg-ok-marker") && readDone.output.includes("退出码 0"));
+  mark("task_output", 0, readDone.ok ? "✅" : "❌");
+  // ② 截断提示：输出环与 run_shell 同源（32KB 头尾环 + [truncated:] 注记），帽行为由 output-ring 判卷覆盖。
+  na("task_output ② 截断提示", "输出环与 run_shell 同源（32KB 头尾环），帽行为由 output-ring 自身判卷覆盖");
+  const { id: longId } = backgroundTasks.start(sleepCmd, ws);
+  const running = await TOOLS.task_output.run({ task_id: longId }, scopedCtx);
+  check("长命令读出「仍在运行」", running.ok && running.output.includes("仍在运行"));
+  const stopped = await TOOLS.task_stop.run({ task_id: longId }, scopedCtx);
+  check("task_stop 组杀并回给停止前输出", stopped.ok && stopped.output.includes("已停止"));
+  mark("task_stop", 2, stopped.ok ? "✅" : "❌");
+  const read2 = await TOOLS.task_output.run({ task_id: longId }, scopedCtx);
+  check("③ 停止后读终态：不再「仍在运行」、无绝对路径", read2.ok && !read2.output.includes("仍在运行") && assertNoAbsPath(read2.output, ws));
+  mark("task_output", 2, read2.ok ? "✅" : "❌");
+  let unknownThrew = false;
+  try { await TOOLS.task_output.run({ task_id: "bg_999" }, scopedCtx); } catch (err) { unknownThrew = err instanceof ToolError; }
+  check("未知任务号 fail-loud（点名现存任务域）", unknownThrew);
+  await rm(ws, { recursive: true, force: true });
+  forgetBackgroundTasks(scopedCtx.sessionLogPath);
+}
+
 console.log("");
 console.log("== 三项清单覆盖（按实际覆盖打印，结语与断言一一对应）==");
-const order = ["grep", "glob", "read_file", "edit_file", "lsp"];
+const order = ["grep", "glob", "read_file", "edit_file", "lsp", "todo_write", "task_output", "task_stop"];
 let asserted = 0;
 for (const t of order) {
   const c = COVERAGE.get(t);
@@ -293,5 +457,5 @@ if (failures > 0) {
   process.exit(1);
 }
 console.log(
-  "✅ tools-check 全部通过：grep/glob/read_file/lsp 四工具三项全绿；edit_file ①② 显式 n/a（输出有界），③ 相对路径绿。",
+  "✅ tools-check 全部通过：grep/glob/read_file/lsp 四工具三项全绿；edit_file/todo_write ①② 显式 n/a（结构性有界），③ 相对路径绿。",
 );

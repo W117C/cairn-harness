@@ -16,6 +16,7 @@ import { describe, expect, it } from "vitest";
 import { restoredPathsOf, turnDelivery } from "../src/renderer/projections";
 import { changedFileCount, changedFilesOf } from "../src/renderer/components/panes";
 import type { AgentEvent } from "../../../src/events";
+import { readAppSurface } from "./helpers/app-surface";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 const ev = (o: Record<string, unknown>): AgentEvent => o as unknown as AgentEvent;
@@ -132,16 +133,17 @@ describe("restoredPathsOf（判定面）", () => {
   });
 });
 
-describe("接线：还原要落事件，且带上会话 id", () => {
-  const app = read("../src/renderer/App.tsx");
+describe("接线：还原要落事件，且带上会话 id 和工作区", () => {
+  const app = readAppSurface();
   const handlers = read("../../../src/main/session-handlers.ts");
 
-  it("渲染层把 sessionId 一起递过去（不递 ⇒ 主进程不知道往哪条事件流落）", () => {
+  it("渲染层把 sessionId 和工作区一起递过去", () => {
     // 形状是条件展开（sessionId 在协议里可选：没有活动会话时不递，主进程也不落流）
     expect(app).toContain("...(sid !== null ? { sessionId: sid } : {}),");
+    expect(app).toContain("...(workspace !== null ? { workspace } : {}),");
     // 2026-10-20：主进程 append 不推流，渲染层成功后本地补一条；只补发起还原的那个会话。
     expect(app).toContain('setEvents((prev) => [...prev, { type: "file_restored", path, snapshotId } as AgentEvent]);');
-    expect(app).toContain("if (sid !== null && activeIdRef.current === sid)");
+    expect(app).toContain("if (sid !== null && activeIdRef.current === sid && activeWorkspaceRef.current === workspace)");
   });
 
   it("主进程还原成功后落 file_restored 事件", () => {
@@ -151,8 +153,8 @@ describe("接线：还原要落事件，且带上会话 id", () => {
 
   it("还原失败不落事件（失败就是没还原，落了就是撒谎）", () => {
     const fn = handlers.slice(
-      handlers.indexOf("export async function handleSnapshotRestore"),
-      handlers.indexOf("export async function handleSnapshotRestore") + 2000,
+      handlers.indexOf("async function restoreSnapshotAndRecord"),
+      handlers.indexOf("// ---- v5 file 窗格"),
     );
     const failAt = fn.indexOf("if (r.ok !== true) return r;");
     const appendAt = fn.indexOf('type: "file_restored"');

@@ -2,6 +2,9 @@
  *  本仓天天建这种树（认证、复跑、双树对照），回收命令也按名字给人看；名字与树的实际 HEAD 不符，
  *  下一个人就会拿一棵树的读数去替另一棵作证。
  *
+ *  这把尺只量 **detached** 树：挂在分支上的活工作树目录名是分支的工作名（如 `.worktrees/cap-20261021`），
+ *  HEAD 随分支移动，本来就不编码提交，也不是「钉在某一笔上」的证据面。
+ *
  *  与 `head-cert-deps.ts` 里 `staleScratchTrees` 的分工（刻意不重抄那一格）：
  *  那把尺答的是**哪些树可以回收**（脏不脏／是不是 HEAD 的祖先／在不在暂存根里）；
  *  这把尺答的是**注册表的名字有没有说谎**（同一棵树在 git 里的 HEAD vs 目录名里的 sha 前缀）。
@@ -12,6 +15,9 @@ export interface ScratchTree {
   path: string;
   /** 这棵树当前 checkout 的提交（来自 `git worktree list --porcelain` 的 HEAD 行）。 */
   head: string;
+  /** `false` = 这棵树挂在一个分支上（活的工作树）；`true`/缺席 = detached（验证树）。
+   *  `git worktree list --porcelain` 的 `detached` 行解析出这一格，命名判据据此只量验证树。 */
+  detached?: boolean;
 }
 
 export interface NamingFinding {
@@ -53,6 +59,11 @@ export function checkScratchTreeNaming(root: string, trees: readonly ScratchTree
   const mine = scratchTreesUnder(root, trees);
   const byHead = new Map<string, string[]>();
   for (const t of mine) {
+    // 挂在分支上的活工作树不是「钉在某个提交上」的验证树：目录名是分支的工作名（如 `cap-20261021`），
+    // HEAD 随分支移动，所以「名字里没有 sha」和「名字承诺 ≠ HEAD」都不成立——把它算进来是尺伸出了归属面。
+    // 2026-10-21 实测：`.worktrees/cap-20261021` 与审计树自身让真仓面常驻红（两棵都是 branch，不是 detached）。
+    // 判据没有放宽：下面所有检查照旧逐条量 detached 树（`detached` 行缺席的合成树也照样量）。
+    if (t.detached === false) continue;
     const name = base(t.path);
     // 工具共享树（package.json 写死的 gate-mutate-verify / gate-head-cert）不含 sha 是设计：
     // 它们是长期复用的工具树，不是「钉在某个提交上」的验证树，豁免它们的命名检查。

@@ -1,0 +1,56 @@
+/* 自动化任务表单：沿用现有主题，字段在控件上方，排程与权限并列。 */
+.ap-form {
+  width: 100%; max-width: 640px; padding: var(--space-lg);
+  gap: var(--space-md); color-scheme: light;
+}
+[data-theme="dark"] .ap-form { color-scheme: dark; }
+.ap-form-title {
+  margin: 0; font-size: var(--fs-body-lg); font-weight: var(--fw-semibold);
+  color: hsl(var(--text-000));
+}
+.ap-form .ap-form-row { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-xs); min-width: 0; }
+.ap-form .ap-k { padding: 0; color: hsl(var(--text-200)); font-size: var(--fs-body-sm); }
+.ap-form input, .ap-form select, .ap-form textarea {
+  min-width: 0; height: 36px; padding: 6px 10px;
+  border-radius: var(--radius-sm); box-shadow: none;
+}
+.ap-form textarea { height: auto; min-height: 104px; line-height: 1.6; }
+.ap-form input:focus, .ap-form select:focus, .ap-form textarea:focus { border-color: hsl(var(--accent-control)); }
+.ap-form-settings { display: grid; grid-template-columns: 3fr 2fr; gap: var(--space-md); }
+.ap-form .ap-form-ctl { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-xs); align-items: center; }
+.ap-form .ap-form-ctl input, .ap-form .ap-form-ctl select { width: 100%; }
+.ap-form .ap-weekdays { grid-column: 1 / -1; display: flex; gap: var(--space-xs); }
+.ap-form .ap-weekdays .chip { flex: 1; min-width: 0; height: 30px; justify-content: center; padding-inline: 0; border-radius: var(--radius-sm); }
+.ap-form-settings[data-kind="once"] { grid-template-columns: 1fr; }
+.ap-form-settings[data-kind="once"] .ap-form-ctl { grid-template-columns: 1fr 2fr; }
+.ap-form-note { display: flex; flex-direction: column; gap: var(--space-xs); }
+.ap-form-note .sp-dim { font-size: var(--fs-caption-sm); line-height: 1.6; }
+.ap-form-actions {
+  display: flex; justify-content: flex-end; gap: var(--space-sm);
+  padding-top: var(--space-md); border-top: 1px solid var(--hairline);
+}
+.ap-form-actions .mini-btn { min-height: 32px; padding-inline: var(--space-md); }
+.automation-toolbar {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;
+  gap: var(--space-sm); padding-bottom: var(--space-md); margin-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--hairline);
+}
+.automation-list .ap-item { min-height: 52px; align-items: center; }
+@media (max-width: 760px) {
+  .ap-form { padding: var(--space-md); }
+  .ap-form-settings { grid-template-columns: 1fr; }
+  .automation-list .ap-item { flex-wrap: wrap; }
+  .automation-list .ap-item .r { width: 100%; }
+}
+
+.automation-views { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
+.idle-task-section { display: grid; gap: var(--space-md); }
+.idle-task-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: start; gap: var(--space-sm); }
+.idle-task-heading h2 { margin: 0; font-size: var(--fs-body-lg); }
+.idle-task-heading p { margin: var(--space-xs) 0 0; overflow-wrap: anywhere; }
+.idle-task-list { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--hairline); }
+.idle-task-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: start; gap: var(--space-sm); padding: var(--space-sm) 0; border-bottom: 1px solid var(--hairline); }
+.idle-task-row details { flex: 1 1 200px; min-width: 0; }
+.idle-task-row summary { cursor: pointer; overflow-wrap: anywhere; }
+.idle-task-row p { overflow-wrap: anywhere; }
+.idle-task-actions { display: flex; flex-wrap: wrap; gap: var(--space-xs); }

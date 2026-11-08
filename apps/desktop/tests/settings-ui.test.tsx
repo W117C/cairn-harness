@@ -1,18 +1,24 @@
 // 批 6（《全局 UI 视觉重构》总纲阶段 2 公共组件 + 细则 §六 设置页）：
 // SettingsPage（20px 标题 + ≤960px 内容列，2026-10-16 模型/通道页重做 A/B）/
-// SettingsSection（12.5px tertiary 组标题在卡上方 + surface 卡 14 圆角）/
+// SettingsSection（caption 档 tertiary 组标题在卡上方 + surface 卡 14 圆角）/
 // SettingsRow（220px 标题列 + 弹性控件列左对齐、56px 行高、1px 分隔线、窄宽单列，2026-10-16 C）/
 // Field/Badge/StatusDot（控件 36px/8px 四态、徽章、状态点，2026-10-16 新增）/
 // EmptyState（图标+标题+说明+主按钮）/ OptionCard（单选卡：选中强调描边淡底、danger 档危险色）/
 // Banner（信息/警告 + 可折叠「查看详情」）。
-// 组标题字号口径（细则三处一致「12.5px tertiary」优先于总纲「15px/600」——克制小标签式；页面标题承担 20px）。
+// 组标题字号口径（细则三处一致「caption 档 tertiary」优先于总纲「15px/600」——克制小标签式；页面标题承担 20px）。
+// 2026-10-21：caption-xs 按业主 §4.4 由 12.5 改回 11（`--fs-caption-xs` = 0.6875rem），
+// 于是本处不再钉死具体像素，只钉「吃 caption 刻度」这一事实。
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { readAppSurface } from "./helpers/app-surface";
 import { Badge, Banner, EmptyState, Field, OptionCard, SettingsPage, SettingsRow, SettingsSection, StatusDot } from "../src/renderer/components/settings-ui";
 import { ShortcutsSection } from "../src/renderer/components/settings-sections";
 
 const styles = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
+const refinementPath = new URL("../src/renderer/components/settings-refinement.css", import.meta.url);
+const refinement = existsSync(refinementPath) ? readFileSync(refinementPath, "utf8") : "";
 function block(css: string, sel: string): string {
   const i = css.indexOf(`\n${sel} {`);
   if (i < 0) throw new Error(`CSS 块不存在：${sel}`);
@@ -29,7 +35,7 @@ describe("批 6：设置页公共组件（SSR 结构）", () => {
     expect(h).toContain('id="x"');
   });
 
-  it("SettingsSection：12.5px 组标题在卡上方（hint 可选）+ surface 卡容器", () => {
+  it("SettingsSection：caption 档组标题在卡上方（hint 可选）+ surface 卡容器", () => {
     const h = renderToStaticMarkup(
       <SettingsSection title="外观" hint="主题与密度">
         <div id="row" />
@@ -45,16 +51,31 @@ describe("批 6：设置页公共组件（SSR 结构）", () => {
     expect(bare).not.toContain("ss-sec-hint");
   });
 
-  it("快捷键速查：双列键帽+说明，12 行；窄窗一列", () => {
+  it("页面标题与说明组成独立页头，分组名使用真正的二级标题", () => {
+    const h = renderToStaticMarkup(
+      <SettingsPage title="通用" desc="外观、文字与输入习惯。">
+        <SettingsSection title="外观"><div /></SettingsSection>
+      </SettingsPage>,
+    );
+    expect(h).toContain('<header class="ss-head"><h1 class="ss-title">通用</h1><p class="ss-desc">外观、文字与输入习惯。</p></header>');
+    expect(h).toContain('<h2 class="ss-sec-title">外观</h2>');
+  });
+
+  it("快捷键速查：完整分组双列表（36 行）；窄窗一列", () => {
     const h = renderToStaticMarkup(<ShortcutsSection />);
     expect(h).toContain('class="kx-list"');
     expect(h).toContain('<kbd class="kx-keys">⌘N</kbd>');
-    expect(h).toContain('class="kx-what">新任务');
-    expect((h.match(/class="kx-row"/g) ?? []).length).toBe(12);
+    // 2026-11-02：13 条精简版升级为与 ⌘/ 弹层同源的完整分组表（会话 13 / 窗格 10 / 视图 13）。
+    expect(h).toContain('class="kx-what">新会话（回到主页）');
+    expect((h.match(/class="kx-row"/g) ?? []).length).toBe(36);
+    expect(h).toContain('class="ss-sec-title kx-group-title">会话');
+    expect(h).toContain('class="ss-sec-title kx-group-title">窗格');
+    expect(h).toContain('class="ss-sec-title kx-group-title">视图与输入');
     expect(h).toContain("完整速查表");
     const list = block(styles, ".kx-list");
     expect(list).toContain("repeat(2, minmax(0, 1fr))");
-    expect(block(styles, ".kx-row")).toContain("grid-template-columns: 108px minmax(0, 1fr)");
+    // 2026-11-02：键帽列改内容自适应（固定 108px 会裁长键位）。
+    expect(block(styles, ".kx-row")).toContain("grid-template-columns: minmax(56px, max-content) minmax(0, 1fr)");
     expect(block(styles, ".kx-keys")).toContain("font-family: var(--mono)");
     expect(styles).toContain("@media (max-width: 760px)");
   });
@@ -132,41 +153,71 @@ describe("批 6：设置页公共组件（SSR 结构）", () => {
 });
 
 describe("批 6：设置页公共组件（CSS 口径哨兵）", () => {
-  it(".ss-title = 20px / --fw-bold；内容列 960px 水平居中（2026-10-16 重做 A：滚动容器撑满、内容列收口）", () => {
-    const t = block(styles, ".ss-title");
-    expect(t).toContain("font-size: var(--fs-title-md)");
-    expect(t).toContain("font-weight: var(--fw-bold)");
-    // 宽度与居中的单一落点：sp-body 的内容列包装规则（原 .ss-page 自带 720 上限已下架）
-    expect(styles).toContain(".sp-body > .ss-page, .sp-body > .ap-body { max-width: 960px; margin: 0 auto; width: 100%; }");
-    expect(block(styles, ".sp-body")).not.toContain("max-width"); // 滚动容器自身不再设宽（A 的根因）
-    expect(block(styles, ".ss-page")).not.toContain("max-width");
+  it("设置页加载局部样式：无衬线标题、宽内容列与全宽滚动容器", () => {
+    expect(readAppSurface().includes('import "./settings-refinement.css"')).toBe(true);
+    const t = block(refinement, ".sp-page .ss-head > .ss-title");
+    expect(t).toContain("font-family: inherit");
+    // 2026-11-02：标题从 22px 抬到 26px（此前比插件/记忆页标题轻一档）。
+    expect(t).toContain("font-size: 26px");
+    expect(t).toContain("font-weight: var(--fw-semibold)");
+    expect(t).toContain("letter-spacing: -0.02em");
+    const page = block(refinement, ".sp-page .sp-body > .ss-page");
+    // 2026-11-02：760 → 880（1440 宽窗口右侧不再空一整片）。
+    expect(page).toContain("max-width: 880px");
+    expect(page).toContain("margin: 0 auto");
+    expect(block(refinement, ".sp-page .sp-body")).not.toContain("max-width");
   });
 
-  it(".ss-sec-head 组标题 = 12.5px tertiary；.ss-card = surface + 描边 + 14 圆角 + 20 内距", () => {
-    expect(block(styles, ".ss-sec-head")).toContain("font-size: var(--fs-caption-xs)");
-    expect(block(styles, ".ss-sec-head")).toContain("color: hsl(var(--text-400))");
-    const card = block(styles, ".ss-card");
-    expect(card).toContain("border-radius: var(--radius-pop)"); // 14（与弹层同档）
-    expect(card).toContain("hsl(var(--bg-000))");
-    expect(card).toContain("1px solid var(--hairline-strong)");
-    expect(card).toContain("padding: 0");
+  it("分组靠间距与细线分层，正文不再包嵌套外卡片", () => {
+    const title = block(refinement, ".sp-page .ss-sec-head > .ss-sec-title");
+    expect(title).toContain("font-family: inherit");
+    expect(title).toContain("font-size: var(--fs-body-md)");
+    expect(title).toContain("font-weight: var(--fw-semibold)");
+    const card = block(refinement, ".sp-page .ss-card");
+    expect(card).toContain("border: 0");
+    expect(card).toContain("border-radius: 0");
+    expect(card).toContain("background: transparent");
+    // 分区之间的细线（靠 .ss-content 包裹才生效）
+    expect(block(refinement, ".sp-page .ss-content > .ss-sec + .ss-sec")).toContain("border-top: 1px solid var(--hairline)");
+    // 2026-11-01 真机（进化页）：分区头与内容之间要有一条细线——头不再浮在一片空白上
+    // （读作「标题 + 分隔线」，不是一个洞）。
+    const head = block(refinement, ".sp-page .ss-sec-head");
+    expect(head).toContain("border-bottom: 1px solid var(--hairline)");
+    expect(head).toContain("padding: 0 0 10px");
   });
 
-  it(".ss-row = 220px 标题列 + 弹性控件列（左对齐，2026-10-16 C）；行间 1px 分隔线；窄宽单列", () => {
-    const row = block(styles, ".ss-row");
-    expect(row).toContain("grid-template-columns: 220px minmax(0, 1fr)");
-    expect(row).toContain("min-height: 56px");
-    expect(row).toContain("border-top: 1px solid var(--hairline)");
-    expect(styles).toContain(".ss-card > .ss-row:first-child { border-top: 0; }");
-    // 控件列不再右对齐（「控件被挤到右半边」的反向钉）
-    expect(block(styles, ".ss-row-ctl")).not.toContain("justify-content: flex-end");
-    // 窄宽媒体查询：标题列收进单列（800px 窗口仍两列，控件换行不溢出）
-    expect(styles).toMatch(/@media \(max-width: 640px\)[\s\S]{0,300}\.ss-row \{ grid-template-columns: minmax\(0, 1fr\)/);
+  it("表单标签稳定占一列，控件可收缩；窄内容列回落单列防止挤成碎字", () => {
+    const row = block(refinement, ".sp-page .ss-row");
+    // 2026-11-01 真机（进化页）：值列此前是 1.5fr（比文字列还宽）⇒ 徽章被推到天边，
+    // 文字与值之间空出一大片。值列改为 auto（贴着内容走）。
+    expect(row).toContain("grid-template-columns: minmax(150px, 1fr) auto");
+    expect(row).not.toContain("1.5fr");
+    expect(row).toContain("align-items: center");
+    // 2026-11-02：60 → 52（与插件/记忆页的密度对齐）。
+    expect(row).toContain("min-height: 52px");
+    const ctl = block(refinement, ".sp-page .ss-row-ctl");
+    expect(ctl).toContain("justify-content: flex-end");
+    expect(ctl).toContain("width: auto");
+    expect(ctl).not.toContain("width: 100%");
+    expect(refinement).toMatch(/@container \(max-width: 560px\)[\s\S]*\.sp-page \.ss-row \{ grid-template-columns: minmax\(0, 1fr\)/);
+    expect(refinement).toMatch(/@container \(max-width: 560px\)[\s\S]*\.sp-page \.ss-row-ctl \{ justify-content: flex-start/);
+    expect(block(refinement, ".sp-page .pv-detail .ss-frow .ss-field")).toContain("min-width: 0");
+    expect(refinement).toContain('.sp-page .pv-split { grid-template-columns: minmax(0, 1fr);');
   });
 
-  it(".ss-opt 选中 = 强调描边 + 淡底；danger 档 = 危险色描边（不铺大红底）", () => {
+  it("计数小片：一格一个数，CJK 词不许折行（进化页真机）", () => {
+    expect(block(refinement, ".sp-page .sp-chips")).toContain("flex-wrap: wrap");
+    const chip = block(refinement, ".sp-page .sp-chip");
+    expect(chip).toContain("white-space: nowrap");
+    expect(chip).toContain("display: inline-flex");
+    expect(refinement).toContain(".sp-page .sp-tech > summary");
+    expect(refinement).toContain(".sp-page .sp-tech-body");
+  });
+
+  it(".ss-opt 选中 = 品牌描边 + 淡底（2026-11-05 业主裁：点击后不要蓝框）；danger 档 = 危险色描边（不铺大红底）", () => {
     const on = styles.match(/\.ss-opt\.on \{[^}]*\}/) ?? [""];
     expect(on[0]).toContain("accent-brand");
+    expect(on[0]).not.toContain("accent-control");
     expect(styles).toContain(".ss-opt.danger .ss-opt-title");
     expect(styles).toMatch(/\.ss-opt\.danger \{[^}]*color-danger/);
   });
@@ -223,5 +274,53 @@ describe("2026-10-16：控件契约三件（Field / Badge / StatusDot）", () =>
     expect(dot).toContain('aria-hidden="true"');
     expect(styles).toMatch(/\.ss-dot\[data-tone="ok"\] \{ background: hsl\(var\(--success\)\); \}/);
     expect(styles).toMatch(/\.ss-dot\[data-tone="warn"\] \{ background: hsl\(var\(--color-risk\)\); \}/);
+  });
+});
+
+describe("SettingsPage 分区说明（2026-10-21）", () => {
+  it("desc 在位时渲染一行说明；缺省不摆空段落", () => {
+    const withDesc = renderToStaticMarkup(<SettingsPage title="通用" desc="外观、文字与输入习惯。"><div /></SettingsPage>);
+    expect(withDesc).toContain("外观、文字与输入习惯。");
+    const without = renderToStaticMarkup(<SettingsPage title="通用"><div /></SettingsPage>);
+    expect(without).not.toContain("ss-desc");
+  });
+});
+
+describe("设置卡内主按钮的身份（2026-11-01 第 862 页）", () => {
+  it("卡内不再另涂一套品牌珊瑚：primary 与全应用同一条 --btn-primary-* 令牌", () => {
+    // 业主用色裁决：品牌珊瑚只出现在品牌标记本身；要强调用对比而不是色相。
+    // 此前只有 `.ss-card` 里的 `mini-btn primary` 被改涂 accent-brand ⇒ 同一个语义控件
+    // 两套长相，且设置页最响的一块是一枚珊瑚键（真机 06-settings-provider 截图）。
+    expect(styles).not.toMatch(/\.ss-card \.mini-btn\.primary[^{]*\{[^}]*accent-brand/);
+    expect(styles).not.toContain(".ss-card .mini-btn.primary");
+    // 反向自证：全局那条确实读令牌（不是把两处一起删掉造成假绿）。
+    expect(styles).toMatch(/\.mini-btn\.primary \{ background: var\(--btn-primary-bg\)/);
+    // 卡内按钮的尺寸档仍在（本次只撤色相，不动 36px 这一档）。
+    expect(block(styles, ".ss-card .mini-btn")).toContain("height: 36px");
+  });
+});
+
+describe("分区标题与行标签不重复（第 892 页 · 让布局说话）", () => {
+  /** 扫源码：同一 SettingsSection 里，行标签不许是分区标题的子串。
+ *  ≥3 字才判：「关于与更新」分区里有一行就叫「更新」，那是短词的巧合包含，不是同词重复
+ *  （变异自检：把行标签改成分区标题的 ≥3 字子串，本判卷会红）。 */
+  const FILES = [
+    "../src/renderer/components/settings-sections.tsx",
+    "../src/renderer/components/settings/NetworkSection.tsx",
+    "../src/renderer/components/settings/UsageSection.tsx",
+  ];
+  it("没有「分区标题 ⊃ 行标签」的同屏重复", () => {
+    const dups: string[] = [];
+    for (const rel of FILES) {
+      const src = readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
+      for (const m of src.matchAll(/SettingsSection title="([^"]+)"([\s\S]*?)<\/SettingsSection>/g)) {
+        const [, title, body] = m;
+        for (const lm of body.matchAll(/SettingsRow label="([^"]+)"/g)) {
+          const lab = lm[1];
+          if (lab.length >= 3 && title.includes(lab)) dups.push(`${rel} :: ${title} ⊃ ${lab}`);
+        }
+      }
+    }
+    expect(dups, "同屏同词：\n" + dups.join("\n")).toEqual([]);
   });
 });

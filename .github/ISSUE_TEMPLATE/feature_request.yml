@@ -6,9 +6,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        本仓当前处于 **B1 内测**阶段，交付面只有 CLI（桌面端不在 v1 交付面内）。
-        受众与范围的裁决见 `docs/adr/0002-v1-audience-b1-internal-beta.md`，
-        扩大受众的清单留门 `docs/b2-checklist.md`。**提之前先读这两份。**
+        先说清楚你遇到的实际问题和使用场景。请先读 [docs/ROADMAP.md](https://github.com/W117C/cairn-harness/blob/main/docs/ROADMAP.md)
+        的非目标清单，避免提出当前明确不做的东西。
 
   - type: textarea
     id: problem

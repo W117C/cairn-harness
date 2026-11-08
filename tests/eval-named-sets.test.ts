@@ -228,7 +228,7 @@ describe("一次 verify 拍里有 N 条命令时的取料编排", () => {
 });
 
 describe("生产闭环：第 415 页产出的规格真的有消费者", () => {
-  const sample = readFileSync(join(ROOT, "outputs/eval-benchmark-adapter-2026-09-24/swebench-sample.jsonl"), "utf8");
+  const sample = readFileSync(join(ROOT, "fixtures/eval/swebench-sample.jsonl"), "utf8");
   const parsed = fromSweBenchJsonl(sample);
   const realSpec = (parsed.tasks[0] as TaskSpec | undefined)?.judge;
 

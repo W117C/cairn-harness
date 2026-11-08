@@ -7,12 +7,14 @@
 // 本模块**不反向依赖装配根**（同 state-handlers / scheduler-runtime / demo-scripted 那一族）：
 // 入参 `SessionProviderOptions` 自己声明（原先写作 `Pick<RunOptions, "logPath" | "workspace" |
 // "attachments"> & {…}`），见该接口头上的说明。
-import { createSessionProvider, gateToolSpecs, type SessionTransport } from "../agent/session-provider";
+import { createSessionProvider, createSessionSummarizer, createHookModelCall, gateToolSpecs, type SessionCompaction, type SessionTransport } from "../agent/session-provider";
+import type { CompactionConfig } from "../agent/compaction";
+import type { ImageChannel } from "../agent/image-channel";
 import type { SolpiRuntime } from "../agent/solpi-runtime";
 import type { AgentEvent } from "../events";
 import type { GlmToolSpec } from "../providers/glm";
 import { createMockProvider } from "../providers/mock";
-import { toWorkerModel, type RegistryWorkerModel } from "../providers/registry";
+import { toWorkerModel, type RegistryWorkerModel } from "../providers/worker-adapters";
 import type { ThinkingEffort } from "../providers/capabilities";
 import type { Provider, ProviderToolSpec } from "../providers";
 import { MOCK_FIXTURE, scriptedMainModelPath } from "./demo-scripted";
@@ -49,18 +51,95 @@ export interface SessionProviderOptions {
   promptCache?: boolean;
   /** 思考档位（§S8）：一路带到适配器的请求体里。缺省 / "off" ⇒ 请求体里不出现这个字段。 */
   thinking?: ThinkingEffort;
+  /** 逐请求思考档（质量档）：按当前 run 的事件决定规划/执行/返修各用哪档。
+   *  给了就由它接管每一拍；`undefined` 回落 `thinking`；两者都不给 = 旧行为。 */
+  thinkingPolicy?: NonNullable<Parameters<typeof createSessionProvider>[1]>["thinkingPolicy"];
   onPreCompact?: (trigger: "manual" | "auto") => Promise<void>;
+  /** compaction 触发旋钮的注入面（自进化「提前压缩」偏置用，闭环 v2 · 批次 A4）：
+   *  给了就透传给 SessionCompaction.config，覆盖缺省 ratio。缺省不传 = compaction
+   *  用自己的缺省（逐字旧行为）。 */
+  compactionConfig?: Partial<CompactionConfig>;
+  prediction?: NonNullable<SessionCompaction["prediction"]>;
   /** 本 provider 每次请求末尾追加的临时 user 消息（不进日志）：会话末沉淀轮送指令用。 */
   ephemeralUserTurn?: string;
   /** 识图活盒子：loop 读到图后，provider 在下一轮请求里取走附上（见 image-channel.ts）。
    *  与 `ephemeralImages`（一次性、调用方自己算好）是两条不同的时机。 */
-  imageChannel?: { take: () => { type: "image"; dataUrl: string }[] };
+  imageChannel?: Pick<ImageChannel, "peek" | "take">;
   /** 本次请求附带的图片内容块（不进日志）：`read_image` 读到的图走这条进请求体。 */
   ephemeralImages?: readonly { type: "image"; dataUrl: string }[];
 }
 
 // Main-session wrapper + non-session transport share one selected registry model.
 // Explicit fixture env paths still win, preserving frozen demo/e2e bytes.
+
+/** 会话那一档 ⇒ 一条 `SessionTransport`。**这是全仓唯一的"给一次模型调用取家/取档"的出口**：
+ *  主会话（`createProvider`）与旁路（§9.6 prompt 钩子，`hookModelCallFor`）都从这里取，
+ *  两处各算一遍迟早漂——第 1001 页那条缺陷就是旁路自己算了 legacy GLM 缺省。
+ *  `deps.fetchImpl` 是判卷注入点（与适配器那一份同名同语义），生产不传。 */
+export function sessionModelTransport(
+  selection: MainModelSelection,
+  sessionOptions?: Pick<SessionProviderOptions, "promptCache" | "thinking">,
+  deps?: { fetchImpl?: typeof fetch },
+): { transport: SessionTransport; label: string } {
+  // demo 通道根本不拨号（`createProvider` 在那一支走 mock）；这里自己收下这个形状，
+  // 而不是让每个调用方都记得先判一遍——忘了判的那一方就会拿 {kind:"demo"} 去要 spec。
+  if (selection.kind === "demo") throw new Error("demo 通道不拨号，取不到会话那一档");
+  // 取 provider id 必须走 selectionProviderId：`kind` 在自定义家那一支上是标签 "custom"，
+  // 不是家名。直接传 kind 会让自定义 provider 在最后一米被误判成「未登记 env 映射」。
+  assertProviderKeyConfigured(selectionProviderId(selection));
+  const modelTransport: RegistryWorkerModel = toWorkerModel(selection.spec, {
+    promptCache: sessionOptions?.promptCache === true,
+    // "off" 等于没给：适配器只在拿到真实档位时才往请求体里加字段（逐字旧行为的边界就在这里）
+    ...(sessionOptions?.thinking !== undefined && sessionOptions.thinking !== "off"
+      ? { reasoningEffort: sessionOptions.thinking }
+      : {}),
+    ...(deps?.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}),
+  });
+  // createSessionProvider predates native adapters and exposes a GLM-shaped transport slot.
+  // This adapter forwards cancellation + OpenAI/GLM metering while binding the already-resolved spec.
+  const transport: SessionTransport = (messages, options, tools, call) => modelTransport(messages, tools ?? [], {
+    call,
+    ...(options?.stream !== undefined ? { stream: options.stream } : {}),
+    ...(options?.metering ? { metering: options.metering } : {}),
+    ...(options?.reasoningEffort !== undefined ? { reasoningEffort: options.reasoningEffort as ThinkingEffort } : {}),
+  });
+  return { transport, label: selection.spec.provider };
+}
+
+/** §9.6 prompt 档钩子的模型面：**绑到会话装配的那一家那一档**，且只在真能拨号时返回。
+ *  家没配 key ⇒ 返回 null（调用方留空 ⇒ 钩子在闸上如实拒），而不是抛异常把整场 run 带走——
+ *  钩子是旁路，旁路不可用不该让主路停。 */
+export function hookModelCallFor(
+  selection: MainModelSelection,
+  deps?: { fetchImpl?: typeof fetch },
+): ReturnType<typeof createHookModelCall> | null {
+  if (scriptedMainModelPath() !== null) return null; // 夹具/演示通道：不拨号，也不该被钩子借去当"判过了"
+  if (selection.kind === "demo") return null;
+  try {
+    const { transport, label } = sessionModelTransport(selection, undefined, deps);
+    return createHookModelCall(transport, undefined, label);
+  } catch {
+    return null; // `assertProviderKeyConfigured` 那一类：这一档此刻拨不出去，不假装能判
+  }
+}
+
+/** 压缩摘要器装配（手动 `/compact` 与 worker 子流压缩共用）：**绑到会话选定的那一家那一档**，
+ *  避免非 GLM 会话静默失败或把上下文发往环境变量里的 GLM key。
+ *  夹具/demo 通道或该家缺凭据时返回 undefined，交由调用方按各自 fail-closed 或 demo 口径处理。 */
+export function sessionSummarizerFor(
+  selection: MainModelSelection,
+  deps?: { fetchImpl?: typeof fetch },
+): ReturnType<typeof createSessionSummarizer> | undefined {
+  if (scriptedMainModelPath() !== null) return undefined;
+  if (selection.kind === "demo") return undefined;
+  try {
+    const { transport, label } = sessionModelTransport(selection, undefined, deps);
+    return createSessionSummarizer(selection.spec.model, undefined, transport, label);
+  } catch {
+    return undefined;
+  }
+}
+
 export function createProvider(
   _userMessage: string,
   systemPrefix: string | undefined,
@@ -71,24 +150,7 @@ export function createProvider(
   if (scripted !== null) return createMockProvider(scripted);
   if (selection.kind === "demo") return createMockProvider(MOCK_FIXTURE);
 
-  // 取 provider id 必须走 selectionProviderId：`kind` 在自定义家那一支上是标签 "custom"，
-  // 不是家名。直接传 kind 会让自定义 provider 在最后一米被误判成「未登记 env 映射」。
-  assertProviderKeyConfigured(selectionProviderId(selection));
-  const modelTransport: RegistryWorkerModel = toWorkerModel(selection.spec, {
-    promptCache: sessionOptions?.promptCache === true,
-    // "off" 等于没给：适配器只在拿到真实档位时才往请求体里加字段（逐字旧行为的边界就在这里）
-    ...(sessionOptions?.thinking !== undefined && sessionOptions.thinking !== "off"
-      ? { reasoningEffort: sessionOptions.thinking }
-      : {}),
-  });
-  // createSessionProvider predates native adapters and exposes a GLM-shaped transport slot.
-  // This adapter forwards cancellation + OpenAI/GLM metering while binding the already-resolved spec.
-  const transport: SessionTransport = (messages, options, tools, call) => modelTransport(messages, tools ?? [], {
-    call,
-    ...(options?.stream !== undefined ? { stream: options.stream } : {}),
-    ...(options?.metering ? { metering: options.metering } : {}),
-  });
-  const label = selection.spec.provider;
+  const { transport, label } = sessionModelTransport(selection, sessionOptions);
 
   if (sessionOptions) {
     const attachmentContext = formatAttachmentContext(sessionOptions.attachments ?? [], sessionOptions.workspace);
@@ -98,6 +160,10 @@ export function createProvider(
       requestFace: sessionOptions.requestFace,
       compaction: {
         ...(sessionOptions.onPreCompact ? { onPreCompact: sessionOptions.onPreCompact } : {}),
+        // 自进化「提前压缩」偏置（闭环 v2 · 批次 A4）：上一轮读数说贵 ⇒ 触发 ratio 压到
+        // COMPRESS_EARLY_RATIO（值唯一事实源在 evolution/advice.ts，调用方取来递进来）。
+        ...(sessionOptions.compactionConfig ? { config: sessionOptions.compactionConfig } : {}),
+        ...(sessionOptions.prediction ? { prediction: sessionOptions.prediction } : {}),
       },
       emit: sessionOptions.emit,
       plugins: sessionOptions.plugins,
@@ -108,6 +174,7 @@ export function createProvider(
       // 自由档位的名字查表恒为 undefined ⇒ 窗口必须由 spec 递进预算，否则 `--ctx-window` 只改到一半
       // （toWorkerModel 会丢掉 ctxWindow，只有这一条真的落到 inputLimit 上）。
       ...(selection.modelExplicit ? { ctxWindow: selection.spec.ctxWindow } : {}),
+      ...(sessionOptions.thinkingPolicy !== undefined ? { thinkingPolicy: sessionOptions.thinkingPolicy } : {}),
       transport,
       transportLabel: label,
       ...(sessionOptions.ephemeralUserTurn !== undefined ? { ephemeralUserTurn: sessionOptions.ephemeralUserTurn } : {}),

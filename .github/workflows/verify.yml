@@ -1,58 +1,33 @@
-# L1 自动兜底（M9）：typecheck + 全量判卷 + 快门面。推上去才生效，本地零影响。
-# 取舍、成本、以及"为什么这里排除了两道门"见 scripts/ci/README.md（L2 pre-commit 已裁定不做，
-# 理由与一键启用路径也在那里）。
-#
-# runner 选 macos-latest 的理由（诚实标注）：本仓开发环境是 macOS，沙箱与平台分支的判卷按它写；
-# ubuntu 迁移是另一件事，换 runner 之前要先在真实 CI 上验证一轮（本机无法验证 Linux 行为，
-# 所以这里不假装 ubuntu 也行——见 README「换 runner 前先做什么」）。
+# Public L1 verification: typecheck + core/desktop tests + product-contract gates.
+# Heavy release certification (head-cert, mutation testing) and internal evidence
+# audits are intentionally not part of a public pull request.
 name: verify
+
 on:
   push:
   pull_request:
   workflow_dispatch:
 
-# 并发组：同一个 ref 上只留最新的一趟在跑，旧的被取消。
-# 为什么加这一格（2026-10-25）：本仓每趟 verify 要跑完整判卷 + 25 道快门，
-# 连续推送时会叠出好几趟并行——重复的是同一份树，浪费的是计费分钟。
-# 取消的是**被取代**的那一趟，不是最新那趟：最新那趟仍会跑完并给出读数。
 concurrency:
   group: verify-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# 最小权限：这道门只需要读仓库（checkout + 跑判卷）。
-# 历史上 workflows 默认拿到写权限，那是**能用上但用不到**的权限面。
 permissions:
   contents: read
 
 jobs:
   verify:
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
-        with:
-          # 全量历史（2026-10-12 第一次 CI 自评抓到的洞）：本仓判卷里有五处**吃 git 历史**——
-          # docs-check 的 D-5（PROGRESS.md 引了 445 个提交 sha，逐个核可达）、
-          # blocked-citation-face 的 sha256 恢复件、mutate-needles-check 的针脚搬迁成因
-          # （点名 1f16bea）、head-import-face 的 `--at` 换 rev、head-cert-deps 的留档取料。
-          # 缺省 fetch-depth:1 让它们全部读成「不可达」⇒ 13 条假红。
-          # 代价：多拉约 128MB 历史。对一条 1639 笔提交的私有仓，这是判据正确性的对价。
-          fetch-depth: 0
       - uses: pnpm/action-setup@v6
-        # 第 475 页：**这一格刻意不写 `with: version:`**——版本只住在 package.json 的 `packageManager`
-        # 里（现读 `pnpm@11.21.0`），action 自己会去读它。两处同时写会被 action 直接判红
-        # （`Multiple versions of pnpm specified`，10-13 那趟实测），那比"漂"更早暴露，但也更冤：
-        # 想钉的从来只有一处。为什么非得跟开发环境同大版本：**pnpm 9 与 11 读 overrides 的地方不是一个**
-        # （9 读 package.json 的 `pnpm` 字段、11 读 `pnpm-workspace.yaml`，11 对前者只印 warning 就忽略）
-        # ⇒ 差一个大版本，同一份锁文件在两处会被解释成两种配置，CI 上直接
-        # `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH`。
+        # Version comes from package.json#packageManager only — do not add a second copy here.
       - uses: actions/setup-node@v7
         with:
-          node-version: "22"
+          node-version: "24"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: typecheck
-        run: pnpm typecheck
       - name: Electron runtime matches installed package
         timeout-minutes: 5
         env:
@@ -60,23 +35,4 @@ jobs:
         run: >-
           pnpm --filter cairn-desktop exec electron -e
           'const assert = require("node:assert/strict"); const expected = require("electron/package.json").version; assert.equal(process.versions.electron, expected); console.log(JSON.stringify(process.versions));'
-      - name: full test suite
-        # 同一套核心测试，固定两个 worker；命令与本地可复现入口同源。
-        run: pnpm test:capped
-      - name: desktop tests
-        run: pnpm --filter cairn-desktop test
-      # 快门面 = CERT_GATES 那 25 道，逐字点名（`pnpm gates` 不加参数跑的是 GATES 全集，比认证面慢、面也不同）。
-      # 道数由 `tests/ci-cert-face-parity.test.ts` 钉：两份名单必须逐字相等，且**今天还在生效的**标注必须等于条数。
-      # 这一行从前**排除**过两道已知红：gate-check 的 H7 与 mutate-needles-check 的 4 支失针锚点。
-      # 两条理由到 10-02 都已结案 ⇒ 名单补回来。当时那笔认证的原文（**历史读数，不随门表演化**）：
-      # 认证树 `认证门面=22 道（跑到 22）｜绿 22 道`（`outputs/retry-backoff-2026-10-02/head-cert-7cc9605.log`，TREE=7cc9605、DIRTY_JUDGED=0）。
-      # 2026-10-15 状态复核：origin 已连接；verify 最近一次于 2026-10-14 11:47Z
-      # 在 zcode@074656c522ac7b6b350f389bd854fb28a712da0b 通过（Actions run 38559010713）。
-      # 该读数只覆盖该远端提交，不代表当前本地 HEAD 或未提交工作树通过；详见 scripts/ci/README.md。
-      # “本仓没有 git remote / workflow 从未真跑过”是 10-02 的历史状态，现已过时。
-      # 2026-10-12：cert face 23 → 25（买进 `e2e` 与 `desktop-test`，理由见 `scripts/gate-manifest.ts`
-      # 的 `CERT_GATES` 那两条买入注）。这条名单被 `tests/cert-gate-face.test.ts` 钉着与门面集合相等。
-      - name: fast gates (cert face, 25)
-        run: >-
-          pnpm gates
-          --only=no-progress-check,prune-check,fork-check,compaction-check,docs-check,memory-check,head-import-check,autonomy-check,sandbox:check,security-check,provider:check,routing-check,model-surface-check,prefix-churn-check,prompt-surface-check,replay-determinism-check,cost-per-progress-check,web-fetch-check,gym-check,evidence-typecheck-check,gate-check,mutate-needles-check,repo-hygiene-check,e2e,desktop-test
+      - run: pnpm verify

@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { transcriptFileName, transcriptMarkdown } from "../src/renderer/transcript";
 import type { AgentEvent } from "../../../src/main/ipc-protocol";
+import { readAppSurface } from "./helpers/app-surface";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 const ev = (o: Record<string, unknown>): AgentEvent => o as unknown as AgentEvent;
@@ -96,8 +97,8 @@ describe("transcriptMarkdown", () => {
 
   it("接线：面板操作 + App 分发 + Markdown 生成", () => {
     const palette = read("../src/renderer/components/CommandPalette.tsx");
-    expect(palette).toContain('{ id: "copy-transcript", label: "复制整段对话" }');
-    const app = read("../src/renderer/App.tsx");
+    expect(palette).toMatch(/\{ id: "copy-transcript", label: "复制整段对话"/);
+    const app = readAppSurface();
     expect(app).toContain("transcriptMarkdown(events, title)");
     expect(app).toContain('case "copy-transcript":');
     expect(app).toContain('toast.success("已复制整段对话")');
@@ -119,7 +120,7 @@ describe("transcriptFileName", () => {
     expect(readRoot("src/main/ipc-protocol.ts")).toContain("exportTranscript(markdown: string, suggestedName: string)");
     expect(readRoot("apps/desktop/src/main/channels.ts")).toContain('exportTranscript: "agent:transcript-export"');
     expect(readRoot("apps/desktop/src/main/index.ts")).toContain("dialog.showSaveDialog");
-    expect(read("../src/renderer/components/CommandPalette.tsx")).toContain('{ id: "export-transcript", label: "导出整段对话（Markdown 文件）" }');
-    expect(read("../src/renderer/App.tsx")).toContain("exportTranscriptFile");
+    expect(read("../src/renderer/components/CommandPalette.tsx")).toMatch(/\{ id: "export-transcript", label: "导出整段对话（Markdown 文件）"/);
+    expect(readAppSurface()).toContain("exportTranscriptFile");
   });
 });

@@ -5,11 +5,19 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
+
+/** 快捷键表（唯一事实源）：通用页不再复述它已有的行（第 866 页）。 */
+const shortcutsTable = readFileSync(new URL("../src/renderer/shortcuts.ts", import.meta.url), "utf8");
+import { fileURLToPath } from "node:url";
+import { readAppSurface } from "./helpers/app-surface";
 import {
   AboutSection,
+  AdvancedSection,
   GeneralSection,
   PermissionsSection,
   ProviderSection,
+  licenseExpiryHint,
+  licenseLabel,
   providerStatusLabel,
   providerStatusParts,
 } from "../src/renderer/components/settings-sections";
@@ -24,12 +32,19 @@ const VISION = { state: "undeclared" as const, modelId: "cn:hy3", declaredModali
 
 describe("批 6：通用段（外观 / 语言 / 字号 / 快捷键 四卡）", () => {
   const menu = (over: Partial<AppSettings> = {}, textSize: TextSizeSetting = "md", uiSize: UiSizeSetting = "2"): string =>
-    renderToStaticMarkup(<GeneralSection settings={S(over)} textSize={textSize} uiSize={uiSize} onSave={noop} onCtrlTab={noop} onTextSize={noop} onUiSize={noop} />);
+    renderToStaticMarkup(<GeneralSection settings={S(over)} textSize={textSize} uiSize={uiSize} onSave={noop} onCtrlTab={noop} onTextSize={noop} onUiSize={noop} onWindowVibrancy={noop} onNotify={noop} />);
 
-  it("四组标题在场（ss-sec 卡式分组）", () => {
+  it("外观控件合并为一组，使用习惯独立成组；保留重启与未支持提示", () => {
     const h = menu();
-    for (const t of ["外观", "语言", "字号", "组件尺寸", "快捷键"]) expect(h).toContain(t);
-    expect((h.match(/class="ss-sec"/g) ?? []).length).toBe(5);
+    for (const t of ["外观", "使用习惯", "主题", "文字大小", "界面密度", "窗口材质", "界面语言", "Ctrl+Tab 切会话"]) expect(h).toContain(t);
+    expect((h.match(/class="ss-sec"/g) ?? []).length).toBe(2);
+    const appearance = h.slice(0, h.indexOf("使用习惯"));
+    for (const label of ["主题", "文字大小", "界面密度", "窗口材质"]) expect(appearance).toContain(label);
+    // 第 866 页「让布局说话」：不可推导的那半句留下（要重启），
+    // 复述控件/标签的半句走掉（「默认关」= 开关当下位置；「英文尚未接入」= 右侧只有一个值）。
+    expect(h).toContain("改动需重启窗口");
+    expect(h).not.toContain("默认关，改动需重启窗口");
+    expect(h).not.toContain("目前只有中文界面");
   });
 
   it("主题 = 3 个带小预览图的选项卡；选中项恰一枚 on（强调描边交给 CSS 哨兵）", () => {
@@ -38,7 +53,8 @@ describe("批 6：通用段（外观 / 语言 / 字号 / 快捷键 四卡）", (
     const themeGroup = h.slice(h.indexOf('aria-label="主题"'), h.indexOf('aria-label="文字大小"'));
     expect((themeGroup.match(/class="theme-opt[ "]/g) ?? []).length).toBe(3);
     expect((themeGroup.match(/class="theme-opt on"/g) ?? []).length).toBe(1);
-    expect((themeGroup.match(/class="theme-thumb/g) ?? []).length).toBe(3);
+    // 2026-10-24 业主：色块小预览撤下，纯文字选项（theme-thumb 零残留）
+    expect((themeGroup.match(/class="theme-thumb/g) ?? []).length).toBe(0);
     for (const t of ["跟随系统", "亮", "暗"]) expect(h).toContain(t);
     // 选中者 = dark 那颗（索引序：system/light/dark）
     const opts = [...themeGroup.matchAll(/class="theme-opt( on)?"/g)];
@@ -46,17 +62,35 @@ describe("批 6：通用段（外观 / 语言 / 字号 / 快捷键 四卡）", (
     expect(opts[2][1]).toBe(" on");
   });
 
-  it("Ctrl+Tab 行：开关在场、说明改到标签下方（通俗句）", () => {
+  it("任务完成通知：开关在场、缺省开；关掉后 aria 状态跟着变", () => {
+    const notifySwitch = (html: string): string =>
+      html.match(/<button[^>]*aria-label="任务完成时通知"[^>]*>/)?.[0] ?? "";
+    const on = menu();
+    expect(on).toContain("任务完成时通知");
+    // 第 866 页「让布局说话」：开关本身已经说了「开/关」，行标签已经说了「任务完成时通知」，
+    // 次级说明只留不可推导的那半句（点通知会落回哪个会话）。
+    expect(on).toContain("点击通知回到该会话");
+    expect(on).not.toContain("窗口不在前台时发系统通知");
+    expect(notifySwitch(on)).toContain('aria-checked="true"');
+    const off = menu({ notifyOnComplete: false });
+    expect(notifySwitch(off)).toContain('aria-checked="false"');
+  });
+
+  it("Ctrl+Tab 行：只剩标签与开关；同一条快捷键全应用只说一次", () => {
     const h = menu();
     expect(h).toContain("Ctrl+Tab 切会话");
-    expect(h).toContain("曾被误触？关掉它，只留 ⌘⇧[ / ⌘⇧] 循环会话。");
-    expect(h).toContain("ss-row-desc");
+    expect(h.match(/aria-label="Ctrl\+Tab 切会话"/), "开关仍在场").toBeTruthy();
+    // 第 866 页业主口径「让布局说话」：这句此前在通用页复述了快捷键表已有的一行。
+    // 反向自证不是空话——先确证信息确实还在**唯一**该在的地方（快捷键表）。
+    expect(shortcutsTable).toContain("⌘⇧] / ⌘⇧[");
+    expect(h).not.toContain("也可用 ⌘⇧[ / ⌘⇧] 切换");
   });
 
   it("语言行：单语静态说明（英文未接，不摆可切换的空壳）", () => {
     const h = menu();
     expect(h).toContain("中文（简体）");
-    expect(h).toContain("英文界面尚未接入");
+    // 值本身就摆在右侧（只有一项），不再另配一句复述它的次级说明。
+    expect(h).not.toContain("英文界面尚未接入");
     expect(h).not.toContain("English");
     expect(h).not.toContain('aria-label="界面语言"');
   });
@@ -86,7 +120,7 @@ describe("批 6：通用段（外观 / 语言 / 字号 / 快捷键 四卡）", (
       expect(h).toContain("界面密度");
       expect(h).toContain('aria-label="界面密度"');
       const uiGroup = h.slice(h.indexOf('aria-label="界面密度"'));
-      expect([...uiGroup.matchAll(/class="ts-thumb" data-ui="([1-5])"/g)].map((m) => m[1])).toEqual(["1", "2", "3", "4", "5"]);
+      expect([...uiGroup.matchAll(/class="theme-opt(?: on)?"[^>]*><span>(.*?)<\/span>/g)].map((m) => m[1])).toEqual(["紧凑", "标准", "宽松", "舒适", "超大"]);
       const opts = [...uiGroup.matchAll(/class="theme-opt( on)?"/g)];
       expect(opts.length).toBe(5);
       expect(opts.findIndex((m) => m[1] === " on")).toBe(idx);
@@ -105,9 +139,13 @@ describe("批 6：通用段（外观 / 语言 / 字号 / 快捷键 四卡）", (
     expect(pick(b)).toBe(4);
   });
 
-  it("字号段的说明不撒谎（说清是整界面一起缩放）", () => {
+  it("外观组用标签表达控件，去掉重复的小标题和工程说明", () => {
     const h = menu();
-    expect(h).toContain("整界面文字一起缩放");
+    expect(h).not.toContain("主题偏好");
+    expect(h).not.toContain("整界面文字一起缩放");
+    expect(h).not.toContain("控件高 / 圆角");
+    expect(h).not.toContain("未做视觉验收");
+    expect(h).not.toContain("ss-sec-hint");
   });
 });
 
@@ -117,11 +155,20 @@ describe("批 6：模型与 Provider 三段", () => {
     cap?: { search: { kind: "unset" } | { kind: "ok" } | { kind: "broken"; message: string }; searchEndpoint?: string;
       vision: { state: "declared" | "undeclared" | "unverified"; modelId: string | null; declaredModalities: readonly string[] } } | null;
     checkMsg?: { tone: "wait" | "ok" | "err"; text: string; hint?: string } | null;
+    providers?: readonly { id: string; label: string; custom: boolean }[];
+    models?: readonly { id: string; provider: string }[];
   } = {}): string =>
     renderToStaticMarkup(
       <ProviderSection
         settings={S({ provider: "glm" })}
         status={over.status ?? STATUS}
+        providers={over.providers ?? [
+          { id: "glm", label: "glm", custom: false },
+          { id: "openai", label: "openai", custom: false },
+          { id: "anthropic", label: "anthropic", custom: false },
+          { id: "gemini", label: "gemini", custom: false },
+        ]}
+        models={over.models ?? []}
         cap={over.cap === undefined ? null : over.cap}
         keyProvider="glm"
         onKeyProviderChange={noop}
@@ -132,97 +179,207 @@ describe("批 6：模型与 Provider 三段", () => {
         checkMsg={over.checkMsg ?? null}
         onCheck={noop}
         onCustomSaved={noop}
-        onCopyHint={noop}
+        onOpenSearch={noop}
       />,
     );
 
-  it("四卡标题：当前通道与密钥 / 联网搜索 / 自定义接口 / 识图能力", () => {
+  it("同屏不许两处同词：分区标题已经说了的事，行标签不再念一遍（第 892 页）", () => {
+    // 「当前通道与密钥」分区里原本第一行就叫「当前通道」，整行只有一枚值 + 六个字；
+    // 现在值与生效时机进分区头 hint，行撤掉。反向钉：整段渲染里「当前通道」只许出现一次。
+    const h = provider({ cap: { search: { kind: "ok" }, vision: { state: "declared", modelId: "m", declaredModalities: ["image"] } } });
+    expect((h.match(/当前通道/g) ?? []).length, "「当前通道」在同屏出现的次数").toBe(1);
+    expect(h).toContain("ss-sec-hint");
+    expect(h).toContain("下次发送生效");
+    // 2026-11-02：分区头走 providers 表的登记标签；默认夹具 label 就是 glm ⇒ 这里换
+    // 一份带人话名的夹具单独钉（见下方新例）。
+    expect(h).not.toContain(">当前通道<");
+  });
+
+  it("密钥管理与能力各成一组，搜索和识图保留独立入口与状态", () => {
     const h = provider();
-    for (const t of ["当前通道与密钥", "联网搜索", "自定义接口", "识图能力"]) expect(h).toContain(t);
-    // 3 → 4（2026-10-16 加「识图能力」）：这一格同时钉"加了卡"与"卡数说得准"。
-    expect((h.match(/class="ss-sec"/g) ?? []).length).toBe(4);
+    for (const t of ["当前通道与密钥", "联网搜索", "识图能力"]) expect(h).toContain(t);
+    expect(h).not.toContain("自定义接口");
+    expect(h).toContain('<h2 class="ss-sec-title">能力</h2>');
+    expect((h.match(/class="ss-sec"/g) ?? []).length).toBe(2);
+  });
+
+  it("花费/并发三个数字输入框在字段缺省时不显示字面 undefined（2026-11-02 真机）", () => {
+    // 直接渲染 AdvancedSection 的最小 props，把三个数值字段置为 undefined。
+    const html = renderToStaticMarkup(
+      <AdvancedSection
+        settings={{
+          autoMemory: true, impactAnalysis: false, promptCache: true, telemetry: false,
+          maxBudgetUsd: undefined as unknown as number,
+          budgetPricePerMTok: undefined as unknown as number,
+          scheduleConcurrencyCap: undefined as unknown as number,
+          subagentTools: true, autoVerify: true, autoVerifyRepair: false,
+          actionFusion: true, requestMetering: true, observationPack: true,
+          evidenceReceipts: false, economicCompaction: true,
+          routingBandit: false, routingCascade: false,
+        } as never}
+        onSaveKey={() => undefined}
+      />,
+    );
+    expect(html).not.toContain('value="undefined"');
+    expect(html).not.toContain('defaultValue="undefined"');
+  });
+
+  it("快捷键页渲染完整分组表（与 ⌘/ 弹层同源），不是 13 条精简版（2026-11-02）", () => {
+    const src = readFileSync(new URL("../src/renderer/components/settings-sections.tsx", import.meta.url), "utf8");
+    // 分组表由 SHORTCUT_GROUPS 驱动；核心键 SHORTCUTS 只承担 tooltip 取键。
+    expect(src).toContain("SHORTCUT_GROUPS.map");
+    expect(src).not.toContain("SHORTCUTS.map");
+    // 分组标题要出现在设置页（与弹层同一份标题族）。
+    expect(src).toContain("{g.title}");
+  });
+
+  it("关于页版本行：构建信息单独一行且可折行；冒烟状态说人话（2026-11-02 真机）", () => {
+    const src = readFileSync(new URL("../src/renderer/components/settings-sections.tsx", import.meta.url), "utf8");
+    const css = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
+    // 版本号与构建信息分两行（此前挤在一行，右侧被裁成「已过」）。
+    expect(src).toContain('className="ss-inline ss-version"');
+    expect(src).toContain('className="sp-dim ss-version-meta"');
+    expect(css).toMatch(/\.ss-version\s*\{[^}]*flex-direction:\s*column/s);
+    expect(css).toMatch(/\.ss-version-meta\s*\{[^}]*overflow-wrap:\s*anywhere/s);
+    // 非 passed 不许原文打印；统一读「未通过」。
+    expect(src).not.toContain('? "已过" : props.build.packagedSmoke');
+    expect(src).toContain('? "已通过" : "未通过"');
+  });
+
+  it("分区头的通道名走 providers 表的登记标签，不印机器 id（2026-11-02）", () => {
+    const h = provider({ providers: [{ id: "glm", label: "智谱 GLM", custom: false }] });
+    expect(h).toContain("智谱 GLM · 下次发送生效");
+    expect(h).not.toContain(">glm · 下次发送生效<");
   });
 
   it("当前通道行：provider 名 + 查看说明；检查连接（结果就地显示在这卡内）", () => {
     const h = provider({ checkMsg: { tone: "ok", text: "连接成功：发现 3 个可用模型" } });
     expect(h).toContain("glm");
-    expect(h).toContain("模型与思考档位在输入框处切换（下一轮派活生效）");
+    expect(h).toContain("下次发送生效");
+    expect(h).not.toContain("模型与思考强度可在输入框旁切换");
     expect(h).toContain("检查连接");
     expect(h).toContain("连接成功：发现 3 个可用模型");
     // 「不消耗额度」进 tooltip（title），不再占行内
     expect(h).toContain("向 glm 拉一次模型清单（不消耗模型额度）");
+    expect(h.indexOf(">当前通道</span>")).toBeLessThan(h.indexOf('class="pv-split"'));
   });
 
-  it("密钥行（2026-10-16 重做）：一行等高控件 + 已存 key 徽章可删 + env 提示色小字", () => {
+  it("供应商管理（2026-10-24 参照 Codex 供应商页）：左列表选通道 + 右详情表单（堆叠字段）+ 徽章可删", () => {
     const h = provider({ status: { available: true, stored: ["glm"], envActive: true } });
-    expect(h).toContain("当前通道密钥");
+    expect(h).toContain("pv-split");        // 左列表 + 右详情
+    expect(h).toContain("pv-item");        // 供应商行（状态点 + 名称）
+    expect(h).toContain("智谱 GLM");        // kind id 上屏前翻人话
+    expect(h).toContain("pv-detail-name"); // 详情头 = 选中供应商名
     expect(h).toContain("保存到钥匙串");
-    expect(h).toContain("ss-ctl-row");      // 选择器 + 密码框 + 保存钮 = 同一行（原 sp-key-row 下架）
-    expect(h).toContain('data-w="lg"');     // 选择器宽度档
-    // 真机实测（1200 窗口）：三者相加 685px > 控件列 634px，按钮会被挤到孤行；
-    // 第二行容器 ss-ctl-sub 强制换行 ⇒ 输入 + 按钮恒同行（总纲「输入+按钮同一行」）。
-    expect(h).toContain('class="ss-ctl-sub"');
-    expect(h.indexOf("ss-ctl-sub") < h.indexOf('type="password"')).toBe(true); // 容器包住输入框
-    expect(h.indexOf('type="password"') < h.indexOf("保存到钥匙串")).toBe(true); // 且按钮在其后
-    expect(h).toContain("ss-badge");        // 徽章（原 sp-key-chip 下架，判卷钉同步点名）
+    expect(h).toContain("添加供应商");       // 列表底部添加入口（详情里出空白新增表单）
+    // API Key 字段：标签在上、输入 + 保存按钮同一行
+    expect(h).toContain("ss-flabel");
+    expect(h).toContain('class="ss-frow"');
+    expect(h.indexOf("ss-frow") < h.indexOf('type="password"')).toBe(true);
+    expect(h.indexOf('type="password"') < h.indexOf("保存到钥匙串")).toBe(true);
+    // 已存 key 的徽章（按选中通道过滤）+ env 提示色小字
+    expect(h).toContain("ss-badge");
     expect(h).toContain('aria-label="删除 glm 的 key"');
-    expect(h).toContain("ss-hint tip");     // 「检测到环境变量」走提示色小字位
+    expect(h).toContain("ss-hint tip");
     expect(h).toContain("检测到环境变量，将优先使用");
-    expect(h).not.toContain("已存 key：");   // 徽章已表达，不再重复摆一整句
+    expect(h).not.toContain("已存 key：");
+  });
+
+  it("自定义供应商进左列表（用户可添加更多大模型供应商，2026-10-24 业主）", () => {
+    const h = provider({
+      providers: [
+        { id: "glm", label: "glm", custom: false },
+        { id: "openai", label: "openai", custom: false },
+        { id: "anthropic", label: "anthropic", custom: false },
+        { id: "gemini", label: "gemini", custom: false },
+        { id: "agnes", label: "agnes", custom: true },
+        { id: "deepseek-x", label: "DeepSeek 中转", custom: true },
+      ],
+      models: [
+        { id: "agnes-2.5-flash", provider: "agnes" },
+        { id: "deepseek-chat", provider: "deepseek-x" },
+      ],
+    });
+    expect(h).toContain("自定义");           // 分组标签
+    expect(h).toContain("agnes");           // 自定义行进列表
+    expect(h).toContain("DeepSeek 中转");
+  });
+
+  it("自定义详情分支：右详情就地编辑（表单预填 + 同名覆盖），独立「自定义接口」卡已撤（2026-10-24 业主：两块合并）", () => {
+    const stream = readAppSurface();
+    expect(stream).toContain("const activeCustom = customSelId !== null && customs.some((p) => p.id === customSelId) ? customSelId : null;");
+    // 选中自定义 → 详情内嵌编辑表单（预填 editing；key 分支隔离，预填不带进新增）；添加供应商 → 空白表单。
+    expect(stream).toContain('<CustomProviderForm key={`edit-${activeCustom}`} editing={editingEntry}');
+    expect(stream).toContain('<CustomProviderForm key="add"');
+    expect(stream).toContain('<span className="pv-detail-name">添加供应商</span>');
+    // 编辑表单的回填源 = providerCustomList（新 IPC）。
+    expect(stream).toContain("window.agent.providerCustomList()");
   });
 
   it("联网搜索（2026-10-16 重做）：状态点行 + 去配置 + 查看详情折叠含配法原文；已配 = 绿点、无去配置", () => {
     const unset = provider({ cap: { search: { kind: "unset" }, vision: VISION } });
     // 只看**联网搜索那一段**（识图能力段自己有 warn 条，不能让它替搜索段背锅）。
-    const unsetSec = unset.slice(unset.indexOf("联网搜索"), unset.indexOf("自定义接口"));
-    expect(unsetSec).toContain('data-tone="warn"');       // 未配 = 橙点
-    expect(unsetSec).toContain("web_search 工具不会出现");
-    expect(unsetSec).toContain("去配置");                  // 明确的主按钮入口
-    expect(unsetSec).toContain("查看详情");
-    expect(unsetSec).toContain("endpoint 必须含 {query} 占位符");
-    expect(unsetSec).not.toContain("ss-banner");          // 旧 Banner 形态下架（业主裁）
+    const unsetSec = unset.slice(unset.indexOf("联网搜索"), unset.indexOf("识图能力"));
+    expect(unsetSec).toContain("尚未配置可用的搜索服务");
+    expect(unsetSec).toContain("配置联网搜索");
+    expect(unsetSec).not.toContain("复制配置片段");
+    expect(unsetSec).not.toContain(".agent/config.json");
+    expect(unsetSec).not.toContain("{query}");
     const ok = provider({ cap: { search: { kind: "ok" }, searchEndpoint: "https://searx.example", vision: VISION } });
-    const okSec = ok.slice(ok.indexOf("联网搜索"), ok.indexOf("自定义接口"));
+    const okSec = ok.slice(ok.indexOf("联网搜索"), ok.indexOf("识图能力"));
     expect(okSec).toContain('data-tone="ok"');            // 已配 = 绿点
-    expect(okSec).not.toContain("去配置");                 // 已配不摆「去配置」
+    expect(okSec).toContain("配置联网搜索");
     expect(okSec).not.toContain("ss-banner warn");
-    expect(ok).toContain("联网搜索已配");
+    expect(ok).toContain("已配置联网搜索");
   });
 
-  // 识图能力（2026-10-16）：undeclared 必须出 warn 条，且那句要把「调用成功 ≠ 看得懂」说出来。
-  // 实测被误读的正是这一格：render_image 成功回执 ⇒ 认为模型看过并理解了那张图。
-  it("识图未声明：warn 条在场，且明说调用成功不等于上游看得懂", () => {
+  // 识图能力（2026-10-16 立口径；2026-11-01 第 886 页改语法不改口径）：
+  // 实测被误读的正是这一格——render_image 成功回执 ⇒ 认为模型看过并理解了那张图。
+  // 原实现用一条页面级 Banner 表达警告，与同分区上一行（点 + 句）不成一套；
+  // 现在警告由**琥珀状态点 + 风险墨状态句**承担，那三句原文一字未动，仍不许出现工具名。
+  it("识图未声明：警告仍可扫读（点 + 风险墨），三句原文与不暴露实现都不变", () => {
     const h = provider({ cap: { search: { kind: "ok" }, vision: { state: "undeclared", modelId: "cn:hy3", declaredModalities: [] } } });
-    expect(h).toContain("ss-banner warn");
-    expect(h).toContain("cn:hy3");
-    expect(h).toContain("「调用成功」不等于上游看得懂");
-    // 已声明时不出 warn（那不再是缺口，只是没实测——desc 里说清）。
+    const sec = h.slice(h.indexOf("识图能力"));
+    expect(sec).toContain('data-tone="warn"');
+    expect(sec).toContain('data-warn="true"');
+    expect(sec).toContain("cn:hy3");
+    expect(sec).toContain("未声明支持图片输入");
+    expect(sec).toContain("图片理解能力尚未确认");
+    expect(sec).not.toContain("render_image");
+    // 反向：不再往设置行里塞页面级 Banner（同一分区只许一种右列语法）。
+    expect(sec).not.toContain("ss-banner");
+    // 已声明 ⇒ 绿点、不带风险墨，但那句「尚未验证实际效果」仍在（配置事实 ≠ 实测）。
     const declared = provider({ cap: { search: { kind: "ok" }, vision: { state: "declared", modelId: "m", declaredModalities: ["text", "image"] } } });
-    // 只看识图那一段（它自己不出 warn；搜索段此时也不出）。
-    const visionSec = declared.slice(declared.indexOf("识图能力"));
-    expect(visionSec).not.toContain("ss-banner warn");
-    expect(declared).toContain("这是配置声明，未经带凭据实测");
-    // 取不到选中模型 ⇒ 未验证，不猜它支不支持。
+    const dsec = declared.slice(declared.indexOf("识图能力"));
+    expect(dsec).toContain('data-tone="ok"');
+    expect(dsec).not.toContain('data-warn="true"');
+    expect(dsec).toContain("已声明支持图片输入");
+    expect(dsec).toContain("尚未验证实际效果");
+    // 取不到选中模型 ⇒ 未验证（灰点 + 风险墨），不猜它支不支持。
     const unknown = provider({ cap: { search: { kind: "ok" }, vision: { state: "unverified", modelId: null, declaredModalities: [] } } });
-    expect(unknown).toContain("未验证");
+    const usec = unknown.slice(unknown.indexOf("识图能力"));
+    expect(usec).toContain("未验证");
+    expect(usec).toContain('data-warn="true"');
   });
 
-  it("自定义接口：表单在场（接口地址输入锚在场）", () => {
-    const h = provider();
-    expect(h).toContain("自定义接口");
-    expect(h).toContain('aria-label="自定义接口地址"');
+  it("自定义表单在场（合并进详情后组件仍渲染——由编辑/新增分支挂载）", () => {
+    const stream = readAppSurface();
+    expect(stream).toContain('aria-label="自定义接口地址"');
+    expect(stream).toContain('placeholder="https://api.deepseek.com/v1"');
   });
 });
 
-describe("批 6：权限与安全段（OptionCard 四档 + danger 自动）", () => {
+describe("批 6：权限与安全段（OptionCard 四档 + danger 智能审批/完全允许）", () => {
   const perms = (over: Partial<AppSettings> = {}): string =>
     renderToStaticMarkup(<PermissionsSection settings={S(over)} onSave={noop} />);
 
-  it("四档 OptionCard（role=radio 恰四枚）；当前档恰一枚 on", () => {
+  it("四档 OptionCard（role=radio 恰四枚，含 full-access）；当前档恰一枚 on", () => {
     const h = perms({ mode: "guided" });
     expect((h.match(/role="radio"/g) ?? []).length).toBe(4);
     expect((h.match(/ss-opt on( |")/g) ?? []).length).toBe(1);
-    for (const t of ["只读", "默认 · 逐次审批", "引导 · 按风险放行", "自动 · 低风险免批"]) expect(h).toContain(t);
+    for (const t of ["只读", "需要审批", "智能审批", "完全允许"]) expect(h).toContain(t);
+    // 旧 guided 配置落到「智能审批」那一格；已存值是最松档时也要有选中项。
+    expect((perms({ mode: "full-access" }).match(/ss-opt on( |")/g) ?? []).length).toBe(1);
   });
 
   it("「自动」= danger 档 + 警示行（不拿整行变色冒充）", () => {
@@ -231,15 +388,20 @@ describe("批 6：权限与安全段（OptionCard 四档 + danger 自动）", ()
     expect(h).toContain("ss-opt-warn");
     // 口径与 PermissionMenu 的 MODE_LABEL 同源：auto 免的是"逐笔问写"，不是"什么都不问"
     // （riskAskAt 仍是 high）。旧文案「全部放行」让用户以为切了就万事大吉 ⇒ 实测读成"切换没用"。
-    expect(h).toContain("高风险动作仍会出卡");
+    expect(h).toContain("低风险直接做，高风险出卡");
     expect(h).not.toContain("全部放行");
+    // 最松档同样带警示：风险线 / critical 也不再询问（硬边界仍在文案里说明）。
+    expect(h).toContain("最松档");
+    expect(h).toContain("出网与方案门也放行");
   });
 
-  it("方案门：开关 + 通俗文案「写文件前先提交方案，等我批准」；网络 = 只读说明行（无控件）", () => {
+  it("安全段：方案开关已撤（agent 自判，2026-11-03）；网络 = 只读说明行（无控件）", () => {
     const h = perms();
-    expect(h).toContain("写文件前先提交方案，等我批准");
+    expect(h).not.toContain("写文件前先提交方案，等我批准");
     expect(h).toContain("网络");
     expect(h).toContain("默认断网");
+    expect(h).toContain('<span class="ss-row-desc">默认断网；除「完全允许」档外出网都要一次性批准（不记忆）。沙箱在 macOS 走 Seatbelt。</span>');
+    expect(h).toContain('<span class="sp-tag">默认断网</span>');
     // 网络行不给按钮/开关（只读说明）——该行的 ctl 里不出现 button
     const netRowAt = h.indexOf("网络");
     const rowEnd = h.indexOf("ss-row-ctl", netRowAt);
@@ -278,26 +440,80 @@ describe("凭据状态三件（providerStatusParts）", () => {
 });
 
 describe("批 6：关于与更新段", () => {
-  it("版本 + 检查更新 + 诊断信息折叠区（术语收容所）", () => {
+  it("版本 + 检查更新 + 运行诊断 + 工程细节折叠区（术语收容所）", () => {
     const h = renderToStaticMarkup(
       <AboutSection version="0.1.0" updateMsg={null} onCheckUpdate={noop} diagnostics="调度器：serveScheduler 常驻；journal 投影正常。" />,
     );
-    expect(h).toContain("关于与更新");
+    expect(h).toContain("版本与更新"); // 第 954 页：页头已经叫「关于与更新」，段标题不再同名
     expect(h).toContain("0.1.0");
     expect(h).toContain("检查更新");
-    expect(h).toContain("诊断信息");
+    expect(h).toContain("运行诊断");
+    expect(h).toContain("工程细节");
     expect(h).toContain("serveScheduler");
   });
 });
 
 describe("批 6：样式哨兵（主题选项卡/段落样式）", () => {
   const styles = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
-  it(".theme-opt 选中 = 强调描边 + 淡底；preview 图三态在", () => {
+  it(".theme-opts 允许换行：620px 窄列里五档不横向裁切（2026-10-28 第 743 页）", () => {
+    expect(styles).toMatch(/\.theme-opts\s*\{[^}]*flex-wrap:\s*wrap/s);
+  });
+
+  it(".theme-opt = 纯文字药丸（2026-10-24 业主：色块撤下）；选中 = 品牌陶土描边 + 淡底（2026-11-01 业主裁决：控件蓝太扎眼）", () => {
     expect(styles).toMatch(/\.theme-opt\.on \{[^}]*accent-brand[^}]*\}/);
-    expect(styles).toContain(".theme-thumb");
-    expect(styles).toContain(".theme-opt.on .theme-thumb");
+    expect(styles).not.toContain(".theme-thumb");
   });
   it(".ss-banner 样式在（信息/警告两 tone）", () => {
-    expect(styles).toMatch(/\.ss-banner\.warn \{[^}]*color-risk/);
+    expect(styles).toMatch(/\.ss-banner\.warn \{[^}]*semantic-warning-border/);
+    expect(styles).toMatch(/\.ss-banner\.warn \{[^}]*semantic-warning-surface/);
+    expect(styles).toMatch(/\.ss-banner \{[^}]*semantic-info-surface/);
+  });
+});
+describe("许可证状态一行话（四态全显式）", () => {
+  it("valid / expired / invalid / inactive 各有话说，未读取不冒充未激活", () => {
+    expect(licenseLabel({ state: "valid", licensee: "Acme", expiresAt: null })).toBe("有效 · Acme");
+    expect(licenseLabel({ state: "valid", licensee: "Acme", expiresAt: "2027-01-01" })).toContain("至 2027-01-01");
+    expect(licenseLabel({ state: "expired", licensee: "Acme", expiresAt: "2026-01-01" })).toBe("已过期 · Acme");
+    expect(licenseLabel({ state: "invalid", reason: "签名不符" })).toBe("无效 · 签名不符");
+    expect(licenseLabel({ state: "inactive" })).toBe("未激活");
+    expect(licenseLabel(null)).toBe("未读取");
+  });
+});
+
+describe("licenseExpiryHint（到期摘要）", () => {
+  const now = Date.parse("2026-10-30T00:00:00Z");
+  it("30 天内提醒；当天/未来 N 天各一句；远日不打扰", () => {
+    expect(licenseExpiryHint({ state: "valid", licensee: "Acme", expiresAt: "2027-01-01T00:00:00Z" }, now)).toBeNull();
+    expect(licenseExpiryHint({ state: "valid", licensee: "Acme", expiresAt: "2026-11-09T00:00:00Z" }, now)).toBe("还有 10 天到期");
+    expect(licenseExpiryHint({ state: "valid", licensee: "Acme", expiresAt: "2026-10-30T00:00:00Z" }, now)).toBe("今天到期");
+    expect(licenseExpiryHint({ state: "expired", licensee: "Acme", expiresAt: "2026-10-01T00:00:00Z" }, now)).toBe("已于 2026-10-01 过期");
+    expect(licenseExpiryHint({ state: "valid", licensee: "Acme", expiresAt: null }, now)).toBeNull();
+  });
+
+  it("标签里的 ISO 时刻截到日（不显示 T00:00:00Z）", () => {
+    expect(licenseLabel({ state: "valid", licensee: "Acme", expiresAt: "2027-01-01T00:00:00Z" })).toBe("有效 · Acme · 至 2027-01-01");
+  });
+});
+
+describe("关于页构建信息", () => {
+  it("build-info 存在时版本行显示构建日期 / 签名 / 冒烟凭据", () => {
+    const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/settings-sections.tsx", import.meta.url)), "utf8");
+    expect(src).toContain("props.build.createdAt.slice(0, 10)");
+    expect(src).toContain("props.build.signature");
+    expect(src).toContain("props.build.packagedSmoke");
+  });
+});
+
+describe("通用设置移除首启检查", () => {
+  it("即使旧调用方带有重显回调，也不再展示该入口", () => {
+    const legacyProps = {
+      settings: S(), textSize: "md" as const, uiSize: "2" as const,
+      onSave: noop, onCtrlTab: noop, onTextSize: noop, onUiSize: noop,
+      onWindowVibrancy: noop, onNotify: noop, onShowOnboarding: noop,
+    };
+    const html = renderToStaticMarkup(<GeneralSection {...legacyProps} />);
+    expect(html).not.toContain("首启检查");
+    expect(html).not.toContain("重新显示");
+    expect(html).toContain("任务完成时通知");
   });
 });

@@ -8,11 +8,11 @@ export type {
   PromoteOrigin, SkillInvocationMeta, GoalTurnOrigin, UserMessageOrigin, UserMessageAttachment,
   UserMessageEvent, AssistantMessageEvent, AssistantDeltaEvent, ThinkingDeltaEvent,
   ToolCallEvent, ToolBlockReason, HarnessHoldReason, ToolResultEvent,
-  UsageEvent, SessionMetaEvent,
+  UsageEvent, SessionMetaEvent, SessionEvolutionStamp, VerifyDeclaration,
   ClarifyQuestion, ClarifyAnswerMap, ClarifyRequestedEvent,
   PlanFileChange, PlanProposal, PlanProposedEvent, PlanApprovedEvent,
   VerifyCause, VerifyCommandResult, VerifyResultEvent,
-  CompactionUsage, CompactionEvent,
+  CompactionUsage, CompactionEvent, CompactionCommon, NumericCompaction, ReferencedCompaction, SummaryAnchor,
   SecuritySeverity, SecurityConfidence, SecurityCategory, SecurityFinding, SecurityChangeRef,
   SecurityReportEvent, ImpactReportEvent,
   AgentMode, AgentStatus, AgentPermissionMode,
@@ -23,9 +23,10 @@ export type {
   RunErrorEvent,
   GoalSetEvent, GoalStoppedEvent, GoalPausedEvent, GoalResumedEvent,
   TurnTruncatedEvent, TurnStopMissingEvent, SurfaceAccountEvent,
+  TodoItem, TodoUpdatedEvent,
   AgentEvent,
 } from "./types";
-export { AGENT_PERMISSION_MODES, HARNESS_HOLD_PROSE_TOKEN, HARNESS_HOLD_REASONS, TOOL_BLOCK_REASONS, isEnvVerifyCause } from "./types";
+export { AGENT_PERMISSION_MODES, HARNESS_HOLD_PROSE_TOKEN, HARNESS_HOLD_REASONS, isNumericCompaction, isReferencedCompaction, numericCompactionIds, numericCompactionOffset, TOOL_BLOCK_REASONS, isEnvVerifyCause } from "./types";
 export type { EventLog, ForkResult } from "./log";
 export {
   closeAllEventLogs, createEventLog, forkSession, hasEventLogHandle, invalidateEventLogHandle,
@@ -38,3 +39,17 @@ export {
   DEFAULT_ENTROPY, secretFindings,
 } from "./redact";
 export type { EntropyOptions, RedactResult, ScanOptions } from "./redact";
+// 日志结构控制记录的**投影**（ADR 0005）：控制记录由这一层解释，`replay()` 逐字不动它们。
+export { effectiveEntries, effectiveEvents, sessionMetaPatch } from "./projection";
+export type { ProjectedEvent } from "./projection";
+export { forkSessionPointer, replaySession, resolveSessionChain, SessionReplayError, unfinishedIndexes } from "./session";
+export type { PointerForkResult, ReplaySessionOptions, SessionChainFile, SessionReplayErrorCode } from "./session";
+// 来源引用与来源视图（ADR 0005 产品接入）：EventRef / SessionView 的公开面。
+export {
+  eventRefKey, isEventRef, isSessionRef, sameEventRef, sameSession, sessionRefKey,
+} from "./session-ref";
+export type { EventRef, SessionRef } from "./session-ref";
+export type { EffectiveVerifyDeclaration } from "./verify-declaration";
+export { findEffectiveVerifyDeclaration, isVerifyDeclaration, declarationExcludedIds } from "./verify-declaration";
+export { forkPointInView, readSessionView } from "./session-view";
+export type { ForkPointInView, SessionView, SessionViewEntry } from "./session-view";

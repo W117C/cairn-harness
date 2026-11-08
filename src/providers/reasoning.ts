@@ -18,11 +18,13 @@ import type { ThinkingEffort } from "./capabilities";
 /** 真正会发出去的档位（"off" 不在其中：关闭 = 不发这个字段）。 */
 export type ActiveReasoningEffort = Exclude<ThinkingEffort, "off">;
 
-/** 档位 → 思考预算（token）。低/中/高单调递增。 */
+/** 档位 → 思考预算（token）。低→中→高→最高单调递增；max 对应上游自述的最高档（如 DeepSeek）。 */
 export const REASONING_BUDGET_TOKENS: Readonly<Record<ActiveReasoningEffort, number>> = {
   low: 1_024,
   medium: 4_096,
   high: 16_384,
+  xhigh: 32_768,
+  max: 65_536,
 };
 
 export interface ReasoningDirective {
@@ -31,7 +33,7 @@ export interface ReasoningDirective {
 }
 
 /** 我们支持的档位名（顺序即展示顺序；"off" 由调用方另行处理）。 */
-export const ACTIVE_REASONING_EFFORTS: readonly ActiveReasoningEffort[] = ["low", "medium", "high"];
+export const ACTIVE_REASONING_EFFORTS: readonly ActiveReasoningEffort[] = ["low", "medium", "high", "xhigh", "max"];
 
 /** 档位 → 中立描述；"off" / 未给 ⇒ null（= 请求体里一个字都不加，逐字保持旧行为）。 */
 export function reasoningDirective(effort: ThinkingEffort | undefined): ReasoningDirective | null {
@@ -42,16 +44,17 @@ export function reasoningDirective(effort: ThinkingEffort | undefined): Reasonin
 /** 上游自述的档位名 → 我们的档位名。认不出的**丢掉**（不猜、不硬塞）。
  *
  *  为什么需要别名表：各家的档位词汇不一样。实测 DeepSeek 的 `/models` 给 `["low","high","max"]`，
- *  OpenRouter 的 `reasoning.supported_efforts` 会给 `minimal|xhigh|max` 之类。我们有四档
- *  （off/low/medium/high），所以：比最低档还低的叫 low，比最高档还高的叫 high（**宁可发小一档**：
- *  发大了是烧钱与跑偏，发小了只是思考少一点）。这张表是唯一映射处，别处不要再抄。 */
+ *  OpenRouter 的 `reasoning.supported_efforts` 会给 `minimal|xhigh|max` 之类。我们有六档
+ *  （off/low/medium/high/xhigh/max）：2026-11-05 业主裁按业界标准档，xhigh 自成一档
+ *  （不再是折回 high 的保守别名）；认不出的档位名照旧**丢掉**（不猜、不硬塞）。
+ *  这张表是唯一映射处，别处不要再抄。 */
 const EFFORT_ALIASES: Readonly<Record<string, ActiveReasoningEffort>> = {
   low: "low",
   minimal: "low",
   medium: "medium",
   high: "high",
-  xhigh: "high",
-  max: "high",
+  xhigh: "xhigh",
+  max: "max",
 };
 
 export function mapUpstreamEfforts(names: readonly string[]): ActiveReasoningEffort[] {
@@ -62,4 +65,55 @@ export function mapUpstreamEfforts(names: readonly string[]): ActiveReasoningEff
   }
   // 按我们自己的顺序稳定输出（低→高），免得配置里的书写顺序影响展示
   return ACTIVE_REASONING_EFFORTS.filter((e) => out.includes(e));
+}
+
+/** 一个模型的思考声明：**支持哪些档**（四档里挑，空 = 不支持）+ **首选哪一档**。
+ *
+ *  为什么合成一处：「哪些名字算数」「首选档怎么定」此前要在配置校验、能力表、设置表单三处各判一次，
+ *  那就是三份会漂移的副本。这里规范化一次，三处都调它 —— 「默认值不另拄一份」这条纪律的实现。
+ *  · 认不出的档位名**不在这里判错**（原样放进 `unknown`）：配置层拿它出问题单，界面层直接忽略。
+ *  · 「off」写进档位列表里 ≡ 没写（它是「不发思考参数」，不是一档能力）；「空列表 = 不支持」照旧。 */
+export interface ThinkingDeclaration {
+  /** 规范化后的支持档（低→高、去重、不含 "off"）。空数组 = 该模型不支持思考。 */
+  levels: ActiveReasoningEffort[];
+  /** **生效**的首选档：声明里写了、且确实在 levels 里 ⇒ 用它；否则 "off"（不替用户开花钱的档）。 */
+  default: ThinkingEffort;
+  /** 声明里那个首选档映射后的值（没写 ⇒ 缺席）；调用方据此区分「没写」与「写了但不在支持集里」。 */
+  preferred?: ThinkingEffort;
+  /** 认不出的档位名（原样回传，去空白）。 */
+  unknown: string[];
+}
+
+/** 单个档位名 → 我们的档位名；"off" 单独认（它不是 EFFORT_ALIASES 里的成员）；认不出 ⇒ undefined。 */
+function mapLevelToken(raw: unknown): ActiveReasoningEffort | "off" | undefined {
+  if (typeof raw !== "string") return undefined;
+  const token = raw.trim().toLowerCase();
+  if (token === "") return undefined;
+  if (token === "off") return "off";
+  return EFFORT_ALIASES[token];
+}
+
+export function normalizeThinkingDeclaration(levels: readonly unknown[], preferred?: unknown): ThinkingDeclaration {
+  const unknown: string[] = [];
+  const seen = new Set<ActiveReasoningEffort>();
+  for (const raw of levels) {
+    const mapped = mapLevelToken(raw);
+    if (mapped === undefined) {
+      if (typeof raw === "string" && raw.trim() !== "") unknown.push(raw.trim());
+      continue;
+    }
+    if (mapped !== "off") seen.add(mapped);
+  }
+  const ordered = ACTIVE_REASONING_EFFORTS.filter((e) => seen.has(e));
+  const mappedPreferred = mapLevelToken(preferred);
+  if (mappedPreferred === undefined && typeof preferred === "string" && preferred.trim() !== "") unknown.push(preferred.trim());
+  // 首选档只在「声明了它、且它真在支持集里」时生效：写了 high 却只声明 [low] ⇒ 回 off，不偷偷发更大的档。
+  const effective: ThinkingEffort =
+    mappedPreferred !== undefined && mappedPreferred !== "off" && ordered.includes(mappedPreferred) ? mappedPreferred : "off";
+  return {
+    levels: ordered,
+    default: effective,
+    ...(mappedPreferred !== undefined ? { preferred: mappedPreferred } : {}),
+    unknown,
+  };
 }

@@ -266,7 +266,7 @@ export const MUTATIONS = [
     src: "src/agent/plugins/skills.ts",
     test: "tests/skill-invocation-faces.test.ts",
     desc: "路由清单只留 description ⇒ 模型知道「有这个 skill」却不知道「什么时候该用」，§9.3 的 (+when_to_use) 没落地，触发靠猜",
-    apply: (s) => s.replace("  return \"- \" + skillInvokeName(s) + (desc ? \" — \" + desc : \"\") + (when ? \"（适用：\" + when + \"）\" : \"\");", "  return \"- \" + skillInvokeName(s) + (desc ? \" — \" + desc : \"\");"),
+    apply: (s) => s.replace("  const combined = capRoutingText(desc + (when ? \"（适用：\" + when + \"）\" : \"\"));", "  const combined = capRoutingText(desc);"),
     expectFail: "when_to_use 在场时并入同一行：模型据此判断何时触发，而不只是知道有个 skill",
   },
   {
@@ -331,7 +331,7 @@ export const MUTATIONS = [
     src: "src/agent/plugins/hooks.ts",
     test: "tests/hook-session-end.test.ts",
     desc: "去掉 SessionEnd 的 30s 短帽 ⇒ 收尾回落到缺省 600s，一个挂死的钩子能把「退出」拖住十分钟",
-    apply: (s) => s.replace('          : event === "SessionEnd" ? HOOK_TIMEOUT_SESSION_END', '          : false ? HOOK_TIMEOUT_SESSION_END'),
+    apply: (s) => s.replace('    if (event === "SessionEnd") return HOOK_TIMEOUT_SESSION_END;', '    if (event === "never-matches") return HOOK_TIMEOUT_SESSION_END;'),
     expectFail: "未声明 timeout 的 SessionEnd handler 取 30s；别的缺省仍是 600s",
   },
   {
@@ -387,7 +387,7 @@ export const MUTATIONS = [
     src: "src/agent/plugins/index.ts",
     test: "tests/skill-invocation-faces.test.ts",
     desc: "压缩后重挂时不重放当年那次调用的参数 ⇒ 同一个 skill 第一次进上下文是替换过的、重挂回来是裸模板，模型看到两份不一样的「权威正文」",
-    apply: (s) => s.replace('      return { body: substituteVars(entry.body, { ...this.substitutionFor(entry), args: callArgs }) };', '      return { body: entry.body };'),
+    apply: (s) => s.replace('        body: substituteVars(entry.body, { ...this.substitutionFor(entry), args: callArgs }),', '        body: entry.body,'),
     expectFail: "压缩后重挂重放当年那次调用的参数 ⇒ 同一 skill 两次进上下文内容一致",
   },
   {
@@ -416,11 +416,11 @@ export const MUTATIONS = [
   },
   {
     id: "plugin-lsp-unhonored-fields-silent",
-    src: "src/agent/plugins/discover.ts",
+    src: "src/agent/plugins/index.ts",
     test: "tests/plugin-lsp-activation.test.ts",
-    desc: "运行时还没兑现的字段不吭声 ⇒ 作者以为配了重启策略，实际崩了就崩了（本仓规矩：不静默改语义，也不静默不兑现）",
-    apply: (s) => s.replace('        if (unhonored.length > 0) warnings.push(', '        if (false) warnings.push('),
-    expectFail: "§9.8 里运行时还没兑现的字段，装载期当场说出来（不静默收下）",
+    desc: "插件 LSP 的 startupTimeout / restartOnCrash / diagnostics.maxPerFile 不进运行时 ⇒ 运行时落回硬编码（8s / 不重启 / 20 条），作者配了也白配",
+    apply: (s) => s.replace("          ...(cfg.startupTimeout !== undefined ? { startupTimeout: cfg.startupTimeout } : {}),\n          ...(cfg.restartOnCrash !== undefined ? { restartOnCrash: cfg.restartOnCrash } : {}),\n          ...(cfg.diagnostics?.maxPerFile !== undefined ? { diagnosticsMaxPerFile: cfg.diagnostics.maxPerFile } : {}),\n", ""),
+    expectFail: "§9.8 的 startupTimeout / restartOnCrash / diagnostics.maxPerFile 已兑现到运行时；未知字段仍出声",
   },
   {
     id: "hook-exec-form-spawns-first-arg",
@@ -443,7 +443,7 @@ export const MUTATIONS = [
     src: "src/agent/plugins/hooks.ts",
     test: "tests/plugin-user-config.test.ts",
     desc: "敏感 user_config 值被展开进 exec argv ⇒ ps / 崩溃报告可读到 safeStorage 里的密钥（应只走 PLUGIN_OPTION_* env）",
-    apply: (s) => s.replace("      const argvValues = Object.fromEntries(Object.entries(cfgValues).filter(([k]) => !sensitive.has(k)));", "      const argvValues = cfgValues;"),
+    apply: (s) => s.replace("    const argvValues = Object.fromEntries(Object.entries(cfgValues).filter(([k]) => !sensitive.has(k)));", "    const argvValues = cfgValues;"),
     expectFail: "exec form：敏感值只进 env（argv 里保留占位符，进程表读不到密钥）",
   },
   {
@@ -451,7 +451,7 @@ export const MUTATIONS = [
     src: "src/agent/plugins/hooks.ts",
     test: "tests/plugin-user-config.test.ts",
     desc: "不设 PLUGIN_OPTION_* ⇒ §9.5 给 hook 进程取值的那条正门没了（argv 只能带一个键，其余配置项无处可取）",
-    apply: (s) => s.replace("        extra: pluginOptionEnv(cfgValues),", "        extra: {},"),
+    apply: (s) => s.replace("      extra: pluginOptionEnv(cfgValues),", "      extra: {},"),
     expectFail: "exec form：敏感值只进 env（argv 里保留占位符，进程表读不到密钥）",
   },
   {
@@ -587,7 +587,7 @@ export const MUTATIONS = [
     src: "src/agent/plugins/skills.ts",
     test: "tests/skill-user-invocation.test.ts",
     desc: "用户那条 face 不设顶帽 ⇒ 敲一次 /skill 就把 200KB 的 SKILL.md 原样买进上下文，而它整段会话都要付费（模型那条有帽、这头没有）",
-    apply: (s) => s.replace('    text: clampSkillBody(\n      renderPromptCommand(hit, args, ctxFor?.(hit) ?? {}),\n      SKILL_REMOUNT_TOKENS_PER_SKILL,\n      skillRecallSuffix(hit.path, workspace)),', "    text: renderPromptCommand(hit, args, ctxFor?.(hit) ?? {}),"),
+    apply: (s) => s.replace('    text: clampSkillBodyWithResources(\n      renderPromptCommand(hit, args, ctxFor?.(hit) ?? {}),\n      SKILL_REMOUNT_TOKENS_PER_SKILL,\n      skillRecallSuffix(hit.path, workspace),\n      skillResourceSuffix(hit.resources, dirname(hit.path), workspace)),', "    text: renderPromptCommand(hit, args, ctxFor?.(hit) ?? {}),"),
     expectFail: "超预算的正文按模型侧同一顶帽裁掉",
   },
   {
@@ -667,4 +667,209 @@ export const MUTATIONS = [
     ),
     expectFail: "缺省就扫 <ws>/.agent/skills，且首次装载是 pending（不是免信任溜进来）",
   },
+  /* 第 999 页：MCP 断线自动重连。四条各钉一条"看着修好了、其实没回来/回不来/停不下来"的写法。 */
+  {
+    id: "mcp-crash-never-reconnects",
+    src: "src/agent/plugins/mcp.ts",
+    test: "tests/mcp-reconnect.test.ts",
+    desc: "onclose 只标失败不重连 ⇒ server 崩一次，它那批工具整个会话消失（第 999 页修的就是这条）",
+    apply: (s) => s.replace("          this.scheduleReconnect(plugin, server, k, generation);\n", ""),
+    expectFail: "崩一次 ⇒ 自己回来，工具与调用都恢复（不等下一次手工 connect）",
+  },
+  {
+    id: "mcp-reconnect-unbounded",
+    src: "src/agent/plugins/mcp.ts",
+    test: "tests/mcp-reconnect.test.ts",
+    desc: "重连不设上限 ⇒ 真没修好的 server 变成一直在背景握手的噪声源，状态永远'重连中'",
+    apply: (s) => s.replace("private static readonly MAX_RECONNECTS = 2;", "private static readonly MAX_RECONNECTS = 12;"),
+    expectFail: "重连失败最多两次就停手，并把原因留在状态里",
+  },
+  {
+    id: "mcp-reconnecting-reported-as-connected",
+    src: "src/agent/plugins/mcp.ts",
+    test: "tests/mcp-reconnect.test.ts",
+    desc: "把「重连中」直接报成 connected ⇒ 面板与判卷读到一盏随时可能变红的绿灯（三档被压成两档）",
+    apply: (s) => s.replace('        ? "reconnecting"', '        ? "connected"'),
+    expectFail: "三档话术互不相同：在跑 / 重连中 / 已失败（「重连中」不许被读成绿灯）",
+  },
+  /* 注：`scheduleReconnect` 里那句"退出中/代次已变就返回"的第一道守卫**没有配锚点**——实测把它的条件
+   *  打死（`if (false) return;`）后判卷仍绿：循环内那道与 `connectOnce` 的代次检查已经覆盖同一场景。
+   *  它是纵深防御，不是"少一条就会出事"的那一条；给它编一条假锚点，等于在表里放一条永远绿的说谎行。
+   *  （第 262/263 页那条"存活⇒先问判卷喂到了第几支"的纪律，这里就是它的应用例。） */
+  {
+    id: "mcp-reconnect-leaves-tools-deactivated",
+    src: "src/agent/plugins/index.ts",
+    test: "tests/plugins-mcp.test.ts",
+    desc: "重连只把工具放回注册表、不恢复激活集 ⇒ 连接显示在跑，模型那边还是看不见这几把工具",
+    apply: (s) => s.replace("      if (wasActive.length === 0) return;", "      if (true) return;"),
+    expectFail: "崩溃前激活的那几把，重连后自己回来（连接绿了而工具看不见＝半截修好，比不修更坏）",
+  },
+  /* 第 1000 页：hook handler 三档传输（command / http / mcp_tool）。八条各钉一种
+   *  「类型枚举声明了、运行侧没兑现或兑错了」的写法。 */
+  {
+    id: "hook-http-non2xx-read-as-success",
+    src: "src/agent/plugins/hooks.ts",
+    test: "tests/plugins-hook-handlers.test.ts",
+    desc: "HTTP 状态不当真 ⇒ 503/404 被折成「跑成功且没意见」，政策服务拒绝了钩子却放行（网络钩子的整个意义没了）",
+    apply: (s) => s.replace("      const ok = res.status >= 200 && res.status < 300;", "      const ok = true;"),
+    expectFail: "非 2xx 是非阻塞错误，状态码写进回执",
+  },
+  {
+    id: "hook-http-response-body-dropped",
+    src: "src/agent/plugins/hooks.ts",
+    test: "tests/plugins-hook-handlers.test.ts",
+    desc: "响应体不进折叠 ⇒ deny 决策与上下文回注双双失效：请求发了、答案丢了，钩子退化成单向噪声",
+    apply: (s) => s.replace('        stdout: ok ? res.body : "",', '        stdout: "",'),
+    expectFail: "2xx + JSON 决策体与 command hook 的 exit 2 同效（deny 变阻断，理由在案）",
+  },
+  {
+    id: "hook-http-any-scheme-allowed",
+    src: "src/agent/plugins/hooks.ts",
+    test: "tests/plugins-hook-handlers.test.ts",
+    desc: "协议不筛 ⇒ file:/data: 也能「请求」，一条插件钩子变成新的本地读取通道（command 档读本地文件走的是权限面，这里没有）",
+    apply: (s) => s.replace('  return url.protocol === "http:" || url.protocol === "https:";', "  return true;"),
+    expectFail: "非 http(s) 协议拒载：http 钩子不许变成新的本地文件读通道",
+  },
+  {
+    id: "hook-readonly-lets-network-post",
+    src: "src/agent/plugins/hooks.ts",
+    test: "tests/plugins-hook-handlers.test.ts",
+    desc: "只读档放过 http ⇒ 降档只拦 shell，网络写照样发生（只读承诺变成半个）",
+    apply: (s) => s.replace('    if (handler.type === "http" && this.opts.mode === "read-only") {', "    if (false) {"),
+    expectFail: "只读档拒绝 http 钩子：网络写同样是副作用",
+  },
+  {
+    id: "hook-dedup-key-collapses-http",
+    src: "src/agent/plugins/hooks.ts",
+    test: "tests/plugins-hook-handlers.test.ts",
+    desc: "去重键丢掉 URL ⇒ 所有 http 钩子长得一样，第二条起被静默吞掉（旧实现用 command 字段给全部类型算键，就是这个形状）",
+    apply: (s) => s.replace('      return "http:" + handler.url;', '      return "http:";'),
+    expectFail: "两条不同的 http URL 不再互相吞掉",
+  },
+  {
+    id: "hook-mcp-unresolved-template-sent-literal",
+    src: "src/agent/plugins/hooks.ts",
+    test: "tests/plugins-hook-handlers.test.ts",
+    desc: "args 里取不到值的 ${path} 原样发给 server ⇒ 工具拿到字面量当文件名，错到对面去爆（本仓口径：当场点名，不猜）",
+    apply: (s) => s.replace("    if (expanded.missing.length > 0) {", "    if (false) {"),
+    expectFail: "args 里取不到值的 ${...} ⇒ 不调用、不送字面量，并点名是哪个路径",
+  },
+  {
+    id: "hook-unhonored-types-silently-pass",
+    src: "src/agent/plugins/hooks.ts",
+    test: "tests/plugins-hook-handlers.test.ts",
+    desc: "未兑现名单清空 ⇒ agent 档被说成「未知类型」而不是「尚未兑现」，作者读到的是错话，装载门也照常放行",
+    apply: (s) => s.replace('const UNHONORED_HANDLER_TYPES: readonly HookHandlerType[] = ["agent"];', "const UNHONORED_HANDLER_TYPES: readonly HookHandlerType[] = [];"),
+    expectFail: "未兑现的 agent 档在装载期就如实点名；已兑现的档不被顺手拒掉",
+  },
+  {
+    id: "mcp-call-tool-skips-filtered-table",
+    src: "src/agent/plugins/mcp.ts",
+    test: "tests/mcp-bounds.test.ts",
+    desc: "callTool 不查裁剪后的表 ⇒ include/exclude 只在进注册表那一步生效，任何绕过注册表的调用方（mcp_tool 钩子就是第一个）都能点到用户明确关掉的那把工具",
+    apply: (s) => s.replace("    if (!conn.tools.some((t) => t.name === tool)) {", "    if (false) {"),
+    expectFail: "裁剪是权限面不是显示面：被裁掉的工具名在 callTool 这一层同样调不动",
+  },
+  {
+    id: "hook-readonly-mcp-ignores-grade",
+    src: "src/agent/plugins/hooks.ts",
+    test: "tests/plugins-hook-handlers.test.ts",
+    desc: "只读档不看工具副作用标注 ⇒ 要么把标注 readOnly 的读工具也拒掉（比模型可见面更严，钩子成了没法用的摆设），"
+      + "要么把没标注的当读工具放过（只读承诺变半个）——这条锚点取后者那一半",
+    apply: (s) => s.replace("      const grade = this.opts.mcpToolGrade?.(h.plugin, handler.server, handler.tool);", "      const grade: McpGrade | undefined = undefined;"),
+    expectFail: "只读档只放过标注了 readOnly 的工具，其余拒跑（钩子不是特权通道）",
+  },
+  {
+    id: "hook-http-timeout-wording-flattened",
+    src: "src/agent/plugins/hooks.ts",
+    test: "tests/plugins-hook-handlers.test.ts",
+    desc: "三档共用「强杀」那一句话 ⇒ http 根本没有进程可杀，回执把请求中止说成 SIGKILL，"
+      + "排查的人会去查那个不存在的被杀进程而不是查超时",
+    apply: (s) => s.replace('        const killWord = out.wording === undefined ? "强杀" : "中止";', '        const killWord = "强杀";'),
+    expectFail: "超时报「中止」、对面拒报「未被受理」：两种失败不能说成一种",
+  },
+  /* 第 1001 页：prompt 档（模型判定型钩子）。六条各钉一种「钩子写了、接缝或纪律没跟上」的写法。 */
+  {
+    id: "hook-prompt-redaction-skipped",
+    src: "src/agent/plugins/hooks.ts",
+    test: "tests/plugins-hook-prompt.test.ts",
+    desc: "出站前不剥密钥形态 ⇒ 一条插件钩子成了把仓库内容原样发给外部 provider 的通道，"
+      + "而作者以为模型看到的是原文",
+    apply: (s) => s.replace("    const userScan = redactSecrets(userText);", "    const userScan = { text: userText, findings: [], blocked: false };"),
+    expectFail: "密钥形态出站前剥掉，并且说清剥了几处（不剥=把插件钩子当外泄通道，谎称剥了=更坏）",
+  },
+  {
+    id: "hook-prompt-critical-still-sent",
+    src: "src/agent/plugins/hooks.ts",
+    test: "tests/plugins-hook-prompt.test.ts",
+    desc: "命中 critical（私钥块）还照发 ⇒ `redactSecrets` 那句「调用方应拒绝而非仅脱敏」在本层被改写成"
+      + "「脱敏后发出去」，同一把尺在两处有了两种含义",
+    apply: (s) => s.replace("    if (sysScan.blocked || userScan.blocked) {", "    if (false) {"),
+    expectFail: "payload 里有私钥块（critical）⇒ 整条钩子不出站，不是脱敏后照发",
+  },
+  {
+    id: "hook-prompt-truncated-note-dropped",
+    src: "src/agent/plugins/hooks.ts",
+    test: "tests/plugins-hook-prompt.test.ts",
+    desc: "半份结论不吭声 ⇒ 被截断的判断与完整判断同形（摘要器那一侧早就钉过「收下但不声张就等于没收」）",
+    apply: (s) => s.replace('      if (res.truncated !== undefined) notes.push("模型未写完（stop_reason " + res.truncated + "）⇒ 下面这段是半份结论，别当完整判断用");\n', ""),
+    expectFail: "模型只回了一半 ⇒ 出声，不当完整结论用",
+  },
+  {
+    id: "hook-prompt-shape-missing-prompt-passes",
+    src: "src/agent/plugins/hooks.ts",
+    test: "tests/plugins-hook-prompt.test.ts",
+    desc: "prompt 档不查形态 ⇒ 一条没有指令的「模型判定」照样装载，运行时拿 undefined 去调模型",
+    apply: (s) => s.replace('        : "prompt 档缺 prompt（没有指令的模型调用不知道该判什么）";', "        : null;"),
+    expectFail: "缺 prompt 字段 ⇒ 拒载并点名",
+  },
+  {
+    id: "hook-model-call-empty-answer-counts-as-agreement",
+    src: "src/agent/session-provider.ts",
+    test: "tests/plugins-hook-prompt.test.ts",
+    desc: "模型回空白当成功 ⇒ 引擎把「没内容」折成「模型没意见」，钩子等于被静默放行；"
+      + "这与摘要器那句「宁可是错」是同一件事",
+    apply: (s) => s.replace('    if (!text.trim()) return { ok: false, text, error: label + " 返回空判断（按失败处理，不当「模型没意见」用）" };\n', ""),
+    expectFail: "模型只回了空白 ⇒ 是失败，不是「模型没意见」",
+  },
+  {
+    id: "hook-model-call-timeout-reason-lost",
+    src: "src/agent/session-provider.ts",
+    test: "tests/plugins-hook-prompt.test.ts",
+    desc: "到点 abort 不带原因 ⇒ 回执只剩一句泛化失败，读者分不出「挂到超时」与「对面拒了」，"
+      + "而这两件事的处置动作完全不同（调钩子超时帽 / 换 provider）",
+    apply: (s) => s.replace('controller.abort("prompt 钩子超时")', 'controller.abort("aborted")'),
+    expectFail: "超时到点 ⇒ 这一条以超时失败收（不是永远悬着）",
+  },
+  /* 第 1002 页：旁路模型调用改吃「会话那一档」。四条各钉一种"装配层定了、旁路又自己猜一遍"。 */
+  {
+    id: "hook-model-call-invents-a-tier",
+    src: "src/agent/session-provider.ts",
+    test: "tests/hook-model-assembly.test.ts",
+    desc: "钩子那一跳自己往请求里塞一个 model ⇒ 旁路重新拿回「拨哪一档」的决定权：装配层的降档偏置、"
+      + "自定义家改名、per-run 点名，它一概不认（这正是第 1001 页缺陷的形状）",
+    apply: (s) => s.replace('        // 不带 model：这一跳拨哪一档由注入方（`sessionModelTransport`）绑死，旁路不重猜。\n        { stream: false, ', '        { stream: false, model: "glm-5.2", '),
+    expectFail: "createHookModelCall 不再自己编档位名：送给 transport 的 options 里没有 model",
+  },
+  {
+    id: "hook-model-call-throws-when-provider-missing",
+    src: "src/main/provider-assembly.ts",
+    test: "tests/hook-model-assembly.test.ts",
+    desc: "家没配 key 时把异常抛穿出去 ⇒ 一条插件钩子的配置问题变成整场 run 起不来；"
+      + "旁路不可用的正确说法是「没这条能力」，不是炸主路",
+    apply: (s) => s.replace("  } catch {\n    return null; // `assertProviderKeyConfigured` 那一类：这一档此刻拨不出去，不假装能判\n  }", "  } catch {\n    throw new Error(\"钩子模型面装配失败\");\n  }"),
+    expectFail: "家没配 key ⇒ 返回 null 而不是抛；不绑定就是「没这条能力」，主流程不受影响",
+  },
+  {
+    id: "hook-model-bind-not-inherited-by-worker-view",
+    src: "src/agent/plugins/hooks.ts",
+    test: "tests/plugins-hook-prompt.test.ts",
+    desc: "worker 视图造新引擎时把晚绑定的模型面丢掉 ⇒ 主会话的 prompt 钩子判得动、read worker 的判不动，"
+      + "而两边的面板长得一模一样",
+    apply: (s) => s.replace("    return mode === \"read\" ? new HookEngine({ ...this.opts, mode: \"read-only\" }) : this;", "    return mode === \"read\" ? new HookEngine({ ...this.opts, mode: \"read-only\", modelCall: undefined }) : this;"),
+    expectFail: "晚绑定之后建的 worker 视图（read 档）也拿得到模型面",
+  },
+  /* 注：`hookModelCallFor` 里"demo / 夹具通道返回 null"那一支**没有配锚点**——判卷那三条都在真 spec 那一路，
+   *  把这一支打死（`void 0`）现有判卷一条都不会红（实测过：它只影响 mock 流那条我们已经不走的路径）。
+   *  与其在表里放一行永远绿的谎，按第 262/263 页那条纪律留字说明它是纵深防御。 */
 ];

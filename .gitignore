@@ -42,6 +42,12 @@ agent-canon/
 # · `.agent/evolution.json`：会话沉淀出来的进化补丁登记（本机运行产物）。
 .agent/providers.json
 .agent/evolution.json
+# 自进化闭环 v2（第 707 页）新增的三支同族运行产物：跨轮账本（evolution-ledger.jsonl，逐轮追加）、
+# 周期体检报告（assess-report.json）、canary 观察档（canary/，观察期读-改-写）——口径同上，
+# 机器本地状态不随仓库分发；账本/报告含本机会话的读数与措辞，不是源码。
+.agent/evolution-ledger.jsonl
+.agent/assess-report.json
+.agent/canary/
 # 桌面端（apps/desktop）首启工作区默认落仓库根（S2 ①：不得回落 $HOME）⇒ 会话 JSONL 写进
 # <repo>/.agent/sessions/。这是运行产物，与 .agent/memory/ 同理不进 git；.agent/permissions.json
 # 仍是有意跟踪的（见上），所以只忽略 sessions/ 这一支，不整体忽略 .agent/。
@@ -91,6 +97,9 @@ docs/facts/
 .worktrees/
 .superpowers/
 
+# Chromium user profiles produced by the desktop permission smoke contain runtime state.
+/outputs/desktop-permission-2026-11-03/profile*/
+
 # vitest JSON reporter 产物（本仓零消费者；2026-10-03 实测 .vitest/json/output.json 无人读）
 .vitest/
 
@@ -129,6 +138,9 @@ GEMINI.md
 # .venv/ 861 支、.rivet/ 13 支、var/ 5 支。口径与 `.serena/`、`.qoder/` 那一族相同——
 # **只掐掉「随仓库分发」这一条通路**，文件仍在本地盘。
 apps/desktop/release/
+apps/desktop/release-*/
+# Temporary staging contains the same generated bundles as release/.
+/apps/desktop/.cairn-package-*/
 apps/desktop/preview/dist/
 
 # python venv（解释器＋site-packages），`python -m venv .venv` 可重建。
@@ -150,3 +162,10 @@ var/
 #    只有它的 `dist/` 是产物（已在上方忽略）。
 #  · `agent-canon/`（1239 支 / 48M，含 INDEX.md/README.md/canon/raw/families/tools）——是**策展语料**
 #    不是产物，但从未提交、仓内也无引用。归 commit 还是归 ignore 属业主裁决，不替它决定。
+
+# Project-local evolution episodes/playbook are generated runtime state.
+/.agent/evolve/
+
+# gym 靶场的草稿运行态（fixtures/gym/drafts/<会话>/，gym-check A4 的草稿面）：会话目录名带空格
+# 与时间戳、内容是未齐件的运行残留——按「别把运行态写进 fixtures 树」的既定口径掐分发通路。
+fixtures/gym/drafts/

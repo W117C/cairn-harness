@@ -52,20 +52,26 @@ describe("插件 .lsp.json 进 LSP 运行时（§9.8 第三激活面）", () => 
     expect(pluginLspServerIds(ws)).not.toContain("echo-suite:socket-only");
     const cfg = loadLspConfig(ws);
     expect(cfg.servers["echo-suite:stub-ts"]?.extensions).toEqual([".ts", ".tsx"]); // CC 的 extensionToLanguage 键集
+    // 2026-10-23：extensionToLanguage 的**值**必须一路带到运行时。此前 `activateLsp` 只取
+    // `Object.keys(cfg.extensionToLanguage)` 当 extensions、把值丢掉 ⇒ 非 JS 语言的插件 server
+    // （`.py`/`.go`/`.rs`）didOpen 时 languageId 落回 TS 启发式的 "plaintext"，六操作静默失效。
+    // 这条钉的是**值本身**（不是键集）：插件 server 与宿主 server 走同一条 languageId 契约。
+    expect(cfg.servers["echo-suite:stub-ts"]?.extensionToLanguage).toEqual({ ".ts": "typescript", ".tsx": "typescript" });
     // 面板口径：声明数与已注册数分开报（只看声明数就是"装载即陈列"的旧撒谎法）
     const snap = e.snapshot().plugins.find((p) => p.name === "echo-suite");
     expect(snap?.counts.lsp).toBe(1);
     expect(snap?.counts.lspActive).toBe(1);
   });
 
-  it("§9.8 里运行时还没兑现的字段，装载期当场说出来（不静默收下）", async () => {
+  it("§9.8 的 startupTimeout / restartOnCrash / diagnostics.maxPerFile 已兑现到运行时；未知字段仍出声", async () => {
     const e = await load();
+    const cfg = loadLspConfig(ws).servers["echo-suite:stub-ts"];
+    expect(cfg?.startupTimeout).toBe(5000);
+    expect(cfg?.restartOnCrash).toBe(false);
+    expect(cfg?.diagnosticsMaxPerFile).toBe(20);
     const warns = e.manifest.plugins.find((p) => p.name === "echo-suite")?.warnings ?? [];
-    const unhonored = warns.find((w) => w.includes("本轮不生效"));
-    expect(unhonored).toBeDefined();
-    expect(unhonored ?? "").toContain("startupTimeout");
-    expect(unhonored ?? "").toContain("restartOnCrash");
-    expect(unhonored ?? "").toContain("diagnostics.maxPerFile");
+    expect(warns.some((w) => w.includes("本轮不生效"))).toBe(false);
+    expect(warns.some((w) => w.includes("unknownLspField"))).toBe(true);
   });
 
   it("未过信任门的插件不注册（server.command 是任意可执行文件，信任门与 hook/MCP 同口径）", async () => {

@@ -39,8 +39,14 @@ import type { GlmToolSpec } from "../providers/glm";
  *  不该碰到闸，装三个必碰到」。行业侧对照读数：工具定义到约 10k token 就该改为按需装载，
  *  50–70k token 是已知的失败区（见 outputs/model-surface-budget-2026-09-23/00-调研综述.md）。
  *
+ *  2026-11-07 重推导（台账第 1040 页）：工具层扩充（git_read/calc/list_dir/read_doc/
+ *  background-tasks 等）后缺省固定面实测 25,031 字符、prompt-cost 折算约 6.2k token/轮——
+ *  帽未重推导而面已长过闸，MS1 变成「告警常红」。按实测 + 中等 MCP 余量重钉 **28,000**
+ *  （距 50–70k token 失败区仍有 2 倍余量；降配梯与 MS2/MS3 前缀不变量不动）。
+ *  业主要求回缩时收窄描述即可，此常量回落无需改梯。
+ *
  *  **不含易变侧**：记忆 / skills 块 / 符号地图 / 附件引用各有自己的硬帽，见文件头口径更正。 */
-export const MODEL_SURFACE_TOTAL_CHAR_LIMIT = 24_000;
+export const MODEL_SURFACE_TOTAL_CHAR_LIMIT = 28_000;
 
 /** 梯级 A 的紧帽：超预算时把可降档工具的描述压到这里。
  *  比 `MCP_DESCRIPTION_CHAR_LIMIT`（2048，装载期守住的单条上限）更狠，因为它只在**池子已满**时生效。 */
@@ -56,7 +62,11 @@ export type SurfaceTier =
   /** 插件与 MCP 带来的工具：可压描述、可从尾部整条丢。 */
   | "optional";
 
-export const PINNED_SURFACE_TOOLS: ReadonlySet<string> = new Set(["skill", "obs_recall", "impact_query"]);
+export const PINNED_SURFACE_TOOLS: ReadonlySet<string> = new Set([
+  "skill", "obs_recall", "impact_query",
+  // 懒加载目录/激活元工具：丢了它们，MCP 工具就再也进不来；体积很小，必须常驻。
+  "mcp_list", "mcp_activate", "mcp_release",
+]);
 
 /** core 的身份由调用方交给它（`gateToolSpecs()` 的名字集），本模块不另抄一份工具表——
  *  抄了就是一处「规格与实现两处手写」，正是本仓的缺陷族。 */

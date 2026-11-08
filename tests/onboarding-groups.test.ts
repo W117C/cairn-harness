@@ -51,3 +51,61 @@ describe("消费者面：settings 服务给出去的是这份数据，且是副�
     expect((await onboardingGroups()).length).toBe(ONBOARDING_GROUPS.length);
   });
 });
+
+describe("首启文案是用户语言（不是设置审计）", () => {
+  it("labels / entries 不出现 BYOK、单价表、license、沙箱状态、面板布局等工程词", () => {
+    const banned = /BYOK|单价表|license|沙箱状态|产出代码安全模式|面板布局|Provider 管理|遥测开关/;
+    for (const group of ONBOARDING_GROUPS) {
+      expect(group.label, group.id).not.toMatch(banned);
+      expect(group.entry, group.id).not.toMatch(banned);
+    }
+  });
+
+  it("每一组都有一句「这格是干什么的」——不是只有名词", () => {
+    for (const group of ONBOARDING_GROUPS) {
+      expect(group.entry.length, group.id).toBeGreaterThan(8);
+      expect(group.entry, group.id).toMatch(/[。；]|可以|随时|这里|默认|查看|填入/);
+    }
+  });
+});
+
+describe("entry 不许把 label 换个说法再念一遍（2026-11-01 第 896 页 · 业主「让布局说话」）", () => {
+  // 这四句此前就在屏上：它们只重排了格子标题里的词，读完不知道会看到什么新东西。
+  // 保留「每组必须有 entry」的既有裁决，所以处理方式是**改写成不可推导的事实**
+  // （何时发生 / 能做什么 / 默认状态），不是删掉。
+  const RESTATED = [
+    "需要定时跑的任务在这里安排",
+    "查看版本、许可证与更新",
+    "选主题；布局随时可在右栏调整",
+    "会话结束后自动沉淀项目约定，可在记忆页查看",
+  ];
+  it("被撤的复述句不许回来（逐句点名）", () => {
+    for (const gone of RESTATED) {
+      for (const g of ONBOARDING_GROUPS) {
+        expect(g.entry, `这句是复述标题：${gone}`).not.toBe(gone);
+      }
+    }
+  });
+
+  it("反向自证：上面四条确实曾经在这份数据里出现过（不是恒真的空名单）", () => {
+    // 名单里每一条都对应一个真实 label；若哪天 label 被改掉，这条会提醒我们同步名单。
+    const labels = ONBOARDING_GROUPS.map((g) => g.label);
+    for (const l of ["定时任务", "版本与更新", "主题与布局", "记忆"]) {
+      expect(labels, `复述名单里点名的格子（${l}）还在屏上——名单不许悄悄失效`).toContain(l);
+    }
+    // 再证一层：这四格现在的 entry 与名单里的旧句都不同（改写过，不是没执行）
+    const byLabel = new Map(ONBOARDING_GROUPS.map((g) => [g.label, g.entry]));
+    expect(byLabel.get("定时任务")).not.toBe("需要定时跑的任务在这里安排");
+    expect(byLabel.get("版本与更新")).not.toBe("查看版本、许可证与更新");
+    expect(byLabel.get("主题与布局")).not.toBe("选主题；布局随时可在右栏调整");
+    expect(byLabel.get("记忆")).not.toBe("会话结束后自动沉淀项目约定，可在记忆页查看");
+  });
+
+  it("每格仍带一句非复述的事实（不许退化成空壳或纯名词）", () => {
+    for (const g of ONBOARDING_GROUPS) {
+      expect(g.entry.trim().length, g.id).toBeGreaterThan(8);
+      // 事实标记：时间/默认/能力/落点之一
+      expect(g.entry, `${g.id} 的 entry 要带不可推导的信息`).toMatch(/自动|默认|随时|可|这里|填入|诊断/);
+    }
+  });
+});

@@ -21,6 +21,8 @@ const pushApi = {
   onPreviewState: (cb: (p: unknown) => void) => subscribe(PUSH_CHANNELS.onPreviewState, cb),
   // 载荷是命令 id 字符串（main 侧只发 id）；subscribe 的入参是 unknown，这里显式过一手。
   onMenu: (cb: (id: string) => void) => subscribe(PUSH_CHANNELS.onMenu, (v) => { cb(String(v)); }),
+  // v21：完成通知点击（main 已聚焦窗口）；载荷形状由 renderer 侧校验，这里原样透传。
+  onNotificationOpen: (cb: (p: unknown) => void) => subscribe(PUSH_CHANNELS.onNotificationOpen, cb),
 };
 
 function subscribe(channel: string, cb: (v: unknown) => void): () => void {
@@ -37,3 +39,9 @@ const api = {
   pathForFile: (file: File): string => webUtils.getPathForFile(file),
 } as unknown as AgentApi;
 contextBridge.exposeInMainWorld("agent", api);
+// 窗口材质只在主进程显式开启时生效；这里只加一个数据集，默认路径不变。
+if (process.env.CAIRN_WINDOW_VIBRANCY === "sidebar" || process.env.CAIRN_WINDOW_VIBRANCY === "1" || process.argv.includes("--cairn-vibrancy")) {
+  const markVibrancy = (): void => { document.documentElement.dataset.vibrancy = "sidebar"; };
+  if (document.readyState === "loading") window.addEventListener("DOMContentLoaded", markVibrancy, { once: true });
+  else markVibrancy();
+}

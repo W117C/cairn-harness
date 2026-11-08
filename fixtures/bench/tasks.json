@@ -23,7 +23,8 @@
       "verifyOk",
       "judgeUntouched",
       "heldOutPass"
-    ]
+    ],
+    "judge": {"failToPass":["券后金额跌破包邮线，应当收运费"],"passToPass":["无券：商品金额 + 运费","已包邮：只付商品金额"]}
   },
   {
     "id": "B2-feature-export",
@@ -49,7 +50,8 @@
       "verifyOk",
       "judgeUntouched",
       "heldOutPass"
-    ]
+    ],
+    "judge": {"failToPass":["tests/fit.test.js"],"passToPass":[]}
   },
   {
     "id": "B3-refactor-callsite",
@@ -65,7 +67,8 @@
     "expects": [
       "verifyOk",
       "judgeUntouched"
-    ]
+    ],
+    "judge": {"failToPass":["money 一律两位小数","receiptLine 用 format.money 渲染","legacyTotal 与 receiptLine 渲染一致","receipt 逐行渲染"],"passToPass":[]}
   },
   {
     "id": "B4-bugfix-pagination",
@@ -81,7 +84,8 @@
     "expects": [
       "verifyOk",
       "judgeUntouched"
-    ]
+    ],
+    "judge": {"failToPass":["listPage 每页满员","第一页取满 size 条"],"passToPass":["listPage 末页余数正确","第二页取剩下的","越界页返回空"]}
   },
   {
     "id": "B5-bugfix-async",
@@ -97,7 +101,8 @@
     "expects": [
       "verifyOk",
       "judgeUntouched"
-    ]
+    ],
+    "judge": {"failToPass":["drain 等所有异步任务完成后才返回","drain 保持提交顺序"],"passToPass":["total 累加异步结果"]}
   },
   {
     "id": "B6-feature-flag",
@@ -113,7 +118,8 @@
     "expects": [
       "verifyOk",
       "judgeUntouched"
-    ]
+    ],
+    "judge": {"failToPass":["parseArgs 的结果可以直接喂 setVerbose","--verbose 置位且不进 rest","--verbose 与位置参数共存"],"passToPass":["--name 取值"]}
   },
   {
     "id": "B7-feature-csv",
@@ -129,7 +135,8 @@
     "expects": [
       "verifyOk",
       "judgeUntouched"
-    ]
+    ],
+    "judge": {"failToPass":["含逗号的字段要用双引号包住","含双引号的字段：包起来并把内部引号写成两个","含换行的字段要包起来","导出带表头，且转义生效"],"passToPass":["普通字段直接用逗号连"]}
   },
   {
     "id": "B8-feature-memo",
@@ -145,7 +152,8 @@
     "expects": [
       "verifyOk",
       "judgeUntouched"
-    ]
+    ],
+    "judge": {"failToPass":["同一个 id 只真取一次"],"passToPass":["不同 id 各自真取","resetCache 之后会重新取"]}
   },
   {
     "id": "B9-refactor-rename",
@@ -161,7 +169,8 @@
     "expects": [
       "verifyOk",
       "judgeUntouched"
-    ]
+    ],
+    "judge": {"failToPass":["新名字 fetchUser 可用","旧名字 getUser 不再保留"],"passToPass":["三个调用点都跟着改了"]}
   },
   {
     "id": "B10-refactor-dedupe",
@@ -177,7 +186,8 @@
     "expects": [
       "verifyOk",
       "judgeUntouched"
-    ]
+    ],
+    "judge": {"failToPass":["两处口径必须完全一致（逐例比）","都做 trim + 小写"],"passToPass":["非法一律 null"]}
   },
   {
     "id": "B11-refactor-signature",
@@ -193,7 +203,8 @@
     "expects": [
       "verifyOk",
       "judgeUntouched"
-    ]
+    ],
+    "judge": {"failToPass":["put 收选项对象"],"passToPass":["三个调用点都改用新签名"]}
   },
   {
     "id": "B12-long-horizon",
@@ -209,6 +220,7 @@
     "expects": [
       "verifyOk",
       "judgeUntouched"
-    ]
+    ],
+    "judge": {"failToPass":["clamp：把 v 夹在 [lo, hi] 之间","sum：求和（含第一个元素）","unique：去重且**保持首次出现顺序**","chunk：按 size 切块，**末块不足也保留**","titleCase：每词首字母大写，**其余转小写**","parseIntSafe：解析失败返回 fallback，不是 NaN","mean：平均值（除以个数）","zip：**按较长者**配对，缺的用 null 填","flatten：**递归**展平到最深层","groupBy：分组：同键的**累积**成数组（不是覆盖）","sortBy：按**数值**升序（不是字符串序）","trimAll：**每一条**都去掉首尾空白","escapeHtml：转义 & < > 三个字符","splitLines：按","percent：返回**百分数**（0-100）","roundTo：四舍五入到 n 位小数，**返回数字**","pickKeys：挑出**指定**的键（当前挑反了）","deepMerge：**深**合并（嵌套对象不整个覆盖）","lastN：取**最后** n 个","repeatEach：每个元素重复 n 次"],"passToPass":[]}
   }
 ]

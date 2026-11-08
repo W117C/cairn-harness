@@ -17,6 +17,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { sessionToolSpecs } from "../src/agent/session-provider";
+import { MODEL_SURFACE_TOTAL_CHAR_LIMIT } from "../src/agent/model-surface";
 import { projectContext } from "../src/agent/context";
 import { replay, type AgentEvent } from "../src/events";
 import type { GlmToolSpec } from "../src/providers/glm";
@@ -99,7 +100,8 @@ describe("P0 装配账落流", () => {
     expect(a.sentToolCount).toBe(specs.length);
     expect(a.declaredToolSpecChars).toBe(a.sentToolSpecChars);
     expect(a.overChars).toBe(0);
-    expect(a.limitChars).toBe(24_000);
+    // 帽随重推导走（2026-11-07 台账第 1040 页：28,000）——测试与常量同源，不许抄死数。
+    expect(a.limitChars).toBe(MODEL_SURFACE_TOTAL_CHAR_LIMIT);
     expect(a.baseSystemChars).toBe(SYSTEM.length);
     // 空数组 = 确定没降配；与「旧版本没记这个字段」必须分得开（§3 取舍 3）。
     expect(a.shortened).toEqual([]);

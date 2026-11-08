@@ -6,12 +6,15 @@ import { describe, expect, it } from "vitest";
 import {
   abRowLine,
   armOfPath,
+  exactSignP,
   groupPairs,
   magnitudeOfAb,
   parseArm,
   repRowLine,
   signTestToken,
+  SIGN_ALPHA,
   taskKey,
+  wilsonInterval,
   type AbMagnitude,
   type Cell,
 } from "../scripts/lib/eval-arms";
@@ -325,5 +328,101 @@ describe("signTestToken：符号与幅度分开判", () => {
     // base 两次 [100,300] ⇒ 中位 200；short 两次 [150,150] ⇒ 150 ⇒ base 更贵
     const s = signTestToken([pairOf("T1", [100, 300], [150, 150])]);
     expect(s.tokenDirection).toEqual({ sign: "a-above-b", agree: 1, against: 0 });
+  });
+});
+
+/* ——— 方向之外还要能判「够不够格」：这一段的动因是外部读数面给的 ———
+ *  本仓的语料 A/B 面只报「几比几同向」，没有 p 值 ⇒「5/5 同向」被读成定论。
+ *  外部开源那批自进化项目（2026-10-22 实读 16 个仓库的 README）**没有一个**带显著性门槛：
+ *  门槛都是阈值/规则（OpenEvolve 的 admit()、ShinkaEvolve 的 fitness|crowding、GEPA 的 Pareto 支配、
+ *  DGM 的 "sufficiently high performance"）⇒ 这一格是本仓的空白，也是本仓能拿来做差异点的地方。
+ *  p 值与区间两条借法都有实读出处：rliable 的 `probability_of_improvement`（每任务 Mann–Whitney U）
+ *  与 promptfoo 的 `getWilsonScoreInterval`（闭式 Wilson 区间 + unstable 标记）。 */
+
+describe("exactSignP：符号检验的 p 值（精确二项、双侧）", () => {
+  it("5/5 全同向 ⇒ p=0.0625 ⇒ 在 α=0.05 下**不**显著（这一格最容易被读成定论）", () => {
+    expect(exactSignP(5, 5)).toBe(0.0625);
+    expect(exactSignP(5, 5)! <= SIGN_ALPHA).toBe(false);
+  });
+
+  it("6/6 全同向 ⇒ p=0.03125 ⇒ 够格（**差一格**才跨过 α=0.05，所以格子数是硬约束）", () => {
+    expect(exactSignP(6, 6)).toBe(0.03125);
+    expect(exactSignP(6, 6)! <= SIGN_ALPHA).toBe(true);
+  });
+
+  it("4/5 ⇒ p=0.375；3/5 ⇒ p=1（过半同向本来就与随机分不开）", () => {
+    expect(exactSignP(5, 4)).toBe(0.375);
+    expect(exactSignP(5, 3)).toBe(1);
+  });
+
+  it("方向无关：1/5 与 4/5 同一个 p 值（双侧的定义就是这样）", () => {
+    expect(exactSignP(5, 1)).toBe(exactSignP(5, 4));
+  });
+
+  it("分母为 0 ⇒ null（不许读成 p=1，那是「没测」读成「测过了」）", () => {
+    expect(exactSignP(0, 0)).toBeNull();
+  });
+
+  it("越界输入 ⇒ null（负数 / agree>分母 / 非整数）", () => {
+    expect(exactSignP(-1, 0)).toBeNull();
+    expect(exactSignP(3, 4)).toBeNull();
+    expect(exactSignP(3, 1.5)).toBeNull();
+  });
+});
+
+describe("wilsonInterval：同向比例的 95% 区间", () => {
+  it("5/5 ⇒ 下界只有 0.566（点估计 1.00 会把话说满）", () => {
+    const ci = wilsonInterval(5, 5)!;
+    expect(ci.lower).toBeCloseTo(0.5656, 3);
+    expect(ci.upper).toBeCloseTo(1, 3);
+  });
+
+  it("3/5 ⇒ 区间横跨点估计两侧 ⇒ 「60% 同向」不能当数用", () => {
+    const ci = wilsonInterval(3, 5)!;
+    expect(ci.lower).toBeLessThan(0.6);
+    expect(ci.upper).toBeGreaterThan(0.6);
+    expect(ci.lower).toBeGreaterThan(0.2);
+    expect(ci.upper).toBeLessThan(0.9);
+  });
+
+  it("分母为 0 或越界 ⇒ null", () => {
+    expect(wilsonInterval(0, 0)).toBeNull();
+    expect(wilsonInterval(6, 5)).toBeNull();
+  });
+});
+
+describe("signTestToken：方向之外还要能判「够不够格」", () => {
+  it("5/5 全同向 ⇒ p=0.0625 ⇒ verdict=not-significant（方向可报，**结论不够格**）", () => {
+    const s = signTestToken([
+      pairOf("I1", [46504], [28549]),
+      pairOf("I2", [14385], [11799]),
+      pairOf("I3", [45681], [23159]),
+      pairOf("I4", [23849], [9860]),
+      pairOf("J2", [68535], [24067]),
+    ]);
+    expect(s.pValue).toBe(0.0625);
+    expect(s.verdict).toBe("not-significant");
+    // 区间下界才是能引用的那个数：5/5 的下界只有 0.566
+    expect(s.agreementCi?.lower).toBeCloseTo(0.5656, 3);
+  });
+
+  it("6/6 全同向 ⇒ p=0.03125 ⇒ verdict=significant", () => {
+    const s = signTestToken([
+      pairOf("I1", [46504], [28549]),
+      pairOf("I2", [14385], [11799]),
+      pairOf("I3", [45681], [23159]),
+      pairOf("I4", [23849], [9860]),
+      pairOf("J2", [68535], [24067]),
+      pairOf("J3", [12000], [4000]),
+    ]);
+    expect(s.pValue).toBe(0.03125);
+    expect(s.verdict).toBe("significant");
+  });
+
+  it("零格可比 ⇒ pValue/verdict/区间全是 null（不许读成 p=1 或 100%）", () => {
+    const s = signTestToken([pairOf("T1", [0], [0])]);
+    expect(s.pValue).toBeNull();
+    expect(s.agreementCi).toBeNull();
+    expect(s.verdict).toBe("no-comparison");
   });
 });

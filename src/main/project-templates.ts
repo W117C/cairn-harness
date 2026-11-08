@@ -12,6 +12,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, wri
 import { homedir } from "node:os";
 import { dirname, extname, isAbsolute, join, resolve } from "node:path";
 import { defaultProjectsRoot, validateProjectName, type CreateProjectFailure } from "./project-create";
+import { isRecord } from "../is-record";
 
 export type TemplateRunKind = "static" | "vite";
 
@@ -630,7 +631,7 @@ function declaredDeps(pkg: Record<string, unknown> | null): string[] {
   const out: string[] = [];
   for (const key of ["dependencies", "devDependencies"]) {
     const v = pkg[key];
-    if (typeof v === "object" && v !== null && !Array.isArray(v)) out.push(...Object.keys(v as Record<string, unknown>));
+    if (isRecord(v)) out.push(...Object.keys(v));
   }
   return out;
 }
@@ -653,8 +654,8 @@ function diagnoseViteForm(
 ): ProjectDiagnosis {
   const scriptsRaw = pkg.scripts;
   const scripts =
-    typeof scriptsRaw === "object" && scriptsRaw !== null && !Array.isArray(scriptsRaw)
-      ? (scriptsRaw as Record<string, unknown>)
+    isRecord(scriptsRaw)
+      ? scriptsRaw
       : {};
   const lifecycle = LIFECYCLE_SCRIPTS.filter((s) => typeof scripts[s] === "string" && (scripts[s] as string).trim() !== "");
   if (lifecycle.length > 0) {

@@ -244,7 +244,9 @@ if (importFace === null || faceEmpty) {
     + (importFace === null ? "git 读不到 " + TARGET.slice(0, 7) : "取到空面：文件 " + String(importFace.headFiles.size) + " 个、边 " + String(importFace.edges.length) + " 条")
     + "）⇒ 不等于 import 面自洽");
 } else {
-  const dang = findDanglingImports(importFace.edges, importFace.headFiles, (rel) => existsSync(join(MAIN, rel)));
+  // 存在性问**整版**（revFiles），不是量面（headFiles）——量面只管「读谁的 import」。
+  // 用量面判存在性会把一个明明在版内、只是住在桌面层（apps/）的模块读成「悬空 / 漏 git add」。
+  const dang = findDanglingImports(importFace.edges, importFace.revFiles, (rel) => existsSync(join(MAIN, rel)));
   const face = checkHeadImportFace(dang);
   say(`import 面：${String(importFace.edges.length)} 条边｜悬空 ${String(dang.length)}（其中存量已豁免 ${String(dang.length - face.filter((f) => f.kind === "dangling").length)}）`);
   for (const f of face) say(`  ${f.kind === "dangling" ? "❌" : "⚠️"} ${f.target} — ${f.detail}`);
@@ -295,6 +297,11 @@ if (face.state === "broken") {
   for (const r of verdict.reds) say(`  ❌ ${r}`);
 }
 
+/** 认证这趟的全量判卷并发档：8GB 宿主上默认 worker 数会过订阅，出 30s 级假超时
+ *  （AGENTS.md 的 load-artifact 那条；同一条单跑 1.9s 全绿）。认证要可复现读数，
+ *  与 `pnpm test:capped` 同档。 */
+const CERT_MAX_WORKERS = 2;
+
 let testStatus: number | null = null;
 let summary = LEVEL.label;
 let timingReading: string | null = null;
@@ -306,13 +313,13 @@ if (!flag("skip-test")) {
   // 两端各采一次——中间那 90 秒采不到（判卷是阻塞的 spawnSync），所以这格只回答"起前/跑完有没有别人"，
   // 不回答"中途有没有"；红的时候它给的是**归因方向**，不是结论。
   psBefore = countConcurrentSuites(run(MAIN, "ps", ["-eo", "pid,pgid,command"]).out);
-  const t = run(TREE, "node", ["node_modules/vitest/vitest.mjs", "run", "--config", "tests/vitest.config.ts", "--reporter=default", "--reporter=json", `--outputFile.json=${join(logDir, "suite.json")}`], join(logDir, "test.log"));
+  const t = run(TREE, "node", ["node_modules/vitest/vitest.mjs", "run", "--config", "tests/vitest.config.ts", `--maxWorkers=${String(CERT_MAX_WORKERS)}`, "--reporter=default", "--reporter=json", `--outputFile.json=${join(logDir, "suite.json")}`], join(logDir, "test.log"));
   psAfter = countConcurrentSuites(run(MAIN, "ps", ["-eo", "pid,pgid,command"]).out);
   testStatus = t.status;
   const strip = t.out.replace(/\x1b\[[0-9;]*m/g, "");
   const files = /Test Files +(.*)$/m.exec(strip)?.[1] ?? "读不到";
   const tests = /\n *Tests +(.*)$/m.exec(strip)?.[1] ?? "读不到";
-  summary = `Test Files ${files}｜Tests ${tests}｜exit=${String(testStatus)}（退出码直接取，不接管道）`;
+  summary = `Test Files ${files}｜Tests ${tests}｜并发=maxWorkers ${String(CERT_MAX_WORKERS)}｜exit=${String(testStatus)}（退出码直接取，不接管道）`;
   // 贴帽读数（第 262 页，任务 #8）：逐条 duration 由**同一次**判卷顺手产出 ⇒ 零额外 spawn、零额外墙钟。
   // 只印不判：秒数会被负载挪动（规则 256），把它做成门禁等于造一把会自己变红/变绿的尺。
   // 取料两头都在**被认证的那棵树**里（判卷文件与 config 都按 `TARGET` 那一笔读，不是脚下的工作树）。

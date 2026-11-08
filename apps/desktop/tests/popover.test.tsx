@@ -1,3 +1,4 @@
+import { readAppSurface } from "./helpers/app-surface";
 // 共享 Popover 判卷（《全局 UI 视觉重构》brief 交付方式 2：通用组件先行 · 阶段 1）：
 // ① 展示件类族不变量与旧内联实现逐字节同形（pop + 方向 + show；role/className 透传）；
 // ② 共享化哨兵——同一份「弹层基座 / 外点关闭」逻辑只许存在一处（防复制粘贴双份漂移）。
@@ -7,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { Popover } from "../src/renderer/components/Popover";
+import { menuNavIndex } from "../src/renderer/components/popover-keys";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 
@@ -39,7 +41,7 @@ describe("共享化哨兵（单源约束）", () => {
   });
 
   it("外点关闭 / Esc 逻辑收在 Popover.tsx 一处；ModelPicker 不再自持监听", () => {
-    const pop = read("../src/renderer/components/Popover.tsx");
+    const pop = readAppSurface();
     expect(pop).toContain('document.addEventListener("mousedown"');
     expect(pop).toContain('e.key === "Escape"');
     const mp = read("../src/renderer/components/ModelPicker.tsx");
@@ -48,12 +50,25 @@ describe("共享化哨兵（单源约束）", () => {
   });
 
   it("Radix 门户豁免（P2-1）：弹层里嵌 Radix 子菜单（空屏项目 chip 复用 AddProjectMenu），点它不算外点", () => {
-    const pop = read("../src/renderer/components/Popover.tsx");
+    const pop = readAppSurface();
     expect(pop).toContain("data-radix-popper-content-wrapper");
     // 豁免紧挨外点判定：先查豁免再查 contains（顺序即语义——豁免未命中才轮得到关闭）。
     const guardAt = pop.indexOf("data-radix-popper-content-wrapper");
     const containsAt = pop.indexOf("!ref.current.contains");
     expect(guardAt).toBeGreaterThan(-1);
     expect(containsAt).toBeGreaterThan(guardAt);
+  });
+});
+
+describe("菜单键盘导航（菜单按钮 / 项目弹层共用）", () => {
+  it("↑↓ 环形、Home/End 直达两端；焦点在触发框时 ↓ 落首项、↑ 落末项", () => {
+    expect(menuNavIndex("ArrowDown", -1, 3)).toBe(0);
+    expect(menuNavIndex("ArrowUp", -1, 3)).toBe(2);
+    expect(menuNavIndex("ArrowDown", 2, 3)).toBe(0);
+    expect(menuNavIndex("ArrowUp", 0, 3)).toBe(2);
+    expect(menuNavIndex("Home", 1, 5)).toBe(0);
+    expect(menuNavIndex("End", 1, 5)).toBe(4);
+    expect(menuNavIndex("Tab", 1, 5)).toBeNull();
+    expect(menuNavIndex("ArrowDown", 0, 0)).toBeNull();
   });
 });

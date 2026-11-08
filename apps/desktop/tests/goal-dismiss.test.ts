@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { dismissedFrom } from "../src/renderer/goal-dismiss";
+import { readAppSurface } from "./helpers/app-surface";
 
 describe("dismissedFrom", () => {
   it("只收整数；坏数据/空值当没有", () => {
@@ -13,7 +14,7 @@ describe("dismissedFrom", () => {
   });
 
   it("App 启动读 storage、隐藏时写回", () => {
-    const app = readFileSync(fileURLToPath(new URL("../src/renderer/App.tsx", import.meta.url)), "utf8");
+    const app = readAppSurface();
     expect(app).toContain("useState<Map<string, number>>(() => readDismissedGoals())");
     expect(app).toContain("writeDismissedGoals(next);");
   });

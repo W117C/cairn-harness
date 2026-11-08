@@ -24,6 +24,7 @@
 // IO 壳（发请求、SSRF 判据、停滞看门狗）不在这里：本文件零依赖、纯函数，判卷只喂 JSON。
 
 /** 从 `GET /models` 里读出来的一条候选模型。除 `id` 外**全部可能缺席**，缺席就是缺席。 */
+import { isRecord } from "../is-record";
 export interface DiscoveredModel {
   /** 上游真实调用名（就是写进请求体的那个 model 字段）。 */
   id: string;
@@ -47,10 +48,6 @@ export interface DiscoveredModel {
  *  自定义 provider 只会挑其中一种，不新增第四种适配器。 */
 export const DISCOVERY_PROTOCOLS = ["openai", "anthropic", "gemini"] as const;
 export type DiscoveryProtocol = (typeof DISCOVERY_PROTOCOLS)[number];
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
 
 /** 非空字符串（trim 后）；否则 null —— 认不出就是没有，不给 ""。 */
 function nonEmptyString(v: unknown): string | null {

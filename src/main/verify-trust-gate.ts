@@ -48,7 +48,7 @@ export function createVerifyTrustGate(deps: VerifyTrustGateDeps): VerifyTrustRes
         { repoDir: req.repoDir, fingerprint: req.fingerprint, commands: [...req.commands] },
         {
           reason:
-            "自动验证拍要执行**仓库自带**的验证命令（来自 " +
+            "自动验证/诊断拍要执行**仓库自带**的命令（来自 " +
             (req.provenance === "repo-config" ? ".agent/config.json" : "package.json / Makefile 等探测面") +
             "）。批准 = 这批命令可以在这个仓里被自动执行（同一份内容以后再问一次都不用；" +
             "命令面一改就会重新出这张卡）。不批 = 这一拍不验，你自己用 run_shell 跑。",

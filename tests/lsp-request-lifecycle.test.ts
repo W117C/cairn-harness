@@ -125,17 +125,34 @@ describe("LSP 请求只清理自己拥有的等待状态", () => {
   });
 });
 
-async function requestServerWorkspace(stderrOnInitialize = 0, failInitialize = false) {
+async function requestServerWorkspace(stderrOnInitialize = 0, failInitialize = false, gateInput = false) {
   const dir = await mkdtemp(join(tmpdir(), "lsp-request-lifecycle-"));
   dirs.push(dir);
   const script = join(dir, "server.mjs");
   const protocol = pathToFileURL(createRequire(import.meta.url).resolve("vscode-languageserver-protocol/node")).href;
   await writeFile(script, `
 import { createProtocolConnection, StreamMessageReader, StreamMessageWriter, InitializeRequest, ShutdownRequest, ExitNotification } from ${JSON.stringify(protocol)};
-const conn = createProtocolConnection(new StreamMessageReader(process.stdin), new StreamMessageWriter(process.stdout));
+// 控制公开 MessageReader 的交付时机，明确把 request/cancel 同步交给 SDK；不赌两个定时器的先后。
+const source = new StreamMessageReader(process.stdin);
+let held = false;
+const messages = [];
+const input = ${gateInput} ? {
+  onError: source.onError, onClose: source.onClose, onPartialMessage: source.onPartialMessage,
+  dispose: () => source.dispose(),
+  listen: (callback) => source.listen((message) => {
+    if (message.method === "fixture/release-input") {
+      held = false;
+      for (const pending of messages.splice(0)) callback(pending);
+    } else if (held) messages.push(message);
+    else callback(message);
+  }),
+} : source;
+const conn = createProtocolConnection(input, new StreamMessageWriter(process.stdout));
 let count = 0;
 const pending = new Map();
 const cancelled = [];
+const cancelledAtEntry = [];
+conn.onRequest("fixture/hold-input", () => { held = true; return null; });
 const writeStderr = (bytes) => new Promise((resolve, reject) => {
   process.stderr.write(Buffer.alloc(bytes, 120), (error) => error ? reject(error) : resolve());
 });
@@ -151,12 +168,17 @@ conn.onRequest("fixture/noisy", async (params) => {
 conn.onRequest("fixture/query", (params, token) => new Promise((resolve, reject) => {
   const index = ++count;
   pending.set(index, { resolve, reject });
-  token.onCancellationRequested(() => {
+  if (token.isCancellationRequested) cancelledAtEntry.push(index);
+  const cancel = () => {
     cancelled.push(index);
     if (params.cancelOnToken) { pending.delete(index); resolve({ cancelled: true }); }
-  });
+  };
+  // 同批取消可先于 handler；先检查当前状态，再订阅后续事件。
+  if (token.isCancellationRequested) cancel();
+  else token.onCancellationRequested(cancel);
 }));
 conn.onRequest("fixture/count", () => count);
+conn.onRequest("fixture/cancelledAtEntry", () => cancelledAtEntry);
 conn.onRequest("fixture/state", () => ({ count, pending: [...pending.keys()], cancelled }));
 conn.onRequest("fixture/release", (params) => {
   const request = pending.get(params.index);
@@ -201,6 +223,23 @@ describe("官方 JSON-RPC 链路的超时重试", () => {
     const state = await client.request("fixture/state", {});
     await client.request("fixture/release", { index: 2 });
     expect(await other).toEqual({ request: 2 });
+    expect(state).toEqual({ count: 2, pending: [2], cancelled: [1] });
+  });
+
+  it("请求与取消同批到达，handler 开始前已取消也只释放自己的任务", async () => {
+    const dir = await requestServerWorkspace(0, false, true);
+    setLspTrustedRepos([dir]);
+    const client = await getLspClient(dir, loadLspConfig(dir), "fixture");
+    await client.request("fixture/hold-input", {});
+    const expired = expect(client.request("fixture/query", { query: "batched", cancelOnToken: true }, 20)).rejects.toThrow("超时（20ms）");
+    const other = client.request("fixture/query", { query: "other" });
+    await expired;
+    const statePromise = client.request("fixture/state", {});
+    await client.notify("fixture/release-input", {});
+    const state = await statePromise;
+    await client.request("fixture/release", { index: 2 });
+    expect(await other).toEqual({ request: 2 });
+    expect(await client.request("fixture/cancelledAtEntry", {})).toEqual([1]);
     expect(state).toEqual({ count: 2, pending: [2], cancelled: [1] });
   });
 

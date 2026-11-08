@@ -14,6 +14,7 @@ import {
   renderDoctor,
   readCapabilities,
   runDoctor,
+  runDoctorForWorkspace,
   trustCountsText,
   trustFaceCheck,
   verdictOf,
@@ -22,7 +23,7 @@ import {
   type TrustFaceFacts,
 } from "../src/main/doctor";
 import { effectiveModelTable } from "../src/providers/registry";
-import { PROVIDER_ENV_KEYS } from "../src/providers/env-keys";
+import { ENV_KEYED_PROVIDERS, PROVIDER_ENV_KEYS } from "../src/providers/env-keys";
 import { DEFAULT_MODEL_TABLE, specsByTier } from "../src/providers/registry";
 
 const RANGE = parseEngines(">=20.11.0 <25")!;
@@ -80,6 +81,8 @@ function facts(over: Partial<DoctorFacts> = {}): DoctorFacts {
     keyPresence: { CAIRN_API_KEY: true, OPENAI_API_KEY: false, ANTHROPIC_API_KEY: false, GEMINI_API_KEY: false },
     sandbox: { available: true },
     workspaceWritable: true,
+    settingsFace: { kind: "absent", path: "/fixture/ws/.agent/settings.json" },
+    sessionsFace: { kind: "absent", path: "/fixture/ws/.agent/sessions/session-metadata.json" },
     search: { kind: "unset" },
     tierCounts: TIER_COUNTS,
     trust: TRUST_OK,
@@ -87,7 +90,7 @@ function facts(over: Partial<DoctorFacts> = {}): DoctorFacts {
   };
 }
 
-describe("collectDoctorChecks（七项固定清单，spec §2 ＋ 第 432 页的信任落点）", () => {
+describe("collectDoctorChecks（九项固定清单，spec §2 ＋ 第 432 页信任落点 ＋ 用户数据面两项）", () => {
   it("脱敏：sk- 形态的串进不了渲染面（事实结构里就没有值的字段）", () => {
     const checks = collectDoctorChecks(
       facts({ keyPresence: { CAIRN_API_KEY: false, OPENAI_API_KEY: true, ANTHROPIC_API_KEY: false, GEMINI_API_KEY: false } }),
@@ -104,12 +107,18 @@ describe("collectDoctorChecks（七项固定清单，spec §2 ＋ 第 432 页的
     expect(keys.ok).toBe(false);
     expect(keys.fatal).toBe(false);
     expect(keys.hint).toContain("--provider demo");
+    // DeepSeek 入表后计数与变量名必须现读（此前写死「四个 provider key」= 对第五家的谎报）。
+    expect(keys.detail).toContain(`${String(ENV_KEYED_PROVIDERS.length)} 个 provider key 全部未设`);
+    expect(keys.detail).toContain(PROVIDER_ENV_KEYS.deepseek);
+    expect(keys.hint).toContain(PROVIDER_ENV_KEYS.deepseek);
   });
 
   it("keys：部分在位 ⇒ detail 点名缺省将拨谁（按 ENV_KEYED_PROVIDERS 表序第一个在位的）", () => {
     const keys = collectDoctorChecks(facts()).find((x) => x.id === "keys")!;
     expect(keys.ok).toBe(true);
     expect(keys.detail).toContain(PROVIDER_ENV_KEYS.glm);
+    // 未设清单里也要点名 DeepSeek（用户排查「为什么没拨它」的第一站）。
+    expect(keys.detail).toContain(PROVIDER_ENV_KEYS.deepseek);
   });
 
   it("node：版本不满足 ⇒ fatal（唯一 exit 1 项）；engines 解析失败 ⇒ 同样 fatal", () => {
@@ -133,6 +142,29 @@ describe("collectDoctorChecks（七项固定清单，spec §2 ＋ 第 432 页的
     expect(collectDoctorChecks(facts({ search: { kind: "ok" } })).find((x) => x.id === "search")!.ok).toBe(true);
   });
 
+  it("设置/会话元数据：缺席 = ok（新工作区）；坏档 = ✗ 非致命，点名文件与出路", () => {
+    const absent = collectDoctorChecks(facts());
+    expect(absent.find((c) => c.id === "settings")!.ok).toBe(true);
+    expect(absent.find((c) => c.id === "sessions")!.ok).toBe(true);
+
+    const settingsPath = "/ws/.agent/settings.json";
+    const sessionsPath = "/ws/.agent/sessions/session-metadata.json";
+    const broken = collectDoctorChecks(facts({
+      settingsFace: { kind: "broken", path: settingsPath, message: "JSON 解析失败：Unexpected token" },
+      sessionsFace: { kind: "broken", path: sessionsPath, message: "会话元数据损坏，已拒绝覆盖" },
+    }));
+    const s = broken.find((c) => c.id === "settings")!;
+    expect(s.ok).toBe(false);
+    expect(s.fatal).toBe(false);
+    expect(s.detail).toContain(settingsPath);
+    expect(s.hint).toContain("修好或删除");
+    const m = broken.find((c) => c.id === "sessions")!;
+    expect(m.ok).toBe(false);
+    expect(m.fatal).toBe(false);
+    expect(m.detail).toContain(sessionsPath);
+    expect(verdictOf(broken)).toEqual({ verdict: "部分就绪", exitCode: 0 });
+  });
+
   it("tiers：只报数，恒 ok，detail 带三档分布", () => {
     const t = collectDoctorChecks(facts()).find((x) => x.id === "tiers")!;
     expect(t.ok).toBe(true);
@@ -140,13 +172,15 @@ describe("collectDoctorChecks（七项固定清单，spec §2 ＋ 第 432 页的
     expect(t.detail).toContain(" 条（cheap " + TIER_COUNTS.cheap + " / standard " + TIER_COUNTS.standard + " / strong " + TIER_COUNTS.strong);
   });
 
-  it("固定清单＝七项，顺序即渲染顺序，第七项是 trust（第 432 页带进来的那一格）", () => {
+  it("固定清单＝九项，顺序即渲染顺序（settings/sessions 插在 workspace 之后，trust 仍是最后一项）", () => {
     expect(collectDoctorChecks(facts()).map((c) => c.id)).toEqual([
       "node",
       "keys",
       "tiers",
       "sandbox",
       "workspace",
+      "settings",
+      "sessions",
       "search",
       "trust",
     ]);
@@ -263,6 +297,52 @@ describe("runDoctor（IO 壳，tmpdir 真工作区）", () => {
       expect(r.checks.find((c) => c.id === "workspace")!.ok).toBe(true);
       expect(r.checks.find((c) => c.id === "search")!.detail).toContain("search.endpoint 未配");
     } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  it("设置/会话元数据坏档 ⇒ 两项 ✗ 并点名文件（报告不抛、非致命）；空工作区两项 ok", async () => {
+    const ws = mkdtempSync(join(tmpdir(), "doctor-data-"));
+    try {
+      const clean = await runDoctor(ws, { sandbox: { available: true } });
+      expect(clean.checks.find((c) => c.id === "settings")!.ok).toBe(true);
+      expect(clean.checks.find((c) => c.id === "sessions")!.ok).toBe(true);
+
+      const settingsPath = join(ws, ".agent", "settings.json");
+      const sessionsPath = join(ws, ".agent", "sessions", "session-metadata.json");
+      mkdirSync(join(ws, ".agent", "sessions"), { recursive: true });
+      writeFileSync(settingsPath, "{oops");
+      writeFileSync(sessionsPath, "{oops");
+      const bad = await runDoctor(ws, { sandbox: { available: true } });
+      const s = bad.checks.find((c) => c.id === "settings")!;
+      const m = bad.checks.find((c) => c.id === "sessions")!;
+      expect(s.ok).toBe(false);
+      expect(s.fatal).toBe(false);
+      expect(s.detail).toContain(settingsPath);
+      expect(m.ok).toBe(false);
+      expect(m.fatal).toBe(false);
+      expect(m.detail).toContain(sessionsPath);
+      expect(bad.verdict).toBe("部分就绪");
+      expect(bad.exitCode).toBe(0);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  it("会话目录只读 ⇒ sessions 项 ✗ 并点名「会话目录不可写」（只报不阻断）", async () => {
+    const ws = mkdtempSync(join(tmpdir(), "doctor-ro-sessions-"));
+    const sessions = join(ws, ".agent", "sessions");
+    mkdirSync(sessions, { recursive: true });
+    chmodSync(sessions, 0o500);
+    try {
+      const r = await runDoctor(ws, { sandbox: { available: true } });
+      const m = r.checks.find((c) => c.id === "sessions")!;
+      expect(m.ok).toBe(false);
+      expect(m.fatal).toBe(false);
+      expect(m.detail).toMatch(/会话目录不可写/);
+      expect(r.exitCode).toBe(0);
+    } finally {
+      chmodSync(sessions, 0o700);
       rmSync(ws, { recursive: true, force: true });
     }
   });
@@ -492,6 +572,33 @@ describe("readCapabilities：能力在场性读数（桌面端「模型为什么
       // 声没声明由图说；但两种态都不许变成「已实测支持」。
       expect(got.vision.state).toBe(declared ? "declared" : "undeclared");
       if (!declared) expect(got.vision.declaredModalities).not.toContain("image");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// 2026-10-30（v34）：桌面「运行诊断」的入口。没有工作区时不猜根；有工作区时走同一套检查核。
+describe("runDoctorForWorkspace（桌面入口）", () => {
+  it("没有工作区 ⇒ 可操作的错误，不拿错根硬跑", async () => {
+    expect(await runDoctorForWorkspace(null)).toEqual({ ok: false, error: "先在当前窗口打开一个项目，再运行诊断" });
+    expect(await runDoctorForWorkspace("   ")).toEqual({ ok: false, error: "先在当前窗口打开一个项目，再运行诊断" });
+  });
+
+  it("真实临时工作区 ⇒ 九项检查全在、总档三选一（沙箱读数注入，不赌机器态）", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "doctor-desktop-"));
+    try {
+      const r = await runDoctorForWorkspace(dir, {
+        sandbox: { available: true },
+        nodeVersion: "22.0.0",
+        engines: ">=20.11.0 <25",
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.report.checks.map((c) => c.id)).toEqual([
+        "node", "keys", "tiers", "sandbox", "workspace", "settings", "sessions", "search", "trust",
+      ]);
+      expect(["就绪", "部分就绪", "未就绪"]).toContain(r.report.verdict);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

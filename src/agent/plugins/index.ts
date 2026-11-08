@@ -4,15 +4,20 @@
 import { dirname, join } from "node:path";
 import type { PermissionMode } from "../../permissions/modes";
 import {
-  discoverPlugins, activeHooks,
+  discoverPlugins, activeHooks, pendingPlugins,
 } from "./discover";
-import { TrustStore, pluginFingerprintEx } from "./trust";
-import { HookEngine } from "./hooks";
-import { McpManager, type McpToolInfo } from "./mcp";
+import { defaultForeignSources, type ForeignSource } from "./foreign";
+import { TrustStore, pluginFingerprint, pluginFingerprintEx } from "./trust";
+import { HookEngine, type HookModelCallFn } from "./hooks";
+import {
+  McpManager, capMcpDescription, mcpServerKey, scopedToolName,
+  MCP_ACTIVE_SERVER_LIMIT, MCP_ACTIVE_TOOL_LIMIT, MCP_CATALOG_DESC_CHAR_LIMIT,
+  type McpToolInfo, type McpServerSummary, type McpToolSummary,
+} from "./mcp";
 import {
   buildSkillRoutingList, skillInvokeName, commandInvokeName, resolveSkillName, skillRemount, modelInvocable,
-  clampSkillBody, skillRecallSuffix, substituteVars, declaredArgumentNames, expandConfigVars, expandUserConfig, referencedUserConfigKeys,
-  skillToolPolicy,
+  clampSkillBody, clampSkillBodyWithResources, skillRecallSuffix, skillResourceSuffix, substituteVars, declaredArgumentNames, expandConfigVars, expandUserConfig, referencedUserConfigKeys,
+  skillToolPolicy, capRoutingText,
   SKILL_REMOUNT_TOKENS_PER_SKILL,
   type ActivatedSkill, type RoutingListResult, type RemountResult, type SubstitutionContext, type SkillToolPolicy,
 } from "./skills";
@@ -23,13 +28,14 @@ import { loadUserAgentRoles, userAgentInvoke, type UserAgentRole } from "../role
 import {
   registerPluginLspServers, unregisterPluginLspServers, closePluginLspClients, type LspServerConfig as LspRuntimeConfig,
 } from "../../tools/lsp";
-import type { AgentEvent, ToolCallEvent, ToolResultEvent, UserMessageEvent } from "../../events";
+import { isNumericCompaction, type AgentEvent, type ToolCallEvent, type ToolResultEvent, type UserMessageEvent } from "../../events";
 import { userConfigValuesErrors } from "./manifest";
 import type {
   DiscoveredPlugin, LoadedHookDef, LooseSkill, PluginsManifest, SkillEntry, McpServerStatus,
 } from "./types";
 
 export * from "./types";
+export { defaultForeignSources, FOREIGN_LAYOUTS } from "./foreign";
 export {
   parseUserConfigFields,
   sensitiveUserConfigKeys,
@@ -58,15 +64,28 @@ export {
 export { parseFrontmatter, fmString } from "./frontmatter";
 export { discoverPlugins, activeHooks, pendingPlugins } from "./discover";
 export { TrustStore, pluginFingerprint } from "./trust";
-export { HookEngine, hookEnv, pluginOptionEnv, parseHookDecision, mergeDecision, parseHookIf, hookIfMatches, HOOK_OUTPUT_CAP, HOOK_CONTEXT_TOTAL_CHAR_LIMIT, HOOK_REASON_CHAR_LIMIT, HOOK_TIMEOUT_DEFAULT, HOOK_TIMEOUT_USER_PROMPT, type HookEngineOptions } from "./hooks";
-export { McpManager, expandMcpConfig, scopedToolName, parseScopedToolName, type McpToolInfo, type McpConnectResult } from "./mcp";
+export { HookEngine, hookEnv, pluginOptionEnv, parseHookDecision, mergeDecision, parseHookIf, hookIfMatches,
+  hookStdinJson, hookPayloadJson, hookShapeRejection, hookUrlAllowed, expandHookTemplate, dedupKey,
+  HOOK_OUTPUT_CAP, HOOK_CONTEXT_TOTAL_CHAR_LIMIT, HOOK_REASON_CHAR_LIMIT, HOOK_TIMEOUT_MAX,
+  HOOK_TIMEOUT_DEFAULT, HOOK_TIMEOUT_USER_PROMPT, HOOK_TIMEOUT_SESSION_END,
+  type HookEngineOptions, type HookFetchFn, type HookFetchResult, type HookMcpCallFn,
+  type HookModelCallFn, type HookModelResult,
+  type HookExecFn, type HookExecOutcome, type HookPayload, type HookRunResult,
+} from "./hooks";
+export {
+  McpManager, expandMcpConfig, scopedToolName, parseScopedToolName, mcpServerKey,
+  MCP_ACTIVE_SERVER_LIMIT, MCP_ACTIVE_TOOL_LIMIT, MCP_CATALOG_DESC_CHAR_LIMIT,
+  type McpToolInfo, type McpConnectResult, type McpServerSummary, type McpToolSummary,
+} from "./mcp";
 export {
   buildSkillRoutingList, skillInvokeName, resolveSkillName, skillRoutingLine, substituteVars, declaredArgumentNames,
   expandConfigVars, expandUserConfig, referencedUserConfigKeys,
-  renderPromptCommand, commandInvokeName, expandPromptCommand, expandSkillInvocation, skillRemount, clampSkillBody, estimateTokens, skillRecallSuffix,
+  renderPromptCommand, commandInvokeName, expandPromptCommand, expandSkillInvocation, skillRemount, clampSkillBody, clampSkillBodyWithResources, estimateTokens, skillRecallSuffix,
+  skillResourceSuffix, SKILL_RESOURCE_LIST_MAX, SKILL_RESOURCE_LIST_CHAR_LIMIT,
   skillToolPolicy, modelInvocable, type SkillToolPolicy,
   type CommandExpansion, type SkillUserExpansion, type SubstitutionContext,
-  SKILL_ROUTING_CHAR_LIMIT, SKILL_REMOUNT_TOKENS_PER_SKILL, SKILL_REMOUNT_TOKENS_TOTAL,
+  SKILL_ROUTING_CHAR_LIMIT, SKILL_ROUTING_DESC_CHAR_LIMIT, capRoutingText,
+  SKILL_REMOUNT_TOKENS_PER_SKILL, SKILL_REMOUNT_TOKENS_TOTAL,
   type ActivatedSkill, type RoutingListResult, type RemountResult,
 } from "./skills";
 
@@ -77,11 +96,19 @@ export interface PluginRuntimeOptions {
    *  显式给空串＝关掉这一顶根（判卷与「只想看别的根」的脚本用）。 */
   projectSkillsDir?: string;
   looseRoots?: string[];
+  /** 外部声明式来源（opencode / pi / codex / qoder / claude）。缺省 =
+   *  `defaultForeignSources(workspace, home)`：项目级五顶根，带 home 时再加用户级。 */
+  foreignSources?: ForeignSource[];
   workspace: string;
   /** 插件数据根（PLUGIN_DATA / 超限落盘）。 */
   pluginDataRoot: string;
   /** 信任决议存储路径（项目级插件；缺省不持久 = 全部 pending）。 */
   trustFile?: string;
+  /** 用户级 MCP 配置路径（<appData>/mcp.json；ZCode 独立管理对应面）。给了就读取并合成虚拟插件
+   *  user-mcp（user 作用域恒 trusted）；缺省 = 不读。 */
+  userMcpConfigPath?: string;
+  /** 用户级 hooks 配置路径（<appData>/hooks.json）。给了就读取并合成虚拟插件 user-hooks；缺省 = 不读。 */
+  userHooksConfigPath?: string;
   /** hook 权限档（类型取自 `permissions/modes`，不再自己抄一份 union）。 */
   mode?: PermissionMode;
   /** 会话标识：透传给 hook 引擎进 stdin JSON（§9.5）。缺省 = 该字段不进 JSON，不伪造。 */
@@ -114,6 +141,16 @@ export function defaultPluginDataRoot(home: string): string {
   return join(home, ".config", "cairn", PLUGIN_DATA_DIR_NAME);
 }
 
+/** 用户级安装目录与信任/配置数据同顶，但只扫描 `plugins/`；disabled/staging 永远在它之外。 */
+export function defaultUserPluginsDir(home: string): string {
+  return userPluginsDirOf(defaultPluginDataRoot(home));
+}
+
+/** 已解析数据根对应的用户级插件扫描目录。 */
+export function userPluginsDirOf(pluginDataRoot: string): string {
+  return join(pluginDataRoot, "plugins");
+}
+
 /** 数据根的唯一决议：显式 `M2E_PLUGIN_DATA` 优先，空串按「没给」处理（与旧的 truthy 判定同义）。
  *  纯函数（env 与 home 都从参数进）是为了这一格能被秒级判卷直接问，而不是只在装配面间接可见。 */
 export function pluginDataRootOf(env: NodeJS.ProcessEnv, home: string): string {
@@ -137,14 +174,21 @@ export function projectSkillsRootOf(workspace: string): string {
 export function activationsFromEvents(
   events: AgentEvent[],
   /** 第二参 = 那次 tool_call 实下的 `args`（§9.3 的参数替换要在重挂时重放；无参数 = 空串）。 */
-  resolve: (invokeName: string, argsString: string) => { body: string } | null,
+  resolve: (invokeName: string, argsString: string) => { body: string; suffix?: string } | null,
 ): ActivatedSkill[] {
   const out: ActivatedSkill[] = [];
   const pending = new Map<string, { invoke: string; args: string; index: number }>();
   events.forEach((e, index) => {
     if (e.type === "user_message" && (e as UserMessageEvent).skill) {
       const m = (e as UserMessageEvent).skill!;
-      out.push({ invoke: m.invoke, body: resolve(m.invoke, m.args)?.body ?? "", triggerEventId: index + 1, seq: out.length });
+      const resolved = resolve(m.invoke, m.args);
+      out.push({
+        invoke: m.invoke,
+        body: resolved?.body ?? "",
+        ...(resolved?.suffix !== undefined ? { suffix: resolved.suffix } : {}),
+        triggerEventId: index + 1,
+        seq: out.length,
+      });
     } else if (e.type === "tool_call" && (e as ToolCallEvent).name === "skill") {
       const raw = (e as ToolCallEvent).args?.name;
       if (typeof raw === "string") {
@@ -156,7 +200,14 @@ export function activationsFromEvents(
       const r = e as ToolResultEvent;
       const p = pending.get(r.callId);
       if (p && r.ok) {
-        out.push({ invoke: p.invoke, body: resolve(p.invoke, p.args)?.body ?? "", triggerEventId: index + 1, seq: out.length });
+        const resolved = resolve(p.invoke, p.args);
+        out.push({
+          invoke: p.invoke,
+          body: resolved?.body ?? "",
+          ...(resolved?.suffix !== undefined ? { suffix: resolved.suffix } : {}),
+          triggerEventId: index + 1,
+          seq: out.length,
+        });
         pending.delete(r.callId);
       }
     }
@@ -193,6 +244,13 @@ export interface PluginPanelSnapshot {
   /** 审查 S2-12（任务 4.6）：loose 样本同样要能被面板列出并被决议 => 带 name/trust。 */
   looseSkills: { name: string; invoke: string; description: string; trust: string }[];
   mcpServers: McpServerStatus[];
+  /** 本 run 整台激活的 MCP server key（`plugin/server`）；空 = 没有整台装载的 server。
+   *  旧快照/手写夹具可缺省：渲染层按空表处理，不把「没记录」读成「没有激活」。 */
+  activeMcpServers?: string[];
+  /** 本 run 按工具激活的 scoped 名（大 server 的子集模式）。 */
+  activeMcpTools?: string[];
+  /** MCP 激活态的单一读取面（server / tools / none + activeToolCount）；面板直接用这张表。 */
+  mcpServerSummaries?: McpServerSummary[];
   /** §9.3 权限联动的本 turn 账：哪些 skill/command 被激活过、各自申报了什么工具面改动。
    *  面板与判据读同一份（审计与可解释：申报了 allowed-tools 却仍需确认时，这里看得见是谁）。 */
   toolScopes: { invoke: string; allow: string[]; deny: string[] }[];
@@ -206,10 +264,22 @@ export class PluginRuntime {
   mcp: McpManager;
   trust: TrustStore;
   private opts: PluginRuntimeOptions;
-  /** 本轮已注册的 MCP 工具（scoped 名 → 定义；统一注册表的插件侧贡献）。 */
+  /** 本轮已注册的 MCP 工具（scoped 名 → 定义；统一注册表的插件侧贡献）。
+   *  连接期仍会列全部工具（目录需要），但**只有整台 active 的 server 或 activeMcpTools 里的 scoped 名**
+   *  才进模型面/执行表。 */
   mcpTools: Map<string, McpToolInfo & { plugin: string; server: string }> = new Map();
+  /** 整台激活的 server key 集：一次 run 的生命周期（同 skillScopes）。 */
+  private activeMcpServers = new Set<string>();
+  /** 按工具激活的 scoped 名集（大 server 的逃生口）。整台激活的 server 不重复记在这里。 */
+  private activeMcpTools = new Set<string>();
+  /** 崩溃前这个 server 哪些工具在激活集里：自动重连成功后按原样放回去。
+   *  不记这份，重连回来只是一堆"未激活"的工具——连接绿了，模型那边还是少工具。 */
+  private mcpActiveBeforeDown = new Map<string, string[]>();
   /** 本轮已注册进 LSP 运行时的插件服务器 id（带插件前缀）；shutdown 按这张表摘干净。 */
   private lspServerIds: string[] = [];
+  /** prompt 档钩子的模型面（晚绑定，见 `bindModelCall`）。`reload` 会换掉引擎实例，
+   *  所以这份要记在运行时上、换完再贴回去——绑过一次就永久生效这件事不该依赖实例身份。 */
+  private hookModelCall: HookModelCallFn | null = null;
   /** §9.5 userConfig 的读侧（一个受信插件一份）。三条激活面（hook / MCP / LSP）都从这里取值。 */
   private userConfigs: Map<string, PluginUserConfigRead> = new Map();
   /** §9.3 权限联动的持有面：本 run 内被激活过的 skill/command 申报的工具改动。
@@ -230,15 +300,41 @@ export class PluginRuntime {
       pluginDataRoot: opts.pluginDataRoot,
       ...(opts.mode ? { mode: opts.mode } : {}),
       ...(opts.sessionId ? { sessionId: opts.sessionId } : {}),
-      // exec form 的 ${user_config.*} 展开与 PLUGIN_OPTION_* 取值共用这一份解析结果。
+      // mcp_tool 档的钩子走这一个口子：与模型可见的工具调用共享连接态、include/exclude 裁剪、
+      // 超时与取消纪律。钩子不另开一条 MCP 通道（两条通道必漂，且第二条没有闸）。
+      mcpCall: (plugin, server, tool, args) => this.mcp.callTool(plugin, server, tool, args),
+      mcpToolGrade: (plugin, server, tool) =>
+        this.mcpTools.get(scopedToolName(plugin, server, tool))?.grade,
+      // §9.5 userConfig 的取值面：exec form 的 ${user_config.*} 展开与 PLUGIN_OPTION_* 共用这一份解析结果。
       userConfigValues: (plugin) => this.userConfigs.get(plugin)?.values ?? {},
       userConfigSensitive: (plugin) => this.userConfigs.get(plugin)?.sensitive ?? [],
     });
     this.mcp = new McpManager();
     // server 崩溃 ⇒ 立即摘掉它的工具（旧实现只标 failed，模型仍看到一组永远「未连接」的工具）。
     this.mcp.onServerDown = (plugin, server) => {
+      const key = mcpServerKey(plugin, server);
+      const wasActive = [...this.activeMcpTools].filter((scoped) => {
+        const info = this.mcpTools.get(scoped);
+        return info !== undefined && info.plugin === plugin && info.server === server;
+      });
+      if (wasActive.length > 0) this.mcpActiveBeforeDown.set(key, wasActive);
+      this.clearActiveForServer(plugin, server);
       for (const [name, info] of this.mcpTools) {
         if (info.plugin === plugin && info.server === server) this.mcpTools.delete(name);
+      }
+    };
+    // 第 999 页：manager 自己重连成功后，工具必须回到模型看得见的那张表上。
+    this.mcp.onServerUp = (plugin, server, tools) => {
+      const key = mcpServerKey(plugin, server);
+      for (const t of tools) this.mcpTools.set(t.scopedName, { ...t, plugin, server });
+      const wasActive = this.mcpActiveBeforeDown.get(key) ?? [];
+      this.mcpActiveBeforeDown.delete(key);
+      if (wasActive.length === 0) return;
+      // 走正常激活入口（帽、校验都在里面）：超限就退回"连接已恢复但工具未激活"，
+      // 不偷偷绕过帽——那等于把重连变成一条走后门的扩容路。
+      const res = this.activateMcpTools(key, wasActive);
+      if (!res.ok) {
+        try { console.error("[mcp] " + key + " 重连后恢复激活集失败：" + (res.error ?? "")); } catch { /* 无 stderr */ }
       }
     };
   }
@@ -253,6 +349,9 @@ export class PluginRuntime {
       // 缺省取装配面那个唯一算法（不在调用方拼路径）；显式空串＝关掉这一顶（`??` 不把 "" 当没给）。
       projectSkillsDir: opts.projectSkillsDir ?? projectSkillsRootOf(opts.workspace),
       ...(opts.looseRoots ? { looseRoots: opts.looseRoots } : {}),
+      foreignSources: opts.foreignSources ?? defaultForeignSources(opts.workspace, opts.home),
+      ...(opts.userMcpConfigPath ? { userMcpConfigPath: opts.userMcpConfigPath } : {}),
+      ...(opts.userHooksConfigPath ? { userHooksConfigPath: opts.userHooksConfigPath } : {}),
       trustStatus: (abs, fp, bounded) => trust.statusSync(abs, fp, bounded),
     });
     const rt = new PluginRuntime(manifest, opts);
@@ -382,21 +481,32 @@ export class PluginRuntime {
     // 旧实现取扫描序第一个 ⇒ 用户批的是 A，落信任的可能是 B 的执行面。
     // 判不准就不落：歧义时拒绝本次决议（fail-closed），面板仍显示待信任。
     const matches = [
-      ...this.manifest.plugins.map((x) => ({ name: x.name, root: x.root })),
-      ...this.manifest.looseSkills.map((x) => ({ name: x.name, root: x.root })),
+      ...this.manifest.plugins.map((x) => ({ name: x.name, root: x.root, fingerprint: x.fingerprint })),
+      ...this.manifest.looseSkills.map((x) => ({ name: x.name, root: x.root, fingerprint: x.fingerprint })),
     ].filter((x) => x.name === pluginName);
     if (matches.length !== 1) return false;
     const target = matches[0]!;
-    const { fp, bounded } = await pluginFingerprintEx(target.root);
+    // 指纹必须与**发现侧**算的是同一份：外部来源按被导入目录算子集指纹，这里若另算全量根指纹，
+    // 写下的 `abs@fp` 永远不被重载查询命中（批准了还弹卡）。旧快照/手写夹具没有这一格才回退。
+    const { fp, bounded } = target.fingerprint ?? await pluginFingerprintEx(target.root);
     await this.trust.decide(target.root, trusted, fp, bounded);
     const reloaded = await PluginRuntime.load(this.opts);
     const inactive = this.manifest.plugins.filter((plugin) =>
       reloaded.manifest.plugins.find((current) => current.name === plugin.name)?.trust !== "trusted");
     this.manifest = reloaded.manifest;
     this.hooks = reloaded.hooks;
+    // 晚绑定的模型面跟着引擎实例走：reload 换实例，不换绑定关系。
+    if (this.hookModelCall !== null) this.hooks.bindModelCall(this.hookModelCall);
     this.userConfigs = reloaded.userConfigs;
     const cleanups: Promise<void>[] = [];
     for (const plugin of inactive) {
+      for (const key of [...this.activeMcpServers]) {
+        if (key.startsWith(plugin.name + "/")) this.activeMcpServers.delete(key);
+      }
+      for (const scoped of [...this.activeMcpTools]) {
+        const info = this.mcpTools.get(scoped);
+        if (info && info.plugin === plugin.name) this.activeMcpTools.delete(scoped);
+      }
       for (const [name, info] of this.mcpTools) if (info.plugin === plugin.name) this.mcpTools.delete(name);
       const ids = this.lspServerIds.filter((id) => id.startsWith(plugin.name + ":"));
       unregisterPluginLspServers(this.opts.workspace, ids);
@@ -404,7 +514,12 @@ export class PluginRuntime {
       cleanups.push(this.mcp.disconnectPlugin(plugin.name), closePluginLspClients(this.opts.workspace, ids));
     }
     await Promise.all(cleanups);
-    return true;
+    // 决议是否真的落地：重载后仍 pending 就说没生效，不拿「已批准」冒充。
+    const applied = [
+      ...reloaded.manifest.plugins.map((x) => ({ name: x.name, trust: x.trust })),
+      ...reloaded.manifest.looseSkills.map((x) => ({ name: x.name, trust: x.trust })),
+    ].find((x) => x.name === pluginName);
+    return trusted ? applied?.trust === "trusted" : applied?.trust === "declined";
   }
 
   /** 激活全部受信插件的 MCP server（未信任/declined 不连接）。 */
@@ -413,6 +528,10 @@ export class PluginRuntime {
       if (p.trust !== "trusted") continue;
       for (const { serverName, config } of p.mcp) {
         if (this.manifest.plugins.find((current) => current.name === p.name)?.trust !== "trusted") break;
+        if (config.disabled === true) {
+          this.clearActiveForServer(p.name, serverName);
+          continue;
+        }
         const res = await this.mcp.connect(p.name, serverName, config, {
           pluginRoot: p.root,
           projectDir: this.opts.workspace,
@@ -426,6 +545,193 @@ export class PluginRuntime {
         }
       }
     }
+  }
+
+  /** MCP 服务器目录（只读：server 名 + 工具数 + 激活模式；不含 schema）。 */
+  mcpServerSummaries(): McpServerSummary[] {
+    const grouped = new Map<string, { plugin: string; server: string; toolCount: number; activeTools: number }>();
+    for (const info of this.mcpTools.values()) {
+      const key = mcpServerKey(info.plugin, info.server);
+      const cur = grouped.get(key);
+      if (cur) cur.toolCount++;
+      else grouped.set(key, { plugin: info.plugin, server: info.server, toolCount: 1, activeTools: 0 });
+      if (this.activeMcpTools.has(info.scopedName)) grouped.get(key)!.activeTools++;
+    }
+    return [...grouped.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, v]) => {
+        const whole = this.activeMcpServers.has(key);
+        const activeToolCount = whole ? v.toolCount : v.activeTools;
+        return {
+          key,
+          plugin: v.plugin,
+          server: v.server,
+          toolCount: v.toolCount,
+          active: whole || v.activeTools > 0,
+          activeMode: whole ? "server" : v.activeTools > 0 ? "tools" : "none",
+          activeToolCount,
+        };
+      });
+  }
+
+  /** 单台 server 的工具摘要（名字 + 截断描述 + 当前 active；不含 schema）；未知 key = null。 */
+  mcpServerTools(key: string): McpToolSummary[] | null {
+    const rows = [...this.mcpTools.values()].filter((info) => mcpServerKey(info.plugin, info.server) === key);
+    if (rows.length === 0) return null;
+    return rows
+      .map((info) => ({
+        name: info.name,
+        scopedName: info.scopedName,
+        description: capMcpDescription(info.description, MCP_CATALOG_DESC_CHAR_LIMIT),
+        active: this.isMcpToolActive(info.scopedName),
+      }))
+      .sort((a, b) => a.scopedName.localeCompare(b.scopedName));
+  }
+
+  /** 整台 server 是否已激活（按工具激活不算）。UI/兼容面仍可用它看「整台」状态。 */
+  isMcpServerActive(key: string): boolean {
+    return this.activeMcpServers.has(key);
+  }
+
+  /** 某把 scoped 工具是否在模型面：整台激活或按工具激活。 */
+  isMcpToolActive(scopedName: string): boolean {
+    const info = this.mcpTools.get(scopedName);
+    if (!info) return false;
+    return this.activeMcpServers.has(mcpServerKey(info.plugin, info.server)) || this.activeMcpTools.has(scopedName);
+  }
+
+  /** 当前实际激活的工具总数（整台 server 的工具数 + 按工具集；整台 server 覆盖的不重复计）。 */
+  activeMcpToolCount(): number {
+    let n = 0;
+    for (const info of this.mcpTools.values()) if (this.isMcpToolActive(info.scopedName)) n++;
+    return n;
+  }
+
+  /** 整台激活的 server key（按工具模式不在这里；面板用 mcpServerSummaries 看混合态）。 */
+  activeMcpServerKeys(): string[] {
+    return [...this.activeMcpServers].sort();
+  }
+
+  /** 按工具激活的 scoped 名（面板显示具体哪几把）。 */
+  activeMcpToolKeys(): string[] {
+    return [...this.activeMcpTools].sort();
+  }
+
+  private clearActiveForServer(plugin: string, server: string): void {
+    this.activeMcpServers.delete(mcpServerKey(plugin, server));
+    for (const scoped of [...this.activeMcpTools]) {
+      const info = this.mcpTools.get(scoped);
+      if (info && info.plugin === plugin && info.server === server) this.activeMcpTools.delete(scoped);
+    }
+  }
+
+  /** 激活整台 server：只增加「下一轮可见」的集合，不执行任何 MCP 工具。
+   *  超过总工具帽时显式拒绝，并把「用 tools 参数激活子集」这条路指出来。 */
+  activateMcpServer(key: string): { ok: boolean; tools: McpToolSummary[]; error?: string } {
+    const summary = this.mcpServerSummaries().find((s) => s.key === key);
+    if (!summary) {
+      const available = this.mcpServerSummaries().map((s) => s.key).join(", ") || "（无）";
+      return { ok: false, tools: [], error: "未找到 MCP server: " + key + "；可用：" + available };
+    }
+    if (this.activeMcpServers.has(key)) {
+      return { ok: true, tools: this.mcpServerTools(key) ?? [] };
+    }
+    const wholeCount = this.activeMcpServers.size;
+    const activeTools = this.activeMcpToolCount();
+    if (wholeCount >= MCP_ACTIVE_SERVER_LIMIT) {
+      return {
+        ok: false,
+        tools: [],
+        error: "已整台激活 " + String(wholeCount) + " 台 server（上限 " + String(MCP_ACTIVE_SERVER_LIMIT) +
+          "）：" + this.activeMcpServerKeys().join(", ") + "；先用 mcp_release 释放一台",
+      };
+    }
+    if (activeTools + summary.toolCount > MCP_ACTIVE_TOOL_LIMIT) {
+      return {
+        ok: false,
+        tools: [],
+        error: "激活 " + key + " 会带来 " + String(activeTools + summary.toolCount) +
+          " 把工具，超过上限 " + String(MCP_ACTIVE_TOOL_LIMIT) + "（当前 " + String(activeTools) +
+          "）；该 server 有 " + String(summary.toolCount) + " 把工具，可用 mcp_activate 的 tools 参数只激活子集，" +
+          "或在 .mcp.json 用 includeTools 收窄",
+      };
+    }
+    this.activeMcpServers.add(key);
+    // 整台激活后，按工具集的重复项清掉（active 判定以整台为准）。
+    for (const scoped of [...this.activeMcpTools]) {
+      const info = this.mcpTools.get(scoped);
+      if (info && mcpServerKey(info.plugin, info.server) === key) this.activeMcpTools.delete(scoped);
+    }
+    return { ok: true, tools: this.mcpServerTools(key) ?? [] };
+  }
+
+  /** 按工具激活：大 server 不整台装载，只把选定工具的 schema 送进下一轮模型面。
+   *  不占整台 server 名额，但仍受 MCP_ACTIVE_TOOL_LIMIT 总帽约束。 */
+  activateMcpTools(key: string, names: readonly string[]): { ok: boolean; tools: McpToolSummary[]; error?: string } {
+    const rows = [...this.mcpTools.values()].filter((info) => mcpServerKey(info.plugin, info.server) === key);
+    if (rows.length === 0) {
+      const available = this.mcpServerSummaries().map((s) => s.key).join(", ") || "（无）";
+      return { ok: false, tools: [], error: "未找到 MCP server: " + key + "；可用：" + available };
+    }
+    const wanted = new Set(names.map((n) => n.trim()).filter((n) => n !== ""));
+    if (wanted.size === 0) return { ok: false, tools: [], error: "tools 不能为空" };
+    const picked = rows.filter((info) => wanted.has(info.name) || wanted.has(info.scopedName));
+    const unknown = [...wanted].filter((n) => !rows.some((info) => info.name === n || info.scopedName === n));
+    if (unknown.length > 0) {
+      return {
+        ok: false,
+        tools: [],
+        error: "该 server 没有这些工具: " + unknown.join(", ") + "；可用：" + rows.map((r) => r.name).join(", "),
+      };
+    }
+    if (this.activeMcpServers.has(key)) {
+      return { ok: true, tools: this.mcpServerTools(key) ?? [] };
+    }
+    const already = picked.filter((info) => this.activeMcpTools.has(info.scopedName)).length;
+    const nextCount = this.activeMcpToolCount() + (picked.length - already);
+    if (nextCount > MCP_ACTIVE_TOOL_LIMIT) {
+      return {
+        ok: false,
+        tools: [],
+        error: "激活 " + String(picked.length) + " 把工具后会到 " + String(nextCount) +
+          " 把，超过上限 " + String(MCP_ACTIVE_TOOL_LIMIT) + "（当前 " + String(this.activeMcpToolCount()) +
+          "）；请少选几把或先 mcp_release",
+      };
+    }
+    for (const info of picked) this.activeMcpTools.add(info.scopedName);
+    return { ok: true, tools: this.mcpServerTools(key) ?? [] };
+  }
+
+  releaseMcpServer(key: string): { ok: boolean; error?: string; removed?: number } {
+    const before = this.activeMcpToolCount();
+    this.activeMcpServers.delete(key);
+    for (const scoped of [...this.activeMcpTools]) {
+      const info = this.mcpTools.get(scoped);
+      if (info && mcpServerKey(info.plugin, info.server) === key) this.activeMcpTools.delete(scoped);
+    }
+    const removed = before - this.activeMcpToolCount();
+    if (removed === 0) return { ok: false, error: "未激活: " + key };
+    return { ok: true, removed };
+  }
+
+  releaseMcpTool(key: string, name: string): { ok: boolean; error?: string } {
+    if (this.activeMcpServers.has(key)) {
+      return { ok: false, error: "整台 server 已激活；要按工具收窄，先 mcp_release 这台 server，再用 tools 激活子集" };
+    }
+    const rows = [...this.mcpTools.values()].filter((info) => mcpServerKey(info.plugin, info.server) === key);
+    const hit = rows.find((info) => info.name === name || info.scopedName === name);
+    if (!hit) return { ok: false, error: "该 server 没有这个工具: " + name };
+    if (!this.activeMcpTools.delete(hit.scopedName)) return { ok: false, error: "未激活: " + hit.scopedName };
+    return { ok: true };
+  }
+
+  /** §9.6 prompt 档钩子的模型面：**全仓唯一的绑定点**。
+   *  会话拨哪一档要等 provider 装配出来（`agent-runner` 里 `modelSelection` 定死之后、loop 起之前），
+   *  而 `PluginRuntime.load` 在那之前 ⇒ 只能晚绑。第 1001 页把它写在 load 处，等于让旁路自己认
+   *  legacy GLM 那一档——家与档位都不跟配置面走。绑不上（家没配 key）就留空，钩子在闸上如实拒。 */
+  bindModelCall(call: HookModelCallFn): void {
+    this.hookModelCall = call;
+    this.hooks.bindModelCall(call);
   }
 
   /** §9.8 的第三个激活面：把受信插件的 `.lsp.json` 注册进 LSP 运行时。
@@ -451,8 +757,14 @@ export class PluginRuntime {
           command: expand(cfg.command),
           args: (cfg.args ?? []).map(expand),
           extensions,
+          // extensionToLanguage 的**值**此前在这里被丢掉（只用 Object.keys 取扩展名）⇒
+          // didOpen 的 languageId 落回 TS 启发式，非 JS 语言的插件 server 静默失效。
+          ...(cfg.extensionToLanguage !== undefined ? { extensionToLanguage: cfg.extensionToLanguage } : {}),
           ...(cfg.initializationOptions !== undefined ? { initializationOptions: cfg.initializationOptions } : {}),
           ...(cfg.diagnostics?.enabled === false ? { diagnosticsEnabled: false } : {}),
+          ...(cfg.startupTimeout !== undefined ? { startupTimeout: cfg.startupTimeout } : {}),
+          ...(cfg.restartOnCrash !== undefined ? { restartOnCrash: cfg.restartOnCrash } : {}),
+          ...(cfg.diagnostics?.maxPerFile !== undefined ? { diagnosticsMaxPerFile: cfg.diagnostics.maxPerFile } : {}),
         };
       }
       const { accepted } = registerPluginLspServers(this.opts.workspace, servers);
@@ -532,7 +844,7 @@ export class PluginRuntime {
    *  只能靠猜，猜错的唯一反馈是 spawn 被拒（未知角色）。同一条清单、同一份预算。 */
   routingList(query = ""): RoutingListResult {
     const roleLines = [...this.agentRoles(), ...this.userAgentRoles()].map((a) => {
-      const desc = a.description.replace(/\s+/g, " ").trim();
+      const desc = capRoutingText(a.description);
       return "- " + a.invoke + " — " + (desc !== "" ? desc : "（该 agent 文件没写 description）") + "（可用作 pipeline stages[].role）";
     });
     return buildSkillRoutingList(this.skills(), roleLines, query);
@@ -569,12 +881,16 @@ export class PluginRuntime {
     //（参数把正文撑长的那部分本来就该算进预算）。
     // 权限联动（§9.3）在成功触发的那一刻登记：拒绝路径不给任何工具面改动。
     this.grantSkillScope(skillInvokeName(entry), entry.frontmatter);
+    // L2 资源清单与截断尾注走同一条 suffix：两者都计入 clampSkillBody 的预算，
+    // 不会出现「正文按 5k 截了，资源清单又额外白送」的账实不符。
+    const resourceSuffix = skillResourceSuffix(entry.resources, dirname(entry.path), this.opts.workspace);
     return {
       ok: true,
-      output: clampSkillBody(
+      output: clampSkillBodyWithResources(
         substituteVars(entry.body, { ...this.substitutionFor(entry), args: argsString }),
         SKILL_REMOUNT_TOKENS_PER_SKILL,
-        skillRecallSuffix(entry.path, this.opts.workspace)),
+        skillRecallSuffix(entry.path, this.opts.workspace),
+        resourceSuffix),
     };
   }
 
@@ -587,11 +903,14 @@ export class PluginRuntime {
       const entry = all.find((s) => s.plugin === hit.plugin && s.name === hit.name)!;
       // 重挂必须重放**当年那次调用的参数**：激活记录只存名字，参数在 tool_call 事件里；
       // 不传就会把一份已经替换过的正文重挂成带裸 $ARGUMENTS 的原始模板（同一 skill 两次进上下文内容不同）。
-      return { body: substituteVars(entry.body, { ...this.substitutionFor(entry), args: callArgs }) };
+      return {
+        body: substituteVars(entry.body, { ...this.substitutionFor(entry), args: callArgs }),
+        suffix: skillResourceSuffix(entry.resources, dirname(entry.path), this.opts.workspace),
+      };
     });
     const excluded = new Set<number>();
     for (const e of events) {
-      if (e.type === "compaction") for (const id of e.compressed_event_ids) excluded.add(id);
+      if (e.type === "compaction" && isNumericCompaction(e)) for (const id of e.compressed_event_ids) excluded.add(id);
     }
     return skillRemount(activated, (id) => excluded.has(id));
   }
@@ -640,6 +959,9 @@ export class PluginRuntime {
         trust: l.trust,
       })),
       mcpServers: this.mcp.statuses(),
+      activeMcpServers: this.activeMcpServerKeys(),
+      activeMcpTools: this.activeMcpToolKeys(),
+      mcpServerSummaries: this.mcpServerSummaries(),
       toolScopes: this.skillScopeSnapshot(),
       errors: this.manifest.errors,
       warnings: this.manifest.warnings,
@@ -647,6 +969,8 @@ export class PluginRuntime {
   }
 
   async shutdown(): Promise<void> {
+    this.activeMcpServers.clear();
+    this.activeMcpTools.clear();
     await this.mcp.disconnectAll();
     // LSP 注册表与会话同生命周期（TOOLS 摘除同族）：不清零的话下一个会话会继承上一个插件的服务器，
     // 而那个插件的目录可能已经被卸载——pickServerForFile 会挑到一个不存在的 command。

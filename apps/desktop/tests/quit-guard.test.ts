@@ -1,7 +1,7 @@
 // 退出后果告知判卷（蓝本 §3.3「退出后果告知」）：
 // 文案逐字同构 + 闸判据（0 个在跑会话 = 不打扰）。纯函数段，无 Electron 依赖。
 import { describe, expect, it } from "vitest";
-import { quitWarningMessage, shouldWarnBeforeQuit } from "../src/main/quit-guard";
+import { quitWarningMessage, restartWarningMessage, shouldWarnBeforeQuit } from "../src/main/quit-guard";
 
 describe("quitWarningMessage", () => {
   it("逐字同构（品牌名 Cairn；count 进文案）", () => {
@@ -19,5 +19,14 @@ describe("shouldWarnBeforeQuit", () => {
 
   it("负数按 0 处理（防御：计数来源异常时不弹无意义警告）", () => {
     expect(shouldWarnBeforeQuit(-1)).toBe(false);
+  });
+});
+
+describe("restartWarningMessage", () => {
+  it("说清会中断、也说清磁盘记录不会丢", () => {
+    const message = restartWarningMessage(2);
+    expect(message).toContain("2 个会话");
+    expect(message).toContain("重新启动会中断");
+    expect(message).toContain("已写入磁盘的记录不会丢");
   });
 });

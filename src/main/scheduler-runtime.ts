@@ -10,6 +10,7 @@ import { createEventLog, type AgentEvent } from "../events";
 import { TOOLS, type Tool, type ToolResult } from "../tools";
 import type { AskGate } from "./ask-gate";
 import { isUnattendedTier, validateAutomation } from "./automations";
+import type { IdleTaskResult, IdleTaskSnapshot } from "./idle-tasks";
 import {
   loadAutomationsFile,
   normalizeHistoryFilter,
@@ -68,6 +69,8 @@ export function initScheduler(opts: {
   clock?: () => number;
   jitterMs?: () => number;
   cap?: number;
+  isAgentBusy?: () => boolean;
+  isIdleWorkspaceAvailable?: (workspace: string) => boolean;
 }): void {
   // 单调真值先置（下面那句 `if (scheduler) return` 的幂等路径也要认）：这一句之后
   // `installTimeAutomationFace` 在本进程余生都判真，五件的说明书就一直在两面挂着。
@@ -84,7 +87,12 @@ export function initScheduler(opts: {
     runSession: makeScheduledExecutor(ws),
     ...(opts.clock ? { clock: opts.clock } : {}),
     ...(opts.jitterMs ? { jitterMs: opts.jitterMs } : {}),
+    ...(opts.isAgentBusy ? { isAgentBusy: opts.isAgentBusy } : {}),
+    ...(opts.isIdleWorkspaceAvailable ? { isIdleWorkspaceAvailable: opts.isIdleWorkspaceAvailable } : {}),
     getCap: () => scheduleCapCache,
+    // 装载警告（如 automations.json 损坏）必须有人收：没有 onWarn 时 Scheduler.warn 是空操作，
+    // `cairn --serve` 会在「坏档 + 空清单」上静默跑。CLI 写 stderr；桌面主进程进日志。
+    onWarn: (msg: string) => { console.warn(msg); },
     emitTimeline: async (e: AgentEvent) => {
       const cur = (await store().get()).currentSession;
       const sdir = getSessionsDir();
@@ -108,6 +116,11 @@ export async function startScheduler(): Promise<void> {
     /* 缺省 2 */
   }
   return scheduler?.start();
+}
+
+/** 当前装载的定时任务数（CLI `--serve` 启动行用：刚打通的模式要能说出「有没有活干」）。 */
+export function scheduledTaskCount(): number {
+  return scheduler?.list().length ?? 0;
 }
 
 export function stopScheduler(): void {
@@ -136,7 +149,7 @@ export function scheduledRunCount(): number {
 export function makeScheduledExecutor(workspace: string): TriggerExecutor {
   return (args) => {
     scheduledRunsInFlight += 1;
-    return D().runSession(workspace, args).finally(() => {
+    return D().runSession(args.workspace ?? workspace, args).finally(() => {
       scheduledRunsInFlight = Math.max(0, scheduledRunsInFlight - 1);
     });
   };
@@ -144,8 +157,21 @@ export function makeScheduledExecutor(workspace: string): TriggerExecutor {
 
 export async function handleScheduleSnapshot(rawFilter?: unknown): Promise<ScheduleSnapshot> {
   // 筛选值来自渲染层的下拉框（跨进程输入面）；合法性与归一都在 scheduler 那一处（防第二份谓词）
-  if (!scheduler) return { tasks: [], history: [], running: 0, queued: 0, cap: scheduleCapCache, startupDone: false, tzNotes: {} };
+  if (!scheduler) return { tasks: [], history: [], running: 0, queued: 0, cap: scheduleCapCache, startupDone: false, tzNotes: {}, warnings: [], definitionsCorrupt: false };
   return scheduler.snapshot(normalizeHistoryFilter(rawFilter));
+}
+
+export async function handleIdleTaskList(workspace?: string): Promise<IdleTaskSnapshot> {
+  if (!scheduler) throw new Error("本地调度器尚未启动");
+  return scheduler.idleTaskSnapshot(workspace);
+}
+
+export async function handleIdleTaskEnqueue(raw: unknown, workspace?: string): Promise<IdleTaskResult> {
+  return scheduler?.enqueueIdleTask(raw, workspace) ?? { ok: false, error: "本地调度器尚未启动" };
+}
+
+export async function handleIdleTaskUpdate(id: unknown, action: unknown, workspace?: string): Promise<IdleTaskResult> {
+  return scheduler?.updateIdleTask(id, action, workspace) ?? { ok: false, error: "本地调度器尚未启动" };
 }
 
 export async function handleScheduleUpsert(raw: unknown, form = true): Promise<{ ok: boolean; error?: string }> {
@@ -270,6 +296,6 @@ export function installAutomationTools(): void {
  *  一旦有人（UI 或 `--serve`）落下第一条任务，下一场 run 就自己挂回来，不需要新发明一个设置项。 */
 export async function automationsScheduled(workspace: string): Promise<boolean> {
   const { tasks } = await loadAutomationsFile(join(scheduleDataDir(workspace), "automations.json"))
-    .catch(() => ({ tasks: [], warnings: [] })); // 装载器自己已 fail-closed，这里只兜路径异常
+    .catch(() => ({ tasks: [], warnings: [], corrupt: false })); // 装载器自己已 fail-closed，这里只兜路径异常
   return tasks.length > 0;
 }

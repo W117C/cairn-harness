@@ -1,14 +1,16 @@
 // v2.17 运行中可沟通：发送队列（渲染层内存态，按会话各一条表）。
-// 三条语义各一个出口，组件与 App 不各算一份：
+// 四条语义各一个出口，组件与 App 不各算一份：
 //   takeQueued    本轮收束后取队首（FIFO；空队列给 null，调用方据此停表）
 //   promoteQueued 把某条提到队首（「打断并发送」：先改序再打断，收束后先发的就是它）
 //   dropQueued    按位移除
+//   editQueued    改一条的正文（附件/次序不动；空文本不落地）
+//   moveQueued    上/下移一条（键盘可达的排序，不靠拖拽）
 // 为什么是纯函数：本仓没有 jsdom（见 render-structure.test.tsx 头注），交互逻辑一律抽成
 // 纯函数判卷 + 组件走 SSR 结构判卷两面。
 import type { RunAttachmentReference, SessionQueueEntry } from "../../../../src/main/ipc-protocol";
 
 export interface QueuedSend {
-  /** 渲染键（进程内自增；队列不落盘——沿用渲染层内存态纪律）。 */
+  /** 渲染键（进程内自增；只有消息内容落盘，渲染键不落盘）。 */
   id: number;
   text: string;
   attachments: RunAttachmentReference[];
@@ -36,6 +38,25 @@ export function dropQueued(list: readonly QueuedSend[], index: number): QueuedSe
   return list.filter((_, i) => i !== index);
 }
 
+/** 改一条排队消息的正文：只换 text（附件、id、次序不动）。空文本/越界原样返回——
+ *  队列里没有「发一条空消息」这种东西，清空输入不该把条目变成哑弹。 */
+export function editQueued(list: readonly QueuedSend[], index: number, text: string): QueuedSend[] {
+  const trimmed = text.trim();
+  if (trimmed === "" || index < 0 || index >= list.length) return [...list];
+  return list.map((item, i) => (i === index ? { ...item, text: trimmed } : item));
+}
+
+/** 上移(-1)/下移(+1)一条：越界或原地不动原样返回（ends 不交换成空）。 */
+export function moveQueued(list: readonly QueuedSend[], index: number, delta: -1 | 1): QueuedSend[] {
+  const to = index + delta;
+  if (index < 0 || index >= list.length || to < 0 || to >= list.length) return [...list];
+  const out = [...list];
+  const picked = out.splice(index, 1)[0];
+  if (picked === undefined) return [...list];
+  out.splice(to, 0, picked);
+  return out;
+}
+
 /** 落盘载荷只保留用户消息本身；id 是渲染态，不进磁盘。 */
 export function toSessionQueueEntries(list: readonly QueuedSend[]): SessionQueueEntry[] {
   return list.map((item) => ({ text: item.text, attachments: [...item.attachments] }));
@@ -53,14 +74,52 @@ export function fromSessionQueueEntries(entries: readonly SessionQueueEntry[], n
 export async function drainQueue(
   first: { text: string; attachments: RunAttachmentReference[] },
   run: (msg: { text: string; attachments: RunAttachmentReference[] }) => Promise<boolean>,
-  takeNext: () => QueuedSend | null,
+  takeNext: () => QueuedSend | null | Promise<QueuedSend | null>,
 ): Promise<void> {
   let next: { text: string; attachments: RunAttachmentReference[] } | null = first;
   while (next !== null) {
     const keepGoing = await run(next);
     if (!keepGoing) return;
-    next = takeNext();
+    next = await takeNext();
   }
+}
+
+/** 运行中按回车/发送时，这条消息该走哪条路（第 9 点·轮中插话，2026-10-23）。
+ *
+ *  三条路，语义相反，**必须先判再发**：
+ *   · `steer`    —— 送进正在跑的那一轮（不新开 run、不改轮次）；
+ *   · `queue`    —— 排到本轮结束后自动发（用户明确要排队，或主进程说「不在运行」，或带附件）；
+ *   · `run`      —— 空闲，起新一轮。
+ *
+ *  为什么抽成纯函数：这段判据原本内联在 `send()` 里，被「会话是否运行中」与「主进程怎么答」
+ *  两层状态各切一刀，而**离屏界面根本立不住那个状态**（第 681 页记的冒烟失败）。
+ *  把它做成纯函数，三条路的分岔就能不依赖 DOM/运行态被钉死，`send()` 只负责执行。
+ *
+ *  `forceQueue` 是用户显式意图（点「加入队列」钮）：按钮写着「加入队列」却把话插进当前轮，
+ *  就是按钮在说谎——所以它的优先级高于一切插话条件。
+ *  附件同理：附件要过引用校验与装载，属下一轮的入口，半路塞进当前轮会把校验绕开。 */
+export function steerRouteOf(input: {
+  /** 当前是否有活动会话；空屏（null）只可能是起新一轮。 */
+  sessionId: string | null;
+  /** 渲染层的运行集判据（真值来源见 run-queue 的 keyOf）。 */
+  running: boolean;
+  /** 用户显式要求排队（「加入队列」钮）。 */
+  forceQueue: boolean;
+  /** 本条消息带来的附件数。 */
+  attachmentCount: number;
+}): "run" | "queue" | "steer" {
+  if (input.sessionId === null) return "run";
+  if (!input.running) return "run";
+  if (input.forceQueue) return "queue";
+  if (input.attachmentCount > 0) return "queue";
+  return "steer";
+}
+
+/** 主进程对 `runSteer` 的应答是否等于「真送进去了」（决定要不要落回入队）。 */
+export function steerAccepted(res: { ok?: boolean }): boolean {
+  // 只认 `ok === true`：协议兜底/桩兜底给 `{}` 时是 `undefined`，
+  // 那必须当成"没送进去"并回落入队——把 undefined 读成成功就是**吞消息**。
+  return res.ok === true;
 }
 
 /** 一轮 run 收束后是否继续派队列：用户打断是正常收束，真实失败才停表。 */
@@ -89,17 +148,20 @@ export function shouldHealStaleRun(args: {
 
 /** Composer 锁因（2026-10-18 收口）：同一个 disabled 布尔此前被 Composer 拿去猜占位文案，
  *  于是「澄清/方案门未决」被写成「正在创建会话…」——禁用是真的，原因说错了。
- *  优先级 = 用户越需要处理的越靠前：门（要你做决定）> 队列读回（一闪而过的加载）> 创建会话。
+ *  会话读取失败先要求恢复；其余优先级 = 门（要你做决定）> 队列读回 > 创建会话。
  *  **运行中不在这里**——运行中输入可用（回车排队、⌘↩ 打断并发送）。
  *  ask（审批）门不进 gateActive：卡在场时输入保持可用（v2.17 口径，v2.18 沿用）。 */
-export type ComposerLockReason = "gate" | "queue" | "creating";
+export type ComposerLockReason = "gate" | "queue" | "creating" | "session";
 
 export function composerLockReason(input: {
   /** 读回发送队列的瞬时加载（App 侧原本以 disabled 的第三项独立 OR 进来）。 */
   queueLoading?: boolean;
+  /** 正文或队列读取失败；请求结束不等于会话已就绪。 */
+  sessionLoadFailed?: boolean;
   creating: boolean;
   gateActive: boolean;
 }): ComposerLockReason | null {
+  if (input.sessionLoadFailed === true) return "session";
   if (input.gateActive) return "gate";
   if (input.queueLoading === true) return "queue";
   if (input.creating) return "creating";

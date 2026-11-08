@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ProviderBanner } from "../src/renderer/components/ProviderBanner";
+import { readAppSurface } from "./helpers/app-surface";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 
@@ -20,10 +21,12 @@ describe("ProviderBanner", () => {
   });
 
   it("App 只在 providerOk === false 的空屏挂载它", () => {
-    const app = read("../src/renderer/App.tsx");
+    const app = readAppSurface();
     expect(app).toContain("providerOk === false && (");
     expect(app).toContain("<ProviderBanner");
     expect(app).toContain("setSettingsOpen(true)");
+    // 「去设置」必须落到 Provider 分区，不是设置页的默认通用分区（2026-10-30）。
+    expect(app).toContain('onOpenSettings={() => { setSettingsSection("provider"); setSettingsOpen(true); }}');
     const css = read("../src/renderer/styles.css");
     expect(css).toMatch(/\.home-banner\s*{[^}]*border:\s*1px solid hsl\(var\(--color-risk\) \/ 35%\)/s);
     expect(css).toMatch(/\.home-banner\s*{[^}]*background:\s*hsl\(var\(--color-risk\) \/ 10%\)/s);

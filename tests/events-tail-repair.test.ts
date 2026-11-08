@@ -2,7 +2,7 @@
 // 读者侧一直按「尾部半写可丢」容错，写入侧此前没人补——下一次 append 会把它与下一条事件
 // **拼成一条坏行**，新事件静默不可见。修复在新开句柄时做（跨进程续写的唯一入口）。
 // 三条边界各钉一条：尾修好且响亮 / 中间坏行**不许**被这条修碰（重放仍要抛）/ 正常追加零打扰。
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, statSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -49,6 +49,51 @@ describe("repairPartialTail：硬杀后的续写", () => {
     } finally {
       warn.mockRestore();
     }
+  });
+
+  it("完整但缺换行的尾事件：补换行保留，不当作半写裁掉", async () => {
+    // 崩溃窗口在 JSON 之后、换行之前：replay() 已经能读到这条事件；下一次 append 不能把它删掉。
+    writeFileSync(path, line(1), "utf8"); // 合法事件，但无结尾换行
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const log = createEventLog(path);
+      await log.append(EV(2));
+      const warnText = warn.mock.calls.map((c) => String(c[0])).join("\n");
+      expect(warnText).toContain("完整尾事件缺少换行");
+      expect(warnText).not.toContain("已丢弃未成行的");
+      const events = await replay(path);
+      expect(events.map((e) => (e as { content: string }).content)).toEqual(["第 1 条", "第 2 条"]);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("续写保留已可重放的 17 MiB 无换行尾事件及其行号", async () => {
+    const large = { type: "user_message", content: "x".repeat(17 * 1024 * 1024), ts: 2 };
+    writeFileSync(path, line(1) + "\n" + JSON.stringify(large), "utf8");
+    const before = await replay(path, "2");
+    expect(before).toHaveLength(2);
+    expect((before[1] as { content: string }).content === large.content).toBe(true);
+
+    await createEventLog(path).append(EV(3));
+
+    const after = await replay(path);
+    expect(after).toHaveLength(3);
+    expect(after[1]).toMatchObject({ ts: 2 });
+    expect((after[1] as { content: string }).content === large.content).toBe(true);
+    expect(after[2]).toMatchObject({ content: "第 3 条" });
+  });
+
+  it("超过可安全判定的无换行尾段拒绝续写并保留原字节", async () => {
+    writeFileSync(path, line(1) + "\n" + "{");
+    truncateSync(path, 65 * 1024 * 1024);
+    const before = statSync(path);
+
+    await expect(createEventLog(path).append(EV(2))).rejects.toThrow(/尾部.*未修改/u);
+
+    const after = statSync(path);
+    expect(after.size).toBe(before.size);
+    expect(after.mtimeMs).toBe(before.mtimeMs);
   });
 
   it("正常文件（以换行收尾）零打扰：不告警、旧字节逐字不动、追加只加不改", async () => {

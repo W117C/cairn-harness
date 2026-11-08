@@ -2,6 +2,7 @@
 // 纪律：sequencer 零 LLM 调用——本模块与编排器的 runChain 展开路径只做解析/拼接/触发，
 // 不 import 任何 provider（静态断言面：agents-check 对本文件与 orchestrator.runChain 源码段扫 provider 引用 = 0）。
 // gate 环只落 verdict 标注，不重跑（V1；loopback 随 M3 压力测试后再定）。
+import { MAX_PIPELINE_STAGES } from "./orchestrator-config";
 
 /** stages[] 的原始形态（spawn_agent args.stages 元素）。 */
 export interface RawStage {
@@ -29,8 +30,10 @@ export function parseStages(raw: unknown): ParseStagesResult {
   if (!Array.isArray(raw) || raw.length === 0) {
     return { ok: false, why: "stages 必须是非空数组（pipeline = 预置链，至少一环）" };
   }
-  if (raw.length > 8) {
-    return { ok: false, why: "stages 上限 8 环（V1 链长收敛；依赖图深 ≤ 链长）" };
+  // 上限吃 orchestrator-config 的 MAX_PIPELINE_STAGES（单一事实源）：此前这里是手抄字面量 8，
+  // 而 MAX_PIPELINE_STAGES 全仓零功能消费者（只有 barrel 转出口）——真闸在这边，两处迟早漂。
+  if (raw.length > MAX_PIPELINE_STAGES) {
+    return { ok: false, why: "stages 上限 " + String(MAX_PIPELINE_STAGES) + " 环（V1 链长收敛；依赖图深 ≤ 链长）" };
   }
   const out: FrozenStage[] = [];
   for (let i = 0; i < raw.length; i++) {

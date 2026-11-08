@@ -25,9 +25,12 @@ describe("工具过程的分层披露", () => {
     const html = renderToStaticMarkup(<Stream rows={projectStream(events)} view="normal" streaming={false} />);
     expect(html).toContain('class="tool-group-toggle"');
     expect(html).toContain('aria-expanded="false"');
-    expect(html).toContain("2 次工具调用");
-    expect(html).toContain("1 次失败");
-    expect(html).toContain("Assertion failed");
+    // 2026-11-02：失败数与总数合成一句（此前「2 次工具调用 | 1 次失败」并排，读成两件事）。
+    expect(html).toContain("1 次工具失败（共 2 次）");
+    // 2026-11-01 真机缺陷 1：收起卡那一行改说人话（机器面原文是写给模型读的解释面）；
+    // 原文不丢——退到悬停提示（title）里，展开体另有全文。
+    expect(html).toContain("run_shell 调用失败");
+    expect(html).toContain("原始报错：Assertion failed");
   });
 
   it("详细模式显示输入和返回内容；输出当作文本转义，不执行 HTML", () => {

@@ -5,12 +5,13 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { readAppPageSurface, readAppSurface } from "./helpers/app-surface";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 
 describe("技能信任接线", () => {
   it("设置页开关传 name（不是 invoke）", () => {
-    const pane = read("../src/renderer/components/AppPage.tsx");
+    const pane = readAppPageSurface();
     expect(pane).toContain("window.agent.pluginDecide(selected.name, next)");
     expect(pane).not.toContain("pluginDecide(selected.invoke");
   });
@@ -21,7 +22,11 @@ describe("技能信任接线", () => {
     expect(sh).toContain("pluginSnapshotWorkspace === ws");
     expect(sh).toContain("if (pluginSnapshotWorkspace === ws) pluginSnapshot = null");
     expect(read("../../../src/main/ipc-protocol.ts")).toContain("pluginDecide(plugin: string, trusted: boolean, workspace?: string)");
-    expect(read("../src/main/index.ts")).toContain("handlePluginDecide(plugin as string, trusted as boolean, String(workspace ?? \"\") || workspaceContext)");
+    // 2026-10-21 批 133：workspace 参数不再任意直通——先过已登记根闸，再交给运行时。
+    const main = read("../src/main/index.ts");
+    expect(main).toContain("resolveProvidedWorkspace(workspace, await knownProjectRoots(), workspaceContext())");
+    expect(main).toContain("handlePluginDecide(plugin as string, trusted as boolean, gate.workspace)");
+    expect(main).not.toContain('String(workspace ?? "") || workspaceContext');
   });
 
   it("run 收束时快照带上 run 的工作区", () => {
@@ -29,7 +34,7 @@ describe("技能信任接线", () => {
   });
 
   it("技能抽屉按名字读正文，不再摆「待接」", () => {
-    const pane = read("../src/renderer/components/AppPage.tsx");
+    const pane = read("../src/renderer/components/SkillsPane.tsx");
     expect(pane).toContain("window.agent.skillBody(selectedName)");
     expect(pane).toContain('className="skill-body"');
     expect(pane).not.toContain("快照不含正文");
@@ -39,7 +44,7 @@ describe("技能信任接线", () => {
   });
 
   it("插件技能行可读正文（按 /plugin:skill 拉，展开/收起）", () => {
-    const pane = read("../src/renderer/components/AppPage.tsx");
+    const pane = read("../src/renderer/components/PluginsPane.tsx");
     expect(pane).toContain("window.agent.skillBody(invoke)");
     expect(pane).toContain('className="plugin-skill"');
     expect(pane).toContain("读正文");
@@ -47,12 +52,12 @@ describe("技能信任接线", () => {
   });
 
   it("插件命令与技能同进斜杠补全", () => {
-    expect(read("../src/renderer/App.tsx")).toContain("setSkills([...r.skills, ...r.commands])");
+    expect(readAppSurface()).toContain("setSkills([...r.skills, ...r.commands])");
     expect(read("../../../src/main/state-handlers.ts")).toContain("commands: snap.plugins.flatMap((p) => p.commands");
   });
 
   it("设置关闭后刷新斜杠技能清单", () => {
-    const app = read("../src/renderer/App.tsx");
+    const app = readAppSurface();
     expect(app).toContain("if (settingsOpen) return;");
     expect(app).toContain("}, [activeWorkspace, settingsOpen]);");
   });

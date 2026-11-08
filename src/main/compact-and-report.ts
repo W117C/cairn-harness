@@ -11,6 +11,10 @@ import { createSessionSummarizer } from "../agent/session-provider";
 import type { HookEngine } from "../agent/plugins/hooks";
 import { buildSecurityReport } from "../agent/security/scan";
 import { store } from "./settings-handlers";
+import { acquireSessionRunLock } from "./session-lock";
+import { sessionSummarizerFor } from "./provider-assembly";
+import { providerKindFromEnv, resolveMainModel } from "./provider-runtime";
+import { readSessionPreferences } from "./session-preferences";
 
 // ---- M1d：/compact 手动入口（压缩必出卡，走 BUILTIN_PROMPTS 内置模板）----
 // 摘要器：CAIRN_API_KEY 在场 → GLM 暗卷；缺 key 且 M1D_COMPACTION_DEMO=1 → 冻结 mock（演示通道，
@@ -58,18 +62,51 @@ export async function compactSessionLog(
   emit?: (e: AgentEvent) => Promise<void>,
   hooks?: HookEngine,
 ): Promise<{ ok: boolean; error?: string; event?: AgentEvent; cardPayload?: Record<string, unknown> }> {
+  // 压缩也要写同一份日志：与正在跑的 run 并发会交错（同 handleAgentRun 的那把锁）。
+  const lock = await acquireSessionRunLock(logPath);
+  if (!lock.ok) return { ok: false, error: lock.error };
+  try {
+    return await compactSessionLogLocked(logPath, emit, hooks);
+  } finally {
+    await lock.lock.release();
+  }
+}
+
+async function compactSessionLogLocked(
+  logPath: string,
+  emit?: (e: AgentEvent) => Promise<void>,
+  hooks?: HookEngine,
+): Promise<{ ok: boolean; error?: string; event?: AgentEvent; cardPayload?: Record<string, unknown> }> {
   const events = await replay(logPath);
   if (events.length === 0) return { ok: false, error: "会话为空，无可压缩" };
   // §9.5 PreCompact 的生产端在 runCompaction 里（唯一）——这里只把「谁去跑钩子」递下去。
   // 原先是本函数自己 run 一次，而自动压缩档没人发 ⇒ `PreCompact(auto)` 的 matcher 永不命中；
   // 两处各发又会变成 SessionEnd 那种双生产者。trigger 取 §9.5 表里的枚举值 manual/auto。
   const demo = process.env.M1D_COMPACTION_DEMO === "1";
-  const summarizer = process.env.CAIRN_API_KEY
-    ? createSessionSummarizer()
-    : demo
-      ? createMockSummarizer(DEMO_SUMMARY)
-      : undefined;
-  if (!summarizer) return { ok: false, error: "无 CAIRN_API_KEY，手动压缩不可用（fail-closed，不静默压缩）" };
+  const settings = await store().get();
+  const prefs = await readSessionPreferences(logPath).catch(() => null);
+  const selection = resolveMainModel({
+    forcedKind: providerKindFromEnv(process.env.M0A_PROVIDER),
+    configuredKind: settings.provider,
+    settingsModel: settings.model,
+    legacyEnvModel: process.env.CAIRN_MODEL,
+    ...(prefs?.model !== undefined ? { requestModel: prefs.model } : {}),
+  });
+  const summarizer = selection.kind !== "demo"
+    ? (sessionSummarizerFor(selection) ?? (demo ? createMockSummarizer(DEMO_SUMMARY) : undefined))
+    : process.env.CAIRN_API_KEY
+      ? createSessionSummarizer()
+      : demo
+        ? createMockSummarizer(DEMO_SUMMARY)
+        : undefined;
+  if (!summarizer) {
+    return {
+      ok: false,
+      error: selection.kind === "demo"
+        ? "无 CAIRN_API_KEY，手动压缩不可用（fail-closed，不静默压缩）"
+        : `当前模型通道（${selection.spec.provider}）无可用凭据，手动压缩不可用（fail-closed，不静默压缩）`,
+    };
+  }
   const outcome = await runCompaction({
     events,
     trigger: "manual",

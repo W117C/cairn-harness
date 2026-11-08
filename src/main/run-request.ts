@@ -15,13 +15,17 @@ const ALLOWED_FIELDS = new Set<keyof RunRequest>([
   "model",
   "thinking",
   "attachments",
+  "planRequired",
 ]);
 
 export type RunRequestValidation =
   | { ok: true; value: RunRequest }
   | { ok: false; error: string };
 
-export function validateRunRequestEnvelope(raw: unknown): RunRequestValidation {
+export function validateRunRequestEnvelope(
+  raw: unknown,
+  options: { deferModelLookup?: boolean } = {},
+): RunRequestValidation {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return { ok: false, error: "RunRequest 必须是对象" };
   const value = raw as Record<string, unknown>;
   const unknownFields = Object.keys(value).filter((key) => !ALLOWED_FIELDS.has(key as keyof RunRequest));
@@ -46,12 +50,15 @@ export function validateRunRequestEnvelope(raw: unknown): RunRequestValidation {
       return { ok: false, error: "RunRequest.model 必须是非空稳定 registry id（≤128 字符）" };
     }
     // 同样改走有效表：否则「用自定义模型跑一轮」会在请求校验这一关卡住（用户刚踩到的下一站）
-    if (!lookupModel(effectiveModelTable(), value.model)) {
+    if (options.deferModelLookup !== true && !lookupModel(effectiveModelTable(), value.model)) {
       return { ok: false, error: `RunRequest.model 未登记: ${JSON.stringify(value.model)}` };
     }
   }
   if (value.thinking !== undefined && !THINKING_EFFORTS.includes(value.thinking as (typeof THINKING_EFFORTS)[number])) {
     return { ok: false, error: `RunRequest.thinking 非法: ${JSON.stringify(value.thinking)}` };
+  }
+  if (value.planRequired !== undefined && typeof value.planRequired !== "boolean") {
+    return { ok: false, error: "RunRequest.planRequired 必须是布尔值" };
   }
 
   let attachments: RunAttachmentReference[] | undefined;
@@ -75,6 +82,7 @@ export function validateRunRequestEnvelope(raw: unknown): RunRequestValidation {
       ...(value.model !== undefined ? { model: value.model } : {}),
       ...(value.thinking !== undefined ? { thinking: value.thinking as (typeof THINKING_EFFORTS)[number] } : {}),
       ...(attachments !== undefined ? { attachments } : {}),
+      ...(value.planRequired !== undefined ? { planRequired: value.planRequired as boolean } : {}),
     },
   };
 }

@@ -46,8 +46,7 @@ describe("session provider transport", () => {
     expect(closed).toBe(true);
   });
 
-  it("reassembles log history and forwards tools and cancellation on every request", async () => {
-    const path = await setup();
+  it("reassembles log history and forwards tools and cancellation on every request", async () => {    const path = await setup();
     const abort = new AbortController();
     const requests: GlmMessage[][] = [];
     const tools = gateToolSpecs("read-only");
@@ -223,5 +222,32 @@ describe("自由档位的窗口申报落到预算面（M-1）", () => {
     const over = await setup();
     await log.append({ type: "assistant_message", content: BIG });
     await expect(drain(over, { model: FREEFORM })).rejects.toThrow("context_budget_exceeded"); // 150k > 128k ⇒ 拒
+  });
+});
+
+/* 识图的两条时机（imageChannel 活盒子 / ephemeralImages 一次性块）在 provider-assembly 是
+   两条都透传的并列口（注释明言「两条不同的时机」）；装配点旧形状是同键 spread——后者静默
+   吃掉前者。今天还没有生产者同时用两条，但形状一留，第一个同时用的调用方就会无声丢图。 */
+describe("识图两条时机合并进同一请求", () => {
+  it("imageChannel 的活盒图与一次性 ephemeralImages 同给时都进请求（后者不再吃掉前者）", async () => {
+    const path = await setup();
+    const requests: GlmMessage[][] = [];
+    const provider = createSessionProvider(path, {
+      map: false, workspace: dir,
+      imageChannel: {
+        peek: () => [{ type: "image", dataUrl: "data:image/png;base64,CHAN" }],
+        take: () => [],
+      },
+      ephemeralImages: [{ type: "image", dataUrl: "data:image/png;base64,ONESHOT" }],
+      transport: async function* (messages) {
+        requests.push(messages);
+        yield { type: "assistant_message", content: "ok" };
+      },
+    });
+    for await (const _ of provider.stream([], undefined, {})) { /* drain */ }
+    const last = requests[0]?.at(-1);
+    expect(last).toMatchObject({ role: "user", content: "[read_image] 以下是你要的图片内容：" });
+    const parts = (last as { contentParts?: { dataUrl: string }[] }).contentParts ?? [];
+    expect(parts.map((p) => p.dataUrl)).toEqual(["data:image/png;base64,CHAN", "data:image/png;base64,ONESHOT"]);
   });
 });

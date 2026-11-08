@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "memory": [
+    {
+      "id": "paraphrase-runbook",
+      "query": "deploy outage",
+      "expectedTopic": "prod-runbook",
+      "queryVector": [1, 0],
+      "candidates": [
+        {
+          "topic": "prod-runbook",
+          "type": "project",
+          "digest": "production failure runbook",
+          "body": "check gateway health before retrying",
+          "vector": [0.98, 0.2]
+        },
+        {
+          "topic": "style-guide",
+          "type": "project",
+          "digest": "naming conventions",
+          "body": "use descriptive identifiers",
+          "vector": [0, 1]
+        }
+      ]
+    }
+  ],
+  "history": [
+    {
+      "id": "compacted-tool-fact",
+      "query": "ARCHIVED_FACT_77",
+      "expectedEventId": 3,
+      "entries": [
+        {
+          "eventId": 2,
+          "event": {
+            "type": "tool_call",
+            "id": "old-call",
+            "name": "read_file",
+            "args": { "path": "old.txt" }
+          }
+        },
+        {
+          "eventId": 3,
+          "event": {
+            "type": "tool_result",
+            "callId": "old-call",
+            "ok": true,
+            "output": "ARCHIVED_FACT_77"
+          }
+        },
+        {
+          "eventId": 4,
+          "event": {
+            "type": "compaction",
+            "trigger": "auto",
+            "reason": "threshold",
+            "compressed_event_ids": [2],
+            "summary": "tool output compacted",
+            "summary_offset": 3,
+            "tokens_before": 100,
+            "tokens_after": 20
+          }
+        }
+      ]
+    }
+  ],
+  "compaction": [
+    {
+      "id": "compaction-success",
+      "assistantChunks": [800, 800, 600],
+      "summarizer": "success"
+    },
+    {
+      "id": "compaction-failure",
+      "assistantChunks": [800, 800, 600],
+      "summarizer": "failure"
+    }
+  ]
+}
+

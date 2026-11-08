@@ -6,16 +6,23 @@
 // 双形态：string = shell form（经 shell 执行），string[] = exec form（直接 spawn，不经 shell）。
 // 退出码 0 成功 / 2 阻断（stderr 反馈）/ 其他非阻塞错误；stdout JSON 决策字段（CC 格式）；
 // 输出 10k 上限、超限全文落盘；timeout 缺省 600s（UserPromptSubmit 降 30s）、到点 SIGKILL 强杀；
-// 同事件多 handler 并行；跨层按 (command+args) 去重；${user_config.*} 禁入 shell-form（装载已拒）。
+// 同事件多 handler 并行；跨层按 handler 身份去重；${user_config.*} 禁入 shell-form（装载已拒）。
 // 环境变量：插件相关只给 PLUGIN_ROOT / PLUGIN_DATA / PROJECT_DIR（宿主密钥类变量显式剥离）。
+// 四档传输（第 1000 / 1001 页）：command 走 spawn、http 走 POST（体与 stdin 同一份 payload JSON）、
+// mcp_tool 走 McpManager.callTool（与模型可见调用同一张裁剪表）、prompt 走注入的模型面（出站前过 redactSecrets）。
+// 四档折进**同一套**决策/回注/错误语义，只有措辞按传输区分（把 HTTP 503 说成「非零退出 503」、把请求中止说成
+// 「SIGKILL 强杀」都是假话）；成功但有条件的事（剥过密钥、只回了一半）走 `notes`，同样进可见回执。
+// agent 档仍未兑现：装载期按「未兑现」拒载并出声，不是运行时一行刷掉的警告。
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isShellFamily, staticRisk } from "../../permissions/risk";
+import { redactSecrets } from "../../events/redact";
 import { createChunkText } from "../../tools/output-ring";
 import type { PermissionMode } from "../../permissions/modes";
+import type { McpGrade } from "../../permissions/autonomy";
 import { CC_TOOL_ALIAS } from "../../tools/base";
 import { sanitizedEnv, spawnTracked } from "../../tools/process";
-import type { HookEventName, LoadedHookDef } from "./types";
+import type { HookEventName, HookHandlerDef, HookHandlerType, HttpHookHandler, LoadedHookDef, McpToolHookHandler, PromptHookHandler } from "./types";
 import { expandUserConfig } from "./skills";
 
 /** 输出上限（每流，字符）。 */
@@ -56,8 +63,9 @@ export interface HookPayload {
 }
 
 /** §9.5 的字段名翻译：我们内部叫 tool_args，CC 的钩子读的是 tool_input。
- *  未给出的字段**整键缺席**——空串/null 会被钩子当成"有值但为空"，那是伪造输入。 */
-export function hookStdinJson(payload: HookPayload, cwd: string, sessionId?: string): string {
+ *  未给出的字段**整键缺席**——空串/null 会被钩子当成"有值但为空"，那是伪造输入。
+ *  这一份同时是 command 档的 stdin 与 http 档的请求体：一份 payload 契约，两种传输。 */
+export function hookPayloadJson(payload: HookPayload, cwd: string, sessionId?: string): Record<string, unknown> {
   const json: Record<string, unknown> = { hook_event_name: payload.event, cwd };
   if (sessionId !== undefined) json.session_id = sessionId;
   if (payload.tool_name !== undefined) json.tool_name = payload.tool_name;
@@ -68,8 +76,97 @@ export function hookStdinJson(payload: HookPayload, cwd: string, sessionId?: str
   if (payload.trigger !== undefined) json.trigger = payload.trigger;
   if (payload.agent_id !== undefined) json.agent_id = payload.agent_id;
   if (payload.agent_type !== undefined) json.agent_type = payload.agent_type;
-  return JSON.stringify(json);
+  return json;
 }
+
+export function hookStdinJson(payload: HookPayload, cwd: string, sessionId?: string): string {
+  return JSON.stringify(hookPayloadJson(payload, cwd, sessionId));
+}
+
+/** http 档只接受 http(s)。`file:` / `data:` / `javascript:` 之类会把「发个钩子请求」变成一条
+ *  新的本地读取通道——那不在钩子的职权里（command 档要读本地文件用的是 fs，早就在权限面与危险检测里）。 */
+export function hookUrlAllowed(raw: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return false;
+  }
+  return url.protocol === "http:" || url.protocol === "https:";
+}
+
+/** 尚未兑现的 handler 档（运行侧没有传输实现）：装载期就点名，而不是等运行时一行刷掉的警告。 */
+const UNHONORED_HANDLER_TYPES: readonly HookHandlerType[] = ["agent"];
+
+/** handler 形态与类型是否相称。返回拒载原因（`null` = 形态合法）。
+ *  这是装载期的唯一判口——`discover.ts` 用它决定 `loaded`，运行时兜底复用它，两处不会漂。 */
+export function hookShapeRejection(handler: HookHandlerDef): string | null {
+  switch (handler.type) {
+    case "command": {
+      const c = handler.command;
+      const ok = (typeof c === "string" && c.trim() !== "") || (Array.isArray(c) && c.length > 0 && c.every((a) => typeof a === "string"));
+      return ok ? null : "command 档的 command 不是非空命令串或非空 argv";
+    }
+    case "http": {
+      const url = handler.url;
+      if (typeof url !== "string" || url.trim() === "") return "http 档缺 url（请求无处可发）";
+      // 模板未展开前也可能不可解析（`${user_config.base}/hook`）：带占位符的 URL 放到执行期校验展开结果。
+      if (url.includes("${")) return null;
+      return hookUrlAllowed(url) ? null : "http 档的 url 协议不是 http(s)（只放行 http/https）：" + url.slice(0, 200);
+    }
+    case "mcp_tool":
+      if (typeof handler.server !== "string" || handler.server.trim() === "") return "mcp_tool 档缺 server（不知道打哪台）";
+      if (typeof handler.tool !== "string" || handler.tool.trim() === "") return "mcp_tool 档缺 tool（不知道打哪个工具）";
+      return null;
+    case "prompt":
+      return typeof handler.prompt === "string" && handler.prompt.trim() !== ""
+        ? null
+        : "prompt 档缺 prompt（没有指令的模型调用不知道该判什么）";
+    case "agent":
+      return UNHONORED_HANDLER_TYPES.includes(handler.type)
+        ? handler.type + " 档尚未兑现（装载即拒；运行侧没有这条 handler 的传输实现）"
+        : "未知 handler 类型 " + String((handler as { type?: unknown }).type);
+    default:
+      return "未知 handler 类型 " + String((handler as { type?: unknown }).type);
+  }
+}
+
+/** `${path}` 按 payload 对象展开（点分路径）。整串就是一个占位符时保留原类型（数组/对象/数字不强行 stringify）；
+ *  嵌在长串里时按字符串拼接。取不到的路径原样保留，由调用方判定并出声——绝不静默送字面量。 */
+export function expandHookTemplate(value: unknown, source: Record<string, unknown>): { value: unknown; missing: string[] } {
+  const missing: string[] = [];
+  const walk = (v: unknown): unknown => {
+    if (typeof v === "string") {
+      const whole = /^\$\{([A-Za-z0-9_.-]+)\}$/.exec(v);
+      if (whole !== null) {
+        const found = lookupPath(source, whole[1]);
+        if (found.missing) missing.push(whole[1]);
+        return found.value;
+      }
+      return v.replace(/\$\{([A-Za-z0-9_.-]+)\}/g, (all, path: string) => {
+        const found = lookupPath(source, path);
+        if (found.missing) { missing.push(path); return all; }
+        return typeof found.value === "string" ? found.value : JSON.stringify(found.value) ?? "";
+      });
+    }
+    if (Array.isArray(v)) return v.map(walk);
+    if (v !== null && typeof v === "object") {
+      return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, item]) => [k, walk(item)]));
+    }
+    return v;
+  };
+  return { value: walk(value), missing };
+}
+
+function lookupPath(source: Record<string, unknown>, path: string): { value: unknown; missing: boolean } {
+  let cur: unknown = source;
+  for (const seg of path.split(".")) {
+    if (cur === null || typeof cur !== "object" || !(seg in (cur as Record<string, unknown>))) return { value: undefined, missing: true };
+    cur = (cur as Record<string, unknown>)[seg];
+  }
+  return cur === undefined ? { value: undefined, missing: true } : { value: cur, missing: false };
+}
+
 
 /** matcher 该配 payload 的哪个字段——§9.5 表逐事件规定，全用 tool_name 会让
  *  SessionStart("startup") / PreCompact("manual") / Subagent*(agent type) 三类 matcher
@@ -119,7 +216,41 @@ export interface HookExecOutcome {
   /** 起不来进程的原因（ENOENT / EACCES…）。与 code:null 配对——没有它，"起都没起来"
    *  与"起来了但退出码为空"在错误里长得一模一样。 */
   error?: string;
+  /** 回执措辞：command 说「退出码」，http 说「HTTP 状态」，mcp_tool 说「MCP 调用」，prompt 说「模型调用」。
+   *  三档共用同一套折叠（决策/上下文/错误），但把 503 报成「非零退出 503」是假话。 */
+  wording?: "http" | "mcp" | "model";
+  /** 成功也要让读者看见的事（出站前剥了几处密钥形态、回文只写了一半）。
+   *  这不是错误路径：钩子确实跑了、结论也确实可用，但"可用"是有条件的——把条件藏起来就等于谎称完整。 */
+  notes?: string[];
 }
+
+/** http 档的传输面（POST + JSON 体；体积帽与超时帽在引擎里，不在这一层）。 */
+export interface HookFetchResult {
+  status: number;
+  body: string;
+}
+export type HookFetchFn = (url: string, init: {
+  method: "POST";
+  headers: Record<string, string>;
+  body: string;
+  timeoutMs: number;
+}) => Promise<HookFetchResult>;
+
+/** mcp_tool 档的调用面：与模型可见的 MCP 工具走同一个 `McpManager.callTool`，
+ *  因此 include/exclude 裁剪、超时、取消、失败态都是同一份纪律。 */
+export type HookMcpCallFn = (plugin: string, server: string, tool: string, args: Record<string, unknown>) =>
+  Promise<{ ok: boolean; output: string }>;
+
+/** prompt 档的模型面：`(system, user, timeoutMs) → 文本`。由装配层注入（`createHookModelCall`），
+ *  判卷注入替身 ⇒ 没有 key 也能量这条链，且绝不偷偷打真网络。 */
+export interface HookModelResult {
+  ok: boolean;
+  text: string;
+  /** provider 侧的"没写完"原文（`turn_truncated` 的 stop_reason）。缺席 = 写完。 */
+  truncated?: string;
+  error?: string;
+}
+export type HookModelCallFn = (system: string, user: string, timeoutMs: number) => Promise<HookModelResult>;
 
 export type HookExecFn = (
   command: string,
@@ -147,11 +278,21 @@ export interface HookEngineOptions {
   /** 会话标识，进 stdin JSON 的 session_id（§9.5）。缺席时整字段不进 JSON——不伪造。 */
   sessionId?: string;
   exec?: HookExecFn;
+  /** http 档的传输面。缺省 = 真 fetch（带超时与体积帽）；判卷注入替身，不碰网络。 */
+  fetch?: HookFetchFn;
+  /** mcp_tool 档的调用面。缺省 = 不注入 ⇒ 这条 handler 如实失败（不是静默跳过）：
+   *  运行时没有 MCP 通道时，"钩子跑了" 必须是假的。由 PluginRuntime 接到 McpManager.callTool。 */
+  mcpCall?: HookMcpCallFn;
+  /** 工具副作用标注（与模型可见面同一份 `McpGrade`）。只读档用它决定 mcp_tool 钩子跑不跑：
+   *  标注 readOnly 且非 destructive 才放行——拿不到标注就拒，钩子不是绕过降档的后门。 */
+  mcpToolGrade?: (plugin: string, server: string, tool: string) => McpGrade | undefined;
+  /** prompt 档的模型面。缺省 = 不注入 ⇒ 这条 handler 在闸上如实拒（不占「跑了」的计数）：
+   *  没有凭证/没有装配会话时，"模型判过了"必须是假的。由 PluginRuntime 接 `createHookModelCall`。 */
+  modelCall?: HookModelCallFn;
   /** §9.5 userConfig 取值面（按插件给）。缺席 = 不展开、不设 PLUGIN_OPTION_*（零行为，旧调用方逐字不变）。
-   *  由 PluginRuntime 注入：值来自明文配置 + safeStorage，敏感位只进子进程 env。 */
+   *  值来自明文配置 + safeStorage，敏感位只进子进程 env / http 头，不进正文/事件流/日志。 */
   userConfigValues?: (plugin: string) => Record<string, string>;
-  /** 敏感键名：**只进 env（PLUGIN_OPTION_*），不进 argv**。argv 在进程表/崩溃报告/审计里可读，
-   *  `["--token","<secret>"]` 等于把 safeStorage 的目标作废。 */
+  /** 敏感键名：**只进 env（PLUGIN_OPTION_*）与 http 头**，不进 argv，也不进任何回执文本。 */
   userConfigSensitive?: (plugin: string) => readonly string[];
 }
 
@@ -217,9 +358,25 @@ function matcherHits(matcher: string | undefined, value: string | undefined): bo
   }
 }
 
-/** 跨层去重键：(command+args) = 命令形态整体（shell 串或 exec argv）。 */
+/** 跨层去重键：按类型分域的「这条钩子的身份」。
+ *  旧实现是 `JSON.stringify(h.handler.command)`——非 command 档没这个字段，键恒为 `undefined`，
+ *  于是两条不同的 http / mcp_tool 钩子在 `seen` 里长得一模一样，第二条被**静默吞掉**。
+ *  URL 用模板原文（展开后的值可能含密钥，身份不该把密钥抄进一张可能被日志读走的表）。 */
 export function dedupKey(h: LoadedHookDef): string {
-  return JSON.stringify(h.handler.command);
+  const handler = h.handler;
+  switch (handler.type) {
+    case "http":
+      return "http:" + handler.url;
+    case "mcp_tool":
+      return "mcp:" + handler.server + "/" + handler.tool + JSON.stringify(handler.args ?? null);
+    case "prompt":
+      // 身份 = 指令模板（展开后的值可能带密钥，不进这张可能被读走的表）。
+      return "prompt:" + handler.prompt;
+    case "command":
+      return "command:" + JSON.stringify(handler.command);
+    default:
+      return "unsupported:" + String(handler.type);
+  }
 }
 
 interface ParsedDecision {
@@ -303,6 +460,20 @@ function defaultExec(): HookExecFn {
   };
 }
 
+/** http 档的缺省传输：真 fetch，带超时（到点 AbortSignal 抛，落进非阻塞错误）与体积帽。
+ *  体积帽按 4× 输出上限读——超限全文落盘那条纪律不能被一次 200MB 响应顶穿。 */
+function defaultFetch(): HookFetchFn {
+  return async (url, init) => {
+    const res = await fetch(url, {
+      method: init.method,
+      headers: init.headers,
+      body: init.body,
+      signal: AbortSignal.timeout(init.timeoutMs),
+    });
+    return { status: res.status, body: (await res.text()).slice(0, HOOK_OUTPUT_CAP * 4) };
+  };
+}
+
 /** §9.5 的 `if`：权限规则语法 best-effort 过滤（CC 原话「硬闸必须走权限系统」——本字段只决定
  *  这条钩子跑不跑，不放宽任何权限）。形态 `Tool` 或 `Tool(<前缀>)`，前缀对该工具的**主参数**做
  *  前缀比较，与 PermissionRule.pattern 的「命令段前缀」同一口径——不另立第二套匹配语言。
@@ -350,10 +521,13 @@ export function hookIfMatches(expr: string | undefined, toolName: string | undef
 export class HookEngine {
   private opts: HookEngineOptions;
   private exec: HookExecFn;
+  private httpFetch: HookFetchFn | null;
 
   constructor(opts: HookEngineOptions) {
     this.opts = opts;
     this.exec = opts.exec ?? defaultExec();
+    // 不注入 = 用真 fetch；显式传 null 语义不存在（可选参数缺省即缺省），判卷传替身走 opts.fetch。
+    this.httpFetch = opts.fetch ?? defaultFetch();
   }
 
   /** worker 档视图（§9.10「worker 继承主会话插件启用集」的最小权限半边）：
@@ -361,6 +535,14 @@ export class HookEngine {
    *  不抄到调用方去（本仓点名的「同族出口策略副本」）。write worker 沿用原档。 */
   forWorkerMode(mode: "read" | "write"): HookEngine {
     return mode === "read" ? new HookEngine({ ...this.opts, mode: "read-only" }) : this;
+  }
+
+  /** prompt 档的模型面**晚绑定**：会话拨哪一档要等 provider 装配完才知道（`agent-runner` 里
+   *  `modelSelection` 定下来之后、loop 起之前那一处），而 `PluginRuntime.load` 在那之前。
+   *  只有这一处绑定点 ⇒ 旁路不会再自成一派取料口（第 1001 页那条缺陷的形状就是"装配前注入"）。
+   *  没绑过 = `gateHook` 拒并出声；`forWorkerMode` 在绑定之后才建视图，worker 档自动跟上。 */
+  bindModelCall(call: HookModelCallFn): void {
+    this.opts.modelCall = call;
   }
 
   /** 事件 → 匹配且去重后的 handler 列表（跨层按 (command+args) 去重）。 */
@@ -381,12 +563,34 @@ export class HookEngine {
     return out;
   }
 
-  /** 静态危险检测 + 权限门（hook 命令不是特权通道）。 */
+  /** 静态危险检测 + 权限门（hook 不论走哪档传输都不是特权通道）。 */
   gateHook(h: LoadedHookDef): string | null {
-    if (h.handler.type !== "command") {
-      return null; // 非 command 类型不跑（由 run() 统一记 skipped 警告）
+    // 形态兜底：装载期已按同一口径判过（discover.ts），执行面复用同一个纯函数，不留第二份规则。
+    const shape = hookShapeRejection(h.handler);
+    if (shape !== null) return shape;
+    const handler = h.handler;
+    if (handler.type === "http" && this.opts.mode === "read-only") {
+      // 只读档连"往本机写文件"都拒，一条 POST 到别人家的请求同样是副作用——而且我们看不到对面做了什么。
+      return "只读档拒绝 http hook（网络请求同样是副作用，插件 " + h.plugin + "）";
     }
-    const command = typeof h.handler.command === "string" ? h.handler.command : h.handler.command.join(" ");
+    if (handler.type === "mcp_tool") {
+      // 通道不在 = 跑不了：在闸上说清，别让一条永远不会响的钩子占着「跑了」的计数。
+      if (!this.opts.mcpCall) return "运行时未注入 MCP 调用面（server " + handler.server + " 打不了）";
+      if (this.opts.mode !== "read-only") return null;
+      // 与模型可见面同一条纪律：只有**标注了 readOnly 且非 destructive** 的工具能在只读档跑。
+      // 没标注/取不到标注 = 拒——钩子不是绕过降档的后门。
+      const grade = this.opts.mcpToolGrade?.(h.plugin, handler.server, handler.tool);
+      if (grade === undefined) return "只读档拒绝 mcp_tool hook（server " + handler.server + " 的工具 " + handler.tool + " 没有副作用标注）";
+      if (grade.destructive === true) return "只读档拒绝 mcp_tool hook（工具 " + handler.tool + " 标注 destructive）";
+      if (grade.readOnly !== true) return "只读档拒绝 mcp_tool hook（工具 " + handler.tool + " 未标注 readOnly）";
+      return null;
+    }
+    if (handler.type === "prompt") {
+      if (!this.opts.modelCall) return "运行时未注入模型调用面（prompt 钩子判不了）";
+      return null;
+    }
+    if (handler.type !== "command") return null;
+    const command = typeof handler.command === "string" ? handler.command : handler.command.join(" ");
     if (this.opts.mode === "read-only") {
       // 只读档：hook 命令也不得有副作用面（静态通道任何命中都拒跑）
       const r = staticRisk("run_shell", { command });
@@ -399,23 +603,171 @@ export class HookEngine {
     return null;
   }
 
+  /** 单条 handler 的超时帽（秒）：四档传输共用——「按事件收口」这条规则不该只服务 shell。 */
+  private timeoutSecFor(event: HookEventName, h: LoadedHookDef): number {
+    const declared = h.handler.timeout;
+    if (typeof declared === "number") return Math.min(Math.max(1, declared), HOOK_TIMEOUT_MAX);
+    if (event === "UserPromptSubmit") return HOOK_TIMEOUT_USER_PROMPT;
+    if (event === "SessionEnd") return HOOK_TIMEOUT_SESSION_END;
+    return HOOK_TIMEOUT_DEFAULT;
+  }
+
+  /** 按 handler 类型选传输，结果一律折成 HookExecOutcome——决策、上下文回注、10k 帽、
+   *  溢出落盘、错误回执因此只有一套语义（三档各写一遍必漂）。 */
+  private async dispatch(h: LoadedHookDef, payload: HookPayload, timeoutSec: number): Promise<HookExecOutcome> {
+    if (h.handler.type === "http") return await this.dispatchHttp(h, h.handler, payload, timeoutSec);
+    if (h.handler.type === "mcp_tool") return await this.dispatchMcp(h, h.handler, payload, timeoutSec);
+    if (h.handler.type === "prompt") return await this.dispatchPrompt(h, h.handler, payload, timeoutSec);
+    return await this.dispatchCommand(h, payload, timeoutSec);
+  }
+
+  /** prompt 档：把**同一份 payload JSON** 交给模型判一次（与 stdin / http 体同源）。
+   *  两条纪律是从别处抄来的现成规矩，不是这里新立的：
+   *  ① 出站前过 `src/events/redact.ts` 那把唯一的密钥形态尺——命中 critical（私钥块一类）就**不出站**，
+   *     只脱敏后照发等于把"这条钩子会外泄"变成常态；剥了几处必须让读者看见，否则他以为模型看到了原文。
+   *  ② `turn_truncated` 那种"没写完"不许当完整结论（同 `createSessionSummarizer` 里那句
+   *     「收下但不声张就等于没收」）。 */
+  private async dispatchPrompt(h: LoadedHookDef, handler: PromptHookHandler, payload: HookPayload, timeoutSec: number): Promise<HookExecOutcome> {
+    const call = this.opts.modelCall;
+    if (!call) return { code: null, stdout: "", stderr: "", killed: false, wording: "model", error: "运行时未注入模型调用面" };
+    const source = hookPayloadJson(payload, this.opts.workspace, this.opts.sessionId);
+    const promptExpanded = expandHookTemplate(handler.prompt, source);
+    if (promptExpanded.missing.length > 0) {
+      return { code: null, stdout: "", stderr: "", killed: false, wording: "model", error: "prompt 里的 ${" + promptExpanded.missing[0] + "} 在本次 payload 里取不到（不把它当字面量发给模型）" };
+    }
+    const systemText = typeof promptExpanded.value === "string" ? promptExpanded.value : JSON.stringify(promptExpanded.value) ?? "";
+    const userText = hookStdinJson(payload, this.opts.workspace, this.opts.sessionId);
+    const sysScan = redactSecrets(systemText);
+    const userScan = redactSecrets(userText);
+    if (sysScan.blocked || userScan.blocked) {
+      return { code: null, stdout: "", stderr: "", killed: false, wording: "model", error: "本次 payload 含 critical 密钥形态（私钥块一类）⇒ 不出站" };
+    }
+    const masked = sysScan.findings.length + userScan.findings.length;
+    try {
+      const res = await call(sysScan.text, userScan.text, Math.max(1, timeoutSec) * 1000);
+      if (!res.ok) {
+        return { code: 1, stdout: "", stderr: res.error ?? "", killed: false, wording: "model", error: (res.error ?? "模型调用失败").slice(0, 200) };
+      }
+      const notes: string[] = [];
+      if (masked > 0) notes.push("prompt 钩子出站前剥了 " + String(masked) + " 处密钥形态（模型看到的不是原文）");
+      if (res.truncated !== undefined) notes.push("模型未写完（stop_reason " + res.truncated + "）⇒ 下面这段是半份结论，别当完整判断用");
+      return { code: 0, stdout: res.text, stderr: "", killed: false, wording: "model", ...(notes.length > 0 ? { notes } : {}) };
+    } catch (err) {
+      return { code: null, stdout: "", stderr: "", killed: false, wording: "model", error: "模型调用异常：" + (err instanceof Error ? err.message : String(err)).slice(0, 200) };
+    }
+  }
+
+  private async dispatchCommand(h: LoadedHookDef, payload: HookPayload, timeoutSec: number): Promise<HookExecOutcome> {
+    if (h.handler.type !== "command") return { code: null, stdout: "", stderr: "", killed: false, error: "handler 形态与 command 档不符" };
+    const shell = typeof h.handler.command === "string";
+    // §9.5：`${user_config.*}` 只进 exec form（shell form 在装载期就被拒载——那串会被 shell 再解析一次）。
+    // 执行端展开而不是装载端展开：值来自 safeStorage，装载期（纯静态扫描）不该去碰密钥环。
+    const cfgValues = this.opts.userConfigValues?.(h.plugin) ?? {};
+    // argv 展开用过滤后的值：敏感键（safeStorage）只走 env，留在 argv 里会被 ps / 崩溃报告读走。
+    // 引用敏感键的 argv 保留 `${user_config.<key>}` 字面量（插件应改走 PLUGIN_OPTION_*）。
+    const sensitive = new Set(this.opts.userConfigSensitive?.(h.plugin) ?? []);
+    const argvValues = Object.fromEntries(Object.entries(cfgValues).filter(([k]) => !sensitive.has(k)));
+    const command = shell
+      ? (h.handler.command as string)
+      : expandUserConfig((h.handler.command as string[])[0] ?? "", argvValues);
+    const argv = shell ? [] : (h.handler.command as string[]).slice(1).map((a) => expandUserConfig(a, argvValues));
+    const env = hookEnv({
+      pluginRoot: this.pluginRootOf(h),
+      pluginData: join(this.opts.pluginDataRoot, h.plugin),
+      workspace: this.opts.workspace,
+      // §9.5：hook 进程经 PLUGIN_OPTION_<KEY> 取 userConfig 值（含 sensitive——只进子进程 env，
+      // 不进正文/事件流/日志）。宿主密钥类变量仍由 ENV_ALLOW 白名单拦在外面。
+      extra: pluginOptionEnv(cfgValues),
+    });
+    return await this.exec(command, argv, shell, env, this.opts.workspace, timeoutSec,
+      hookStdinJson(payload, this.opts.workspace, this.opts.sessionId));
+  }
+
+  /** http 档：POST 同一份 payload JSON（与 command 档的 stdin 逐字同源）。
+   *  折叠口径：2xx ⇒ 体当 stdout（JSON 决策体同 command 生效，非 JSON 走上下文回注）；
+   *  非 2xx / 异常 / 超时 ⇒ 非阻塞错误。SSRF 面没有新增——command 档本来就能 curl 任意地址，
+   *  真正的闸是插件信任门；这里新增的是**协议**限制（file:/data: 拒），别把它当新通道。 */
+  private async dispatchHttp(h: LoadedHookDef, handler: HttpHookHandler, payload: HookPayload, timeoutSec: number): Promise<HookExecOutcome> {
+    if (!this.httpFetch) {
+      return { code: null, stdout: "", stderr: "", killed: false, wording: "http", error: "运行时未注入 http 传输面" };
+    }
+    const cfgValues = this.opts.userConfigValues?.(h.plugin) ?? {};
+    const url = expandUserConfig(handler.url, cfgValues);
+    if (!hookUrlAllowed(url)) {
+      // 展开后也要过一遍：模板本身合法不代表值合法（`${user_config.base}` 可以指向 file:）。
+      return { code: null, stdout: "", stderr: "", killed: false, wording: "http", error: "url 协议不是 http(s)：" + handler.url.slice(0, 200) };
+    }
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    for (const [k, v] of Object.entries(handler.headers ?? {})) {
+      headers[k.toLowerCase()] = expandUserConfig(v, cfgValues);
+    }
+    try {
+      const res = await this.httpFetch(url, {
+        method: "POST",
+        headers,
+        body: hookStdinJson(payload, this.opts.workspace, this.opts.sessionId),
+        timeoutMs: Math.max(1, timeoutSec) * 1000,
+      });
+      const ok = res.status >= 200 && res.status < 300;
+      return {
+        code: ok ? 0 : res.status,
+        stdout: ok ? res.body : "",
+        stderr: ok ? "" : "HTTP " + String(res.status),
+        killed: false,
+        wording: "http",
+        ...(ok ? {} : { error: "HTTP 状态 " + String(res.status) }),
+      };
+    } catch (err) {
+      // AbortSignal.timeout 到点是 TimeoutError（部分运行时是 AbortError）：那就是「超时被中止」，
+      // 不是「对面拒了」——把两者都说成"失败"，排查的人会去查网络而不是查钩子作者的 URL。
+      const name = err instanceof Error ? err.name : "";
+      const timedOut = name === "TimeoutError" || name === "AbortError";
+      const detail = (err instanceof Error ? err.message : String(err)).slice(0, 200);
+      // 回声模板而不是展开后的 URL：后者可能带着 Authorization 要用的那个敏感值。
+      return timedOut
+        ? { code: null, stdout: "", stderr: "", killed: true, wording: "http", error: "http 请求超时（url " + handler.url.slice(0, 200) + "）" }
+        : { code: null, stdout: "", stderr: "", killed: false, wording: "http", error: "http 请求失败：" + detail + "（url " + handler.url.slice(0, 200) + "）" };
+    }
+  }
+
+  /** mcp_tool 档：走 `McpManager.callTool` 这一个口子——连接态、include/exclude 裁剪、超时、
+   *  取消都在同一处生效。args 的 `${path}` 按 payload 展开；取不到值 ⇒ 不跑并点名（不送字面量）。 */
+  private async dispatchMcp(h: LoadedHookDef, handler: McpToolHookHandler, payload: HookPayload, timeoutSec: number): Promise<HookExecOutcome> {
+    if (!this.opts.mcpCall) {
+      return { code: null, stdout: "", stderr: "", killed: false, wording: "mcp", error: "运行时未注入 MCP 调用面（server " + handler.server + "）" };
+    }
+    const source = hookPayloadJson(payload, this.opts.workspace, this.opts.sessionId);
+    const expanded = expandHookTemplate(handler.args ?? {}, source);
+    if (expanded.missing.length > 0) {
+      return { code: null, stdout: "", stderr: "", killed: false, wording: "mcp", error: "args 里的 ${" + expanded.missing[0] + "} 在本次 payload 里取不到（不把它当字面量发出去）" };
+    }
+    try {
+      const res = await this.opts.mcpCall(h.plugin, handler.server, handler.tool, expanded.value as Record<string, unknown>);
+      return {
+        code: res.ok ? 0 : 1,
+        stdout: res.ok ? res.output : "",
+        stderr: res.ok ? "" : res.output,
+        killed: false,
+        wording: "mcp",
+        ...(res.ok ? {} : { error: res.output.slice(0, 200) }),
+      };
+    } catch (err) {
+      return { code: null, stdout: "", stderr: "", killed: false, wording: "mcp", error: "MCP 调用异常：" + (err instanceof Error ? err.message : String(err)).slice(0, 200) };
+    }
+  }
+
   /** 触发一轮 hook（同事件多 handler 并行，Promise.all）。 */
   async run(event: HookEventName, payload: HookPayload): Promise<HookRunResult> {
     const result: HookRunResult = { blocked: false, additionalContext: "", errors: [], overflowFiles: [], droppedContextHandlers: [], ran: 0, skipped: 0 };
     const handlers = this.handlersFor(event, payload);
     if (handlers.length === 0) return result; // 空注册表 = 零行为（既有门字节不变的根基）
 
-    const timeouts: number[] = [];
+    const plan: { h: LoadedHookDef; timeoutSec: number }[] = [];
     for (const h of handlers) {
       // 读不懂的 if 已经"照样跑"了，这里再留一条执行期回执：装载期警告会被面板刷掉，
       // 而这一次到底按什么语义跑的，得能在当场看见（不静默改语义）。
       if (h.if !== undefined && parseHookIf(h.if) === null) {
         result.errors.push("hook 的 if 语法读不懂（" + h.if + "）⇒ 本次按「总是跑」处理");
-      }
-      if (h.handler.type !== "command") {
-        result.skipped++;
-        result.errors.push("handler 类型 " + h.handler.type + " 本轮不支持，跳过 + 警告（插件 " + h.plugin + "）");
-        continue;
       }
       const denied = this.gateHook(h);
       if (denied) {
@@ -423,50 +775,35 @@ export class HookEngine {
         result.errors.push("hook 拒跑（插件 " + h.plugin + "）：" + denied);
         continue;
       }
-      timeouts.push(typeof h.handler.timeout === "number" ? Math.min(Math.max(1, h.handler.timeout), HOOK_TIMEOUT_MAX)
-        : event === "UserPromptSubmit" ? HOOK_TIMEOUT_USER_PROMPT
-          : event === "SessionEnd" ? HOOK_TIMEOUT_SESSION_END
-            : HOOK_TIMEOUT_DEFAULT);
+      plan.push({ h, timeoutSec: this.timeoutSecFor(event, h) });
     }
-    const runnable = handlers.filter((h) => h.handler.type === "command" && this.gateHook(h) === null);
 
-    const outcomes = await Promise.all(runnable.map(async (h, i) => {
-      const shell = typeof h.handler.command === "string";
-      // §9.5：`${user_config.*}` 只进 exec form（shell form 在装载期就被拒载——那串会被 shell 再解析一次）。
-      // 执行端展开而不是装载端展开：值来自 safeStorage，装载期（纯静态扫描）不该去碰密钥环。
-      const cfgValues = this.opts.userConfigValues?.(h.plugin) ?? {};
-      // argv 展开用过滤后的值：敏感键（safeStorage）只走 env，留在 argv 里会被 ps / 崩溃报告读走。
-      // 引用敏感键的 argv 保留 `${user_config.<key>}` 字面量（插件应改走 PLUGIN_OPTION_*）。
-      const sensitive = new Set(this.opts.userConfigSensitive?.(h.plugin) ?? []);
-      const argvValues = Object.fromEntries(Object.entries(cfgValues).filter(([k]) => !sensitive.has(k)));
-      const command = shell
-        ? (h.handler.command as string)
-        : expandUserConfig((h.handler.command as string[])[0] ?? "", argvValues);
-      const argv = shell ? [] : (h.handler.command as string[]).slice(1).map((a) => expandUserConfig(a, argvValues));
-      const pluginRoot = this.pluginRootOf(h);
-      const env = hookEnv({
-        pluginRoot,
-        pluginData: join(this.opts.pluginDataRoot, h.plugin),
-        workspace: this.opts.workspace,
-        // §9.5：hook 进程经 PLUGIN_OPTION_<KEY> 取 userConfig 值（含 sensitive——只进子进程 env，
-        // 不进正文/事件流/日志）。宿主密钥类变量仍由 ENV_ALLOW 白名单拦在外面。
-        extra: pluginOptionEnv(cfgValues),
-      });
-      const out = await this.exec(command, argv, shell, env, this.opts.workspace, timeouts[i] ?? HOOK_TIMEOUT_DEFAULT,
-        hookStdinJson(payload, this.opts.workspace, this.opts.sessionId));
-      return { h, out };
-    }));
+    // 四档传输共用这一条并行轨：同事件多 handler 并行、每条自己限时、结果按同一套语义折叠。
+    // 从前这里靠 `timeouts[i]` 与 `runnable` 两个平行数组按索引对齐——两套过滤条件今天恰好相同，
+    // 但「两个数组必须永远同步 filter」是隐形契约，加一档传输就会错位（超时帽张冠李戴）。
+    const outcomes = await Promise.all(plan.map(async ({ h, timeoutSec }) =>
+      ({ h, out: await this.dispatch(h, payload, timeoutSec) })));
 
     for (const { h, out } of outcomes) {
       result.ran++;
       const stdout = out.stdout;
       const stderr = out.stderr;
+      // 措辞跟着传输走：把 HTTP 503 报成「非零退出 503」是把两种失败说成一种（排查的人会去找不存在的退出码）。
+      const transportLabel = out.wording === "http" ? "hook HTTP 请求"
+        : out.wording === "mcp" ? "hook MCP 调用"
+          : out.wording === "model" ? "hook 模型调用"
+            : "hook";
+      // 成功也要出声的事（剥过密钥形态 / 只回了一半）：藏在 stdout 里会被当上下文照发，
+      // 单列进 errors 才是"这条钩子的结论有条件"的可见回执。
+      for (const note of out.notes ?? []) result.errors.push(note + "（插件 " + h.plugin + "，" + event + "）");
       if (stdout.length > HOOK_OUTPUT_CAP) {
         const file = await this.persistOverflow(h, event, stdout);
         result.overflowFiles.push(file);
       }
       if (out.killed) {
-        result.errors.push("hook 超时被强杀（插件 " + h.plugin + "，" + event + "）");
+        // 命令档是被 SIGKILL 强杀的；http/mcp 没有进程可杀，是请求被中止——两件事不能说成一件。
+        const killWord = out.wording === undefined ? "强杀" : "中止";
+        result.errors.push(transportLabel + " 超时被" + killWord + "（插件 " + h.plugin + "，" + event + "）");
         continue;
       }
       if (out.code === 2) {
@@ -476,8 +813,11 @@ export class HookEngine {
         continue;
       }
       if (out.code !== 0) {
-        result.errors.push("hook 非零退出 " + String(out.code) + "（插件 " + h.plugin + "，非阻塞）" +
-          (out.error !== undefined && out.error !== "" ? "：起进程失败 " + out.error.slice(0, 200) : ""));
+        result.errors.push(out.wording === undefined
+          ? "hook 非零退出 " + String(out.code) + "（插件 " + h.plugin + "，非阻塞）" +
+            (out.error !== undefined && out.error !== "" ? "：起进程失败 " + out.error.slice(0, 200) : "")
+          : transportLabel + " 未被受理（插件 " + h.plugin + "，" + event + "，非阻塞）" +
+            (out.error !== undefined && out.error !== "" ? "：" + out.error.slice(0, 200) : ""));
         continue;
       }
       const parsed = parseHookDecision(stdout);

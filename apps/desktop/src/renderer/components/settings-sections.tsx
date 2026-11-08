@@ -2,29 +2,40 @@
 //   GeneralSection      外观（主题 3 选项卡带小预览图）/ 语言 / 快捷键（Ctrl+Tab）
 //   ProviderSection     当前通道与密钥 / 联网搜索（状态点 + 一句话 + 去配置 + 查看详情折叠）/
 //                       自定义接口 / 识图能力（2026-10-16 v12 导入诊断批补的第四卡）
-//   PermissionsSection  四档 OptionCard（自动 = danger + 警示行）/ 方案门 / 网络只读行
+//   PermissionsSection  四档 OptionCard（auto / full-access = danger + 警示行）/ 网络只读行
+//                       （方案开关 2026-11-03 撤下：是否先出方案由 agent 自判，不再由用户武装）
 //   AboutSection        版本 / 更新 / 诊断信息折叠区（术语收容所）
 // 纯函数资产（panelPatch / providerStatusLabel(由 providerStatusParts 拼回) / searchCapabilityLabel /
 // SEARCH_CONFIG_HINT / defaultKeyProvider / PANEL_PROVIDER_KINDS / providerNeedsKey）随迁至本文件——
 // SettingsPanel 重导出保旧 import 面（settings-panel.test 判卷锚不动）。
 // 2026-10-16（模型/通道页重做）：控件走 settings-ui 的 Field（36px/8px/四态）、徽章走 Badge、
 // 状态走 StatusDot；旧 sp-key-row / sp-key-chip 一族随重做下架（判卷钉已同步改名点名）。
-import { useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { MutableRefObject, ReactNode } from "react";
-import { Copy, Image as ImageIcon } from "lucide-react";
+import { ChevronRight, Plus, TriangleAlert } from "lucide-react";
+import type { LicenseState } from "../../../../../src/main/license";
+import type { BuildInfo } from "../../../../../src/main/build-info";
+import type { DoctorReport } from "../../../../../src/main/doctor";
 import type { AppSettings, PermissionMode } from "../../../../../src/main/ipc-protocol";
+import { selectablePermissionMode } from "../../../../../src/permissions/modes";
 import type { TextSizeSetting, UiSizeSetting } from "../../../../../src/main/settings";
-import { envKeyOf } from "../../../../../src/providers/env-keys";
 import { Badge, Banner, Field, OptionCard, SettingsSection, SettingsRow, StatusDot } from "./settings-ui";
 import { Switch } from "./Switch";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { permissionConfirmCopy } from "./PermissionMenu";
 import { CustomProviderForm } from "./CustomProviderForm";
-import { SHORTCUTS } from "../shortcuts";
+import { SHORTCUT_GROUPS } from "../shortcuts";
+import { doctorReportText, doctorRows, doctorTarget, doctorVerdictText, type DoctorKeyStatus, type DoctorRow } from "./settings/doctor-view";
+import { LspStatusRow } from "./settings/LspStatusRow";
 import { STR } from "../strings";
+import type { SectionId } from "../app-controls";
+import { isCompositionEnter } from "../ime";
 
-/** patch 白名单：UI 只放行这六键，不透传任意 patch。
+/** patch 白名单：UI 只放行这五键，不透传任意 patch。
  *  locale 进白名单修的是实测缺陷：下拉框选了 English、后端也白名单放行，但 panelPatch 把它丢了
- *  ⇒ 显示"已保存"而选项没落库（同族形态：视图说成功、事实没发生）。 */
-export const PANEL_PATCH_KEYS = ["provider", "model", "mode", "theme", "planRequiredByDefault", "locale"] as const;
+ *  ⇒ 显示"已保存"而选项没落库（同族形态：视图说成功、事实没发生）。
+ *  方案默认值键出列（2026-11-03 业主）：方案模式不再由用户武装，agent 自判。 */
+export const PANEL_PATCH_KEYS = ["provider", "model", "mode", "theme", "locale"] as const;
 
 export function panelPatch(patch: Record<string, unknown>): Partial<AppSettings> {
   const out: Partial<AppSettings> = {};
@@ -37,7 +48,7 @@ export function panelPatch(patch: Record<string, unknown>): Partial<AppSettings>
 
 /** provider 选项集（同形再推导：settings.ts 拖 node:fs，不能进 renderer bundle；
  *  与 settings.PROVIDER_KINDS 的逐位等值由 settings-panel.test 对账钉死）。 */
-export const PANEL_PROVIDER_KINDS: readonly string[] = ["demo", "glm", "openai", "anthropic", "gemini"];
+export const PANEL_PROVIDER_KINDS: readonly string[] = ["demo", "glm", "openai", "anthropic", "gemini", "deepseek"];
 
 /** 该 provider 是否需要 key（demo 免；未知一律按要 key 判——fail-visible 而不是当 demo 放行）。 */
 export function providerNeedsKey(kind: string): boolean {
@@ -116,19 +127,20 @@ export function visionCapabilityLabel(cap: {
 }): string {
   const v = cap.vision;
   if (v.state === "declared") {
-    return `识图：${v.modelId ?? "当前模型"} 声明了图片输入模态（${v.declaredModalities.join("/")}）——这是配置声明，未经带凭据实测`;
+    return `${v.modelId ?? "当前模型"} 已声明支持图片输入；尚未验证实际效果。`;
   }
   if (v.state === "undeclared") {
-    return `识图未声明：${v.modelId ?? "当前模型"} 没有图片输入模态声明——render_image 仍会把图发过去，但「调用成功」不等于上游看得懂`;
+    return `${v.modelId ?? "当前模型"} 未声明支持图片输入，图片理解能力尚未确认。`;
   }
-  return "识图能力未验证：取不到当前选中的模型，不猜它支不支持图片输入";
+  return "识图能力未验证：无法读取当前模型，暂时无法确认是否支持图片输入。";
 }
 
 /** 「关于与更新」诊断信息折叠区文案（术语收容所）：工程词集中在这里供对照，
  *  正文一律说人话（总纲阶段 3-3「去掉界面中所有内部术语」的收容侧）。 */
 export const DIAGNOSTICS_TEXT =
   "调度器：serveScheduler 常驻；运行历史 = journal 投影；技能正文由 expandSkillInvocation 展开。" +
-  "以上为工程术语，供排查时对照日志使用。";
+  "主进程日志写在应用数据目录的 logs/main.log（超过 2 MiB 轮转为 main.1.log），" +
+  "可从菜单栏「帮助 → 打开日志文件夹」打开。以上为工程术语，供排查时对照日志使用。";
 
 // ── 通用段（外观 / 语言 / 快捷键）────────────────────────────────────────
 
@@ -169,10 +181,13 @@ export function GeneralSection(props: {
   /** 2026-10-20：组件尺寸档（尺寸轴）；同样走单键直调，理由同上。 */
   uiSize: UiSizeSetting;
   onUiSize: (next: UiSizeSetting) => void;
+  onWindowVibrancy: (next: boolean) => void;
+  /** 完成通知开关（同样走单键直调：panelPatch 白名单不动）。 */
+  onNotify: (next: boolean) => void;
 }): React.JSX.Element {
   return (
     <>
-      <SettingsSection title="外观" hint="主题偏好">
+      <SettingsSection title="外观">
         <SettingsRow label="主题">
           <div className="theme-opts" role="radiogroup" aria-label="主题">
             {THEME_OPTIONS.map((t) => (
@@ -184,28 +199,12 @@ export function GeneralSection(props: {
                 className={"theme-opt" + (props.settings.theme === t.id ? " on" : "")}
                 onClick={() => props.onSave({ theme: t.id })}
               >
-                <span className="theme-thumb" data-thumb={t.id} aria-hidden="true" />
+                {/* 2026-10-24 业主：不要色块小预览——主题选择就是三个词，文字直给。 */}
                 <span>{t.label}</span>
               </button>
             ))}
           </div>
         </SettingsRow>
-      </SettingsSection>
-
-      <SettingsSection title="语言">
-        {/* 2026-10-17 真机发现：下拉能选 English、locale 也真的落库，但渲染层没有任何地方消费
-            它——切了界面仍是中文，卡上「重启后全部生效」是假承诺。英文文案整包没接入之前，
-            这里不摆可切换的空壳：静态写清「目前只有中文」。 */}
-        <SettingsRow label="界面语言" desc="目前只有中文界面；英文界面尚未接入。">
-          <span className="ss-static">中文（简体）</span>
-        </SettingsRow>
-      </SettingsSection>
-
-      {/* 2026-10-18 字号档：tokens.css 的三档（html[data-text-size=sm|md|lg] → --rem-scale .92|1|1.08）
-          与「每个字号 calc 都乘 --rem-scale」的写法**早就写好并在用**，缺的只是一个字段和一处赋值
-          ——data-text-size 从来没被任何代码写过，三档是死代码，用户也无处调字号。
-          现在接上：settings.textSize 单一持有，App 写 html 属性，CSS 消费。 */}
-      <SettingsSection title="字号" hint="整界面文字一起缩放">
         <SettingsRow label="文字大小">
           <div className="theme-opts" role="radiogroup" aria-label="文字大小">
             {TEXT_SIZE_OPTIONS.map((t) => (
@@ -223,11 +222,6 @@ export function GeneralSection(props: {
             ))}
           </div>
         </SettingsRow>
-      </SettingsSection>
-
-      {/* 2026-10-20 组件尺寸档（尺寸轴）：与上面的字号档正交——
-          字号改文字、尺寸改控件高/圆角/间距。Claude 实测五档 data-step="1…5"。 */}
-      <SettingsSection title="组件尺寸" hint="控件高 / 圆角 / 间距一起缩放，不影响文字大小">
         <SettingsRow label="界面密度">
           <div className="theme-opts" role="radiogroup" aria-label="界面密度">
             {UI_SIZE_OPTIONS.map((t) => (
@@ -239,16 +233,37 @@ export function GeneralSection(props: {
                 className={"theme-opt" + (props.uiSize === t.id ? " on" : "")}
                 onClick={() => props.onUiSize(t.id)}
               >
-                <span className="ts-thumb" data-ui={t.id} aria-hidden="true">▭</span>
                 <span>{t.label}</span>
               </button>
             ))}
           </div>
         </SettingsRow>
+        <SettingsRow label="窗口材质" desc="改动需重启窗口。">
+          <Switch
+            label="窗口材质"
+            checked={props.settings.windowVibrancy === true}
+            onChange={props.onWindowVibrancy}
+            onText="开"
+            offText="关"
+          />
+        </SettingsRow>
       </SettingsSection>
-
-      <SettingsSection title="快捷键">
-        <SettingsRow label="Ctrl+Tab 切会话" desc="曾被误触？关掉它，只留 ⌘⇧[ / ⌘⇧] 循环会话。">
+      <SettingsSection title="使用习惯">
+        {/* 次级说明不再复述控件已经说的话：语言值就摆在右侧（只有一项），
+            快捷键表里另有「⌘⇧] / ⌘⇧[」一行，这里再写一遍是同一屏的第二处。 */}
+        <SettingsRow label="界面语言">
+          <span className="ss-static">中文（简体）</span>
+        </SettingsRow>
+        <SettingsRow label="任务完成时通知" desc="点击通知回到该会话。">
+          <Switch
+            label="任务完成时通知"
+            checked={props.settings.notifyOnComplete !== false}
+            onChange={props.onNotify}
+            onText="开"
+            offText="关"
+          />
+        </SettingsRow>
+        <SettingsRow label="Ctrl+Tab 切会话">
           <Switch
             label="Ctrl+Tab 切会话"
             checked={props.settings.ctrlTabCycle}
@@ -264,10 +279,23 @@ export function GeneralSection(props: {
 
 // ── 模型与 Provider 三段（当前通道与密钥 / 联网搜索 / 自定义接口）──────────
 
+/** 供应商显示名（2026-10-24 参照 Codex 供应商页的左列表）：kind id 是机器名，界面上给人话。 */
+const PROVIDER_LABELS: Record<string, string> = {
+  demo: "Demo",
+  glm: "智谱 GLM",
+  openai: "OpenAI",
+  anthropic: "Anthropic",
+  gemini: "Gemini",
+  deepseek: "DeepSeek",
+};
+
 export function ProviderSection(props: {
   settings: AppSettings | null;
   status: { available: boolean; stored: string[]; envActive: boolean };
-  /** 能力读数只消费 search/searchEndpoint 两格（结构子集，同 searchCapabilityLabel 的口径）。 */
+  /** 已知供应商清单（内置 + 已装自定义）——来自 getProviderInfo，不再写死四个。 */
+  providers: readonly { id: string; label: string; custom: boolean }[];
+  /** 全量真模型（按 provider 归数给自定义供应商的详情用）。 */
+  models: readonly { id: string; provider: string }[];
   /** 能力读数只消费 search/searchEndpoint/vision 三格（结构子集，同 searchCapabilityLabel 的口径）。
    *  vision 是 2026-10-16 加的：把「模型声明了图片输入」与「上游真的看得懂」分开——
      *  前者是配置事实，后者要带凭据实测，而后者今天一次都没有做过。 */
@@ -282,125 +310,166 @@ export function ProviderSection(props: {
   checkMsg: { tone: "wait" | "ok" | "err"; text: string; hint?: string } | null;
   onCheck: () => void;
   onCustomSaved: () => void;
-  /** 复制配法（clipboard 访问留在壳层，本段纯展示）。 */
-  onCopyHint: () => void;
+  /** 直接进入可填写和测试的联网设置。 */
+  onOpenSearch: () => void;
 }): React.JSX.Element {
   const provider = props.settings?.provider ?? "—";
+  // 分区头给人话名字（DeepSeek），不印配置里的机器 id（deepseek）；未登记才回落原值。
+  const providerLabel = props.providers.find((p) => p.id === provider)?.label ?? provider;
   const statusParts = providerStatusParts(props.status);
-  // 「去配置」= 展开详情折叠（含配法 + 复制片段）——原生 details 只被掰开，零新逻辑零新通道。
-  const searchHelp = useRef<HTMLDetailsElement | null>(null);
+  // 换选中的供应商即清空 key 输入框：输入框里残留的是**上一个通道**的半截输入，留着必出错。
+  useEffect(() => {
+    if (props.keyInputRef.current !== null) props.keyInputRef.current.value = "";
+  }, [props.keyProvider, props.keyInputRef]);
+  // 自定义供应商的选中态：点列表里的自定义行 = 在右详情**就地编辑**（表单预填，同名覆盖）。
+  const [customSelId, setCustomSelId] = useState<string | null>(null);
+  const customs = props.providers.filter((p) => p.custom);
+  const activeCustom = customSelId !== null && customs.some((p) => p.id === customSelId) ? customSelId : null;
+  // 新增模式：点「添加供应商」= 详情里出一张空白自定义表单（原独立卡合并进详情，2026-10-24 业主）。
+  const [addMode, setAddMode] = useState(false);
+  // 已装自定义供应商的预填数据（编辑表单的回填源；不含 key 明文）。
+  const [customEntries, setCustomEntries] = useState<readonly { id: string; label: string; protocol: string; baseURL: string; apiKeyEnv: string; modelIds: readonly string[] }[]>([]);
+  useEffect(() => {
+    if (activeCustom === null && !addMode) return;
+    void window.agent.providerCustomList().then((r) => { if (r.ok) setCustomEntries(r.entries); }).catch(() => undefined);
+  }, [activeCustom, addMode, props.onCustomSaved]);
+  const editingEntry = activeCustom !== null ? customEntries.find((e) => e.id === activeCustom) ?? null : null;
   return (
     <>
-      <SettingsSection title="当前通道与密钥">
-        <SettingsRow label="当前通道" desc="模型与思考档位在输入框处切换（下一轮派活生效）。">
-          <span className="sp-tag">{provider}</span>
-        </SettingsRow>
-        <SettingsRow label="当前通道密钥" desc="key 只进系统钥匙串，不落明文文件。">
-          <div className="ss-ctl-row">
-            <Field width="lg" select>
-              <select
-                aria-label="选择 provider"
-                value={props.keyProvider}
-                onChange={(e) => props.onKeyProviderChange(e.target.value)}
+      {/* 摘要进分区头（第 892 页）：分区名已经写着「当前通道与密钥」，下面第一行又贴一次
+          「当前通道」⇒ 同一屏两处同词，而那一行的全部内容就是一枚值 + 六个字。
+          现在值与生效时机挂在分区标题右侧，读到的顺序不变（先结论、再列表/表单）。 */}
+      {/* 分区头只留结论：当前通道与其生效时机放一句人话，不再把名词、标签、短句挤成三截。 */}
+      <SettingsSection title="当前通道与密钥" hint={`${providerLabel} · 下次发送生效`}>
+        {/* 供应商管理（2026-10-24 参照 Codex 供应商页）：左列表（状态点=已存 key）选通道，
+            右侧详情 = 该通道的密钥表单（标签在上、字段整行）。换选中即清空 key 输入框。 */}
+        <div className="pv-split">
+          <div className="pv-list" role="tablist" aria-label="供应商">
+            {(props.providers.filter((p) => !p.custom && providerNeedsKey(p.id))).map((p) => (
+              <button
+                key={p.id}
+                className={"pv-item" + (activeCustom === null && props.keyProvider === p.id ? " on" : "")}
+                role="tab"
+                aria-selected={activeCustom === null && props.keyProvider === p.id}
+                onClick={() => { setCustomSelId(null); setAddMode(false); props.onKeyProviderChange(p.id); }}
               >
-                {PANEL_PROVIDER_KINDS.filter((k) => providerNeedsKey(k)).map((k) => (
-                  <option key={k} value={k}>{k}{envKeyOf(k) !== null ? `（env：${envKeyOf(k) ?? ""}）` : ""}</option>
-                ))}
-              </select>
-            </Field>
-            {/* 第二行容器（ss-ctl-sub）：输入 + 按钮必须同行（总纲控件要求）；
-                三者相加 685px > 控件列 634px，不加这条换行容器按钮会被挤到孤行。 */}
-            <div className="ss-ctl-sub">
-              <Field width="md">
-                <input ref={props.keyInputRef} type="password" aria-label="API key" placeholder="粘贴 key（不落明文文件）" />
-              </Field>
-              <button className="mini-btn primary" disabled={props.busy} onClick={props.onSaveKey}>
-                {props.busy ? "保存中…" : "保存到钥匙串"}
+                <StatusDot tone={props.status.stored.includes(p.id) ? "ok" : "off"} />
+                <span className="pv-item-name">{PROVIDER_LABELS[p.id] ?? p.label}</span>
+                {props.settings?.provider === p.id && <span className="sp-tag">当前</span>}
               </button>
-            </div>
-          </div>
-          <div className="ss-key-status">
-            {statusParts.stored.map((p) => (
-              <Badge key={p} onRemove={() => props.onDeleteKey(p)} removeLabel={`删除 ${p} 的 key`}>{p}</Badge>
             ))}
-            {statusParts.line !== "" && (
-              <span className={"ss-hint" + (statusParts.tone === "warn" ? " err" : "")}>{statusParts.line}</span>
-            )}
-            {statusParts.envHint !== null && <span className="ss-hint tip">{statusParts.envHint}</span>}
+            {customs.length > 0 && <div className="pv-list-label">自定义</div>}
+            {customs.map((p) => (
+              <button
+                key={p.id}
+                className={"pv-item" + (activeCustom === p.id ? " on" : "")}
+                role="tab"
+                aria-selected={activeCustom === p.id}
+                onClick={() => { setAddMode(false); setCustomSelId(p.id); }}
+              >
+                <StatusDot tone={props.status.stored.includes(p.id) ? "ok" : "off"} />
+                <span className="pv-item-name">{p.label}</span>
+                {props.settings?.provider === p.id && <span className="sp-tag">当前</span>}
+              </button>
+            ))}
+            <button
+              className={"pv-add" + (addMode ? " on" : "")}
+              aria-pressed={addMode}
+              onClick={() => { setCustomSelId(null); setAddMode(true); }}
+            >
+              <Plus size={12} aria-hidden="true" />
+              <span>添加供应商</span>
+            </button>
           </div>
-        </SettingsRow>
-        {/* 检查连接放分组底部（总纲阶段 3-1「按钮放在分组底部，点击后行内显示成功/失败」）。 */}
-        <SettingsRow label="连接检查">
-          <button
-            type="button"
-            className="mini-btn"
-            disabled={props.checkMsg?.tone === "wait"}
-            title={`向 ${props.keyProvider} 拉一次模型清单（不消耗模型额度）`}
-            onClick={props.onCheck}
-          >
-            检查连接
-          </button>
-          {props.checkMsg !== null && (
-            <div className={`sp-note ${props.checkMsg.tone === "ok" ? "ok" : props.checkMsg.tone === "err" ? "err" : ""}`} role="status" style={{ width: "100%" }}>
-              {props.checkMsg.text}
-              {props.checkMsg.hint !== undefined && <div className="sp-dim">{props.checkMsg.hint}</div>}
-            </div>
-          )}
-        </SettingsRow>
-      </SettingsSection>
-
-      <SettingsSection title="联网搜索">
-        <SettingsRow label="状态">
-          {props.cap === null ? (
-            <div className="ss-search">
-              <StatusDot tone="off" />
-              <span className="ss-search-line">读不到能力读数（不当作「已配」）。</span>
-            </div>
-          ) : (
-            <div className="ss-search">
-              <StatusDot tone={props.cap.search.kind === "ok" ? "ok" : "warn"} />
-              <span className="ss-search-line">{searchCapabilityLabel(props.cap)}</span>
-              {props.cap.search.kind === "unset" && (
-                <button
-                  className="mini-btn primary"
-                  onClick={() => { if (searchHelp.current !== null) searchHelp.current.open = true; }}
-                >去配置</button>
-              )}
-              <details className="ss-help" ref={searchHelp}>
-                <summary>查看详情</summary>
-                <div className="ss-help-body">
-                  <code>{SEARCH_CONFIG_HINT}</code>
-                  <button type="button" className="mini-btn ghost" onClick={props.onCopyHint}><Copy size={11} />复制配置片段</button>
+          <div className="pv-detail">
+            {activeCustom !== null ? (
+              <>
+                <div className="pv-detail-head">
+                  <span className="pv-detail-name">{customs.find((p) => p.id === activeCustom)?.label ?? activeCustom}</span>
                 </div>
-              </details>
-            </div>
-          )}
-        </SettingsRow>
-      </SettingsSection>
-
-      <SettingsSection title="自定义接口">
-        <div className="cp-in-card">
-          <CustomProviderForm onSaved={props.onCustomSaved} />
+                {/* 就地编辑：表单预填已存配置，保存按同名覆盖（2026-10-24 业主：两块合并）。
+                    key = 编辑/新增分支各持独立实例——条件链同位复用会把上一家的预填带进新增表单。 */}
+                {editingEntry === null ? (
+                  <div className="ap-empty">正在读取配置…</div>
+                ) : (
+                  <CustomProviderForm key={`edit-${activeCustom}`} editing={editingEntry} onSaved={() => { props.onCustomSaved(); }} />
+                )}
+              </>
+            ) : addMode ? (
+              <>
+                <div className="pv-detail-head">
+                  <span className="pv-detail-name">添加供应商</span>
+                </div>
+                <CustomProviderForm key="add" onSaved={() => { setAddMode(false); props.onCustomSaved(); }} />
+              </>
+            ) : (
+              <>
+                <div className="pv-detail-head">
+                  <span className="pv-detail-name">{PROVIDER_LABELS[props.keyProvider] ?? props.keyProvider}</span>
+                  <button
+                    type="button"
+                    className="mini-btn"
+                    disabled={props.checkMsg?.tone === "wait"}
+                    title={`向 ${props.keyProvider} 拉一次模型清单（不消耗模型额度）`}
+                    onClick={props.onCheck}
+                  >
+                    检查连接
+                  </button>
+                </div>
+                {/* key 只进系统钥匙串，不落明文文件。 */}
+                <div className="ss-field-block">
+                  <label className="ss-flabel" htmlFor="provider-api-key">API Key</label>
+                  <div className="ss-frow">
+                    <Field width="full">
+                      <input id="provider-api-key" ref={props.keyInputRef} type="password" aria-label="API key" placeholder="粘贴 API Key" />
+                    </Field>
+                    <button className="mini-btn primary" disabled={props.busy} onClick={props.onSaveKey}>
+                      {props.busy ? "保存中…" : "保存到钥匙串"}
+                    </button>
+                  </div>
+                </div>
+                <div className="ss-key-status">
+                  {statusParts.stored.filter((p) => p === props.keyProvider).map((p) => (
+                    <Badge key={p} onRemove={() => props.onDeleteKey(p)} removeLabel={`删除 ${p} 的 key`}>{p}</Badge>
+                  ))}
+                  {statusParts.line !== "" && (
+                    <span className={"ss-hint" + (statusParts.tone === "warn" ? " err" : "")}>{props.status.available ? statusParts.line : "安全存储不可用，无法保存密钥。密钥不会写入明文文件。"}</span>
+                  )}
+                  {statusParts.envHint !== null && <span className="ss-hint tip">{statusParts.envHint}</span>}
+                </div>
+                {props.checkMsg !== null && (
+                  <div className={`sp-note ${props.checkMsg.tone === "ok" ? "ok" : props.checkMsg.tone === "err" ? "err" : ""}`} role="status">
+                    {props.checkMsg.text}
+                    {props.checkMsg.hint !== undefined && <div className="sp-dim">{props.checkMsg.hint}</div>}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </SettingsSection>
-      {/* 识图能力一行：把「图进了请求体」与「上游看得懂」分开。undeclared 时给 warn 条而不是
-          弱化的一行——这一格实测被误读过（render_image 成功 ⇒ 认为模型看过并理解了）。 */}
-      <SettingsSection title="识图能力">
-        {props.cap === null ? (
-          <SettingsRow label="状态" desc="读不到能力读数（不当作「已支持」）。">
-            <span className="sp-dim">—</span>
-          </SettingsRow>
-        ) : props.cap.vision.state === "undeclared" ? (
-          <SettingsRow label="状态">
-            <Banner tone="warn" icon={<ImageIcon size={13} />}>
-              {visionCapabilityLabel(props.cap)}
-            </Banner>
-          </SettingsRow>
-        ) : (
-          <SettingsRow label="状态" desc={visionCapabilityLabel(props.cap)}>
-            <span className="sp-tag">{props.cap.vision.state === "declared" ? "已声明" : "未验证"}</span>
-          </SettingsRow>
-        )}
+
+      <SettingsSection title="能力">
+        <SettingsRow label="联网搜索">
+          <div className="ss-search">
+            <StatusDot tone={props.cap?.search.kind === "ok" ? "ok" : "off"} />
+            <span className="ss-search-line">{props.cap === null ? "正在读取配置…" : props.cap.search.kind === "ok" ? "已配置联网搜索" : "尚未配置可用的搜索服务"}</span>
+            <button type="button" className="mini-btn" onClick={props.onOpenSearch}>配置联网搜索</button>
+          </div>
+        </SettingsRow>
+        {/* 识图能力（第 886 页改语法，不改口径）：三态原先是三种右列——一个「—」、
+            一整条页面级 Banner、一句 desc 加一枚把句首词重复一遍的「已声明/未验证」药丸
+            ⇒ 同一个「能力」分区里两行各说各的话。现在与上一行同一语法：
+            状态点 + 状态句；未声明/未验证仍**可扫读**（琥珀点 + 风险墨），
+            那句「调用成功 ≠ 看得懂」的原文一字未动。 */}
+        <SettingsRow label="识图能力">
+          <div className="ss-search">
+            <StatusDot tone={props.cap === null ? "off" : props.cap.vision.state === "declared" ? "ok" : props.cap.vision.state === "undeclared" ? "warn" : "off"} />
+            <span className="ss-search-line" data-warn={props.cap !== null && props.cap.vision.state !== "declared" ? "true" : undefined}>
+              {props.cap === null ? "正在读取模型能力…" : visionCapabilityLabel(props.cap)}
+            </span>
+          </div>
+        </SettingsRow>
       </SettingsSection>
     </>
   );
@@ -408,20 +477,30 @@ export function ProviderSection(props: {
 
 // ── 权限与安全段 ─────────────────────────────────────────────────────────
 
-const MODE_OPTIONS: readonly { id: PermissionMode; label: string; desc: string; warn?: string }[] = [
+export const MODE_OPTIONS: readonly { id: PermissionMode; label: string; desc: string; warn?: string }[] = [
   { id: "read-only", label: "只读", desc: "写工具一律拒" },
-  { id: "default", label: "默认 · 逐次审批", desc: "每次写 / 跑都出卡" },
-  { id: "guided", label: "引导 · 按风险放行", desc: "低风险自动、高风险出卡" },
-  // 与 PermissionMenu 的 MODE_LABEL 同一口径：auto 免的是"逐笔问写"，不是"什么都不问"
-  // （riskAskAt 仍是 high）。旧文案「全部放行」让用户以为切了就万事大吉，
-  // 而沙箱降级时写向仍会出卡 ⇒ 实测读成"切换没用"。
-  { id: "auto", label: "自动 · 低风险免批", desc: "高风险动作仍会出卡", warn: "不设逐笔防线——确认后果再开。" },
+  { id: "default", label: "需要审批", desc: "每次写 / 跑都出卡" },
+  // 2026-11-03 业主：引导与自动两档文案重叠，合并成一个「智能审批」入口（持久化 id 仍是 auto）。
+  // 它免的是"逐笔问写"，不是"什么都不问"：风险 ≥ high 的动作照样出卡。
+  { id: "auto", label: "智能审批", desc: "低风险直接做，高风险出卡", warn: "不设逐笔防线——确认后果再开。" },
+  // 2026-11-03 业主：完全允许 = 什么都允许。除评测判卷文件的冻结闸外，出网、方案门、
+  // 禁止规则与风险线都不再拦（旧文案说"出网仍一次性批准"已作废）。
+  { id: "full-access", label: "完全允许", desc: "不再出任何审批卡，出网与方案门也放行", warn: "最松档——风险线与 critical 也不再询问。确认你在受信任的仓库里。" },
 ];
 
 export function PermissionsSection(props: {
   settings: AppSettings;
   onSave: (patch: Record<string, unknown>) => void;
 }): React.JSX.Element {
+  const [confirmMode, setConfirmMode] = useState<PermissionMode | null>(null);
+  const requestMode = (id: PermissionMode): void => {
+    if ((id === "auto" || id === "full-access") && props.settings.mode !== id) {
+      setConfirmMode(id);
+      return;
+    }
+    props.onSave({ mode: id });
+  };
+  const confirmCopy = confirmMode === null ? null : permissionConfirmCopy(confirmMode);
   return (
     <>
       <SettingsSection title="权限档" hint="下一轮派活生效">
@@ -429,28 +508,34 @@ export function PermissionsSection(props: {
           {MODE_OPTIONS.map((m) => (
             <OptionCard
               key={m.id}
-              checked={props.settings.mode === m.id}
+              checked={selectablePermissionMode(props.settings.mode) === m.id}
               title={m.label}
               desc={m.desc}
               {...(m.warn !== undefined ? { danger: true, warn: m.warn } : {})}
-              onSelect={() => props.onSave({ mode: m.id })}
+              // 2026-11-02 真机：五档里「自动」和「完全允许」此前同样红描边，风险梯度读不出。
+              // 自动 = 警告级（黄），完全允许 = 危险级（红），与权限菜单的档位色点口径一致。
+              tone={m.id === "auto" ? "warn" : m.id === "full-access" ? "danger" : "normal"}
+              onSelect={() => { requestMode(m.id); }}
             />
           ))}
         </div>
       </SettingsSection>
+      {confirmMode !== null && confirmCopy !== null && (
+        <ConfirmDialog
+          title={confirmCopy.title}
+          note={confirmCopy.desc}
+          confirmLabel="确认切换"
+          danger
+          onClose={() => { setConfirmMode(null); }}
+          onConfirm={() => { const m = confirmMode; setConfirmMode(null); props.onSave({ mode: m }); }}
+        />
+      )}
 
       <SettingsSection title="安全">
-        <SettingsRow label="写文件前先提交方案，等我批准">
-          <Switch
-            label="写文件前先提交方案，等我批准"
-            checked={props.settings.planRequiredByDefault}
-            onChange={(next) => props.onSave({ planRequiredByDefault: next })}
-            onText="开"
-            offText="关"
-          />
-        </SettingsRow>
-        <SettingsRow label="网络">
-          <span className="sp-dim">默认断网；出网 = 逐次审批（一次性，不记忆）。沙箱在 macOS 走 Seatbelt。</span>
+        {/* 方案模式（2026-11-03 业主）：是否先出方案由 agent 自判（提示词自判面 + 方案门写禁），
+            这里不再有用户开关；设置存档里方案默认值的旧键只为读旧档兼容而保留。 */}
+        <SettingsRow label="网络" desc="默认断网；除「完全允许」档外出网都要一次性批准（不记忆）。沙箱在 macOS 走 Seatbelt。">
+          <span className="sp-tag">默认断网</span>
         </SettingsRow>
       </SettingsSection>
     </>
@@ -471,6 +556,15 @@ export function parseBudgetField(raw: string, max: number): { ok: true; value: n
   return { ok: true, value: n };
 }
 
+/** 定时并发上限（1-8 的整数）：后端对非法值静默回退 2，界面必须先拦——否则用户改 0/12
+ *  看到「已保存」，实际跑的是 2。与花费闸同一个理由：视图不许说成功而事实没发生。 */
+export function parseCapField(raw: string): { ok: true; value: number } | { ok: false; error: string } {
+  const t = raw.trim();
+  const n = Number(t);
+  if (t === "" || !Number.isInteger(n) || n < 1 || n > 8) return { ok: false, error: "要填 1-8 的整数" };
+  return { ok: true, value: n };
+}
+
 export function AdvancedSection(props: {
   settings: AppSettings;
   /** 单键直写（不走 panelPatch 白名单——那份白名单与其判卷口径保持原样；
@@ -479,6 +573,7 @@ export function AdvancedSection(props: {
 }): React.JSX.Element {
   const [budgetErr, setBudgetErr] = useState<string | null>(null);
   const [priceErr, setPriceErr] = useState<string | null>(null);
+  const [capErr, setCapErr] = useState<string | null>(null);
   const s = props.settings;
   return (
     <>
@@ -518,8 +613,9 @@ export function AdvancedSection(props: {
             <Field width="sm">
               <input
                 aria-label={STR.advanced.maxBudgetUsd}
-                defaultValue={String(s.maxBudgetUsd)}
+                defaultValue={typeof s.maxBudgetUsd === "number" && Number.isFinite(s.maxBudgetUsd) ? String(s.maxBudgetUsd) : "0"}
                 inputMode="decimal"
+                onKeyDown={(e) => { if (e.key === "Enter" && !isCompositionEnter(e, null)) { e.preventDefault(); e.currentTarget.blur(); } }}
                 onBlur={(e) => {
                   const r = parseBudgetField(e.target.value, 10000);
                   if (!r.ok) { setBudgetErr(r.error); return; }
@@ -534,10 +630,15 @@ export function AdvancedSection(props: {
         <SettingsRow label={STR.advanced.budgetPrice} desc={STR.advanced.budgetPriceDesc}>
           <div className="ss-inline">
             <Field width="sm">
+              {/* 2026-11-02 真机：字段缺省时 `String(undefined)` 把字面 "undefined" 填进了输入框。
+                  先判空再转串（0 是合法值，不能被省略）。 */}
               <input
                 aria-label={STR.advanced.budgetPrice}
-                defaultValue={String(s.budgetPricePerMTok)}
+                defaultValue={typeof s.budgetPricePerMTok === "number" && Number.isFinite(s.budgetPricePerMTok)
+                  ? String(s.budgetPricePerMTok)
+                  : "0"}
                 inputMode="decimal"
+                onKeyDown={(e) => { if (e.key === "Enter" && !isCompositionEnter(e, null)) { e.preventDefault(); e.currentTarget.blur(); } }}
                 onBlur={(e) => {
                   const r = parseBudgetField(e.target.value, 10000);
                   if (!r.ok) { setPriceErr(r.error); return; }
@@ -552,21 +653,194 @@ export function AdvancedSection(props: {
       </SettingsSection>
 
       <SettingsSection title={STR.advanced.privacyTitle}>
-        <SettingsRow label={STR.advanced.telemetry} desc={STR.advanced.telemetryDesc}>
+        <SettingsRow label={STR.advanced.telemetry}>
+          {/* 2026-11-02：Badge 的正文是 children（settings-ui.tsx:135），不是 text 属性。
+              写成 text 时那个 prop 被丢掉 ⇒ 胶囊渲染成一片空白，判卷 settings-advanced-section
+              第 57 条要的「未收集」在 DOM 里根本不存在（该条一直红）。 */}
+          <Badge>未收集</Badge>
+        </SettingsRow>
+      </SettingsSection>
+
+      {/* 2026-10-30 补账：这三个开关一直在生效却没有入口——子代理工具决定模型看不看得见三把工具，
+          收束闸/返修直接改花钱与交付质量。默认值与 settings.ts 同源（不另抄）。 */}
+      <SettingsSection title={STR.advanced.verifyTitle}>
+        <SettingsRow label={STR.advanced.subagentTools} desc={STR.advanced.subagentToolsDesc}>
           <Switch
-            label={STR.advanced.telemetry}
-            checked={s.telemetry}
-            onChange={(next) => props.onSaveKey("telemetry", next)}
+            label={STR.advanced.subagentTools}
+            checked={s.subagentTools}
+            onChange={(next) => props.onSaveKey("subagentTools", next)}
             onText="开"
             offText="关"
           />
+        </SettingsRow>
+        <SettingsRow label={STR.advanced.autoVerify} desc={STR.advanced.autoVerifyDesc}>
+          <Switch
+            label={STR.advanced.autoVerify}
+            checked={s.autoVerify}
+            onChange={(next) => props.onSaveKey("autoVerify", next)}
+            onText="开"
+            offText="关"
+          />
+        </SettingsRow>
+        <SettingsRow label={STR.advanced.autoVerifyRepair} desc={STR.advanced.autoVerifyRepairDesc}>
+          <Switch
+            label={STR.advanced.autoVerifyRepair}
+            checked={s.autoVerifyRepair}
+            onChange={(next) => props.onSaveKey("autoVerifyRepair", next)}
+            onText="开"
+            offText="关"
+          />
+        </SettingsRow>
+      </SettingsSection>
+
+      <SettingsSection title={STR.advanced.lspTitle}>
+        <LspStatusRow />
+      </SettingsSection>
+
+      <SettingsSection title={STR.advanced.scheduleTitle}>
+        <SettingsRow label={STR.advanced.scheduleCap} desc={STR.advanced.scheduleCapDesc}>
+          <div className="ss-inline">
+            <Field width="sm">
+              <input
+                aria-label={STR.advanced.scheduleCap}
+                defaultValue={typeof s.scheduleConcurrencyCap === "number" && Number.isFinite(s.scheduleConcurrencyCap) ? String(s.scheduleConcurrencyCap) : "1"}
+                inputMode="numeric"
+                onKeyDown={(e) => { if (e.key === "Enter" && !isCompositionEnter(e, null)) { e.preventDefault(); e.currentTarget.blur(); } }}
+                onBlur={(e) => {
+                  const r = parseCapField(e.target.value);
+                  if (!r.ok) { setCapErr(r.error); return; }
+                  setCapErr(null);
+                  if (r.value !== s.scheduleConcurrencyCap) props.onSaveKey("scheduleConcurrencyCap", r.value);
+                }}
+              />
+            </Field>
+            {capErr !== null && <span className="ss-err">{capErr}</span>}
+          </div>
         </SettingsRow>
       </SettingsSection>
     </>
   );
 }
 
+// ── 设置文件首读失败横幅（v26）─────────────────────────────────────────
+
+/** 文件坏了不许静默用缺省：说清哪份文件、什么原因、怎么修。
+ *  缺省（undefined / null）= 没有文件或读得动，不摆横幅（缺席 ≠ 失败）。
+ *  不给「重新检查」按钮：主进程的设置缓存与首读结论都驻留在进程里，改盘后要重启才生效——
+ *  摆一个点了没反应的按钮，比不摆更坏。 */
+export function SettingsIssueBanner(props: {
+  issue: { kind: string; message: string; path: string } | null | undefined;
+  /** 真重读盘（设置页传 `window.agent.reloadSettings`）；缺省不摆按钮（SSR / 旧调用面零行为）。 */
+  onReload?: () => void;
+  reloading?: boolean;
+}): React.JSX.Element | null {
+  if (props.issue === null || props.issue === undefined) return null;
+  return (
+    <Banner
+      tone="warn"
+      icon={<TriangleAlert size={13} />}
+      details={
+        <>
+          <p>{props.issue.path}</p>
+          <p>{props.issue.message}</p>
+        </>
+      }
+    >
+      {props.onReload === undefined
+        ? "设置文件未生效：当前按缺省设置运行。修好或删除它，再重新打开 Cairn。"
+        : "设置文件未生效：当前按缺省设置运行。修好或删除它，然后点「重新读取」。"}
+      {props.onReload !== undefined && (
+        <button
+          type="button"
+          className="mini-btn ss-banner-action"
+          disabled={props.reloading === true}
+          onClick={props.onReload}
+        >
+          {props.reloading === true ? "正在读取…" : "重新读取"}
+        </button>
+      )}
+    </Banner>
+  );
+}
+
 // ── 关于与更新段 ─────────────────────────────────────────────────────────
+
+/** 许可证状态 → 一行给人看的话（四态全显式；不把「没校验」说成「有效」）。 */
+/** 只把 ISO 日期截到日：签发的 expires_at 常带 T00:00:00Z，原样显示又长又像调试串。 */
+function licenseDate(iso: string): string {
+  const m = /^\d{4}-\d{2}-\d{2}/.exec(iso);
+  return m === null ? iso : m[0];
+}
+
+export function licenseLabel(state: LicenseState | null | undefined): string {
+  if (state === null || state === undefined) return "未读取";
+  switch (state.state) {
+    case "valid": return state.expiresAt === null ? "有效 · " + state.licensee : "有效 · " + state.licensee + " · 至 " + licenseDate(state.expiresAt);
+    case "expired": return "已过期 · " + state.licensee;
+    case "invalid": return "无效 · " + state.reason;
+    case "inactive": return "未激活";
+  }
+}
+
+/** 到期摘要：30 天内才提醒；过期/当天/未来 N 天各一句。`now` 注入便于判卷不赌时钟。 */
+export function licenseExpiryHint(state: LicenseState | null | undefined, now: number = Date.now()): string | null {
+  if (state === null || state === undefined) return null;
+  if (state.state === "expired") return `已于 ${licenseDate(state.expiresAt)} 过期`;
+  if (state.state !== "valid" || state.expiresAt === null) return null;
+  const at = Date.parse(state.expiresAt);
+  if (Number.isNaN(at)) return null;
+  const days = Math.ceil((at - now) / (24 * 60 * 60 * 1000));
+  if (days < 0) return `已于 ${licenseDate(state.expiresAt)} 过期`;
+  if (days === 0) return "今天到期";
+  if (days <= 30) return `还有 ${String(days)} 天到期`;
+  return null;
+}
+
+/** 诊断结果的行渲染：失败的、且应用里能改的项做成按钮，点了跳到对应设置分区；
+ *  其余（Node / 工作区 / 设置文件 / 会话数据）保持只读行——不摆「点了没反应」的入口。 */
+export function DoctorResultView(props: {
+  rows: readonly DoctorRow[];
+  onOpenSection?: (section: SectionId) => void;
+}): React.JSX.Element {
+  return (
+    <>
+      {props.rows.map((row) => {
+        const target = row.ok ? undefined : doctorTarget(row.id);
+        const body = (
+          <>
+            <span className="ss-doctor-mark" aria-hidden="true">{row.ok ? "✓" : "✗"}</span>
+            <span className="ss-doctor-label">{row.label}</span>
+            <span className="ss-doctor-detail">{row.detail}{row.hint !== undefined ? `（${row.hint}）` : ""}</span>
+          </>
+        );
+        return target !== undefined && props.onOpenSection !== undefined ? (
+          <button
+            key={row.id}
+            type="button"
+            data-doctor-id={row.id}
+            className={"ss-doctor-row ss-doctor-row-action " + (row.ok ? "ok" : "bad")}
+            aria-label={`${row.label}：到设置里处理`}
+            title="到设置里处理这一项"
+            onClick={() => { props.onOpenSection?.(target); }}
+          >
+            {body}
+            <ChevronRight size={13} className="ss-doctor-go" aria-hidden="true" />
+          </button>
+        ) : (
+          <div key={row.id} data-doctor-id={row.id} className={"ss-doctor-row " + (row.ok ? "ok" : "bad")}>
+            {body}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+type DoctorState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "error"; error: string }
+  | { status: "ready"; report: DoctorReport; keys: DoctorKeyStatus | null };
 
 export function AboutSection(props: {
   version: string | null;
@@ -576,16 +850,181 @@ export function AboutSection(props: {
   updateManifestUrl?: string;
   /** 单键直写更新源（不走 panelPatch 白名单）。 */
   onSaveManifest?: (url: string) => void;
-  /** 诊断信息（术语收容所）；缺省用 DIAGNOSTICS_TEXT。 */
+  /** 工程细节（术语收容所）；缺省用 DIAGNOSTICS_TEXT。 */
   diagnostics?: string;
+  /** 许可证状态（getState().license；缺省 undefined 显示「未读取」而不是「未激活」）。 */
+  license?: LicenseState | null;
+  /** 诊断失败项的落点：切到对应设置分区（缺省 = 不给按钮，保持只读）。 */
+  onOpenSection?: (section: SectionId) => void;
+  /** 导入许可证成功后回灌状态（缺省 = 只显示本次导入结果，不更新上方标签）。 */
+  onLicenseChanged?: (state: LicenseState) => void;
+  /** 导入偏好成功后回灌整份设置（缺省 = 只显示回执，不刷新面板）。 */
+  onPreferencesImported?: (settings: AppSettings) => void;
+  /** 包内 build-info.json；开发态/旧包为 null（版本行只显示版本号）。 */
+  build?: BuildInfo | null;
 }): React.JSX.Element {
+  // v34「运行诊断」：按钮点下去才跑（会做一次沙箱自检，不在面板打开时偷偷跑）。
+  const [doctor, setDoctor] = useState<DoctorState>({ status: "idle" });
+  /** 「复制报告」的回执：null = 还没点过/已重新诊断；成功与失败都给一句，不静默。 */
+  const [copyMsg, setCopyMsg] = useState<string | null>(null);
+  /** 许可证导入的三态：idle / importing / 一句话回执。 */
+  const [licenseBusy, setLicenseBusy] = useState(false);
+  const [licenseMsg, setLicenseMsg] = useState<string | null>(null);
+  /** 「导出诊断包」的忙碌/回执：文件落盘成功要给路径，取消不报错。 */
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportMsg, setExportMsg] = useState<string | null>(null);
+  /** 偏好备份的忙碌/回执：导入会覆盖当前偏好，成功/失败都要有回执。 */
+  const [prefBusy, setPrefBusy] = useState(false);
+  const [prefMsg, setPrefMsg] = useState<string | null>(null);
+  const exportPreferences = async (): Promise<void> => {
+    setPrefBusy(true);
+    setPrefMsg(null);
+    try {
+      const r = await window.agent.exportPreferences();
+      if (r.canceled === true) { setPrefMsg("已取消导出"); return; }
+      if (r.ok && r.path !== undefined) { setPrefMsg(`已保存：${r.path}`); return; }
+      setPrefMsg(`导出失败：${r.error ?? "未知原因"}`);
+    } catch (err) {
+      setPrefMsg(`导出失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setPrefBusy(false);
+    }
+  };
+  const [pendingImport, setPendingImport] = useState<{ patch: Record<string, unknown>; ignored: string[] } | null>(null);
+  const [resetOpen, setResetOpen] = useState(false);
+  const importPreferences = async (): Promise<void> => {
+    setPrefBusy(true);
+    setPrefMsg(null);
+    try {
+      const r = await window.agent.importPreferences();
+      if (r.canceled === true) { setPrefMsg("已取消导入"); return; }
+      if (!r.ok || r.patch === undefined) { setPrefMsg(`导入失败：${r.error ?? "备份不合格"}`); return; }
+      // 先预览、后应用：导入是覆盖写，不能让用户在没看见改了哪几项时就落盘。
+      setPendingImport({ patch: r.patch as Record<string, unknown>, ignored: r.ignored ?? [] });
+    } catch (err) {
+      setPrefMsg(`导入失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setPrefBusy(false);
+    }
+  };
+  const applyPendingImport = async (): Promise<void> => {
+    if (pendingImport === null) return;
+    setPrefBusy(true);
+    try {
+      const next = await window.agent.setSettings(pendingImport.patch);
+      props.onPreferencesImported?.(next);
+      const count = Object.keys(pendingImport.patch).length;
+      const ignored = pendingImport.ignored.length > 0 ? `；忽略 ${pendingImport.ignored.length} 项不认识的设置` : "";
+      setPrefMsg(`已导入 ${count} 项偏好${ignored}`);
+      setPendingImport(null);
+    } catch (err) {
+      setPrefMsg(`导入失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setPrefBusy(false);
+    }
+  };
+  const resetPreferences = async (): Promise<void> => {
+    setPrefBusy(true);
+    try {
+      const next = await window.agent.resetPreferences();
+      props.onPreferencesImported?.(next);
+      setPrefMsg("已恢复默认偏好");
+      setResetOpen(false);
+    } catch (err) {
+      setPrefMsg(`恢复失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setPrefBusy(false);
+    }
+  };
+  const exportDiagnostics = async (): Promise<void> => {
+    if (doctor.status !== "ready") return;
+    setExportBusy(true);
+    setExportMsg(null);
+    try {
+      const text = doctorReportText({
+        version: props.version,
+        generatedAt: new Date().toISOString(),
+        verdict: doctorVerdictText(doctor.report, doctorRowsView),
+        rows: doctorRowsView,
+      });
+      const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
+      const r = await window.agent.exportDiagnostics(text, `Cairn-diagnostics-${stamp}.md`);
+      if (r.canceled === true) { setExportMsg("已取消导出"); return; }
+      if (r.ok && r.path !== undefined) { setExportMsg(`已保存：${r.path}`); return; }
+      setExportMsg(`导出失败：${r.error ?? "未知原因"}`);
+    } catch (err) {
+      setExportMsg(`导出失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setExportBusy(false);
+    }
+  };
+  const importLicense = async (): Promise<void> => {
+    setLicenseBusy(true);
+    setLicenseMsg(null);
+    try {
+      const r = await window.agent.importLicense();
+      if ("canceled" in r && r.canceled === true) { setLicenseMsg("已取消导入"); return; }
+      if (r.ok && r.state.state === "valid") {
+        props.onLicenseChanged?.(r.state);
+        setLicenseMsg(`许可证已导入：${r.state.licensee}`);
+        return;
+      }
+      if (r.ok && r.state.state === "expired") {
+        props.onLicenseChanged?.(r.state);
+        setLicenseMsg(`许可证已导入，但已过期：${r.state.licensee}`);
+        return;
+      }
+      setLicenseMsg(`导入失败：${r.error ?? "签名或文件不合格"}`);
+    } catch (err) {
+      setLicenseMsg(`导入失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setLicenseBusy(false);
+    }
+  };
+  const runDoctor = async () => {
+    setCopyMsg(null);
+    setDoctor({ status: "loading" });
+    try {
+      const [report, keys] = await Promise.all([
+        window.agent.doctor(),
+        window.agent.providerKeyStatus().catch(() => null),
+      ]);
+      if (!report.ok) { setDoctor({ status: "error", error: report.error }); return; }
+      setDoctor({ status: "ready", report: report.report, keys });
+    } catch (err) {
+      setDoctor({ status: "error", error: err instanceof Error ? err.message : String(err) });
+    }
+  };
+  const doctorRowsView = doctor.status === "ready" ? doctorRows(doctor.report, doctor.keys) : [];
   return (
-    <SettingsSection title="关于与更新">
+    <SettingsSection title="版本与更新">
       <SettingsRow label="版本">
-        <span className="sp-tag">{props.version ?? "—"}</span>
+        {/* 2026-11-02 真机：版本 + 构建时间 + 签名 + 冒烟 + commit 全挤在一行，右侧被裁成「已过」。
+            版本号单独一行，构建信息另起一行允许折行。 */}
+        <div className="ss-inline ss-version">
+          <span className="sp-tag">{props.version ?? "—"}</span>
+          {props.build !== undefined && props.build !== null && (
+            <span className="sp-dim ss-version-meta" role="status">
+              构建于 {props.build.createdAt.slice(0, 10)} · 签名 {props.build.signature} · 打包冒烟 {props.build.packagedSmoke === "passed" ? "已通过" : "未通过"}
+              {props.build.sourceCommit !== undefined && <> · {props.build.sourceCommit.slice(0, 8)}{props.build.sourceDirty ? "（含未提交修改）" : ""}</>}
+            </span>
+          )}
+        </div>
+      </SettingsRow>
+      <SettingsRow label="许可证" desc="导入发行方签发的 license.json；验签通过才会覆盖现有文件。">
+        <div className="ss-inline">
+          <span className="sp-tag">{licenseLabel(props.license)}</span>
+          {licenseExpiryHint(props.license) !== null && <span className="sp-dim" role="status">{licenseExpiryHint(props.license)}</span>}
+          <button type="button" className="mini-btn ghost" disabled={licenseBusy} onClick={() => { void importLicense(); }}>
+            {licenseBusy ? "导入中…" : "导入许可证…"}
+          </button>
+          {licenseMsg !== null && <span className="sp-dim" role="status">{licenseMsg}</span>}
+        </div>
       </SettingsRow>
       <SettingsRow label="更新">
-        <button className="mini-btn ghost" onClick={props.onCheckUpdate}>检查更新</button>
+        {/* 2026-11-02：此前是 ghost 变体（透明底、无描边），读作一行文字而不是按钮。
+            它是这个分区的主操作，回到默认描边按钮。 */}
+        <button type="button" className="mini-btn" onClick={props.onCheckUpdate}>检查更新</button>
         {props.updateMsg !== null && <span className="sp-dim">{props.updateMsg}</span>}
       </SettingsRow>
       {/* 更新源（2026-10-18 补）：此前这个字段只能改 settings.json，界面上是死胡同——
@@ -599,6 +1038,7 @@ export function AboutSection(props: {
                 aria-label={STR.update.manifestLabel}
                 defaultValue={props.updateManifestUrl ?? ""}
                 placeholder={STR.update.manifestPlaceholder}
+                onKeyDown={(e) => { if (e.key === "Enter" && !isCompositionEnter(e, null)) { e.preventDefault(); e.currentTarget.blur(); } }}
                 onBlur={(e) => {
                   const next = e.target.value.trim();
                   if (next !== (props.updateManifestUrl ?? "")) props.onSaveManifest?.(next);
@@ -609,12 +1049,96 @@ export function AboutSection(props: {
           </div>
         </SettingsRow>
       )}
-      <SettingsRow label="诊断信息" desc="排查问题时对照日志使用的工程细节。">
+      <SettingsRow label="偏好备份" desc="只含主题、字号、权限档、预算与开关；模型、项目路径、会话不进备份。">
+        <div className="ss-inline">
+          <button type="button" className="mini-btn" disabled={prefBusy} onClick={() => { void exportPreferences(); }}>
+            导出偏好…
+          </button>
+          <button type="button" className="mini-btn ghost" disabled={prefBusy} onClick={() => { void importPreferences(); }}>
+            导入偏好…
+          </button>
+          <button type="button" className="mini-btn ghost" disabled={prefBusy} onClick={() => { setResetOpen(true); }}>
+            恢复默认…
+          </button>
+          {prefMsg !== null && <span className="sp-dim" role="status">{prefMsg}</span>}
+        </div>
+      </SettingsRow>
+      <SettingsRow label="运行诊断" desc="检查 Node / 凭据 / 档位 / 沙箱 / 工作区 / 设置与会话数据 / 联网搜索 / 插件信任面。只读；会做一次沙箱自检。">
+        <div className="ss-inline">
+          <button type="button" className="mini-btn" disabled={doctor.status === "loading"} onClick={() => { void runDoctor(); }}>
+            {doctor.status === "loading" ? "诊断中…" : "运行诊断"}
+          </button>
+          <button
+            type="button"
+            className="mini-btn ghost"
+            disabled={doctor.status !== "ready"}
+            title="把这份诊断报告复制到剪贴板，便于贴进问题反馈"
+            onClick={() => {
+              if (doctor.status !== "ready") return;
+              if (typeof navigator === "undefined" || navigator.clipboard === undefined) {
+                setCopyMsg("复制失败：剪贴板不可用");
+                return;
+              }
+              const text = doctorReportText({
+                version: props.version,
+                generatedAt: new Date().toISOString(),
+                verdict: doctorVerdictText(doctor.report, doctorRowsView),
+                rows: doctorRowsView,
+              });
+              void navigator.clipboard.writeText(text).then(
+                () => { setCopyMsg("已复制诊断报告"); },
+                (err: unknown) => { setCopyMsg(`复制失败：${err instanceof Error ? err.message : String(err)}`); },
+              );
+            }}
+          >
+            复制报告
+          </button>
+          <button
+            type="button"
+            className="mini-btn ghost"
+            disabled={doctor.status !== "ready" || exportBusy}
+            title="导出诊断报告 + 主进程日志尾部（Markdown），便于附到问题反馈"
+            onClick={() => { void exportDiagnostics(); }}
+          >
+            {exportBusy ? "导出中…" : "导出诊断包…"}
+          </button>
+          {copyMsg !== null && <span className="sp-dim" role="status">{copyMsg}</span>}
+          {exportMsg !== null && <span className="sp-dim" role="status">{exportMsg}</span>}
+        </div>
+      </SettingsRow>
+      {doctor.status === "error" && (
+        <div className="ss-note err" role="alert">诊断失败：{doctor.error}</div>
+      )}
+      {doctor.status === "ready" && (
+        <div className="ss-doctor" role="status" aria-label="诊断结果">
+          <div className="ss-doctor-verdict">{doctorVerdictText(doctor.report, doctorRowsView)}</div>
+          <DoctorResultView rows={doctorRowsView} onOpenSection={props.onOpenSection} />
+        </div>
+      )}
+      <SettingsRow label="工程细节">
         <details className="ss-diag">
           <summary>展开</summary>
           <div className="ss-diag-body">{props.diagnostics ?? DIAGNOSTICS_TEXT}</div>
         </details>
       </SettingsRow>
+      {pendingImport !== null && (
+        <ConfirmDialog
+          title="导入偏好？"
+          note={`将覆盖 ${Object.keys(pendingImport.patch).length} 项：${Object.keys(pendingImport.patch).slice(0, 8).join("、")}${Object.keys(pendingImport.patch).length > 8 ? " 等" : ""}。模型、项目路径、会话与首启标记不会改变。`}
+          confirmLabel="应用"
+          onConfirm={() => { void applyPendingImport(); }}
+          onClose={() => { setPendingImport(null); }}
+        />
+      )}
+      {resetOpen && (
+        <ConfirmDialog
+          title="恢复默认偏好？"
+          note="会把主题、字号、权限档、预算与开关恢复为默认；模型、项目路径、会话与首启标记不会改变。"
+          confirmLabel="恢复默认"
+          onConfirm={() => { void resetPreferences(); }}
+          onClose={() => { setResetOpen(false); }}
+        />
+      )}
     </SettingsSection>
   );
 }
@@ -625,15 +1149,26 @@ export function AboutSection(props: {
  *  完整速查（含窗格/视图键）按 ⌘/ 弹层。 */
 export function ShortcutsSection(): React.JSX.Element {
   return (
-    <SettingsSection title="快捷键" hint="完整速查表按 ⌘/ 随时调出">
-      <div className="kx-list">
-        {SHORTCUTS.map((s) => (
-          <div className="kx-row" key={s.id}>
-            <kbd className="kx-keys">{s.keys}</kbd>
-            <span className="kx-what">{s.label}</span>
+    /* 2026-11-02：此前只列 13 条核心键，但 ⌘/ 弹层有 40+ 条（含窗格/视图/查找族）——
+       同一件事两份数据，设置页成了精简版。现在直接渲染完整分组表（SHORTCUT_GROUPS，
+       与 ⌘/ 弹层同一事实源）；核心键仍由 SHORTCUTS 承担 tooltip 取键。 */
+    <SettingsSection title="按键一览" hint="完整速查表按 ⌘/ 随时调出">
+      {SHORTCUT_GROUPS.map((g) => (
+        <div key={g.title}>
+          <h2 className="ss-sec-title kx-group-title">{g.title}</h2>
+          <div className="kx-list">
+            {g.rows.map((row) => (
+              <div className="kx-row" key={`${g.title}:${row.keys}:${row.what}`}>
+                <kbd className="kx-keys">{row.keys}</kbd>
+                <span className="kx-what">{row.what}</span>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
+      ))}
     </SettingsSection>
   );
 }
+
+export { McpSection, mcpDraftFrom, mcpDraftPayload, MCP_EMPTY_DRAFT, type McpDraft } from "./settings/McpSection";
+export { HooksSection } from "./settings/HooksSection";

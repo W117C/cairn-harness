@@ -1,5 +1,5 @@
 // M1e settings 存储单测：写后重载一致 / 非法值回退默认 / 原子写残留清理。
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -50,11 +50,58 @@ describe("settings 存储（M1e 布局持久化）", () => {
     expect(s2).toEqual(DEFAULT_SETTINGS);
   });
 
+  it("首读问题可被调用方看见：坏 JSON / 读不了都留结论，文件不存在不算问题", async () => {
+    const bad = join(dir, "bad-json.json");
+    await writeFile(bad, "{ 不是 JSON", "utf8");
+    const badStore = new SettingsStore(bad);
+    await badStore.get();
+    expect(badStore.loadIssue()?.kind).toBe("invalid-json");
+    expect(badStore.loadIssue()?.message).toContain("JSON 解析失败");
+    expect(badStore.loadIssue()?.path).toBe(bad);
+
+    const asDir = join(dir, "settings-is-a-dir");
+    await mkdir(asDir);
+    const dirStore = new SettingsStore(asDir);
+    await dirStore.get();
+    expect(dirStore.loadIssue()?.kind).toBe("unreadable");
+    expect(dirStore.loadIssue()?.message).toContain("读取失败");
+
+    const missing = new SettingsStore(join(dir, "missing.json"));
+    await missing.get();
+    expect(missing.loadIssue(), "新档案没有文件是正常的，不该报问题").toBeNull();
+  });
+
+  it("成功写盘后首读问题清空（文件已被修好）", async () => {
+    const file = join(dir, "repair.json");
+    await writeFile(file, "{ 不是 JSON", "utf8");
+    const s = new SettingsStore(file);
+    await s.get();
+    expect(s.loadIssue()?.kind).toBe("invalid-json");
+    await s.set({ theme: "dark" });
+    expect(s.loadIssue()).toBeNull();
+    expect((JSON.parse(await readFile(file, "utf8")) as { theme?: string }).theme).toBe("dark");
+  });
+
+  it("notifyOnComplete：缺键缺省开（旧档案不被静默关掉）；显式 false 保留；非布尔回退开", () => {
+    expect(validateSettings(null).notifyOnComplete).toBe(true);
+    expect(validateSettings({}).notifyOnComplete).toBe(true);
+    expect(validateSettings({ notifyOnComplete: false }).notifyOnComplete).toBe(false);
+    expect(validateSettings({ notifyOnComplete: "no" }).notifyOnComplete).toBe(true);
+    expect(DEFAULT_SETTINGS.notifyOnComplete).toBe(true);
+  });
+
   it("validateSettings：缺省输入给全部默认；currentSession 字符串保留", () => {
     expect(validateSettings(null)).toEqual(DEFAULT_SETTINGS);
     const v = validateSettings({ currentSession: "会话 1" });
     expect(v.currentSession).toBe("会话 1");
     expect(validateSettings({ currentSession: 42 }).currentSession).toBeNull();
+  });
+
+  it("windowVibrancy 默认关：缺键回退 false，显式 true 才开", () => {
+    expect(DEFAULT_SETTINGS.windowVibrancy).toBe(false);
+    expect(validateSettings({}).windowVibrancy).toBe(false);
+    expect(validateSettings({ windowVibrancy: true }).windowVibrancy).toBe(true);
+    expect(validateSettings({ windowVibrancy: "yes" }).windowVibrancy).toBe(false);
   });
 
   it("locale 往返：写入后新实例读回；白名单外的值回退缺省（面板白名单放行它才谈得上落库）", async () => {

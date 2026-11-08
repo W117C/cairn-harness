@@ -20,15 +20,17 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { planDecisionFor } from "../src/cli";
+import { approvalDecisionFor, planDecisionFor } from "../src/cli";
 
 const ROOT = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
 const BIN = join(ROOT, "bin", "cairn.mjs");
 
 describe("planDecisionFor：方案门的档位判据（纯函数，逐格穷举）", () => {
-  it("★ auto 档 ⇒ 批准（这是缺陷那一格：旧写法在管道里恒判拒绝，不看档位）", () => {
+  it("★ auto / full-access 档 ⇒ 批准（这是缺陷那一格：旧写法在管道里恒判拒绝，不看档位）", () => {
     expect(planDecisionFor({ mode: "auto", ask: true })).toBe("approve");
     expect(planDecisionFor({ mode: "auto", ask: false })).toBe("approve");
+    expect(planDecisionFor({ mode: "full-access", ask: true })).toBe("approve");
+    expect(planDecisionFor({ mode: "full-access", ask: false })).toBe("approve");
   });
 
   it("交互终端下的 default / guided ⇒ 问人（不是自动批准）", () => {
@@ -47,6 +49,32 @@ describe("planDecisionFor：方案门的档位判据（纯函数，逐格穷举�
     // 而不是问一个人一个本档永远不会执行的问题。
     expect(planDecisionFor({ mode: "read-only", ask: true })).toBe("ask");
     expect(planDecisionFor({ mode: "read-only", ask: false })).toBe("reject");
+  });
+});
+
+describe("approvalDecisionFor：审批/方案门的输入→决议映射（业主 2026-11-07 裁决：回车=拒绝）", () => {
+  it("★ 空回车 ⇒ 拒绝（裁决那一格：旧形状 a !== \"n\" 把回车当批准）", () => {
+    expect(approvalDecisionFor("")).toEqual({ approved: false, scope: "once" });
+    expect(approvalDecisionFor("   ")).toEqual({ approved: false, scope: "once" });
+    expect(approvalDecisionFor("\n")).toEqual({ approved: false, scope: "once" });
+  });
+
+  it("显式 y/yes ⇒ 批准一次（大小写/首尾空白照收）", () => {
+    expect(approvalDecisionFor("y")).toEqual({ approved: true, scope: "once" });
+    expect(approvalDecisionFor(" Y ")).toEqual({ approved: true, scope: "once" });
+    expect(approvalDecisionFor("yes")).toEqual({ approved: true, scope: "once" });
+  });
+
+  it("a/all ⇒ 批准 + 本会话内同类（scope 会话级）", () => {
+    expect(approvalDecisionFor("a")).toEqual({ approved: true, scope: "session_kind" });
+    expect(approvalDecisionFor("all")).toEqual({ approved: true, scope: "session_kind" });
+  });
+
+  it("★ 反向哨兵：n/no 与一切打错的字都拒绝（不是「非 n 即批」）", () => {
+    expect(approvalDecisionFor("n")).toEqual({ approved: false, scope: "once" });
+    expect(approvalDecisionFor("no")).toEqual({ approved: false, scope: "once" });
+    expect(approvalDecisionFor("banana")).toEqual({ approved: false, scope: "once" });
+    expect(approvalDecisionFor("1")).toEqual({ approved: false, scope: "once" });
   });
 });
 

@@ -11,7 +11,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { autoVerifyBeats, costSplit, moneyText, PRICE_UNKNOWN, priceFace, runValidity, tally, verifyRecovery, VERIFY_RECOVERY_WHY, WHY_INTERRUPTED_PREFIX, WHY_NOT_STARTED } from "../scripts/lib/eval-validity";
+import { autoVerifyBeats, costSplit, moneyText, PRICE_UNKNOWN, priceFace, runValidity, tally, taskRollup, verifyRecovery, VERIFY_RECOVERY_WHY, WHY_INTERRUPTED_PREFIX, WHY_NOT_STARTED } from "../scripts/lib/eval-validity";
 import type { VerifyBeatFace, VerifyRecovery } from "../scripts/lib/eval-validity";
 
 const row = (requests: number, ok: boolean, fails: string[] = []) =>
@@ -278,5 +278,109 @@ describe("返修那一格（verifyRecovery）：六态分开印，闸补的绿�
     expect(src).not.toContain("v.auto === true || v.callId ===");
     expect(readFileSync(fileURLToPath(new URL("../src/agent/loop.ts", import.meta.url)), "utf8"))
       .toContain("const beat = await verifyBeat(HARNESS_VERIFY_CALL_ID, true);");
+  });
+});
+
+// 任务级那一层（2026-10-22）：**独立单位是「任务」而不是「趟次」**。
+//
+// 缘起：`--reps N` 把同一条任务跑 N 遍，而**同一条任务的 N 遍不独立**（同一份任务难度、同一族种子）
+// ⇒ 把 N×M 趟当成 M 个独立二项样本去算区间，**区间会算窄**（自相关把方差压小），
+// 于是「12 任务 × 3 rep」被读成比它实际更可靠的样子。
+//
+// 而更要紧的是**两个指标的分母不能一刀切**：没跑满的任务对 pass@k 与 pass^k 的「不可知」含义**相反**
+// （见 `lib/eval-validity.ts` 的 `taskRollup` 注释）——一刀切剔掉就是把一次**已知的败**藏起来，
+// 那是**不安全**的方向（本仓「把红跑藏起来」那一族）。
+describe("任务级汇总：独立单位是任务，且两个指标各算各的分母", () => {
+  const trow = (taskId: string, requests: number, ok: boolean, fails: string[] = []) =>
+    ({ taskId, r: { requests }, g: { ok, fails } });
+  const runnerSrc = () => readFileSync(fileURLToPath(new URL("../scripts/loop-eval.ts", import.meta.url)), "utf8");
+
+  it("正例：3 条任务各跑 1 遍，2 条达标 ⇒ 2/3，区间包住点估计", () => {
+    const tr = taskRollup([trow("TA", 1, true), trow("TB", 1, true), trow("TC", 1, false)], 1);
+    expect(tr.refuse).toBe(false);
+    expect(tr.passAtKTotal).toBe(3);
+    expect(tr.passAtK).toBe(2);
+    expect(tr.passKTotal).toBe(3);
+    expect(tr.passK).toBe(2);
+    expect(tr.partial).toEqual([]);
+    expect(tr.passAtKCi).not.toBeNull();
+    expect(tr.passAtKCi!.lower).toBeLessThan(2 / 3);
+    expect(tr.passAtKCi!.upper).toBeGreaterThan(2 / 3);
+  });
+
+  it("分辨力：rep=3 时 pass@3 与 pass^3 必须分得开（1/3 蒙对 ≠ 3/3 全对）", () => {
+    const tr = taskRollup([
+      trow("TA", 1, true), trow("TA", 1, true), trow("TA", 1, true),
+      trow("TB", 1, true), trow("TB", 1, false), trow("TB", 1, false),
+    ], 3);
+    expect(tr.passAtKTotal).toBe(2);
+    expect(tr.passAtK).toBe(2);
+    expect(tr.passKTotal).toBe(2);
+    expect(tr.passK).toBe(1);
+  });
+
+  it("同答那一格：rep=1 时 pass@1 与 pass^1 必然相等（一位只有一种读法）", () => {
+    const tr = taskRollup([trow("TA", 1, true), trow("TB", 1, false)], 1);
+    expect(tr.passAtK).toBe(1);
+    expect(tr.passK).toBe(1);
+  });
+
+  it("★不可知的两面：2 遍败＋1 遍未起步 ⇒ pass@k 不可知，但 pass^k 已定局是败（不许藏）", () => {
+    const tr = taskRollup([
+      trow("TA", 1, true), trow("TA", 1, true), trow("TA", 1, true),
+      trow("TD", 1, false), trow("TD", 1, false), trow("TD", 0, false),
+    ], 3);
+    // pass@k：TD 那一遍可能赢 ⇒ 不可知 ⇒ 不进分母
+    expect(tr.passAtKTotal).toBe(1);
+    expect(tr.passAtK).toBe(1);
+    // pass^k：TD 见着两遍败 ⇒ 已经不算 pass^k 了 ⇒ 定局是败 ⇒ **留在分母里当败**
+    expect(tr.passKTotal).toBe(2);
+    expect(tr.passK).toBe(1);
+    expect(tr.partial).toHaveLength(1);
+    expect(tr.partial[0].taskId).toBe("TD");
+    expect(tr.partial[0].valid).toBe(2);
+    expect(tr.partial[0].unknown).toBe(1);
+    expect(tr.partial[0].atKKnown).toBe(false);
+    expect(tr.partial[0].kKnown).toBe(true);
+  });
+
+  it("★反向那一格：1 遍赢＋1 遍未起步 ⇒ pass@k 已定局是赢，但 pass^k 不可知", () => {
+    const tr = taskRollup([trow("TE", 1, true), trow("TE", 0, true)], 2);
+    expect(tr.passAtKTotal).toBe(1);
+    expect(tr.passAtK).toBe(1);
+    expect(tr.passKTotal).toBe(0);
+    expect(tr.passK).toBe(0);
+    expect(tr.passKCi).toBeNull();
+    expect(tr.refuse).toBe(false);
+    expect(tr.partial[0].atKKnown).toBe(true);
+    expect(tr.partial[0].kKnown).toBe(false);
+  });
+
+  it("分母都空 ⇒ 拒绝出数（不许印 0/0）", () => {
+    const tr = taskRollup([trow("TA", 0, false), trow("TB", 0, false)], 1);
+    expect(tr.refuse).toBe(true);
+    expect(tr.passAtKTotal).toBe(0);
+    expect(tr.passAtKCi).toBeNull();
+    expect(tr.passKCi).toBeNull();
+  });
+
+  it("区间用的是 Wilson 闭式（1/1 的下界 0.2065，不是正态近似的 0）", () => {
+    const tr = taskRollup([trow("TA", 1, true)], 1);
+    expect(tr.passKCi!.lower).toBeCloseTo(0.2065, 3);
+    expect(tr.passKCi!.upper).toBeCloseTo(1, 3);
+  });
+
+  it("repsPerTask <= 0 ⇒ 拒绝出数（不许拿 0 遍当分母）", () => {
+    const tr = taskRollup([trow("TA", 1, true)], 0);
+    expect(tr.refuse).toBe(true);
+    expect(tr.passAtKTotal).toBe(0);
+  });
+
+  it("★接线：跑器必须真的把这两个读数印出来（算出来不接＝没出口）", () => {
+    const src = runnerSrc();
+    // 钉整条调用连入参：只钉函数名则「算出来不接」这一变异会存活
+    expect(src).toContain("const tr = taskRollup(rows, REPS);");
+    expect(src).toContain("rate(tr.passAtK, tr.passAtKTotal)");
+    expect(src).toContain("rate(tr.passK, tr.passKTotal)");
   });
 });

@@ -3,14 +3,18 @@
 // 新建/切换/重命名/删除；删除当前会话回退到最近一个（mtime 降序）。
 // electron-free（root 由调用方传入：app 用 userData，验收脚本用临时目录），可 headless 单测。
 import { mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join, dirname } from "node:path";
 import type { AgentEvent } from "../events";
-import { createEventLog, replay } from "../events";
+import { createEventLog, invalidateEventLogHandle, replay } from "../events";
 import { tmpPathFor, writeFileAtomic } from "../atomic-write";
 import { parseRunAttachment, type RunAttachmentReference } from "./run-attachments";
 import type { SessionMetadataRecord, SessionMetadataRepository } from "./session-metadata";
 import { isSessionLogBusy, markSessionMutating, unmarkSessionMutating } from "./session-liveness";
+import { sessionRunLockHeld } from "./session-lock";
 import { attachmentPrefixFor, legacyAttachmentPrefixFor } from "../agent/prune";
+import { sessionPreferencesPath } from "./session-preferences";
+import { isRecord } from "../is-record";
+import { MAX_SESSION_ID_LENGTH } from "./session-id";
 
 /** 文件事实始终来自 JSONL；sidecar 字段只在确有 metadata 时合并，老会话不会被伪造成默认记录。 */
 export interface SessionInfo extends Partial<SessionMetadataRecord> {
@@ -159,8 +163,10 @@ function rememberLineCount(p: string, entry: LineCountEntry): void {
   lineCounts.set(p, entry);
 }
 
-/** 一个会话文件的行数：未变则复用，长大只读追加段，首次/换 inode/被截断才整份扫。 */
-async function countSessionLines(p: string, st: { ino: number; size: number }): Promise<number> {
+/** 一个会话文件的行数：未变则复用，长大只读追加段，首次/换 inode/被截断才整份扫。
+ *  `st` 是调用方**先前**取的 stat；冷读可能读到其后追加的字节 ⇒ 水位按实际读到的字节数记，
+ *  不能按 stat.size 夹回去（否则下一次增量会把同一段再加一遍）。 */
+export async function countSessionLines(p: string, st: { ino: number; size: number }): Promise<number> {
   const cached = lineCounts.get(p);
   if (cached && cached.ino === st.ino && cached.size === st.size) {
     return cached.closed + (cached.tail.trim().length > 0 ? 1 : 0);
@@ -179,14 +185,63 @@ async function countSessionLines(p: string, st: { ino: number; size: number }): 
     }
   }
   const raw = await readFile(p, "utf8"); // 首访/重建/截断：整份扫一次（此后只走上面两支）
-  const { entry, lines } = foldSegments(0, raw, st.size, st.ino);
+  const { entry, lines } = foldSegments(0, raw, Buffer.byteLength(raw, "utf8"), st.ino);
   rememberLineCount(p, entry);
   return lines;
 }
 
-/** 会话名合法性：可打印、无路径分隔符、不为点、长度 1–80（renderer IPC 是信任边界，fail-closed）。 */
+/** 会话根目录里与事件同用 `.jsonl` 的 UI sidecar 名（不含扩展名）：它们**永远不是会话**。
+ *  名单只收真的会撞扩展名的两枚——`projects.json` / `session-metadata.json` 与 `<id>.jsonl` 不冲突。 */
+export const RESERVED_SESSION_IDS: readonly string[] = ["pins", "feedback"];
+export const isReservedSessionId = (id: string): boolean => RESERVED_SESSION_IDS.includes(id);
+
+/** 首行能否**证明**这是会话（顶层 type 是字符串）。坏行 / 空行 / 非对象都不能。 */
+function isEventHeadLine(head: string): boolean {
+  try {
+    const raw = JSON.parse(head) as unknown;
+    return typeof raw === "object" && raw !== null && typeof (raw as Record<string, unknown>)["type"] === "string";
+  } catch {
+    return false;
+  }
+}
+
+/** 目录扫描共用的会话判定（唯一一份）：sidecar 形状 ⇒ 不是会话；
+ *  **保留名且首行证明不了是事件** ⇒ 也不是（pins/feedback 首行坏掉时实测会被列成会话）。
+ *  用户真把会话命名成 pins（首行是事件）仍算会话——文件名不作主判据。 */
+export function sessionFileIsSession(name: string, head: string | null): boolean {
+  if (head === null) return true;
+  if (isUiSidecarLine(head)) return false;
+  const id = name.endsWith(".jsonl") ? name.slice(0, -".jsonl".length) : name;
+  return !(isReservedSessionId(id) && !isEventHeadLine(head));
+}
+
+/** 会话 id 的**路径安全**问题（null = 合法）：读写既有会话只要求这一层。
+ *  保留名不在此列——老档案里真有叫 pins 的会话时，读/续跑仍要能走。 */
+export function sessionIdProblem(name: string): string | null {
+  if (typeof name !== "string" || name.length === 0) return "会话名不能为空";
+  if (name.length > MAX_SESSION_ID_LENGTH) return `会话名最长 ${String(MAX_SESSION_ID_LENGTH)} 字`;
+  if (name.trim() !== name) return "会话名首尾不能有空白";
+  if (/[/\\\u0000-\u001f.]/.test(name)) return "会话名不得含 / \\ . 或控制字符";
+  return null;
+}
+
+/** 会话名合法性（读写/寻址）：可打印、无路径分隔符、不为点、长度 1–80。 */
 export function isValidSessionName(name: string): boolean {
-  return typeof name === "string" && /^[^/\\\u0000-\u001f.]{1,80}$/.test(name) && name.trim() === name && name.length > 0;
+  return typeof name === "string" && sessionIdProblem(name) === null;
+}
+
+/** 创建一个**新名字**时的问题（null = 可用）：在路径安全之上再拒 UI sidecar 保留名——
+ *  与 pins.jsonl / feedback.jsonl 同名会把两类数据写进同一个文件。 */
+export function sessionNameProblem(name: string): string | null {
+  const base = sessionIdProblem(name);
+  if (base !== null) return base;
+  if (isReservedSessionId(name)) return `「${name}」是 UI sidecar 的保留名，换一个`;
+  return null;
+}
+
+/** 目录里一条路径是不是会话日志（读首行按上面那份唯一判定）。 */
+export async function isSessionLogAt(path: string): Promise<boolean> {
+  return sessionFileIsSession(basename(path), await readHeadLine(path));
 }
 
 function sessionPath(root: string, id: string): string {
@@ -214,17 +269,14 @@ const SESSION_QUEUE_MAX_ATTACHMENTS = 32;
 
 export class SessionQueueCorruptError extends Error {
   constructor(filePath: string, reason: string) {
-    super(`发送队列损坏，已拒绝覆盖: ${filePath} (${reason})`);
+    // 与元数据侧同口径：拒因与出路同屏（这句会原样进「发送队列读取/保存失败」错误条）。
+    super(`发送队列损坏，已拒绝覆盖: ${filePath} (${reason})——修好或删除该文件后重试`);
     this.name = "SessionQueueCorruptError";
   }
 }
 
 function queuePath(root: string, id: string): string {
   return sessionPath(root, id).replace(/\.jsonl$/, ".queue.json");
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function validateSessionQueueEntry(raw: unknown, index: number): SessionQueueEntry {
@@ -288,10 +340,25 @@ export async function readSessionQueue(root: string, id: string): Promise<Sessio
   }
 }
 
-/** 原子写发送队列；空数组删文件，避免空 sidecar 长期留在目录里。 */
+/** 原子写发送队列；空数组删文件，避免空 sidecar 长期留在目录里。
+ *  **覆盖前先读旧档**：坏档不许被静默抹掉——读路径 fail-closed，写路径同口径
+ *  （否则「已拒绝覆盖」这半句就是假话：下一次入队会把用户还能手工抢救的内容盖掉）。 */
 export async function writeSessionQueue(root: string, id: string, entries: readonly SessionQueueEntry[]): Promise<void> {
   const items = validateSessionQueueItems(entries);
   const p = queuePath(root, id);
+  let prev: string | null = null;
+  try {
+    prev = await readFile(p, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  if (prev !== null) {
+    try {
+      validateSessionQueueState(JSON.parse(prev) as unknown);
+    } catch (error) {
+      throw new SessionQueueCorruptError(p, error instanceof Error ? error.message : String(error));
+    }
+  }
   if (items.length === 0) {
     await rm(p, { force: true });
     return;
@@ -301,9 +368,7 @@ export async function writeSessionQueue(root: string, id: string, entries: reado
 }
 
 /** 重命名会话时同步迁移队列 sidecar；源不存在 = false（幂等），目标冲突显式拒绝。 */
-async function moveSessionQueue(root: string, fromId: string, toId: string): Promise<boolean> {
-  const from = queuePath(root, fromId);
-  const to = queuePath(root, toId);
+async function moveSessionSidecar(from: string, to: string, conflict: string): Promise<boolean> {
   const sourceExists = await stat(from).then(() => true, (error: unknown) => {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
     throw error;
@@ -313,9 +378,19 @@ async function moveSessionQueue(root: string, fromId: string, toId: string): Pro
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
     throw error;
   });
-  if (targetExists) throw new Error(`目标会话队列已存在: ${toId}`);
+  if (targetExists) throw new Error(conflict);
   await rename(from, to);
   return true;
+}
+
+/** 未创建的根是空目录；权限、路径类型和 IO 故障必须交回调用方，不能伪装成零会话。 */
+async function readSessionDirectory(root: string): Promise<string[]> {
+  try {
+    return await readdir(root);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  }
 }
 
 /** 扫描会话目录：mtime 降序（最近在上），行数 = 非空行数。
@@ -324,12 +399,7 @@ export async function listSessions(
   root: string,
   metadataById?: ReadonlyMap<string, SessionMetadataRecord>,
 ): Promise<SessionInfo[]> {
-  let names: string[] = [];
-  try {
-    names = await readdir(root);
-  } catch {
-    return []; // 目录不存在 = 零会话
-  }
+  const names = await readSessionDirectory(root);
   const out: SessionInfo[] = [];
   for (const name of names) {
     if (!name.endsWith(".jsonl")) continue;
@@ -340,7 +410,7 @@ export async function listSessions(
       if (!st.isFile()) continue;
       // 先读首行再数行：sidecar 在这里就被挡掉，不会为一个假会话把整份 pins/feedback 读一遍。
       const head = await readHeadLine(p);
-      if (head !== null && isUiSidecarLine(head)) continue;
+      if (!sessionFileIsSession(name, head)) continue;
       const lines = await countSessionLines(p, st); // 未变即复用计数，不再整份读文件体
       const meta = head === null ? null : projectHeadLine(head); // 只读首行（旧实现在此之上还要整份 readFile 数行）
       const organization = metadataById?.get(id);
@@ -355,6 +425,12 @@ export async function listSessions(
               pinned: organization.pinned,
               archived: organization.archived,
               ...(organization.projectId !== undefined ? { projectId: organization.projectId } : {}),
+              ...(organization.model !== undefined ? { model: organization.model } : {}),
+              ...(organization.thinking !== undefined ? { thinking: organization.thinking } : {}),
+              ...(organization.viewedAt !== undefined ? { viewedAt: organization.viewedAt } : {}),
+              ...(organization.archivedAt !== undefined ? { archivedAt: organization.archivedAt } : {}),
+              ...(organization.idleSince !== undefined ? { idleSince: organization.idleSince } : {}),
+              ...(organization.resumeAttempts !== undefined ? { resumeAttempts: organization.resumeAttempts } : {}),
               createdAt: organization.createdAt,
               updatedAt: organization.updatedAt,
             }
@@ -407,6 +483,15 @@ export function deriveSessionTitle(message: string, maxWidth = 32): string | nul
   return out;
 }
 
+/** 会话根 → 工作区：CLI 与桌面都把根放在 `<workspace>/.agent/sessions`（同一形态）。
+ *  只给「多根归属已经由解析器确定」的调用方用——拿任意临时目录来推工作区不是本函数的承诺。 */
+export function workspaceOfSessionsRoot(root: string): string | null {
+  const agent = dirname(root);
+  if (basename(root) !== "sessions" || basename(agent) !== ".agent") return null;
+  const workspace = dirname(agent);
+  return workspace === agent ? null : workspace;
+}
+
 /** 新建会话：名字缺省 = 时间戳；撞名自动加序号。可选 sidecar 写入失败时回滚空 JSONL。 */
 export async function createSession(
   root: string,
@@ -414,7 +499,7 @@ export async function createSession(
   metadata?: Pick<SessionMetadataRepository, "create">,
 ): Promise<string> {
   const base = name?.trim() || `会话 ${new Date().toLocaleString("sv-SE").replace(/[T]/g, " ").slice(0, 16)}`;
-  if (!isValidSessionName(base)) throw new Error(`非法会话名: ${JSON.stringify(name)}`);
+  if (sessionNameProblem(base) !== null) throw new Error(`非法会话名: ${JSON.stringify(name)}（${sessionNameProblem(base) ?? "未知原因"}）`);
   await mkdir(root, { recursive: true });
   // 独占创建（O_EXCL）把「查重 + 建文件」合成一个原子步：旧实现 stat 后 writeFile，
   // 两个并发调用（双击新建 / 编辑入口与发送入口同秒）会都看到 ENOENT、都写同一个文件，
@@ -466,7 +551,10 @@ export async function renameSession(
 ): Promise<string> {
   const from = sessionPath(root, oldId);
   // 重命名与运行中的 append 抢同一个 inode：句柄跟着旧文件走，新路径会缺一段事件。
-  if (isSessionLogBusy(from)) throw new Error(`会话正在运行，先停止再重命名: ${oldId}`);
+  // 同删除：跨进程的持有者只能从会话锁文件看出来。
+  if (isSessionLogBusy(from) || await sessionRunLockHeld(from)) {
+    throw new Error(`会话正在运行，先停止再重命名: ${oldId}`);
+  }
   markSessionMutating(from);
   try {
     return await renameSessionUnlocked(root, oldId, newName, metadata);
@@ -481,7 +569,7 @@ async function renameSessionUnlocked(
   newName: string,
   metadata?: Pick<SessionMetadataRepository, "rename">,
 ): Promise<string> {
-  if (!isValidSessionName(newName)) throw new Error(`非法会话名: ${JSON.stringify(newName)}`);
+  if (sessionNameProblem(newName) !== null) throw new Error(`非法会话名: ${JSON.stringify(newName)}（${sessionNameProblem(newName) ?? "未知原因"}）`);
   const from = sessionPath(root, oldId);
   const to = sessionPath(root, newName);
   await stat(from); // 不存在 → 抛错（fail loud）
@@ -496,16 +584,24 @@ async function renameSessionUnlocked(
       throw err;
     }
   }
+  await invalidateEventLogHandle(from).catch(() => undefined);
   await rename(from, to);
-  let queueMoved = false;
+  // 没有活着的持有者才走到这里：旧路径上的残留锁是崩溃遗留，随改名清掉（新名从干净状态开始）。
+  await rm(`${from}.lock`, { force: true }).catch(() => undefined);
+  const movedSidecars: { from: string; to: string }[] = [];
   try {
-    queueMoved = await moveSessionQueue(root, oldId, newName);
+    for (const sidecar of [
+      { from: queuePath(root, oldId), to: queuePath(root, newName), label: "队列" },
+      { from: sessionPreferencesPath(from), to: sessionPreferencesPath(to), label: "偏好" },
+    ]) {
+      if (await moveSessionSidecar(sidecar.from, sidecar.to, `目标会话${sidecar.label}已存在: ${newName}`)) movedSidecars.push(sidecar);
+    }
     if (metadata) await metadata.rename(oldId, newName, newName);
   } catch (error) {
     const rollbackErrors: unknown[] = [];
-    if (queueMoved) {
+    for (const sidecar of movedSidecars.reverse()) {
       try {
-        await moveSessionQueue(root, newName, oldId);
+        await moveSessionSidecar(sidecar.to, sidecar.from, `回滚目标 sidecar 已存在: ${oldId}`);
       } catch (rollbackError) {
         rollbackErrors.push(rollbackError);
       }
@@ -547,7 +643,10 @@ export async function deleteSession(
 ): Promise<void> {
   const source = sessionPath(root, id);
   // 运行中的会话有常驻写句柄：unlink 后 append 会写进已删除的 inode，事件静默消失。
-  if (isSessionLogBusy(source)) throw new Error(`会话正在运行，先停止再删除: ${id}`);
+  // 本进程的运行表只看得见自己；**另一个进程（CLI / 另一个窗口的主进程）**要看会话锁文件。
+  if (isSessionLogBusy(source) || await sessionRunLockHeld(source)) {
+    throw new Error(`会话正在运行，先停止再删除: ${id}`);
+  }
   markSessionMutating(source);
   try {
     await deleteSessionUnlocked(root, id, metadata);
@@ -562,20 +661,29 @@ async function deleteSessionUnlocked(
   metadata?: Pick<SessionMetadataRepository, "find" | "remove" | "restore">,
 ): Promise<void> {
   const source = sessionPath(root, id);
+  // 走到这里说明没有活着的持有者：任何残留锁都是崩溃遗留，随会话一起清掉。
+  await rm(`${source}.lock`, { force: true }).catch(() => undefined);
   const staged = tmpPathFor(source);
-  const queueSource = queuePath(root, id);
-  const queueStaged = tmpPathFor(queueSource);
+  const stagedSidecars: { source: string; staged: string }[] = [];
+  await invalidateEventLogHandle(source).catch(() => undefined);
   await rename(source, staged); // 先原子移出列表；清理失败可原名恢复
-  let queueStagedExists = false;
   try {
-    try {
-      await rename(queueSource, queueStaged);
-      queueStagedExists = true;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    for (const sidecarSource of [queuePath(root, id), sessionPreferencesPath(source)]) {
+      const sidecarStaged = tmpPathFor(sidecarSource);
+      try {
+        await rename(sidecarSource, sidecarStaged);
+        stagedSidecars.push({ source: sidecarSource, staged: sidecarStaged });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
     }
   } catch (error) {
-    await rename(staged, source).catch(() => undefined);
+    const rollbackErrors: unknown[] = [];
+    for (const sidecar of [...stagedSidecars].reverse()) {
+      try { await rename(sidecar.staged, sidecar.source); } catch (rollbackError) { rollbackErrors.push(rollbackError); }
+    }
+    try { await rename(staged, source); } catch (rollbackError) { rollbackErrors.push(rollbackError); }
+    if (rollbackErrors.length > 0) throw new AggregateError([error, ...rollbackErrors], `删除会话失败且回滚不完整: ${id}`);
     throw error;
   }
   let record: SessionMetadataRecord | undefined;
@@ -597,9 +705,9 @@ async function deleteSessionUnlocked(
     } catch (rollbackError) {
       rollbackErrors.push(rollbackError);
     }
-    if (queueStagedExists) {
+    for (const sidecar of [...stagedSidecars].reverse()) {
       try {
-        await rename(queueStaged, queueSource);
+        await rename(sidecar.staged, sidecar.source);
       } catch (rollbackError) {
         rollbackErrors.push(rollbackError);
       }
@@ -609,8 +717,8 @@ async function deleteSessionUnlocked(
     }
     throw error;
   }
-  // JSONL 已确认删除后，队列暂存文件是纯清理面；失败不把已完成的删除反签成失败。
-  if (queueStagedExists) await rm(queueStaged, { force: true }).catch(() => undefined);
+  // JSONL 已确认删除后，sidecar 暂存文件是纯清理面；失败不把已完成的删除反签成失败。
+  for (const sidecar of stagedSidecars) await rm(sidecar.staged, { force: true }).catch(() => undefined);
 }
 
 /** 空会话文件存在性检查。 */
@@ -621,6 +729,38 @@ export async function sessionExists(root: string, id: string): Promise<boolean> 
   } catch {
     return false;
   }
+}
+
+/** 这个文件是不是**真会话日志**（不是 pins/feedback 这类 UI sidecar）。
+ *  只读首行；空文件按会话算（新建后还没有事件）。 */
+async function isSessionFile(path: string): Promise<boolean> {
+  return await isSessionLogAt(path);
+}
+
+/** 精确到单个 id 的真会话检查（不需要扫整目录）：sessionLog 这类只读一条日志的通道用。
+ *  比 sessionExists 多挡一层 sidecar——pins/feedback 与事件同为 .jsonl。 */
+export async function isSessionInRoot(root: string, id: string): Promise<boolean> {
+  if (isReservedSessionId(id)) return false;
+  if (!(await sessionExists(root, id))) return false;
+  return await isSessionFile(sessionPath(root, id));
+}
+
+/** 只做「会话 id 清单」的轻量扫描（2026-10-21 评审修）：只 stat + 读首行，
+ *  **不整份读文件数行**。用量账本/日志查看只关心有哪些真会话，不需要 listSessions 的全量投影；
+ *  侧栏的 icon/line 数仍走 listSessions。 */
+export async function listSessionIds(root: string): Promise<string[]> {
+  const names = await readSessionDirectory(root);
+  const out: string[] = [];
+  for (const name of names) {
+    if (!name.endsWith(".jsonl")) continue;
+    const p = join(root, name);
+    try {
+      if (!(await stat(p)).isFile()) continue;
+      if (!(await isSessionFile(p))) continue;
+      out.push(name.slice(0, -".jsonl".length));
+    } catch { /* 单个文件读不了：跳过；调用方的 skipped 面会按读取失败另行计数 */ }
+  }
+  return out;
 }
 
 // ---- M2f：sidechat 会话（独立 JSONL 文件组）----

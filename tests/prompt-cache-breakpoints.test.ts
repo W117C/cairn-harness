@@ -9,7 +9,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createEventLog } from "../src/events";
 import { Orchestrator } from "../src/agent/orchestrator";
 import { toAnthropicBody, type AnthropicOptions } from "../src/providers/anthropic";
-import { DEFAULT_MODEL_TABLE, toWorkerModel } from "../src/providers/registry";
+import { DEFAULT_MODEL_TABLE } from "../src/providers/registry";
+import { toWorkerModel } from "../src/providers/worker-adapters";
 import type { ProviderMessage, ProviderToolSpec } from "../src/providers";
 import { costUsd, DEFAULT_PRICE_TABLE, uncalibratedCachePrices, unpricedModels, type ModelPrice } from "../src/routing/pricing";
 

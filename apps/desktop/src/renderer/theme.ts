@@ -20,13 +20,33 @@ export interface ThemeEnv {
   watchSystemDark(onChange: () => void): () => void;
 }
 
+/** 主题键落位（纯函数，判卷面）：Cairn 用 `data-theme`，官方 CDS 令牌薄按 `data-mode`。
+   两者都要写——只写 data-theme 时 `vendor/cds-official/tokens.css` 的暗色块选不中，
+   整个暗色会静默退回亮色值。返回要写/要摘的属性，使壳可以一次落两步。 */
+export interface ThemeKeys {
+  /** 写到 documentElement 上的属性。 */
+  readonly attributes: Readonly<Record<"data-theme" | "data-mode", ActualTheme>>;
+  /** 是否给 body 打暗色标记（styles/dsh-claude-style 消费）。 */
+  readonly bodyDark: boolean;
+}
+
+export function themeKeysOf(value: ActualTheme): ThemeKeys {
+  return {
+    attributes: { "data-theme": value, "data-mode": value },
+    bodyDark: value === "dark",
+  };
+}
+
 /** 产品环境：document + matchMedia。 */
 export function browserThemeEnv(): ThemeEnv {
   const mq = window.matchMedia("(prefers-color-scheme: dark)");
   return {
     setDataTheme: (v) => {
-      document.documentElement.setAttribute("data-theme", v);
-      document.body.toggleAttribute("data-ds-dark-theme", v === "dark");
+      const keys = themeKeysOf(v);
+      for (const [name, value] of Object.entries(keys.attributes)) {
+        document.documentElement.setAttribute(name, value);
+      }
+      document.body.toggleAttribute("data-ds-dark-theme", keys.bodyDark);
     },
     systemDark: () => mq.matches,
     watchSystemDark: (onChange) => {

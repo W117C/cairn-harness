@@ -11,11 +11,14 @@
 // 放进 `fixtures/todo-app/.agent/` 会被 replay-faces 的整树哈希算进去，锁自己的存在就会让断言红）。
 // 锁里写持有者 pid：持有进程已消失时，等待者直接接管，不必等到超时——崩溃的 worker 不该
 // 把后面整张表拖住 10 分钟（那是「一道门永远红」的另一种写法）。
-import { mkdir, open, readFile, stat, unlink } from "node:fs/promises";
+import { mkdir, open, readFile, rm, stat, unlink } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const LOCK_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "..", ".tmp", "app-fixture.lock");
+/** 收束缝会写进靶子的运行态账本；它是 .jsonl，会被 projection-invariant 当成「git 看不见的语料」。
+ *  每次拿到锁先清掉：判卷从干净靶子起跑，而不是继承上一趟的残留。 */
+const RUN_LEDGER = resolve(dirname(fileURLToPath(import.meta.url)), "..", "fixtures", "todo-app", ".agent", "evolution-ledger.jsonl");
 /** 等锁上限：三支串行的实际耗时是秒级；给足余量吸收并发负载，但绝不无限等。 */
 const WAIT_TIMEOUT_MS = 5 * 60_000;
 const RETRY_MS = 20;
@@ -39,6 +42,7 @@ export async function acquireAppFixtureLock(): Promise<() => Promise<void>> {
       const handle = await open(LOCK_PATH, "wx");
       await handle.writeFile(String(process.pid), "utf8");
       await handle.close();
+      await rm(RUN_LEDGER, { force: true });
       let released = false;
       return async () => {
         if (released) return;

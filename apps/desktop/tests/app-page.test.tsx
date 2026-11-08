@@ -6,7 +6,10 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { AppPageBody, PAGE_META, PAGE_ORDER, buildSchedule, scheduleLabel } from "../src/renderer/components/AppPage";
+import { AppPageBody, AutomationPane, PAGE_META, PAGE_ORDER, buildSchedule, scheduleLabel } from "../src/renderer/components/AppPage";
+import { readAppPageSurface } from "./helpers/app-surface";
+import { WorktreesPane } from "../src/renderer/components/WorktreesPane";
+import { readAppSurface } from "./helpers/app-surface";
 
 describe("scheduleLabel（七 kind 人话）", () => {
   it("每种 kind 一句人话，不编造字段", () => {
@@ -34,20 +37,73 @@ describe("buildSchedule（表单四 kind 映射）", () => {
 });
 
 describe("页体并入设置（v7.1 业主裁）：AppPageBody + 事实源", () => {
+  it("AppPageBody forwards the selected plugin filter without inventing another state owner", () => {
+    const source = readAppSurface();
+    expect(source).toContain("filter={activeFilter}");
+    expect(source).toContain("onFilter={setActiveFilter}");
+  });
+
+  it("page frames do not render duplicate pane pills", () => {
+    const source = readAppSurface();
+    expect(source).not.toContain("<PanePills");
+  });
+
   it("PAGE_ORDER 顺序固定、PAGE_META 标签齐备（设置页导航从这里渲染，不许各抄一份）", () => {
-    expect(PAGE_ORDER).toEqual(["plugins", "automation", "skills", "memory"]);
-    expect(PAGE_ORDER.map((p) => PAGE_META[p].label)).toEqual(["插件", "自动化任务", "技能中心", "记忆系统"]);
+    expect(PAGE_ORDER).toEqual(["plugins", "automation", "skills", "memory", "worktrees"]);
+    expect(PAGE_ORDER.map((p) => PAGE_META[p].label)).toEqual(["插件", "自动化任务", "技能中心", "记忆系统", "工作树"]);
+  });
+
+  it("记忆页给出去处：沉淀开关在设置·高级，记忆页有直达入口（不给就不摆）", () => {
+    const src = readAppPageSurface();
+    // 入口由宿主注入：给了 onOpenSection 才渲染按钮（空态与有数据态各一处）。
+    expect(src).toContain("onOpenMemorySettings?: () => void");
+    expect(src).toContain("onOpenSection?.(\"advanced\")");
+    expect(src).toMatch(/props\.onOpenMemorySettings !== undefined\s*\?\s*\{ action: <button/);
+    // 反向：宿主不注入 onOpenSection 时，页体不许凭空摆出这个按钮（属性用 spread 条件注入）。
+    expect(src).toContain('{...(props.onOpenSection !== undefined ? { onOpenMemorySettings');
+  });
+
+  it("记忆列表按语义分组：只在「全部」下出组头（单层筛选不重复那行）", () => {
+    const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/MemoryPane.tsx", import.meta.url)), "utf8");
+    const css = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
+    // 组头由语义类别变化驱动，筛选到单层时 grouped=false ⇒ 一节组头都不出。
+    expect(src).toContain('const grouped = filter === "all";');
+    expect(src).toContain('{grouped && (index === 0 || memorySemanticGroup(sorted[index - 1]!.topic) !== memorySemanticGroup(r.topic)) && (');
+    // 2026-11-05 记忆卡重做：组头仍是 ap-group-label（网格跨列 variant 叠加其上）。
+    expect(src).toContain('ap-group-label memory-grid-label');
+    expect(css).toContain(".ap-group-label {");
+  });
+
+  it("工作树页：孤儿逐条列出 + 清理按钮；空态不摆假列表", () => {
+    const html = renderToStaticMarkup(<WorktreesPane snap={{ workspace: "/tmp/ws", orphans: ["worker-3"], details: [{ name: "worker-3", dirty: true }] }} onError={() => undefined} refresh={() => undefined} />);
+    expect(html).toContain("wt-worker-3");
+    expect(html).toContain("清理");
+    expect(html).toContain("有未提交改动");
+    expect(html).toContain('data-dirty="true"');
+    // 清理目标必须带快照的工作区：切项目后 activeWorkspace 是旧值，clean 不能拿它去删。
+    expect(html).toContain('data-workspace="/tmp/ws"');
+    const empty = renderToStaticMarkup(<WorktreesPane snap={{ workspace: "/tmp/ws", orphans: [] }} onError={() => undefined} refresh={() => undefined} />);
+    expect(empty).toContain("没有遗留的工作树");
+  });
+
+  it("工作树未解析（无可用工作区）时给说明与出路，不是一行状态字（2026-11-02 真机）", () => {
+    const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/AppPage.tsx", import.meta.url)), "utf8");
+    expect(src).not.toContain('stateFrame("工作区未解析（无可用工作区）")');
+    expect(src).toContain("还没有可分析的工作区");
+    expect(src).toMatch(/还没有可分析的工作区[\s\S]{0,400}先在侧栏打开一个文件夹/);
   });
 
   it("SSR 首帧：页体带 aria-label 与诚实占位（快照未到时说明，不摆空壳内容）", () => {
-    const html = renderToStaticMarkup(<AppPageBody page="automation" onError={() => undefined} />);
+    const html = renderToStaticMarkup(<AppPageBody page="automation" />);
     expect(html).toContain('aria-label="自动化任务"');
+    expect(html).toContain('class="page-frame"');
+    expect(html).toContain('<h1 class="page-frame-title">自动化任务</h1>');
     expect(html).toContain("正在读取快照…");
   });
 });
 
 describe("记忆页重做（2026-10-16 业主裁 · D/E/F · 源码哨兵）", () => {
-  const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/AppPage.tsx", import.meta.url)), "utf8");
+  const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/MemoryPane.tsx", import.meta.url)), "utf8");
 
   it("D：抽屉顺序 = 主题正文 → 索引 → 待批外部引用 → 删除（底置、描边红小按钮 + 二次确认）", () => {
     let last = -1;
@@ -79,22 +135,27 @@ describe("记忆页重做（2026-10-16 业主裁 · D/E/F · 源码哨兵）", (
     expect(src).toContain("subTitle={fullTime(selected.modified)}");
   });
 
-  it("H：列表行顺序 = 名称 / 元信息 / 类型标签（标签钉右；省略交给 .ap-item 的 CSS 契约）", () => {
-    const rowAt = src.indexOf('<span className="nm">{r.topic.topic}</span>');
-    const subAt = src.indexOf('<span className="sub" title={fullTime(r.topic.modified)}>');
-    const tagAt = src.indexOf('<span className="sp-tag">{r.layer === "project" ? "项目层" : "全局层"}</span>');
+  it("H：卡片行顺序 = 名称 / 正文 hero / 卡脚元信息（2026-11-05 内容前置卡重做；层别随卡徽标）", () => {
+    const rowAt = src.indexOf('<span className="nm" title={r.topic.topic}>');
+    const bodyAt = src.indexOf('className="memory-card-body"');
+    const footAt = src.indexOf('className="memory-card-foot"');
     expect(rowAt).toBeGreaterThan(-1);
-    expect(subAt).toBeGreaterThan(rowAt);
-    expect(tagAt).toBeGreaterThan(subAt);
+    expect(bodyAt).toBeGreaterThan(rowAt);
+    expect(footAt).toBeGreaterThan(bodyAt);
+    expect(src).not.toContain('className="sp-tag">{r.layer === "project"');
   });
 
   it("G/H/E 样式哨兵：统计等分整行、名称可省略、标签不缩、索引行渲染样式在", () => {
     const css = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
-    // G：按实际枚数等分（原 repeat(4,1fr) 写死四轨 ⇒ 3 枚时右空一轨）
-    expect(css).toContain(".ap-stats { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--space-sm); }");
+    // 2026-11-02：自动化页四张统计卡也换成摘要行后，.ap-stats 一族已无调用者 ⇒ 死规则删掉。
+    // 反向钉：统计卡类名不许再出现在样式表与页体里（两个页面必须同一形态）。
+    expect(css).not.toContain(".ap-stats {");
+    expect(css).not.toMatch(/\.ap-stat\s*\{/);
+    expect(src).not.toContain("function Stats(");
+    expect(src).not.toContain('className="ap-stats"');
+    expect(css).toContain(".ap-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-md); }");
     // H：名称单行省略 + 标签不缩
     expect(css).toMatch(/\.ap-item \.nm \{[^}]*text-overflow: ellipsis/);
-    expect(css).toMatch(/\.ap-item \.sp-tag \{ flex: none; \}/);
     // E：索引逐行卡内样式在
     expect(css).toContain(".ap-index-line");
     expect(css).toContain(".ap-drawer-foot");
@@ -115,5 +176,93 @@ describe("记忆页重做（2026-10-16 业主裁 · D/E/F · 源码哨兵）", (
     expect(sec).toContain("此主题暂无正文");               // 空正文回落不摆空壳
     // 空态文案只在空数组分支（有正文时不渲染回落句）
     expect(sec.indexOf("bodyLines(selected.body)") < sec.indexOf("此主题暂无正文")).toBe(true);
+  });
+});
+
+// 2026-10-30：自动化文件坏掉时，页面上要能读到「哪份文件、什么原因、还能不能写」。
+// 此前只 console.warn（桌面没有控制台），空态还写着「还没有定时任务」——把失败伪装成空。
+describe("自动化页：装载警告上屏（空态分支也要摆）", () => {
+  const corrupt = {
+    tasks: [], history: [], running: 0, queued: 0, cap: 2, startupDone: true, tzNotes: {},
+    warnings: [`调度任务文件损坏：/tmp/cairn/automations.json（JSON 解析失败）——修好或删除该文件后重试，本次不覆盖`],
+    definitionsCorrupt: true,
+  };
+  const clean = { ...corrupt, warnings: [], definitionsCorrupt: false };
+
+  it("坏档：横幅点名文件与原因，并说清写路径会被拒；空态仍在（不是二选一）", () => {
+    const html = renderToStaticMarkup(<AutomationPane snap={corrupt} onError={() => undefined} refresh={() => undefined} />);
+    expect(html).toContain("调度任务文件损坏");
+    expect(html).toContain("/tmp/cairn/automations.json");
+    expect(html).toContain("新建、修改、删除任务都会被拒绝");
+    expect(html, "坏档整页只剩空态 = 用户读成「本来就没有任务」").toContain("还没有定时任务");
+    expect(html).toContain("ss-banner warn");
+  });
+
+  it("缺文件 / 正常：不摆警告横幅（缺席不是失败）", () => {
+    const html = renderToStaticMarkup(<AutomationPane snap={clean} onError={() => undefined} refresh={() => undefined} />);
+    expect(html).not.toContain("调度任务文件损坏");
+    expect(html).not.toContain("ss-banner warn");
+    expect(html).toContain("还没有定时任务");
+  });
+
+  it("坏条目（文件仍可写）：横幅说「已跳过」，不说写路径会被拒", () => {
+    const partial = {
+      ...clean,
+      warnings: ["automations.json 第 2 条无效已跳过：name 缺失"],
+      definitionsCorrupt: false,
+    };
+    const html = renderToStaticMarkup(<AutomationPane snap={partial} onError={() => undefined} refresh={() => undefined} />);
+    expect(html).toContain("已跳过");
+    expect(html).toContain("name 缺失");
+    expect(html).not.toContain("新建、修改、删除任务都会被拒绝");
+  });
+});
+
+// 第 934 页：运行历史把 due_at 的原始 ISO 直接摆上屏（旁边「下次」却是 toLocaleString），
+// 且只铺 20 条却不说——25 条时标题写着 25，列表只到 20，尾部被当成整份读。
+describe("自动化页：时间口径与历史截断要说清", () => {
+  const task = {
+    id: "t1", name: "每日备份", prompt: "备份仓库", schedule: { kind: "daily", time: "03:00" },
+    timeZone: "Asia/Shanghai", permissionTier: "read-only", catchUp: "skip", enabled: true,
+    createdAt: "2026-10-01T00:00:00.000Z", updatedAt: "2026-10-01T00:00:00.000Z",
+    nextRunAt: "2026-11-02T03:00:00.000Z",
+  };
+  const entry = (i: number) => ({
+    task_id: "t1", task_name: "每日备份", occurrence_key: `t1:${String(i)}`,
+    due_at: "2026-11-01T03:00:00.000Z", decision: "triggered", state: "triggered",
+    at: "2026-11-01T03:00:01.000Z",
+  });
+  const snap = (n: number) => ({
+    tasks: [task], history: Array.from({ length: n }, (_, i) => entry(i)),
+    running: 0, queued: 0, cap: 2, startupDone: true, tzNotes: {}, warnings: [], definitionsCorrupt: false,
+  }) as never;
+
+  it("due_at 与「下次」都按本地时间显示，不摆原始 ISO", () => {
+    const html = renderToStaticMarkup(<AutomationPane snap={snap(1)} onError={() => undefined} refresh={() => undefined} />);
+    expect(html).not.toContain("2026-11-01T03:00:00.000Z");
+    expect(html).not.toContain("2026-11-02T03:00:00.000Z");
+    expect(html).toContain("2026-11-01");
+    expect(html).toContain("2026-11-02");
+  });
+
+  it("超过 20 条：标题说清只显示最近 20 条（不把尾部冒充整份）", () => {
+    const html = renderToStaticMarkup(<AutomationPane snap={snap(25)} onError={() => undefined} refresh={() => undefined} />);
+    expect(html).toContain("运行历史（25 条 · 只显示最近 20 条）");
+  });
+
+  it("不超过 20 条：不加那句（说多了也是噪音）", () => {
+    const html = renderToStaticMarkup(<AutomationPane snap={snap(3)} onError={() => undefined} refresh={() => undefined} />);
+    expect(html).toContain("运行历史（3 条）");
+    expect(html).not.toContain("只显示最近");
+  });
+});
+
+describe("目的地错误不泄漏到对话", () => {
+  it("AppPage 的 reportError 只写本页 operationError，不再回调工作台 lastError", () => {
+    const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/AppPage.tsx", import.meta.url)), "utf8");
+    expect(src).not.toContain("props.onError?.(message)");
+    const view = readFileSync(fileURLToPath(new URL("../src/renderer/panes/WorkbenchView.tsx", import.meta.url)), "utf8");
+    const pageCall = view.slice(view.indexOf("<AppPageBody"), view.indexOf("/>", view.indexOf("<AppPageBody")) + 2);
+    expect(pageCall).not.toContain("onError=");
   });
 });

@@ -1,0 +1,43 @@
+/* 单窗格标签页：所有已开窗格常驻挂载，只切换可见性。
+   为什么不是条件渲染（2026-10-25）：
+   TerminalPane 的卸载清理会 terminalKill（切一次标签就杀一次 PTY）；
+   BrowserPane 的卸载清理会 browserClose（切走就关掉全部内嵌标签页）；
+   旁路对话、文件树展开与滚动位置也会一起丢。标签页的语义是「换到另一个页面」，
+   不是「销毁再新建」。隐藏用 visibility 而不是 display:none：xterm 的容器要继续有尺寸，
+   切回来才不会按 0×0 重新 fit；原生 WebContentsView 另由 PaneDock 显式收成零矩形。 */
+.pane-workbench { position: relative; }
+.pane-stack {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.pane-stack > .pane-chunk {
+  position: absolute;
+  inset: 0;
+  height: auto;
+  visibility: hidden;
+  pointer-events: none;
+}
+.pane-stack > .pane-chunk[data-active="true"] {
+  visibility: visible;
+  pointer-events: auto;
+}
+/* 窗格里的工作台页按**容器宽**收口，不按窗口宽：右栏 320–360 在 1440 窗口里也会出现。
+   插件页的标题区原本是「标题 + 240px 搜索框」横排，在 360 栏里标题被挤成竖排。
+   窄容器下改为上下两行，搜索框吃满。 */
+.pane-chunk-body,
+.mod-sidebar-body { container-type: inline-size; }
+@container (max-width: 520px) {
+  .ap-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-sm);
+  }
+  .ap-head-acts {
+    width: 100%;
+    padding-top: 0;
+  }
+  .ap-head-search { width: 100%; }
+  /* 卡片默认双列；360 栏里两列各 ~160px，插件名/描述只剩省略号，改单列。 */
+  .ap-grid { grid-template-columns: minmax(0, 1fr); }
+}

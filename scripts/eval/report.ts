@@ -47,6 +47,9 @@ export interface Row {
   reps?: string;
   /** 这一趟属于哪一副臂（A/B 的臂名；缺省由跑器落到 `--system`，见 `loop-eval.ts` 的 `ARM`）。空串＝没盖章。 */
   arm?: string;
+  /** 逐名判卷的三态（第 640 页）：`pass`／`fail`／`unreadable`／`no-face`（这条任务没有 judge 规格）。
+   *  **不是** `ok` 的别名——同一枚退出码 1 下它分得开「该转绿的没绿」与「该保住的坏了」。 */
+  namedSetState: "pass" | "fail" | "unreadable" | "no-face";
   /** **提供者那一侧的脸**（配对键，第 455 页进 `RUN_IDENTITY_KEYS`）：`真会话` = 真模型 provider（花钱、要 key），
    *  `剧本` = `--scripted=` 合成面（零花费、零抖动）。
    *
@@ -192,8 +195,21 @@ export function parseReadings(text: string, label = "readings"): Row[] {
       // 提供者那一侧的脸（第 455 页）：写侧 `loop-eval.ts:671` 逐条盖 `providerFace`，
       // 存量语料没这一格 ⇒ 空串＝缺章 ⇒ 落 unknown-face（不许把"没记这一格"当成"是真会话"去凑配对）。
       providerFace: identityStr(rr["providerFace"] ?? rec["providerFace"]),
+      // 逐名判卷那一格的三态（第 640 页起跑器逐条盖 `namedSets`）。**缺省 undefined ＝ 无面**，
+      // 与 `HeldOutState` 同一条纪律：没给 judge 规格的任务不进这一格的分母，而不是算成绿。
+      // 存量语料没这一格 ⇒ 全数落 no-face，对账表会明说"这一格在两侧都没有尺"。
+      namedSetState: namedSetStateOf(rr["namedSets"]),
     };
   });
+}
+
+/** 读数里那一枚 → 三态串；`undefined`（没盖）／形状不对都交 `no-face`。
+ *  形状不对也收成 no-face 而不是抛：对账表要能读动存量语料（那里本来就没这一格），
+ *  但**绝不许**把读不懂的东西并进 pass/fail 任何一桶（本模块通篇那条：取不到 ≠ 没问题）。 */
+export function namedSetStateOf(v: unknown): "pass" | "fail" | "unreadable" | "no-face" {
+  if (typeof v !== "object" || v === null) return "no-face";
+  const state = (v as Record<string, unknown>)["state"];
+  return state === "pass" || state === "fail" || state === "unreadable" ? state : "no-face";
 }
 
 export function totalsOf(rows: readonly Row[]): Totals {
@@ -293,6 +309,64 @@ export function renderIdentityFace(id: IdentityRuling): string {
   return `读数身份面：❌ **${IDENTITY_SENTENCE}**（${detail}）。` +
     "rev／时刻／档名任一没盖章 ⇒ 这份读数不知道自己是谁跑的、什么时候跑的。" +
     "下面那行模型归因面连同整张表，都只按量级读，不按可比读数读。";
+}
+
+/* ───────────────── 逐名判卷面（第 640 页补）────────────────────────────────────────────
+ * 为什么对账表要有这一格：`ok`（退出码 0）回答「判卷过了没有」，**不回答**「过的是哪一种」。
+ * 同一枚退出码 1 下可能是「该转绿的没绿」（没修好）也可能是「该保住的坏了」（修坏了别的）——
+ * 出路口完全不同，却在 `successRate` 里同成一个 0。第 640 页起跑器逐条盖 `namedSets`，
+ * 本模块把它折成一张三态面，与模型归因面并排印。
+ *
+ * 三条口径（写清楚理由，别当成自然形状）：
+ *   ⑴ **no-face 单列，不算绿也不算红**：没有 `judge` 规格的任务（I1…I4 内建四条、以及 2026-10-22 之前
+ *      的全部存量语料）不进这一格的分母。把它算进 pass 会让「没尺」读成「绿了」。
+ *   ⑵ **unreadable 不许并进 fail**：尺接了线却没接住料（输出认不出／派生不完整）是第三态，
+ *      修法在取料面；「有红」的修法在模型或判据。混成一格就把两种修法并成一种。
+ *   ⑶ **只在有尺的一侧出声**：两侧都 no-face 时这一格印「两侧都没有尺」而不是绿——
+ *      那是"没有量"不是"量出来没问题"。 */
+export type NamedSetFaceState = "same" | "differs" | "no-face";
+
+export interface NamedSetFace {
+  state: NamedSetFaceState;
+  baseline: Record<string, number>;
+  candidate: Record<string, number>;
+}
+
+const NAMED_SET_BUCKETS = ["pass", "fail", "unreadable", "no-face"] as const;
+
+/** 一批行的逐名三态计数（四个桶都出现，0 也印——「这一桶是 0」与「没数这一桶」要分得开）。 */
+export function namedSetCounts(rows: readonly Row[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const b of NAMED_SET_BUCKETS) out[b] = 0;
+  for (const r of rows) out[r.namedSetState] = (out[r.namedSetState] ?? 0) + 1;
+  return out;
+}
+
+/** 两侧的逐名面：`no-face` = 两侧都没有一行带尺（此时任何逐名对比都无从谈起）。
+ *  `same` = 四个桶的分布逐字相同；`differs` = 有桶不同（**方向不判**——「红变绿」与「绿变红」
+ *  都叫 differs，因为那一格由 `ok` 与逐靶配对面去说，这一格只说「逐名结论动没动」）。 */
+export function namedSetFace(baseline: readonly Row[], candidate: readonly Row[]): NamedSetFace {
+  const b = namedSetCounts(baseline);
+  const c = namedSetCounts(candidate);
+  const anyFace = NAMED_SET_BUCKETS.some((k) => (b[k] ?? 0) + (c[k] ?? 0) > 0 && k !== "no-face");
+  if (!anyFace) return { state: "no-face", baseline: b, candidate: c };
+  const same = NAMED_SET_BUCKETS.every((k) => (b[k] ?? 0) === (c[k] ?? 0));
+  return { state: same ? "same" : "differs", baseline: b, candidate: c };
+}
+
+/** 逐名面印出来那一行。`same` 也印——"这一格没动"这件事得看得见（与归因面同一条）。 */
+export function renderNamedSetFace(f: NamedSetFace): string {
+  const show = (c: Record<string, number>): string =>
+    NAMED_SET_BUCKETS.map((k) => `${k} ${String(c[k] ?? 0)}`).join("／");
+  if (f.state === "no-face") {
+    return "逐名判卷面：两侧都没有尺（no-face）⇒ 这一格**没有量**，不是「量出来没问题」"
+      + "（任务集没给 judge 规格，或读数是第 640 页之前的存量语料）";
+  }
+  const moved = NAMED_SET_BUCKETS.filter((k) => (f.baseline[k] ?? 0) !== (f.candidate[k] ?? 0));
+  return f.state === "same"
+    ? `逐名判卷面：同一面（${show(f.baseline)}）✅`
+    : `逐名判卷面：动了（基线 ${show(f.baseline)} ↔ 改动 ${show(f.candidate)}；变动的桶：${moved.join("、")}）`
+      + "——同一枚退出码下的两种结局（该转绿的没绿／该保住的坏了）在这里分得开";
 }
 
 /* ───────────────── 逐靶配对面（ledger #90，2026-10-05 补）─────────────────
@@ -615,8 +689,17 @@ function fmt(metric: keyof Totals, v: number): string {
 }
 
 /** 渲染成人看的对照表。`band` 未知时**明说判不出**，不给假结论；
- *  结果类超带退化时**整表禁止读作改善**（`outcomeGate`）。 */
-export function renderReport(cmp: Comparison, bandSource: string): string {
+ *  结果类超带退化时**整表禁止读作改善**（`outcomeGate`）。
+ *
+ *  `faces` 可选（第 640 页补）：把逐名判卷那一格也印出来。**可选而不并入 `Comparison`** 的理由：
+ *  `Comparison` 是纯逐指标对账（可复算、与行无关），而逐名面要从**原始行**数桶——塞进去会让
+ *  这个结构同时背"指标差"与"行分布"两件事，而它的判卷（`tests/eval-report.test.ts`）只喂 Totals。
+ *  不给 `faces` 时那一行不印（不是印成绿）——调用方要么传、要么明说没传。 */
+export function renderReport(
+  cmp: Comparison,
+  bandSource: string,
+  faces?: { namedSet: NamedSetFace },
+): string {
   const gate = outcomeGate(cmp);
   const out: string[] = [];
   out.push(`噪声带来源：${bandSource}`);
@@ -661,6 +744,7 @@ export function renderReport(cmp: Comparison, bandSource: string): string {
         `退化 ${String(worse.length)} 项（${worse.map((l) => LABEL[l.metric]).join("、") || "无"}）`,
     );
   }
+  if (faces !== undefined) out.push("", renderNamedSetFace(faces.namedSet));
   out.push("");
   out.push("读法：噪声带 = **同配置两次运行**的差。改动幅度落在带内 ⇒ 判不出好坏，不许当成功。");
   out.push("      两点样本是弱证据：要下结论请提高 --reps 并多喂几份 --baseline。");
@@ -734,7 +818,10 @@ if (process.argv[1] !== undefined && process.argv[1].endsWith("report.ts")) {
   // 逐靶配对面：身份闸说"有没有盖章"，这一格说"盖同一枚章的两趟逐靶翻了几个"（#90）。
   // 两侧**全部**行一起进配对，缺身份的那几条会被单独成条并出声，不并进可比面。
   process.stdout.write(renderPairing(indexFaces([...baseRows.flat(), ...candRows.flat()])) + "\n\n");
-  process.stdout.write(renderReport(cmp, bandSource) + "\n");
+  // 逐名判卷面（第 640 页）：`ok` 只答「判卷过没过」，这一格答「过的是哪一种」。
+  // 排在表**后面**：它是读数的**解释**，不是读数能否可比的前提（前提由身份闸/归因面答）。
+  const namedSet = namedSetFace(baseRows.flat(), candRows.flat());
+  process.stdout.write(renderReport(cmp, bandSource, { namedSet }) + "\n");
   // 出口码落在两道闸上：调用方不必 parse 文本就能分清「可信 / 只有量级 / 禁止读作改善」。
   const code = exitCodeOf(identity, outcomeGate(cmp));
   process.stdout.write(renderExitFace(code) + "\n");

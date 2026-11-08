@@ -212,7 +212,12 @@ export class ApprovalsChainsSupervise {
     };
     this.deps.chains.set(callId, chain);
     await this.emitSequencerStatus(chain, "链已批准启动：" + String(stages.length) + " 环（" + stages.map((s) => s.role).join(" → ") + "）");
-    void this.runChain(chain).catch(() => {}); // sequencer 边界永不炸主 loop
+    // sequencer 边界永不炸主 loop——但异常必须收束成**整链 failed**，不能把 chain 永远留在 running：
+    // 父模型已经收到 ok:true 的回执，空 catch 会让它等一条永不结束的 pipeline。
+    void this.runChain(chain).catch((err: unknown) => {
+      const reason = "sequencer 异常：" + (err instanceof Error ? err.message : String(err));
+      void this.failChain(chain, reason).catch(() => {});
+    });
     return { ok: true, output: JSON.stringify({ pipeline: true, chain_id: callId, stages: stages.length, stage_roles: stages.map((s) => s.role) }) };
   }
 
@@ -647,6 +652,9 @@ export class ApprovalsChainsSupervise {
 
   /** 整链失败（任一环 failed → 整链 failed；各环报告可见）。 */
   private async failChain(chain: PipelineChain, reason: string): Promise<void> {
+    // 终态闸：done/failed 的链不再二次收束——runChain 各异常出口都汇到这里，若先有一次
+    // failChain（或已 done）再抛，无闸会重复吐一条同 callId 的 tool_result（双份矛盾事实）。
+    if (chain.status !== "running") return;
     chain.status = "failed";
     chain.reason = reason;
     for (const st of chain.state) {
@@ -760,7 +768,7 @@ export class ApprovalsChainsSupervise {
    *  判据是 terminalResolved 而非 finished：finishInner 开头就置 finished=true，但 done 分支还要
    *  await git diff + 安全流水才挂 lastResult——落在窗口里读 finished 会返回「done + result 空」，
    *  sequencer 据此把绿证据环判成失败环（实测：级联因此白烧一档再误报整链 failed）。 */
-  private waitForAgentTerminal(agentId: string): Promise<{ status: string; result: Extract<AgentEvent, { type: "agent_result" }> | null }> {
+  waitForAgentTerminal(agentId: string): Promise<{ status: string; result: Extract<AgentEvent, { type: "agent_result" }> | null }> {
     const w = this.deps.workers.get(agentId);
     if (w && w.terminalResolved) {
       return Promise.resolve({ status: w.terminalStatus ?? "done", result: w.lastResult ?? null });

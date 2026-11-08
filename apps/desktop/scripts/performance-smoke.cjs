@@ -14,12 +14,18 @@ const budgets={
   p95Ms:Number(process.env.CAIRN_PERF_P95_BUDGET_MS??200),
   maxMs:Number(process.env.CAIRN_PERF_MAX_BUDGET_MS??500),
   startupMs:Number(process.env.CAIRN_PERF_STARTUP_BUDGET_MS??1500),
+  // 打开会话（第 958 页补）：400 轮会话首开实测 503–657 ms（第 956/957 页五跑），此前**只量不判**——
+  // 打开慢三倍也照样 exit 0。帽取 1500 ms（约实测上限的 2.3 倍，CI 慢机可用环境变量抬）。
+  openMs:Number(process.env.CAIRN_PERF_OPEN_BUDGET_MS??1500),
 };
 const out = resolve(process.argv[2] ?? 'performance.json');
 const turns = Number(process.argv[3] ?? 400);
 const samples = Number(process.argv[4] ?? 40);
+const rendererDir = resolve(process.env.CAIRN_PERF_RENDERER_DIR ?? join(__dirname, '../dist'));
 const pause = (ms) => new Promise(r => setTimeout(r, ms));
 async function main() {
+  if (!Number.isInteger(turns) || turns < 1 || !Number.isInteger(samples) || samples < 2) throw new Error('必须至少一轮历史、两次独立增量');
+  if (Object.values(budgets).some(value => !Number.isFinite(value) || value <= 0)) throw new Error('性能预算必须为有限正数');
   await app.whenReady();
   const protocol = readFileSync(join(__dirname, '../../../src/main/ipc-protocol.ts'), 'utf8');
   const version = Number(protocol.match(/IPC_PROTOCOL_VERSION\s*=\s*(\d+)/)[1]);
@@ -40,7 +46,7 @@ async function main() {
     throw new Error('等待超时: '+expression);
   };
   const t0=performance.now();
-  await win.loadFile(join(__dirname,'../dist/index.html'));
+  await win.loadFile(join(rendererDir,'index.html'));
   await waitFor(`!!document.querySelector('.session') && !!document.querySelector('.composer-card textarea')`);
   const startupMs=performance.now()-t0;
   win.webContents.debugger.attach('1.3');
@@ -72,12 +78,35 @@ async function main() {
     await js(`new Promise(r=>requestAnimationFrame(r))`);
     frames.push(performance.now()-started);
   }
-  await js(`window.__cairnPerf.finish()`);
   const dom=await js(`({ nodes:document.querySelectorAll('*').length, users:document.querySelectorAll('.row.user').length, assistants:document.querySelectorAll('.row.assistant').length, tools:document.querySelectorAll('.tool-head').length, historyPresent:document.querySelector('[data-event-id="4"]')?.textContent.includes('模块 0'), lastPresent:document.querySelector('.reading').textContent.includes('PERF-LIVE-${samples}') })`);
   const sorted=[...frames].sort((a,b)=>a-b);
   const finalMetrics=await metrics();
   const metricDelta=(before,after)=>Object.fromEntries(['TaskDuration','ScriptDuration','LayoutDuration','RecalcStyleDuration','LayoutCount','RecalcStyleCount'].map(key=>[key,(after[key]??0)-(before[key]??0)]));
   const report={turns,samples,startupMs,openMs,runningStarted,metrics:{open:metricDelta(startupMetrics,openMetrics),stream:metricDelta(streamMetrics,finalMetrics)},frameMs:{p50:sorted[Math.floor(sorted.length*.5)],p95:sorted[Math.floor(sorted.length*.95)],max:sorted.at(-1),all:frames},dom,errors,budgets};
+  const checkActions = process.env.CAIRN_PERF_CHECK_ACTIONS === '1';
+  if (checkActions) await js('window.__cairnPerf.complete()');
+  await js('window.__cairnPerf.finish()');
+  if (checkActions) {
+    // 在计时结束后点击刚生成一轮的动作，验证缓存没有把事件闭包冻结在旧历史。
+    const round = turns + 1;
+    const branch = `[aria-label="从第 ${round} 轮分叉新会话"]`;
+    const revert = `[aria-label="撤回第 ${round} 轮的文件改动"]`;
+    const confirm = `[role="dialog"][aria-label="还原第 ${round} 轮的改动？"] .cc-actions .danger`;
+    await waitFor(`!!document.querySelector('${branch}') && document.querySelector('.gen-bar')?.dataset.running === 'false'`);
+    await js(`document.querySelector('${revert}').click()`);
+    await waitFor(`!!document.querySelector('${confirm}')`);
+    const waitedForConfirm = await js('window.__cairnPerf.calls().reverts.length === 0');
+    await js(`document.querySelector('${confirm}').click()`);
+    await waitFor('window.__cairnPerf.calls().reverts.length === 1');
+    await js(`document.querySelector('${branch}').click()`);
+    await waitFor('window.__cairnPerf.calls().forks.length === 1');
+    const calls = await js('window.__cairnPerf.calls()');
+    report.actions = {
+      sentLatest: calls.runs.length === 1 && calls.runs[0].sessionId === 's1' && calls.runs[0].message === '逐帧流式性能检查',
+      branchLatest: calls.forks[0].sessionId === 's1' && calls.forks[0].round === round && calls.forks[0].unique === true && calls.forks[0].workspace === '/tmp/demo-ws',
+      revertLatest: waitedForConfirm && calls.reverts[0].sessionId === 's1' && calls.reverts[0].round === round && calls.reverts[0].workspace === '/tmp/demo-ws',
+    };
+  }
   mkdirSync(require('node:path').dirname(out),{recursive:true});
   writeFileSync(out,JSON.stringify(report,null,2));
   console.log(JSON.stringify(report));
@@ -87,9 +116,12 @@ async function main() {
     ...(report.frameMs.p95>budgets.p95Ms?[`帧时间 p95 ${report.frameMs.p95.toFixed(1)}ms > 帽 ${budgets.p95Ms}ms`]:[]),
     ...(report.frameMs.max>budgets.maxMs?[`帧时间 max ${report.frameMs.max.toFixed(1)}ms > 帽 ${budgets.maxMs}ms`]:[]),
     ...(report.startupMs>budgets.startupMs?[`启动 ${report.startupMs.toFixed(1)}ms > 帽 ${budgets.startupMs}ms`]:[]),
+    ...(report.openMs>budgets.openMs?[`打开会话 ${report.openMs.toFixed(1)}ms > 帽 ${budgets.openMs}ms`]:[]),
   ];
   if(overBudget.length>0) console.error('[performance-smoke] 超预算：'+overBudget.join('；'));
-  app.exit(runningStarted && errors.length===0 && dom.historyPresent && dom.lastPresent && overBudget.length===0 ? 0:1);
+  const completeHistory = dom.users === turns+1 && dom.assistants === turns+1 && dom.tools === turns;
+  const validActions = report.actions === undefined || Object.values(report.actions).every(Boolean);
+  app.exit(runningStarted && errors.length===0 && dom.historyPresent && dom.lastPresent && completeHistory && validActions && overBudget.length===0 ? 0:1);
 }
 setTimeout(()=>{console.error('performance-smoke 超时');app.exit(1);},90000).unref();
 main().catch(e=>{console.error(e);app.exit(1);});

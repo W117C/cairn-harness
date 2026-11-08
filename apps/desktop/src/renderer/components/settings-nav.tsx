@@ -1,34 +1,55 @@
 // 设置导航的轻量单源：命令面板只需要分区 id/标签，不应因此把设置页正文与工作台一起拉进首屏。
-import { BookOpen, Brain, Clock, Globe, KeyRound, Keyboard, Puzzle, Shield, SlidersHorizontal, Wrench } from "lucide-react";
+import { BarChart3, BookOpen, Brain, Bot, Clock, FolderInput, GitBranch, Globe, KeyRound, Keyboard, Plug, Puzzle, Shield, SlidersHorizontal, Sparkles, UserRound, Webhook, Wrench } from "lucide-react";
 
-export type PageId = "plugins" | "automation" | "skills" | "memory";
+import type { PageId } from "../app-controls";
+export type { PageId } from "../app-controls";
 
-/** 页面顺序（导航与图标/标题事实源）：设置页的四个分区按此渲染，不再各抄一份。 */
-export const PAGE_ORDER: readonly PageId[] = ["plugins", "automation", "skills", "memory"];
+/** Page metadata remains the shared source for durable pages and the two page-style settings sections. */
+export const PAGE_ORDER: readonly PageId[] = ["plugins", "automation", "skills", "memory", "worktrees"];
+export const SETTINGS_PAGE_ORDER: readonly PageId[] = ["skills", "worktrees"];
 
 export const PAGE_META: Record<PageId, { label: string; icon: React.JSX.Element }> = {
   plugins: { label: "插件", icon: <Puzzle size={14} /> },
   automation: { label: "自动化任务", icon: <Clock size={14} /> },
   skills: { label: "技能中心", icon: <BookOpen size={14} /> },
   memory: { label: "记忆系统", icon: <Brain size={14} /> },
+  worktrees: { label: "工作树", icon: <GitBranch size={14} /> },
 };
 
-export type SectionId = "general" | "provider" | "permissions" | "advanced" | "shortcuts" | PageId | "about";
+import type { SectionId } from "../app-controls";
+export type { SectionId } from "../app-controls";
 
-const PAGE_SECTIONS = PAGE_ORDER.map((id) => ({ id, label: PAGE_META[id].label, icon: PAGE_META[id].icon }));
+const PAGE_SECTIONS = SETTINGS_PAGE_ORDER.map((id) => ({ id, label: PAGE_META[id].label, icon: PAGE_META[id].icon }));
 
 /** 设置分区（顺序固定，唯一事实源——导航与命令面板只许从这里取）。 */
 export const SECTIONS: readonly { id: SectionId; label: string; icon: React.JSX.Element }[] = [
   { id: "general", label: "通用", icon: <SlidersHorizontal size={14} /> },
   { id: "provider", label: "模型与 Provider", icon: <KeyRound size={14} /> },
+  { id: "personalization", label: "个性化", icon: <UserRound size={14} /> },
+  { id: "subagents", label: "子 Agent", icon: <Bot size={14} /> },
+  // 用户级 MCP 服务器（ZCode 独立管理对应面，2026-11-05）：<appData>/mcp.json 的管理面。
+  { id: "mcp", label: "MCP 服务器", icon: <Plug size={14} /> },
+  // 用户级 Hooks（ZCode HooksSection 对应面，2026-11-05）：<appData>/hooks.json 的管理面。
+  { id: "hooks", label: "Hooks", icon: <Webhook size={14} /> },
+  { id: "network", label: "联网搜索", icon: <Globe size={14} /> },
+  { id: "usage", label: "用量统计", icon: <BarChart3 size={14} /> },
+  // 2026-10-27：Evolve 只读报告（经验/实验/候选/预算/冻结态）。不注入、不晋升。
+  { id: "evolve", label: "进化", icon: <Sparkles size={14} /> },
   { id: "permissions", label: "权限与安全", icon: <Shield size={14} /> },
   // 2026-10-18 补：AppSettings 里一直在生效、却没有开关的字段（记忆沉淀 / 跨文件波及 /
   // prompt 缓存 / 花费上限 / 隐私）——用户看不见也改不了，等于悄悄替他决定。
   { id: "advanced", label: "高级", icon: <Wrench size={14} /> },
   { id: "shortcuts", label: "快捷键", icon: <Keyboard size={14} /> },
   ...PAGE_SECTIONS,
+  { id: "migration", label: "迁移导入", icon: <FolderInput size={14} /> },
   { id: "about", label: "关于与更新", icon: <Globe size={14} /> },
 ];
+
+/** 分区标题的唯一出口（第 949 页）：导航、命令面板与设置页头都从这里取。
+ *  此前设置页头把七个标题又抄了一遍字面量——导航改了名、页头还留旧话。 */
+export function sectionLabel(id: SectionId): string {
+  return SECTIONS.find((s) => s.id === id)?.label ?? id;
+}
 
 /** 分区搜索词（2026-10-18 补设置页搜索）：只补**同义/口语**词，不进 SECTIONS 本体——
  *  SECTIONS 的形状被壳导航与命令面板消费，加字段要连带改两处与它们的判据；
@@ -36,7 +57,15 @@ export const SECTIONS: readonly { id: SectionId; label: string; icon: React.JSX.
  *  收录口径：用户会打、但分区名里没有的字（如「暗模式」「密钥」「预算」）。 */
 export const SECTION_KEYWORDS: Readonly<Record<SectionId, string>> = {
   general: "主题 暗 亮 深色 夜间 外观 界面 语言 ctrl tab 循环 会话切换",
-  provider: "模型 通道 api key 密钥 token 接口 glm openai anthropic gemini deepseek 自定义 识图 视觉 联网 搜索",
+  personalization: "全局 自定义 指令 提示词 prompt 个性化 工作偏好",
+  subagents: "子代理 子智能体 并行 worker 角色 委派 subagent",
+  migration: "迁移 导入 claude code codex 兼容 配置",
+  provider: "模型 通道 api key 密钥 接口 glm openai anthropic gemini deepseek 自定义 识图 视觉",
+  mcp: "mcp server 服务器 工具 模型上下文协议 stdio sse http 接入",
+  hooks: "hooks 钩子 生命周期 会话开始结束 触发 命令 自动化",
+  network: "联网 搜索 网络 检索 brave tavily searxng 服务地址 api key",
+  usage: "用量 统计 token 活动 趋势 模型消耗 缓存 调用 账单",
+  evolve: "进化 自进化 经验 实验 候选 预算 冻结 stop 证据 holdout",
   permissions: "权限 档位 模式 只读 自动 引导 审批 安全 沙箱 网络 方案 计划 写文件",
   advanced: "记忆 沉淀 波及 缓存 prompt 花费 预算 上限 成本 价格 隐私 遥测 统计",
   shortcuts: "快捷键 按键 键盘 键位 热键",
@@ -44,7 +73,8 @@ export const SECTION_KEYWORDS: Readonly<Record<SectionId, string>> = {
   automation: "自动化 定时 任务 调度 计划任务 cron",
   skills: "技能 skill 命令 斜杠",
   memory: "记忆 memory 上下文",
-  about: "关于 更新 版本 诊断 日志 更新源 manifest",
+  worktrees: "工作树 worktree 孤儿 清理 分支",
+  about: "关于 更新 版本 诊断 日志 更新源 manifest 偏好 备份 迁移 导入 导出 许可证 license 数据目录",
 };
 
 /** 设置分区搜索（纯函数，可单测）：空查询 = 全量；按 label + 关键词做大小写不敏感的子串匹配。

@@ -1,6 +1,7 @@
 import { realpathSync } from "node:fs";
-import { realpath, stat } from "node:fs/promises";
+import { open, realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
+import { sniffImageMime } from "../tools/read_image";
 
 export type RunAttachmentKind = "file" | "directory";
 
@@ -14,8 +15,12 @@ export interface ValidatedRunAttachment extends RunAttachmentReference {
   /** canonical path; never the renderer-provided spelling */
   realPath: string;
   withinWorkspace: boolean;
-  /** The caller must pass this through the existing external-reference approval path. */
+  /** The caller must pass this through the external-reference approval path. */
   requiresExternalApproval: boolean;
+  /** Set only after the user approved this external reference for the current run.
+   *  It grants `read_file`/`read_image` access to exactly this path (or subtree for a
+   *  directory) while the run is alive; it is never persisted. */
+  externalApproved?: boolean;
 }
 
 export type AttachmentParseResult =
@@ -147,6 +152,25 @@ export async function validateRunAttachments(
   return { ok: true, value: validated };
 }
 
+/** 外置**图片**自动放行：用户把图拖进来/粘贴进来本身就是明确动作，再点一次「允许」
+ *  只是噪音（实测：截图走剪贴板落在系统 temp，100% 在 workspace 外 ⇒ 每张都弹卡）。
+ *  判据用 magic number（后缀名不参与，与 read_image 同源），只放行这一条路径、只活本轮；
+ *  非图片附件仍走审批卡。读取时仍按 realpath 复核，批准后换软链也不会被跟随。 */
+export async function isImageRunAttachment(attachment: ValidatedRunAttachment): Promise<boolean> {
+  if (attachment.kind !== "file") return false;
+  let handle: Awaited<ReturnType<typeof open>> | null = null;
+  try {
+    handle = await open(attachment.realPath, "r");
+    const prefix = Buffer.alloc(16);
+    const { bytesRead } = await handle.read(prefix, 0, prefix.length, 0);
+    return sniffImageMime(prefix.subarray(0, bytesRead)) !== null;
+  } catch {
+    return false;
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
+}
+
 /** Path-only prompt context. No file bytes are read here; the Agent must use normal guarded tools. */
 export function formatAttachmentContext(
   attachments: readonly ValidatedRunAttachment[],
@@ -159,16 +183,24 @@ export function formatAttachmentContext(
   } catch {
     return undefined;
   }
+  let hasApprovedExternal = false;
   const lines = attachments.map((attachment) => {
     const rel = relative(workspaceReal, attachment.realPath);
     const workspaceRelative = pathIsWithin(workspaceReal, attachment.realPath) ? rel || "." : undefined;
-    // 不把 renderer 原文或绝对 canonical path 送进模型；外部引用在 handler 已先行拒绝。
-    const displayPath = workspaceRelative ?? "[已验证的本地引用]";
+    // 工作区内给相对路径（与工具入参同形）。项目外只有在本轮获得批准后才交出 canonical
+    // path（非图片点「允许」；图片的拖入/粘贴本身就是授权）；批准过的路径同时进
+    // `externalReadGrants`，read_file/read_image 才认它。
+    const approvedExternal = workspaceRelative === undefined && attachment.externalApproved === true;
+    if (approvedExternal) hasApprovedExternal = true;
+    const displayPath = workspaceRelative ?? (approvedExternal ? attachment.realPath : "[未批准的本地引用]");
     return `- ${attachment.kind}: path=${JSON.stringify(displayPath)}`;
   });
   return [
     "[附件引用（仅路径，尚未读取内容）]",
     ...lines,
-    "需要内容时使用 read_file；目录使用 glob。附件内容仍受工作区与权限门约束。",
+    "需要内容时使用 read_file；目录可先用 read_file 列条目。附件内容仍受工作区与权限门约束。",
+    ...(hasApprovedExternal
+      ? ["项目外附件已获本轮一次性读取批准；只有上面列出的路径可用，未列出的项目外路径仍会被拒绝。"]
+      : []),
   ].join("\n");
 }

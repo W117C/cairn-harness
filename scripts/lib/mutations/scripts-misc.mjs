@@ -1536,9 +1536,9 @@ export const MUTATIONS = [
     id: "claim-no-needle-cap-raised-one-notch",
     src: "scripts/probe-promise-recall.ts",
     test: "tests/promise-recall-inventory.test.ts",
-    desc: "把第四态的帽抬一档（5→6）⇒ 「现读低于帽」那一半当场失去分辨力，"
+    desc: "把第四态的帽抬一档（4→5）⇒ 「现读低于帽」那一半当场失去分辨力，"
       + "而这一档存在的全部理由就是「帽等于干净树现读那一档、只准调低」——抬帽不是修尺，是把尺关掉",
-    apply: (s) => s.replace("export const CLAIM_NO_NEEDLE_CAP = 5;", "export const CLAIM_NO_NEEDLE_CAP = 6;"),
+    apply: (s) => s.replace("export const CLAIM_NO_NEEDLE_CAP = 4;", "export const CLAIM_NO_NEEDLE_CAP = 5;"),
     expectFail: "★第四态也有账（第 331 页 #34）：「尺读不出」超帽红、低于帽也红，帽＝干净树现读那一档",
   },
   {
@@ -1816,6 +1816,15 @@ export const MUTATIONS = [
       + "`head-cert-<sha7>` 这一整族（本仓实际使用的短前缀形状）全被判成「名字在说谎」",
     apply: (s) => s.replace("    if (!head.toLowerCase().startsWith(prefix)) {", "    if (head.toLowerCase() !== prefix) {"),
     expectFail: "名字与 HEAD 相符 ⇒ 一条都不许多报（主树与暂存根外的树不参与）",
+  },
+  {
+    id: "scratch-tree-live-branch-measured",
+    src: "scripts/lib/scratch-tree-naming.ts",
+    test: "tests/scratch-tree-naming.test.ts",
+    desc: "去掉「活工作树不参与命名对账」那一跳 ⇒ 挂在分支上的 `.worktrees/cap-20261021` 被当成验证树："
+      + "它的日期段恰好是 8 位十六进制，正则把 `cap-20261021` 读成前缀 `cap` ＋ sha `20261021` ⇒ 名字被举报成说谎",
+    apply: (s) => s.replace("    if (t.detached === false) continue;\n", ""),
+    expectFail: "挂在分支上的活工作树（detached=false）不参与命名对账；detached 的同名树照旧响",
   },
   {
     id: "trim-token-keeps-trailing-punct",

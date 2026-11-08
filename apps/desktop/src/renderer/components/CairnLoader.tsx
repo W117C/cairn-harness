@@ -1,0 +1,17 @@
+/** Cairn 逐格加载标（2026-10-24）：与启动屏同一图形、同一动效——图形不转，
+ *  颜色沿 7 格（6 段环 + 右上火花）顺时针逐格点亮，一圈 1.68s。
+ *  颜色随上下文（currentColor），尺寸由挂载处的 CSS 定（缺省 14px）；
+ *  动画关键帧与逐格延时在 styles.css 的 .cairn-loader（reduced-motion 停格为全色）。 */
+export function CairnLoader({ className = "" }: { className?: string }) {
+  return (
+    <svg className={`cairn-loader${className !== "" ? ` ${className}` : ""}`} viewBox="0 0 100 100" aria-hidden="true" focusable="false">
+      <path d="M 35.31 11.72 A 41 41 0 0 1 64.69 11.72 L 57.17 31.33 A 20 20 0 0 0 42.83 31.33 Z"/>
+      <path d="M 10.79 38.01 A 41 41 0 0 1 28.88 14.86 L 39.70 32.86 A 20 20 0 0 0 30.87 44.15 Z"/>
+      <path d="M 16.41 73.52 A 41 41 0 0 1 9.31 45.00 L 30.15 47.56 A 20 20 0 0 0 33.62 61.47 Z"/>
+      <path d="M 47.85 90.94 A 41 41 0 0 1 21.01 78.99 L 35.86 64.14 A 20 20 0 0 0 48.95 69.97 Z"/>
+      <path d="M 80.94 76.90 A 41 41 0 0 1 55.00 90.69 L 52.44 69.85 A 20 20 0 0 0 65.09 63.12 Z"/>
+      <path d="M 90.25 42.18 A 41 41 0 0 1 85.14 71.12 L 67.14 60.30 A 20 20 0 0 0 69.63 46.18 Z"/>
+      <path d="M 65 36 L 91 9 L 80 34 L 63 43 Z"/>
+    </svg>
+  );
+}

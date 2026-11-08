@@ -16,7 +16,8 @@ import { createUsageAttributor } from "../src/agent/usage-attribution";
 import { Orchestrator, scriptedWorkerModel, type SpawnArgs } from "../src/agent/orchestrator";
 import { budgetPriceKeyOf, mainUsageModelOf, resolveRunModel, scriptedMainModelPath } from "../src/main/agent-runner";
 import { priceForModel, spentUsdFor } from "../src/agent/orchestrator-join";
-import { DEFAULT_MODEL_TABLE, PROVIDER_IDS, toWorkerModel } from "../src/providers/registry";
+import { DEFAULT_MODEL_TABLE, PROVIDER_IDS } from "../src/providers/registry";
+import { toWorkerModel } from "../src/providers/worker-adapters";
 import { usageNameOf } from "../src/agent/worker-model";
 import { costOf, usageOfStream } from "../scripts/replay/run-scorecard";
 

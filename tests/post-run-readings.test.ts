@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { mixedAttributionFixture } from "../scripts/cost-per-progress-check";
 import { eventsForCurrentRun } from "../src/agent/delivery-guard";
 import { evolutionPathFor, loadEvolution } from "../src/agent/evolution";
+import { loadPlaybook } from "../src/main/evolve/playbook-store";
 import type { AgentEvent } from "../src/events";
 import { emitPostRunReadings } from "../src/main/post-run-readings";
 
@@ -57,11 +58,37 @@ describe("收尾观测的真实落盘结果", () => {
     const record = await loadEvolution(input.workspace);
     expect(record?.fromSession).toBe("session-proof");
     expect(record?.patches.map((patch) => patch.kind)).toEqual(hasPatch ? ["goal-reconfirm"] : []);
+    const playbook = await loadPlaybook(input.workspace);
+    expect(playbook.entries).toHaveLength(hasPatch ? 1 : 0);
+    if (hasPatch) expect(playbook.entries[0]!.status).toBe("candidate");
     const warnings = input.warnings.filter((message) => message.startsWith("[evolution]"));
     expect(warnings).toEqual(hasPatch
       ? ["[evolution] 本跑产出 1 条策略补丁，已落 " + evolutionPathFor(input.workspace)]
       : []);
     expect(await readFile(input.logPath, "utf8")).toBe(input.originalLog);
+  });
+
+  it("反思轮挂死也被限时兜住：到点返回 null（fail-open 回规则），emitPostRunReadings 照常 resolve", async () => {
+    const input = await setup(true);
+    // 反思 provider 永不返回（模拟网络挂死）：没有限时的话，读数转尾工后它会把
+    // 下一场 run 的让位等待吃满 120s 保险丝——限时是这条修法的另一半。
+    const started = Date.now();
+    await expect(emitPostRunReadings({
+      ...input,
+      sessionId: "session-reflect-deadline",
+      reflectDeadlineMs: 30,
+      reflectProviderFor: () => {
+        return {
+          stream: () => (async function* never() {
+            await new Promise(() => undefined); // 永不 yield、永不结束
+          })(),
+        } as never;
+      },
+    })).resolves.toBeUndefined();
+    expect(Date.now() - started, "反思限时生效：读数不被挂死的 provider 拖住").toBeLessThan(5_000);
+    // fail-open：规则补丁照常落（goal-reconfirm），反射产出缺席不影响落盘链。
+    const record = await loadEvolution(input.workspace);
+    expect(record?.fromSession).toBe("session-reflect-deadline");
   });
 });
 

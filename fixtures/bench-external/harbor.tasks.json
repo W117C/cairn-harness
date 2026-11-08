@@ -1,0 +1,18 @@
+[
+  {
+    "task_id": "harbor-demo-1",
+    "instruction": "修复仓库中的失败测试，并证明修复后测试通过。",
+    "repo": "example/harbor-demo",
+    "commit": "1111111111111111111111111111111111111111",
+    "seed": 1,
+    "max_agent_timeout_sec": 900,
+    "token_budget": 200000,
+    "max_cost_usd": 3
+  },
+  {
+    "id": "harbor-demo-2",
+    "description": "实现一个边界条件没有覆盖的小功能，并补充测试。",
+    "repo": "example/harbor-demo",
+    "commit": "both-missing-seed-and-budgets"
+  }
+]

@@ -6,8 +6,40 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ApprovalCard } from "../src/renderer/components/ApprovalCard";
-import { describeAsk } from "../src/renderer/components/cards";
+import { describeAsk, patchHeadline } from "../src/renderer/components/cards";
 import type { AskPayload } from "../../../src/main/ipc-protocol";
+
+/** 三张决策卡（审批/澄清/方案）的动作次序必须一致：拒绝在前、主按钮钉最右（2026-11-02）。 */
+describe("决策卡动作次序统一", () => {
+  /** 取 `card-actions` 之后到文件末尾的区域（动作行总在卡片最后，且没有同级 div 干扰）。 */
+  const actionsHtml = (file: string): string => {
+    const src = readFileSync(new URL(`../src/renderer/components/${file}`, import.meta.url), "utf8");
+    const at = src.indexOf('className="card-actions"');
+    expect(at, `${file} 的动作行`).toBeGreaterThan(-1);
+    return src.slice(at);
+  };
+  /** 主按钮（btn primary）必须排在 spacer 之后＝钉在最右。 */
+  const primaryAfterSpacer = (block: string): boolean =>
+    block.indexOf("spacer") > -1 && block.lastIndexOf("btn primary") > block.lastIndexOf("spacer");
+
+  it("审批卡：拒绝 / 总是允许 / 提示 → spacer → 允许·本次（主钮最右）", () => {
+    const block = actionsHtml("ApprovalCard.tsx");
+    expect(primaryAfterSpacer(block)).toBe(true);
+    expect(block.indexOf("拒绝")).toBeLessThan(block.indexOf("btn primary"));
+  });
+
+  it("澄清卡：提示 → spacer → 提交回答（主钮最右，与审批卡同序）", () => {
+    const block = actionsHtml("ClarifyCard.tsx");
+    expect(primaryAfterSpacer(block)).toBe(true);
+    expect(block.indexOf("consequence")).toBeLessThan(block.indexOf("spacer"));
+  });
+
+  it("方案卡：拒绝 → spacer → 提示 → 批准方案（主钮最右，与审批卡同序）", () => {
+    const block = actionsHtml("PlanCard.tsx");
+    expect(primaryAfterSpacer(block)).toBe(true);
+    expect(block.indexOf("拒绝")).toBeLessThan(block.indexOf("btn primary"));
+  });
+});
 
 const ask = (over: Partial<AskPayload>): AskPayload =>
   ({ askId: "a1", tool: "run_shell", args: {}, ...over }) as AskPayload;
@@ -44,6 +76,79 @@ describe("describeAsk（批准卡人话单点）", () => {
     const fb = describeAsk({ tool: "mystery_tool", args: { a: 1 } });
     expect(fb.title).toBe("需要你批准");
     expect(fb.body).toContain('"a"');
+    // 第 930 页：名单外的工具要把工具名摆出来——原来只有 aria-label 里有，看得见的是参数 JSON。
+    expect(fb.subject).toBe("mystery_tool");
+  });
+});
+
+describe("apply_patch 的批准卡先给抬头（第 933 页）", () => {
+  const patch = [
+    "diff --git a/src/a.ts b/src/a.ts",
+    "--- a/src/a.ts",
+    "+++ b/src/a.ts",
+    "@@ -1,1 +1,2 @@",
+    "-old",
+    "+new",
+    "+extra",
+    "diff --git a/src/b.ts b/src/b.ts",
+    "--- a/src/b.ts",
+    "+++ b/src/b.ts",
+    "@@ -1,1 +1,1 @@",
+    "-x",
+    "+y",
+  ].join("\n");
+
+  it("抬头：文件数、增删行数、前三路径", () => {
+    expect(patchHeadline(patch)).toBe("2 个文件 · +3 −2 · src/a.ts、src/b.ts");
+  });
+
+  it("解析不了不猜：抬头为空，正文仍是补丁原文（整段不丢）", () => {
+    expect(patchHeadline("这不是补丁")).toBeUndefined();
+    expect(patchHeadline("")).toBeUndefined();
+    const d = describeAsk({ tool: "apply_patch", args: { patch: "这不是补丁" } });
+    expect(d).toEqual({ title: "应用补丁", body: "这不是补丁" });
+  });
+
+  it("卡上真出现抬头，且补丁原文仍在", () => {
+    const html = renderToStaticMarkup(
+      <ApprovalCard ask={ask({ tool: "apply_patch", args: { patch }, risk: "low" })} onDecide={() => undefined} />,
+    );
+    expect(html).toContain("2 个文件 · +3 −2 · src/a.ts、src/b.ts");
+    expect(html).toContain("diff --git a/src/a.ts b/src/a.ts");
+  });
+});
+
+describe("读族/渲染/诊断的批准卡说人话（第 932 页）", () => {
+  it("六个工具：标题是动作、主体是那件事本身", () => {
+    expect(describeAsk({ tool: "read_file", args: { path: "src/a.ts" } })).toEqual({ title: "读取文件", body: "src/a.ts" });
+    expect(describeAsk({ tool: "read_file", args: { paths: ["a.ts", "b.ts"] } })).toEqual({ title: "读取文件", body: "a.ts、b.ts" });
+    expect(describeAsk({ tool: "grep", args: { pattern: "TODO" } })).toEqual({ title: "查找内容", body: "TODO" });
+    expect(describeAsk({ tool: "glob", args: { pattern: "**/*.ts" } })).toEqual({ title: "找文件", body: "**/*.ts" });
+    expect(describeAsk({ tool: "lsp", args: { symbol: "resolveFlag" } })).toEqual({ title: "查符号", subject: "resolveFlag" });
+    expect(describeAsk({ tool: "render_image", args: { path: "out/chart.html" } })).toEqual({ title: "渲染图", body: "out/chart.html" });
+    expect(describeAsk({ tool: "diagnose", args: {} })).toEqual({ title: "跑诊断", body: "全部检查" });
+    expect(describeAsk({ tool: "diagnose", args: { face: "test" } })).toEqual({ title: "跑诊断", body: "只跑 test" });
+  });
+
+  it("SSR：读文件的卡上是「读取文件 + 路径」，不是一段 JSON", () => {
+    const html = renderToStaticMarkup(
+      <ApprovalCard ask={ask({ tool: "read_file", args: { path: "src/a.ts" }, risk: "low" })} onDecide={() => undefined} />,
+    );
+    expect(html).toContain("<h3>读取文件</h3>");
+    expect(html).toContain("src/a.ts");
+    expect(html).not.toContain("&quot;path&quot;");
+  });
+});
+
+describe("名单外工具的批准卡（第 930 页）", () => {
+  it("工具名可见：mcp__db__drop_table 不再是「需要你批准 + 一段 JSON」", () => {
+    const html = renderToStaticMarkup(
+      <ApprovalCard ask={ask({ tool: "mcp__db__drop_table", args: { table: "users" }, risk: "high" })} onDecide={() => undefined} />,
+    );
+    expect(html).toContain('<h3>需要你批准</h3>');
+    expect(html).toContain('class="ask-subject"');
+    expect(html).toContain("mcp__db__drop_table");
+    expect(html).toContain("&quot;table&quot;"); // 参数仍在（可诊断）
   });
 });
 
@@ -115,6 +220,44 @@ describe("ApprovalCard SSR（重设计后）", () => {
     expect(css).not.toContain("\n.ghost {");
     expect(css).not.toContain("\n.suggest-ghost"); // 规则位清零（行首锚；注释里的历史说明不算）
     expect(css).toContain(".suggest-note {");
+  });
+});
+
+describe("项目外附件审批卡（2026-11-02）", () => {
+  it("describeAsk：标题说清是项目外附件，路径逐行上卡（不塞 JSON）", () => {
+    expect(describeAsk({ tool: "attachment", args: { paths: ["/Users/ze/Desktop/report.pdf", "/tmp/notes.txt"] } }))
+      .toEqual({
+        title: "读取项目外附件",
+        subject: "2 项",
+        body: "\"/Users/ze/Desktop/report.pdf\"\n\"/tmp/notes.txt\"",
+      });
+  });
+
+  it("describeAsk：混合附件只列需审批的非图片路径，并说明图片已自动放行", () => {
+    expect(
+      describeAsk({
+        tool: "attachment",
+        args: { paths: ["/tmp/notes.txt"], count: 1, autoApprovedImages: 2 },
+      }),
+    ).toEqual({
+      title: "读取项目外附件",
+      subject: "1 项 · 另有 2 张图片已自动放行",
+      body: "\"/tmp/notes.txt\"",
+    });
+  });
+
+  it("SSR：只给一次性允许——不摆「本会话此类 / 总是允许」的持久 scope", () => {
+    const html = renderToStaticMarkup(
+      <ApprovalCard
+        ask={ask({ tool: "attachment", args: { paths: ["/Users/ze/Desktop/report.pdf"] }, risk: "medium" })}
+        onDecide={() => undefined}
+      />,
+    );
+    expect(html).toContain("<h3>读取项目外附件</h3>");
+    expect(html).toContain("/Users/ze/Desktop/report.pdf");
+    expect(html).toContain("允许 · 本次");
+    expect(html).not.toContain("总是允许");
+    expect(html).not.toContain("本会话此类");
   });
 });
 

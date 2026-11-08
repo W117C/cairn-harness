@@ -11,14 +11,17 @@
 //   AskGate 承担；超时双闸 = runTimeoutMs（到点 abort，轮界收束）+ settlesWithin（宿主不响应时的二道退出）。
 // - 完成回写：summarizeRun 纯投影摘要（零新 LLM 调用）→ automation_completed 事件（复用 report 卡类型）。
 // electron-free；tick/jitter/clock/executor 全部可注入，验收禁止真实 sleep 等触发。
-import { mkdir, open, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rm, stat, writeFile, type FileHandle } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { writeFileAtomic } from "../atomic-write";
+import { processLiveness } from "../process-liveness";
 import type { PermissionMode } from "../permissions/modes";
 import { Cron } from "croner";
 import type { AgentEvent } from "../events";
-import { createEventLog, hasEventLogHandle, invalidateEventLogHandle, replay, resolveHandle } from "../events";
+import { createEventLog, invalidateEventLogHandle, replay, resolveHandle } from "../events";
 import { createSession, isValidSessionName, pathOf } from "./sessions";
+import { parseMutationLockPid } from "./session-mutation-lock";
+import { createIdleTask, readIdleTasks, saveIdleTasks, type IdleTaskResult, type IdleTaskSnapshot, type StoredIdleTask } from "./idle-tasks";
 import {
   normalizeTimeZone,
   systemTimeZone,
@@ -59,14 +62,24 @@ interface AutomationsFile {
   tasks: AutomationDefinition[];
 }
 
-/** 加载任务定义（迁移容忍：坏文件/坏条目跳过 + 警告，不静默丢整个清单）。 */
-export async function loadAutomationsFile(file: string): Promise<{ tasks: AutomationDefinition[]; warnings: string[] }> {
+/** 加载任务定义（迁移容忍：坏条目跳过 + 警告，不静默丢整个清单）。
+ *  **缺文件 ≠ 坏文件**：坏 JSON 单独标 `corrupt`，写路径据此拒绝覆盖（同会话元数据/队列口径）；
+ *  把两者混成「空清单」会让下一次 upsert 把用户的任务表整份盖掉（实测路径：桌面加一条任务即可）。 */
+export async function loadAutomationsFile(
+  file: string,
+): Promise<{ tasks: AutomationDefinition[]; warnings: string[]; corrupt: boolean }> {
   const warnings: string[] = [];
   let raw: unknown = null;
   try {
     raw = JSON.parse(await readFile(file, "utf8")) as unknown;
-  } catch {
-    return { tasks: [], warnings: warnings.length > 0 ? warnings : ["（无既有文件，按空清单起步）"] };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { tasks: [], warnings: [], corrupt: false };
+    const reason = error instanceof Error ? error.message : String(error);
+    return {
+      tasks: [],
+      warnings: [`调度任务文件损坏：${file}（${reason}）——修好或删除该文件后重试，本次不覆盖`],
+      corrupt: true,
+    };
   }
   const obj = raw as { version?: unknown; tasks?: unknown };
   const list = Array.isArray(obj?.tasks) ? obj.tasks : [];
@@ -76,7 +89,7 @@ export async function loadAutomationsFile(file: string): Promise<{ tasks: Automa
     if (v.ok) tasks.push(v.value);
     else warnings.push(`automations.json 第 ${String(i + 1)} 条无效已跳过：${v.errors.join("；")}`);
   });
-  return { tasks, warnings };
+  return { tasks, warnings, corrupt: false };
 }
 
 /** 保存任务定义（原子写：tmp + rename，中断自愈；与 settings/permissions 同款）。 */
@@ -121,6 +134,88 @@ export function occurrenceKeyOf(taskId: string, dueAt: Date): string {
  *  链式串行与 events replay / B8 同一口径；链按文件键，跑完即回收（不单调增长）。 */
 const journalChain = new Map<string, Promise<unknown>>();
 
+/** journal 的**跨进程**写锁：append 与 compact 必须共用同一把，否则 compact 的
+ *  readFile→rename 会覆盖另一实例在窗口内追加的 triggered 账（重启后同一 occurrence 重复跑）。
+ *  与准入锁 `automations.lock` 分开：准入锁内会调用 append，共用一把会自锁。 */
+const JOURNAL_FILE_LOCK = "automations-journal.lock";
+
+async function schedulerLockOwner(path: string): Promise<ReturnType<typeof processLiveness>> {
+  try {
+    return processLiveness(parseMutationLockPid(await readFile(path, "utf8")));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "unknown";
+    throw error;
+  }
+}
+
+async function releaseSchedulerLock(path: string, handle: FileHandle): Promise<void> {
+  try {
+    const owned = await handle.stat();
+    const current = await stat(path);
+    if (current.dev === owned.dev && current.ino === owned.ino) {
+      await rm(path, { force: true });
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      console.warn(`[scheduler] 无法释放调度锁 ${path}:`, error);
+    }
+  } finally {
+    await handle.close().catch(() => undefined);
+  }
+}
+
+async function acquireSchedulerLock(path: string): Promise<FileHandle | null> {
+  let handle: FileHandle;
+  try {
+    handle = await open(path, "wx");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") return null;
+    throw error;
+  }
+  try {
+    await handle.writeFile(String(process.pid));
+    return handle;
+  } catch (error) {
+    await releaseSchedulerLock(path, handle);
+    throw error;
+  }
+}
+
+async function recoverSchedulerLock(path: string): Promise<boolean> {
+  const recoveryPath = path + ".recovery";
+  const recovery = await acquireSchedulerLock(recoveryPath);
+  if (recovery === null) return false;
+  try {
+    // 首次读到的陈旧锁可能已经换代。串行化回收后重查，只删确认已退出的持有者。
+    if (await schedulerLockOwner(path) !== "dead") return false;
+    await rm(path, { force: true });
+    return true;
+  } finally {
+    await releaseSchedulerLock(recoveryPath, recovery);
+  }
+}
+
+async function withJournalFileLock<T>(file: string, job: () => Promise<T>): Promise<T> {
+  const lockPath = join(dirname(file), JOURNAL_FILE_LOCK);
+  const deadline = Date.now() + 5_000;
+  await mkdir(dirname(file), { recursive: true });
+  for (;;) {
+    const handle = await acquireSchedulerLock(lockPath);
+    if (handle !== null) {
+      try {
+        return await job();
+      } finally {
+        await releaseSchedulerLock(lockPath, handle);
+      }
+    }
+    if (await schedulerLockOwner(lockPath) === "dead" && await recoverSchedulerLock(lockPath)) continue;
+    if (Date.now() >= deadline) {
+      throw new Error(`调度日志锁无法取得，请检查锁及其回收标记是否为崩溃残留：${lockPath}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
 function onJournalPath<T>(file: string, job: () => Promise<T>): Promise<T> {
   const prev = journalChain.get(file);
   const next = (prev === undefined ? Promise.resolve() : prev.catch(() => undefined)).then(job);
@@ -135,15 +230,10 @@ function onJournalPath<T>(file: string, job: () => Promise<T>): Promise<T> {
 }
 
 export async function appendJournalEntry(file: string, entry: JournalEntry): Promise<void> {
-  await onJournalPath(file, async () => {
-    // X2：常驻文件句柄直写（与 A1 同族）——裸 appendFile 是 open+write+close 三连（实测 2,220µs/次），
-    // journal 是 append-only，复用 events 的 resolveHandle（含 inode 校验 + 有界缓存 + 串行化）。
-    // mkdir 只在**首次**（该 path 尚无句柄）时做：本机 mkdir(recursive) 实测 ≈2,126µs/次，是 10k
-    // 级 append 的主成本；目录已存在时每次都做会把这条路径钉死在毫秒级。
-    if (!hasEventLogHandle(file)) await mkdir(dirname(file), { recursive: true });
-    const fh = await resolveHandle(file);
+  await onJournalPath(file, () => withJournalFileLock(file, async () => {
+    const fh = await resolveHandle(file, isJournalEntry);
     await fh.write(JSON.stringify(entry) + "\n");
-  });
+  }));
 }
 
 // ---- D7（审查 P2）：journal 保留上限——append-only 无界增长使 journalKeys/journalByTask/
@@ -155,10 +245,19 @@ export async function compactJournalIfLarge(
   file: string,
   onCompacted?: (kept: JournalEntry[]) => void,
 ): Promise<number> {
-  return await onJournalPath(file, async () => {
+  return await onJournalPath(file, () => withJournalFileLock(file, async () => {
+    // 读必须在锁内：锁外读到的快照会漏掉另一实例在窗口内追加的账，rename 覆盖后那条账就没了。
     const { entries } = await readJournalFile(file);
     if (entries.length <= JOURNAL_MAX_ENTRIES) return entries.length;
-    const keep = entries.slice(-JOURNAL_KEEP_ENTRIES);
+    // 只保留「最近 KEEP 条」会挤掉稀疏任务唯一的已决账：一个每天跑一次的任务，其最后一条
+    // triggered 可能早于其他任务制造的一万条噪音 ⇒ 重启后 lastDecidedAt 退回 createdAt，
+    // 同一个 occurrence 被重新补跑。因此再并上**每个任务最后一条**（按原顺序去重）。
+    const keepIdx = new Set<number>();
+    for (let i = Math.max(0, entries.length - JOURNAL_KEEP_ENTRIES); i < entries.length; i++) keepIdx.add(i);
+    const latestByTask = new Map<string, number>();
+    entries.forEach((entry, index) => { latestByTask.set(entry.task_id, index); });
+    for (const index of latestByTask.values()) keepIdx.add(index);
+    const keep = entries.filter((_, index) => keepIdx.has(index));
     await writeFileAtomic(file, keep.map((e) => JSON.stringify(e) + "\n").join(""));
     // X2（关键）：覆盖写完成后**同链内**显式失效该 path 的常驻句柄——rename 之后缓存句柄仍指向
     // 已被覆盖掉的旧 inode，不失效则后续 appendJournalEntry 复用旧句柄，journal 写入静默丢失。
@@ -169,7 +268,13 @@ export async function compactJournalIfLarge(
     // 内存三表对已截断历史仍单调增长）。
     onCompacted?.(keep);
     return keep.length;
-  });
+  }));
+}
+
+function isJournalEntry(value: unknown): value is JournalEntry {
+  if (value === null || typeof value !== "object") return false;
+  const row = value as Partial<JournalEntry>;
+  return typeof row.task_id === "string" && typeof row.occurrence_key === "string" && typeof row.decision === "string";
 }
 
 /** 读调度日志（append-only；坏行跳过 + 警告，不断链）。 */
@@ -186,8 +291,8 @@ export async function readJournalFile(file: string): Promise<{ entries: JournalE
     const t = line.trim();
     if (t === "") return;
     try {
-      const e = JSON.parse(t) as JournalEntry;
-      if (typeof e.task_id === "string" && typeof e.occurrence_key === "string" && typeof e.decision === "string") {
+      const e: unknown = JSON.parse(t);
+      if (isJournalEntry(e)) {
         entries.push(e);
       } else {
         warnings.push(`journal 第 ${String(i + 1)} 行缺关键字段，已跳过`);
@@ -263,13 +368,15 @@ export function nextOccurrence(def: AutomationDefinition, after: Date): Date | n
       timeZone: def.timeZone, year: "numeric", month: "2-digit", day: "2-digit",
     }).formatToParts(created);
     const part = (type: string): number => Number(wall.find((p) => p.type === type)?.value ?? "0");
-    const anchor = zonedDate(def.timeZone, part("year"), part("month") - 1, part("day"), h, m);
-    const anchorUtc = anchor.getTime() - tzOffsetMs(def.timeZone, anchor);
+    // 锚点用**墙钟纪元**（Date.UTC）而不是 UTC instant：zonedDate 已经把墙钟换算成 instant，
+    // 再减一次 tzOffsetMs 会把相位平移一个时区偏移（悉尼/东京 everyDays>1 落到前一天）。
+    // 步进也走墙钟日序，DST 由 zonedDate 每次重新解析。
+    const anchorWall = Date.UTC(part("year"), part("month") - 1, part("day"), h, m);
     // 以 24h 步进近似找首个 > after 的天序，再按 tz 墙钟重建（跨月由 Date.UTC 归一化）
     const dayMs = s.everyDays * 24 * 60 * 60 * 1000;
-    const k = Math.max(0, Math.ceil((after.getTime() + 1 - anchorUtc) / dayMs));
+    const k = Math.max(0, Math.ceil((after.getTime() + 1 - anchorWall) / dayMs));
     for (let i = Math.max(0, k - 1); i < k + 2; i++) {
-      const base = new Date(anchorUtc + i * dayMs);
+      const base = new Date(anchorWall + i * dayMs);
       const y = base.getUTCFullYear();
       const mo = base.getUTCMonth();
       const d = base.getUTCDate();
@@ -369,6 +476,8 @@ export interface TriggerExecutorArgs {
   message: string;
   mode: TriggerMode;
   signal: AbortSignal;
+  workspace?: string;
+  logPath?: string;
 }
 export type TriggerExecutor = (args: TriggerExecutorArgs) => Promise<{ ok: boolean; error?: string }>;
 
@@ -381,6 +490,9 @@ export interface SchedulerDeps {
   clock?: () => number;
   /** 并发上限（settings.scheduleConcurrencyCap）；缺省 2。 */
   getCap?: () => number;
+  /** 仅桌面宿主启用本地闲时队列；每次启动任务前检查真实 Agent 活动。 */
+  isAgentBusy?: () => boolean;
+  isIdleWorkspaceAvailable?: (workspace: string) => boolean;
   runTimeoutMs?: number;
   settlesWithinMs?: number;
   /** 启动抖动（缺省随机 1-3min；验收注入 () => 0）。 */
@@ -431,6 +543,11 @@ export interface ScheduleSnapshot {
   /** task_id → 时区注记：只有该任务的时区与本机不同（或声明值非法）时才有键。
    *  单独一张表而不是塞进 task：定义对象要能原样回传给严格校验（未知字段会被整条拒）。 */
   tzNotes: Record<string, string>;
+  /** 装载期警告（automations.json 损坏 / 坏条目被跳过 / journal 坏行）。
+   *  桌面端没有控制台可看：装载失败若只 `console.warn`，用户只会看到「还没有定时任务」。 */
+  warnings: string[];
+  /** 任务定义文件损坏（读不了）：写路径会拒绝覆盖。与「坏条目被跳过」不同，后者仍可写。 */
+  definitionsCorrupt: boolean;
 }
 
 /** 时区注记（纯函数，唯一实现；措辞与偏移都取自 automations 的那份 helper，不另写一遍）。 */
@@ -492,6 +609,10 @@ export class Scheduler {
   private jitterTimer: ReturnType<typeof setTimeout> | null = null;
   private firstTickDone = false;
   private started = false;
+  /** 装载期的坏档 / 坏行（快照上屏；桌面控制台无人可见）。 */
+  private definitionsWarnings: string[] = [];
+  private definitionsCorrupt = false;
+  private journalWarnings: string[] = [];
   private chain: Promise<void> = Promise.resolve();
   private tickMutex: Promise<void> = Promise.resolve();
   // tick 与 run_now 共用准入锁；覆盖检查到 queued 入表，不能跨 IO 留空位。
@@ -502,6 +623,8 @@ export class Scheduler {
   private readonly jitterMs: () => number;
   readonly definitionsPath: string;
   readonly journalPath: string;
+  private readonly idleTasksPath: string;
+  private idleRun: { id: string; controller: AbortController | null } | null = null;
   /** occurrence_key → session_id 的旁路索引：journal 条目在 spawn **前**写（崩溃窗口不双跑），
    *  此时 session 还不存在 ⇒ 条目天然没有 session_id。旧实现只把 session_id 写进内存表，
    *  重启后所有成功触发都被投影成 failed/interrupted。 */
@@ -515,6 +638,7 @@ export class Scheduler {
     this.jitterMs = deps.jitterMs ?? defaultJitterMs;
     this.definitionsPath = join(deps.dataDir, "automations.json");
     this.journalPath = join(deps.dataDir, "automations-journal.jsonl");
+    this.idleTasksPath = join(deps.dataDir, "idle-tasks.json");
     this.sessionIndexPath = join(deps.dataDir, "automation-sessions.json");
   }
 
@@ -531,12 +655,19 @@ export class Scheduler {
   async start(): Promise<void> {
     if (this.started) return;
     this.started = true;
+    // stop→start 同进程重启必须重新走启动判定语义：firstTickDone 残留会让抖动期内的
+    // interval/手动 tick 以常规路真跑错过的 occurrence——catchUp=skip 的任务被违背
+    // 「对齐不补跑」的属主意图（start 前半段全是 await，复位必须在本行、装载之前）。
+    this.firstTickDone = false;
     const loaded = await loadAutomationsFile(this.definitionsPath);
     this.tasks = loaded.tasks;
+    this.definitionsWarnings = loaded.warnings;
+    this.definitionsCorrupt = loaded.corrupt;
     for (const w of loaded.warnings) this.warn("[scheduler] " + w);
     const j = await readJournalFile(this.journalPath);
     this.ingestJournal(j.entries);
     await this.loadSessionIndex();
+    this.journalWarnings = j.warnings;
     for (const w of j.warnings) this.warn("[scheduler] " + w);
     // D7（审查 P2）：启动时对 journal 做保留上限收敛（超帽截到 KEEP 条，原子替换）。
     const kept = await compactJournalIfLarge(this.journalPath, (keep) => this.rebuildJournalMemory(keep)).catch(() => -1);
@@ -632,7 +763,9 @@ export class Scheduler {
     this.journalByTask.clear();
     this.sessionIdByKey.clear();
     for (const e of entries) this.addJournalEntry(e);
-    for (const [key, sid] of sidecar) this.sessionIdByKey.set(key, sid);
+    for (const [key, sid] of sidecar) {
+      if (this.journalKeys.has(key) || this.inflight.has(key)) this.sessionIdByKey.set(key, sid);
+    }
   }
 
   /** 手动 tick（验收注入；生产由 interval 驱动）。startup=true = 启动 tick（补跑闸生效）。 */
@@ -683,6 +816,7 @@ export class Scheduler {
           if (due) await this.pipeline(def, due, "triggered", report);
         }
       }
+      await this.dispatchIdleTask().catch((err: unknown) => this.warn("[scheduler] " + String(err)));
       return report;
     };
     const next = this.tickMutex.then(run, run);
@@ -732,51 +866,32 @@ export class Scheduler {
     kind: "triggered" | "catchup",
     report: TickReport,
   ): Promise<void> {
-    const run = async (): Promise<void> => {
-      // 跨进程互斥：同根多实例（桌面 app + cairn --serve）各自内存表 + append-only journal
-      // 仍有「双方都读到未决、都 append」的窗口。刷新只能缩小窗口，锁才关掉它。
-      const locked = await this.withCrossProcessLock(() => this.admitOccurrence(def, dueAt, kind, report));
-      if (!locked) report.duplicates += 1; // 对方进程正在决定这一拍：本次让路，不重复触发
-    };
+    // 刷新不足以关掉两个进程同时决定同一拍的窗口，准入共用同一个磁盘锁。
+    const locked = await this.withAdmission(() => this.admitOccurrence(def, dueAt, kind, report));
+    if (locked === false) report.duplicates += 1;
+  }
+
+  private withAdmission<T>(fn: () => Promise<T>): Promise<T | false> {
+    const run = () => this.withCrossProcessLock(fn);
     const next = this.admissionMutex.then(run, run);
-    // IO 失败仍释放锁；原始拒绝交还调用者，journal 的已决水位不回滚。
     this.admissionMutex = next.then(() => undefined, () => undefined);
     return next;
   }
 
-  /** 跨进程准入锁（O_EXCL + 陈旧清理）。返回 false = 锁被活着的另一进程持有。 */
+  /** 跨进程准入锁。活着或无法确认的持有者都让路。 */
   private async withCrossProcessLock<T>(fn: () => Promise<T>): Promise<T | false> {
     const lockPath = join(this.deps.dataDir, "automations.lock");
-    const tryOnce = async (): Promise<T | false> => {
-      let fh: Awaited<ReturnType<typeof open>>;
-      try {
-        await mkdir(this.deps.dataDir, { recursive: true });
-        fh = await open(lockPath, "wx");
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-        return false;
-      }
-      try {
-        try {
-          await fh.writeFile(String(process.pid));
-        } finally {
-          await fh.close().catch(() => undefined);
-        }
-        return await fn();
-      } finally {
-        await rm(lockPath, { force: true }).catch(() => undefined);
-      }
-    };
-    const first = await tryOnce();
-    if (first !== false) return first;
-    // 陈旧锁（崩溃留下的）：超过 2 分钟视为无主，清掉重试一次。
-    const st = await stat(lockPath).catch(() => null);
-    if (st !== null && Date.now() - st.mtimeMs > 120_000) {
-      await rm(lockPath, { force: true }).catch(() => undefined);
-      const retry = await tryOnce();
-      return retry;
+    await mkdir(this.deps.dataDir, { recursive: true });
+    let handle = await acquireSchedulerLock(lockPath);
+    if (handle === null && await schedulerLockOwner(lockPath) === "dead" && await recoverSchedulerLock(lockPath)) {
+      handle = await acquireSchedulerLock(lockPath);
     }
-    return false;
+    if (handle === null) return false;
+    try {
+      return await fn();
+    } finally {
+      await releaseSchedulerLock(lockPath, handle);
+    }
   }
 
   /** 把磁盘上（别的进程刚写的）新 journal 条目并入内存去重表。 */
@@ -830,16 +945,9 @@ export class Scheduler {
     if (kind === "catchup") report.catchup++;
     else report.triggered++;
     report.decisions.push({ task_id: def.id, occurrence_key: key, decision });
-    // 会话标题 = 任务名 · 触发时刻（任务时区墙钟）
-    const title = def.name + " · " + formatLocal(dueAt, def.timeZone);
-    const sessionId = await createSession(this.deps.sessionsDir, isValidSessionName(title) ? title : def.name);
+    const sessionId = await this.createOccurrenceSession(def, dueAt);
     await this.rememberSessionId(key, sessionId);
-    await createEventLog(pathOf(this.deps.sessionsDir, sessionId)).append({
-      type: "session_meta",
-      origin: "scheduled",
-      automation_id: def.id,
-      automation_name: def.name,
-    } as AgentEvent);
+    await this.writeOccurrenceMeta(def, sessionId);
     this.inflight.set(key, { taskId: def.id, taskName: def.name, sessionId, state: "queued", dueAt });
     await this.emitTimelineSafe({
       type: "automation_triggered",
@@ -852,6 +960,162 @@ export class Scheduler {
       ts: this.clock(),
     } as AgentEvent);
     this.enqueue(def, key, dueAt, sessionId);
+  }
+
+  private createOccurrenceSession(
+    def: Pick<AutomationDefinition, "name" | "timeZone">, dueAt: Date, sessionsDir = this.deps.sessionsDir,
+  ): Promise<string> {
+    const title = def.name + " · " + formatLocal(dueAt, def.timeZone);
+    return createSession(sessionsDir, isValidSessionName(title) ? title : def.name);
+  }
+
+  private async writeOccurrenceMeta(def: Pick<AutomationDefinition, "id" | "name">, sessionId: string, sessionsDir = this.deps.sessionsDir): Promise<void> {
+    await createEventLog(pathOf(sessionsDir, sessionId)).append({
+      type: "session_meta",
+      origin: "scheduled",
+      automation_id: def.id,
+      automation_name: def.name,
+    });
+  }
+
+  private isIdleWorkspaceAvailable(workspace: string): boolean {
+    return this.deps.isIdleWorkspaceAvailable?.(workspace) ?? workspace === this.deps.workspace;
+  }
+
+  private idleWorkspace(task: StoredIdleTask): string {
+    return task.workspace ?? this.deps.workspace;
+  }
+
+  private idleSessionsDir(workspace: string): string {
+    return workspace === this.deps.workspace ? this.deps.sessionsDir : join(workspace, ".agent", "sessions");
+  }
+
+  async idleTaskSnapshot(workspace = this.deps.workspace): Promise<IdleTaskSnapshot> {
+    if (!this.isIdleWorkspaceAvailable(workspace)) throw new Error("闲时任务工作区不可用");
+    const tasks = await this.readIdleTaskState();
+    return {
+      workspace,
+      tasks: tasks.filter((task) => this.idleWorkspace(task) === workspace)
+        .map(({ workspace: _workspace, runPid: _runPid, ...task }) => task),
+    };
+  }
+
+  async enqueueIdleTask(input: unknown, workspace = this.deps.workspace): Promise<IdleTaskResult> {
+    if (!this.isIdleWorkspaceAvailable(workspace)) return { ok: false, error: "闲时任务工作区不可用" };
+    const result = createIdleTask(input, new Date(this.clock()));
+    if ("error" in result) return { ok: false, error: result.error };
+    return this.writeIdleChange(async (tasks) => {
+      await saveIdleTasks(this.idleTasksPath, [...tasks, { ...result.task, workspace }]);
+      return { ok: true };
+    });
+  }
+
+  async updateIdleTask(id: unknown, action: unknown, workspace = this.deps.workspace): Promise<IdleTaskResult> {
+    if (!this.isIdleWorkspaceAvailable(workspace)) return { ok: false, error: "闲时任务工作区不可用" };
+    return this.writeIdleChange(async (tasks) => {
+      const task = tasks.find((item) => item.id === id && this.idleWorkspace(item) === workspace);
+      if (!task) return { ok: false, error: "闲时任务不存在" };
+      const live = this.idleRun;
+      if (action === "cancel" && task.status === "running" && live !== null && live.id === id && live.controller !== null) {
+        live.controller.abort();
+        return { ok: true };
+      }
+      // running 但控制器已收（runOccurrence 终态回写前的窗口）：这一刀取消改变不了结果，
+      // 如实说，不谎报 ok、也不给一句与本任务无关的「当前状态不支持此操作」。
+      if (action === "cancel" && task.status === "running" && live?.id === id) {
+        return { ok: false, error: "任务刚结束，取消未生效（结果按其真实终态回写）" };
+      }
+      if (action === "pause" && task.status === "queued") task.status = "paused";
+      else if (action === "resume" && task.status === "paused") task.status = "queued";
+      else if (action === "cancel" && (task.status === "queued" || task.status === "paused")) task.status = "cancelled";
+      else return { ok: false, error: "当前状态不支持此操作" };
+      task.updatedAt = new Date(this.clock()).toISOString();
+      await saveIdleTasks(this.idleTasksPath, tasks);
+      return { ok: true };
+    });
+  }
+
+  private async writeIdleChange(change: (tasks: StoredIdleTask[]) => Promise<IdleTaskResult>): Promise<IdleTaskResult> {
+    if (this.deps.isAgentBusy === undefined) return { ok: false, error: "本地闲时队列未启用" };
+    try {
+      const result = await this.withAdmission(async () => change(await this.readIdleTaskState()));
+      return result === false ? { ok: false, error: "调度器正在处理其他任务，请重试" } : result;
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
+  private async readIdleTaskState(): Promise<StoredIdleTask[]> {
+    const tasks = await readIdleTasks(this.idleTasksPath);
+    return Promise.all(tasks.map(async (task) => {
+      if (task.status !== "running" || this.idleRun?.id === task.id) return task;
+      const workspace = this.idleWorkspace(task);
+      if (!this.isIdleWorkspaceAvailable(workspace)) return task;
+      const terminal = task.sessionId === undefined ? null : await this.terminalOf(task.sessionId, this.idleSessionsDir(workspace));
+      if (terminal?.state === "succeeded" || terminal?.state === "failed") {
+        const { runPid: _runPid, ...stored } = task;
+        return {
+          ...stored,
+          status: terminal.reason === "cancelled" ? "cancelled" : terminal.state,
+          ...(terminal.reason !== undefined && terminal.reason !== "cancelled" ? { error: terminal.reason } : {}),
+        };
+      }
+      if (task.runPid !== undefined && task.runPid !== process.pid && processLiveness(task.runPid) !== "dead") return task;
+      const { runPid: _runPid, ...stored } = task;
+      return { ...stored, status: "failed", error: "interrupted" };
+    }));
+  }
+
+  private async dispatchIdleTask(): Promise<void> {
+    const isAvailable = () => this.started && this.deps.isAgentBusy?.() === false && this.inflight.size === 0;
+    if (this.idleRun !== null || !isAvailable()) return;
+    await this.withAdmission(async () => {
+      const tasks = await this.readIdleTaskState();
+      const task = tasks.find((item) => item.status === "queued" && this.isIdleWorkspaceAvailable(this.idleWorkspace(item)));
+      if (task === undefined || this.idleRun !== null || !isAvailable()
+        || tasks.some((item) => item.status === "running" && this.isIdleWorkspaceAvailable(this.idleWorkspace(item)))) return;
+      const workspace = this.idleWorkspace(task);
+      const sessionsDir = this.idleSessionsDir(workspace);
+      const now = new Date(this.clock());
+      const sessionId = task.sessionId ?? await this.createOccurrenceSession(task, now, sessionsDir);
+      if (task.sessionId === undefined) await this.writeOccurrenceMeta(task, sessionId, sessionsDir);
+      task.sessionId = sessionId;
+      task.status = "running";
+      task.runPid = process.pid;
+      task.updatedAt = now.toISOString();
+      const controller = new AbortController();
+      this.idleRun = { id: task.id, controller };
+      try {
+        await saveIdleTasks(this.idleTasksPath, tasks);
+        // 前台可能在磁盘 I/O 期间开始工作。最后一次检查与执行器调用之间没有 await。
+        if (!isAvailable() || !this.isIdleWorkspaceAvailable(workspace)) {
+          task.status = "queued";
+          delete task.runPid;
+          await saveIdleTasks(this.idleTasksPath, tasks);
+          this.idleRun = null;
+          return;
+        }
+      } catch (err) {
+        this.idleRun = null;
+        throw err;
+      }
+      this.chain = this.runOccurrence(task, occurrenceKeyOf(task.id, now), now, sessionId, { controller, workspace })
+        .then(async (terminal) => {
+          const result = await this.writeIdleChange(async (current) => {
+            const row = current.find((item) => item.id === task.id);
+            if (row === undefined) return { ok: false, error: "闲时任务不存在" };
+            row.status = terminal.reason === "cancelled" ? "cancelled" : terminal.status;
+            if (terminal.reason !== undefined && terminal.reason !== "cancelled") row.error = terminal.reason;
+            row.updatedAt = new Date(this.clock()).toISOString();
+            delete row.runPid;
+            await saveIdleTasks(this.idleTasksPath, current);
+            return { ok: true };
+          });
+          if (!result.ok) this.warn("[scheduler] 闲时任务终态仍可从会话恢复：" + (result.error ?? ""));
+        })
+        .catch((err: unknown) => this.warn("[scheduler] 闲时任务收束失败：" + String(err)))
+        .finally(() => { this.idleRun = null; });
+    });
   }
 
   private async decideSkip(def: AutomationDefinition, dueAt: Date, reason: SkipReason, report: TickReport, keySuffix = ""): Promise<void> {
@@ -910,22 +1174,26 @@ export class Scheduler {
   /** 执行队列（串行穿过 runSession——主进程 agent 会话态为单例；并发闸按 queued+running 计数）。 */
   private enqueue(def: AutomationDefinition, key: string, dueAt: Date, sessionId: string): void {
     this.chain = this.chain.then(
-      () => this.runOccurrence(def, key, dueAt, sessionId),
-      () => this.runOccurrence(def, key, dueAt, sessionId),
+      async () => { await this.runOccurrence(def, key, dueAt, sessionId); },
+      async () => { await this.runOccurrence(def, key, dueAt, sessionId); },
     );
   }
 
   /** 触发执行（§12.2.4）：全新会话 + unattended fail-closed（会话侧 AskGate）+ 超时双闸 + 完成回写。 */
-  private async runOccurrence(def: AutomationDefinition, key: string, dueAt: Date, sessionId: string): Promise<void> {
+  private async runOccurrence(
+    def: Pick<AutomationDefinition, "id" | "name" | "prompt" | "timeZone" | "permissionTier">,
+    key: string, dueAt: Date, sessionId: string, idle?: { controller: AbortController; workspace: string },
+  ): Promise<{ status: "succeeded" | "failed"; reason?: string }> {
     const f = this.inflight.get(key);
     if (f) f.state = "running";
-    const logPath = pathOf(this.deps.sessionsDir, sessionId);
+    const workspace = idle?.workspace ?? this.deps.workspace;
+    const logPath = pathOf(idle === undefined ? this.deps.sessionsDir : this.idleSessionsDir(workspace), sessionId);
     const message =
       def.prompt +
-      `\n\n—— 本会话由定时任务「${def.name}」在 ${dueAt.toISOString()}（${def.timeZone}）无人值守触发；` +
-      `工作区：${this.deps.workspace}。无人值守下一切审批请求会被自动拒绝（fail-closed），` +
+      `\n\n—— 本会话由${idle === undefined ? "定时任务" : "闲时任务"}「${def.name}」在 ${dueAt.toISOString()}（${def.timeZone}）无人值守触发；` +
+      `工作区：${workspace}。无人值守下一切审批请求会被自动拒绝（fail-closed），` +
       `写向操作需任务档位允许的自主路径才可执行。`;
-    const controller = new AbortController();
+    const controller = idle?.controller ?? new AbortController();
     let aborted = false;
     const abortTimer = setTimeout(() => {
       aborted = true;
@@ -941,7 +1209,10 @@ export class Scheduler {
         const hard = new Promise<"hard">((resolve) => {
           hardResolve = resolve;
         });
-        const exec = this.deps.runSession({ sessionId, message, mode: tierToMode(def.permissionTier), signal: controller.signal });
+        const exec = this.deps.runSession({
+          sessionId, message, mode: tierToMode(def.permissionTier), signal: controller.signal,
+          ...(idle === undefined ? {} : { workspace, logPath }),
+        });
         const raced = await Promise.race([
           exec.then(
             (v) => ({ kind: "exec" as const, v }),
@@ -956,16 +1227,19 @@ export class Scheduler {
       clearTimeout(hardTimer);
     }
     const timedOut = aborted || outcome === null;
+    if (idle !== undefined && this.idleRun?.controller === idle.controller) {
+      this.idleRun.controller = null;
+    }
     // 完成回写：从会话事件投影摘要（零新 LLM 调用）；终态事件落会话日志 + 主时间线（完成卡复用 report）
-    let status: "succeeded" | "failed" = timedOut ? "failed" : outcome && outcome.ok ? "succeeded" : "failed";
-    let reason: string | undefined = timedOut ? "timeout" : (outcome && !outcome.ok ? outcome.error ?? "run_failed" : undefined);
+    const cancelled = idle?.controller.signal.aborted === true && !timedOut;
+    const status = !timedOut && !cancelled && outcome?.ok === true ? "succeeded" : "failed";
+    const reason = timedOut ? "timeout" : cancelled ? "cancelled" : outcome && !outcome.ok ? outcome.error ?? "run_failed" : undefined;
     let events: AgentEvent[] = [];
     try {
       events = await replay(logPath);
     } catch {
       events = [];
     }
-    if (!timedOut && status === "succeeded") reason = undefined;
     const sum = summarizeRun(events);
     const completed: Extract<AgentEvent, { type: "automation_completed" }> = {
       type: "automation_completed",
@@ -985,7 +1259,7 @@ export class Scheduler {
     } catch (err) {
       this.warn("[scheduler] 终态事件落会话失败: " + (err instanceof Error ? err.message : String(err)));
     }
-    await this.emitTimelineSafe(completed);
+    if (idle === undefined) await this.emitTimelineSafe(completed);
     // P1-9（审查）：completions 加容量帽（每个 occurrence 一条、永不删 → 无界增长）；淘汰最早插入。
     if (this.completions.size >= COMPLETIONS_MAX) {
       const oldest = this.completions.keys().next().value;
@@ -996,6 +1270,7 @@ export class Scheduler {
     if (timedOut) {
       this.warn(`[scheduler] 运行超时（runTimeoutMs=${String(this.runTimeoutMs)}ms${aborted ? "，已 abort" : "，settlesWithin 二道退出"}）: ${def.name} ${sessionId}`);
     }
+    return { status, ...(reason !== undefined ? { reason } : {}) };
   }
 
   // ---- 任务定义 CRUD（设置页 / agent 工具共用；name 唯一）----
@@ -1011,6 +1286,11 @@ export class Scheduler {
     // 写前重读磁盘任务表：两个实例（桌面 app + `cairn --serve`）各持启动时的旧表，
     // 直接整表回写会静默抹掉对方刚建/改的任务。
     const disk = await loadAutomationsFile(this.definitionsPath).catch(() => null);
+    if (disk !== null) {
+      this.definitionsWarnings = disk.warnings;
+      this.definitionsCorrupt = disk.corrupt;
+    }
+    if (disk?.corrupt === true) return { ok: false, errors: disk.warnings.length > 0 ? disk.warnings : ["调度任务文件损坏，已拒绝覆盖"] };
     if (disk !== null) this.tasks = disk.tasks;
     const dup = this.tasks.find((t) => t.name === v.value.name && t.id !== v.value.id);
     if (dup) return { ok: false, errors: [`任务名已存在: ${v.value.name}（name 唯一）`] };
@@ -1023,17 +1303,27 @@ export class Scheduler {
     value.nextRunAt = nextRun ? nextRun.toISOString() : undefined;
     this.tasks = existing ? this.tasks.map((t) => (t.id === value.id ? value : t)) : [...this.tasks, value];
     await saveAutomationsFile(this.definitionsPath, this.tasks);
+    // 写成功 = 盘上已是一份完整合法的任务表；装载期的坏档 / 坏条目警告随之失效。
+    this.definitionsWarnings = [];
+    this.definitionsCorrupt = false;
     return { ok: true, value };
   }
 
   async remove(id: string): Promise<{ ok: boolean; error?: string }> {
     // 同 upsert：先与磁盘合并，别用旧表整表回写抹掉对方的改动。
     const disk = await loadAutomationsFile(this.definitionsPath).catch(() => null);
+    if (disk !== null) {
+      this.definitionsWarnings = disk.warnings;
+      this.definitionsCorrupt = disk.corrupt;
+    }
+    if (disk?.corrupt === true) return { ok: false, error: disk.warnings[0] ?? "调度任务文件损坏，已拒绝覆盖" };
     if (disk !== null) this.tasks = disk.tasks;
     const before = this.tasks.length;
     this.tasks = this.tasks.filter((t) => t.id !== id);
     if (this.tasks.length === before) return { ok: false, error: "任务不存在: " + id };
     await saveAutomationsFile(this.definitionsPath, this.tasks);
+    this.definitionsWarnings = [];
+    this.definitionsCorrupt = false;
     return { ok: true };
   }
 
@@ -1071,7 +1361,8 @@ export class Scheduler {
         }
         const mem = this.completions.get(e.occurrence_key);
         if (mem) {
-          history.push({ task_id: taskId, task_name: name, occurrence_key: e.occurrence_key, due_at: e.due_at, decision: e.decision, session_id: e.session_id, state: mem.status, ...(mem.reason !== undefined ? { reason: mem.reason } : {}), at: e.at });
+          const sid = e.session_id ?? this.findSessionIdByKey(e.occurrence_key);
+          history.push({ task_id: taskId, task_name: name, occurrence_key: e.occurrence_key, due_at: e.due_at, decision: e.decision, ...(sid ? { session_id: sid } : {}), state: mem.status, ...(mem.reason !== undefined ? { reason: mem.reason } : {}), at: e.at });
           continue;
         }
         // 跨重启：读会话终态（automation_completed）；无终态记录 = interrupted（V1 不自动重试，§12.3.4）
@@ -1107,6 +1398,8 @@ export class Scheduler {
       cap: this.cap,
       startupDone: this.firstTickDone,
       tzNotes: scheduleTimeZoneNotes(tasks, systemTimeZone(), now),
+      warnings: [...this.definitionsWarnings, ...this.journalWarnings],
+      definitionsCorrupt: this.definitionsCorrupt,
     };
   }
 
@@ -1117,21 +1410,21 @@ export class Scheduler {
 
   /** H3-P2：会话终态（automation_completed）按文件签名缓存读取。签名 = size:mtimeMs——
    *  会话 JSONL 是 append-only，签名不变则终态不可能变化，免全量 replay。 */
-  private async terminalOf(sid: string): Promise<{ state: HistoryState; reason?: string } | null> {
-    const p = pathOf(this.deps.sessionsDir, sid);
+  private async terminalOf(sid: string, sessionsDir = this.deps.sessionsDir): Promise<{ state: HistoryState; reason?: string } | null> {
+    const p = pathOf(sessionsDir, sid);
     const st = await stat(p).catch(() => null);
     if (!st) {
-      this.termCache.delete(sid);
+      this.termCache.delete(p);
       return null;
     }
     const sig = String(st.size) + ":" + String(st.mtimeMs);
-    const hit = this.termCache.get(sid);
+    const hit = this.termCache.get(p);
     if (hit && hit.sig === sig) return { state: hit.state, reason: hit.reason };
     try {
       const events = await replay(p);
       const term = [...events].reverse().find((x): x is Extract<AgentEvent, { type: "automation_completed" }> => x.type === "automation_completed");
       if (!term) {
-        this.termCache.delete(sid);
+        this.termCache.delete(p);
         return null;
       }
       const out: { state: HistoryState; reason?: string } = { state: term.status, ...(term.reason !== undefined ? { reason: term.reason } : {}) };
@@ -1139,7 +1432,7 @@ export class Scheduler {
         const first = this.termCache.keys().next().value;
         if (first !== undefined) this.termCache.delete(first);
       }
-      this.termCache.set(sid, { sig, ...out });
+      this.termCache.set(p, { sig, ...out });
       return out;
     } catch {
       return null; /* 会话文件缺失/坏行：保持 failed/interrupted */

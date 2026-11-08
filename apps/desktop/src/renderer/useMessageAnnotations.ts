@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { anchorKeyOf, type AnchoredEvent } from "./state/session-identity";
 
 type MarkState<Value> = {
   sessionId: string | null;
-  values: ReadonlyMap<number, Value>;
-  pending: ReadonlySet<number>;
+  values: ReadonlyMap<string, Value>;
+  pending: ReadonlySet<string>;
   loading: boolean;
 };
 type MarkSource<Value> = {
   label: string;
-  load: (sessionId: string) => Promise<ReadonlyMap<number, Value>>;
-  save: (sessionId: string, eventId: number, value: Value | undefined) => Promise<{ ok: boolean; error?: string }>;
+  load: (sessionId: string) => Promise<ReadonlyMap<string, Value>>;
+  save: (sessionId: string, anchor: AnchoredEvent, value: Value | undefined) => Promise<{ ok: boolean; error?: string }>;
 };
 type ReportError = (message: string, sessionId?: string) => void;
 
@@ -17,7 +18,7 @@ type ReportError = (message: string, sessionId?: string) => void;
 function useSessionMarks<Value>(sessionId: string | null, source: MarkSource<Value>, onError: ReportError) {
   const [state, setState] = useState<MarkState<Value>>({ sessionId: null, values: new Map(), pending: new Set(), loading: true });
   const generation = useRef(0);
-  const locks = useRef(new Set<number>());
+  const locks = useRef(new Set<string>());
   useEffect(() => {
     const version = ++generation.current;
     locks.current.clear();
@@ -34,24 +35,25 @@ function useSessionMarks<Value>(sessionId: string | null, source: MarkSource<Val
     return () => { generation.current += 1; };
   }, [sessionId, source, onError]);
 
-  const set = useCallback(async (eventId: number, value: Value | undefined): Promise<void> => {
-    if (sessionId === null || state.sessionId !== sessionId || state.loading || locks.current.has(eventId)) return;
-    locks.current.add(eventId); // 同帧连点也只发一次，不依赖 React 下一帧的 disabled。
+  const set = useCallback(async (anchor: AnchoredEvent, value: Value | undefined): Promise<void> => {
+    const key = anchorKeyOf(anchor);
+    if (sessionId === null || state.sessionId !== sessionId || state.loading || locks.current.has(key)) return;
+    locks.current.add(key); // 同帧连点也只发一次，不依赖 React 下一帧的 disabled。
     const version = generation.current;
-    const previous = state.values.get(eventId);
+    const previous = state.values.get(key);
     const update = (nextValue: Value | undefined, pending: boolean) => {
       setState((current) => {
         if (current.sessionId !== sessionId) return current;
         const values = new Map(current.values);
-        if (nextValue === undefined) values.delete(eventId); else values.set(eventId, nextValue);
+        if (nextValue === undefined) values.delete(key); else values.set(key, nextValue);
         const nextPending = new Set(current.pending);
-        if (pending) nextPending.add(eventId); else nextPending.delete(eventId);
+        if (pending) nextPending.add(key); else nextPending.delete(key);
         return { ...current, values, pending: nextPending };
       });
     };
     update(value, true);
     try {
-      const result = await source.save(sessionId, eventId, value);
+      const result = await source.save(sessionId, anchor, value);
       if (!result.ok) throw new Error(result.error ?? "未知错误");
       if (generation.current === version) update(value, false);
     } catch (error: unknown) {
@@ -59,27 +61,27 @@ function useSessionMarks<Value>(sessionId: string | null, source: MarkSource<Val
       update(previous, false);
       onError(`${source.label}提交失败：${error instanceof Error ? error.message : String(error)}`, sessionId);
     } finally {
-      if (generation.current === version) locks.current.delete(eventId);
+      if (generation.current === version) locks.current.delete(key);
     }
   }, [sessionId, state, source, onError]);
   const current = state.sessionId === sessionId;
   return useMemo(() => ({
-    values: current ? state.values : new Map<number, Value>(),
-    busy: (eventId: number) => !current || state.loading || state.pending.has(eventId),
-    pending: (eventId: number) => current && state.pending.has(eventId),
+    values: current ? state.values : new Map<string, Value>(),
+    busy: (anchor: AnchoredEvent) => !current || state.loading || state.pending.has(anchorKeyOf(anchor)),
+    pending: (anchor: AnchoredEvent) => current && state.pending.has(anchorKeyOf(anchor)),
     set,
   }), [current, state, set]);
 }
 
 const feedbackSource: MarkSource<"up" | "down"> = {
   label: "反馈",
-  load: async (sid) => new Map((await window.agent.listFeedback(sid)).map((item) => [item.eventId, item.rating])),
-  save: (sid, eventId, value) => window.agent.submitFeedback({ sessionId: sid, eventId, rating: value ?? "none" }),
+  load: async (sid) => new Map((await window.agent.listFeedback(sid)).map((item) => [anchorKeyOf(item), item.rating])),
+  save: (sid, anchor, value) => window.agent.submitFeedback({ sessionId: sid, eventId: anchor.eventId, rating: value ?? "none", ...(anchor.eventRef !== undefined ? { eventRef: anchor.eventRef } : {}) }),
 };
 const pinSource: MarkSource<true> = {
   label: "置顶",
-  load: async (sid) => new Map((await window.agent.listMessagePins(sid)).map((id) => [id, true as const])),
-  save: (sid, eventId, value) => window.agent.setMessagePinned({ sessionId: sid, eventId, pinned: value === true }),
+  load: async (sid) => new Map((await window.agent.listMessagePins(sid)).map((anchor) => [anchorKeyOf(anchor), true as const])),
+  save: (sid, anchor, value) => window.agent.setMessagePinned({ sessionId: sid, eventId: anchor.eventId, pinned: value === true, ...(anchor.eventRef !== undefined ? { eventRef: anchor.eventRef } : {}) }),
 };
 
 export function useMessageAnnotations(sessionId: string | null, onError: ReportError) {
@@ -88,10 +90,10 @@ export function useMessageAnnotations(sessionId: string | null, onError: ReportE
   return useMemo(() => ({
     feedback: feedback.values,
     feedbackBusy: feedback.busy,
-    onFeedback: (eventId: number, rating: "up" | "down" | null) => { void feedback.set(eventId, rating ?? undefined); },
+    onFeedback: (anchor: AnchoredEvent, rating: "up" | "down" | null) => { void feedback.set(anchor, rating ?? undefined); },
     pinnedEventIds: new Set(pins.values.keys()),
     pinBusy: pins.busy,
-    annotationPending: (eventId: number) => feedback.pending(eventId) || pins.pending(eventId),
-    onPin: (eventId: number, pinned: boolean) => { void pins.set(eventId, pinned ? true : undefined); },
+    annotationPending: (anchor: AnchoredEvent) => feedback.pending(anchor) || pins.pending(anchor),
+    onPin: (anchor: AnchoredEvent, pinned: boolean) => { void pins.set(anchor, pinned ? true : undefined); },
   }), [feedback, pins]);
 }

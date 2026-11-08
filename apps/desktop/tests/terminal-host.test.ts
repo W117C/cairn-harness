@@ -26,10 +26,10 @@ const waitFor = async (cond: () => boolean, ms = 6000): Promise<boolean> => {
 };
 
 describe("TerminalHost", () => {
-  it("非 darwin ⇒ 明确拒绝（不冒充可用）；write 未知 id ⇒ false", () => {
+  it("非 darwin ⇒ 明确拒绝（不冒充可用）；write 未知 id ⇒ false", async () => {
     const { host } = makeHost();
     if (process.platform !== "darwin") {
-      const r = host.start(null);
+      const r = await host.start(null);
       expect(r.ok).toBe(false);
       if (!r.ok) expect(r.error).toContain("macOS");
     }
@@ -39,7 +39,7 @@ describe("TerminalHost", () => {
   it.runIf(process.platform === "darwin")("真起 PTY：echo 标记经推送回来；kill 后不再有输出", async () => {
     const dir = await mkdtemp(join(tmpdir(), "cairn-term-"));
     const { host, events } = makeHost();
-    const r = host.start(dir);
+    const r = await host.start(dir);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(host.write(r.id, "echo CAIRN-TERM-MARKER-42\n")).toBe(true);
@@ -53,13 +53,12 @@ describe("TerminalHost", () => {
 });
 
 describe("TerminalHost 启动失败（2026-10-19）", () => {
-  it.runIf(process.platform === "darwin")("cwd 不存在 ⇒ 发 exit 并摘表（不永久泄漏）", async () => {
+  it.runIf(process.platform === "darwin")("cwd 不存在 ⇒ 启动直接失败，不产生失联的终端 id", async () => {
     const { host, events } = makeHost();
-    const r = host.start("/definitely/not/a/real/dir-cairn-test");
-    expect(r.ok).toBe(true); // spawn 本身异步失败，start 仍返回 id
-    if (!r.ok) return;
-    const exited = await waitFor(() => events.some((e) => e.kind === "exit" && e.id === r.id));
-    expect(exited).toBe(true);
-    expect(host.write(r.id, "echo x\n")).toBe(false); // 已摘表
+    const r = await host.start("/definitely/not/a/real/dir-cairn-test");
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("启动失败不应返回终端 id");
+    expect(r.error).toContain("启动失败");
+    expect(events).toEqual([]);
   }, 10000);
 });

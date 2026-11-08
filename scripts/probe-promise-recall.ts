@@ -196,8 +196,13 @@ function scanMarkedSites(
 }
 
 export function scanPromiseSites(files: readonly { path: string; text: string }[]): PromiseSite[] {
+  // 弱标记「 available」的佐证判别式（2026-11-07，台账第 1040 页）：真面是「<工具名> available」
+  // （ledger 的「obs_recall available」一族——英文写法的可回取承诺），不是 "available tools"
+  // 这种普通英语。旧规则「字面量里出现任意工具名就算佐证」被 acceptance-contract.ts 的防注入
+  // 提示句误收（「using available tools … via verify」——同一句里恰好有工具名，且词序相反）。
+  const recallAvailable = new RegExp("\\b(" + CALLABLE_NAMES.join("|") + ")\\s+available");
   return scanMarkedSites(files, PROMISE_MARKS, (text, mark) =>
-    !(WEAK_MARKS.includes(mark) && !CALLABLE_NAMES.some((n) => text.includes(n))), false);
+    !(mark === " available" && !recallAvailable.test(text)), false);
 }
 
 /* ---------------- 第二个 claim 类：模型可见的「能力断言」有没有证人（第 311 页） ----------------
@@ -259,8 +264,11 @@ export const CLAIM_UNWITNESSED_CAP = 0;
  *  **未选**「让针脚跨插值取值」，理由与反转条件：实测它只救得上面 1 格（另 4 格根本没有插值），
  *  代价是把匹配从"逐字包含"换成带通配的模式匹配——那会把"其实没人判"读成"有证人"，
  *  而这一维唯一不能错的方向就是这个（宁可说"没人判"，不许说"有人判"）。
- *  反转条件：若哪天欠证人那一维要靠插值句补，先给模式匹配配一条**反例证人不算有证人**的判卷，再放开。 */
-export const CLAIM_NO_NEEDLE_CAP = 5;
+ *  反转条件：若哪天欠证人那一维要靠插值句补，先给模式匹配配一条**反例证人不算有证人**的判卷，再放开。
+ *  帽跟着现读走（第 1000 页 5→4）：那一句「handler 类型 X 本轮不支持，跳过 + 警告」不再是无人判的断言——
+ *  它描述的那条"声明了但不跑"的能力被兑现/被装载期拒载取代，句子本身随实现删除。逐格点名见
+ *  outputs/claims-no-needle-2026-11-02/nowrite.log（旧五格读数留在 2026-10-03 那份）。 */
+export const CLAIM_NO_NEEDLE_CAP = 4;
 
 /** 证人候选段：句里**所有**够长的连续中文（先把 `${…}` 插值挖掉，再按非中文断开），门槛 6 字。
  *  为什么交"每一段"而不是"最长那一段"：一句能力断言往往分好几层，判卷通常只点其中一层
@@ -451,24 +459,11 @@ export const CLAIM_BINDINGS: readonly ClaimBinding[] = [
       + "同形状的另一半（连续两次都没成功 ⇒ 成条且正文带「没有一次成功」）在同文件"
       + "「写向动作的完全相同参数重复调用成条」里，那里判的是正向，故不重复登记。",
   },
-  {
-    face: "src/agent/sidechat.ts#SIDECHAT_SYSTEM｜写向工具已从你的工具表摘除",
-    symbol: "SIDECHAT_FORBIDDEN_TOOLS",
-    testFile: "tests/sidechat-core.test.ts",
-    testCase: "三个写向工具不在 sidechat 工具表里",
-    why: "那句话的范围由这份名单兜：那条用例逐个断言名单里的工具不在 `sidechatToolSpecs()` 给的表内；"
-      + "而表本身是按 `SIDECHAT_TOOL_WHITELIST` 过滤出来的（allow-list，不是黑名单加补丁）",
-  },
-  {
-    face: "src/agent/sidechat.ts#SIDECHAT_SYSTEM｜你的结论不会自动进入主会话",
-    symbol: "promoteToMain",
-    testFile: "tests/sidechat-core.test.ts",
-    testCase: "source_event_ids 为空 → 拒绝（结论须可追溯）",
-    why: "旁路进主流只有 `promoteToMain` 这一个显式入口，那条用例钉的是「没有可追溯的源事件号 ⇒ 整条拒绝」，"
-      + "⇒ 不调它（或调了但缺三件事）主会话一个字节都不写。"
-      + "这句的另一半（旁路事件落在自己的 JSONL、主文件字节不变）由同文件那条 JSONL 用例守着，"
-      + "而那条不引用这个符号 ⇒ 本条登记说的是**入口这一半**，不冒充整句都被它兜住。",
-  },
+  /* 第 313 页那两条 sidechat 绑定（「写向工具已摘除」/「结论不自动进主会话」）已于 2026-11-06 撤下：
+     原句随全英文 SOTA 重构翻成英文，CLAIM_MARKS 措辞网是纯中文词表，英文句不再入网 ⇒ 两格成了白登记。
+     能力本身仍由 tests/sidechat-core.test.ts 守着（名单 + promoteToMain 三条件）。
+     **语言盲区欠账（规则 122 同族）**：能力断言网挂在中文措辞上，英文面整族漏收——
+     补英文标记（cannot / must not / never / only）会整批新增欠证人面，需同笔配证人后再收，另开一批。 */
   /* 第 317 页：拿新的四条件把「其实早就有人判，只是证人用了另一套词」那几格捞回来。
      每条都是先跑候选名单（`outputs/claim-binding-tighten-2026-10-03/find-candidates.mts`）、
      再逐条读那条用例的体确认"它判的就是这句话"才登记的——不是符号两边都在就填。 */
@@ -515,11 +510,41 @@ export const CLAIM_BINDINGS: readonly ClaimBinding[] = [
   },
   {
     face: "src/main/provider-connection.ts#hintFor｜这家服务不提供模型清单接口",
-    symbol: "unsupported",
+    // 配对词不能选 `unsupported`：它在 8 份判卷里都出现，等于没有区分度（门自己会红）。
+    // 选 hint 里那句只有这家会说的话，用例断言的也正是它。
+    symbol: "key 已保存",
     testFile: "tests/provider-connection.test.ts",
     testCase: "404：unsupported（这家没有模型清单接口），文案允许用户继续用",
     why: "hintFor 的 unsupported 分支就是这句话；用例让 /models 返回 404，断言 reason=unsupported 且 hint 允许继续用，"
       + "⇒ 这句文案有执行端观测者，不是只写在提示里。",
+  },
+  /* 2026-10-22：会话语义面（`src/agent/session-cursor.ts`，ADR 0005 那一批）新增的游标入口。
+     游标是**不透明且 fail-closed** 的契约（AGENTS.md「Event log」段），所以「不认识就拒」这句承诺
+     必须有观测者——否则它只是一句注释。三条各由一条真用例兜住，且**互不重叠**：
+     解码入口的「版本不对」「种类不认识」，与结构化入口（绕过 decode）的「版本或种类不对」。 */
+  {
+    face: "src/agent/session-cursor.ts#decodeCursor｜游标版本不支持",
+    symbol: "decodeCursor",
+    testFile: "tests/session-semantics.test.ts",
+    testCase: "坏游标一律抛 `malformed`：不是 base64url / 不是 JSON / 校验和不符 / 版本不对",
+    why: "那条用例的四种坏法里有一种把载荷的 `v` 改成 99（校验和随载荷重算）⇒ 走到版本那一支，"
+      + "并断言抛出的是 `malformed` 且是 `CursorError` ⇒ 「版本不对就拒、绝不用另一个位置顶上」这句由它兜住。",
+  },
+  {
+    face: "src/agent/session-cursor.ts#decodeCursor｜游标种类不支持",
+    symbol: "decodeCursor",
+    testFile: "tests/session-semantics.test.ts",
+    testCase: "种类不支持 ⇒ `unsupported-kind`（解得开、校验也对，只是种类不认识）",
+    why: "那条用例把 `kind` 换成一个不存在的种类并**重算校验和**（让载荷本身合法）⇒ 剩下的唯一变量就是种类，"
+      + "并断言码是 `unsupported-kind` ⇒ 「解得开但种类不认识」这一档不会退化成 `malformed`、也不会被悄悄接受。",
+  },
+  {
+    face: "src/agent/session-cursor.ts#forkPointFromCursor｜游标种类不支持",
+    symbol: "forkPointFromCursor",
+    testFile: "tests/session-semantics.test.ts",
+    testCase: "结构化游标也验kind/version；不允许绕过decode",
+    why: "结构化入口收的是**已解码的对象**，所以它自己也得验 kind/version——否则绕开 decode 就能塞进一个错种类。"
+      + "那条用例把解码出来的游标的 `kind` 改成别的值再喂进去，断言必须抛 ⇒ 「不许绕过 decode」由它兜住。",
   },
 ];
 

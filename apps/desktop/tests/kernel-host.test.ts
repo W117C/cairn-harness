@@ -14,6 +14,9 @@ import { autoTitleFirstMessage, createKernelHost, normalizeWorkspaces, stableSes
 import { createSession as createSessionInRoot, pathOf } from "../../../src/main/sessions";
 import { SessionMetadataRepository } from "../../../src/main/session-metadata";
 import { handleAgentRun } from "../../../src/main/agent-runner";
+import { getSettings } from "../../../src/main/settings-handlers";
+import { deriveCustomProviders, parseCustomProviders } from "../../../src/providers/provider-config";
+import { installCustomProviders } from "../../../src/providers/registry";
 
 const dir = mkdtempSync(join(tmpdir(), "cairn-host-"));
 const workspace = join(dir, "ws");
@@ -172,6 +175,19 @@ describe("M3 多工作区运行面", () => {
       // 每条会话都带着自己根的 workspace 标记进清单。
       expect(all.some((s) => s.id === a.id && s.workspace === real(wsA))).toBe(true);
       expect(all.some((s) => s.id === b.id && s.workspace === real(wsB))).toBe(true);
+      // 跨工作区恢复的**后端那一半**：activeWorkspace 仍是 A，openSession 只给 B 的 id
+      // （渲染层重启恢复就是这么调的）也必须读到 B 的事件——归属解析器不许回落到 activeWorkspace。
+      const openedB = await multi.openSession(b.id);
+      expect(openedB.events.some((e) => e.type === "user_message" && e.content === "demo")).toBe(true);
+      // 同名 id 跨项目：显式 workspace 必须决定读哪个根。只给 id 时 host 仍按旧规则解析，
+      // 所以 renderer 必须把决定里的 workspace 带进 IPC（App/会话面板接线另有哨兵）。
+      const dupA = join(wsA, ".agent", "sessions", "dup.jsonl");
+      const dupB = join(wsB, ".agent", "sessions", "dup.jsonl");
+      writeFileSync(dupA, JSON.stringify({ type: "user_message", content: "A-DUP" }) + "\n");
+      writeFileSync(dupB, JSON.stringify({ type: "user_message", content: "B-DUP" }) + "\n");
+      const dup = await multi.openSession("dup", real(wsB));
+      expect(dup.events.some((e) => e.type === "user_message" && e.content === "B-DUP")).toBe(true);
+      expect(dup.events.some((e) => e.type === "user_message" && e.content === "A-DUP")).toBe(false);
     },
     60_000,
   );
@@ -285,16 +301,16 @@ describe("M3 多工作区运行面", () => {
       const external = Array.from({ length: observed }, (_, i) =>
         JSON.stringify({ type: "user_message", content: `EXTERNAL ${String(i)}` }) + "\n").join("");
       appendFileSync(ap, external);
-      const denied = await driftHost.run({ message: "must reject", mode: "default", sessionId: sid });
+      const denied = await driftHost.run({ message: "must reject", mode: "default", sessionId: sid, workspace: a });
       expect(denied.ok).toBe(false);
       expect(denied.error).toMatch(/外部修改/);
       expect(readFileSync(ap, "utf8")).toContain(external);
       const opened = await driftHost.openSession(sid, a);
       expect(opened.events.filter((e) => e.type === "user_message" && e.content.startsWith("EXTERNAL ")))
         .toHaveLength(observed);
-      const retry = await driftHost.run({ message: "after refresh", mode: "default", sessionId: sid });
+      const retry = await driftHost.run({ message: "after refresh", mode: "default", sessionId: sid, workspace: a });
       expect(retry.ok, JSON.stringify(retry)).toBe(true);
-      const again = await driftHost.run({ message: "own appends are allowed", mode: "default", sessionId: sid });
+      const again = await driftHost.run({ message: "own appends are allowed", mode: "default", sessionId: sid, workspace: a });
       expect(again.ok, JSON.stringify(again)).toBe(true);
     } finally {
       if (previousScript === undefined) delete process.env.M3A_MAIN_SCRIPT;
@@ -341,6 +357,7 @@ describe("M3 多工作区运行面", () => {
 
     expect(snapshot).toMatchObject({ unstable: true });
   });
+});
 
   it("漂移基线：文件已追加但本端归因尚未回调时，不接受不相容快照", async () => {
     let pending = true;
@@ -358,7 +375,6 @@ describe("M3 多工作区运行面", () => {
 
     expect(snapshot).toMatchObject({ size: 10, mtimeMs: 1, lines: 1, ownAtSnapshot: 1 });
   });
-});
 
 describe("发送队列持久化（重启恢复的 host 面）", () => {
   it("queueSet 落会话 sidecar；新 host 实例 queueGet 读回；queueSet 空数组清队列", async () => {
@@ -564,6 +580,74 @@ describe("第十八遍：首条消息自动命名（autoTitleFirstMessage + run 
       const again = await titleHost.run({ message: "再来一轮", mode: "default", sessionId: created.id });
       expect(again.ok, JSON.stringify(again)).toBe(true);
       expect((await titleHost.listSessions()).find((s) => s.id === created.id)?.title).toBe("部署脚本怎么改成滚动的");
+    },
+    60_000,
+  );
+
+  it("并发懒建竞争钉：markActive 同拍懒建占位记录（title=id），ensureTitle 仍落真标题", async () => {
+    // 2026-11-07 竞态实锤的回归针：落名挪到 user_message 拍之后，与审计 markActive 的懒建
+    // mutate（markViewed/markActive 对缺记录懒建 title=id 占位）并发——旧 find+create 形状
+    // 会撞「会话 metadata 已存在」丢标题；ensureTitle 在单个入队操作内读改写，两者并发也落位。
+    const repo = new SessionMetadataRepository(join(dir, "ensure-title-race.json"));
+    const sid = "会话 race-pin";
+    await Promise.all([repo.markActive(sid), repo.ensureTitle(sid, "真标题")]);
+    expect((await repo.get(sid)).title).toBe("真标题");
+    // 再补一拍：已有真标题 ⇒ 不覆盖（ensureTitle 的契约由 autoTitle 的 null 闸钉住）
+    await repo.ensureTitle(sid, "另一条");
+    expect((await repo.get(sid)).title).toBe("真标题");
+  });
+
+  it(
+    "P1 修：run 起跑前失败（模型解析不过）不再留下有标题的空会话垃圾",
+    async () => {
+      // 2026-11-07 真机实证的失败形状：settings.provider 指一家注册表里没有的自定义家
+      // ⇒ resolveRunModel 在 user_message 落盘前抛「未知主会话 provider」。落名已挪到
+      // 「run 真正接收用户轮」这一拍 ⇒ 侧栏不得出现带消息标题的 0 字节会话。
+      // 时序按真实摆布：先装（选择器写盘时它装着）→ 建 host（settings 首读缓存原始串）→ 清空。
+      const ghostDir = join(dir, "ghost-ws");
+      const ghostUserData = join(dir, "ghost-userData");
+      mkdirSync(ghostDir, { recursive: true });
+      mkdirSync(ghostUserData, { recursive: true });
+      writeFileSync(join(ghostUserData, "settings.json"), JSON.stringify({ provider: "ghost-provider", model: "" }));
+      const ghostParsed = parseCustomProviders({
+        version: 1,
+        providers: [
+          { id: "ghost-provider", protocol: "openai", baseURL: "https://ghost.example.com/v1", apiKeyEnv: "GHOST_KEY", models: [{ id: "chat", model: "ghost-model" }] },
+        ],
+      });
+      if (!ghostParsed.ok) throw new Error("ghost fixture 必须合法");
+      installCustomProviders(deriveCustomProviders(ghostParsed.file));
+      const ghostHost = createKernelHost({
+        workspaces: [ghostDir],
+        activeWorkspace: ghostDir,
+        userDataDir: ghostUserData,
+        outbox: () => {},
+      });
+      // settings 首读（host 内是 void 异步 preheat）必须落在「注册表装着 ghost」的窗口里，
+      // 否则校验器把未知家内存归一化成 demo（盘上原样保留——既定取舍），钉就摆不进真实形状。
+      await getSettings();
+      installCustomProviders([]);
+      // 摘掉文件级剧本 env：本钉要的就是「解析失败」这一拍，不能让 M3A_AGENTS_DEMO 的
+      // 脚本化主模型把 run 救活（文件头注释同一条纪律：env 残留会劫持判卷）。
+      const savedDemo = process.env.M3A_AGENTS_DEMO;
+      delete process.env.M3A_AGENTS_DEMO;
+      let ghostRes: Awaited<ReturnType<KernelHost["run"]>>;
+      let created: { id: string };
+      try {
+        created = await ghostHost.createSession();
+        ghostRes = await ghostHost.run({ message: "这条会在起跑前失败", mode: "default", sessionId: created.id });
+      } finally {
+        if (savedDemo !== undefined) process.env.M3A_AGENTS_DEMO = savedDemo;
+      }
+      const res = ghostRes;
+      expect(res.ok, JSON.stringify(res)).toBe(false);
+      if (res.ok === false) expect(res.error ?? "").toContain("未知主会话 provider");
+      // 落名已随「run 接受用户轮」走：起跑前失败 ⇒ 无 metadata 记录（整条不入列）或仍是戳名，
+      // 两种形状都绝不该出现「消息文本当标题」的 0 字节垃圾会话（2026-11-07 真机两个实锤）。
+      const listed = (await ghostHost.listSessions()).find((s) => s.id === created.id);
+      // listed 可能缺席（无 metadata 记录不入列）或 title 缺席（盘上有文件、sidecar 没记录）——
+      // 唯一钉死的是：消息文本不得成为标题。
+      expect(listed?.title ?? "").not.toBe("这条会在起跑前失败");
     },
     60_000,
   );

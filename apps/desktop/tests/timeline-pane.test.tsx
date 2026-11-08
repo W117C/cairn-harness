@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { AgentEvent } from "../../../src/events";
 import { timelineItems } from "../src/renderer/projections";
 import { TimelinePane } from "../src/renderer/components/TimelinePane";
+import { readRendererFile } from "./helpers/app-surface";
 
 const events = [
   { type: "user_message", content: "帮我改一下", ts: 1000 },
@@ -31,9 +32,30 @@ describe("① timelineItems（事件日志步骤时间线投影）", () => {
     ]);
     expect(items[0]?.label).toBe("帮我改一下");
     expect(items[1]?.label).toBe("好的，我先看看");
-    expect(items[2]?.label).toBe("read_file a.ts");
+    // 第 918 页：时间线不写实现名——词表与对话流的工具行同一份（`derived/tool-verbs.ts`）。
+    expect(items[2]?.label).toBe("读取 a.ts");
     expect(items[3]?.label).toBe("输入 1.2k · 输出 340");
     expect(items[4]?.label).toBe("改完了。");
+  });
+
+  it("未知工具回落原名（宁缺不编）；已知工具不出现实现名", () => {
+    const mixed = [
+      { type: "tool_call", id: "t1", name: "run_shell", args: { command: "pnpm test" }, ts: 1 },
+      { type: "tool_call", id: "t2", name: "mystery_tool", args: { q: "x" }, ts: 2 },
+    ] as unknown as AgentEvent[];
+    const labels = timelineItems(mixed).map((it) => it.label);
+    expect(labels).toEqual(["运行 pnpm test", "mystery_tool {\"q\":\"x\"}"]);
+    expect(labels.join("|")).not.toContain("run_shell");
+  });
+
+  it("usage 步与用量环读同一把尺：过百万写 1.3m，不写 1250.0k（第 921 页）", () => {
+    const big = [
+      { type: "usage", inputTokens: 1_250_000, outputTokens: 340, ts: 1 },
+    ] as unknown as AgentEvent[];
+    expect(timelineItems(big)[0]?.label).toBe("输入 1.3m · 输出 340");
+    // 同一份实现：组件层那个出口也从派生层转发（不是第二份）
+    expect(readRendererFile("components/format-tokens.ts")).toContain('export { formatTokens } from "../derived/format-tokens";');
+    expect(readRendererFile("derived/timeline.ts")).not.toContain("const fmtTokens");
   });
 
   it("at 只取在场 ts（编不出来的不给）", () => {
@@ -72,7 +94,8 @@ describe("② TimelinePane SSR", () => {
     expect(html).toContain('tl-kind assistant">回复');
     expect(html).toContain('tl-kind tool">工具');
     expect(html).toContain('tl-kind usage">用量');
-    expect(html).toContain("read_file a.ts");
+    expect(html).toContain("读取 a.ts");
+    expect(html).not.toContain("read_file a.ts");
     expect(html).toContain("跳到对话中的对应位置");
     expect(html.match(/class="tl-at"/g)?.length).toBe(5);
   });

@@ -4,8 +4,8 @@
   与「推荐」段（B＋B1）不同，故本 ADR 以裁决记录为准（见文末「裁决记录」）
 - 日期：2026-10-03（提出）／2026-10-04（结案）
 - 决策者：仓库所有者
-- 依据材料：README.md、AGENTS.md、BLOCKED.md、docs/CODE-WIKI.md、docs/DOCS-MAP.md、
-  docs/superpowers/specs/2026-10-02-desktop-shell-design.md、apps/desktop/**、实测记录（见「实测证据」）
+- 依据材料：README.md、AGENTS.md、docs/CODE-WIKI.md、
+  apps/desktop/**、实测记录（见「实测证据」）
 
 ## 背景
 
@@ -13,14 +13,14 @@
 （core-only 迁移落地）」），此后多份治理文档按「桌面层已不存在」书写。但 2026-10-02 起，
 `apps/desktop/` 以 M1-1/2/3 三个切片重新入库。
 
-于是仓库处于**自我否定**状态：代码说有，文档说没有，而 BLOCKED.md 规定「任何桌面工作必须先有
+于是仓库处于**自我否定**状态：代码说有，文档说没有，而当时的内部阻塞清单规定「任何桌面工作必须先有
 新的显式设计决策」——该决策至今不存在（仓内无 `docs/adr/`）。本 ADR 即为那份缺失的决策。
 
 ## 现状事实（均已核实，非推断）
 
 | # | 事实 | 定位 |
 |---|------|------|
-| 1 | 5 处文档宣称桌面层不存在，桌面层实际存在且已提交 | README.md:4、README.md:328、DOCS-MAP.md:3、CODE-WIKI.md:3、BLOCKED.md:3 |
+| 1 | 5 处文档宣称桌面层不存在，桌面层实际存在且已提交 | README.md:4、README.md:328、CODE-WIKI.md:3 |
 | 2 | 39 个 invoke 通道声明，仅 6 个接线（15%） | apps/desktop/src/main/channels.ts vs index.ts:59-67 |
 | 3 | 未接的 33 个通道在 src/main/ 均有已实现 handler（抽样 6 个全中） | settings-handlers.ts:53/101、session-handlers.ts:109/133、agent-runner.ts:893/2233 |
 | 4 | 事件投影 4/30，error 等事件不进界面 | renderer/projections.ts:25 `default: break` |

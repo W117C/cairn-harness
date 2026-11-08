@@ -43,6 +43,22 @@ const REWORKED_FILES: readonly string[] = [
   "src/renderer/components/ModelPicker.tsx",
   "src/renderer/components/PermissionMenu.tsx",
   "src/renderer/components/ImportDiagnosisCard.tsx",
+  // 2026-11-07 设置面整批收编（上一批复查批遗留项）：以下 14 个文件的用户可见文案
+  // 全部收进 STR（值面不变，源文不写裸中文）；此后面不再回退。
+  "src/renderer/components/SettingsPanel.tsx",
+  "src/renderer/components/settings/LspStatusRow.tsx",
+  "src/renderer/components/settings/PersonalizationSection.tsx",
+  "src/renderer/components/settings/EvolveSection.tsx",
+  "src/renderer/components/settings/EvolvePanel.tsx",
+  "src/renderer/components/settings/integration-ui.tsx",
+  "src/renderer/components/settings/doctor-view.ts",
+  "src/renderer/components/settings/usage-dashboard-data.ts",
+  "src/renderer/components/settings/SubagentsSection.tsx",
+  "src/renderer/components/settings/MigrationSection.tsx",
+  "src/renderer/components/settings/NetworkSection.tsx",
+  "src/renderer/components/settings/HooksSection.tsx",
+  "src/renderer/components/settings/UsageSection.tsx",
+  "src/renderer/components/settings/McpSection.tsx",
 ];
 
 function stripComments(src: string): string {

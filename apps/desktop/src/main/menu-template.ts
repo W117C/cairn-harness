@@ -31,6 +31,12 @@ export interface AppMenuDeps {
   send: (id: MenuCommandId) => void;
   /** 「关闭窗口」：主进程自己就能做（渲染层没有窗口句柄），不给快捷键。 */
   closeWindow: () => void;
+  /** 「打开日志文件夹」：主进程直接开壳，不经渲染层、不发 IPC。 */
+  openLogs: () => void;
+  /** 「打开数据目录」：settings / projects / logs 所在处。 */
+  openDataDir: () => void;
+  /** 「重新启动 Cairn」：有在跑会话时先确认，再 relaunch。 */
+  restart: () => void;
 }
 
 /** 模板构造：`send` 在 click 里调用（每条命令一个闭包，共用同一个出口）。 */
@@ -59,6 +65,9 @@ export function appMenuTemplate(deps: AppMenuDeps): MenuItemConstructorOptions[]
         { type: "separator" },
         command("export-transcript", "导出整段对话…"),
         command("compact", "压缩当前会话历史"),
+        { type: "separator" },
+        // 重启是壳动作：主进程自己 relaunch，不经渲染层。
+        { id: "cairn.restart", label: "重新启动 Cairn", click: () => { deps.restart(); } },
       ],
     },
     {
@@ -125,6 +134,10 @@ export function appMenuTemplate(deps: AppMenuDeps): MenuItemConstructorOptions[]
         command("settings", "设置…", "CmdOrCtrl+,"),
         { type: "separator" },
         command("about", "关于 Cairn"),
+        { type: "separator" },
+        // 应用级故障时用户能带走的现场：主日志目录（main.log / main.1.log）。
+        { id: "cairn.open-data", label: "打开数据目录", click: () => { deps.openDataDir(); } },
+        { id: "cairn.open-logs", label: "打开日志文件夹", click: () => { deps.openLogs(); } },
       ],
     },
   ];

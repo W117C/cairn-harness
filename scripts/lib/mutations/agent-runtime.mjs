@@ -4,6 +4,115 @@
 import { regexSource } from "./regex-source.mjs";
 
 export const MUTATIONS = [
+  // ---- 第 9 点·轮中插话（steering，2026-10-23）----
+  {
+    id: "loop-treats-stall-abort-as-user-cancel",
+    src: "src/agent/loop.ts",
+    test: "tests/loop-abort-attribution.test.ts",
+    desc: "把「谁叫停的」判回旧条件（isAbortLike && signal.aborted 共用一个判据）⇒ 对端停滞这一趟落 0 条 error，事件流只剩一条 user_message 就戛然而止；用户与审计都看不到「为什么停了」",
+    apply: (s) => s.replace("      const userCancelled = opts.signal?.aborted === true;\n      if (!userCancelled) {", "      if (!isAbortLike(err) && !opts.signal?.aborted) {"),
+    expectFail: "★ 对端停滞（provider 侧 abort）⇒ **必须**落 error：那是「为什么停了」的唯一证据",
+  },
+  {
+    id: "loop-records-error-on-user-cancel",
+    src: "src/agent/loop.ts",
+    test: "tests/loop-abort-attribution.test.ts",
+    desc: "用户取消也落 error ⇒ 把「用户按了停止」读成「出错了」，终态分类被污染（编排器按事件流分类 cancelled 的那一半会看到一条红）",
+    apply: (s) => s.replace("      if (!userCancelled) {", "      if (true) {"),
+    expectFail: "★ 反向哨兵：用户取消 ⇒ **不落** error（取消是正常收束，不是出错）",
+  },
+  {
+    id: "truncation-treated-as-normal-finish",
+    src: "src/agent/loop.ts",
+    test: "tests/loop-truncation-repair.test.ts",
+    desc: "截断当成说完（去掉截断续跑）⇒ `truncationNote` 那条『别当成已答完』生成了却没有任何下一轮去读；用户拿到半句，harness 以为收完了",
+    apply: (s) => s.replace("      if (truncatedThisRun && opts.truncationRepair !== false && !truncationRepairUsed) {", "      if (false) {"),
+    expectFail: "★ 截断后真的再要一轮，且那一轮**读到了**「别当成已答完」那条提示",
+  },
+  {
+    id: "truncation-repair-unbounded",
+    src: "src/agent/loop.ts",
+    test: "tests/loop-truncation-repair.test.ts",
+    desc: "截断续跑不记『已用过』⇒ 次次截断就无限续跑（与 deliveryRepair/autoVerifyRepair 的至多一轮口径分家，且是无上限花钱）",
+    apply: (s) => s.replace("      if (truncatedThisRun && opts.truncationRepair !== false && !truncationRepairUsed) {", "      if (truncatedThisRun && opts.truncationRepair !== false) {"),
+    expectFail: "★ 上限：次次截断也**至多续一轮**（不无限要，与 deliveryRepair/autoVerifyRepair 同形）",
+  },
+  {
+    id: "steering-resets-run-boundary",
+    src: "src/agent/delivery-guard.ts",
+    test: "tests/steering-injection.test.ts",
+    desc: "把轮中插话当成新 run 起点（`eventsForCurrentRun` 不跳过 steering）⇒ 插话之前那一段的交付承诺与证据整段静默失效：ghost delivery 由『缺 a.ts』变成『没问题』，假绿",
+    apply: (s) => s.replace(
+      'if (event.type === "user_message" && !isWorkerEvent(event) && !isSteeringMessage(event)) start = i;',
+      'if (event.type === "user_message" && !isWorkerEvent(event)) start = i;'),
+    expectFail: "★ 带 origin:steering 的 user_message 之后，本轮承诺仍然算数",
+  },
+  {
+    id: "steering-does-not-count-as-user-spoke",
+    src: "src/agent/loop.ts",
+    test: "tests/steering-injection.test.ts",
+    desc: "插话不置 userSpokeSinceVerifyBeat ⇒ R1（验证停滞）里那条『用户说过话就不算停滞』的抑制项永远走不到；用户明明已经改写了目标，harness 还在喊『同一条路再走一遍不会变』",
+    apply: (s) => s.replace("          userSpokeSinceVerifyBeat = true;", "          // mutated: 不记用户说过话"),
+    expectFail: "★ 两次同签名红之间用户插了话 ⇒ **不喊停滞**（目标可能已被改写）",
+  },
+  {
+    id: "steering-take-not-clearing",
+    src: "src/agent/steering-channel.ts",
+    test: "tests/steering-injection.test.ts",
+    desc: "取料后不清空盒子（同一条插话在两拍里各付一遍 token，模型还会以为自己看漏了）",
+    apply: (s) => s.replace("      pending = [];\n      return out;", "      return out;"),
+    expectFail: "push/take 的取出即清空：同一条不会被两拍各付一遍 token",
+  },
+  {
+    id: "steering-empty-text-accepted",
+    src: "src/agent/steering-channel.ts",
+    test: "tests/steering-injection.test.ts",
+    desc: "纯空白/空串也进货（误触变成一条空洞的指令，白付 token 且污染转录）",
+    apply: (s) => s.replace('      if (trimmed === "") return; // 误触不进货', "      // 误触也进货"),
+    expectFail: "纯空白 / 空串不进货（误触不该变成一条空洞的指令）",
+  },
+  // ---- worker worktree 分支撞名（2026-10-23）：agentId 是进程内序列，分支是跨进程的 ----
+  {
+    id: "worktree-overwrites-dirty-residue",
+    src: "src/agent/worktree.ts",
+    test: "tests/worktree-branch-reuse.test.ts",
+    desc: "同路径残留有未提交改动仍自动 rm -rf ⇒ 上一次崩溃留下的孤儿 working tree 被静默抹掉：commit 过的还在分支上，未提交的没有第二份",
+    apply: (s) => s.replace('  if (residue.state === "dirty") {', "  if (false) {"),
+    expectFail: "同路径残留有未提交改动：拒绝 spawn，文件原样保留（不自动 rm -rf）",
+  },
+  {
+    id: "session-worktree-recreate-destroys-wip",
+    src: "src/main/session-worktree.ts",
+    test: "tests/session-worktree-idempotent.test.ts",
+    desc: "已隔离仍走重建（createWorktree 开头 rm -rf 同路径）⇒ 隔离树里未提交的改动被整片删掉，还回 ok:true——「幂等」名义下的一次数据丢失",
+    apply: (s) => s.replace("  if (await isSessionIsolated(root, sessionId)) {", "  if (false) {"),
+    expectFail: "已隔离再调用：返回现状，未提交改动还在（旧实现会删掉并回 ok）",
+  },
+  {
+    id: "worktree-reuses-stale-agent-branch",
+    src: "src/agent/worktree.ts",
+    test: "tests/worktree-branch-reuse.test.ts",
+    desc: "撞名时挂载旧分支（旧语义）⇒ 进程重启后重号的 worker 站在旧提交上干活，baseCommit 却是当前 HEAD（diff 反向吃掉别人的提交）；旧分支对象损坏时整次 spawn 直接失败",
+    apply: (s) => s.replace("    if (opts.reuseExistingBranch === true) {", "    if (true) {"),
+    expectFail: "撞名：换名新建，新树从当前 HEAD 起，旧分支原样不动",
+  },
+  // ---- 工具返回畸形结构（2026-10-23）：插件/MCP 工具是运行期对象，类型上的 output:string 管不到 ----
+  {
+    id: "stuck-observation-trusts-string-type",
+    src: "src/agent/stuck.ts",
+    test: "tests/tool-result-malformed.test.ts",
+    desc: "观察摘要直接 .slice 信任 output 是字符串 ⇒ 工具返回 {ok:true}（缺 output）时 `undefined.slice` 抛 TypeError，**把整轮任务打死**——为一条诊断读数赔掉整轮是本末倒置",
+    apply: (s) => s.replace('  return toolOutputText(output).slice(0, 200);', "  return (output as string).slice(0, 200);"),
+    expectFail: "★ 缺 output（`{ok:true}`）⇒ 不许炸整轮，且回执可读",
+  },
+  {
+    id: "tool-result-implicit-string-coercion",
+    src: "src/agent/loop.ts",
+    test: "tests/tool-result-malformed.test.ts",
+    desc: "落盘回执用隐式 String() ⇒ 缺 output 落成字面量 undefined、对象落成 [object Object]：模型拿到一条『有回执但读不懂』的 tool_result",
+    apply: (s) => s.replace("          output: redactSecrets(readToolOutput(result.output) + postContext + repeatNote + stuckExperienceNote + driftExperienceNote).text,", "          output: redactSecrets(String(result.output) + postContext + repeatNote + stuckExperienceNote + driftExperienceNote).text,"),
+    expectFail: "★ output = 对象 ⇒ **序列化出来**（不是 [object Object]）",
+  },
   {
     id: "verify-fail-closed-empty",
     src: "src/agent/verify.ts",
@@ -17,7 +126,7 @@ export const MUTATIONS = [
     src: "src/agent/verify.ts",
     test: "tests/verify.test.ts",
     desc: "任一命令失败仍判 ok（全绿门槛被拆，验证门可被单条失败绕过）",
-    apply: (s) => s.replace("return { ok: results.every((r) => r.ok), results };", "return { ok: true, results };"),
+    apply: (s) => s.replace("return { ok: results.every((r) => r.ok), results, source };", "return { ok: true, results, source };"),
     expectFail: "失败命令 → ok:false；failureDigest 摘要含命令与输出",
   },
   {
@@ -273,7 +382,10 @@ export const MUTATIONS = [
     src: "src/agent/loop.ts",
     test: "tests/loop-repeat-nudge.test.ts",
     desc: "检测照跑、提示却没落进 tool_result（模型看到的仍是裸错误 ⇒ 换路压力为零，重复照旧烧到 maxSteps）",
-    apply: (s) => s.replace("output: redactSecrets(result.output + postContext + repeatNote).text,", "output: redactSecrets(result.output + postContext).text,"),
+    // 针脚随「stuck/drift 经验提醒」与 f6ed0552 重指：落盘那一行仍是
+    // readToolOutput(result.output) 取料；变异体只丢掉 repeatNote（其余提醒照旧），
+    // 被守护的「重复提示必须挂上」没有变。
+    apply: (s) => s.replace("output: redactSecrets(readToolOutput(result.output) + postContext + repeatNote + stuckExperienceNote + driftExperienceNote).text,", "output: redactSecrets(readToolOutput(result.output) + postContext + stuckExperienceNote + driftExperienceNote).text,"),
     expectFail: "同一调用连败 3 次：提示挂在那条 tool_result 尾部，前两次一字不加",
   },
   {
@@ -305,7 +417,7 @@ export const MUTATIONS = [
     src: "src/agent/system-prompt.ts",
     test: "tests/base-system-discipline.test.ts",
     desc: "「先写复现测试跑到红」这条纪律被删（提示词回到「改完就说修好了」，能力 5 最关键那条失去唯一的字面抓手）",
-    apply: (s) => s.replace("  \"4) 修 bug 先写一条能复现它的测试并跑到红，再改代码到绿；没有红过的复现就不要宣称已修复；\",\n", ""),
+    apply: (s) => s.replace("  \"4) When fixing bugs, first write a test reproducing the bug and run to red, then fix to green; never claim resolved without a red reproduction;\",\n", ""),
     expectFail: "先红后绿写进纪律：修 bug 必须先有跑到红的复现，没红过不得宣称修好（能力 5 的正面）",
   },
   {
@@ -313,7 +425,7 @@ export const MUTATIONS = [
     src: "src/agent/system-prompt.ts",
     test: "tests/base-system-discipline.test.ts",
     desc: "「改已有文件用 edit_file 打补丁」被删 ⇒ 模型继续整文件重抄（write_file 的行数提示只在事后，事前预防更省一轮）",
-    apply: (s) => s.replace("  \"3) 改已有文件用 edit_file 打补丁，write_file 只用于新建文件（整份重抄费 output 又容易漏抄未改的行）；\",\n", ""),
+    apply: (s) => s.replace("  \"3) Edit existing files using edit_file; write_file is only for creating new files (full rewrites waste tokens and risk dropping lines);\",\n", ""),
     expectFail: "补丁优先写进纪律：改已有文件用 edit_file，write_file 只用于新建（能力 2「补丁级 diff」）",
   },
   {
@@ -321,7 +433,7 @@ export const MUTATIONS = [
     src: "src/agent/system-prompt.ts",
     test: "tests/base-system-discipline.test.ts",
     desc: "去掉「第 4 条是新增用例，不是改判卷面」的消歧 ⇒ 两条纪律互相矛盾，模型只能二选一（要么不写复现，要么去改判卷文件）",
-    apply: (s) => s.replace("  \"6) 只改任务需要的文件；既有测试与判卷文件不得改写（第 4 条是**新增**用例，不是改判卷面）。\",\n", "  \"6) 只改任务需要的文件，不改测试与判卷文件。\",\n"),
+    apply: (s) => s.replace("  \"6) Only modify files required by the task; existing test and judging benchmark files must not be rewritten (rule 4 means adding new test cases, not rewriting the judging suite).\",\n", "  \"6) Only modify files required by the task, do not rewrite test and judging files.\",\n"),
     expectFail: "两条纪律不互斥：明确「第 4 条是新增用例，不是改判卷文件」",
   },
   {
@@ -504,7 +616,7 @@ export const MUTATIONS = [
     src: "src/agent/system-prompt.ts",
     test: "tests/base-system-discipline.test.ts",
     desc: "整段编排纪律删掉 ⇒ 模型面重新没人教「何时拆 / 怎么派 / 派完收队」，而 W1a 的工具照样在线（能力已发货、指令面缺席）",
-    apply: (s) => s.replace("  \"编排（派子代理时）：能各自独立验收才拆，单一改动别拆；任务书必须自包含（worker 看不到本会话历史）；派完先调 wait_for_agents 收队，未拿到回执不得转述 worker 的结论。\",\n", ""),
+    apply: (s) => s.replace("  \"Orchestration (subagents): Only decompose when independently verifiable; single changes must not be split; taskbook must be self-contained (workers cannot see parent history); wait_for_agents to collect upon dispatch, and never relay findings without receipt.\",\n", ""),
     expectFail: "编排段在：拆的判据 / 任务书自包含 / 派完必须收队，三句各锁一句（W1a 的收队义务此前只在工具描述里）",
   },
   {
@@ -512,7 +624,7 @@ export const MUTATIONS = [
     src: "src/agent/system-prompt.ts",
     test: "tests/base-system-discipline.test.ts",
     desc: "只删收队那半句 ⇒ 派完仍会凭想象转述 worker 结论，D1 的失败模式重新敞开（工具在、没人叫它）",
-    apply: (s) => s.replace("派完先调 wait_for_agents 收队，未拿到回执不得转述 worker 的结论。", ""),
+    apply: (s) => s.replace("wait_for_agents to collect upon dispatch, and never relay findings without receipt.", ""),
     expectFail: "编排段在：拆的判据 / 任务书自包含 / 派完必须收队，三句各锁一句（W1a 的收队义务此前只在工具描述里）",
   },
   {
@@ -520,7 +632,7 @@ export const MUTATIONS = [
     src: "src/agent/system-prompt.ts",
     test: "tests/base-system-discipline.test.ts",
     desc: "删「任务书自包含」半句 ⇒ worker 拿不到验收口径就要返工（它看不到父会话历史，这条是 worker 质量的上游）",
-    apply: (s) => s.replace("任务书必须自包含（worker 看不到本会话历史）；", ""),
+    apply: (s) => s.replace("taskbook must be self-contained (workers cannot see parent history);", ""),
     expectFail: "编排段在：拆的判据 / 任务书自包含 / 派完必须收队，三句各锁一句（W1a 的收队义务此前只在工具描述里）",
   },
   {
@@ -528,7 +640,7 @@ export const MUTATIONS = [
     src: "src/agent/system-prompt.ts",
     test: "tests/base-system-discipline.test.ts",
     desc: "把编排段改成「7) …」⇒ 条件段混进动作序列编号，纪律 1–6 的连续性断号（模型会以为后面的约束可省）",
-    apply: (s) => s.replace("\"编排（派子代理时）：", "\"7) 编排（派子代理时）："),
+    apply: (s) => s.replace("\"Orchestration (subagents):", "\"7) Orchestration (subagents):"),
     expectFail: "六条纪律编号连续（缺号=模型读到断号，会以为后面的约束可省）",
   },
   {
@@ -539,7 +651,7 @@ export const MUTATIONS = [
       "（2026-10-16）：agent 写鹈鹕骑自行车的循环动画，IK 算对了、模板组装对了、回执确认无残留占位符，" +
       "然后就没回头看。产物里膝盖被选肢钉死在身体右前方（膝 x 全程只摆 21px），" +
       "而它三个机会都没发现——缺的不是能力，是没人要求它回头看。",
-    apply: (s) => s.replace('  "视觉产物（HTML/SVG/动画/图表）：交付前必须真的看过；只交付落盘那一份——不要在回复里重抄内容。",\n', ''),
+    apply: (s) => s.replace('  "Visual artifacts (HTML/SVG/animations/charts): Must inspect actual output before delivery; only deliver the file on disk -- do not duplicate in reply.",\n', ''),
     expectFail: "视觉产物自检段在：交付前必须真的看过（能力 5 对非代码产物同样成立）",
   },
   {
@@ -548,7 +660,7 @@ export const MUTATIONS = [
     test: "tests/base-system-discipline.test.ts",
     desc: "视觉产物段被编成「7)」⇒ 条件段混进纪律编号，1–6 连续性断号（模型会以为后面的约束可省）。" +
       "与编排段同一条理由。",
-    apply: (s) => s.replace('"视觉产物（HTML/SVG/动画/图表）', '"7) 视觉产物（HTML/SVG/动画/图表）'),
+    apply: (s) => s.replace('"Visual artifacts (HTML/SVG/animations/charts)', '"7) Visual artifacts (HTML/SVG/animations/charts)'),
     expectFail: "视觉产物段不占纪律编号（同编排段：条件段混进编号会造断号）",
   },
   // ---- 能力 5 回流通道：自动验证拍的红投进下一轮（tests/context-auto-verify-note.test.ts）----
@@ -680,7 +792,13 @@ export const MUTATIONS = [
     src: "src/agent/loop.ts",
     test: "tests/worker-hooks.test.ts",
     desc: "loop 收到了 agentId 却不写进 PreToolUse 载荷 ⇒ 同一格「两头断」的另一头：编排端接了、执行端没传",
-    apply: (s) => s.replace("            tool_use_id: output.id,\n            agent_id: opts.agentId,\n          });\n          if (pre.blocked) {", "            tool_use_id: output.id,\n            agent_id: undefined,\n          });\n          if (pre.blocked) {"),
+    // 针脚必须连 `tool_name: output.name` 一起锚：verify 分支（2026-10-22）在同一文件里插了一段
+    // 一模一样的 `tool_use_id/agent_id` 载荷，只锚后两行会改成 verify 那段 ⇒ 对普通工具那一跳是空操作
+    // （实测变体存活：tests/worker-hooks.test.ts 用的是 read_file，走的是下面这段）。
+    apply: (s) => s.replace(
+      "              event: \"PreToolUse\",\n              tool_name: output.name,\n              tool_args: output.args,\n              tool_use_id: output.id,\n              agent_id: opts.agentId,",
+      "              event: \"PreToolUse\",\n              tool_name: output.name,\n              tool_args: output.args,\n              tool_use_id: output.id,\n              agent_id: undefined,",
+    ),
     expectFail: "钩子拿到 agent_id = 该 worker 的 id 与模型实下的参数（§4.4 归因）",
   },
   {
@@ -713,7 +831,7 @@ export const MUTATIONS = [
     src: "src/agent/compaction.ts",
     test: "tests/hook-precompact-producer.test.ts",
     desc: "压缩不再发 PreCompact ⇒ §9.5 表里这一行整条失效，插件作者以为「压缩前备份」在跑，实际一次也没有（发点在 runCompaction 上，摘掉它三条路一起哑）",
-    apply: (s) => s.replace("  if (args.onPreCompact) {", "  if (false && args.onPreCompact) {"),
+    apply: (s) => s.replace("  if (args.onPreCompact && args.prediction !== true) {", "  if (false) {"),
     expectFail: "manual / auto / overflow 三条都发，且 trigger 按 §9.5 表映射（overflow 归 auto）",
   },
   {
@@ -730,7 +848,7 @@ export const MUTATIONS = [
     test: "tests/hook-precompact-producer.test.ts",
     desc: "协调器收了 onPreCompact 却不往 runCompaction 递 ⇒ 会话内自动/溢出压缩永不发钩子（构造面收下即丢，只有手动档看起来是好的）",
     apply: (s) => s.replace("      ...(this.onPreCompact ? { onPreCompact: this.onPreCompact } : {}),", "      ...(false ? { onPreCompact: this.onPreCompact } : {}),"),
-    expectFail: "压缩没开始就不发：decision=null 不发；摘要停用后 auto 不发，overflow 截断照发",
+    expectFail: "压缩没开始就不发：decision=null 不发；摘要停用后 auto 由微压缩接管（真开始 ⇒ 发），overflow 截断照发",
   },
   {
     id: "precompact-session-provider-forward-dropped",
@@ -1293,7 +1411,7 @@ export const MUTATIONS = [
     src: "src/agent/session-provider.ts",
     test: "tests/automation-tool-surface.test.ts",
     desc: "只读档漏摘 ⇒ 只读会话能排下一次无人值守的写盘（与 wait/cancel 同族的漏摘形状）",
-    apply: (s) => s.replace(" &&\n      !AUTOMATION_TOOL_NAMES.includes(s.function.name),", ","),
+    apply: (s) => s.replace("!AUTOMATION_TOOL_NAMES.includes(s.function.name)", "true"),
     expectFail: "只读档整族摘除（只读会话不该能排一次无人值守的写盘）",
   },
   {
@@ -1488,7 +1606,7 @@ export const MUTATIONS = [
     test: "tests/tool-block-witness.test.ts",
     desc: "权限门那一格只留散文不留结构 ⇒ 「被哪道闸拦」与「旧日志」「工具自己失败」再次同形（规则 300 的缺席三因）。" +
       "这一族的从来不是改文案，而是让落盘面自己说得出是谁拦的",
-    apply: (s) => s.replace("\n          blockedBy: \"permission\",", ""),
+    apply: (s) => s.replace("\n            blockedBy: \"permission\",", ""),
     expectFail: "权限门拒绝：这一闸拦下的那次调用带 blockedBy",
   },
   {
@@ -1497,7 +1615,7 @@ export const MUTATIONS = [
     test: "tests/tool-block-witness.test.ts",
     desc: "六道里最靠前的那道（只读白名单摘除）没落 ⇒ 它与档位拒绝在事件流里同形。次序上排在 verify 系统门之前，" +
       "少了这一格，「表里没有却被执行」那条权限旁路在读盘面上看不出来",
-    apply: (s) => s.replace("\n          blockedBy: \"tool-table\",", ""),
+    apply: (s) => s.replace("\n            blockedBy: \"tool-table\",", ""),
     expectFail: "工具表白名单摘除：这一闸拦下的那次调用带 blockedBy",
   },
   {
@@ -1663,7 +1781,10 @@ export const MUTATIONS = [
     test: "tests/loop-cap-verify-beat.test.ts",
     desc: "撞帽路不再补那一拍 ⇒ 被帽砍掉的 run 又回到「一条 verify 证据都没有」。#69 的原形状"
       + "（真模型面实测 5/43≈12% 整趟跑废，且这批恰是写得最多、最可能失败的那一批）",
-    apply: (s) => s.replace("      if (!capReached) return;", "      return;"),
+    apply: (s) => s.replace(
+      "      if (opts.verify && opts.autoVerify === true && wroteThisRun && (firstBeat || repairBeat || qualityRefresh)) {",
+      "      if (!capReached && opts.verify && opts.autoVerify === true && wroteThisRun && (firstBeat || repairBeat || qualityRefresh)) {",
+    ),
     expectFail: "撞帽 + 写过盘 + 开闸 ⇒ 恰一拍 auto 证据落流，且 run 照旧抛错（帽没被藏起来）",
   },
   {

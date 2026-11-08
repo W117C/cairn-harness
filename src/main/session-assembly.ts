@@ -14,6 +14,7 @@
 // 按回调注入。
 import { existsSync } from "node:fs";
 import { projectAgentPath } from "../app-data";
+import { extractTaskPaths } from "../agent/evolve/task-context";
 import { affectedFilesOf } from "../agent/impact/index.js";
 import { scanStreamEvent } from "../agent/worker-projection";
 import { Orchestrator, type OrchestratorOptions } from "../agent/orchestrator";
@@ -23,11 +24,13 @@ import { createEventLog, replay, type AgentEvent } from "../events";
 import { loadPermissionRules } from "../permissions";
 import { globalPermissionsPath } from "../permissions/rules";
 import { resolveSafeMode } from "./compact-and-report";
+import { experienceSignalNudge } from "./evolve/experience-nudge";
+import { baselineEvolutionNote } from "./evolve/runtime";
 import type { MainModelSelection } from "./provider-runtime";
 import type { RoutingFlagOverrides } from "./routing-flags";
 import { runInSandbox, type SandboxStatus } from "./sandbox";
 import { mapSandboxTestCommandForWorkspace } from "./sandbox-test-command";
-import { requireSessionsDir } from "./session-handlers";
+import { requireSessionsDir, resolveSessionRoot } from "./session-handlers";
 import { pathOf } from "./sessions";
 import { store } from "./settings-handlers";
 import { currentWorkspace } from "./state-handlers";
@@ -40,7 +43,7 @@ export type OrchestratorExtras = (
   trust: { trustedRepo: boolean; verifyTrust: VerifyTrustResolver | null },
   over: RoutingFlagOverrides,
 ) => Promise<
-  Pick<OrchestratorOptions, "agentRoleFor" | "workerSummarizer" | "budget" | "routing" | "banditStatePath" | "promptCache" | "impactAnalysis" | "workerVerify" | "workerHooks">
+  Pick<OrchestratorOptions, "agentRoleFor" | "defaultModelSpec" | "workerSummarizer" | "budget" | "routing" | "banditStatePath" | "promptCache" | "impactAnalysis" | "workerVerify" | "workerAutoVerifyRepair" | "workerHooks">
 >;
 
 /** 装配根注入的活状态与策略口（唯一入口 `setSessionAssemblyDeps`）。 */
@@ -83,7 +86,7 @@ export function workerShellRunnerFor(sandbox: SandboxStatus | null): Orchestrato
   if (sandbox === null || !sandbox.available) return undefined;
   return async (command, ctx) => {
     const mapped = mapSandboxTestCommandForWorkspace(command, ctx.workspace);
-    return runInSandbox(mapped, { cwd: ctx.workspace, network: "deny" });
+    return runInSandbox(mapped, { cwd: ctx.workspace, network: "deny", ...(ctx.signal ? { signal: ctx.signal } : {}) });
   };
 }
 
@@ -134,6 +137,37 @@ export async function buildSessionOrchestrator(a: {
     // 两个 worker 各改各的文件（glob 不相交）但改动波及同一批调用点，合并时同样会打架。
     ...(s.impactAnalysis ? { semanticLease: (globs: string[]) => affectedFilesOf(a.workspace, globs) } : {}),
     ...(await D().orchestratorExtras(a.sandbox, a.runModel, { trustedRepo: a.trustedRepo ?? false, verifyTrust: a.verifyTrust ?? null }, a.routing ?? {})), // M3c：插件角色 / worker 压缩摘要器 / 成本闸 / W4a worker 收束闸
+    // worker 起点经验：同一工作区的 active 经验按任务面筛一遍，排在记忆之后、任务书之前。
+    // 只读、无 assignment；没有 active/读不动 ⇒ 空串（worker 提示词逐字不变）。
+    workerExperienceNote: async ({ task, toolNames }) => {
+      try {
+        return await baselineEvolutionNote({
+          workspace: a.workspace,
+          taskContent: task,
+          toolNames,
+          paths: extractTaskPaths(task, { workspace: a.workspace }),
+        });
+      } catch (err) {
+        console.warn("[evolve] worker 起点经验注记失败（不影响 worker）: "
+          + (err instanceof Error ? err.message : String(err)));
+        return "";
+      }
+    },
+    // worker 自动验证红时的快环提醒（只在开了 workerAutoVerifyRepair 时会有下一轮用到）。
+    // 读主 workspace 的 active 经验；冻结/读失败 ⇒ 空提醒；不写 assignment、不改变验证语义。
+    workerExperienceNudge: async ({ task, toolNames, signals }) => {
+      try {
+        return await experienceSignalNudge(a.workspace, signals, {
+          taskContent: task,
+          toolNames,
+          paths: extractTaskPaths(task, { workspace: a.workspace }),
+        });
+      } catch (err) {
+        console.warn("[evolve] worker 失败经验提醒失败（不影响 worker）: "
+          + (err instanceof Error ? err.message : String(err)));
+        return { note: "", ids: [] };
+      }
+    },
     ...(a.modelFor ? { modelFor: a.modelFor } : {}),
   });
 }
@@ -151,7 +185,15 @@ export async function ensureSessionOrchestrator(): Promise<Orchestrator | null> 
   if (existing) return existing;
   const sessionId = (await store().get()).currentSession;
   const logPath = sessionId ? pathOf(requireSessionsDir(), sessionId) : D().lastLogPath();
-  if (!logPath || !existsSync(logPath)) return null; // 宁可不建，也不给不存在的会话凭空开一条流
+  const resolvedRoot = sessionId ? await resolveSessionRoot(sessionId).catch(() => null) : null;
+  const effectiveLogPath = sessionId
+    ? (resolvedRoot && logPath ? pathOf(resolvedRoot, sessionId) : null)
+    : logPath;
+  if (!effectiveLogPath || !existsSync(effectiveLogPath)) return null; // 宁可不建，也不给不存在的会话凭空开一条流
+  return await buildRecoveredOrchestrator(effectiveLogPath);
+}
+
+async function buildRecoveredOrchestrator(logPath: string): Promise<Orchestrator> {
   const log = createEventLog(logPath);
   const workspace = await currentWorkspace();
   const orch = await buildSessionOrchestrator({

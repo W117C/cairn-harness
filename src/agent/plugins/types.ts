@@ -19,16 +19,55 @@ export type HookEventName =
   | "Stop"
   | "SessionEnd";
 
-/** handler 类型枚举：V1 只做 command；其余收下（schema 层）但运行跳过 + 警告。 */
+/** handler 类型：`command` / `http` / `mcp_tool` / `prompt` 四档已兑现；`agent` 声明了但运行侧
+ *  还没接（装载期按「未兑现」拒载 + 警告点名，不再等运行时一行警告）。
+ *  形态按 type 判别——从前 `command` 是全类型必填字段，于是 http 档**连 URL 都无处写**：
+ *  作者写的 `url` 被 schema 丢掉，钩子在运行时静默缺席。 */
 export type HookHandlerType = "command" | "http" | "mcp_tool" | "prompt" | "agent";
 
-export interface HookHandlerDef {
-  type: HookHandlerType;
-  /** shell form（string，经 shell 执行）或 exec form（string[]，直接 spawn，不经 shell）。 */
-  command: string | string[];
-  /** 秒；缺省 600（UserPromptSubmit 降 30）。 */
+/** 秒；缺省 600（UserPromptSubmit 降 30）。三档兑现中的 handler 共用这一份超时纪律。 */
+interface HookHandlerTiming {
   timeout?: number;
 }
+
+export interface CommandHookHandler extends HookHandlerTiming {
+  type: "command";
+  /** shell form（string，经 shell 执行）或 exec form（string[]，直接 spawn，不经 shell）。 */
+  command: string | string[];
+}
+
+export interface HttpHookHandler extends HookHandlerTiming {
+  type: "http";
+  /** 只接受 http(s)：`file:` / `data:` 之类会把它变成一条新的本地读取通道，那不是钩子的职权。 */
+  url: string;
+  /** 头值允许 `${user_config.*}`（含 sensitive——Authorization 头就是它的用途）；
+   *  回执与日志只回声模板，不回声展开后的值。 */
+  headers?: Record<string, string>;
+}
+
+export interface McpToolHookHandler extends HookHandlerTiming {
+  type: "mcp_tool";
+  /** 只能打**本插件**声明的那台 server；且必须在裁剪后的工具表里（见 `McpManager.callTool`）。 */
+  server: string;
+  tool: string;
+  /** 字符串值里的 `${path}` 按 hook payload 展开（与 command 档的 stdin 同一份契约）；
+   *  取不到值 ⇒ 这条钩子不跑并点名路径，绝不把字面 `${tool_input.x}` 当参数送给 server。 */
+  args?: Record<string, unknown>;
+}
+
+export interface PromptHookHandler extends HookHandlerTiming {
+  type: "prompt";
+  /** 给模型的指令（进 system）。值里的 `${path}` 按 hook payload 展开——与 mcp_tool 档同一套
+   *  展开与「取不到就点名」纪律。 */
+  prompt: string;
+}
+
+/** 尚未兑现的档：没有可写的载荷字段，装载期即拒（枚举留着是为了如实点名）。 */
+export interface UnhonoredHookHandler extends HookHandlerTiming {
+  type: "agent";
+}
+
+export type HookHandlerDef = CommandHookHandler | HttpHookHandler | McpToolHookHandler | PromptHookHandler | UnhonoredHookHandler;
 
 export interface HookMatcherDef {
   /** 工具名 matcher（Pre/PostToolUse 系）；缺省 = 匹配全部。 */
@@ -53,6 +92,12 @@ export interface McpServerConfig {
   url?: string;
   headers?: Record<string, string>;
   type?: "stdio" | "http" | "sse";
+  /** 与 Qoder/CC 对齐的工具级裁剪：只注册列出的工具 / 排除列出的工具。
+   *  在 `tools/list` 之后、进注册表之前生效，因此被排除的工具连名字都不会进模型面。 */
+  includeTools?: string[];
+  excludeTools?: string[];
+  /** 保留配置但不连接；用于按任务临时关掉一台 server。 */
+  disabled?: boolean;
 }
 
 export interface McpConfigFile {
@@ -93,6 +138,13 @@ export interface LspConfigFile {
   servers?: Record<string, LspServerConfig>;
 }
 
+/** 发现期算出的内容指纹。信任决议必须复用这一份：外部来源按「被导入目录」算子集指纹，
+ *  决议侧若另算全量根指纹，写下的键与发现侧查询的键永远不同（批准了还弹卡）。 */
+export interface PluginContentFingerprint {
+  fp: string;
+  bounded: boolean;
+}
+
 /** 解析后的插件（已发现未激活）。pending = 项目级插件等待信任。 */
 export interface DiscoveredPlugin {
   name: string;
@@ -116,6 +168,8 @@ export interface DiscoveredPlugin {
   warnings: string[];
   /** 项目级插件信任状态：trusted / pending / declined。user 级恒 trusted。 */
   trust: "trusted" | "pending" | "declined";
+  /** 发现期指纹；旧快照/手写夹具没有这一格时，决议侧回退到全量根指纹。 */
+  fingerprint?: PluginContentFingerprint;
 }
 
 /** 散装 skill（无 manifest 的 foo/SKILL.md = 独立 skill，免包装加载）。
@@ -130,6 +184,16 @@ export interface LooseSkill {
    *  `<ws>/.agent/skills`（走信任门）和摆在 `M2E_LOOSE_SKILLS`（恒 trusted）下，
    *  状态不同而名字相同——只报名字就说不出「为什么这条要批、那条不用」。 */
   scope: PluginScope;
+  /** 发现期指纹（决议侧复用；旧快照/手写夹具缺省时回退全量根指纹）。 */
+  fingerprint?: PluginContentFingerprint;
+}
+
+/** Skill 目录里的一个随附资源（L2）：只登记路径与大小，不读内容。
+ *  模型要内容时再走 read_file / run_shell，避免把 assets/references 全量买进上下文。 */
+export interface SkillResource {
+  /** 相对 skill 根目录的路径（不是绝对路径）。 */
+  path: string;
+  bytes: number;
 }
 
 export interface SkillEntry {
@@ -140,6 +204,8 @@ export interface SkillEntry {
   path: string;
   frontmatter: Record<string, unknown>;
   body: string;
+  /** L2 资源索引：加载 SKILL.md 时只 stat、不读内容；旧夹具/外部构造可缺省。 */
+  resources?: SkillResource[];
 }
 
 export interface PromptCommandEntry {
@@ -170,8 +236,10 @@ export interface LoadedHookDef {
   /** §9.5 的 `if`（从 HookMatcherDef 带到执行面；同组 handler 共享一条过滤）。 */
   if?: string;
   handler: HookHandlerDef;
-  /** ${user_config.*} 禁入 shell-form hook：违规条目装载即拒绝（loaded=false + warning）。 */
+  /** ${user_config.*} 禁入 shell-form hook / handler 形态与类型不符：违规条目装载即拒绝（loaded=false + warning）。 */
   loaded: boolean;
+  /** 拒载原因（`loaded=false` 时给警告面用）。缺省 = 沿用 shell-form 那条旧文案。 */
+  rejectReason?: string;
 }
 
 /** 这一次扫描**实际**吃了哪几顶根（`null` = 这一顶没给，不是「给了空目录」）。
@@ -182,6 +250,21 @@ export interface PluginScanRoots {
   projectPluginsDir: string | null;
   projectSkillsDir: string | null;
   looseRoots: string[];
+  /** 外部声明式来源（opencode / pi）：只导入 skills、commands、agents，不含进程内代码插件。
+   *  旧快照没带这一格 = 未记录（不是「没扫」）。 */
+  foreignSources?: ForeignSource[];
+}
+
+/** 外部 harness 的声明式插件来源。各家的目录布局映射见 `foreign.ts` 的 FOREIGN_LAYOUTS。 */
+export type ForeignSourceKind = "opencode" | "pi" | "codex" | "qoder" | "claude";
+
+export interface ForeignSource {
+  kind: ForeignSourceKind;
+  /** 来源根（绝对路径），如 `<ws>/.opencode`、`<ws>/.pi`、`<ws>/.agents`、`<ws>/.qoder`、`<ws>/.claude`。 */
+  root: string;
+  scope: PluginScope;
+  /** 合成插件名（决定 `/<name>:<command>` 与 skill 路由的命名空间）。 */
+  name: string;
 }
 
 /** 加载清单（会话启动静态扫描产物；不新增事件类型，面板/脚本直接消费）。 */
@@ -200,7 +283,9 @@ export interface PluginsManifest {
 export interface McpServerStatus {
   plugin: string;
   server: string;
-  state: "connected" | "failed" | "untrusted" | "disabled";
+  /** `reconnecting` 是**独立一档**，不许折进 connected：面板上"在跑"与"崩了在试第 2 次"
+   *  是两件事，混起来就是让业主以为服务好好的。 */
+  state: "connected" | "failed" | "reconnecting" | "untrusted" | "disabled";
   tools: string[];
   error?: string;
 }

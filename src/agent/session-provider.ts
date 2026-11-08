@@ -1,4 +1,4 @@
-// 会话型 provider：保持既有日志重组/compaction 逻辑，transport 可由统一 registry 路由到 GLM/OpenAI/Anthropic/Gemini。
+// 会话型 provider：保持既有日志重组/compaction 逻辑，transport 可由统一 registry 路由到 GLM/OpenAI/Anthropic/Gemini/DeepSeek。
 // 2026-10-16 改名 glm-session.ts → session-provider.ts：这个文件早就不是 GLM 专属（transport 可路由到
 // 四家、83 个文件引用它、主会话与 worker/sidechat/沉淀轮共用同一装配入口），名字却在谎报职责。
 // 代价如实记：40 条变异锚点的 `src:` + PROGRESS.md 台账 5 条裸行号引用（docs-check D-10 的 legacy 名单）
@@ -13,9 +13,12 @@
 // （scripts/provider-check.ts / tests/glm.test.ts）也是从 providers/glm 导入，与本文件无关。
 // 职责：从事件日志重建中立对话历史（含 tool_calls / tool 角色），把工具结果反馈回模型，
 // 使真实 GLM 能多轮调用 clarify / propose_plan / write_file / verify。
-import { createEventLog, replayIncremental, type AgentEvent, type CompactionUsage } from "../events";
+import { createEventLog, eventRefKey, readSessionView, replayIncremental, type AgentEvent, type CompactionEvent, type CompactionUsage, type SessionView } from "../events";
+import { realpath } from "node:fs/promises";
+import { projectViewContext } from "./session-view-context";
 import { isSideEffectTool, isWriteCall, type McpGrade, type PermissionMode } from "../permissions";
 import { streamGlm, type GlmMessage, type GlmOptions, type GlmToolSpec } from "../providers/glm";
+import type { ThinkingEffort } from "../providers/capabilities";
 import { SUPERVISE_MODEL_FIELDS } from "./supervise-contract";
 import { effectiveModelTable, findSpecByNameOrId } from "../providers/registry";
 import type { ModelOutput, Provider, ProviderCall } from "../providers";
@@ -30,6 +33,7 @@ import { createMapBuilder, mapInjectText, mapUnavailableText, type MapBuilder } 
 import { MAP_TOKENS_DEFAULT } from "./map/render";
 import { AUTOMATION_TOOL_NAMES, automationToolSpecs } from "./automation-surface";
 import { strandsWorkersOnSpawn } from "./tool-surface";
+import type { HookModelCallFn } from "./plugins/hooks";
 import { makeMentionedRe, makePathishRe } from "./context-signals";
 import {
   DEFAULT_COMPACTION_CONFIG,
@@ -44,6 +48,8 @@ import {
   type SummarizerInput,
   type SummarizerOutput,
 } from "./compaction";
+import { imageCountOfMessages, imageTokensOfMessages, sumImageTokens, withoutImagePayloads } from "./image-budget";
+import type { ImageChannel } from "./image-channel";
 import type { SolpiRuntime } from "./solpi-runtime";
 import type { RequestMeter } from "./metering";
 import { deriveProgressBoundaries } from "./economics";
@@ -51,6 +57,13 @@ import { planSurfaceBudget, surfaceSpecChars } from "./model-surface";
 import { serializeLayer } from "./prefix-churn";
 import { amortizedCompactionConfig, measureHeadSurvival, type HeadSurvivalReading } from "./compaction-cost";
 import { freshSavings, shouldApplyPrune } from "./prune-batching";
+import {
+  DEFAULT_PREDICTION_MAX_AGE_MS,
+  compactionPrefixDigest,
+  shouldStartCompactionPrediction,
+  validatePrediction,
+  type PredictiveCompactionCandidate,
+} from "./compaction-prediction";
 
 type RawMessage = Record<string, unknown>;
 
@@ -82,14 +95,15 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
       function: {
         name: "read_file",
         description:
-          "读工作区单个文件（workspace 相对路径）；offset/limit 按 1-based 行号取片段，给目录路径则列条目，二进制拒读。" +
+          "读文件：给 workspace 相对路径；主会话里项目外附件经用户本轮批准后，可直接用附件上下文给出的绝对路径" +
+          "（该批准不继承给 worker）。offset/limit 按 1-based 行号取片段，给目录路径则列条目，二进制拒读。" +
           "**要一次看多份小文件（十几支源码/测试）就用 `paths` 数组**：一次调用交回多份，总量仍是同一道 50KB 帽——" +
           "一轮一支读会整段吃掉步数预算。" +
-          "何时用：要用或改某段代码之前先读原文——替换时拼的那个原文字符串要从这里拿，不能凭记忆手打。" +
+          "何时用：改动代码前必读目标区域原文——替换时拼的那个原文字符串要从这里拿（前后包含 3–5 行确保唯一），不能凭记忆手打；大文件善用 offset/limit 定位，避免撑爆上下文。" +
           "按内容找位置用 grep，按文件名形状找用 glob，别拿它遍历目录。整文件读一次通常比多次小范围读便宜；已在上下文里的内容不必重读。",
         parameters: obj(
           {
-            path: { type: "string", description: "workspace 相对路径" },
+            path: { type: "string", description: "workspace 相对路径；项目外附件用附件上下文给出的已批准绝对路径" },
             paths: {
               type: "array",
               items: { type: "string" },
@@ -98,7 +112,9 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
             offset: { type: "number", description: "起始行（1-based，缺省 1）" },
             limit: { type: "number", description: "最多读取行数（缺省 2000）" },
           },
-          ["path"],
+          // `path` 与 `paths` 二选一由工具执行面硬拒二者同给/都不给；规格面不能把 path 写成恒必填，
+          // 否则模型按说明书发 `paths` 时 schema 先自相矛盾。
+          [],
         ),
       },
     },
@@ -109,7 +125,7 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
         description: READ_IMAGE_DESCRIPTION,
         parameters: obj(
           {
-            path: { type: "string", description: "workspace 相对路径（PNG/JPEG/GIF/WebP）" },
+            path: { type: "string", description: "workspace 相对路径（PNG/JPEG/GIF/WebP）；项目外附件用附件上下文给出的已批准绝对路径" },
           },
           ["path"],
         ),
@@ -136,7 +152,7 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
         name: "grep",
         description:
           "按正则搜工作区内容（ripgrep 语法，忽略大小写写 (?i) 前缀）；按文件分组返回，上限 100 命中。" +
-          "何时用：找符号在哪定义、哪里被调用、定位报错原文——改代码前要现场就靠它。按文件名形状找用 glob，读已知路径用 read_file。" +
+          "何时用：找符号在哪定义、哪里被调用、定位报错原文——改代码前要现场就靠它；善用 context 参数（1–5）直接带出周围行上下文。按文件名形状找用 glob，读已知路径用 read_file。" +
           "搜含 ( . $ [ 的串（路径、报错原文、函数调用形状）必须给 fixed_strings，否则会被正则语义曲解或直接报错。",
         parameters: obj(
           {
@@ -166,8 +182,74 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
         ),
       },
     },
-    // P-1 补漏：lsp 在可执行面真实存在（TOOLS / toolTableFor / sidechat 白名单都在表内），
+    // P-1 补漏：lsp 在可执行面真实存在（TOOLS / toolTableFor 都在表内），
     // 但模型可见面此前没有它 ⇒ 模型永远调不到一个已接线的工具。二者必须同源。
+    // sidechat 不在表内：它无人值守、没有审批门，而 lsp 会 spawn `.agent/lsp.json` 的命令
+    // （风险 high）⇒ 旁路只装 read_file/grep/glob，不摆一个永远点不动的入口。
+    {
+      type: "function",
+      function: {
+        name: "git_read",
+        description:
+          "只读 git 三合一（零写权、不经 shell）：op=status 看工作区改动清单与当前分支（porcelain）；" +
+          "op=diff 看对 HEAD 的未提交改动（unified=2，可用 path 收窄到单文件，untracked 不在内）；" +
+          "op=log 看最近 20 条 commit。" +
+          "何时用：开工前看仓库状态、改完核对改动面、查「这文件最近谁动过」。写向 git 操作（add/commit/checkout）不在本工具范围，走 shell 命令按权限闸审批。",
+        parameters: obj(
+          {
+            op: { type: "string", description: "status（改动清单）| diff（未提交 diff）| log（最近 20 条）" },
+            path: { type: "string", description: "仅 diff：收窄到单个文件（workspace 相对）" },
+          },
+          ["op"],
+        ),
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "calc",
+        description:
+          "确定性算术（零近似）：数字与 + - * / % ** 括号、一元负号、pi/e 常量；除零/模零显式报错。" +
+          "何时用：预算、测量、统计、单位换算这类要数字精确的场景——别自己心算，算术交给它。",
+        parameters: obj(
+          {
+            expression: { type: "string", description: "算术表达式（如 (128000-8192)*0.8/4；只接受数字与运算符）" },
+          },
+          ["expression"],
+        ),
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "list_dir",
+        description:
+          "单层目录总览：条目名 + 类型（/目录 @软链）+ 大小 + 修改时间，帽 200 条。" +
+          "何时用：开工摸底看结构、找「最近改过的文件」。递归找文件用 glob，按内容找用 grep——本工具不递归。",
+        parameters: obj(
+          {
+            path: { type: "string", description: "目录（workspace 相对，缺省工作区根）" },
+          },
+          [],
+        ),
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "read_doc",
+        description:
+          "文档读取：pdf / docx / xlsx → 纯文本（按文件内容判型，不是按扩展名）。" +
+          "pdf 是 best-effort 文本层——扫描件/加密件会明说失败；docx 保段落与制表，xlsx 读首表前 500 行。" +
+          "何时用：用户给了一份文档要你读——无需外部命令，直接读。",
+        parameters: obj(
+          {
+            path: { type: "string", description: "文档路径（workspace 相对；项目外附件走已批准的 grant）" },
+          },
+          ["path"],
+        ),
+      },
+    },
     {
       type: "function",
       function: {
@@ -175,16 +257,17 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
         description:
           "LSP 查询（需工作区 .agent/lsp.json 配置；未配置时返回明确不可用原因）：" +
           "definition / references / hover / documentSymbol / workspaceSymbol / implementation；行列均 1-based。" +
+          "servers 不是查询，是状态：配了几台、每台实测支持哪几支、哪台起不来或还在等授权——先问它，别逐支试错。" +
           "何时用：要跳定义、查一个符号都有谁引用（改签名前先看影响面）、看类型签名——同名符号多的仓库里它比 grep 准。" +
           "何时不用：没配 LSP 就用 grep 兜底；纯字面搜索用 grep。",
         parameters: obj(
           {
             operation: {
               type: "string",
-              enum: ["definition", "references", "hover", "documentSymbol", "workspaceSymbol", "implementation"],
-              description: "查询类型",
+              enum: ["definition", "references", "hover", "documentSymbol", "workspaceSymbol", "implementation", "servers"],
+              description: "查询类型（servers = 只读状态，不发起查询也不起进程）",
             },
-            path: { type: "string", description: "workspace 相对路径（workspaceSymbol 可省略）" },
+            path: { type: "string", description: "workspace 相对路径（workspaceSymbol 与 servers 可省略）" },
             line: { type: "number", description: "行号（1-based）" },
             column: { type: "number", description: "列号（1-based）" },
             symbol: { type: "string", description: "workspaceSymbol 的查询串" },
@@ -201,7 +284,7 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
           "精确字符串替换：把 old_string 换成 new_string。old_string 必须唯一匹配（多处命中会报错并给出处数），确要全改加 replace_all: true。" +
           "何时用：改已有文件里已知位置的少数几处——它只付改动的字节，是改已有文件的**首选**。" +
           "何时不用：新建文件用 write_file；改动跨多处或多文件、要一笔原子落地用 apply_patch；一个文件要改的地方多到重抄更省时也用 write_file。" +
-          "old_string 要从 read_file 或 grep 的 context 里复制原文，别凭记忆手打——差一个空格就不匹配。",
+          "old_string 必须从 read_file 或 grep 的 context 里复制真实上下文行（前后保留 3–5 行以确保全局唯一匹配），严禁盲改或凭记忆手打——差一个空格换行就不匹配。",
         parameters: obj(
           {
             path: { type: "string", description: "workspace 相对路径（绝对路径或越出工作区一律拒绝）" },
@@ -256,8 +339,12 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
           "在工作区内执行 bash 命令（同步、有超时；出网与危险命令受权限层与沙箱管辖）。" +
           "何时用：仓库自己的工具链——跑测试、构建、lint、git 只读查询、装依赖。" +
           "何时不用：读文件用 read_file、按内容找用 grep、按文件名找用 glob、改文件用 edit_file/apply_patch/write_file、跑项目验证用 verify——专用工具进上下文更省、权限面更清晰。" +
-          "不要用它绕过被拒的工具；不要丢交互式或长期驻留的命令进来。",
-        parameters: obj({ command: { type: "string" } }, ["command"]),
+          "严禁拼接不可信输入，不要用它绕过被拒的工具；不要丢交互式或长期驻留的命令进来。" +
+          "background:true = 后台跑（立即返回任务号，task_output 读输出、task_stop 停止）——dev server、长测试、watcher 用这一档。",
+        parameters: obj({
+          command: { type: "string" },
+          background: { type: "boolean" },
+        }, ["command"]),
       },
     },
     {
@@ -265,10 +352,10 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
       function: {
         name: "clarify",
         description:
-          "任务有歧义时向用户提问（1–4 个问题，每问 2–4 个选项或允许自由补充）。" +
-          "何时用：需求有实质歧义，且不同解释会导出不同实现——猜错的返工比问一轮贵。" +
-          "何时不用：能从仓库查明的先自己查（read_file/grep/glob）；只是要让用户批计划用 propose_plan；不要拿它请求权限或确认常规操作。" +
-          "问题要具体到用户能一句话选完；能并成 1 问就别拆成 3 问。",
+          "任务有实质歧义时向用户提问（1–4 个问题，每问 2–4 个选项或允许自由补充）。" +
+          "何时用：需求有不可调和的实质歧义，且不同解释会导出截然不同的实现方向——猜错的返工比问一轮贵。" +
+          "何时不用：能从仓库查明或通过只读探索推导出的绝不提问（用 read_file/grep/glob 自行求证）；禁止拿它询问「你能帮我做X吗」这种行动授权（用户指示即行动授权）；不要拿它确认常规操作。" +
+          "问题必须高度具体并附带推荐选项，使用户能一句话单选或快速决策；能并成 1 问就绝不拆成多问。",
         parameters: obj(
           {
             questions: {
@@ -301,10 +388,10 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
       function: {
         name: "propose_plan",
         description:
-          "写文件前提交方案等用户批准；批准前 write_file/run_shell 会被权限层拒绝。" +
-          "何时用：任何要改盘的活开工前。方案要具体到「文件 + 动作 + 做法 + 怎么验」，让用户批的是一个可复核的成品，而不是一个还没想清的意图。" +
-          "何时不用：纯只读调研不必提方案；需求本身还有歧义，先用 clarify 把问题问掉再提。" +
-          "先把已授权且可逆的准备做完再请求批准，别拿半成品占用户一轮。",
+          "多文件/结构性改动或验收未定时才提交方案等用户批准；方案未批准前 write_file/run_shell 会被权限层拒绝。" +
+          "何时用：多文件/结构性改动、方向或验收未定，需先明确文件、做法与验收口径；方案批准后仍按当前权限档逐次执行。" +
+          "何时不用：单一明确的小改动直接做并 verify；需求本身还有歧义，先用 clarify 把问题问掉再提。" +
+          "先自主做完所有已授权且可逆的只读探查，方案包含具体改动与明确验收口径，让用户审批具体成果而非抽象意图。",
         parameters: obj(
           {
             goal: { type: "string" },
@@ -338,9 +425,9 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
       function: {
         name: "verify",
         description:
-          "按仓库 verify 配置跑 lint/test 并判定通过与否；通过则本轮任务收束，失败回传报错继续修。" +
-          "何时用：每一处写盘改动完成之后、宣布完成之前——它是唯一能证明「代码真的能跑」的动作。" +
-          "何时不用：本轮没有写盘改动就不必跑（没有可验的东西）。",
+          "按仓库 verify 配置跑 lint/test 并判定通过与否；通过则本轮任务收束，失败回传报错继续针对机理修复。" +
+          "何时用：改动完成之后、宣布完成之前——它是唯一能证明「代码真的能跑」的客观证据；失败时必须深入研读断言红字与根因，严禁未改代码原地盲跑。" +
+          "何时不用：本轮没有改动或验证诉求就不必跑。",
         parameters: obj({}, []),
       },
     },
@@ -425,6 +512,66 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
         ),
       },
     },
+    {
+      type: "function",
+      function: {
+        name: "send_agent",
+        description:
+          "向已有的逻辑 agent thread 追加一条用户侧后续要求。运行中会排到下一轮边界；终态则用原任务、上一摘要和这条要求启动同 thread 的新 run。" +
+          "thread_id 取 spawn_agent 回执里的 thread_id 或 list_agents 返回的 id；message_id 相同即重复投递，不会执行两次。" +
+          "何时用：原方向基本正确，只需要补约束、换验证目标或继续未完成部分。何时不用：目标已根本改变——应取消并重新派生。",
+        parameters: obj(
+          {
+            thread_id: { type: "string", description: "逻辑 agent thread id（不是 run id）" },
+            message: { type: "string", description: "要追加给该 thread 的后续要求" },
+            message_id: { type: "string", description: "幂等键；缺省使用本次工具 call id，同一键重复调用不会二次投递" },
+            fence: { type: "string", description: "可选 fencing token；与 thread 当前值不符时拒绝，防止旧控制面写入新 run" },
+          },
+          ["thread_id", "message"],
+        ),
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "list_agents",
+        description:
+          "列出本会话当前 AgentRuntime 中的逻辑 agent thread：稳定 id、当前 run_id、状态、fence、任务、摘要与用量。" +
+          "何时用：接续上一轮、需要 resume/close/follow-up 前先确认当前状态；只返回当前会话，不提供跨会话查询。",
+        parameters: obj({}, []),
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "resume_agent",
+        description:
+          "用当前 fencing token 恢复等待中的 agent run。fence 不匹配时拒绝，不能用旧 token 恢复已经换代或重启的 run。" +
+          "何时用：list_agents 显示 waiting，且你确认应继续执行。",
+        parameters: obj(
+          {
+            thread_id: { type: "string", description: "逻辑 agent thread id" },
+            fence: { type: "string", description: "list_agents 返回的当前 fence" },
+          },
+          ["thread_id", "fence"],
+        ),
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "close_agent",
+        description:
+          "关闭逻辑 agent thread 并等待执行器确认停止；重复关闭是幂等的。不会顺手关闭其他 thread。" +
+          "何时用：任务已完成、目标已取消，或确认不再需要该 agent。",
+        parameters: obj(
+          {
+            thread_id: { type: "string", description: "逻辑 agent thread id" },
+          },
+          ["thread_id"],
+        ),
+      },
+    },
     // 长任务的锚点此前只有人能写：模型每轮读回的还是三小时前那句人话，而它此刻已知道自己要交付什么。
     // 这一条只给「改措辞」，不给「改预算」——轮次帽与美元闸归人（工具拒 + 投影层兜底，两处都写死）。
     {
@@ -482,6 +629,55 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
         ),
       },
     },
+    {
+      type: "function",
+      function: {
+        name: "todo_write",
+        description:
+          "任务清单（多步任务用）：把本轮要做的事列成清单，完成一件更新一件（state=done）。" +
+          "items **全量替换**（每次都给整份，≤20 项、每条 ≤200 字）；清单展示在工作状态面板（进程 N/M）。" +
+          "什么时候用：≥3 步的任务动手前列清单；两三步就能完的小活别用（省一轮调用）。",
+        parameters: obj(
+          {
+            items: {
+              type: "array",
+              description: "整份清单（每次全量替换）",
+              items: {
+                type: "object",
+                properties: {
+                  text: { type: "string", description: "任务项一句话（≤200 字）" },
+                  state: { type: "string", description: "pending|done；缺省 pending" },
+                },
+                required: ["text"],
+              },
+            },
+          },
+          ["items"],
+        ),
+      },
+    },
+    // 后台任务三件套（2026-11-05 · 对标 ZCode 的 task-output / task-stop）：
+    // run_shell(background:true) 起后台，这两枚读输出/停止。读向工具，只读档不摘。
+    {
+      type: "function",
+      function: {
+        name: "task_output",
+        description:
+          "读取后台任务的累计输出与状态（看进度/收日志）。" +
+          "给出任务号（如 bg_1）；dev server、长测试起后台后用这一枚看日志。",
+        parameters: obj({ task_id: { type: "string", description: "后台任务号（后台命令返回的 bg_N）" } }, ["task_id"]),
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "task_stop",
+        description:
+          "停止一个后台任务（进程组组杀，不留孤儿）。给出任务号（如 bg_1）；" +
+          "任务完成使命或跑错了要重来时用。",
+        parameters: obj({ task_id: { type: "string", description: "后台任务号" } }, ["task_id"]),
+      },
+    },
   ];
   // 定时任务五件的规格与实现同在（实现在 agent-runner 的 installAutomationTools，
   // 调度器没起来时它们自己 fail-closed）——以前只有实现，模型面上一个都没有 ⇒ 发不出去。
@@ -497,6 +693,14 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
       s.function.name !== "remember" &&
       s.function.name !== "wait_for_agents" &&
       s.function.name !== "cancel_agents" &&
+      s.function.name !== "send_agent" &&
+      s.function.name !== "list_agents" &&
+      s.function.name !== "resume_agent" &&
+      s.function.name !== "close_agent" &&
+      // 后台读/停两件（2026-11-06 对齐执行面）：toolTableFor 判它们非写向（task_output 只读输出，
+      // task_stop 是运维动作不写仓库），执行层在只读档放行 ⇒ 模型面必须跟上（判卷 session-tools
+      // 钉着「specs ⊇ toolTableFor」）。只读档起不了后台任务（run_shell 是写向），但停/读一个
+      // 已存在的任务不写任何东西。
       !AUTOMATION_TOOL_NAMES.includes(s.function.name),
     ));
   }
@@ -507,7 +711,7 @@ export function gateToolSpecs(mode?: PermissionMode): GlmToolSpec[] {
  *  而这两把在只读档连面都不在 ⇒ 那句话对该档是在描述一个它拿不到的能力，正是同类事故第四次（前三次：glob 逃生口／
  *  maxFiles 死参数／prune 附件）。这里只换需要换的那一把的描述，其余逐字沿用同一份源——与 `systemPromptFor` 同一套纪律。 */
 const READ_ONLY_DESCRIPTIONS: Readonly<Record<string, string>> = {
-  propose_plan: "提交方案等用户批准；本档不装配写文件与跑命令的工具，方案是给用户的交付物，不由本会话执行",
+  propose_plan: "提交方案等用户批准；本档不装配写文件与跑命令的工具，方案是给用户的交付物，自主完成只读探查后呈现具体发现与修复建议，不由本会话执行",
 };
 
 function readOnlyDescriptions(specs: GlmToolSpec[]): GlmToolSpec[] {
@@ -527,11 +731,14 @@ function readOnlyDescriptions(specs: GlmToolSpec[]): GlmToolSpec[] {
 export const OPTIONAL_TOOL_NAMES = {
   goalTools: ["refine_goal"],
   memoryTools: ["remember"],
-  /** 子代理三件套：**固定开销里最大的一块（611 tok/轮）**，且它是每一轮重送的静态段。
+  /** 子代理工具族：**固定开销里最大的一块**，且它是每一轮重送的静态段。
    *  缺省挂（能力 4 的正面）；`settings.subagentTools: false` 时整族从模型面摘掉。
    *  关掉它不是为了省钱省到抠——是给「这一轮根本不派 worker」的任务一个诚实的开关：
    *  看不见的工具不会被尝试，模型也就不会把一轮花在派一个派不出来的 worker 上。 */
-  subagentTools: ["spawn_agent", "wait_for_agents", "cancel_agents"],
+  subagentTools: [
+    "spawn_agent", "wait_for_agents", "cancel_agents",
+    "send_agent", "list_agents", "resume_agent", "close_agent",
+  ],
   /** `.agent/lsp.json` 没配（或显式 `{"lsp": false}`）时 lsp 工具**必然抛**
    *  「未启用——工作区 .agent/lsp.json 缺少 lsp 配置」（lsp.ts:602）⇒ 挂着它只有成本没有能力。 */
   lspTools: ["lsp"],
@@ -612,9 +819,17 @@ export function sessionToolSpecs(
 
 /** 事件日志 → OpenAI 兼容消息序列。
  *  M1d：改走组装器投影 projectContext——compaction 感知（跳过被压 id、offset 注入摘要、fresh start），
- *  assistant_delta 合并与 tool 角色映射逻辑与旧版逐字同构。 */
+ *  assistant_delta 合并与 tool 角色映射逻辑与旧版逐字同构。
+ *  指针分叉：从日志对应的受信 session 根建立来源视图（父前缀 + 本地），模型历史由视图投影；
+ *  `replay()` / raw 游标仍只认各自文件（本函数不改变 raw 语义）。 */
 export async function buildSessionHistory(logPath: string): Promise<RawMessage[]> {
-  return projectContext(await replayIncremental(logPath)) as unknown as RawMessage[];
+  const root = dirname(logPath);
+  const agent = dirname(root);
+  const bare = basename(agent) === ".agent" ? dirname(agent) : root;
+  const workspace = await realpath(bare);
+  const sessionId = basename(logPath).replace(/\.jsonl$/u, "");
+  const view = await readSessionView({ workspace, sessionId }, root);
+  return projectViewContext(view) as unknown as RawMessage[];
 }
 
 export type SessionTransport = (
@@ -658,6 +873,43 @@ export function createSessionSummarizer(
   };
 }
 
+/** §9.6 prompt 档钩子的模型面：与摘要器**同一条 transport 接缝**、同一套事件折法
+ *  （`assistant_delta` 累加 / `usage` / `turn_truncated`），只是不带压缩那段包装语——
+ *  钩子发给模型的 user 内容就是 hook payload 原文，压缩话术会把判定语境带歪。
+ *  「空回文」在这里是**失败**而不是成功：摘要器宁可是错，钩子也不能拿一句空话当"模型判过了"。 */
+export function createHookModelCall(
+  transport: SessionTransport,
+  meter?: RequestMeter,
+  label = "provider",
+): HookModelCallFn {
+  return async (system, user, timeoutMs) => {
+    const msgs: GlmMessage[] = [{ role: "system", content: system }, { role: "user", content: user }];
+    let text = "";
+    let truncated: string | undefined;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort("prompt 钩子超时"), Math.max(1, timeoutMs));
+    try {
+      for await (const ev of transport(
+        msgs,
+        // 不带 model：这一跳拨哪一档由注入方（`sessionModelTransport`）绑死，旁路不重猜。
+        { stream: false, ...(meter ? { metering: { meter, category: "summary" as const } } : {}) },
+        undefined,
+        { signal: controller.signal },
+      )) {
+        if (ev.type === "assistant_delta") text += ev.text;
+        else if (ev.type === "turn_truncated") truncated = ev.stop_reason;
+      }
+    } catch (err) {
+      return { ok: false, text, error: label + " prompt 钩子调用失败：" + (err instanceof Error ? err.message : String(err)) };
+    } finally {
+      clearTimeout(timer);
+    }
+    if (controller.signal.aborted) return { ok: false, text, error: label + " prompt 钩子超时（" + String(timeoutMs) + "ms）" };
+    if (!text.trim()) return { ok: false, text, error: label + " 返回空判断（按失败处理，不当「模型没意见」用）" };
+    return { ok: true, text, ...(truncated !== undefined ? { truncated } : {}) };
+  };
+}
+
 export interface SessionCompaction {
   config?: Partial<CompactionConfig>;
   /** 缺省 = 显式 transport，或 legacy CAIRN_API_KEY + GLM。 */
@@ -671,6 +923,13 @@ export interface SessionCompaction {
    *  这一次就多压一点（「一次付账，拿满折扣」）。**缺省关**——关时逐字节零回归，
    *  因为它只动 tail 预算（`tailRatio`/`tailMaxTokens`），而这两个旋钮不在触发判定与硬闸里。 */
   amortizeRewriteCost?: boolean;
+  /** Opt-in speculative summary below the normal trigger. */
+  prediction?: {
+    enabled?: boolean;
+    /** Start when estimated tokens cross this fraction of the normal threshold. */
+    startRatio?: number;
+    maxAgeMs?: number;
+  };
 }
 
 /** 会话型 provider：每次 stream 从日志重建历史，直接转发网络增量；轮次结束由 loop 控制。
@@ -781,6 +1040,13 @@ export function createSessionProvider(
     };
     /** 真实通道模型名（缺省 = provider 层读 CAIRN_MODEL env；settings.model 在场时优先）。 */
     model?: string;
+    /** Explicit effort reaches transport; native off differs from an unspecified upstream default. */
+    thinking?: ThinkingEffort;
+    /** 逐请求的思考档策略（质量档）：按当前 run 的事件与轮次决定这一拍用哪档。
+     *  返回 undefined 时回落到 `thinking`；缺省不传 = 逐字旧行为（每拍同一档）。
+     *  为什么放在 provider 而不在 loop：档位是 wire 参数，只有真正发请求的这一刻
+     *  才知道「当前是规划、执行还是返修」；在 loop 里定档会退化成整轮一个值。 */
+    thinkingPolicy?: (ctx: { round: number; events: readonly AgentEvent[] }) => ThinkingEffort | undefined;
     /** 调用方**已经解析好**的模型窗口（如 `--model` 自由档位合成 spec 上的那个）。
      *  `opts.model` 那条查表的路只认得表内模型；自由档位的名字按定义不在表里，查表恒为 undefined ⇒
      *  窗口得由调用方递进来，否则这一路的预算只能吃 `DEFAULT_COMPACTION_CONFIG` 的硬编码。 */
@@ -793,10 +1059,14 @@ export function createSessionProvider(
      *  会话末沉淀轮用它把指令送进请求——既不落日志（否则下一轮会被当用户发言重放），
      *  又能真正到达模型。缺省 undefined = 零行为。 */
     ephemeralUserTurn?: string;
+    /** Optional host-owned experimental instruction, assembled before the final context budget check. */
+    requestIntervention?: (events: readonly AgentEvent[]) => string | undefined;
     /** 识图通道（`read_image` → 下一轮请求）：provider 每轮组装时从这里取待发的图片。
      *  与 `ephemeralImages` 的区别是**时机**：那个是「这一轮就附上」的一次性块（调用方自己算好），
-     *  这个是「loop 什么时候读到图，下一轮就附上」的活盒子。两者都缺省 = 零行为。 */
-    imageChannel?: { take: () => { type: "image"; dataUrl: string }[] };
+     *  这个是「loop 什么时候读到图，下一轮就附上」的活盒子。两者都缺省 = 零行为。
+     *  形状取 `ImageChannel` 的 peek/take 两面：预算用量 `peek`（不消费），
+     *  清空放在最终硬闸之后（`take`）——见 image-channel.ts 里那条实测记录。 */
+    imageChannel?: Pick<ImageChannel, "peek" | "take">;
     /** 本次请求附带的图片内容块（不进日志）。见 `composeTurnMessages` 的同名参数。 */
     ephemeralImages?: readonly { type: "image"; dataUrl: string }[];
     solpi?: SolpiRuntime;
@@ -822,6 +1092,9 @@ export function createSessionProvider(
   // （turnGenerator 每次 stream() 都是新的生成器，函数内局部变量留不住）。
   let prevRequestLayer = "";
   let headSurvival: HeadSurvivalReading | null = null;
+  let predictionCandidate: PredictiveCompactionCandidate | null = null;
+  let predictionTask: Promise<void> | null = null;
+  const predictionModelKey = opts.model ?? "default";
   /** 本请求的压缩/预算配置：inputLimit 认模型真实窗口（registry.ctxWindow，此前零消费者）。
    *  优先级 = 模型窗口定基线 < 调用方显式 config；但**显式值也绝不超出模型窗口**——
    *  超窗 provider 必 400，把 fail-closed 让给远端不如本地钳住。
@@ -871,7 +1144,7 @@ export function createSessionProvider(
   // 本轮前缀是否已被压缩打断（见 `prune-batching.ts` 的 freeRide 注释）：
   // 在压缩后的那次 fresh-start 重组装**之前**置位，由 assemble() 取用并清零。
   let pruneFreeRide = false;
-  const assemble = async (): Promise<{ events: AgentEvent[]; history: ReturnType<typeof projectContext> }> => {
+  const assemble = async (): Promise<{ events: AgentEvent[]; history: ReturnType<typeof projectContext>; view?: SessionView }> => {
     // A5（审查根因 5）：增量重放——每轮只解析追加段（旧实现全量读盘+全量投影，整会话 O(n²)）
     const events = await replayIncremental(logPath);
     // M2b prune：本地计算裁剪投影（异常静默 → 无裁剪）
@@ -913,7 +1186,25 @@ export function createSessionProvider(
       console.debug("[prune] 计算失败，本轮跳过裁剪:", err instanceof Error ? err.message : String(err));
     }
     if (opts.solpi?.ledger) replacements = await opts.solpi.project(events, replacements);
-    return { events, history: projectContext(events, replacements) };
+    // 指针分叉：本地 raw 事件仍是 `events`（游标/回滚/审计只认它）；模型历史从来源视图生成，
+    // 父前缀按各自文件的行号解释。没分叉的会话走原路径，逐字不变。
+    const head = events[0];
+    let history: ReturnType<typeof projectContext>;
+    let view: SessionView | undefined;
+    if (head !== undefined && head.type === "session_meta" && head.fork !== undefined) {
+      const root = dirname(logPath);
+      const bare = basename(dirname(root)) === ".agent" ? dirname(dirname(root)) : root;
+      const workspace = await realpath(bare);
+      view = await readSessionView({ workspace, sessionId: pruneSessionId }, root);
+      const byRef = new Map<string, string>();
+      for (const [id, replaced] of replacements ?? []) {
+        byRef.set(eventRefKey({ workspace, sessionId: pruneSessionId, eventId: id }), replaced);
+      }
+      history = projectViewContext(view, byRef);
+    } else {
+      history = projectContext(events, replacements);
+    }
+    return { events, history, ...(view !== undefined ? { view } : {}) };
   };
   // M2b 地图：上下文文件 = 最近 2 个 user_message 里提到的 workspace 相对路径 + 最近 read/edit 的文件
   const contextFilesFromEvents = (events: AgentEvent[]): string[] => {
@@ -1015,9 +1306,73 @@ export function createSessionProvider(
       console.warn("[surface_account] 装配账落流失败（本轮请求继续）:", error);
     }
   };
-  const appendSurfaceAccount = async (event: AgentEvent): Promise<void> => {
+  const appendInternalEvent = async (event: AgentEvent): Promise<void> => {
     if (opts.emit) return opts.emit(event);
     await createEventLog(logPath).append(event);
+  };
+  const appendSurfaceAccount = async (event: AgentEvent): Promise<void> => {
+    await appendInternalEvent(event);
+  };
+  const startPrediction = (
+    snapshot: AgentEvent[],
+    estimate: number,
+    overhead: AssemblyOverhead,
+    view: SessionView | undefined,
+    config: CompactionConfig,
+    signal?: AbortSignal,
+  ): void => {
+    const prediction = opts.compaction?.prediction;
+    if (!coordinator || !opts.compaction || prediction?.enabled !== true || coordinator.summarizerDisabled) return;
+    if (signal?.aborted) return;
+    if (!shouldStartCompactionPrediction({
+      estimateTokens: estimate,
+      config,
+      ...(prediction.startRatio !== undefined ? { warmRatio: prediction.startRatio } : {}),
+    })) return;
+    const digest = compactionPrefixDigest(snapshot);
+    if (predictionTask !== null || predictionCandidate !== null) return;
+    const baseEventCount = snapshot.length;
+    const startedAt = Date.now();
+    predictionTask = (async () => {
+      // 两道 abort 复查：任务启动前可能已被取消；predict 等上游摘要返回期间也可能被取消。
+      // 取消后不把这条预测的 usage 落进事件流，更不把过期候选交给下一轮采纳。
+      signal?.throwIfAborted();
+      const outcome = await coordinator.predict([...snapshot], {
+        overhead,
+        ...(view !== undefined ? { view } : {}),
+        config,
+        ...(signal ? { signal } : {}),
+      });
+      signal?.throwIfAborted();
+      if (!outcome?.ok) return;
+      const event = outcome.event;
+      signal?.throwIfAborted();
+      if (event.usage) {
+        await appendInternalEvent({
+          type: "usage",
+          inputTokens: event.usage.inputTokens,
+          outputTokens: event.usage.outputTokens,
+          source: "compaction_prediction",
+          model: event.model ?? predictionModelKey,
+        });
+      }
+      signal?.throwIfAborted();
+      const adopted = { ...event } as CompactionEvent;
+      delete adopted.usage;
+      predictionCandidate = {
+        event: adopted,
+        baseEventCount,
+        prefixDigest: digest,
+        modelKey: predictionModelKey,
+        createdAt: startedAt,
+      };
+    })().catch((error) => {
+      // run 取消不是预测失败：不要把预期的 DOMException 当异常告警刷屏。
+      if (signal?.aborted) return;
+      console.warn("[compaction] predictive summary failed; synchronous fallback remains available:", error);
+    }).finally(() => {
+      predictionTask = null;
+    });
   };
   return {
     stream(_messages, _tools, call): AsyncIterable<ModelOutput> {
@@ -1027,7 +1382,7 @@ export function createSessionProvider(
   async function* turnGenerator(call?: ProviderCall): AsyncGenerator<ModelOutput> {
       call?.signal?.throwIfAborted();
       const attempt = ++attemptSeq;
-      let { events, history } = await assemble();
+      let { events, history, view } = await assemble();
       // 逐请求工具面：给了 requestFace 就每轮现算（run 中途激活的 skill 下一轮就不再出现在清单里），
       // 否则沿用构造时那份。整轮只用这一个 `tools`——散落着读 opts.tools 会出现同轮两种口径。
       let compactedThisRound = false;
@@ -1045,7 +1400,8 @@ export function createSessionProvider(
       // M2d 固定回注（§8.1.5/§8.1.9）：每轮组装重读两层记忆并重注（压缩后自然重注）。
       // 出口在 `buildMemoryInjectionSafe` 那一道（第 315 页）：这里从前是自己的 catch ＋ `console.debug`
       // ⇒ 一次异常把整段 LESSONS/索引变成**无痕**丢失，而模型读到的"没有记忆"与"这仓库没写过记忆"同形。
-      const mem = await buildMemoryInjectionSafe({ workspace });
+      // M7：带上本轮问话做词面检索（RECALL 段）——问句取料与符号地图共用 `lastUserContent` 这一支。
+      const mem = await buildMemoryInjectionSafe({ workspace, queryText: lastUserContent(events) });
       const memory = mem.injection;
       const memoryNote = mem.unavailable;
       const memoryChars = (memory.project?.length ?? 0) + (memory.global?.length ?? 0);
@@ -1125,6 +1481,13 @@ export function createSessionProvider(
         mapChars: mapText?.length ?? 0,
         attachmentContextChars,
       });
+      // 识图：图片只活在进程内存里（不进事件日志，见 image-channel.ts），所以预算的**两边**
+      // 都得在这里显式把它们算上。⚠️ 用 `peek` 不用 `take`：硬闸拦下的那一轮什么都没发出去，
+      // 不该顺手把图吞掉（2026-11-03 实测：两张 900×1200 的帧被 intake 后请求被拒，重试时模型
+      // 看不到图，历史里的 tool_result 却还写着「已作为图片内容块附上」）。
+      const pendingImages = opts.imageChannel?.peek() ?? [];
+      // 一张图按像素折 token，不按 base64 字符——base64 的字符数不是 token 数（见 image-budget.ts）。
+      const carriedImageTokens = sumImageTokens([...pendingImages, ...(opts.ephemeralImages ?? [])]);
       // M1d 触发检查：估算含 system/tools/记忆全量开销；B（硬兜底）→ overflow 紧急截断
       if (coordinator && opts.compaction) {
         const factor = calibrateFactor(events);
@@ -1135,7 +1498,9 @@ export function createSessionProvider(
           memoryChars,
           mapChars: mapText?.length ?? 0,
         };
-        const estimate = estimateContextTokens(history, overhead, factor);
+        // 图片 token 加在**估算结果**上，不进 `overhead`：`overhead` 还要递给压缩器当裁剪目标，
+        // 而图片不在事件流里，压历史压不掉它们——把图算进裁剪目标只会白砍一段冷细节。
+        const estimate = estimateContextTokens(history, overhead, factor) + carriedImageTokens;
         const decision = shouldCompact(estimate, budgetConfig());
         // 摊销只可能收紧 tail 预算；overflow 那支由纯函数自己挡掉（已装不下 ⇒ 少压会立刻再撞硬闸）
         const amortize = amortizedCompactionConfig({
@@ -1144,8 +1509,41 @@ export function createSessionProvider(
           config: budgetConfig(),
           ...(decision ? { trigger: decision.trigger } : {}),
         });
+        const predictionConfig: CompactionConfig = { ...budgetConfig(), ...(amortize ?? {}) };
+        if (decision === null) {
+          startPrediction(events, estimate, overhead, view, predictionConfig, call?.signal);
+        }
+        if (decision?.trigger === "auto" && predictionTask !== null) {
+          // 预测摘要挂起时取消必须立即收束：任务自身带 signal 会自行 unwind，
+          // 但这一轮不该等它；后续 throwIfAborted / streamFn 负责终止主请求链。
+          if (call?.signal && !call.signal.aborted) {
+            await Promise.race([
+              predictionTask,
+              new Promise<void>((resolve) => call.signal!.addEventListener("abort", () => resolve(), { once: true })),
+            ]);
+          } else {
+            await predictionTask;
+          }
+          call?.signal?.throwIfAborted();
+        }
+        let adoptedOutcome: Awaited<ReturnType<CompactionCoordinator["maybeCompact"]>> = null;
+        if (decision?.trigger === "auto" && predictionCandidate !== null) {
+          const verdict = validatePrediction(predictionCandidate, {
+            events,
+            modelKey: predictionModelKey,
+            now: Date.now(),
+            maxAgeMs: opts.compaction.prediction?.maxAgeMs ?? DEFAULT_PREDICTION_MAX_AGE_MS,
+          });
+          if (verdict.ok) {
+            adoptedOutcome = { ok: true, event: predictionCandidate.event };
+          } else {
+            console.debug("[compaction] discarded predictive candidate:", verdict.reason);
+          }
+          predictionCandidate = null;
+        }
         const boundaries = opts.solpi?.flags.economicCompaction ? deriveProgressBoundaries(events) : [];
-        const outcome = await coordinator.maybeCompact(events, decision, { overhead, signal: call?.signal,
+        const outcome = adoptedOutcome ?? await coordinator.maybeCompact(events, decision, { overhead, signal: call?.signal,
+          ...(view !== undefined ? { view } : {}),
           ...(amortize ? { config: amortize } : {}),
           ...(opts.solpi?.flags.economicCompaction ? { economics: {
             state: opts.solpi.economics(events), requestsPerBoundary: boundarySamples,
@@ -1168,16 +1566,18 @@ export function createSessionProvider(
           }
           compactedThisRound = true;
           pruneFreeRide = true; // 头已经断了：紧接着的那次重组装顺手把该剪的一刀剪掉
-          ({ events, history } = await assemble()); // fresh start：重组装（摘要 + tail）
+          ({ events, history, view } = await assemble()); // fresh start：重组装（摘要 + tail）
           skillsBlock = pluginContext(events, liveNote);
           mapText = await buildMapText(history);
         } else if (outcome && outcome.kind === "failed" && coordinator.summarizerDisabled) {
           console.warn("[compaction] 连续摘要失败已达上限，本会话停用摘要（仅 overflow 紧急截断可用）");
         }
       }
-      // 识图：盒子里有图就取出来附到本轮请求末尾（take 即清空 ⇒ 同一张图不会在两轮里各付一遍 token）。
+      // 识图：把上面 peek 到的那几张附到本轮请求末尾。**这里不 take**——清空放到硬闸之后：
+      // 同一张图不会在两轮里各付一遍 token 靠的是「发出去之后清空」，而不是「先清空再看能不能发」。
       // 空盒时这个参数缺席 ⇒ 消息序列逐字不变，不读图的会话一个字节都不多付。
-      const liveImages = opts.imageChannel?.take() ?? [];
+      const ephemeralUserTurn = [opts.ephemeralUserTurn, opts.requestIntervention?.(events)]
+        .filter((text): text is string => text !== undefined && text !== "").join("\n\n");
       const msgs = composeTurnMessages({
         system: opts.system,
         mapText,
@@ -1187,9 +1587,18 @@ export function createSessionProvider(
         ...(skillsBlock ? { skills: skillsBlock } : {}),
         ...(surfaceNoteText ? { surfaceNote: surfaceNoteText } : {}),
         ...(opts.attachmentContext ? { attachmentContext: opts.attachmentContext } : {}),
-        ...(opts.ephemeralUserTurn !== undefined ? { ephemeralUserTurn: opts.ephemeralUserTurn } : {}),
-        ...(liveImages.length > 0 ? { ephemeralImages: liveImages } : {}),
-        ...(opts.ephemeralImages !== undefined ? { ephemeralImages: opts.ephemeralImages } : {}),
+        ...(ephemeralUserTurn !== "" ? { ephemeralUserTurn } : {}),
+        // 两条识图时机**合并**而不是同键覆盖：imageChannel 是「loop 何时读到，下一轮就附」的活盒子，
+        // opts.ephemeralImages 是「调用方自己算好的一次性块」（provider-assembly 把两条都透传，
+        // 注释明言是两条不同的时机）——旧形状后一个 spread 静默吃掉前一个（潜伏：今天还没有
+        // 生产者同时用两条，但形状一留，未来第一个同时用的调用方就会无声丢图）。
+        // 两条识图时机**合并**而不是同键覆盖：imageChannel 是「loop 何时读到，下一轮就附」的活盒子，
+        // opts.ephemeralImages 是「调用方自己算好的一次性块」（provider-assembly 把两条都透传，
+        // 注释明言是两条不同的时机）——旧形状后一个 spread 静默吃掉前一个（潜伏：今天还没有
+        // 生产者同时用两条，但形状一留，未来第一个同时用的调用方就会无声丢图）。
+        ...(pendingImages.length > 0 || opts.ephemeralImages !== undefined
+          ? { ephemeralImages: [...pendingImages, ...(opts.ephemeralImages ?? [])] }
+          : {}),
       });
       // 压缩重写代价的**实测**（不是估算）：本轮装配与上一轮比，头部仍然逐字相同的那段占多少。
       // 只有本轮真的压过才记账——prune/skill 重挂造成的抖动不归这条策略管（它们各有判据）。
@@ -1201,16 +1610,27 @@ export function createSessionProvider(
         prevRequestLayer = requestLayer;
       }
       // 最终装配硬闸：重挂/地图/JSON 包装均已确定，不能只检查压缩前的 overhead。
-      // 无 tokenizer：沿用既有校准估算口径；超限 fail-closed，事件历史不删改。
+      // 无 tokenizer：文本沿用既有校准估算口径；**图片块按像素折 token**——base64 的字符数不是
+      // token 数（image-budget.ts 里记着 2026-11-03 那次 185,657 的实测：两张 106KB 的帧被
+      // chars/2 折成 142,620 token，而 provider 对同一形态的请求实报 15,939）。超限 fail-closed。
       const finalConfig = budgetConfig();
-      const finalChars = JSON.stringify({ messages: msgs, tools: tools ?? [] }).length;
-      const finalEstimate = Math.ceil(finalChars / calibrateFactor(events));
+      const factor = calibrateFactor(events);
+      // 文本那半沿用既有口径：量之前先把图片载荷换成空串，图片的成本另按 token 加回去。
+      const finalChars = JSON.stringify({ messages: withoutImagePayloads(msgs), tools: tools ?? [] }).length;
+      const finalImageTokens = imageTokensOfMessages(msgs);
+      const finalEstimate = Math.ceil(finalChars / factor) + finalImageTokens;
       if (!Number.isFinite(finalConfig.inputLimit) || !Number.isFinite(finalConfig.maxOutputReserve) ||
           finalEstimate > finalConfig.inputLimit - finalConfig.maxOutputReserve) {
-        throw new Error(`[context_budget_exceeded] final estimated input ${finalEstimate}; available ${finalConfig.inputLimit - finalConfig.maxOutputReserve}; request not sent`);
+        const imageNote = finalImageTokens > 0 ? `; images ${imageCountOfMessages(msgs)} ≈ ${finalImageTokens} token` : "";
+        throw new Error(`[context_budget_exceeded] final estimated input ${finalEstimate}; available ${finalConfig.inputLimit - finalConfig.maxOutputReserve}${imageNote}; request not sent`);
       }
+      // 硬闸过了才清空识图盒：被拦下的那一轮图已经随 `msgs` 组装好却一个字节都没发出去，
+      // 先把它们留在盒里，用户点「重试」时同一批帧还能再送一次（take 语义见 image-channel.ts）。
+      opts.imageChannel?.take();
       call?.signal?.throwIfAborted();
+      const effort = opts.thinkingPolicy?.({ round, events }) ?? opts.thinking;
       yield* (opts.transport ?? streamGlm)(msgs, { ...(opts.model ? { model: opts.model } : {}),
+        ...(effort !== undefined ? { reasoningEffort: effort } : {}),
         ...(opts.solpi?.meter ? { metering: { meter: opts.solpi.meter, category: "main" as const } } : {}) }, tools, call);
       successfulRequests++;
       opts.solpi?.sent(msgs, events);

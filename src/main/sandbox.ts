@@ -7,9 +7,10 @@ import { realpathSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import type { PermissionMode } from "../permissions";
 import { type ToolResult } from "../tools/base";
 import { createOutputRing } from "../tools/output-ring";
-import { sanitizedEnv, spawnTracked } from "../tools/process";
+import { killGroup, sanitizedEnv, spawnTracked } from "../tools/process";
 
 const OUTPUT_LIMIT = 32 * 1024;
 const DEFAULT_TIMEOUT_MS = 60_000;
@@ -85,13 +86,25 @@ export const NETWORK_DENIED_NOTE =
  *  抽成纯函数的理由：auto 档的 L4-pass 与无人值守 fail-closed 都必须落在这张真值表里，
  *  而不是散在调用方的 if 里——散着写就会出现「分类器命中即放行」那种旁路。
  *
+ *  **完全允许档（2026-11-03 业主裁决）是唯一例外**：那一档没有审批卡可问，用户选它时
+ *  已经一次性授权了「什么都允许」；此处按档位放行，否则 evaluate 说 approve、沙箱却
+ *  仍然断网，形成「门说行、执行说不行」的两套口径。其余档位的红线不放松。
+ *
  *  覆盖面提醒（改这张表时必须一起看）：这里的 `wantsNetwork` 只管**子进程**那条路
  *  （沙箱 profile 拦的是 shell 的网络）。非 shell 工具在主进程里发包，profile 拦不到，
  *  所以 `web_fetch`（抓网页）走的是另一条同口径的路——权限层 `staticRisk` 给 `high`，
- *  四档都在 `L4-risk` 出口被问，且 `isNetworkCommandCall` 把它钉成一次性 scope
+ *  非完全允许档都在 `L4-risk` 出口被问，且 `isNetworkCommandCall` 把它钉成一次性 scope
  *  （不落「总是允许」规则）。两处是同一句红线，**各自都要在**；这里这一处只说明它管不到工具面。 */
-export function networkProfileFor(input: { wantsNetwork: boolean; asked: boolean; approved: boolean }): "allow" | "deny" {
-  return input.wantsNetwork && input.asked && input.approved ? "allow" : "deny";
+export function networkProfileFor(input: {
+  wantsNetwork: boolean;
+  asked: boolean;
+  approved: boolean;
+  /** 当前权限档；只有 full-access 走「按档放行」那一支。缺省 undefined = 旧语义（必须问过且批了）。 */
+  mode?: PermissionMode;
+}): "allow" | "deny" {
+  if (!input.wantsNetwork) return "deny";
+  if (input.mode === "full-access") return "allow";
+  return input.asked && input.approved ? "allow" : "deny";
 }
 
 /** 给已定形的结果补断网提示：`run_shell` 直连路径（融合分支）用；
@@ -114,33 +127,46 @@ export interface SandboxRunOptions {
   timeoutMs?: number;
   /** 网络面，缺省 deny。allow 的取用条件见 `SandboxProfileOptions.network`（永不免批）。 */
   network?: "deny" | "allow";
+  /** 取消信号：与 run_shell/verify 同一条收束语义——abort 即整组 kill，不等超时。 */
+  signal?: AbortSignal;
 }
 
 /** 在 sandbox-exec 内执行 bash -c；结果形态与 src/tools/run_shell 对齐（截断/超时/退出码）。
  *  「对齐」靠的是同一只 `createOutputRing`：这条路径是**沙箱开着时** verify 与 run_shell 的实际出口
  *  （`verifyExec` / agent-runner 的无融合分支都走这里），它若只留头部，验证门的尾部结论就到不了模型。 */
 export async function runInSandbox(command: string, opts: SandboxRunOptions): Promise<ToolResult> {
+  if (opts.signal?.aborted) {
+    return { ok: false, output: "[cancelled] 会话已取消，沙箱命令未执行", exitCode: null, timedOut: false };
+  }
   const profile = buildSandboxProfile(opts.writableRoot ?? opts.cwd, { network: opts.network });
   const tmp = join(real(opts.cwd), ".tmp");
   await mkdir(tmp, { recursive: true });
+  // 取消可以落在 await mkdir 期间：入口那次检查已经过去了，不能因为「监听还没挂」就继续 spawn。
+  if (opts.signal?.aborted) {
+    return { ok: false, output: "[cancelled] 会话已取消，沙箱命令未执行", exitCode: null, timedOut: false };
+  }
   return await new Promise<ToolResult>((settle) => {
     const ring = createOutputRing(OUTPUT_LIMIT);
     let timedOut = false;
+    let aborted = false;
     let settled = false;
     const collect = (chunk: Buffer): void => ring.push(chunk);
     const timeout = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-    /** 幂等收束：超时主动 settle，不等孙进程放掉 stdout（P1-2）。 */
+    const detach = (): void => { opts.signal?.removeEventListener("abort", onAbort); };
+    /** 幂等收束：超时/取消主动 settle，不等孙进程放掉 stdout（P1-2）。 */
     const finish = (code: number | null): void => {
       if (settled) return;
       settled = true;
       handle.dispose();
+      detach();
       let output = ring.read();
       if (timedOut) output += "\n[error: 沙箱命令超时（" + String(Math.round(timeout / 1000)) + "s），已强制终止]";
-      if (code !== 0 && !timedOut) output += "\n[exit code: " + String(code) + "]";
+      else if (aborted) output += "\n[cancelled] 会话已取消，沙箱命令已中止";
+      else if (code !== 0) output += "\n[exit code: " + String(code) + "]";
       // 断网提示只在本轮走默认（deny）支时贴：allow 支下网络已放行，再贴就是假信号。
       // 与退出码无关——`curl …; echo rc=$?` 这类写法让退出码归 0，而模型看到的是解析失败。
       if (opts.network !== "allow" && looksLikeNetworkDenial(output)) output += "\n" + NETWORK_DENIED_NOTE;
-      settle({ ok: code === 0 && !timedOut, output: output.replace(/\n+$/, ""), exitCode: code, timedOut });
+      settle({ ok: !aborted && code === 0 && !timedOut, output: output.replace(/\n+$/, ""), exitCode: code, timedOut });
     };
     const handle = spawnTracked("sandbox-exec", ["-p", profile, "bash", "-c", command], {
       cwd: opts.cwd,
@@ -151,12 +177,23 @@ export async function runInSandbox(command: string, opts: SandboxRunOptions): Pr
         finish(null);
       },
     });
+    const onAbort = (): void => {
+      if (settled) return;
+      aborted = true;
+      killGroup(handle.child);
+      finish(null);
+    };
+    opts.signal?.addEventListener("abort", onAbort, { once: true });
+    // spawn 与 addEventListener 之间也可能已经 abort：对已 abort 的 signal 挂监听不会再触发，
+    // 必须主动补一次，否则这一次已经启动的进程会跑到超时。
+    if (opts.signal?.aborted) onAbort();
     handle.child.stdout?.on("data", collect);
     handle.child.stderr?.on("data", collect);
     handle.child.on("error", (err) => {
       if (settled) return;
       settled = true;
       handle.dispose();
+      detach();
       // 起不来 = 没有退出码、也没超时：与 finish() 那条出口同一套字段口径（别让读者去猜缺席含义）。
       settle({ ok: false, output: "sandbox-exec: " + err.message, exitCode: null, timedOut: false });
     });

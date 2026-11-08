@@ -1,0 +1,58 @@
+.agent-settings-editor {
+  display: grid;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.agent-settings-editor label {
+  color: hsl(var(--text-100));
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.agent-settings-textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 9em;
+  resize: vertical;
+  padding: var(--space-sm);
+  border: 1px solid var(--hairline-strong, var(--hairline));
+  border-radius: var(--radius-md);
+  background: hsl(var(--bg-100));
+  color: hsl(var(--text-100));
+  font: inherit;
+  line-height: 1.55;
+}
+
+.agent-settings-textarea:focus-visible {
+  outline: 2px solid hsl(var(--accent-100));
+  outline-offset: 2px;
+}
+
+.agent-settings-textarea::placeholder { color: hsl(var(--text-400)); }
+
+.agent-settings-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.agent-settings-actions .sp-note { margin: 0 auto 0 0; }
+.agent-settings-editor .sp-note { margin-block: 0; }
+.agent-role-section { display: grid; gap: var(--space-sm); min-width: 0; }
+.agent-role-section .ss-row-main { overflow-wrap: anywhere; }
+.agent-role-section .ss-row-ctl { flex-shrink: 0; }
+.agent-role-section .ss-row-label { display: flex; align-items: center; gap: var(--space-xs); flex-wrap: wrap; }
+
+.agent-role-add { display: inline-flex; align-items: center; gap: var(--space-2xs, 4px); }
+
+/* 角色名是标识符值，不是 Markdown 行内代码：同样收回中性芯片，避免暗红字读成错误。 */
+body[data-dsh-claude-style] .agent-role-section code {
+  color: hsl(var(--text-000));
+  background: hsl(var(--bg-200));
+  border-radius: var(--radius-xs);
+  padding: 1px 5px;
+}

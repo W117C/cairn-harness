@@ -6,10 +6,11 @@ import {
   reasoningEffortsForModel,
   type ModelSpec,
 } from "./registry";
-import { mapUpstreamEfforts } from "./reasoning";
+import { mapUpstreamEfforts, normalizeThinkingDeclaration } from "./reasoning";
 
-/** UI 与 RunRequest 共用的思考档位。Provider 不支持时只能使用 off。 */
-export const THINKING_EFFORTS = ["off", "low", "medium", "high"] as const;
+/** UI 与 RunRequest 共用的思考档位（2026-11-05 业主裁：按业界标准档 low/medium/high/xhigh/max）。
+ *  Provider 不支持时只能使用 off。 */
+export const THINKING_EFFORTS = ["off", "low", "medium", "high", "xhigh", "max"] as const;
 export type ThinkingEffort = (typeof THINKING_EFFORTS)[number];
 
 export type ModelAvailability = "verified" | "unverified";
@@ -37,9 +38,11 @@ export interface ProviderCapability {
 /**
  * 当前运行时能力的事实表。
  *
- * 目前四个 adapter 尚未把 reasoning/thinking 参数接入请求体，因此不能把
- * “厂商有该模型”伪装成“DSH 已支持该档位”。等 wire 实现和测试落地后，再把
- * 对应条目的 supported/values 打开；renderer 只消费这张表。
+ * 接线与证据是两件事：四个 adapter 都已把 reasoning/thinking 参数接到请求体
+ * （唯一映射处 `providers/reasoning.ts`，由 `registry.ts` 分发），但**内置档位没有带凭据实测**，
+ * 所以 `supported: false` 在这里的含义是「没有证据说明上游收这个参数」，不是「接线没做」。
+ * 只有用户在 `.agent/providers.json` 写了 `reasoningEfforts`（或上游 `/models` 自述）时才开门；
+ * renderer 只消费这张表。
  */
 function capability(modelId: string, provider: string): ProviderCapability {
   if (!isKnownProviderId(provider)) {
@@ -54,6 +57,10 @@ function capability(modelId: string, provider: string): ProviderCapability {
   // 识图能力同样要求证据：模型的输入模态声明里含 "image" 才算支持（缺席 = 上游没说，按不支持）。
   const image = spec?.inputModalities?.includes("image") === true;
   const supported = declared.length > 0;
+  /* 首选档与档位表来自**同一条声明**（`reasoningEfforts` + `reasoningDefault`），由
+     `normalizeThinkingDeclaration` 一次算出来 —— 界面与能力表不会各猜一次而分叉。
+     没声明首选档 ⇒ 仍是 off：声明了支持不等于替用户打开（思考是要花钱的）。 */
+  const { default: declaredDefault } = normalizeThinkingDeclaration(declared, spec?.reasoningDefault);
   return {
     modelId,
     provider,
@@ -61,8 +68,7 @@ function capability(modelId: string, provider: string): ProviderCapability {
     thinking: {
       supported,
       values: supported ? ["off", ...declared] : ["off"],
-      // 缺省仍是 off：声明了支持不等于替用户打开（思考是要花钱的）。
-      default: "off",
+      default: declaredDefault,
     },
     attachments: {
       text: true,

@@ -1,9 +1,11 @@
-// C-15 ClarifyCard（2026-10-07 产品化重写）：进 .card 体系（与审批/方案卡同门面：card-head +
-// chip + q-block + opts），淘汰旧 card-approval 裸样式路径。表单语义与必答校验不动（cards.ts 纯函数）。
+// C-15 ClarifyCard（2026-11-06 设计体检）：与审批/方案卡共用 GateSlot 骨架——
+// card-head / card-evidence / card-actions 三段；表单语义与必答校验不动（cards.ts 纯函数）。
+// 用户可见文案一律来自 STR.gate，组件不新增裸中文。
 import { useState } from "react";
 import type { ClarifyAnswerMap, ClarifyQuestion } from "../../../../../src/events";
 import { clarifyFormValues } from "./cards";
 import { MessageSquare } from "lucide-react";
+import { STR } from "../strings";
 
 /**
  * 澄清卡（M2-5）：questions 渲染表单——options 有 ⇒ radio（单选）/ checkbox（multiSelect），
@@ -36,59 +38,64 @@ export function ClarifyCard(props: {
   };
 
   return (
-    <div className="card">
+    <div className="card" data-gate="clarify">
       <div className="card-head">
         <span className="ico-wait" aria-hidden="true"><MessageSquare size={15} /></span>
-        <h3>需要澄清（{props.questions.length} 问）</h3>
-        <span className="chip wait">回答后继续</span>
-      </div>
-      {props.questions.map((q, i) => {
-        const hasOptions = Array.isArray(q.options) && q.options.length > 0;
-        return (
-          <div className="q-block" key={i}>
-            {q.header && <div className="q-head">{q.header}</div>}
-            <div className="q-text">{q.question}</div>
-            {hasOptions ? (
-              <div className="opts">
-                {q.options!.map((o) => (
-                  <label
-                    key={o.label}
-                    className={"opt" + (q.multiSelect === true
-                      ? Array.isArray(values[q.question]) && (values[q.question] as string[]).includes(o.label)
-                      : values[q.question] === o.label ? " on" : "")}
-                    title={o.description ?? undefined}
-                  >
-                    <input
-                      type={q.multiSelect === true ? "checkbox" : "radio"}
-                      name={`${props.callId}:${i}`}
-                      checked={q.multiSelect === true
-                        ? Array.isArray(values[q.question]) && (values[q.question] as string[]).includes(o.label)
-                        : values[q.question] === o.label}
-                      onChange={() => (q.multiSelect === true ? toggleMulti(q.question, o.label) : setText(q.question, o.label))}
-                    />
-                    <span className="o-label">{o.label}</span>
-                    {o.description && <span className="o-desc">{o.description}</span>}
-                  </label>
-                ))}
-              </div>
-            ) : (
-              <div className="q-free">
-                <input
-                  type="text"
-                  value={typeof values[q.question] === "string" ? (values[q.question] as string) : ""}
-                  aria-label={q.question}
-                  onChange={(e) => setText(q.question, e.target.value)}
-                />
-              </div>
-            )}
-          </div>
-        );
-      })}
-      {error !== null && <div className="form-error">{error}</div>}
-      <div className="card-actions">
-        <button className="btn primary" onClick={submit}>提交回答</button>
+        <h3>{STR.gate.clarifyTitle.replace("{count}", String(props.questions.length))}</h3>
+        <span className="chip wait">{STR.gate.clarifyChip}</span>
         <span className="spacer" />
-        <span className="consequence">带选项的问题必答；自由项可留空</span>
+      </div>
+      <div className="card-evidence">
+        {props.questions.map((q, i) => {
+          const hasOptions = Array.isArray(q.options) && q.options.length > 0;
+          return (
+            <div className="q-block" key={i}>
+              {q.header && <div className="q-head">{q.header}</div>}
+              <div className="q-text">{q.question}</div>
+              {hasOptions ? (
+                <div className="opts">
+                  {q.options!.map((o) => (
+                    <label
+                      key={o.label}
+                      className={"opt" + (q.multiSelect === true
+                        ? Array.isArray(values[q.question]) && (values[q.question] as string[]).includes(o.label) ? " on" : ""
+                        : values[q.question] === o.label ? " on" : "")}
+                      title={o.description ?? undefined}
+                    >
+                      <input
+                        type={q.multiSelect === true ? "checkbox" : "radio"}
+                        name={`${props.callId}:${i}`}
+                        checked={q.multiSelect === true
+                          ? Array.isArray(values[q.question]) && (values[q.question] as string[]).includes(o.label)
+                          : values[q.question] === o.label}
+                        onChange={() => (q.multiSelect === true ? toggleMulti(q.question, o.label) : setText(q.question, o.label))}
+                      />
+                      <span className="o-label">{o.label}</span>
+                      {o.description && <span className="o-desc">{o.description}</span>}
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <div className="q-free">
+                  <textarea
+                    rows={2}
+                    placeholder={STR.gate.clarifyPlaceholder}
+                    value={typeof values[q.question] === "string" ? (values[q.question] as string) : ""}
+                    aria-label={q.question}
+                    onChange={(e) => setText(q.question, e.target.value)}
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {error !== null && <div className="form-error">{error}</div>}
+      </div>
+      <div className="card-actions">
+        {/* 动作次序（2026-11-02）：提示 → 弹性留白 → 主按钮钉最右，与审批/方案卡同序。 */}
+        <span className="consequence">{STR.gate.clarifyHint}</span>
+        <span className="spacer" />
+        <button className="btn primary" data-gate-accept onClick={submit}>{STR.gate.clarifySubmit}</button>
       </div>
     </div>
   );

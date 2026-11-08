@@ -25,7 +25,9 @@ const VALID = JSON.stringify({
   version: 1,
   providers: [
     {
-      id: "deepseek",
+      // id 不用 "deepseek"（2026-10-25 起是内置家名，校验拒收）；端点照用 DeepSeek 的，
+      // 自定义家指向别家端点本就是常态。
+      id: "mydeepseek",
       protocol: "openai",
       baseURL: "https://api.deepseek.com/v1",
       apiKeyEnv: "DEEPSEEK_API_KEY",
@@ -44,17 +46,17 @@ describe("loadCustomProviders：三态", () => {
   it("配好了 ⇒ ok，并连派生结果一起给出（含缺窗口/缺价的提醒）", () => {
     const r = loadCustomProviders(workspaceWith(VALID));
     if (r.kind !== "ok") throw new Error("期望 ok，实际 " + r.kind);
-    expect(r.file.providers[0].id).toBe("deepseek");
+    expect(r.file.providers[0].id).toBe("mydeepseek");
     expect(r.derived[0].specs[0]).toEqual({
-      id: "deepseek-chat",
-      provider: "deepseek",
+      id: "mydeepseek-chat",
+      provider: "mydeepseek",
       model: "deepseek-chat",
       tier: "standard",
       ctxWindow: 128_000, // 档位表里最小的一档：缺窗口时的保守值
     });
     expect(r.derived[0].prices).toEqual({});
     // 两条提醒都要带 provider 标签，用户才知道说的是哪一家
-    expect(r.warnings.some((w) => w.startsWith("deepseek：") && w.includes("contextWindow"))).toBe(true);
+    expect(r.warnings.some((w) => w.startsWith("mydeepseek：") && w.includes("contextWindow"))).toBe(true);
     expect(r.warnings.some((w) => w.includes("price"))).toBe(true);
   });
 

@@ -49,7 +49,7 @@ describe("↑↓ 在会话之间移动焦点", () => {
   });
 
   it("Enter/Space 仍打开（选中语义不因改 role 而变）", () => {
-    const at = sidebar.indexOf('if (e.key === "Enter" || e.key === " ") { e.preventDefault(); props.onOpen(s.id); return; }');
+    const at = sidebar.indexOf('if (e.key === "Enter" || e.key === " ") { e.preventDefault(); props.onOpen(s.id, s.workspace); return; }');
     expect(at).toBeGreaterThan(-1);
   });
 

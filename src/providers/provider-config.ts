@@ -13,18 +13,23 @@
 // 本文件是纯逻辑：读文件、发请求、注入环境变量都不在这里（那是接线层的事）。判卷直接喂 JSON。
 
 import { isIP } from "node:net";
-import { MODEL_ID_RE, RESERVED_PROVIDER_IDS } from "./provider-identifiers";
+import { MODEL_ID_RE, PROVIDER_ID_RE, RESERVED_PROVIDER_IDS } from "./provider-identifiers";
 export { isValidModelId, RESERVED_PROVIDER_IDS } from "./provider-identifiers";
 import { DEFAULT_MODEL_TABLE, type ModelSpec, type ModelTier } from "./registry";
 import type { CatalogPricing } from "./catalog";
 import { DISCOVERY_PROTOCOLS, type DiscoveryProtocol } from "./discovery";
+import { ACTIVE_REASONING_EFFORTS, normalizeThinkingDeclaration } from "./reasoning";
+import type { ThinkingEffort } from "./capabilities";
+import { isRecord } from "../is-record";
 
 /** 用户侧配置文件名（工作区级，与 `.agent/config.json` / `.agent/lsp.json` 同族先例）。 */
 export const CUSTOM_PROVIDERS_RELATIVE_PATH = [".agent", "providers.json"] as const;
 
 /** 目录里能替用户填的字段名（与 catalog.ts 的 CATALOG_FILLABLE_MODEL_FIELDS 同族；
- *  这里只用于**报错文案**，别处不要再抄一份）。 */
-const MODEL_FIELD_NAMES = ["contextWindow", "maxOutputTokens", "price", "reasoningEfforts", "inputModalities"] as const;
+ *  这里只用于**报错文案**，别处不要再抄一份）。
+ *  `reasoningDefault` 2026-11-03 加入：声明「支持哪些思考档」之后，还得能说「首选哪一档」——
+ *  没有它时首选档只能是 off（不在声明里，等于用户没地方表达自己的意图）。 */
+const MODEL_FIELD_NAMES = ["contextWindow", "maxOutputTokens", "price", "reasoningEfforts", "reasoningDefault", "inputModalities"] as const;
 
 export interface CustomModelConfig {
   /** provider 内唯一的短名；派生出的全局档位 id = `<providerId>-<id>`，除非显式给 `registryId`。 */
@@ -40,8 +45,13 @@ export interface CustomModelConfig {
   maxOutputTokens?: number;
   /** 单价（美元 / 每百万 token）。给不全就不进价表 —— 美元闸对这条模型明写「不生效」。 */
   price?: CatalogPricing;
-  /** 上游支持的推理档位（供 thinking 接线用；未接时不生效，但先收下来不丢）。 */
+  /** 上游支持的推理档位（供 thinking 接线用；未接时不生效，但先收下来不丢）。
+   *  它是能力表开门的**唯一证据**：写空 = 该模型不支持思考（界面整段禁用，fail-visible）。 */
   reasoningEfforts?: readonly string[];
+  /** 首选思考档：必须在 `reasoningEfforts` 里（或 "off"）。缺席 = off。
+   *  为什么要有它：声明了「支持哪些档」不等于替用户选一档（思考是花钱的），所以首选档**单独声明**，
+   *  而不是由我们按「最便宜/最强」猜一个。 */
+  reasoningDefault?: ThinkingEffort;
   /** 上游自述的输入模态（`["text","image"]`）；识图能力的唯一证据来源。 */
   inputModalities?: readonly string[];
 }
@@ -86,17 +96,12 @@ export type ParseResult =
   | { ok: true; file: CustomProvidersFile; warnings: readonly string[] }
   | { ok: false; problems: readonly CustomProviderProblem[] };
 
-const PROVIDER_ID_RE = /^[a-z][a-z0-9-]{0,31}$/;
 const ENV_NAME_RE = /^[A-Z][A-Z0-9_]*$/;
 const TIERS: readonly ModelTier[] = ["cheap", "standard", "strong"];
 const PRICE_KEYS = ["inputPerMTok", "outputPerMTok", "cacheReadPerMTok", "cacheWritePerMTok"] as const;
 /** 出现这些字段名 = 用户想把 key 值写进文件。不是「忽略」，是**判错**：
  *  静默忽略会让人以为钥匙已经配好了，而实际上一轮真跑会以「没配 key」失败。 */
 const FORBIDDEN_KEY_FIELDS = ["apikey", "key", "token", "secret", "apikeyvalue", "bearertoken", "password"];
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
 
 function posInt(v: unknown): number | undefined {
   return typeof v === "number" && Number.isInteger(v) && v > 0 ? v : undefined;
@@ -204,7 +209,7 @@ function parseModel(raw: unknown, where: string, problems: CustomProviderProblem
     problems.push({ kind: "model", where, message: "models 的每一项必须是对象" });
     return undefined;
   }
-  const allowed = ["id", "registryId", "model", "tier", "contextWindow", "maxOutputTokens", "price", "reasoningEfforts", "inputModalities"];
+  const allowed = ["id", "registryId", "model", "tier", "contextWindow", "maxOutputTokens", "price", "reasoningEfforts", "reasoningDefault", "inputModalities"];
   rejectUnknown(raw, allowed, where, problems);
   const id = nonEmpty(raw.id);
   if (id === undefined || !MODEL_ID_RE.test(id)) {
@@ -243,6 +248,38 @@ function parseModel(raw: unknown, where: string, problems: CustomProviderProblem
       reasoningEfforts = list;
     }
   }
+  if (raw.reasoningDefault !== undefined && nonEmpty(raw.reasoningDefault) === undefined) {
+    problems.push({ kind: "model", where: `${where}.reasoningDefault`, message: "reasoningDefault 必须是字符串（选项里没有就用 off）" });
+  }
+  /* 声明归一化与判错在同一处：认不出的档位名**判错**（静默丢掉会让用户以为那一档生效了），
+     首选档不在支持集里也判错（否则我们只能悄悄回 off，用户写的东西一点效果都没有）。 */
+  const declared = normalizeThinkingDeclaration(reasoningEfforts ?? [], raw.reasoningDefault);
+  // 认不出的名字要指到**写错的那个框**：档位列表里与首选档里各报各的（同一句话，两处位置）。
+  const reportUnknownLevels = (where2: string, names: readonly string[]): void => {
+    if (names.length === 0) return;
+    problems.push({
+      kind: "model",
+      where: where2,
+      message: `认不出的思考档位：${names.join(" / ")}；只认下列取值：${ACTIVE_REASONING_EFFORTS.join(" / ")}（「off」不必写：档位留空即「不支持」）`,
+    });
+  };
+  reportUnknownLevels(`${where}.reasoningEfforts`, normalizeThinkingDeclaration(reasoningEfforts ?? [], undefined).unknown);
+  reportUnknownLevels(`${where}.reasoningDefault`, normalizeThinkingDeclaration([], raw.reasoningDefault).unknown);
+  if (declared.preferred !== undefined && declared.preferred !== "off") {
+    if (declared.levels.length === 0) {
+      problems.push({
+        kind: "model",
+        where: `${where}.reasoningDefault`,
+        message: "reasoningDefault 只有在声明了 reasoningEfforts 之后才有意义（档位留空 = 不支持思考）",
+      });
+    } else if (!declared.levels.includes(declared.preferred)) {
+      problems.push({
+        kind: "model",
+        where: `${where}.reasoningDefault`,
+        message: `reasoningDefault 必须是所声明的档位之一：${declared.levels.join(" / ")}（或 off）`,
+      });
+    }
+  }
   let inputModalities: string[] | undefined;
   if (raw.inputModalities !== undefined) {
     if (!Array.isArray(raw.inputModalities)) {
@@ -264,7 +301,9 @@ function parseModel(raw: unknown, where: string, problems: CustomProviderProblem
     ...(posInt(raw.contextWindow) !== undefined ? { contextWindow: posInt(raw.contextWindow) } : {}),
     ...(posInt(raw.maxOutputTokens) !== undefined ? { maxOutputTokens: posInt(raw.maxOutputTokens) } : {}),
     ...(price !== undefined ? { price } : {}),
-    ...(reasoningEfforts !== undefined && reasoningEfforts.length > 0 ? { reasoningEfforts } : {}),
+    ...(declared.levels.length > 0 ? { reasoningEfforts: declared.levels } : {}),
+    // 首选档只在「真选了非 off 的一档」时落盘：off 是缺席的语义，写它只会让配置多一个字面量。
+    ...(declared.default !== "off" ? { reasoningDefault: declared.default } : {}),
     ...(inputModalities !== undefined && inputModalities.length > 0 ? { inputModalities } : {}),
   };
 }
@@ -480,6 +519,9 @@ export function deriveCustomProviders(file: CustomProvidersFile, opts: DeriveOpt
         ctxWindow,
         ...(m.inputModalities !== undefined && m.inputModalities.length > 0 ? { inputModalities: m.inputModalities } : {}),
         ...(m.reasoningEfforts !== undefined && m.reasoningEfforts.length > 0 ? { reasoningEfforts: m.reasoningEfforts } : {}),
+        // 首选档与档位列表同源落进 spec：能力表（capabilities.ts）据此定 `thinking.default`，
+        // 不再在别处按「第一档」或硬编码 off 猜一次。
+        ...(m.reasoningDefault !== undefined ? { reasoningDefault: m.reasoningDefault } : {}),
       });
       if (m.reasoningEfforts !== undefined && m.reasoningEfforts.length > 0) reasoning[id] = m.reasoningEfforts;
       if (m.price !== undefined) prices[id] = m.price;

@@ -12,6 +12,7 @@ import {
   InitializedNotification,
   DidOpenTextDocumentNotification,
   DidChangeTextDocumentNotification,
+  DidChangeWatchedFilesNotification,
   DidCloseTextDocumentNotification,
   PublishDiagnosticsNotification,
   DefinitionRequest,
@@ -23,6 +24,39 @@ import {
   ShutdownRequest,
   ExitNotification,
 } from "vscode-languageserver-protocol/node";
+import { existsSync, readFileSync, appendFileSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+const ARGS = process.argv.slice(2);
+const SLOW_INIT = ARGS.includes("--slow-init");
+const CRASH_UNTIL = ARGS.find((a) => a.startsWith("--crash-until="))?.slice("--crash-until=".length);
+if (CRASH_UNTIL !== undefined && !existsSync(CRASH_UNTIL)) {
+  writeFileSync(CRASH_UNTIL, "crashed");
+  process.exit(1);
+}
+// 能力协商的三种"真实服务器会做的事"，判卷按模式演：
+//   --caps-to=<file>   把**客户端**声明的 capabilities 落盘（不声明 = 服务器只会给降级形状，
+//                      而"降级"是静默的：linkSupport 没要 ⇒ definition 回 Location 不是 LocationLink，
+//                      hover 没要 markdown ⇒ 回 plaintext，hierarchical 没要 ⇒ 回平铺符号表）
+//   --no-hover         不声明 hoverProvider，且**不应答** hover（真服务器常这样：没实现就不回）
+//   --incremental      声明 change:2，且**只接受带 range 的 didChange**（缺 range 就整条忽略）
+//   --sync-none        声明 change:0：不接受 didChange，内容只在 didOpen 时读盘
+const CAPS_TO = ARGS.find((a) => a.startsWith("--caps-to="))?.slice("--caps-to=".length);
+const NO_HOVER = ARGS.includes("--no-hover");
+const INCREMENTAL = ARGS.includes("--incremental");
+const SYNC_NONE = ARGS.includes("--sync-none");
+// LSP 3.17 的 workspaceSymbol 条目**允许没有 location**（服务器只知道名字）。真服务器会这么回
+// （未索引的依赖符号就是这样），客户端不能假设每条都带位置。
+const SYMBOL_NO_LOCATION = ARGS.includes("--symbol-no-location");
+// 不声明 workspaceSymbolProvider（**也不注册** handler）：多服务器场景里"这台不参与工作区符号查询"。
+const NO_WORKSPACE_SYMBOL = ARGS.includes("--no-workspace-symbol");
+
+// --watched-to=<file>：订阅 workspace/didChangeWatchedFiles，并把每条事件**当索引用**——
+// 出现/变更的文件从盘上重读进索引，删除的移出索引。这就是 gopls / rust-analyzer / pyright 这类
+// 带项目索引的服务器实际做的事：客户端不发这条通知，它们就永远不知道 agent 刚新建了哪个文件。
+const WATCHED_TO = ARGS.find((a) => a.startsWith("--watched-to="))?.slice("--watched-to=".length);
+
+
 
 const docs = new Map();
 
@@ -79,17 +113,24 @@ function markerRange(uri, m) {
   return { uri, range: { start: { line: m.line, character: m.character }, end: { line: m.line, character: m.character + m.sym.length } } };
 }
 
-conn.onRequest(InitializeRequest.type, () => ({
-  capabilities: {
-    textDocumentSync: 1,
+conn.onRequest(InitializeRequest.type, async (params) => {
+  if (CAPS_TO !== undefined) writeFileSync(CAPS_TO, JSON.stringify(params.capabilities ?? null), "utf8");
+  if (SLOW_INIT) await new Promise((r) => setTimeout(r, 2000));
+  const capabilities = {
+    textDocumentSync: INCREMENTAL
+      ? { openClose: true, change: 2 }
+      : SYNC_NONE
+        ? { openClose: true, change: 0 }
+        : 1,
     definitionProvider: true,
     referencesProvider: true,
-    hoverProvider: true,
     documentSymbolProvider: true,
-    workspaceSymbolProvider: true,
     implementationProvider: true,
-  },
-}));
+  };
+  if (!NO_HOVER) capabilities.hoverProvider = true;
+  if (!NO_WORKSPACE_SYMBOL) capabilities.workspaceSymbolProvider = true;
+  return { capabilities };
+});
 conn.onNotification(InitializedNotification.type, () => {});
 conn.onNotification(DidOpenTextDocumentNotification.type, (p) => {
   docs.set(p.textDocument.uri, p.textDocument.text);
@@ -97,13 +138,58 @@ conn.onNotification(DidOpenTextDocumentNotification.type, (p) => {
 });
 conn.onNotification(DidChangeTextDocumentNotification.type, (p) => {
   const c = p.contentChanges[p.contentChanges.length - 1];
-  docs.set(p.textDocument.uri, c.text);
+  if (SYNC_NONE) return; // 声明了 change:0 的服务器不该收到 didChange；收到了也不当它是更新
+  const before = docs.get(p.textDocument.uri) ?? "";
+  if (INCREMENTAL) {
+    if (!c.range) return; // 只认带 range 的增量编辑：缺 range 的整篇替换在这里**不生效**（不是报错，是沉默）
+    docs.set(p.textDocument.uri, applyRange(before, c.range, c.text));
+  } else {
+    docs.set(p.textDocument.uri, c.text);
+  }
   publish(p.textDocument.uri);
 });
 conn.onNotification(DidCloseTextDocumentNotification.type, (p) => {
   docs.delete(p.textDocument.uri);
   conn.sendNotification(PublishDiagnosticsNotification.type, { uri: p.textDocument.uri, diagnostics: [] });
 });
+
+if (WATCHED_TO !== undefined) {
+  conn.onNotification(DidChangeWatchedFilesNotification.type, (p) => {
+    for (const c of p.changes) {
+      appendFileSync(WATCHED_TO, JSON.stringify({ uri: c.uri, type: c.type }) + "\n", "utf8");
+      // type: 1=Created 2=Changed 3=Deleted（FileChangeType）。服务器按它更新自己的索引。
+      if (c.type === 3) {
+        docs.delete(c.uri);
+        continue;
+      }
+      try {
+        docs.set(c.uri, readFileSync(fileURLToPath(c.uri), "utf8"));
+      } catch {
+        docs.delete(c.uri); // 盘上没有就当它不在了
+      }
+    }
+  });
+}
+
+/** 按 LSP 的 0-based 行列做区间替换（utf-16 计数与 JS string 一致）。 */
+function offsetAt(text, line, character) {
+  let offset = 0;
+  let currentLine = 0;
+  while (currentLine < line) {
+    const nl = text.indexOf("\n", offset);
+    if (nl < 0) return text.length;
+    offset = nl + 1;
+    currentLine++;
+  }
+  return Math.min(offset + character, text.length);
+}
+
+function applyRange(text, range, insert) {
+  const from = offsetAt(text, range.start.line, range.start.character);
+  const to = offsetAt(text, range.end.line, range.end.character);
+  return text.slice(0, from) + insert + text.slice(to);
+}
+
 
 function symAt(p) {
   const text = docAt(p);
@@ -140,11 +226,14 @@ conn.onRequest(ImplementationRequest.type, (p) => {
   const impls = findMarkers(text, "IMPL").filter((x) => x.sym === sym);
   return impls.map((m) => markerRange(p.textDocument.uri, m));
 });
-conn.onRequest(HoverRequest.type, (p) => {
-  const sym = symAt(p);
-  if (!sym) return null;
-  return { contents: { kind: "markdown", value: "hover: " + sym + "（stub）" } };
-});
+if (!NO_HOVER) {
+  conn.onRequest(HoverRequest.type, (p) => {
+    const sym = symAt(p);
+    if (!sym) return null;
+    return { contents: { kind: "markdown", value: "hover: " + sym + "（stub）" } };
+  });
+}
+
 conn.onRequest(DocumentSymbolRequest.type, (p) => {
   const text = docAt(p) ?? "";
   return findMarkers(text, "SYM").map((m) => ({
@@ -155,18 +244,25 @@ conn.onRequest(DocumentSymbolRequest.type, (p) => {
     children: [],
   }));
 });
-conn.onRequest(WorkspaceSymbolRequest.type, (p) => {
-  const query = (p.query ?? "").toLowerCase();
-  const out = [];
-  for (const [uri, text] of docs) {
-    for (const m of findMarkers(text, "SYM")) {
-      if (m.sym.toLowerCase().includes(query)) {
-        out.push({ name: m.sym, kind: 12, location: markerRange(uri, m) });
+if (!NO_WORKSPACE_SYMBOL) {
+  conn.onRequest(WorkspaceSymbolRequest.type, (p) => {
+    const query = (p.query ?? "").toLowerCase();
+    const out = [];
+    for (const [uri, text] of docs) {
+      for (const m of findMarkers(text, "SYM")) {
+        if (m.sym.toLowerCase().includes(query)) {
+          out.push(
+            SYMBOL_NO_LOCATION
+              ? { name: m.sym, kind: 12, containerName: "top" }
+              : { name: m.sym, kind: 12, location: markerRange(uri, m) },
+          );
+        }
       }
     }
-  }
-  return out;
-});
+    return out;
+  });
+}
+
 conn.onRequest(ShutdownRequest.type, () => null);
 conn.onNotification(ExitNotification.type, () => {
   // 等 stdout 排干再退出：client 端正在读的帧不被截断，避免 write-after-destroy 竞态

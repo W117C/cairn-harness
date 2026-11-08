@@ -1,0 +1,25 @@
+.network-settings { width: 100%; }
+.network-settings fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.network-settings fieldset:disabled { opacity: .7; }
+.ns-context { display: flex; align-items: center; gap: 8px; color: hsl(var(--text-300)); font-size: var(--fs-caption); margin-bottom: 24px; }
+.ns-status { margin-left: auto; font-size: var(--fs-caption-sm); }
+.ns-status.on { color: hsl(var(--text-100)); }
+.ns-switch { display: inline-flex; gap: 9px; align-items: center; font-size: var(--fs-body-sm); cursor: pointer; }
+.ns-switch input { width: 16px; height: 16px; accent-color: hsl(var(--accent-brand)); }
+.ns-secret { display: flex; gap: 6px; width: min(100%, 460px); align-items: center; }
+.ns-secret .ss-field { flex: 1; min-width: 0; }
+.ns-eye { flex: 0 0 36px; padding-inline: 0; justify-content: center; }
+.ns-advanced { margin-block: 20px 24px; border-block: 1px solid var(--hairline); }
+.ns-advanced > summary { padding-block: 16px; font-size: var(--fs-body-sm); color: hsl(var(--text-200)); cursor: pointer; }
+.ns-advanced > summary:focus-visible { outline: 2px solid hsl(var(--accent-control)); outline-offset: 4px; border-radius: var(--radius-xs); }
+.ns-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.ns-actions > button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
+.ns-actions > span { width: 100%; color: hsl(var(--text-300)); font-size: var(--fs-caption-sm); margin-top: 2px; }
+.ns-feedback { min-height: 48px; padding-top: 16px; }
+.ns-result { display: flex; align-items: flex-start; gap: 8px; font-size: var(--fs-body-sm); color: hsl(var(--text-100)); line-height: 1.65; overflow-wrap: anywhere; margin: 0 0 8px; }
+.ns-result svg { flex-shrink: 0; margin-top: 4px; }
+.ns-result.error { color: hsl(var(--color-risk)); }
+.ns-spinner { animation: ns-spin 1s linear infinite; }
+@keyframes ns-spin { to { transform: rotate(360deg); } }
+@media (max-width: 760px) { .ns-context { flex-wrap: wrap; } .ns-status { margin-left: 0; } }
+@media (prefers-reduced-motion: reduce) { .ns-spinner { animation: none; } }

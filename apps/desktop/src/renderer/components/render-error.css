@@ -1,0 +1,94 @@
+/* 渲染错误边界的兜底面。只吃设计令牌；不写裸色值。
+   页面级（根）与内联级（设置分区 / 窗格）共用同一套排版，尺寸与边距按层级分档。 */
+.render-error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  color: hsl(var(--text-200));
+}
+.render-error.inline {
+  max-width: 860px;
+  margin: var(--space-md) auto;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-lg);
+  background: hsl(var(--bg-000));
+  box-shadow: var(--shadow-card);
+}
+.render-error.page {
+  min-height: 100vh;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  background: hsl(var(--bg-100));
+}
+.render-error.page .re-copy {
+  max-width: 560px;
+}
+.re-icon {
+  flex: none;
+  display: inline-flex;
+  color: hsl(var(--color-risk-ink));
+  padding-top: 1px;
+}
+.render-error.inline .re-copy { min-width: 0; }
+.re-title {
+  margin: 0 0 4px;
+  font-size: var(--fs-body-md);
+  font-weight: var(--fw-bold);
+  color: hsl(var(--text-000));
+}
+.render-error.page .re-title {
+  font-size: var(--fs-heading-lg);
+  margin-bottom: 8px;
+}
+.re-body {
+  margin: 0;
+  font-size: var(--fs-caption-md);
+  line-height: 1.7;
+  color: hsl(var(--text-200));
+}
+.render-error.page .re-body {
+  font-size: var(--fs-body-md);
+  color: hsl(var(--text-400));
+}
+.re-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-top: var(--space-sm);
+}
+/* mini-btn 的基础样式没声明布局；图标（lucide 的 SVG 是块级）会把文字挤到下一行，
+   在固定高度里被裁掉（真机截图：只剩一个图标方块）。兜底面自己把这一条补齐。 */
+.re-actions .mini-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.re-details {
+  margin-top: var(--space-xs);
+  font-size: var(--fs-caption-xs);
+  color: hsl(var(--text-400));
+}
+.re-details summary {
+  cursor: pointer;
+  width: fit-content;
+  padding: 2px 0;
+}
+.re-details summary:hover { color: hsl(var(--text-200)); }
+.re-pre {
+  margin: 6px 0 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: var(--space-sm);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  background: hsl(var(--bg-100));
+  color: hsl(var(--text-200));
+  font-family: var(--mono);
+  font-size: var(--fs-caption-xs);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

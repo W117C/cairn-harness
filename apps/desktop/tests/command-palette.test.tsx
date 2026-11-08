@@ -14,11 +14,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { Command } from "cmdk";
 import { PaletteContent } from "../src/renderer/components/CommandPalette";
 import { ShortcutsSection } from "../src/renderer/components/settings-sections";
-import { SHORTCUTS, keysOf } from "../src/renderer/shortcuts";
+import { SHORTCUT_GROUPS, SHORTCUTS, keysOf } from "../src/renderer/shortcuts";
 import type { WorkspaceSession } from "../src/renderer/sessions-view";
 
-const appSrc = readFileSync(fileURLToPath(new URL("../src/renderer/App.tsx", import.meta.url)), "utf8");
+const appSrc = readAppSurface();
 const sidebarSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/Sidebar.tsx", import.meta.url)), "utf8");
+const accountSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/AccountMenu.tsx", import.meta.url)), "utf8");
 const stringsSrc = readFileSync(fileURLToPath(new URL("../src/renderer/strings.ts", import.meta.url)), "utf8");
 const paletteSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/CommandPalette.tsx", import.meta.url)), "utf8");
 
@@ -29,9 +30,11 @@ const projects = [{ id: "p1", name: "cairn", path: "/tmp/cairn" }];
 const base = {
   sessions,
   projects,
+  activeSessionId: "s1",
   onOpenSession: () => undefined,
   onSwitchWorkspace: () => undefined,
   onOpenSettings: () => undefined,
+  onOpenDestination: () => undefined,
   onAction: () => undefined,
 };
 
@@ -50,13 +53,15 @@ describe("① PaletteContent SSR（命令面板内容面）", () => {
     expect(html).toContain("切换主题");
     expect(html).toContain("切换权限档");
     expect(html).toContain("开合检查器");
-    // 键位提示与 SHORTCUTS 同源（新任务 ⌘N / 打开文件夹 ⌘O / 开合侧栏 ⌘B / 开合检查器 ⌘⌥B）
+    // 键位提示与 SHORTCUTS 同源（新任务 ⌘N / 打开文件夹 ⌘O / 开合侧栏 ⌘B / 开合检查器 ⌘⌥I）
     expect(html).toContain("⌘N");
     expect(html).toContain("⌘O");
-    expect(html).toContain("⌘⌥B");
+    expect(html).toContain("⌘⌥I");
     // 2026-10-20：开合侧栏此前 shortcutId 误指 palette ⇒ 面板把 ⌘K（命令面板的键）
     // 显示成开合侧栏的快捷键，照着按会打开面板而不是收起侧栏。
     expect(html).toContain("开合侧栏");
+    // 2026-10-21 批 132：「查看日志」进操作组（错误条之外的可发现入口）。
+    expect(html).toContain("查看当前会话日志");
     expect(html).toContain("⌘B");
     expect(html).not.toContain("⌘K");
     // 会话与项目组：标题 / 项目名在场
@@ -64,38 +69,52 @@ describe("① PaletteContent SSR（命令面板内容面）", () => {
     expect(html).toContain("cairn");
     // 设置页目的地链路在（分区入口样例）
     expect(html).toContain("模型与 Provider");
+    // 一级页面目的地独立成组，不再冒充设置分区。
+    expect(html).toContain("页面");
+    expect(html).toContain("对话");
+    expect(html).toContain("插件");
+    expect(html).toContain("记忆");
+    expect(html).toContain("自动化");
   });
 
   it("无会话无项目：操作与设置组仍在（空数据不摆空组也不空屏）", () => {
     const html = renderToStaticMarkup(
       <Command>
-        <PaletteContent {...base} sessions={[]} projects={[]} />
+        <PaletteContent {...base} sessions={[]} projects={[]} activeSessionId={null} />
       </Command>,
     );
     expect(html).toContain("操作");
     expect(html).toContain("新任务");
     expect(html).not.toContain("改登录页");
     expect(html).not.toContain("cairn");
+    // 无活动会话：会话专属动作不摆（不再给必然报错的入口）
+    expect(html).not.toContain("复制整段对话");
+    expect(html).not.toContain("压缩当前会话历史");
+    expect(html).not.toContain("查看当前会话日志");
   });
 });
 
 describe("② ShortcutsSection（设置页「快捷键」区）", () => {
-  it("渲染 SHORTCUTS 全表：label+keys 都在 + 速查入口注（⌘/）", () => {
+  it("渲染完整分组表（2026-11-02：与 ⌘/ 弹层同源）：每组 keys+what 都在 + 入口注（⌘/）", () => {
     const html = renderToStaticMarkup(<ShortcutsSection />);
-    for (const s of SHORTCUTS) {
-      expect(html).toContain(s.keys);
-      expect(html).toContain(s.label);
+    // 设置页与弹层同一份 SHORTCUT_GROUPS；核心键的 keys 仍由 SHORTCUTS 承担（tooltip 取键）。
+    for (const g of SHORTCUT_GROUPS) {
+      expect(html).toContain(g.title);
+      for (const row of g.rows) expect(html).toContain(row.what);
     }
     expect(html).toContain("⌘/");
+    for (const s of SHORTCUTS) expect(html).toContain(s.keys);
   });
 });
 
 describe("③ 同源哨兵（tooltip 与表同源，防漂移）", () => {
-  it("Sidebar tooltip 键位从 SHORTCUTS 取（withKeys 三处 + keysOf 内取）", () => {
+  it("Sidebar 键位 tooltip 从 SHORTCUTS 取；会话搜索不冒充命令面板", () => {
     expect(sidebarSrc).toContain('from "../shortcuts"');
     expect(sidebarSrc).toContain('withKeys(STR.sidebar.newTaskTip, "new-session")');
-    expect(sidebarSrc).toContain('withKeys(STR.sidebar.searchTip, "palette")');
-    expect(sidebarSrc).toContain('withKeys(STR.footer.settingsTip, "settings")');
+    // 2026-11-03：账户菜单搬到全局轨底部（AccountMenu），键位同源判据跟着走。
+    expect(accountSrc).toContain('withKeys(STR.footer.settingsTip, "settings")');
+    expect(sidebarSrc).toContain('title={STR.sidebar.searchTip}');
+    expect(sidebarSrc).not.toContain('withKeys(STR.sidebar.searchTip, "palette")');
     expect(sidebarSrc).toContain("keysOf(id)");
   });
 
@@ -106,10 +125,13 @@ describe("③ 同源哨兵（tooltip 与表同源，防漂移）", () => {
     expect(missing).toEqual([]);
   });
 
-  it("strings.ts 三处 tooltip 不再手写键位（新任务 / 搜索会话与命令 / 设置）", () => {
+  it("strings.ts 三处 tooltip 不再手写键位，搜索只描述会话筛选", () => {
     expect(stringsSrc).not.toContain("新任务（⌘N）");
     expect(stringsSrc).not.toContain("搜索会话与命令（⌘K）");
+    expect(stringsSrc).not.toContain("搜索会话与命令");
     expect(stringsSrc).not.toContain("设置（⌘,）");
+    expect(stringsSrc).toContain('search: "搜索会话"');
+    expect(stringsSrc).toContain('searchTip: "搜索会话"');
   });
 });
 
@@ -122,6 +144,12 @@ describe("④ App 哨兵（键位 → 面板）", () => {
     expect(appSrc).toContain('case "Comma"');
   });
 
+  it("查看日志：命令面板动作接到 App 的日志查看器", () => {
+    expect(appSrc).toContain('case "view-log"');
+    expect(appSrc).toContain("<SessionLogDialog");
+    expect(appSrc).toContain("onViewLog");
+  });
+
   it("面板真开（替换 comingSoon）：setPaletteOpen(true) + 挂载 <CommandPalette>", () => {
     expect(appSrc).toContain("setPaletteOpen(true)");
     expect(appSrc).toContain("<CommandPalette");
@@ -130,7 +158,9 @@ describe("④ App 哨兵（键位 → 面板）", () => {
   it("面板打开时 App 全局快捷键让路，不穿透改背景状态", () => {
     // 2026-10-20：改钉「走共享门」（command-gate.ts 的 overlayBlocked）——
     // 行为判据在 tests/command-gate.test.ts（真 DOM）；这里钉 App 的快捷键路径接上了那道门。
-    expect(appSrc).toContain("overlayBlocked(readGateInput(");
+    // 2026-11-05：门输入改为先读一次（`const gate = …`），Esc 分支还要复用
+    // `escOwnsTarget`/`composerTarget`——仍是同一道门，只是不再内联嵌套。
+    expect(appSrc).toMatch(/const gate = readGateInput\([^;]*\);\s*if \(overlayBlocked\(gate\)\) return;/);
   });
 
   it("命令面板向辅助技术声明模态对话框，而不只是视觉遮罩", () => {
@@ -193,6 +223,143 @@ describe("⑥ 命令面板布局契约（真机量得的缺陷）", () => {
 describe("设置条目可被「设置」搜到", () => {
   it("每个设置条目 value 以「设置 」开头", () => {
     const src = readFileSync2(fileURLToPath2(new URL("../src/renderer/components/CommandPalette.tsx", import.meta.url)), "utf8");
-    expect(src).toContain('value={`设置 ${s.label}`}');
+    expect(src).toContain('value={`设置 ${s.label} ${SECTION_KEYWORDS[s.id]');
+  });
+});
+
+// 2026-10-21 命令面板 2.0：最近使用 / 上下文动作 / 图标与搜索同义词。
+import { pushRecentAction, visibleRecentActions, PALETTE_RECENT_LIMIT, uniqueSkills } from "../src/renderer/components/CommandPalette";
+import { readAppSurface } from "./helpers/app-surface";
+
+describe("命令面板 2.0", () => {
+  it("最近使用：去重置顶、上限 4 条", () => {
+    let list: ReturnType<typeof pushRecentAction> = [];
+    for (const id of ["new-session", "view-log", "toggle-theme", "compact", "new-session"] as const) {
+      list = pushRecentAction(list, id);
+    }
+    expect(list).toEqual(["new-session", "compact", "toggle-theme", "view-log"]);
+    expect(list).toHaveLength(PALETTE_RECENT_LIMIT);
+  });
+
+  it("主页过滤会话专属最近项；未知 id 丢弃", () => {
+    const raw = ["view-log", "compact", "toggle-theme", "bogus"] as unknown as Parameters<typeof visibleRecentActions>[0];
+    expect(visibleRecentActions(raw, false)).toEqual(["toggle-theme"]);
+    expect(visibleRecentActions(raw, true)).toEqual(["view-log", "compact", "toggle-theme"]);
+  });
+
+  it("有活动会话才摆会话动作（复制/查找/压缩/日志/导出）", () => {
+    const html = renderToStaticMarkup(<Command><PaletteContent {...base} /></Command>);
+    for (const label of ["复制整段对话", "在当前会话中查找", "压缩当前会话历史", "查看当前会话日志", "导出整段对话"]) {
+      expect(html).toContain(label);
+    }
+  });
+
+  it("每条动作都有图标容器（`.cp-ico`）；设置条目带同义词、项目/会话按 id/路径可搜", () => {
+    const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/CommandPalette.tsx", import.meta.url)), "utf8");
+    expect(src).toContain('className="cp-ico"');
+    expect(src).toContain("SECTION_KEYWORDS[s.id]");
+    expect(src).toContain("value={`${s.title ?? s.id} ${s.id}`}");
+    expect(src).toContain("value={`${p.name} ${p.path}`}");
+    expect(src).toContain("最近");
+  });
+
+  it("面板加宽以容纳图标：620px / 560px 高（仍在 80px 视口边距内）", () => {
+    const css = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
+    expect(css).toMatch(/\.cp-panel\s*{[^}]*width:\s*min\(620px, calc\(100vw - 80px\)\)/s);
+    expect(css).toMatch(/\.cp-panel\s*{[^}]*max-height:\s*min\(640px, 76vh\)/s);
+    expect(css).toMatch(/\.cp-ico\s*{[^}]*width:\s*16px/s);
+  });
+});
+
+// 2026-10-21 批 136：技能/插件命令进 ⌘K（与斜杠菜单同一条 skills 数据面）。
+describe("命令面板 · 技能组", () => {
+  const skills = [
+    { invoke: "/demo", description: "演示技能：把当前项目跑起来", trust: "pending" },
+    { invoke: "/plugin:cmd", description: "插件命令：生成变更摘要", trust: "trusted" },
+  ];
+
+  it("有技能才摆「技能」组；待批准出 chip，已信任不出", () => {
+    const html = renderToStaticMarkup(
+      <Command><PaletteContent {...base} skills={skills} onUseSkill={() => undefined} /></Command>,
+    );
+    expect(html).toContain("技能");
+    expect(html).toContain("/demo");
+    expect(html).toContain("演示技能");
+    expect(html).toContain("待批准");
+    expect(html).toContain("/plugin:cmd");
+    expect((html.match(/cp-trust/g) ?? []).length).toBeGreaterThanOrEqual(1);
+    // 已信任不出 chip（组内只有一个 cp-trust）
+    expect((html.match(/class="cp-trust"/g) ?? []).length).toBe(1);
+  });
+
+  it("无技能不摆空组（与 P3 同一纪律）", () => {
+    const html = renderToStaticMarkup(<Command><PaletteContent {...base} /></Command>);
+    expect(html).not.toContain(">技能<");
+  });
+
+  it("接线：App 传 skills/onUseSkill；选中只填入不发送；描述可搜", () => {
+    expect(appSrc).toContain("skills={skills}");
+    expect(appSrc).toContain("onUseSkill={(invoke) =>");
+    expect(appSrc).toContain("injectText(");
+    expect(paletteSrc).toContain("value={`技能 ${sk.invoke} ${sk.description}`}");
+    const css = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
+    expect(css).toMatch(/\.cp-stack\s*{[^}]*flex-direction:\s*column/s);
+    expect(css).toMatch(/\.cp-trust\s*{[^}]*border-radius:\s*var\(--radius-pill\)/s);
+  });
+});
+
+describe("技能去重（评审修）", () => {
+  it("同一 invoke 的插件技能/命令只保留首条（React key/选择歧义）", () => {
+    expect(uniqueSkills([
+      { invoke: "/p:demo", description: "skill", trust: "pending" },
+      { invoke: "/p:demo", description: "command", trust: "pending" },
+      { invoke: "/other", description: "x", trust: "trusted" },
+    ])).toEqual([
+      { invoke: "/p:demo", description: "skill", trust: "pending" },
+      { invoke: "/other", description: "x", trust: "trusted" },
+    ]);
+  });
+});
+
+describe("⑥ 面板键位提示全部走表（第 910 页：文件头自己写的契约）", () => {
+  it("cp-keys 里不许出现手写字面键位", () => {
+    // CommandPalette.tsx 第 3 行写着「键位提示从 SHORTCUTS 表取（keysOf——单一事实源，防漂移）」，
+    // 但单会话动作那行曾硬编码 <span className="cp-keys">F2</span> —— 违反的是自家契约。
+    const literals = [...paletteSrc.matchAll(/className="cp-keys">([^<{][^<]*)</g)].map((m) => m[1].trim());
+    expect(literals, "这些键位提示是手抄的，改绑定就会说谎：" + literals.join(" / ")).toEqual([]);
+  });
+
+  it("重命名动作的提示从表里取，且表里确有这一档", () => {
+    expect(paletteSrc).toContain('const renameKeys = keysOf("rename")');
+    const shortcuts = readFileSync(fileURLToPath(new URL("../src/renderer/shortcuts.ts", import.meta.url)), "utf8");
+    expect(shortcuts).toContain('{ id: "rename", keys: "F2", label: "重命名当前会话" }');
+    // 反向自证：不是把提示删掉了事——渲染分支仍在（值为 null 才不摆）。
+    expect(paletteSrc).toContain('{renameKeys !== null && <span className="cp-keys">{renameKeys}</span>}');
+  });
+});
+
+describe("⑦ 搜索行的焦点不再是「面板里嵌一个小框」（2026-11-03 业主截图）", () => {
+  const styles = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
+  const ruleOf = (sel: string): string => {
+    const at = styles.indexOf(sel);
+    if (at === -1) return "";
+    const open = styles.indexOf("{", at);
+    const close = styles.indexOf("}", open);
+    return styles.slice(open, close + 1);
+  };
+
+  it("输入框不吃全局焦点环（那个环带 radius-xs，会浮在搜索行中间）", () => {
+    // 全局 :focus-visible 用的是 box-shadow 三层环 + border-radius: var(--radius-xs)；
+    // 搜索行是面板的第一行，环一上来就是个浮在中间的蓝色圆角小框。
+    expect(ruleOf(".cp-input:focus-visible")).toContain("box-shadow: none");
+    expect(ruleOf(".cp-input:focus-visible")).toContain("outline: 0");
+  });
+
+  it("焦点改由搜索行自己的下缘亮起来（结构性提示，不是把焦点提示删掉）", () => {
+    // 反向自证：不是「看不见焦点也没关系」——焦点换成了这一行的下边框。
+    expect(ruleOf(".cp-search:focus-within")).toContain("border-bottom-color");
+    expect(ruleOf(".cp-search:focus-within")).toContain("var(--accent-control)");
+    // 搜索行本身仍带下边框（改的是颜色那一格，不是把边框去掉）。
+    expect(ruleOf(".cp-search {")).toContain("border-bottom: 1px solid var(--hairline)");
   });
 });

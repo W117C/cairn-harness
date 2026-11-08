@@ -307,7 +307,7 @@ export const apply_patch: Tool = {
         originalMode = opened.stat.mode & 0o777;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-          failures.push(`${f.path} 不可读：${error instanceof Error ? error.message : String(error)}`);
+          failures.push(`${f.path} 读取失败（不可读）：${error instanceof Error ? error.message : String(error)}`);
           continue;
         }
         raw = null;

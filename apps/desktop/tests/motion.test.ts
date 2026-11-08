@@ -12,7 +12,7 @@ describe("动效批", () => {
   });
   it("发送钮三态过渡与按压缩放", () => {
     expect(css).toMatch(/\.send-btn\s*{[^}]*transition:[^}]*background-color var\(--t-fast\)/s);
-    expect(css).toMatch(/\.send-btn:active\s*{[^}]*transform:\s*scale\(\.97\)/s);
+    expect(css).toMatch(/\.send-btn:active\s*{[^}]*transform:\s*scale\(var\(--press-btn\)\)/s);
   });
   it("队列条进场淡入", () => {
     expect(css).toMatch(/\.queue-strip\s*{[^}]*animation:\s*fade-in var\(--t-fast\)/s);

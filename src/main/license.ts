@@ -5,7 +5,8 @@
 // V1 收敛（任务书 §2.2 拍板）：验证失败/缺失 = **不阻断功能**——只在设置页与关于页显示状态；
 //   私钥不入仓库（.tmp 一次性工具签发测试 license），内置公钥为常量。
 // 可测性：publicKey / now 可注入（缺省 = 内置公钥 + 当前时间），headless 单测与 commercial-check 零文件依赖。
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
+import { writeFileAtomic } from "../atomic-write";
 import { createPublicKey, sign as edSign, verify as edVerify } from "node:crypto";
 
 /**
@@ -106,4 +107,57 @@ export async function verifyLicenseFile(
     return { state: "invalid", reason: "license.json 不是合法 JSON" };
   }
   return verifyLicense(raw, opts);
+}
+
+/** 导入结果：ok=false 时 `state` 仍可能带 invalid/expired 供界面解释；target 文件保持原样。 */
+export interface LicenseImportOutcome {
+  ok: boolean;
+  state: LicenseState;
+  error?: string;
+}
+
+/**
+ * 导入一份外部签发的 license（2026-10-30 · 第 805 页）。
+ *
+ * 安全口径：**先验签、后落盘**——签名/结构不合格的文件绝不覆盖现有 license（哪怕当前是 inactive）；
+ * 只有 valid / expired 会写入。大小上限 64 KiB（license 本体几百字节，超限即异常文件）。
+ * 写入走 writeFileAtomic：导入失败/断电不会留下半份 JSON 让下次启动读成 invalid。
+ */
+export async function importLicenseFile(
+  sourcePath: string,
+  targetPath: string,
+  opts: { publicKey?: string; now?: number; maxBytes?: number } = {},
+): Promise<LicenseImportOutcome> {
+  const maxBytes = opts.maxBytes ?? 64 * 1024;
+  let text: string;
+  try {
+    const info = await stat(sourcePath);
+    if (!info.isFile()) return { ok: false, state: { state: "invalid", reason: "不是文件" }, error: "选择的不是文件" };
+    if (info.size > maxBytes) {
+      return { ok: false, state: { state: "invalid", reason: "文件过大" }, error: `许可证文件过大（上限 ${String(maxBytes)} 字节）` };
+    }
+    text = await readFile(sourcePath, "utf8");
+  } catch (err) {
+    return { ok: false, state: { state: "inactive" }, error: `读取许可证失败：${err instanceof Error ? err.message : String(err)}` };
+  }
+  if (Buffer.byteLength(text, "utf8") > maxBytes) {
+    return { ok: false, state: { state: "invalid", reason: "文件过大" }, error: `许可证文件过大（上限 ${String(maxBytes)} 字节）` };
+  }
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text) as unknown;
+  } catch {
+    return { ok: false, state: { state: "invalid", reason: "license.json 不是合法 JSON" }, error: "不是合法 JSON" };
+  }
+  const state = verifyLicense(raw, {
+    ...(opts.publicKey !== undefined ? { publicKey: opts.publicKey } : {}),
+    ...(opts.now !== undefined ? { now: opts.now } : {}),
+  });
+  if (state.state === "invalid") return { ok: false, state, error: state.reason };
+  try {
+    await writeFileAtomic(targetPath, text);
+  } catch (err) {
+    return { ok: false, state, error: `写入许可证失败：${err instanceof Error ? err.message : String(err)}` };
+  }
+  return { ok: true, state };
 }

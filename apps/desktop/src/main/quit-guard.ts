@@ -8,6 +8,11 @@ export function quitWarningMessage(count: number): string {
   return `Cairn 正在 ${count} 个会话中工作。现在退出将中断该工作。`;
 }
 
+/** 重新启动前的告知文案（与退出同源，但说明「磁盘记录不会丢」）。 */
+export function restartWarningMessage(count: number): string {
+  return `Cairn 正在 ${count} 个会话中工作。重新启动会中断该工作；已写入磁盘的记录不会丢。`;
+}
+
 /** 退出前要不要问：有在跑会话才问（0 = 直接退，不打扰）。 */
 export function shouldWarnBeforeQuit(runningCount: number): boolean {
   return runningCount > 0;

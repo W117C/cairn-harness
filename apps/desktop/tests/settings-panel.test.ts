@@ -18,7 +18,7 @@ import { PROVIDER_KINDS } from "../../../src/main/settings";
 import { envKeyOf } from "../../../src/providers/env-keys";
 
 const panelSrc = readFileSync(new URL("../src/renderer/components/SettingsPanel.tsx", import.meta.url), "utf8");
-const appSrc = readFileSync(new URL("../src/renderer/App.tsx", import.meta.url), "utf8");
+const appSrc = readAppSurface();
 const modalSurfaceSrc = readFileSync(new URL("../src/renderer/components/ModalSurface.tsx", import.meta.url), "utf8");
 
 describe("providerStatusLabel（凭据段状态行，三态文案判卷）", () => {
@@ -53,18 +53,17 @@ describe("providerStatusLabel（凭据段状态行，三态文案判卷）", () 
   });
 });
 
-describe("panelPatch（patch 白名单：UI 只放行六键，不透传任意 patch）", () => {
-  it("白名单本身钉死为六键：provider/model/mode/theme/planRequiredByDefault/locale（locale 为实测缺陷修复）", () => {
-    expect([...PANEL_PATCH_KEYS]).toEqual(["provider", "model", "mode", "theme", "planRequiredByDefault", "locale"]);
+describe("panelPatch（patch 白名单：UI 只放行五键，不透传任意 patch）", () => {
+  it("白名单本身钉死为五键：provider/model/mode/theme/locale（locale 为实测缺陷修复；planRequiredByDefault 出列——方案模式 2026-11-03 起由 agent 自判）", () => {
+    expect([...PANEL_PATCH_KEYS]).toEqual(["provider", "model", "mode", "theme", "locale"]);
   });
 
-  it("六键齐传原样通过", () => {
+  it("五键齐传原样通过", () => {
     const patch = {
       provider: "glm",
       model: "glm-5.2",
       mode: "auto",
       theme: "dark",
-      planRequiredByDefault: true,
       locale: "en-US",
     };
     expect(panelPatch(patch)).toEqual(patch);
@@ -160,8 +159,22 @@ describe("searchCapabilityLabel（联网搜索状态行，三态文案判卷）"
 });
 
 describe("设置页模态边界（背景不可达 + 焦点环绕 + 关闭恢复）", () => {
-  it("设置页走统一 ModalSurface，由边界声明 aria-modal 并隔离背景", () => {
-    expect(panelSrc).toContain('<ModalSurface className="sp-page" label="设置" onClose={props.onClose}>');
+  it("布局按三档密度与搜索提示取事实源", () => {
+    expect(panelSrc).toContain("const SETTINGS_DENSITY: Readonly<Record<SectionId, \"single\" | \"table\" | \"compact\">>");
+    expect(panelSrc).toContain('data-density={SETTINGS_DENSITY[section]}');
+    expect(panelSrc).toContain("STR.design.settingsSearchHint");
+    const styles = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
+    expect(styles).toContain('.sp-body[data-density="compact"] > .ss-page');
+    expect(styles).toContain('.sp-search-hint');
+  });
+
+  it("设置页走统一 ModalSurface，由边界声明 aria-modal 并隔离背景（关闭前先提交焦点输入）", () => {
+    // 2026-11-05 初始焦点改落导航搜索框（业主截图「返回按钮蓝环」）：initialFocusRef 交给
+    // sp-nav-search，打开设置不再把焦点+蓝环摆在「返回」动作上；JSX 字面随 prop 追加更新。
+    expect(panelSrc).toContain('<ModalSurface className="sp-page" label={STR.settingsPanel.label} onClose={closeSettings} initialFocusRef={navSearchRef} onEscapeKeyDown={handleSettingsEscape}>');
+    // v33：关闭（Esc / 返回 / 遮罩）先把面板内焦点元素 blur ⇒ onBlur 保存，再卸载。
+    expect(panelSrc).toContain("const closeSettings = () => {");
+    expect(panelSrc).toMatch(/active\.closest\("\.sp-page"\) !== null\) active\.blur\(\);/);
     expect(modalSurfaceSrc).toContain('aria-modal="true"');
     expect(modalSurfaceSrc).toContain('setAttribute("inert", "")');
     expect(modalSurfaceSrc).toContain('setAttribute("aria-hidden", "true")');
@@ -178,7 +191,9 @@ describe("设置页模态边界（背景不可达 + 焦点环绕 + 关闭恢复�
   it("设置打开时 App 全局快捷键让路，Esc 不会被误判成停止运行", () => {
     // 2026-10-20：改钉「走共享门」（command-gate.ts 的 overlayBlocked）——
     // 行为判据在 tests/command-gate.test.ts（真 DOM）；这里钉 App 的快捷键路径接上了那道门。
-    expect(appSrc).toContain("overlayBlocked(readGateInput(");
+    // 2026-11-05：门输入改为先读一次（`const gate = …`），Esc 分支还要复用
+    // `escOwnsTarget`/`composerTarget`——仍是同一道门，只是不再内联嵌套。
+    expect(appSrc).toMatch(/const gate = readGateInput\([^;]*\);\s*if \(overlayBlocked\(gate\)\) return;/);
   });
 });
 
@@ -186,6 +201,7 @@ describe("设置页模态边界（背景不可达 + 焦点环绕 + 关闭恢复�
 // 2026-10-17：设置分区切换的进场（Claude 质感：短淡入，不弹跳）。
 import { readFileSync as readFs } from "node:fs";
 import { fileURLToPath as fileUrl } from "node:url";
+import { readAppSurface } from "./helpers/app-surface";
 describe("设置页切换动效", () => {
   it(".ss-page 首绘淡入（120–160ms 区间）", () => {
     const css = readFs(fileUrl(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");

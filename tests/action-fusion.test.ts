@@ -95,6 +95,34 @@ describe("C1 actual main runner integration (local scripts, no model calls)", ()
     await absent("never");
   });
 
+  // 回归：融合把 lint 红编码成工具 ok:false，但写已经落盘。收束闸若只看 ok 就会跳过
+  // auto-verify —— 这棵树明明被改过，却没有任何人补验。判据必须认 [fused_write:succeeded]。
+  it("lint failure still counts as a persisted write ⇒ auto-verify runs", async () => {
+    await config(["printf BAD; exit 7"]);
+    const events = await run([
+      writeCall(),
+      { type: "assistant_message", content: "收工" },
+    ], { autoVerify: true });
+    const [result] = toolResults(events);
+    expect(result?.ok).toBe(false);
+    expect(result?.output).toContain("[fused_write:succeeded]");
+    expect(result?.output).toContain("[fused_lint:failed]");
+    const auto = events.filter(e => e.type === "verify_result" && e.auto === true);
+    expect(auto.length, "lint 红之后的自动验证拍被跳过 ⇒ 落盘事实被 ok:false 吞了").toBe(1);
+  });
+
+  it("别的工具输出里出现同样字样，不算融合写盘（不让 auto-verify 被字符串骗）", async () => {
+    await config(["printf LINT"]);
+    const events = await run([
+      { type: "tool_call", id: "shell", name: "run_shell", args: { command: "printf '[fused_write:succeeded]'; exit 7" } },
+      { type: "assistant_message", content: "收工" },
+    ], { autoVerify: true });
+    const shell = toolResults(events).find((e) => e.callId === "shell");
+    expect(shell?.ok).toBe(false);
+    expect(shell?.output).toContain("[fused_write:succeeded]");
+    expect(events.filter((e) => e.type === "verify_result" && e.auto === true).length).toBe(0);
+  });
+
   it("failed or permission-denied writes never launch checks", async () => {
     await config(["printf RAN > lint-ran"]);
     const invalid = { ...writeCall(), args: { path: "target.txt", content: 42 } };
@@ -173,9 +201,16 @@ describe("C1 actual main runner integration (local scripts, no model calls)", ()
     let signal: AbortSignal | undefined;
     const shell = vi.spyOn(run_shell, "run").mockImplementation(async (args, ctx) => {
       signal = ctx.signal;
-      expect(String(args.command)).toContain("exec /usr/bin/sandbox-exec -p");
-      expect(String(args.command)).toContain(buildSandboxProfile(dir));
-      expect(String(args.command)).toContain("TMPDIR=");
+      // 2026-11-07 前台沙箱改走 backgroundShellLaunch 同形的启动描述面：命令串保持**模型原文**
+      // （宿主的 .agent 词法闸与重定向快照只看用户命令，包装串进闸会误伤路径含 .agent 段的工作区），
+      // profile / TMPDIR 移到 launch 参数与 env 上。本测钉的是同一语义：profile 在场、
+      // 独立 TMPDIR、shell 上下文随会话取消。
+      expect(String(args.command)).toBe("printf 'QUOTED'");
+      const launch = ctx.foregroundShellLaunch;
+      expect(launch, "前台沙箱必须以启动描述面到达 run_shell").toBeDefined();
+      expect(launch?.executable).toBe("/usr/bin/sandbox-exec");
+      expect(launch?.args.join(" ")).toContain(buildSandboxProfile(dir));
+      expect(launch?.env.TMPDIR ?? "").not.toBe("");
       abort.abort();
       expect(ctx.signal?.aborted).toBe(true);
       return { ok: false, output: "sandbox shell cancelled" };

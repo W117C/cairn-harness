@@ -18,6 +18,7 @@ const SIDE_EFFECT_DECISION: Record<PermissionMode, Decision> = {
   // guided 在粗档不逐笔问：它拆的正是这一条，「问不问」改由风险线判（autonomy 细档）。
   guided: "allow",
   auto: "allow",
+  "full-access": "allow",
 };
 
 // ---- M1c 自治等级：规则库 / 风险三通道 / 评估管线 / scope / 断路器（§11.7）----
@@ -102,11 +103,12 @@ function planBlocks(): boolean {
 
 // 原始判定：read_file 与三门工具（clarify/propose_plan/verify）不产生用户数据副作用，任何档都放行；
 //   write_file / run_shell 有副作用（逐档裁决见上面的 `SIDE_EFFECT_DECISION`，一行一档）：
-//     方案门：存在未批准 plan → 一律 deny（唯一有强制力的门，先批后写）
+//     方案门：存在未批准 plan → 一律 deny（完全允许档除外；先批后写对其它档仍有强制力）
 //     read-only：副作用工具一律 deny
 //     default  ：副作用工具 ask（交互模式下问人）
 //     guided   ：粗档不拦——它拆掉的正是"每写必问"，问不问由风险线判（autonomy 的 MODE_POLICY）
 //     auto     ：全放行
+//     full-access：全放行（2026-11-03 起连方案门也不拦；判卷面冻结闸在 autonomy 的 L0）
 export function checkPermission(mode: PermissionMode, tool: ToolName): Decision {
   // M7 曾在此加「未登记工具名 ⇒ deny」守卫，**已撤回**（理由留在原地，免得有人再加回来）：
   // ① 本函数在生产里只经 `gate()` 到达 loop.ts:401，而它的下一站（loop.ts:423）**已经**是那道闸——
@@ -119,8 +121,10 @@ export function checkPermission(mode: PermissionMode, tool: ToolName): Decision 
   // 真正的主刀因此在 `evaluate()`（autonomy.ts）：它答「这个名字危不危险」，
   // 不答「这次会话有没有这把工具」。两件事是两种问题，判据与数据源都不同。
   if (!isSideEffectTool(tool)) return "allow";
-  if (planBlocks()) return "deny";
-  // 未列出的档位值只可能来自未升级的持久化/外部构造者（类型内三档都已列表）。
+  // 完全允许档（2026-11-03 业主）：连方案门也不拦——用户要的是「什么都允许」。
+  // 判卷面冻结闸不在本函数（它要拿目标路径，住在 evaluate 的 L0），仍是这一档唯一的硬边界。
+  if (mode !== "full-access" && planBlocks()) return "deny";
+  // 未列出的档位值只可能来自未升级的持久化/外部构造者（类型内各档都已列表）。
   // 缺省取 **ask**：非交互时 `gate()` 会把它降成 deny（fail-closed），交互时至少还有人能看见。
   return SIDE_EFFECT_DECISION[mode] ?? "ask";
 }
@@ -161,6 +165,8 @@ export function rememberDecision(opts: {
    *  那正是那条复发闸要挡的写法。 */
   isPlanBlocked: () => boolean;
 }): RememberDecision {
+  // 完全允许档（2026-11-03）：记忆写入也免掉方案门与全局层点头——本档没有任何审批卡。
+  if (opts.mode === "full-access") return "allow";
   if (opts.isPlanBlocked()) return "deny";
   const decision = SIDE_EFFECT_DECISION[opts.mode] ?? "ask";
   if (decision === "deny") return "deny";

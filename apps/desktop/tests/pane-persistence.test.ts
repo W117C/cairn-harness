@@ -3,8 +3,9 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { readAppSurface } from "./helpers/app-surface";
 
-const app = readFileSync(fileURLToPath(new URL("../src/renderer/App.tsx", import.meta.url)), "utf8");
+const app = readAppSurface();
 
 describe("窗格布局持久化", () => {
   it("启动读 key，过滤未知 kind、去重", () => {
@@ -13,11 +14,12 @@ describe("窗格布局持久化", () => {
     expect(app).toContain("const seen = new Set<string>();");
   });
 
-  it("恢复窗格时检查器保持展开；无窗格才初始收起", () => {
-    expect(app).toContain("if (paneTabs.length > 0 || inspectorDefaultOpen) {");
+  it("无显式偏好时恢复窗格才展开；显式关闭优先于恢复内容", () => {
+    expect(app).toContain("initialInspectorOpen({");
+    expect(app).toContain("paneCount: paneTabs.length,");
     expect(app).toContain("setInspectorCollapsed(false);");
     expect(app).toContain("setInspectorCollapsed(true);");
-    expect(app).toContain("恢复了窗格（cairn.panes.v1）时保持展开");
+    expect(app).toContain("显式关掉后带窗格重载必须保持关");
   });
 
   it("写效应在初始化器之外（不是 try 里的 useHook），依赖 paneTabs", () => {

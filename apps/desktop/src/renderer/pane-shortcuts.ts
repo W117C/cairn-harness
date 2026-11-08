@@ -25,6 +25,7 @@ export const PANE_SHORTCUTS: readonly PaneShortcutSpec[] = [
   { kind: "browser", keys: "⌘⇧B", what: "浏览器窗格", code: "KeyB", mod: "cmd", shift: true, alt: false },
   { kind: "terminal", keys: "Ctrl+`", what: "终端窗格", code: "Backquote", mod: "ctrl", shift: false, alt: false },
   { kind: "sidechat", keys: "⌘;", what: "旁路对话窗格（不回写主会话）", code: "Semicolon", mod: "cmd", shift: false, alt: false },
+  { kind: "plugins", keys: "⌘⇧U", what: "插件窗格（技能/命令/信任）", code: "KeyU", mod: "cmd", shift: true, alt: false },
 ];
 
 export interface PaneKeyMods {

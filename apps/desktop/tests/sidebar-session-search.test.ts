@@ -3,7 +3,7 @@
 // 背景：filterSessions / matchSession / SESSION_FILTERS 从 P3-3 起就在 sessions-view.ts，
 // 也有判卷，但**一直没有调用方**——侧栏顶的放大镜实际打开的是 ⌘K 命令面板（整屏模态）。
 // 用户点「搜索」想收窄左侧列表，得到的却是盖住整个应用的弹窗，列表一屏没变。
-// 本轮把它接进 Sidebar：列表上方一行搜索框，命中走 filterSessions，归档组也参与。
+// 本轮把它接进 Sidebar：搜索框按需展开，命中走 filterSessions，归档组也参与。
 //
 // 判据分两层：① 纯函数行为（filterSessions 本身，防回归）；② 接线（Sidebar 真的调用它）。
 import { readFileSync } from "node:fs";
@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 import { filterSessions, matchSession } from "../src/renderer/sessions-view";
 
 const sidebarSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/Sidebar.tsx", import.meta.url)), "utf8");
+const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 
 const S = [
   { id: "s1", title: "修复登录页样式" },
@@ -50,14 +51,45 @@ describe("filterSessions 行为（侧栏搜索的地基）", () => {
 });
 
 describe("Sidebar 搜索接线", () => {
+  const filterMenuSrc = read("../src/renderer/components/SessionFilterMenu.tsx");
   it("真的调用 filterSessions（不再只是 re-export）", () => {
     expect(sidebarSrc).toContain("filterSessions(activeSessions");
     expect(sidebarSrc).toContain("filterSessions(archivedSessions");
   });
 
-  it("放大镜改为聚焦侧栏搜索框（此前打开的是 ⌘K 整屏模态）", () => {
-    expect(sidebarSrc).toContain("searchInputRef.current?.focus()");
-    // 反向：那个按钮不再直接打开命令面板
+  it("筛选状态进入两处 filterSessions（不再硬编码 all），其余四档有菜单入口", () => {
+    expect(sidebarSrc).toMatch(/filterSessions\(activeSessions, \{ search: searchTerm, filter, running: props\.running \}\)/);
+    expect(sidebarSrc).toMatch(/filterSessions\(archivedSessions, \{ search: searchTerm, filter, running: props\.running \}\)/);
+    expect(sidebarSrc).not.toContain('filter: "all", running: props.running');
+    // 2026-11-01：筛选菜单从 Radix DropdownMenu 换成仓库自己的 Popover 基座
+    // （Radix 2.2 的 popper 在侧栏里退成 position:static，浮层跑到左缘）。
+    expect(sidebarSrc).toContain("<SessionFilterMenu");
+    expect(filterMenuSrc).toContain('role="menuitemradio"');
+    expect(filterMenuSrc).toContain('role="menuitemcheckbox"');
+    expect(filterMenuSrc).toContain("filterCounts.map");
+    expect(sidebarSrc).toContain("changeFilter");
+    expect(sidebarSrc).toContain("SESSION_FILTER_KEY");
+    expect(filterMenuSrc).toContain("SESSION_FILTER_NOTE");
+    expect(filterMenuSrc).toContain("data-filter={f.id}");
+  });
+
+  it("筛选无命中给专属空态 + 清除筛选，不谎报「还没有任务」", () => {
+    expect(sidebarSrc).toContain('STR.filter.empty.replace("{label}", filterInfo.label)');
+    expect(sidebarSrc).toContain('changeFilter("all")');
+    expect(sidebarSrc).toContain('STR.filter.clear');
+    // 旧空态只在 all 下出现，避免「有任务但被筛掉」说成「一个都没有」
+    expect(sidebarSrc).toMatch(/!searchOpen && filter === "all"/);
+  });
+
+  it("放大镜按需展开紧凑搜索行，不常驻占位", () => {
+    expect(sidebarSrc).toContain("const [searchExpanded, setSearchExpanded]");
+    expect(sidebarSrc).toContain("data-sidebar-search-toggle");
+    expect(sidebarSrc).toContain("aria-expanded={showSearch}");
+    expect(sidebarSrc).toContain("{showSearch && (");
+    expect(sidebarSrc).toContain("setSearchExpanded(true)");
+    expect(sidebarSrc).toContain("title={STR.sidebar.searchTip}");
+    expect(sidebarSrc).not.toContain('withKeys(STR.sidebar.searchTip, "palette")');
+    // 反向：那个按钮仍只服务侧栏列表搜索，不直接打开命令面板
     expect(sidebarSrc).not.toContain("aria-label={STR.sidebar.search} title={withKeys(STR.sidebar.searchTip, \"palette\")} onClick={props.onOpenPalette}");
   });
 
@@ -66,15 +98,16 @@ describe("Sidebar 搜索接线", () => {
     expect(sidebarSrc).toContain("searchOpen &&");
   });
 
-  it("Esc 两级语义：有字先清空，空着才失焦", () => {
+  it("Esc 两级语义：有字先清空，空着才收起", () => {
     expect(sidebarSrc).toContain('if (e.key === "Escape")');
     expect(sidebarSrc).toContain('if (sessionQuery !== "") { setSessionQuery(""); return; }');
-    expect(sidebarSrc).toContain("searchInputRef.current?.blur()");
+    expect(sidebarSrc).toContain("setSearchExpanded(false)");
+    expect(sidebarSrc).toContain("searchToggleRef.current?.focus()");
   });
 
   it("⏎ 打开第一个命中（搜索的终点就是打开它）", () => {
-    expect(sidebarSrc).toContain('if (e.key === "Enter")');
+    expect(sidebarSrc).toContain('if (e.key === "Enter" && !isCompositionEnter(e, null))');
     expect(sidebarSrc).toContain("const first = visibleActive[0] ?? visibleArchived[0];");
-    expect(sidebarSrc).toContain("props.onOpen(first.id)");
+    expect(sidebarSrc).toContain("props.onOpen(first.id, first.workspace)");
   });
 });

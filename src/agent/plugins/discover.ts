@@ -6,27 +6,21 @@
 //   loose   = 显式给出的散装 skill 根（foo/SKILL.md 无 manifest = 独立 skill，免包装加载）
 // 会话启动静态扫描产「加载清单」（不新增事件类型）；单插件失败隔离：坏 manifest/坏 hook JSON
 // 只影响自身（errors 聚合 + 面板报错），其余照常。
-import { readdir, stat } from "node:fs/promises";
-import { join } from "node:path";
-import { parseFrontmatter, fmString } from "./frontmatter";
-import { pluginSnapshot } from "./snapshot";
+import { readFile, readdir, stat } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { readUserMcpConfig, virtualUserMcpPlugin, USER_MCP_PLUGIN_NAME, USER_HOOKS_PLUGIN_NAME } from "./user-mcp";
+import { pluginSnapshot, snapshotReadText, type PluginSnapshot } from "./snapshot";
+import {
+  dirExists, loadSkillEntry, readAgentEntries, readCommandEntries, readSkillEntries,
+} from "./content";
+import { scanForeignSource, type ForeignSource } from "./foreign";
 import { parsePluginManifest, parseHooksFile, detectJsEntry, PluginLoadError } from "./manifest";
-import { parseHookIf } from "./hooks";
+import { hookShapeRejection, parseHookIf } from "./hooks";
 import { LSP_SERVER_FIELDS } from "./types";
 import type {
-  DiscoveredPlugin, LooseSkill, PluginScanRoots, PluginScope, PluginsManifest, SkillEntry, PromptCommandEntry,
-  AgentRoleEntry, LoadedHookDef, HookEventName, HookMatcherDef, LspConfigFile, LspServerConfig,
+  DiscoveredPlugin, LooseSkill, PluginScanRoots, PluginScope, PluginsManifest,
+  LoadedHookDef, HookEventName, HookMatcherDef, LspConfigFile, LspServerConfig,
 } from "./types";
-import {
-  snapshotIsDirectory,
-  snapshotListDirectory,
-  snapshotReadText,
-  type PluginSnapshot,
-} from "./snapshot";
-
-async function dirExists(p: string): Promise<boolean> {
-  try { return (await stat(p)).isDirectory(); } catch { return false; }
-}
 
 /** 扫描一个作用域根：子目录要么是容器（有 .claude-plugin/plugin.json），要么是散装 skill（有 SKILL.md）。 */
 async function scanScopeRoot(
@@ -59,8 +53,9 @@ async function scanScopeRoot(
         const snapshot = await pluginSnapshot(abs);
         const { fp, bounded } = snapshot;
         if (bounded) warnings.push({ plugin: name, message: "内容指纹不完整（含软链 / 超出上限 / 有文件读不出）⇒ 不可批准（fail-closed）；请改成普通文件布局" });
-        const loaded = await loadPluginFromSnapshot(abs, scope, trustOf(abs, fp, bounded), snapshot);
-        plugins.push(loaded);
+        const plugin = await loadContainer(abs, scope, trustOf(abs, fp, bounded), snapshot);
+        plugin.fingerprint = { fp, bounded };
+        plugins.push(plugin);
       } catch (err) {
         // 单插件失败隔离：坏 manifest 只影响自身
         errors.push({ plugin: name, message: err instanceof Error ? err.message : String(err) });
@@ -74,20 +69,18 @@ async function scanScopeRoot(
       const { fp, bounded } = snapshot;
       if (bounded) warnings.push({ plugin: name, message: "内容指纹不完整（含软链 / 超出上限 / 有文件读不出）⇒ 不可批准（fail-closed）" });
       const entry = await loadSkillEntry(null, abs, name, abs, snapshot);
-      if (entry) loose.push({ name, root: abs, entry, trust: trustOf(abs, fp, bounded), scope });
+      if (entry) loose.push({ name, root: abs, entry, trust: trustOf(abs, fp, bounded), scope, fingerprint: { fp, bounded } });
     }
   }
   return { plugins, loose, errors, warnings };
 }
 
 /** 装载一个容器插件；任何结构性错误抛 PluginLoadError（由调用方隔离）。 */
-/** Load a container using only bytes already bound by pluginSnapshot. Exported
- * so the snapshot-to-loader boundary has a direct regression test. */
-export async function loadPluginFromSnapshot(
+async function loadContainer(
   root: string,
   scope: PluginScope,
   trust: "trusted" | "pending" | "declined",
-  snapshot: PluginSnapshot,
+  snapshot?: PluginSnapshot,
 ): Promise<DiscoveredPlugin> {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -100,57 +93,9 @@ export async function loadPluginFromSnapshot(
   warnings.push(...m.warnings);
   const pluginName = m.name;
 
-  // skills/<name>/SKILL.md
-  const skills: SkillEntry[] = [];
-  const skillsRoot = join(root, m.skillsDir);
-  if (snapshotIsDirectory(root, skillsRoot, snapshot)) {
-    for (const dir of snapshotListDirectory(root, skillsRoot, snapshot)) {
-      const abs = join(skillsRoot, dir);
-      if (!snapshotIsDirectory(root, abs, snapshot)) continue;
-      const entry = await loadSkillEntry(pluginName, root, dir, abs, snapshot);
-      if (entry) skills.push(entry);
-    }
-  }
-
-  // commands/*.md
-  const commands: PromptCommandEntry[] = [];
-  const commandsRoot = join(root, m.commandsDir);
-  if (snapshotIsDirectory(root, commandsRoot, snapshot)) {
-    for (const f of snapshotListDirectory(root, commandsRoot, snapshot)) {
-      if (!f.endsWith(".md")) continue;
-      const abs = join(commandsRoot, f);
-      const text = snapshotReadText(root, abs, snapshot) ?? "";
-      const { frontmatter, body } = parseFrontmatter(text);
-      commands.push({
-        plugin: pluginName,
-        name: f.slice(0, -3),
-        description: fmString(frontmatter, "description") ?? "",
-        path: abs,
-        frontmatter,
-        body,
-      });
-    }
-  }
-
-  // agents/*.md（解析并注册；采纳留 M3）
-  const agents: AgentRoleEntry[] = [];
-  const agentsRoot = join(root, m.agentsDir);
-  if (snapshotIsDirectory(root, agentsRoot, snapshot)) {
-    for (const f of snapshotListDirectory(root, agentsRoot, snapshot)) {
-      if (!f.endsWith(".md")) continue;
-      const abs = join(agentsRoot, f);
-      const text = snapshotReadText(root, abs, snapshot) ?? "";
-      const { frontmatter, body } = parseFrontmatter(text);
-      agents.push({
-        plugin: pluginName,
-        name: fmString(frontmatter, "name") ?? f.slice(0, -3),
-        description: fmString(frontmatter, "description") ?? "",
-        path: abs,
-        frontmatter,
-        body,
-      });
-    }
-  }
+  const skills = await readSkillEntries(root, m.skillsDir, pluginName, snapshot);
+  const commands = await readCommandEntries(root, m.commandsDir, pluginName, snapshot);
+  const agents = await readAgentEntries(root, m.agentsDir, pluginName, snapshot);
 
   // hooks
   const hooks: LoadedHookDef[] = [];
@@ -166,8 +111,8 @@ export async function loadPluginFromSnapshot(
   };
   if (m.hooksRef.kind === "path") {
     try {
-      const raw = snapshotReadText(root, m.hooksRef.path, snapshot);
-      if (raw === null) throw new PluginLoadError("hooks 文件不可完整读取: " + m.hooksRef.path);
+      const raw = snapshot ? snapshotReadText(root, m.hooksRef.path, snapshot) : await readFile(m.hooksRef.path, "utf8");
+      if (raw === null) throw new Error("hooks 文件不在快照内（装载面拒绝按路径重读）");
       collectHooks(parseHooksFile(raw, m.hooksRef.path));
     } catch (err) {
       // 坏 hook JSON 只影响自身（隔离），不炸整插件
@@ -181,8 +126,8 @@ export async function loadPluginFromSnapshot(
   const lsp: Record<string, LspServerConfig> = {};
   const lspPath = join(root, ".lsp.json");
   try {
-    const raw = snapshotReadText(root, lspPath, snapshot);
-    if (raw === null) throw new Error("not present");
+    const raw = snapshot ? snapshotReadText(root, lspPath, snapshot) : await readFile(lspPath, "utf8");
+    if (raw === null) throw new Error("lsp 文件不在快照内");
     const parsed = JSON.parse(raw) as LspConfigFile;
     for (const [id, cfg] of Object.entries(parsed.servers ?? {})) {
       if (cfg && typeof cfg === "object" && cfg.transport === "socket") {
@@ -194,14 +139,6 @@ export async function loadPluginFromSnapshot(
         // 过去这里手抄 8 个字符串，加字段的人只会改 interface，于是合法配置被报成「未知字段忽略」。
         const unknown = Object.keys(cfg).filter((k) => !LSP_SERVER_FIELDS.has(k));
         if (unknown.length > 0) warnings.push("lsp server " + id + ": 未知字段忽略（不阻断）: " + unknown.join(", "));
-        // §9.8 的字段里只有这几个是运行时真正兑现的；剩下的收下不兑现 = 本仓点名的"收下即丢"，
-        // 所以**当场说出来**：作者以为配了重启策略，实际崩了就崩了。
-        const unhonored = [
-          ...(cfg.startupTimeout !== undefined ? ["startupTimeout"] : []),
-          ...(cfg.restartOnCrash !== undefined ? ["restartOnCrash"] : []),
-          ...(cfg.diagnostics?.maxPerFile !== undefined ? ["diagnostics.maxPerFile"] : []),
-        ];
-        if (unhonored.length > 0) warnings.push("lsp server " + id + ": 这些字段本轮不生效（运行时未实现）: " + unhonored.join(", "));
         lsp[id] = cfg;
       } else {
         warnings.push("lsp server " + id + ": 缺少 command，忽略");
@@ -230,14 +167,36 @@ export async function loadPluginFromSnapshot(
   };
 }
 
-/** 事件表 → 扁平 hook 定义列表；${user_config.*} 禁入 shell-form hook（loaded=false，调用方产警告）。 */
-function flattenHooks(plugin: string, pluginRoot: string, hooks: Partial<Record<HookEventName, HookMatcherDef[]>>): LoadedHookDef[] {
+/** Load a container using only bytes already bound by pluginSnapshot. Exported
+ * so the snapshot-to-loader boundary has a direct regression test. */
+export async function loadPluginFromSnapshot(
+  root: string,
+  scope: PluginScope,
+  trust: "trusted" | "pending" | "declined",
+  snapshot: PluginSnapshot,
+): Promise<DiscoveredPlugin> {
+  return await loadContainer(root, scope, trust, snapshot);
+}
+
+/** Inspect one extracted plugin directory without activating it. */
+export async function inspectPluginDirectory(root: string): Promise<DiscoveredPlugin> {
+  return await loadContainer(root, "user", "pending", await pluginSnapshot(root));
+}
+
+/** 事件表 → 扁平 hook 定义列表。两类装载期即拒（loaded=false + 原因，调用方产警告）：
+ *  ① ${user_config.*} 禁入 shell-form hook；② handler 形态与类型不相称
+ *  （http 没 URL、mcp_tool 缺 server/tool、prompt/agent 尚未兑现）。
+ *  第 ② 类从前一路收到运行时才由 `run()` 记一行 skipped 警告——面板刷掉之后就没人知道自己写的钩子
+ *  从来没发过请求；形态错误在装载期说清，才是对作者负责。 */
+export function flattenHooks(plugin: string, pluginRoot: string, hooks: Partial<Record<HookEventName, HookMatcherDef[]>>): LoadedHookDef[] {
   const out: LoadedHookDef[] = [];
   for (const [event, matchers] of Object.entries(hooks)) {
     for (const m of matchers ?? []) {
       for (const handler of m.hooks ?? []) {
-        const shellForm = typeof handler.command === "string";
+        const shellForm = handler.type === "command" && typeof handler.command === "string";
         const banned = shellForm && (handler.command as string).includes("${user_config.");
+        const shape = hookShapeRejection(handler);
+        const reason = banned ? "${user_config.*} 禁入 shell-form hook" : shape;
         out.push({
           plugin,
           pluginRoot,
@@ -245,34 +204,13 @@ function flattenHooks(plugin: string, pluginRoot: string, hooks: Partial<Record<
           ...(m.matcher !== undefined ? { matcher: m.matcher } : {}),
           ...(m.if !== undefined ? { if: m.if } : {}),
           handler,
-          loaded: !banned,
+          loaded: reason === null,
+          ...(reason === null ? {} : { rejectReason: reason }),
         });
       }
     }
   }
   return out;
-}
-
-/** 装载一个 skill 条目（容器内或散装）；frontmatter name/description 缺省回退目录名。 */
-async function loadSkillEntry(
-  plugin: string | null,
-  root: string,
-  dirName: string,
-  dir: string,
-  snapshot: PluginSnapshot,
-): Promise<SkillEntry | null> {
-  const path = join(dir, "SKILL.md");
-  const text = snapshotReadText(root, path, snapshot);
-  if (text === null) return null;
-  const { frontmatter, body } = parseFrontmatter(text);
-  return {
-    plugin,
-    name: fmString(frontmatter, "name") ?? dirName,
-    description: fmString(frontmatter, "description") ?? "",
-    path,
-    frontmatter,
-    body,
-  };
 }
 
 export interface DiscoverOptions {
@@ -287,6 +225,14 @@ export interface DiscoverOptions {
   projectSkillsDir?: string;
   /** 散装 skill 根（目录下每个含 SKILL.md 的子目录 = 独立 skill）。 */
   looseRoots?: string[];
+  /** 外部声明式来源（opencode / pi）。缺省 = 不扫（装配面在 `PluginRuntime.load` 里给默认来源）。 */
+  foreignSources?: ForeignSource[];
+  /** 用户级 MCP 配置（<appData>/mcp.json，ZCode 独立管理对应面，2026-11-05）：给了就读取并
+   *  合成一支虚拟插件（user-mcp，user 作用域恒 trusted）；缺省 = 不读。 */
+  userMcpConfigPath?: string;
+  /** 用户级 hooks 配置（<appData>/hooks.json）：给了就读取并合成虚拟插件（user-hooks，
+   *  user 作用域恒 trusted，钩子跑在既有 HookEngine 上）；缺省 = 不读。 */
+  userHooksConfigPath?: string;
   /** 项目级插件信任决议源（缺省全部 pending）。H3-P5（E-10）：附带插件内容指纹（abs@fp 绑定）。
    *  审查 S1-7：第三参 bounded = 指纹是否被截断（超帽/超大/软链），由信任库编进条目键参与判定。 */
   trustStatus?: (absRoot: string, fingerprint: string, bounded: boolean) => "trusted" | "pending" | "declined";
@@ -306,6 +252,7 @@ export async function discoverPlugins(opts: DiscoverOptions): Promise<PluginsMan
     projectPluginsDir: opts.projectPluginsDir ? opts.projectPluginsDir : null,
     projectSkillsDir: opts.projectSkillsDir ? opts.projectSkillsDir : null,
     looseRoots: [...(opts.looseRoots ?? [])],
+    foreignSources: [...(opts.foreignSources ?? [])],
   };
 
   if (opts.userPluginsDir) {
@@ -331,6 +278,57 @@ export async function discoverPlugins(opts: DiscoverOptions): Promise<PluginsMan
     const r = await scanScopeRoot(root, "loose", () => "trusted");
     looseSkills.push(...r.loose);
     errors.push(...r.errors);
+  }
+  for (const source of opts.foreignSources ?? []) {
+    try {
+      const r = await scanForeignSource(source, trustOf);
+      if (r.plugin !== null) plugins.push(r.plugin);
+      errors.push(...r.errors);
+      warnings.push(...r.warnings);
+    } catch (err) {
+      // 单来源失败隔离（与容器插件同口径）：外部目录的 EACCES/ENOENT
+      // 只让这一支进 errors，不许把整份发现面（含容器插件/hook/MCP）一起打掉。
+      errors.push({
+        plugin: source.name,
+        message: "外部来源扫描失败（已隔离）：" + (err instanceof Error ? err.message : String(err)),
+      });
+    }
+  }
+  if (opts.userMcpConfigPath) {
+    // 用户级 MCP（<appData>/mcp.json）：单台失败隔离——坏一台进 errors，不拖垮其它 server，
+    // 更不许把整份发现面打掉。文件不存在 = 零服务器（合法）。
+    const r = await readUserMcpConfig(opts.userMcpConfigPath);
+    errors.push(...r.errors.map((message) => ({ plugin: USER_MCP_PLUGIN_NAME, message })));
+    warnings.push(...r.warnings.map((message) => ({ plugin: USER_MCP_PLUGIN_NAME, message })));
+    if (r.servers.length > 0) {
+      plugins.push(virtualUserMcpPlugin(dirname(opts.userMcpConfigPath), r.servers));
+    }
+  }
+  if (opts.userHooksConfigPath) {
+    // 用户级 hooks（<appData>/hooks.json）：同一道隔离口径。坏 JSON/坏结构 = 一句错误；
+    // 文件不存在 = 零钩子（合法）。拍平/拒载尺与插件 hooks 同一份（flattenHooks + hookShapeRejection）。
+    try {
+      const raw = await readFile(opts.userHooksConfigPath, "utf8");
+      const parsed = parseHooksFile(raw, opts.userHooksConfigPath);
+      const flat = flattenHooks(USER_HOOKS_PLUGIN_NAME, dirname(opts.userHooksConfigPath), parsed.hooks);
+      warnings.push(...parsed.warnings.map((message) => ({ plugin: USER_HOOKS_PLUGIN_NAME, message })));
+      if (flat.length > 0) {
+        const base = virtualUserMcpPlugin(dirname(opts.userHooksConfigPath), []);
+        plugins.push({
+          ...base,
+          name: USER_HOOKS_PLUGIN_NAME,
+          manifest: { name: USER_HOOKS_PLUGIN_NAME, hooks: parsed.hooks },
+          hooks: flat,
+        });
+      }
+    } catch (err) {
+      errors.push({
+        plugin: USER_HOOKS_PLUGIN_NAME,
+        message: err instanceof PluginLoadError
+          ? err.message
+          : "hooks.json 读不了：" + (err instanceof Error ? err.message : String(err)),
+      });
+    }
   }
 
   // 扁平化警告与 ${user_config.*} 违规提示

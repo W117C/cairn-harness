@@ -5,6 +5,7 @@
 //     窗格脚注写明；这是能力上多出来的，不是少了。
 //   · 模型解析走 core 的 sidechat 面（CAIRN_API_KEY→GLM / 演示脚本 / fail-closed）——不可用时
 //     原文展示错误，不假装能答。
+import { isCompositionEnter } from "../ime";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MessageCirclePlus, Send } from "lucide-react";
 import type { SidechatPanelSnapshot } from "../../../../../src/main/ipc-protocol";
@@ -155,7 +156,7 @@ export function SidechatPane(props: { sessionId: string | null }): React.JSX.Ele
               value={draft}
               disabled={busy}
               onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask(); } }}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !isCompositionEnter(e, null)) { e.preventDefault(); ask(); } }}
             />
             <button className="mini-btn primary" aria-label="发送旁路提问" disabled={busy || draft.trim() === ""} onClick={ask}><Send size={12} /></button>
           </div>

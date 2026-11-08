@@ -1,6 +1,6 @@
 {
   "name": "cairn-desktop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "main": "src/main/entry.cjs",
@@ -10,6 +10,10 @@
     "build:preload": "esbuild src/preload/index.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist-electron/preload.cjs",
     "build": "pnpm run build:preload && vite build && tsc -p tsconfig.json --noEmit",
     "smoke": "node scripts/smoke.mjs",
+    "smoke:layout": "electron scripts/layout-smoke.cjs",
+    "smoke:marketplace": "electron scripts/plugin-marketplace-smoke.cjs",
+    "smoke:performance": "electron scripts/performance-smoke.cjs",
+    "smoke:install": "node scripts/install-smoke.mjs",
     "preview:ui": "pnpm --dir preview dev",
     "preview:ui:build": "pnpm --dir preview build",
     "package": "node scripts/package.mjs",

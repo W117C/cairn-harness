@@ -29,13 +29,15 @@ import { runLoop, type LoopOptions } from "../src/agent/loop";
 
 const exec = promisify(execFile);
 const ORCH_SRC = readFileSync(fileURLToPath(new URL("../src/agent/orchestrator.ts", import.meta.url)), "utf8");
-/** 三缝拆分后 `hold: "budget"` 的落点在 orchestrator-budget.ts、链级两挡在 orchestrator-approvals.ts：
- *  这把尺数的是**盖字面章的那些落点**，不是某一个文件名——四处源码并成一份取料
- *  （否则「枚举里每一挡都有人盖」会误判成白写；worker-merge.ts 收据接线那格也在这份并料面上）。 */
+/** 三缝 + worker-finish/runtime 拆箱后，源码判卷读并料面：盖字面章的那些落点、
+ *  收尾窗口的等待方放行、worker 生命周期钩子与增量投影都可能在各自模块里。
+ *  这把尺数的是行为落点，不是某一个文件名（否则实现一搬家就误判成白写）。 */
 const ORCH_SRC_ALL = ORCH_SRC + "\n"
   + readFileSync(fileURLToPath(new URL("../src/agent/orchestrator-budget.ts", import.meta.url)), "utf8") + "\n"
   + readFileSync(fileURLToPath(new URL("../src/agent/orchestrator-approvals.ts", import.meta.url)), "utf8") + "\n"
-  + readFileSync(fileURLToPath(new URL("../src/agent/worker-merge.ts", import.meta.url)), "utf8");
+  + readFileSync(fileURLToPath(new URL("../src/agent/worker-merge.ts", import.meta.url)), "utf8") + "\n"
+  + readFileSync(fileURLToPath(new URL("../src/agent/worker-finish.ts", import.meta.url)), "utf8") + "\n"
+  + readFileSync(fileURLToPath(new URL("../src/agent/worker-runtime.ts", import.meta.url)), "utf8");
 
 let work = "";
 let repo = "";

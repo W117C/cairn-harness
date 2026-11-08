@@ -11,6 +11,7 @@ import { hasSessionWrites, workerVerificationEvidence } from "./worker-report";
 import { GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN, traceGoal } from "./goal-trace";
 import { bucketsSpendUsd, priceForModel, roundUsd } from "./orchestrator-join";
 import type { GoalSpec } from "./goal-trace";
+import { isRecord } from "../is-record";
 
 // GoalSpec 与轮次帽的定义挪进了 goal-trace.ts（渲染层要用同一份 reduce 与同一份数，但不能
 // import 本文件的 worker-report 链）。在这里再导出一次：既有 importer 与验收脚本零改动。
@@ -61,9 +62,6 @@ export const EVIDENCE_TEXT: Record<WorkerEvidence, string> = {
 };
 
 const usd = (n: number): string => "$" + n.toFixed(4);
-
-const isRecord = (v: unknown): v is Record<string, unknown> =>
-  typeof v === "object" && v !== null && !Array.isArray(v);
 
 /** 边界一律 fail-visible：形状不对就整条拒收并点名，不给"半个目标"跑起来的机会。 */
 export function parseGoalSpec(raw: unknown): GoalParseResult {
@@ -180,9 +178,9 @@ function budgetLine(spec: GoalSpec, spentUsd: number | null): string {
  *  「去拿证据」这一步（顶尖与普通差在能证明代码真的能跑）。 */
 const FOLLOW: Record<WorkerEvidence, string> = {
   verified: "上一轮验证已通过 ⇒ 这一轮只该收束，别再往目标里加东西",
-  stale: "验过之后又写了盘 ⇒ 那份绿证据已作废，本轮针对新改动重跑一次验证",
-  failed: "红字逐条已在上一轮上下文里，直接针对它继续，不要重述已经完成的部分",
-  absent: "这个目标至今没有任何验证记录 ⇒ 本轮先把验证跑起来拿到证据，别在没跑过测试的情况下继续加东西",
+  stale: "验过之后又写了盘 ⇒ 那份绿证据已作废，本轮针对新改动重跑一次验证，确保无次生破坏",
+  failed: "红字逐条已在上一轮上下文里，直接针对它继续：先定位根因假设，针对机理修复后重跑 verify，切忌盲目掩盖报错；不要重述已经完成的部分",
+  absent: "这个目标至今没有任何验证记录 ⇒ 本轮先把验证跑起来拿到基线证据，别在没跑过测试的情况下盲目加东西",
 };
 
 /** 每个续跑轮起点注入的块：目标 + 第几轮 + 上一轮证据态 + 预算口径 + 收束条件。

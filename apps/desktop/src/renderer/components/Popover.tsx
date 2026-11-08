@@ -7,7 +7,7 @@
 // ③ useMenuKeyboard——自绘菜单的 WAI-ARIA 方向键导航（↑↓ 环形 / Home / End），
 //    以及关闭后把焦点还给触发按钮（键盘用户 Esc 后不再掉到 body）。
 // 纪律：弹层开合状态仍归各消费组件（受控）；这里只提供基座与关闭监听，不持有状态。
-import { useCallback, useEffect, useRef, type HTMLAttributes, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
+import { useCallback,type HTMLAttributes,type KeyboardEvent as ReactKeyboardEvent,type ReactNode,type RefObject } from "react";
 import { menuNavIndex } from "./popover-keys";
 
 export function Popover(props: {
@@ -33,32 +33,7 @@ export function Popover(props: {
  *  点选时 mousedown 落在门户里，若照判 contains 会把宿主弹层一起关掉、点选落空。
  *  关闭后焦点归还（2026-10-18）：Esc / 键盘选中让焦点离开被卸载的菜单时回到打开前的元素；
  *  外点关闭不抢焦点（用户点哪儿焦点就该在哪儿）。 */
-export function usePopoverDismiss(open: boolean, close: () => void, ref: RefObject<HTMLElement | null>): void {
-  const returnTo = useRef<HTMLElement | null>(null);
-  useEffect(() => {
-    if (!open) return;
-    const active = document.activeElement;
-    returnTo.current = active instanceof HTMLElement ? active : null;
-    const onDoc = (e: MouseEvent): void => {
-      const target = e.target as Element | null;
-      if (target !== null && target.closest?.("[data-radix-popper-content-wrapper]") !== null) return;
-      if (ref.current !== null && !ref.current.contains(e.target as Node)) close();
-    };
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === "Escape") close();
-    };
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("keydown", onKey);
-      const prev = returnTo.current;
-      const cur = document.activeElement;
-      const lost = cur === null || cur === document.body || (ref.current !== null && ref.current.contains(cur));
-      if (lost && prev !== null && prev.isConnected) prev.focus();
-    };
-  }, [open, close, ref]);
-}
+export { usePopoverDismiss } from "../usePopoverDismiss";
 
 /** 自绘菜单的方向键导航（菜单按钮 + 菜单同一容器上挂 onKeyDown）：
  *  - 关着时 ↓/↑ 打开菜单并聚焦首/末项（菜单项在关态仍挂 DOM，等开态渲染后下一帧再聚焦）；

@@ -45,3 +45,67 @@ export function bodyLines(body: string): string[] {
     .map((line) => line.trimEnd())
     .filter((line) => line.trim() !== "");
 }
+
+import type { MemorySnapshot } from "../../../../src/main/ipc-protocol";
+
+/** 语义分组：从主题类型取中文组名；认不出的类型归「记忆」，不把机器值直接上屏。 */
+export type MemorySemanticGroup = "决策" | "架构" | "偏好" | "记忆";
+export function memorySemanticGroup(topic: { topic: string; type: string; body: string }): MemorySemanticGroup {
+  const haystack = `${topic.topic}\n${topic.type}`.toLowerCase();
+  if (/决策|decision/.test(haystack)) return "决策";
+  if (/架构|architecture/.test(haystack)) return "架构";
+  if (/偏好|preference/.test(haystack)) return "偏好";
+  return "记忆";
+}
+
+/** 按语义分组排序：先分组、层别保持稳定，再在各组内按时间/名称排序；不改动 live snapshot。 */
+export function memoryRows(snap: MemorySnapshot, query: string, filter: string, sortByName: boolean) {
+  const q = query.trim().toLowerCase();
+  const GROUP_ORDER: readonly MemorySemanticGroup[] = ["决策", "架构", "偏好", "记忆"];
+  return (["project", "global"] as const).flatMap((layer) => {
+    if (filter !== "all" && filter !== layer) return [];
+    return snap[layer].topics
+      .filter((t) => `${t.topic}\n${t.type}\n${t.body}`.toLowerCase().includes(q))
+      .map((topic) => ({ layer, topic }))
+      .sort((a, b) => {
+        const group = GROUP_ORDER.indexOf(memorySemanticGroup(a.topic)) - GROUP_ORDER.indexOf(memorySemanticGroup(b.topic));
+        if (group !== 0) return group;
+        const byName = a.topic.topic.localeCompare(b.topic.topic, "zh");
+        if (sortByName) return byName;
+        const aTime = Date.parse(a.topic.modified);
+        const bTime = Date.parse(b.topic.modified);
+        // Invalid dates stay visible at the end, without disturbing the valid dates.
+        return (Number.isNaN(bTime) ? -Infinity : bTime) - (Number.isNaN(aTime) ? -Infinity : aTime) || byName;
+      });
+  });
+}
+
+/** 记忆导出 Markdown：项目层/全局层分节，主题带类型、修改时间、大小与正文。 */
+export function memoryExportMarkdown(snap: MemorySnapshot, generatedAt = new Date().toISOString()): string {
+  const lines: string[] = [
+    "# Cairn 记忆导出",
+    "",
+    `生成时间：${generatedAt}`,
+    "",
+    `项目层：${snap.project.path}`,
+    `全局层：${snap.global.path}`,
+    "",
+  ];
+  const layer = (title: string, layerSnap: MemorySnapshot["project"]): void => {
+    lines.push(`## ${title}`, "");
+    if (layerSnap.index !== null && layerSnap.index.trim() !== "") {
+      lines.push("### 索引", "", layerSnap.index.trimEnd(), "");
+    }
+    if (layerSnap.topics.length === 0) {
+      lines.push("_本层暂无主题_", "");
+      return;
+    }
+    for (const topic of layerSnap.topics) {
+      lines.push(`### ${topic.topic}`, "", `- 类型：${topic.type}`, `- 修改：${topic.modified}`, `- 大小：${String(topic.bytes)} B`, "");
+      lines.push(topic.body.trim() === "" ? "_此主题暂无正文_" : topic.body.trimEnd(), "");
+    }
+  };
+  layer("项目层", snap.project);
+  layer("全局层", snap.global);
+  return lines.join("\n").trimEnd() + "\n";
+}

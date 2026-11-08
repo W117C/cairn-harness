@@ -6,6 +6,7 @@ import { readdir, rm } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { projectAgentPath } from "../app-data";
 import { writeFileAtomic } from "../atomic-write";
+import { processLiveness } from "../process-liveness";
 import { commandForms, invocations, normalizeCommandForMatch, tokenize, tokenSubsequenceStart } from "./command-shape";
 import { ALLOW_PAYLOAD, isShellFamily } from "./risk";
 
@@ -161,12 +162,7 @@ export function globalPermissionsPath(appDataDir?: string): string {
 function tempWriterMayBeRunning(suffix: string): boolean {
   const owner = /^(\d+)-/.exec(suffix);
   if (owner === null) return false;
-  try {
-    process.kill(Number(owner[1]), 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException)?.code !== "ESRCH";
-  }
+  return processLiveness(Number(owner[1])) !== "dead";
 }
 
 /** 原子写：临时文件 + rename；写前清理历史残留，跳过仍在运行或状态未知的写入进程。

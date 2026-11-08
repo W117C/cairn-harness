@@ -1,0 +1,23 @@
+import type { PermissionMode } from "../../../../src/main/ipc-protocol";
+import { STR } from "./strings";
+// 「下一档」循环的唯一实现住在核心档位表旁：renderer 这里只转出，不另抄顺序。
+export { nextPermissionMode } from "../../../../src/permissions/modes";
+
+/** 这次档位变更是否必须先确认：自动/完全允许是危险档，且只有「真的换过去」才问。 */
+export function permissionNeedsConfirm(current: PermissionMode, next: PermissionMode): boolean {
+  return next !== current && (next === "auto" || next === "full-access");
+}
+export const MODE_LABEL: Record<PermissionMode, { label: string; desc: string; warn?: boolean }> = {
+  "read-only": { label: STR.permissionModes.readOnly, desc: STR.permissionModes.readOnlyDesc },
+  default: { label: STR.permissionModes.default, desc: STR.permissionModes.defaultDesc },
+  // 2026-11-03：引导与自动合并成「智能审批」；guided 只作旧配置/旧事件的显示别名，
+  // 选择面不再出现（见 permissions/modes.ts 的 SELECTABLE_PERMISSION_MODES）。
+  guided: { label: STR.permissionModes.guided, desc: STR.permissionModes.guidedDesc },
+  // 「全部放行」是**名不副实**的旧文案：MODE_POLICY 里 auto 是 `writeAsk:false` 而
+  // `riskAskAt:"high"`（permissions/autonomy.ts:154）——它免的是"逐笔问写"这一层，
+  // 风险 ≥ high 的动作（沙箱降级时的写向、出网、critical）照样送审。
+  // 业主实测 2026-10-16 因此以为切换失效。文案改成它真的做的事。
+  auto: { label: STR.permissionModes.auto, desc: STR.permissionModes.autoDesc, warn: true },
+  // 完全允许（2026-11-03 业主）：除判卷面冻结闸外什么都不拦——本仓真正的最松档。
+  "full-access": { label: STR.permissionModes.fullAccess, desc: STR.permissionModes.fullAccessDesc, warn: true },
+};

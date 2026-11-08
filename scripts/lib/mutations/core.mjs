@@ -45,12 +45,7 @@ export const MUTATIONS = [
     src: "src/atomic-write.ts",
     test: "tests/secrets.test.ts",
     desc: "tmp+rename 退回裸 writeFile（写中途崩溃截断密文存储）",
-    apply: (s) => s
-      .replace("const tmp = tmpPathFor(path);", "const tmp = path;")
-      .replace(
-        "constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0)",
-        "constants.O_WRONLY | constants.O_CREAT",
-      ),
+    apply: (s) => s.replace("  const tmp = tmpPathFor(path);\n", "  const tmp = path;\n"),
     expectFail: "原子写：经 tmp→rename 落盘，成功后无 .tmp 残留",
   },
   {
@@ -78,7 +73,7 @@ export const MUTATIONS = [
     src: "src/permissions/index.ts",
     test: "tests/plan-gate.test.ts",
     desc: "判据算得出「该拦」却没人用它 ⇒ 唯一有强制力的门只剩一句话，auto 档照样落盘",
-    apply: (s) => s.replace("  if (planBlocks()) return \"deny\";", ""),
+    apply: (s) => s.replace('  if (mode !== "full-access" && planBlocks()) return "deny";', ""),
     expectFail: "①未批准：write_file/run_shell 一律 deny（连 auto 档也拦）；只读与门工具不拦",
   },
   {
@@ -162,6 +157,32 @@ export const MUTATIONS = [
     apply: (s) => s.replace("if (s.consecutiveAutoApprovals >= MAX_AUTO_APPROVALS) s.breakerTripped = true;", "if (false) s.breakerTripped = true;"),
     expectFail: "第 51 次降级：50 次 scope 自动放行后，下一次送审且直至会话重开",
   },
+  // ---- 「因」这一维（2026-10-22）：层 12 个、出口 17 处，同层几种因结构上分不开
+  // ⇒ 只钉层的判据看不见「因错而层对」。下面两条各守一个**今天才有**的因：
+  //   ① 取不出补丁目标时本该 fail-closed 拒绝（层不动、把 deny 降成 ask ⇒ 旧判据全绿）
+  //   ② 裸 allow 规则（「总是允许该工具」）不带走高风险路径（这一因此前零用例）
+  {
+    id: "gate-cause-failclosed-downgraded-to-ask",
+    src: "src/permissions/autonomy.ts",
+    test: "tests/gate-audit.test.ts",
+    desc: "判卷面取不出目标时把 fail-closed 拒绝降成「要人批」⇒「读不到目标」被读成「大概是安全的」",
+    apply: (s) => s.replace(
+      'verdict: "deny",\n        layer: "L0-hard",\n        reason:\n          `判卷面冻结闸没法判',
+      'verdict: "ask",\n        layer: "L0-hard",\n        reason:\n          `判卷面冻结闸没法判',
+    ),
+    expectFail: "判卷面取不出目标：认不出补丁写哪儿 ⇒ fail-closed 拒绝",
+  },
+  {
+    id: "gate-cause-bare-allow-walks-highrisk-path",
+    src: "src/permissions/autonomy.ts",
+    test: "tests/gate-audit.test.ts",
+    desc: "裸 allow 规则（「总是允许该工具」）带走高风险路径 ⇒ 一次普通 write_file 批准把 .env / .git/hooks 一起免批",
+    apply: (s) => s.replace(
+      'if (risk === "high" && chain.pattern === undefined && !isShellFamily(tool)',
+      'if (false && chain.pattern === undefined && !isShellFamily(tool)',
+    ),
+    expectFail: "裸 allow 规则不带走高风险路径（非 shell）",
+  },
   {
     id: "autonomy-network-once",
     src: "src/permissions/autonomy.ts",
@@ -218,7 +239,7 @@ export const MUTATIONS = [
     src: "src/events/types.ts",
     test: "tests/verify-skipped-third-outcome.test.ts",
     desc: "skipped 不进 ENV_VERIFY_CAUSE_SET ⇒ 下游（额度／证据／返修）仍把它当代码红：烧一次修复额度并注入没有红字的红",
-    apply: (s) => s.replace('"pkg-manager", "not-run", "skipped",', '"pkg-manager", "not-run",'),
+    apply: (s) => s.replace('"pkg-manager", "env-fs", "not-run", "skipped",', '"pkg-manager", "env-fs", "not-run",'),
     expectFail: "被拒那一拍不记 failed、不烧修复额度：执行器一次未叫、attempt 停在 1,1、goal 证据是 absent 不是 failed",
   },
   // ---- 缓存分块进事件流（444fdcd）----
@@ -235,7 +256,7 @@ export const MUTATIONS = [
     src: "src/providers/anthropic.ts",
     test: "tests/provider-cache-usage.test.ts",
     desc: "只认 message_delta 的缓存字段（对端在 message_start 起报、delta 不再回时，整次命中被判成零）",
-    apply: (s) => s.replace("        if (event.message?.usage?.cache_read_input_tokens !== undefined) cacheRead = event.message.usage.cache_read_input_tokens;\n        if (event.message?.usage?.cache_creation_input_tokens !== undefined) cacheWrite = event.message.usage.cache_creation_input_tokens;\n", ""),
+    apply: (s) => s.replace("          if (event.message?.usage?.cache_read_input_tokens !== undefined) cacheRead = event.message.usage.cache_read_input_tokens;\n          if (event.message?.usage?.cache_creation_input_tokens !== undefined) cacheWrite = event.message.usage.cache_creation_input_tokens;\n", ""),
     expectFail: "缓存量只出现在 message_start（delta 不回缓存字段）时同样要认",
   },
   {
@@ -243,7 +264,7 @@ export const MUTATIONS = [
     src: "src/providers/anthropic.ts",
     test: "tests/provider-cache-usage.test.ts",
     desc: "不认累计帧 message_delta 里的缓存字段（末帧才是权威累计值，漏读即分块恒缺）",
-    apply: (s) => s.replace("        if (event.usage?.cache_read_input_tokens !== undefined) cacheRead = event.usage.cache_read_input_tokens;\n        if (event.usage?.cache_creation_input_tokens !== undefined) cacheWrite = event.usage.cache_creation_input_tokens;\n", ""),
+    apply: (s) => s.replace("          if (event.usage?.cache_read_input_tokens !== undefined) cacheRead = event.usage.cache_read_input_tokens;\n          if (event.usage?.cache_creation_input_tokens !== undefined) cacheWrite = event.usage.cache_creation_input_tokens;\n", ""),
     expectFail: "缓存量只出现在 message_delta（累计帧）时也认，且不跨帧累加",
   },
   {
@@ -538,7 +559,7 @@ export const MUTATIONS = [
     src: "src/providers/anthropic.ts",
     test: "tests/turn-truncated.test.ts",
     desc: "Anthropic 这一路摘掉发射 ⇒ 它单独回到「缺失与正常不可分」",
-    apply: (s) => s.replace("    const stopMissing = turnStopMissingEvent(callId, stopReason, outputTokens);\n    if (stopMissing) yield stopMissing;\n", ""),
+    apply: (s) => s.replace("      const stopMissing = turnStopMissingEvent(callId, stopReason, outputTokens);\n      if (stopMissing) yield stopMissing;\n", ""),
     expectFail: "anthropic：流结束而 message_delta 没带 stop_reason ⇒ 落一条 turn_stop_missing",
   },
   {
@@ -546,7 +567,7 @@ export const MUTATIONS = [
     src: "src/providers/gemini.ts",
     test: "tests/turn-truncated.test.ts",
     desc: "Gemini 这一路摘掉发射 ⇒ 它单独回到「缺失与正常不可分」",
-    apply: (s) => s.replace("    const stopMissing = turnStopMissingEvent(callId, finishReason ?? blockReason, outputTokens);\n    if (stopMissing) yield stopMissing;\n", ""),
+    apply: (s) => s.replace("        const stopMissing = turnStopMissingEvent(callId, finishReason ?? blockReason, outputTokens);\n        if (stopMissing) yield stopMissing;\n", ""),
     expectFail: "gemini：流结束而 finishReason 缺席 ⇒ 落一条 turn_stop_missing",
   },
   {
@@ -851,7 +872,7 @@ export const MUTATIONS = [
     src: "src/events/types.ts",
     test: "tests/permission-mode-single-source.test.ts",
     desc: "events 那份抄本少一档 ⇒ 对账判卷若测不出来，「唯一事实源」就是假的：permissions 加了档、events/IPC/worker 侧仍按旧集走，且没人报错",
-    apply: (s) => s.replace('export const AGENT_PERMISSION_MODES = ["read-only", "default", "guided", "auto"] as const;', 'export const AGENT_PERMISSION_MODES = ["read-only", "default", "auto"] as const;'),
+    apply: (s) => s.replace('export const AGENT_PERMISSION_MODES = ["read-only", "default", "guided", "auto", "full-access"] as const;', 'export const AGENT_PERMISSION_MODES = ["read-only", "default", "guided", "auto"] as const;'),
     expectFail: "events 的抄本与 permissions 的事实源逐位相同（顺序=松紧序，clampTier 依赖它）",
   },
   {
@@ -919,7 +940,7 @@ export const MUTATIONS = [
   },
   {
     id: "worker-selfname-not-stamped",
-    src: "src/providers/registry.ts",
+    src: "src/providers/worker-adapters.ts",
     test: "tests/usage-attribution.test.ts",
     desc: "适配器不盖自述名 ⇒ 四支 provider 全落 harness 缺省档，而归因键与折价同一个变量，" +
       "所以两者一起偏、永不互相打脸（#22 的盲区形状）。盖章点必须在包装函数里，四支各写一遍＝第五族「只硬化一支」",
@@ -933,7 +954,7 @@ export const MUTATIONS = [
     desc: "从 ENV 集合里摘掉 not-run ⇒ 三处出口（修复额度／升档与 bandit／沉淀）同时开始记模型的账。" +
       "这一格名字叫 ENV 却进表，是因为消费者要的那句语义是「别照它改代码」，不是「是环境问题」——" +
       "集合是唯一事实源，写死的第三份表就是本仓点名的形状",
-    apply: (s) => s.replace("\"pkg-manager\", \"not-run\",", "\"pkg-manager\","),
+    apply: (s) => s.replace("\"pkg-manager\", \"env-fs\", \"not-run\",", "\"pkg-manager\", \"env-fs\","),
     expectFail: "六类不记在模型账上的成因",
   },
   {
@@ -963,7 +984,9 @@ export const MUTATIONS = [
       "这两档 `writeAsk: true` 永远走不到 ⇒ 出网在两档里变成无声放行。这条钉的是「分级本身就是判据」，" +
       "不是「有没有接权限层」——接了但分级错了，形状上与没接一模一样",
     apply: (s) => s.replace('return { level: "high", reason: "出网取内容（外部不可信输入，SSRF 面）" };', 'return { level: "medium", reason: "出网取内容（外部不可信输入，SSRF 面）" };'),
-    expectFail: "四档逐档 verdict=ask",
+    // 2026-11-03：用例标题随四档合并改写（完全允许档已免卡），针脚跟着改；变异的杀点仍是
+    // 「只读/默认两档不再出卡」——它们的 riskAskAt 是 high，medium 够不着。
+    expectFail: "只读/需要审批/引导/智能审批逐档 verdict=ask",
   },
   {
     id: "webfetch-network-scope-memory-dropped",
@@ -974,8 +997,8 @@ export const MUTATIONS = [
       "⇒「出网永不免批」退化成「出网点一次就永久免批」。**实测过这条洞是真的**：反向对照里把这一支翻成 false，" +
       "第二轮会话的审批次数读数是 0（一次都没问就直接出网了）。判卷是跨会话的——规则库在 runAgent 开头只 load 一次，" +
       "同一轮里测不出来（那样写是空绿，本轮踩过一次）",
-    // 针脚改指（2026-10-02 修）：`0b37ad2`（M3 加 web_search）把这一支**加宽**成两个名字同一条口径 ⇒
-    // 旧针脚（只 web_fetch）失针。改法逐字照旧（把整支翻成 false），只是针脚跟上新条件。
+    // 针脚改指（2026-11-06）：浏览器驾驶三件把 `browser_navigate` 也并入出网家族，
+    // 改法仍是把整支翻成 false；新名字不进针脚会让「点一次总是允许就永久出网」漏测。
     apply: (s) => s.replace('  if ((tool as string) === "web_fetch" || (tool as string) === "web_search") return true;', '  if ((tool as string) === "web_fetch" || (tool as string) === "web_search") return false;'),
     expectFail: "点了「总是允许」也不落永久规则",
   },
@@ -1111,7 +1134,7 @@ export const MUTATIONS = [
     src: "src/cli.ts",
     test: "tests/plugin-cli-face.test.ts",
     desc: "取值型旗标表漏了这两枚 ⇒ `--trust-plugin demo` 把 demo 读成任务描述，决议落错地方还报成功",
-    apply: (s) => s.replace(`    "--trust-plugin", "--decline-plugin",\n`, ""),
+    apply: (s) => s.replace(`  "--trust-plugin", "--decline-plugin",\n`, ""),
     expectFail: "批准后信任表里那条是「绝对路径@内容指纹」，再列一次就成了 trusted",
   },
   {

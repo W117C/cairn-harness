@@ -10,9 +10,10 @@ export const SUMMARY_TOKEN_CAP = 2_000;
 /** spawn_agent 的 mode 白名单：本轮只接入 read（§0 范围）。 */
 export const SPAWN_MODES: readonly string[] = ["read", "write", "pipeline", "supervise"];
 
-/** worker 工具表（read mode，§4.4.6）：read/grep/glob/LSP + 只读 bash（shell_ro）。
- *  **构造时即不含 spawn_agent 与任何写工具**（深度恒 1 的机制化，非运行时报错）。 */
-export const WORKER_TOOL_TABLE: readonly string[] = ["read_file", "grep", "glob", "lsp", "shell_ro"];
+/** worker 工具表（read mode，§4.4.6）：read/grep/glob/LSP + 只读 bash（shell_ro）+ 只读 git（git_read）。
+ *  **构造时即不含 spawn_agent 与任何写工具**（深度恒 1 的机制化，非运行时报错）。
+ *  2026-11-06 +git_read：worker 调查「上游改了什么」是高频地面化需求；零写权零 shell，与 shell_ro 同档。 */
+export const WORKER_TOOL_TABLE: readonly string[] = ["read_file", "grep", "glob", "lsp", "shell_ro", "git_read"];
 /** worker 工具表禁入名单（验收断言面：深度闸 + 写闸 + M4a automation_*——定时任务里再嵌套定时 = 配置面失控，§12.2.5）。 */
 export const WORKER_FORBIDDEN_TOOLS: readonly string[] = [
   "spawn_agent", "write_file", "edit_file", "run_shell", "clarify", "propose_plan", "verify", "remember",
@@ -30,7 +31,7 @@ export const WORKER_FORBIDDEN_TOOLS: readonly string[] = [
  *  remember（记忆恒指主 checkout，任务书裁决 2）。**无 spawn_agent / 无 run_shell / 无任何 merge/commit
  *  能力**——合并唯一出口 = git 面板（§4.3），agent 无合并权。 */
 export const WRITE_WORKER_TOOL_TABLE: readonly string[] = [
-  "read_file", "grep", "glob", "lsp", "write_file", "edit_file", "shell_rw", "remember",
+  "read_file", "grep", "glob", "lsp", "write_file", "edit_file", "shell_rw", "remember", "git_read",
 ];
 /** write mode 禁入名单（验收断言面：深度闸 + 合并权闸 + M4a automation_*）。 */
 export const WRITE_WORKER_FORBIDDEN_TOOLS: readonly string[] = [

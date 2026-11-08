@@ -20,7 +20,7 @@ import { FAILURE_TAIL_LINES, failureFooter, writeFailureLog } from "./lib/gate-f
 // 跑一条命令 + 超时终止阶梯（同族：判据在 ./lib/gate-runner.ts 与 ./lib/gate-kill.ts，那边可单测；
 // 本文件只组命令）。旧实现把 spawn 与「超时直接整组 SIGKILL」写在这里，测不到也换不掉。
 import { gateTimeoutOf, runCommand, type GateResult } from "./lib/gate-runner";
-import { checkGateManifest, EXEMPT_SCRIPTS, GATES, gateCommand } from "./gate-manifest";
+import { checkGateManifest, EXEMPT_SCRIPTS, GATES, PUBLIC_GATES, gateCommand } from "./gate-manifest";
 // 耗时账本（同族：判据在 ./facts.ts，那边可单测；本文件只负责「跑完顺手记一笔」）。
 import { appendRun, currentHost, type GateRun } from "./facts";
 
@@ -29,7 +29,7 @@ import { appendRun, currentHost, type GateRun } from "./facts";
 export { countUnverified, scanAssertionHealth, scanDisjunctions };
 export type { ScanHit };
 // 清单/漂移护栏同族：清单抽到 ./gate-manifest.ts，此处再导出，对外接口不变。
-export { GATES, checkGateManifest, EXEMPT_SCRIPTS };
+export { GATES, PUBLIC_GATES, checkGateManifest, EXEMPT_SCRIPTS };
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -96,8 +96,11 @@ function runGate(name: string, opts: { direct: boolean; scripts: Record<string, 
 }
 
 async function main(): Promise<void> {
+  const publicOnly = process.argv.includes("--public");
   const onlyArg = process.argv.find((a) => a.startsWith("--only="));
-  const only = onlyArg ? new Set(onlyArg.slice("--only=".length).split(",").map((s) => s.trim())) : null;
+  const only = publicOnly
+    ? new Set(PUBLIC_GATES)
+    : onlyArg ? new Set(onlyArg.slice("--only=".length).split(",").map((s) => s.trim())) : null;
   const noScan = process.argv.includes("--no-scan");
   /** H-2：严格模式——未证项直接判红（CI / 有凭据环境用）。 */
   const strictUnverified = process.argv.includes("--strict-unverified") || process.env.DSH_STRICT_UNVERIFIED === "1";

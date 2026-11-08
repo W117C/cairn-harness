@@ -1,119 +1,270 @@
-// Cairn 桌面打包（2026-10-06 接管笔）：把「零打包 + tsx 直跑 TS 源」的运行架构**整体装箱**，
-// 而不是把 core 链 esbuild 进 bundle——后者会把 agent-runner 的 ROOT 漂到 bundle 目录，
-// fixtures/相对语义全部失真（entry.cjs 头注立的案）。装箱后相对布局原样保真：
-//   Cairn.app/Contents/Resources/app/  ← 仓库布局（package.json + src/ + apps/desktop/ + fixtures/）
-//   Cairn.app/Contents/Resources/app/node_modules/  ← 运行期真依赖（npm 装出 closure，非 pnpm 符号链接）
-// main 入口 = Resources/app/apps/desktop/src/main/entry.cjs（Electron 从 Resources/app/package.json
-// 的 "main" 解析），tsx 的 resolve({paths:[repoRoot]}) 落在 Resources/app ✓。
-//
-// 为什么不用 electron-builder：pnpm 工作区 + 根级 TS 源布局不在它的收集模型里，配置面比这百来行
-// shell 逻辑更脆；本脚本只用 macOS 自带工具（PlistBuddy / codesign / hdiutil）+ npm（装运行期
-// closure），**零新增依赖**。
-//
-// 产物：release/Cairn.app（可直接双击；arm64 上必须 ad-hoc 签名——改过 bundle 的原件签名已失效，
-// 不重签会被 SIGKILL）与 release/Cairn.dmg（hdiutil；未公证，首次打开右键 → 打开，或 xattr -cr）。
-// 验收：CAIRN_SMOKE=1 跑打包后的二进制走完真窗口冒烟（与开发态同一份判据，见 main/index.ts）。
+// Keep the source layout intact: the core's import.meta/fixture paths must survive packaging.
+// pnpm deploy supplies a locked, isolated production dependency tree; no second npm resolution.
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, sep } from "node:path";
+import { createHash } from "node:crypto";
+import { createReadStream, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const desktopDir = dirname(dirname(fileURLToPath(import.meta.url))); // apps/desktop
-const repoRoot = join(desktopDir, "..", "..");
-const releaseDir = join(desktopDir, "release");
-// electron 是 cairn-desktop 的 devDep ⇒ 二进制在本包 node_modules（pnpm 符号链接已由 cpSync 解引用）；
-// 根 node_modules 留作回退（有人把它提到根时仍然能跑）。
-const electronDist = [join(desktopDir, "node_modules", "electron", "dist", "Electron.app"), join(repoRoot, "node_modules", "electron", "dist", "Electron.app")]
-  .find((p) => existsSync(p));
+const desktopDir = dirname(dirname(fileURLToPath(import.meta.url)));
+const repoRoot = resolve(desktopDir, "..", "..");
 
-function run(cmd, args, opts = {}) {
-  const r = spawnSync(cmd, args, { stdio: "inherit", ...opts });
-  if (r.status !== 0) {
-    console.error(`[package] FAIL: ${cmd} ${args.join(" ")} 退出码 ${String(r.status)}`);
-    process.exit(1);
+export function makeRuntimePackage(source) {
+  return {
+    // This name also identifies Cairn's safeStorage keychain entry.
+    name: "cairn",
+    version: source.version,
+    type: source.type,
+    private: true,
+    main: "apps/desktop/src/main/entry.cjs",
+    dependencies: { ...source.dependencies },
+  };
+}
+
+export function readSourceProvenance(root) {
+  const git = (args) => {
+    const result = spawnSync("git", ["-C", root, ...args], { encoding: "utf8" });
+    if (result.error || result.signal || result.status !== 0) throw new Error("无法读取构建来源：需要可读的 Git 工作树");
+    return result.stdout.trim();
+  };
+  return {
+    sourceCommit: git(["rev-parse", "--verify", "HEAD"]),
+    sourceDirty: git(["status", "--porcelain", "--untracked-files=normal"]) !== "",
+  };
+}
+
+export function preparePackageStaging(root, out) {
+  const sourceProvenance = readSourceProvenance(root);
+  mkdirSync(dirname(out), { recursive: true });
+  return { sourceProvenance, staging: mkdtempSync(join(dirname(out), ".cairn-package-")) };
+}
+
+export function codeSigningTargets(appDir) {
+  const targets = [];
+  const visit = directory => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue; // Framework aliases must not be traversed twice.
+      const path = join(directory, entry.name);
+      visit(path);
+      if (/\.(app|framework|xpc)$/.test(entry.name)) targets.push(path);
+    }
+  };
+  const frameworks = join(appDir, "Contents/Frameworks");
+  if (existsSync(frameworks)) visit(frameworks);
+  return [...targets, appDir];
+}
+
+// Ad-hoc signing changes the CDHash on every build; macOS then blocks the first keychain
+// lookup on the ACL prompt. The smoke isolates that with Chromium's in-memory keychain, so
+// the packaged process still exercises safeStorage without depending on a human to approve.
+export const PACKAGED_SMOKE_ARGS = ["--use-mock-keychain"];
+
+export function packagedSmokePassed(result) {
+  return result.status === 0 && !result.error && !result.signal
+    && /^\[cairn-smoke\] PASS in \d+ ms\r?$/m.test(result.stdout ?? "");
+}
+
+async function sha256(path) {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(path)) hash.update(chunk);
+  return hash.digest("hex");
+}
+
+/** 发行清单：把「这份归档是什么、由谁构建、依赖锁是哪一份」写成可核对的单一文件。 */
+export function buildReleaseManifest(input) {
+  return {
+    schemaVersion: 1,
+    version: input.version,
+    buildHost: { platform: input.platform, arch: input.arch },
+    electron: input.electronVersion,
+    signing: "ad-hoc",
+    notarized: false,
+    archive: { name: input.archiveName, sha256: input.archiveSha256, bytes: input.archiveBytes },
+    runtimeLockSha256: input.dependencyLockSha256,
+    sourceCommit: input.sourceCommit,
+    sourceDirty: input.sourceDirty,
+  };
+}
+
+export function checksumLines(entries) {
+  return entries.map((entry) => `${entry.sha256}  ${entry.name}\n`).join("");
+}
+
+export function pruneRuntimeState(root, allowedFixturePaths) {
+  const visit = (directory, inAgent = false) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      const rel = relative(root, path).split(sep).join("/");
+      if ([".mimosa", ".git", ".DS_Store", "node_modules"].includes(entry.name)
+        || (entry.name === ".agent" && (!rel.startsWith("fixtures/") || entry.isSymbolicLink()))) {
+        rmSync(path, { recursive: true, force: true });
+      } else if (entry.isDirectory()) {
+        visit(path, inAgent || entry.name === ".agent");
+        if ((inAgent || entry.name === ".agent") && readdirSync(path).length === 0) rmSync(path, { recursive: true });
+      } else if (inAgent && (!allowedFixturePaths.has(rel) || entry.isSymbolicLink())) {
+        rmSync(path, { force: true });
+      }
+    }
+  };
+  for (const payload of ["src", "fixtures", "apps/desktop/src"]) {
+    const path = join(root, payload);
+    if (existsSync(path)) visit(path);
   }
 }
 
-if (!existsSync(electronDist)) {
-  console.error("[package] FAIL: 未找到 Electron 运行时（先 pnpm install）：", electronDist);
-  process.exit(1);
+function run(command, args, options = {}) {
+  const result = spawnSync(command, args, { stdio: "inherit", ...options });
+  if (result.error || result.signal || result.status !== 0) {
+    if (result.stdout) process.stdout.write(result.stdout);
+    if (result.stderr) process.stderr.write(result.stderr);
+    throw new Error(`${command} 失败：${result.error?.message ?? result.signal ?? result.status}`);
+  }
+  return result;
 }
 
-// ① 构建：preload（esbuild）+ 渲染包（vite）。main 保持 TS 源——tsx 在包内直跑（见文件头）。
-run("pnpm", ["--filter", "cairn-desktop", "build:preload"], { cwd: repoRoot });
-run("pnpm", ["--filter", "cairn-desktop", "exec", "vite", "build"], { cwd: repoRoot });
-
-// ② 组壳：Electron.app → Cairn.app；主执行体与 Info.plist 同步改名（辅助进程保持原名——
-//    那是签名一致性的事，本地 ad-hoc 运行不依赖它）。
-//    ⚠️ 壳拷贝必须用 ditto（或 BSD cp -R），**不能用 node cpSync**：后者会把 framework 的相对
-//    符号链接（Versions/Current → A）改写成指向 pnpm store 的**绝对路径**（实测 2026-10-06）——
-//    装进 .app 后子进程/签名顺链摸回 node_modules，GPU 子进程 SIGTRAP、codesign verify 直接
-//    「No such file or directory」。
-rmSync(releaseDir, { recursive: true, force: true });
-mkdirSync(releaseDir, { recursive: true });
-const appDir = join(releaseDir, "Cairn.app");
-run("ditto", [electronDist, appDir]);
-const macDir = join(appDir, "Contents", "MacOS");
-renameSync(join(macDir, "Electron"), join(macDir, "Cairn"));
-const plist = join(appDir, "Contents", "Info.plist");
-// Set 在键缺席时退出非零 ⇒ Set 失败改 Add。（二分实测 2026-10-06：改名+这三项 plist+ad-hoc 重签
-// 组合冒烟 PASS；⚠️ 不要把 framework 的 icu/pak/快照「下放」到 app 层 Resources——打包态加载器
-// 会优先吃 app 层那份**不完整**集（arm64 后缀快照等），反而炸 ICU/GPU——框架内层自己的资源是全的。）
-for (const [key, value] of [
-  ["CFBundleExecutable", "Cairn"],
-  ["CFBundleName", "Cairn"],
-  ["CFBundleIdentifier", "com.cairn.desktop"],
-]) {
-  const set = spawnSync("/usr/libexec/PlistBuddy", ["-c", `Set :${key} ${value}`, plist]);
-  if (set.status !== 0) run("/usr/libexec/PlistBuddy", ["-c", `Add :${key} string ${value}`, plist]);
+function occupied(path) {
+  try { lstatSync(path); return true; }
+  catch (error) { if (error.code === "ENOENT") return false; throw error; }
 }
 
-// ③ 运行期布局：Resources/app = 仓库布局的运行期子集。
-//    package.json 的 "main" 指 entry.cjs；dependencies 带上根包全部生产依赖 + tsx（loader 本体，
-//    devDep 但运行期要用）——④ 的 npm install 按这份清单装出真实文件的完整 closure。
-const appRes = join(appDir, "Contents", "Resources", "app");
-mkdirSync(appRes, { recursive: true });
-const appPkg = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8"));
-const runtimePkg = {
-  // name 会成为 safeStorage 的钥匙串条目名（「<name> Safe Storage」）——用 cairn，
-  // 用户在钥匙串/系统弹窗里看到的就是 Cairn，不是内部包名（2026-10-06 实测弹窗 "cairn-desktop-runtime Safe Storage"）。
-  name: "cairn",
-  private: true,
-  main: "apps/desktop/src/main/entry.cjs",
-  dependencies: { ...appPkg.dependencies, tsx: appPkg.devDependencies.tsx },
-};
-writeFileSync(join(appRes, "package.json"), JSON.stringify(runtimePkg, null, 2) + "\n");
-for (const rel of ["src", "tsconfig.json"]) {
-  const from = join(repoRoot, rel);
-  if (existsSync(from)) cpSync(from, join(appRes, rel), { recursive: true });
+function optionsOf(args) {
+  const options = { out: join(desktopDir, "release"), archive: true, help: false };
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--help" || args[i] === "-h") options.help = true;
+    else if (args[i] === "--no-archive") options.archive = false;
+    else if (args[i] === "--out" && args[i + 1] && !args[i + 1].startsWith("--")) options.out = resolve(args[++i]);
+    else throw new Error(`未知或缺值的打包参数：${args[i]}`);
+  }
+  return options;
 }
-// fixtures 保留（core 的 ROOT 相对语义可能引用），但要滤掉运行残留：todo-app 靶子的 node_modules
-// 里躺着指向 /tmp bench worktree 的**悬空符号链接**（实测 2026-10-06）——进 bundle 会让
-// codesign --verify 报「No such file or directory」（封印面有悬空路径）。.agent/ 同为运行产物。
-cpSync(join(repoRoot, "fixtures"), join(appRes, "fixtures"), {
-  recursive: true,
-  filter: (src) => !src.includes("node_modules") && !src.includes(`${sep}.agent`) && !src.endsWith(".agent"),
-});
-cpSync(join(repoRoot, "apps", "desktop", "src"), join(appRes, "apps", "desktop", "src"), { recursive: true });
-cpSync(join(repoRoot, "apps", "desktop", "dist"), join(appRes, "apps", "desktop", "dist"), { recursive: true });
-cpSync(join(repoRoot, "apps", "desktop", "dist-electron"), join(appRes, "apps", "desktop", "dist-electron"), { recursive: true });
-cpSync(join(repoRoot, "apps", "desktop", "package.json"), join(appRes, "apps", "desktop", "package.json"));
 
-// ④ 运行期 node_modules：npm 装出真实文件的完整闭包（pnpm 的符号链接布局进不了 .app）。
-run("npm", ["install", "--omit=dev", "--no-audit", "--no-fund", "--loglevel=error"], { cwd: appRes });
+async function packageDesktop(options) {
+  if (occupied(options.out)) throw new Error(`目标已存在：${options.out}；请用 --out 选择新目录，已有产物不会被覆盖`);
+  if (process.platform !== "darwin") throw new Error("当前打包入口支持 macOS；请在 macOS 构建 Cairn.app");
+  const electronDist = [join(desktopDir, "node_modules/electron/dist/Electron.app"), join(repoRoot, "node_modules/electron/dist/Electron.app")]
+    .find(path => existsSync(path));
+  if (!electronDist) throw new Error("未找到 Electron 运行时，请先安装仓库声明的依赖");
+  const source = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8"));
+  if (!source.dependencies?.tsx) throw new Error("tsx 是运行期 loader，必须声明在 dependencies 中");
+  run("pnpm", ["--filter", "cairn-desktop", "build"], { cwd: repoRoot });
+  const { sourceProvenance, staging } = preparePackageStaging(repoRoot, options.out);
+  try {
+    const appDir = join(staging, "Cairn.app");
+    // ditto preserves framework-relative symlinks; Node's default cp rewrites them.
+    run("ditto", [electronDist, appDir]);
+    renameSync(join(appDir, "Contents/MacOS/Electron"), join(appDir, "Contents/MacOS/Cairn"));
+    const plist = join(appDir, "Contents/Info.plist");
+    for (const [key, value] of [
+      ["CFBundleExecutable", "Cairn"], ["CFBundleName", "Cairn"],
+      ["CFBundleIdentifier", "com.cairn.desktop"], ["CFBundleIconFile", "cairn.icns"],
+      ["CFBundleShortVersionString", source.version], ["CFBundleVersion", source.version.split(/[+-]/)[0]],
+    ]) {
+      const set = spawnSync("/usr/libexec/PlistBuddy", ["-c", `Set :${key} ${value}`, plist]);
+      if (set.status !== 0) run("/usr/libexec/PlistBuddy", ["-c", `Add :${key} string ${value}`, plist]);
+    }
+    cpSync(join(desktopDir, "src/renderer/public/brand/cairn.icns"), join(appDir, "Contents/Resources/cairn.icns"));
+    const appRes = join(appDir, "Contents/Resources/app");
+    run("pnpm", ["--filter=cairn-harness", "deploy", "--prod", "--ignore-scripts", "--config.injectWorkspacePackages=true", appRes], { cwd: repoRoot });
+    // Nested workspace ignore rules omit generated files from deploy, even with a files whitelist.
+    for (const directory of ["dist", "dist-electron"]) {
+      cpSync(join(desktopDir, directory), join(appRes, "apps/desktop", directory), { recursive: true });
+    }
+    const tracked = run("git", ["ls-files", "-z", "--", "fixtures"], { cwd: repoRoot, stdio: "pipe", encoding: "utf8" });
+    pruneRuntimeState(appRes, new Set(tracked.stdout.split("\0").filter(Boolean)));
+    writeFileSync(join(appRes, "package.json"), JSON.stringify(makeRuntimePackage(source), null, 2) + "\n");
+    // 关于页读这一份：构建时间、签名方式、lock 哈希与打包冒烟凭据都随包走。
+    const buildInfo = {
+      version: source.version, platform: process.platform, arch: process.arch,
+      ...sourceProvenance,
+      sourceLockSha256: createHash("sha256").update(readFileSync(join(repoRoot, "pnpm-lock.yaml"))).digest("hex"),
+      packagedSmoke: "passed", signature: "ad-hoc", createdAt: new Date().toISOString(),
+    };
+    writeFileSync(join(appRes, "build-info.json"), JSON.stringify(buildInfo, null, 2) + "\n");
+    // Re-seal nested code inside out; some installed Electron runtimes lack resource seals.
+    for (const target of codeSigningTargets(appDir)) {
+      run("codesign", ["--force", "--sign", "-", "--preserve-metadata=entitlements,flags", target]);
+    }
+    run("codesign", ["--verify", "--deep", "--strict", appDir]);
 
-// ⑤ ad-hoc 签名（arm64 硬要求）+ 分发件。只签**外层** bundle：主执行体改名 + Info.plist 变更
-//    使原件失效，重签外层即够；内嵌 Framework/Helper 的原厂签名原样保留（内容未动）——
-//    --deep 会把它们也重签，反而报「unsealed contents」（实测 2026-10-06）。
-run("codesign", ["--force", "--sign", "-", appDir]);
-// 分发件：DMG 优先（hdiutil 在部分环境报「功能未实现」——实测本机如此）⇒ 失败降级 ditto zip
-// （保留 .app bundle 结构的正确 mac zip）。两条路都只是「给 .app 穿运输壳」，.app 本身就能跑。
-const dmg = spawnSync("hdiutil", ["create", "-volname", "Cairn", "-srcfolder", appDir, "-ov", "-format", "udzo", join(releaseDir, "Cairn.dmg")]);
-if (dmg.status === 0) {
-  console.log("[package] 完成：", join(releaseDir, "Cairn.dmg"));
-} else {
-  console.error("[package] hdiutil 不可用（" + String(dmg.status) + "），降级 zip：");
-  run("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", appDir, join(releaseDir, "Cairn-macOS.zip")]);
-  console.log("[package] 完成：", join(releaseDir, "Cairn-macOS.zip"));
+    // Prove the deployed native search tool is executable, independent of the source checkout.
+    const executable = join(appDir, "Contents/MacOS/Cairn");
+    const nodeEnv = { ...process.env, ELECTRON_RUN_AS_NODE: "1" };
+    delete nodeEnv.NODE_PATH;
+    run(executable, ["-e", "require('tsx/cjs'); require('./src/main/agent-runner.ts'); console.log('[package] core loader ready'); process.exit(0)"], { cwd: appRes, env: nodeEnv, timeout: 30_000, killSignal: "SIGKILL" });
+    run(executable, ["-e", "const {spawnSync}=require('node:child_process'); const r=spawnSync(require('@vscode/ripgrep').rgPath,['--version'],{stdio:'inherit'}); process.exit(r.status??1)"], { cwd: appRes, env: nodeEnv });
+
+    const workspace = mkdtempSync(join(tmpdir(), "cairn-package-smoke-"));
+    const smokeEnv = { ...process.env, CAIRN_SMOKE: "1", CAIRN_DESKTOP_WORKSPACE: workspace };
+    for (const key of ["ELECTRON_RUN_AS_NODE", "NODE_PATH", "VITE_DEV_SERVER_URL", "M0A_PROVIDER", "M3A_MAIN_SCRIPT"]) delete smokeEnv[key];
+    const smoke = run(executable, PACKAGED_SMOKE_ARGS, { cwd: workspace, env: smokeEnv, timeout: 45_000, killSignal: "SIGKILL", stdio: ["ignore", "pipe", "inherit"], encoding: "utf8" });
+    process.stdout.write(smoke.stdout);
+    if (!packagedSmokePassed(smoke)) throw new Error("打包态进程退出但没有冒烟成功凭据；不生成已验证产物");
+    rmSync(workspace, { recursive: true, force: true });
+
+    if (options.archive) {
+      const dmgPath = join(staging, "Cairn.dmg");
+      // macOS 26 的 hdiutil 已废弃；本机实测 `hdiutil create` 返回「功能未实现」，
+      // 旧脚本于是静默回退 zip，README 却还写着 Cairn.dmg。主路径改走 diskutil，
+      // hdiutil 只作旧系统回退，两者都失败才退 zip（并明确出声）。
+      // 安装盘里放 Applications 快捷方式：用户打开 DMG 就能把 Cairn.app 拖进去。
+      const dmgRoot = join(staging, "dmg");
+      mkdirSync(dmgRoot, { recursive: true });
+      cpSync(appDir, join(dmgRoot, "Cairn.app"), { recursive: true, verbatimSymlinks: true, preserveTimestamps: true });
+      cpSync(join(repoRoot, "docs/macos-trial.md"), join(dmgRoot, "安装说明.md"));
+      symlinkSync("/Applications", join(dmgRoot, "Applications"));
+      let dmg = spawnSync("diskutil", ["image", "create", "from", "--format", "UDZO", "--volumeName", "Cairn", dmgRoot, dmgPath], { encoding: "utf8" });
+      if (dmg.status !== 0) {
+        dmg = spawnSync("hdiutil", ["create", "-volname", "Cairn", "-srcfolder", dmgRoot, "-ov", "-format", "udzo", dmgPath], { encoding: "utf8" });
+      }
+      if (dmg.status !== 0) {
+        console.warn(`[package] DMG 创建失败（diskutil/hdiutil），回退 Cairn-macOS.zip：${String(dmg.stderr ?? "").trim()}`);
+        run("ditto", ["-c", "-k", "--sequesterRsrc", dmgRoot, join(staging, "Cairn-macOS.zip")]);
+      }
+      // 包自己跑安装验收：挂 DMG -> 复制 app -> CAIRN_SMOKE；失败就不产出（不留「能打包但不能装」的包）。
+      if (dmg.status === 0 && existsSync(dmgPath)) {
+        run(process.execPath, [join(desktopDir, "scripts", "install-smoke.mjs"), dmgPath], { cwd: repoRoot, env: process.env, timeout: 90_000 });
+      }
+      // dmgRoot 是 staging 里的 568MB 克隆；不删就会随 rename 一起混进 release（实测 release-829 多出 dmg/）。
+      rmSync(dmgRoot, { recursive: true, force: true });
+    }
+    cpSync(join(repoRoot, "docs/macos-trial.md"), join(staging, "安装说明.md"));
+    writeFileSync(join(staging, "build-info.json"), JSON.stringify(buildInfo, null, 2) + "\n");
+    if (options.archive) {
+      const archiveName = existsSync(join(staging, "Cairn.dmg")) ? "Cairn.dmg" : "Cairn-macOS.zip";
+      const archivePath = join(staging, archiveName);
+      const archiveSha256 = await sha256(archivePath);
+      const dependencyLockPath = join(appRes, "pnpm-lock.yaml");
+      cpSync(join(repoRoot, "pnpm-lock.yaml"), dependencyLockPath);
+      const dependencyLockSha256 = await sha256(dependencyLockPath);
+      const electronVersion = JSON.parse(readFileSync(join(desktopDir, "node_modules/electron/package.json"), "utf8")).version;
+      const releaseManifest = buildReleaseManifest({
+        version: source.version, platform: process.platform, arch: process.arch,
+        electronVersion, archiveName, archiveSha256, archiveBytes: statSync(archivePath).size,
+        dependencyLockSha256, ...sourceProvenance,
+      });
+      writeFileSync(join(staging, "release.json"), JSON.stringify(releaseManifest, null, 2) + "\n");
+      const releaseSha256 = await sha256(join(staging, "release.json"));
+      writeFileSync(join(staging, "SHA256SUMS"), checksumLines([
+        { name: archiveName, sha256: archiveSha256 },
+        { name: "release.json", sha256: releaseSha256 },
+      ]));
+    }
+    if (occupied(options.out)) throw new Error(`目标已存在：${options.out}；保留已有产物`);
+    renameSync(staging, options.out);
+    console.log(`[package] 完成（已验证打包态）：${join(options.out, "Cairn.app")}`);
+  } finally {
+    rmSync(staging, { recursive: true, force: true });
+  }
 }
-console.log("[package] 完成：", appDir);
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  let options;
+  try { options = optionsOf(process.argv.slice(2)); }
+  catch (error) { console.error(`[package] ${error.message}`); process.exitCode = 2; }
+  if (options?.help) console.log("Cairn macOS package: --out <new-directory> [--no-archive]\nBuilds, signs and smoke-tests the app before publishing; existing output is preserved.");
+  else if (options) {
+    try { await packageDesktop(options); }
+    catch (error) { console.error(`[package] FAIL: ${error.message}`); process.exitCode = 1; }
+  }
+}

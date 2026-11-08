@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { runPhaseLabel } from "../src/renderer/projections";
+import { readAppSurface } from "./helpers/app-surface";
 
 const base = { phase: "idle" as const, stopped: false, running: false, hasAnswerText: false, answerQuiet: false };
 
@@ -48,7 +49,7 @@ describe("状态条文案（runPhaseLabel）", () => {
   });
 
   it("接线：App 用的是这一个函数（别在 App 里另写一份三元链）", () => {
-    const app = readFileSync(fileURLToPath(new URL("../src/renderer/App.tsx", import.meta.url)), "utf8");
+    const app = readAppSurface();
     expect(app).toContain("runPhaseLabel({ phase, stopped, running: runningActive, hasAnswerText, answerQuiet })");
     expect(app, "App 里不该再留一份自己的文案三元链").not.toContain('finishing ? "收尾中"');
   });

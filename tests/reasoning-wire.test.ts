@@ -8,7 +8,8 @@
 //   ④ 推理增量（DeepSeek 的 reasoning_content）绝不混进答给用户的正文。
 import { afterEach, describe, expect, it } from "vitest";
 import { reasoningDirective, mapUpstreamEfforts, REASONING_BUDGET_TOKENS } from "../src/providers/reasoning";
-import { toWorkerModel, installCustomProviders, effectiveModelTable, type ModelSpec } from "../src/providers/registry";
+import { installCustomProviders, effectiveModelTable, type ModelSpec } from "../src/providers/registry";
+import { toWorkerModel } from "../src/providers/worker-adapters";
 import { capabilityForModel, validateThinkingEffort } from "../src/providers/capabilities";
 import { deriveCustomProviders, parseCustomProviders } from "../src/providers/provider-config";
 
@@ -62,16 +63,17 @@ describe("映射表", () => {
     expect(reasoningDirective("off")).toBeNull();
   });
 
-  it("三档各有预算，且单调递增", () => {
+  it("五档各有预算，且单调递增（max 是上游自述的最高档；2026-11-05 +xhigh）", () => {
     expect(reasoningDirective("low")).toEqual({ effort: "low", budgetTokens: REASONING_BUDGET_TOKENS.low });
     expect(REASONING_BUDGET_TOKENS.low).toBeLessThan(REASONING_BUDGET_TOKENS.medium);
     expect(REASONING_BUDGET_TOKENS.medium).toBeLessThan(REASONING_BUDGET_TOKENS.high);
+    expect(REASONING_BUDGET_TOKENS.high).toBeLessThan(REASONING_BUDGET_TOKENS.max);
   });
 
-  it("上游档位名映射：实测 DeepSeek 的 [low,high,max] ⇒ [low,high]（max 归到高，认不出的丢掉）", () => {
-    expect(mapUpstreamEfforts(["low", "high", "max"])).toEqual(["low", "high"]);
+  it("上游档位名映射：实测 DeepSeek 的 [low,high,max] ⇒ [low,high,max]（2026-11-05 起 xhigh 自成一档）", () => {
+    expect(mapUpstreamEfforts(["low", "high", "max"])).toEqual(["low", "high", "max"]);
     expect(mapUpstreamEfforts(["minimal", "low"])).toEqual(["low"]);
-    expect(mapUpstreamEfforts(["xhigh"])).toEqual(["high"]);
+    expect(mapUpstreamEfforts(["xhigh"])).toEqual(["xhigh"]);
     expect(mapUpstreamEfforts(["unknown-level", ""])).toEqual([]);
     // 输出去重且按我们自己的顺序（低→高）
     expect(mapUpstreamEfforts(["high", "low", "low"])).toEqual(["low", "high"]);
@@ -119,19 +121,24 @@ describe("推理增量不许泄漏进正文", () => {
 });
 
 describe("能力表的门：有证据才开门", () => {
-  it("内置档位照旧 supported=false（没有任何一条带凭据实测过）", () => {
+  it("内置档位照旧 supported=false——唯一的例外是 DeepSeek（官方文档自述了档位，2026-10-25）", () => {
     const cap = capabilityForModel({ id: "openai-standard", provider: "openai" });
     expect(cap.thinking.supported).toBe(false);
     expect(cap.thinking.values).toEqual(["off"]);
     expect(() => validateThinkingEffort({ id: "openai-standard", provider: "openai" }, "high")).toThrow(/不支持/);
+    // DeepSeek 内置两行走「上游自述」证据通道：官方 /models 与文档给 effort low/high/max
+    const ds = capabilityForModel({ id: "deepseek-cheap", provider: "deepseek" });
+    expect(ds.thinking.supported).toBe(true);
+    expect(ds.thinking.values).toEqual(["off", "low", "high", "max"]);
   });
 
-  it("用户给自己的模型声明了档位 ⇒ 只有声明过的那些可选（max 被映射掉，medium 没声明就不能选）", () => {
+  it("用户给自己的模型声明了档位 ⇒ 只有声明过的那些可选（max 原样保留，medium 没声明就不能选）", () => {
     const parsed = parseCustomProviders({
       version: 1,
       providers: [
         {
-          id: "deepseek",
+          // id 不再用 "deepseek"：它已成内置家名，配置校验会拒收（保留名单同 PROVIDER_IDS 同步）
+          id: "my-deepseek",
           protocol: "openai",
           baseURL: "https://api.deepseek.com/v1",
           apiKeyEnv: "DEEPSEEK_API_KEY",
@@ -141,13 +148,14 @@ describe("能力表的门：有证据才开门", () => {
     });
     if (!parsed.ok) throw new Error(JSON.stringify(parsed.problems));
     installCustomProviders(deriveCustomProviders(parsed.file));
-    const custom = effectiveModelTable().find((s) => s.id === "deepseek-chat");
+    const custom = effectiveModelTable().find((s) => s.id === "my-deepseek-chat");
     if (custom === undefined) throw new Error("自定义档位没进表");
     const cap = capabilityForModel(custom);
     expect(cap.thinking.supported).toBe(true);
-    expect(cap.thinking.values).toEqual(["off", "low", "high"]);
+    expect(cap.thinking.values).toEqual(["off", "low", "high", "max"]);
     expect(cap.thinking.default).toBe("off"); // 声明了支持 ≠ 替你打开
     expect(validateThinkingEffort(custom, "high")).toBe("high");
+    expect(validateThinkingEffort(custom, "max")).toBe("max");
     expect(() => validateThinkingEffort(custom, "medium")).toThrow(/不支持/);
   });
 

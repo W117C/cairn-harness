@@ -2,6 +2,8 @@
 // 纯函数 validateProjectName + SSR 真 HTML。钉：模板卡 = 主进程目录四张（名称口径同 templateCatalog()，
 // 不另写死一份）、名字实时错误行、位置行 home 短写（~/Cairn Projects）与「将创建在：」预览、
 // 零路径手输、每钮 tooltip（P1-6 审计的 Dialog 面）。
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { NewProjectDialog, templateNavigationTarget, validateProjectName } from "../src/renderer/components/NewProjectDialog";
@@ -107,5 +109,16 @@ describe("新建项目 Dialog（真 HTML）", () => {
     for (const b of buttons) {
       expect(b.includes("title=") || b.includes("aria-label="), `按钮缺提示：${b}`).toBe(true);
     }
+  });
+});
+
+// 2026-10-30：模态对话框回车提交（内联改名早已支持，面板里的表单却只有按钮）。
+describe("新建项目：名字输入框回车 = 提交", () => {
+  it("输入框 Enter 走与按钮同一个 submit（不是直接调 onCreate 的旁路）", () => {
+    const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/NewProjectDialog.tsx", import.meta.url)), "utf8");
+    expect(src).toContain('onKeyDown={(e) => { if (e.key === "Enter" && !isCompositionEnter(e, null)) { e.preventDefault(); submit(); } }}');
+    expect(src).toContain("onClick={submit}");
+    expect(src).toContain("const submit = () => {");
+    expect(src).toContain("if (busy) return;");
   });
 });

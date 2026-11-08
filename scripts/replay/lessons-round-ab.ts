@@ -103,7 +103,8 @@ await mkdir(join(ISO, "tests"), { recursive: true });
 await mkdir(join(ISO, "src"), { recursive: true });
 await cp(join(TARGET, "package.json"), join(ISO, "package.json"));
 await cp(join(TARGET, "tests", "todo.test.ts"), join(ISO, "tests", "todo.test.ts"));
-await cp(join(TARGET, "src", "todo.ts"), join(ISO, "src", "todo.ts"));
+// 靶子中的 todo.ts 是运行时文件。用已跟踪的失败样本给隔离工作区播种。
+await cp(BUGGY, join(ISO, "src", "todo.ts"));
 /** 运行工作区：本面所有读写都落在这。反向验证只要把**这一行**改成 `= TARGET`，
  *  整面就回到「动靶子」的老行为（判卷里那条整树哈希不变量会因此变红）；回收照旧只动 `ISO`。 */
 const WS = ISO;

@@ -95,6 +95,8 @@ describe("CX-01 SessionMetadataRepository", () => {
     await writeFile(metadataPath, "not-json", "utf8");
     const repository = new SessionMetadataRepository(metadataPath, { now });
     await expect(repository.list()).rejects.toBeInstanceOf(SessionMetadataCorruptError);
+    // 出路与拒因同屏（会话列表失败行原样显示这句话）：只说「损坏」用户不知道下一步。
+    await expect(repository.list()).rejects.toThrow(/修好或删除该文件后重试/);
     await expect(repository.setPinned("session-a", true)).rejects.toBeInstanceOf(SessionMetadataCorruptError);
     expect(await readFile(metadataPath, "utf8")).toBe("not-json");
 
@@ -116,5 +118,51 @@ describe("CX-01 SessionMetadataRepository", () => {
     await expect(repository.create("session-a")).rejects.toThrow(/已存在/);
     await expect(repository.setPinned("session-a", "yes" as unknown as boolean)).rejects.toThrow(/pinned/);
     await expect(repository.assignProject("session-a", "bad/project")).rejects.toThrow(/projectId/);
+  });
+});
+
+// v35：会话级模型/思考档（sidecar 偏好面）。
+describe("session prefs（model / thinking）", () => {
+  it("写入 → 重载仍在；null 摘掉；undefined 不动另一键", async () => {
+    const repository = new SessionMetadataRepository(metadataPath, { now });
+    await repository.create("s-prefs", "偏好会话");
+    expect(await repository.setPrefs("s-prefs", { model: "glm-5.3-flash", thinking: "high" }))
+      .toMatchObject({ model: "glm-5.3-flash", thinking: "high" });
+
+    const reloaded = new SessionMetadataRepository(metadataPath, { now });
+    expect(await reloaded.get("s-prefs")).toMatchObject({ model: "glm-5.3-flash", thinking: "high" });
+
+    const cleared = await reloaded.setPrefs("s-prefs", { model: null });
+    expect(cleared.model).toBeUndefined();
+    expect(cleared.thinking).toBe("high"); // 没给的键不动
+
+    const again = await new SessionMetadataRepository(metadataPath, { now }).get("s-prefs");
+    expect(again.model).toBeUndefined();
+    expect(again.thinking).toBe("high");
+  });
+
+  it("没有 sidecar 记录的旧会话也能写入（upsert 建档，不丢偏好）", async () => {
+    const repository = new SessionMetadataRepository(metadataPath, { now });
+    const record = await repository.setPrefs("legacy", { model: "deepseek-chat" });
+    expect(record).toMatchObject({ id: "legacy", title: "legacy", model: "deepseek-chat" });
+    expect((await repository.get("legacy")).model).toBe("deepseek-chat");
+  });
+
+  it("非法值一律拒（空 / 首尾空白 / 控制字符 / 超长 / 非字符串）", async () => {
+    const repository = new SessionMetadataRepository(metadataPath, { now });
+    await repository.create("s-bad", "坏值会话");
+    await expect(repository.setPrefs("s-bad", { model: "" })).rejects.toThrow(/model/);
+    await expect(repository.setPrefs("s-bad", { model: " x " })).rejects.toThrow(/model/);
+    await expect(repository.setPrefs("s-bad", { thinking: "a\u0000b" })).rejects.toThrow(/thinking/);
+    await expect(repository.setPrefs("s-bad", { model: "m".repeat(201) })).rejects.toThrow(/model/);
+    await expect(repository.setPrefs("s-bad", { model: 42 as unknown as string })).rejects.toThrow(/model/);
+  });
+
+  it("老 sidecar 没有这两格 ⇒ 读回缺席（不补默认）", async () => {
+    const repository = new SessionMetadataRepository(metadataPath, { now });
+    await repository.create("old-format", "老记录");
+    const record = await repository.get("old-format");
+    expect(record.model).toBeUndefined();
+    expect(record.thinking).toBeUndefined();
   });
 });

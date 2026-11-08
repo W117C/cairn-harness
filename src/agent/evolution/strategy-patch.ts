@@ -56,7 +56,9 @@ export function strategyPatches(s: EvolutionSignals): StrategyPatch[] {
   }
 
   // 3) 成本÷前进可测且偏高 ⇒ 提前压缩 + 降档路由。
-  if (s.costMeasurable && s.tokensPerBoundary !== null && s.tokensPerBoundary > COST_PER_BOUNDARY_LIMIT) {
+  // 「可测」这一格走具名判据（costThrottleMeasurable），不在这儿再抄一遍：
+  // 抄了就会和跨轮评估（patch-effect）那份分叉——一边说贵、一边说已消解。
+  if (costThrottleMeasurable(s) && s.tokensPerBoundary > COST_PER_BOUNDARY_LIMIT) {
     out.push({
       kind: "cost-throttle",
       tokensPerBoundary: s.tokensPerBoundary,
@@ -74,8 +76,17 @@ export function strategyPatches(s: EvolutionSignals): StrategyPatch[] {
  *  **不可测**读成**无前进**——而 verified 边界要求配对的 verify 工具调用，harness 自动补跑的
  *  成功验证、产物生成、有效预览都不产生模型侧 verify 调用 ⇒ 边界=0 ⇒ 不可测。于是"生成了产物、
  *  自动检查也过了"的会话照样被判死跑，还把这句话带进下一轮系统提示词。
- *  现在这一族只在**真可测且偏高**时出手；不可测就是不可测（`cost-per-progress` 的原话）。 */
-export function costThrottleMeasurable(s: EvolutionSignals): boolean {
+ *  现在这一族只在**真可测且偏高**时出手；不可测就是不可测（`cost-per-progress` 的原话）。
+ *
+ *  2026-10-22：这份判据此前是**死导出**（0 引用），而真正在判的两处各抄了一遍内联
+ *  （strategyPatches 的出手条件、patch-effect 的评估分支）⇒ 同一条判据三份，具名那一份
+ *  反而是没人调的那份——上面的 2026-10-16 裁决就写在没人调用的函数上：改了它，两处行为纹丝不动。
+ *  现在它是**唯一事实源**：出手处（strategyPatches）与评估处（patch-effect）都走它。
+ *  返回类型是类型守卫：不可测时 tokensPerBoundary 仍是 null，守卫把这一格收窄成 number，
+ *  两处于是不必再各写一遍 null 检查（那也是同一判据的第四份抄法）。 */
+export function costThrottleMeasurable(
+  s: EvolutionSignals,
+): s is EvolutionSignals & { costMeasurable: true; tokensPerBoundary: number } {
   return s.costMeasurable && s.tokensPerBoundary !== null;
 }
 

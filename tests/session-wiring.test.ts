@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { withoutTs } from "./helpers/stream-equals";
 import { afterEach, expect, it, vi } from "vitest";
-import { handleRunCancel, initSettingsStore, runAgent } from "../src/main/agent-runner";
+import { handleRunCancel, initSettingsStore, runAgent, waitForSessionTailWork } from "../src/main/agent-runner";
 import { createEventLog, replay, type AgentEvent } from "../src/events";
 import { DISTILL_INSTRUCTION } from "../src/agent/memory/distill";
 import { AskGate } from "../src/main/ask-gate";
@@ -18,8 +18,10 @@ afterEach(async () => {
   if (dir) await rm(dir, { recursive: true, force: true });
 });
 
-it("UI cancellation settles the distillation approval immediately without writing memory", async () => {
-  dir = await mkdtemp(join(tmpdir(), "distill-approval-cancel-"));
+it("run 收束后沉淀审批卡由门自行结算（超时 = fail-closed，不写记忆）", async () => {
+  // 2026-11-04 沉淀转后台：run 已结束 ⇒ 没有可取消的 run，卡由门自己的超时结算（旧形状是
+  // 「审批等待期用户点停止 ⇒ handleRunCancel 立即结算」——那条路随沉淀移出 run 一并消失）。
+  dir = await mkdtemp(join(tmpdir(), "distill-approval-timeout-"));
   initSettingsStore(join(dir, "settings.json"));
   vi.stubEnv("M0A_PROVIDER", "glm");
   vi.stubEnv("CAIRN_API_KEY", "offline-test-key");
@@ -29,7 +31,7 @@ it("UI cancellation settles the distillation approval immediately without writin
     requests++;
     const delta = requests === 1 ? { content: "TASK_COMPLETED" } : {
       tool_calls: [{ index: 0, id: "distill-remember", type: "function", function: {
-        // 全局层才过合并审批（第十一遍分层裁决：项目层免批直写不弹卡）——本条测的正是「审批等待期取消」。
+        // 全局层才过合并审批（第十一遍分层裁决：项目层免批直写不弹卡）。
         name: "remember", arguments: JSON.stringify({ scope: "global", kind: "memory", type: "user", topic: "language", content: "Chinese" }),
       } }],
     };
@@ -38,19 +40,14 @@ it("UI cancellation settles the distillation approval immediately without writin
     });
   }));
   const outcomes: string[] = [];
-  let pendingAfterCancel: number | undefined;
   const askGate = new AskGate({
     timeoutMs: 100,
-    notify: () => {
-      expect(handleRunCancel().ok).toBe(true);
-      pendingAfterCancel = askGate.pendingCount;
-    },
     notifyOutcome: (_id, _outcome, reason) => { outcomes.push(reason); },
   });
   await runAgent({ workspace: dir, message: "记住 USER_TASK", mode: "default", logPath: join(dir, "session.jsonl"), askGate });
+  await waitForSessionTailWork(join(dir, "session.jsonl")); // 沉淀轮已转后台：断言前被动等尾工落完
   expect(requests).toBe(2);
-  expect(pendingAfterCancel).toBe(0);
-  expect(outcomes).toEqual(["user"]);
+  expect(outcomes).toEqual(["timeout"]);
   expect(askGate.pendingCount).toBe(0);
   expect(write).not.toHaveBeenCalled();
 });
@@ -71,6 +68,7 @@ it("distillation consumes session history and its instruction with only remember
     });
   }));
   const result = await runAgent({ workspace: dir, message: "记住 USER_TASK", mode: "default", logPath: join(dir, "session.jsonl") });
+  await waitForSessionTailWork(join(dir, "session.jsonl")); // 沉淀轮已转后台：断言前被动等尾工落完
   expect(requests).toHaveLength(2);
   expect(requests[1].messages).toContainEqual({ role: "user", content: "记住 USER_TASK" });
   expect(requests[1].messages).toContainEqual({ role: "assistant", content: "TASK_COMPLETED" });
@@ -117,6 +115,7 @@ it("沉淀指令真的进到请求里（走真 session provider 这条路）", a
     });
   }));
   const result = await runAgent({ workspace: dir, message: "记住 USER_TASK", mode: "auto", logPath: join(dir, "session.jsonl") });
+  await waitForSessionTailWork(join(dir, "session.jsonl")); // 沉淀轮已转后台：断言前被动等尾工落完
   expect(requests).toHaveLength(2);
   const last = requests[1]!.messages.at(-1)!;
   expect(last.role).toBe("user");
@@ -145,6 +144,7 @@ it("沉淀轮的请求与主会话共享同一个前缀（system 同形 + 工具
     });
   }));
   await runAgent({ workspace: dir, message: "记住 T", mode: "auto", logPath: join(dir, "session.jsonl") });
+  await waitForSessionTailWork(join(dir, "session.jsonl")); // 沉淀轮已转后台：断言前被动等尾工落完
   expect(requests).toHaveLength(2);
   type Msg = { role: string; content: unknown };
   const sys = (r: Record<string, unknown>): unknown => (r["messages"] as Msg[])[0]?.content;

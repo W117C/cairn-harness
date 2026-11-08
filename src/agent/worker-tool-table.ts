@@ -4,6 +4,7 @@ import { edit_file } from "../tools/edit_file";
 import { glob } from "../tools/glob";
 import { grep } from "../tools/grep";
 import { createImpactQueryTool } from "../tools/impact-query";
+import { git_read } from "../tools/git_read";
 import { lsp } from "../tools/lsp";
 import { read_file } from "../tools/read_file";
 import { remember } from "../tools/remember";
@@ -27,6 +28,9 @@ export function buildWorkerToolTable(
     grep: gatedWorkerTool("grep", grep, w, orch),
     glob: gatedWorkerTool("glob", glob, w, orch),
     lsp: gatedWorkerTool("lsp", lsp, w, orch),
+    // 只读 git 三合一：固定 argv、零写权、不经 shell；worker 在 worktree 里核对改动面
+    // 与「上游改了什么」复用主会话同一份实现，权限门也走同一个 gatedWorkerTool 出口。
+    git_read: gatedWorkerTool("git_read", git_read, w, orch),
     // shell 是 worker 唯一的命令出口，而主会话那道沙箱门只认 `run_shell` 这个名字
     // （agent-runner 的 `name === "run_shell"` 分支）——`shell_ro`/`shell_rw` 走的是本文件
     // 另一扇门，不注入就等于 worker 整支都在 Seatbelt 之外。宿主有沙箱就注入沙箱版。

@@ -72,6 +72,17 @@ describe("exec 结局的结构面：exitCode / timedOut 要活到落盘面", () 
     expect(r.timedOut).toBe(false);
   });
 
+  it("生产端·spawn 失败（命令根本没跑成）⇒ 结构面也在，不只剩一句文案", async () => {
+    // cwd 不存在 ⇒ spawn 直接 ENOENT：没有进程、因此**没有退出码**（null，而不是 undefined）。
+    // 这一条曾经是**唯一一条结构面缺席的失败支**：结果只有 `{ ok:false, output:"run_shell: …" }`，
+    // 下游只能回去匹配那句文案——正是本仓判为不可当判据的形状。
+    const r = await run_shell.run({ command: "echo hi" }, ctx("/nonexistent-dir-for-exec-face-91348"));
+    expect(r.ok).toBe(false);
+    expect(r.exitCode, "「没有跑成」与「没这一位」是两件事：前者是 null，后者是 undefined").toBeNull();
+    expect(r.timedOut, "这一支不是超时").toBe(false);
+    expect(r.output, "归因走同一条谓词（not-run），文案也在").toContain("[exec:");
+  });
+
   it("共用出口 `annotateExecCause` 四条出口都盖：成功回执也带着这两个字段（幂等，不叠第二层）", () => {
     const ok = annotateExecCause({ ok: true, output: "done" }, { timedOut: false, exitCode: 0 });
     expect(ok.exitCode).toBe(0);

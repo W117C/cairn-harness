@@ -1,14 +1,15 @@
+import { dirname, join } from "node:path";
 import {
   deleteProviderKey,
   providerKeyStatus,
   putProviderKey,
 } from "./provider-keys";
-import { verifyLicenseFile, type LicenseState } from "./license";
+import { importLicenseFile, verifyLicenseFile, type LicenseImportOutcome, type LicenseState } from "./license";
+import type { BuildInfo } from "./build-info";
 import { checkUpdate, type UpdateCheckResult } from "./updater";
-import { SettingsStore, isPersistableProvider, type AppSettings, type ProviderKind } from "./settings";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { SettingsStore, isPersistableProvider, type AppSettings, type ProviderKind, type SettingsLoadIssue } from "./settings";
 import { effectiveModelTable, findSpecByNameOrId } from "../providers/registry";
 import { ENV_KEYED_PROVIDERS, customEnvKeyedProviders, envKeyOf } from "../providers/env-keys";
 import {
@@ -18,6 +19,7 @@ import {
   type ProviderInfo,
 } from "./provider-runtime";
 import { ONBOARDING_GROUPS, type OnboardingGroup } from "./onboarding-groups";
+import { injectStoredProviderKey, revokeInjectedProviderKey } from "./provider-key-inject";
 
 // ---- M1e：settings 存储 + 会话目录 + Provider 只读信息 ----
 // settings 文件与会话目录由 shell（index.ts）按环境初始化：M1E_SETTINGS_PATH / M1E_SESSIONS_DIR
@@ -29,10 +31,13 @@ export interface SettingsHostDeps {
   resolveProviderKind: () => Promise<ProviderKind>;
   /** M4a：scheduleConcurrencyCap 变更 → 调度器即时生效。 */
   onScheduleCapChange: (cap: number) => void;
+  /** 自动化保唤（2026-11-04）：keepAwake 变更 → 桌面主进程即时 start/stop powerSaveBlocker。 */
+  onKeepAwakeChange: (on: boolean) => void;
 }
 const UNWIRED: SettingsHostDeps = {
   resolveProviderKind: async () => "demo",
   onScheduleCapChange: () => {},
+  onKeepAwakeChange: () => {},
 };
 let host: SettingsHostDeps = UNWIRED;
 
@@ -44,9 +49,17 @@ export function setSettingsHostDeps(deps: SettingsHostDeps): void {
 let settingsStore: SettingsStore | null = null;
 let fallbackSettingsPath: string | null = null;
 
-/** shell 启动时初始化 settings 存储（文件路径）。 */
-export function initSettingsStore(filePath: string): void {
+/** shell 启动时初始化 settings 存储（文件路径）。
+ *
+ *  M4b license 状态面随这条**真实初始化路径**一起挂上（2026-10-22 修登记缺陷「产品 P1：
+ *  initLicenseStore 零调用点 ⇒ license 状态恒 inactive」）：license.json 与 settings.json 同目录
+ *  ——桌面 <userData>/license.json、headless <ws>/.agent/license.json，正是 license.ts 文档里的
+ *  「<appData>/license.json」那一格。此前只有 initLicenseStore 这个死锚点，没有任何真实初始化路径
+ *  调它，agent:state 应答里的 license 因此永远是 {state:"inactive"}。
+ */
+export function initSettingsStore(filePath: string, opts: { licensePublicKey?: string } = {}): void {
   settingsStore = new SettingsStore(filePath);
+  initLicenseStore(join(dirname(filePath), "license.json"), { publicKey: opts.licensePublicKey });
 }
 
 export function store(): SettingsStore {
@@ -59,6 +72,21 @@ export function store(): SettingsStore {
 
 export async function getSettings(): Promise<AppSettings> {
   return await store().get();
+}
+
+/** 首读发现的问题（必须在 `getSettings()` 之后读才可靠）：调用方据此告诉用户设置没生效。 */
+export function settingsLoadIssue(): SettingsLoadIssue | null {
+  return store().loadIssue();
+}
+
+/** IPC "agent:settings-reload"：外部修好/改坏 settings.json 后重读盘（不重启也能恢复）。 */
+export async function reloadSettings(): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await store().reload();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 export async function setSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
@@ -81,6 +109,8 @@ export async function setSettings(patch: Partial<AppSettings>): Promise<AppSetti
   }
   // M4a：定时并发上限变更 → 调度器即时生效
   if (patch.scheduleConcurrencyCap !== undefined) host.onScheduleCapChange(next.scheduleConcurrencyCap);
+  // 自动化保唤：keepAwake 变更 → powerSaveBlocker 即时开/关（桌面主进程实现，headless 是 noop）
+  if (patch.keepAwake !== undefined) host.onKeepAwakeChange(next.keepAwake);
   return next;
 }
 
@@ -110,11 +140,15 @@ export async function providerInfo(): Promise<ProviderInfo> {
 export { injectStoredProviderKey } from "./provider-key-inject";
 
 export async function handleProviderKeySet(provider: string, key: string): Promise<{ ok: boolean; error?: string }> {
-  return await putProviderKey(provider, key);
+  const result = await putProviderKey(provider, key);
+  if (result.ok) await injectStoredProviderKey([provider]);
+  return result;
 }
 
 export async function handleProviderKeyDelete(provider: string): Promise<{ ok: boolean; error?: string }> {
-  return await deleteProviderKey(provider);
+  const result = await deleteProviderKey(provider);
+  if (result.ok) revokeInjectedProviderKey(provider);
+  return result;
 }
 
 /** 状态面（设置页徽标 + env 并存提示；不含 key 值）。 */
@@ -134,18 +168,40 @@ export async function handleProviderKeyStatus(): Promise<{ available: boolean; s
 }
 
 let licenseFilePath: string | null = null;
+/** 验签公钥（缺省 = 内置公钥；自建签发链与判卷可注入，与 verifyLicenseFile 的可测性口径一致：
+ *  「公钥/时间可注入」是 license.ts 自己写下的可测性契约，settings 这一层此前没把它接出来）。 */
+let licensePublicKey: string | undefined;
 
 /** shell 启动时初始化 license 文件路径（<appData>/license.json）。 */
-export function initLicenseStore(filePath: string): void {
+export function initLicenseStore(filePath: string, opts: { publicKey?: string } = {}): void {
   licenseFilePath = filePath;
+  licensePublicKey = opts.publicKey;
 }
 
 export async function handleLicenseStatus(): Promise<LicenseState> {
   if (!licenseFilePath) return { state: "inactive" };
-  return await verifyLicenseFile(licenseFilePath);
+  return await verifyLicenseFile(licenseFilePath, licensePublicKey !== undefined ? { publicKey: licensePublicKey } : {});
+}
+
+/** 导入外部签发的 license：验签通过才覆盖（写盘走 atomic），失败保持原文件。 */
+export async function handleLicenseImport(sourcePath: string): Promise<LicenseImportOutcome> {
+  if (!licenseFilePath) {
+    return { ok: false, state: { state: "inactive" }, error: "许可证存储未初始化" };
+  }
+  return await importLicenseFile(sourcePath, licenseFilePath, licensePublicKey !== undefined ? { publicKey: licensePublicKey } : {});
 }
 
 let appVersion = "0.0.1";
+let buildInfo: BuildInfo | null = null;
+
+/** 装配根启动时注入包内 build-info.json；开发态/旧包为 null（关于页显示开发构建）。 */
+export function initBuildInfo(info: BuildInfo | null): void {
+  buildInfo = info;
+}
+
+export function getBuildInfo(): BuildInfo | null {
+  return buildInfo;
+}
 
 /** shell 启动时注入当前版本（app.getVersion()；headless 缺省 package.json 版本）。 */
 export function initUpdateContext(opts: { currentVersion: string }): void {

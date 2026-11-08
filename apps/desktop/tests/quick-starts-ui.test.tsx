@@ -7,26 +7,38 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { QuickStarts } from "../src/renderer/components/QuickStarts";
 import { STR } from "../src/renderer/strings";
+import { readAppSurface } from "./helpers/app-surface";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
-const appSrc = read("../src/renderer/App.tsx");
+const appSrc = readAppSurface();
 const css = read("../src/renderer/styles.css");
 
 describe("QuickStarts（空屏建议行 SSR）", () => {
-  it("建议在场、按序、都是编号起手行", () => {
+  it("建议在场、按序、保持无编号行", () => {
     const items = ["继续上次：修登录页", "帮我看看这 3 个没提交的改动", "跑一遍测试，把失败修到绿"];
     const h = renderToStaticMarkup(<QuickStarts items={items} firstRunSub={null} onPick={() => undefined} />);
     expect(h).toContain('class="empty-below"');
     expect((h.match(/class="start"/g) ?? []).length).toBe(3);
     const qs = [...h.matchAll(/class="start-q">([^<]*)<\/span>/g)].map((m) => m[1]);
     expect(qs).toEqual(items);
+    expect(h).not.toContain('class="start-n"');
+    expect(h).not.toMatch(/>0[1-9]</);
     expect(h).not.toContain('class="pill"');
   });
 
-  it("起手行不是胶囊：编号/说明/箭头三列，hover 才露箭头，进入错峰上浮", () => {
-    expect(css).toContain(".starts {");
-    expect(css).toMatch(/\.start\s*{[^}]*grid-template-columns:\s*26px minmax\(0, 1fr\) 16px/s);
+  it("快捷动作是行列表（无通栏分隔线，2026-11-01 业主裁决）：图标是扫描锚点，整行热区，hover 才露箭头", () => {
+    const h = renderToStaticMarkup(<QuickStarts items={["理解项目", "运行项目", "制定计划"]} firstRunSub={null} onPick={() => undefined} />);
+    expect((h.match(/class="start-icon"/g) ?? []).length).toBe(3);
+    // 2026-10-28 第 735 页：建议是**一条阅读序列**，不是三张等权卡片；2 列网格会留出第四格空洞。
+    expect(css).toMatch(/\.starts\s*{[^}]*display:\s*flex/s);
+    expect(css).toMatch(/\.starts\s*{[^}]*flex-direction:\s*column/s);
+    expect(css).toMatch(/\.start\s*{[^}]*grid-template-columns:\s*22px minmax\(0, 1fr\) 16px/s);
+    // 2026-11-01：通栏 hairline 分隔撤下（横线跨满列宽像表格）；悬停底纹给圆角。
+    expect(css).not.toMatch(/\.starts\s*{[^}]*border-top/s);
+    expect(css).not.toMatch(/\.start\s*{[^}]*border-bottom/s);
+    expect(css).toMatch(/\.start\s*{[^}]*border-radius:\s*var\(--radius-sm\)/s);
     expect(css).toContain(".start:hover .start-go");
+    expect(css).toContain("@media (max-width: 620px)");
     expect(css).toContain("@keyframes rise-in");
     expect(css).toContain(".empty-below { padding-left: 16px; padding-right: 16px; }");
     expect(css).toMatch(/\.empty h1\.empty-greet\s*{[^}]*animation:\s*rise-in/s);
@@ -53,8 +65,12 @@ describe("空屏（App 源文哨兵 · P2-1）", () => {
     expect(appSrc).toContain("GitBranch");
   });
 
-  it("主页项目 chip 只出现一次（composer 的 ctx-chip 在空态让位）", () => {
-    expect(appSrc).toContain('workspaceLabel={!showEmpty && activeWorkspace ?');
+  it("工作区上下文只出现一处（会话内住工具栏左翼；输入区不再有 ctx-chip）", () => {
+    // 2026-10-21 设计重做：原先会话内 composer 上方有一枚 `cairn-... 本地` chip，
+    // 与侧栏/项目名重复；现在工作区标记收进唯一一条工具栏的左翼，输入区只剩写作面。
+    expect(appSrc).not.toContain("workspaceLabel={");
+    expect(appSrc).not.toContain('className="ctx-chip"');
+    expect(appSrc).toContain('className="tb-workspace"');
     expect(appSrc).toContain('className="empty-chip"');
   });
 
@@ -77,6 +93,13 @@ describe("空屏（App 源文哨兵 · P2-1）", () => {
     expect(appSrc).toContain("STR.empty.dropHint");
     // 未注册的最近项点击 = 重加；注册项 = 切过去。
     expect(appSrc).toContain("handleAddProject(p.path)");
+    // 最近项目的 name 可能是空串/undefined：不能渲染成一行空白，回落路径 basename。
+    expect(appSrc).toContain('p.name || p.path.slice(p.path.lastIndexOf("/") + 1)');
+    expect(appSrc).toContain('className="mi-check"');
+    // 项目弹层也走同一套菜单键盘：↑↓ / Home / End 在输入框与项目行之间移动焦点。
+    expect(appSrc).toContain("menuNavIndex(e.key, current, items.length)");
+    expect(appSrc).toContain(".chip-list .menu-item:not(:disabled)");
+    expect(appSrc).toContain('current < 0 && e.key !== "ArrowDown"');
   });
 
   it("居中枢位：main 挂 data-empty；hero 底对齐 + .empty-tail 弹性空带（flex 2.5）", () => {
@@ -121,7 +144,17 @@ describe("空屏（App 源文哨兵 · P2-1）", () => {
 // 2026-10-17 真机目验：项目选择弹层原向下开，正好盖住 composer（选项目时看不见自己要发的字）。
 describe("项目选择弹层方向", () => {
   it("chip 弹层向上开", () => {
-    expect(appSrc).toMatch(/<Popover open=\{chipOpen\} up className="chip-pop"/);
+    expect(appSrc).toMatch(/<Popover\s+open=\{chipOpen\}\s+up\s+className="chip-pop"/);
+  });
+
+  // 2026-10-24 业主截图：上开弹层压到 hero 问候线（10-18 大字 hero 正好悬在弹层路径上）。
+  // 焦点礼让：弹层向上盖到问候线时才淡出（向下开时不淡，2026-10-24 第二版）。
+  it("弹层向上盖到问候线时才淡出（data-picking → 子元素 opacity）", () => {
+    const css = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
+    expect(appSrc).toContain('{...(chipOpen ? { "data-picking": "true" } : {})}');
+    expect(css).toMatch(/\.empty\[data-picking\]:has\(\.chip-pop\.up\.show:not\(\.down\)\) \.empty-greet > \* \{ opacity: \.15; \}/);
+    // 淡出必须打在子元素上：h1 自身被 rise-in(fill both) 锁 opacity，动画级联压过普通声明。
+    expect(css).not.toMatch(/\.empty\[data-picking\] \.empty-greet \{/);
   });
 });
 
@@ -140,8 +173,22 @@ describe("空屏字级层级", () => {
   it("衬线大字 + 珊瑚星标（对照 Claude 桌面端 hero）", () => {
     const css = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
     expect(css).toMatch(/\.empty h1\.empty-greet\s*{[^}]*font-family:[^}]*Songti SC/s);
-    expect(css).toMatch(/\.empty h1\.empty-greet\s*{[^}]*font-size:\s*clamp\(2rem, 4vw, 2\.5rem\)/s);
+    // 第 870 页（业主「让布局说话」）：问候不再用 vw 流体大字（真机 1440 实测 44.2px，
+    // 而输入框正文 14px ⇒ 屏幕上最大的一块字既不能点也不能输入）。现在走标题档上界 22px。
+    expect(css).toMatch(/\.empty h1\.empty-greet\s*{[^}]*font-size:\s*var\(--fs-title-lg\)/s);
+    expect(css).not.toMatch(/\.empty h1\.empty-greet\s*{[^}]*font-size:\s*clamp/s);
     expect(css).toMatch(/\.empty-greet-mark\s*{[^}]*color:\s*hsl\(var\(--accent-brand\)\)/s);
     expect(appSrc).toContain('className="empty-greet-mark"');
+  });
+
+  it("620px 以下星标对齐首行，中文问候均衡换行而不是留下短尾", () => {
+    const narrow = css.match(/@media \(max-width: 620px\) \{([\s\S]*?)\n\}/)?.[1] ?? "";
+    expect(narrow).toMatch(/\.empty h1\.empty-greet\s*{[^}]*align-items:\s*flex-start/s);
+    // 窄窗不再反向上调字号（原来 clamp(1.75rem,7vw,2rem) 比基准还大一档）。
+    expect(narrow).not.toMatch(/\.empty h1\.empty-greet\s*{[^}]*font-size/s);
+    expect(narrow).toMatch(/\.empty-greet-mark\s*{[^}]*margin-top:\s*0\.22em/s);
+    expect(narrow).toMatch(/\.empty-greet > span\s*{[^}]*text-wrap:\s*balance/s);
+    expect(narrow).toMatch(/\.empty-greet-period\s*{[^}]*white-space:\s*nowrap/s);
+    expect(appSrc).toContain('className="empty-greet-period"');
   });
 });

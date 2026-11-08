@@ -26,9 +26,28 @@ export interface PlanChannel {
   waitApproval(callId: string, opts?: GateWaitOptions): Promise<"approved" | "rejected">;
 }
 
+/** 本轮用户明确批准的项目外读取范围（来自 RunRequest attachments 的逐次审批）。
+ *  只由 `handleAgentRun` 在附件审批通过后注入；缺省 undefined = 项目外路径照旧一律拒绝。 */
+export interface ExternalReadGrant {
+  /** canonical real path（`validateRunAttachment` 的 realPath）。 */
+  path: string;
+  kind: "file" | "directory";
+}
+
 export interface ToolContext {
   /** 工具执行的工作区（绝对路径）。 */
   workspace: string;
+  /** 会话日志定位跨 worktree 保持稳定，用于隔离后台命令。 */
+  sessionLogPath?: string;
+  /** 仅由通过审批的沙箱启动路径设置。 */
+  backgroundShellLaunch?: { executable: string; args: string[]; env: NodeJS.ProcessEnv };
+  /** 前台沙箱启动（与 backgroundShellLaunch 同形、同一审批面）：run_shell 用它替代
+   *  `bash -c <包装串>` 的 spawn 形状。命令串保持**模型原文**——`.agent` 词法闸与重定向
+   *  快照都只看用户命令，宿主加的沙箱包装（profile 里有工作区路径）不再被误伤。 */
+  foregroundShellLaunch?: { executable: string; args: string[]; env: NodeJS.ProcessEnv };
+  /** 项目外附件的**本轮**读取白名单。只有这里的精确路径（目录则含整棵子树）能被
+   *  read_file / read_image 打开；不复制文件、不修改文件、不持久化。 */
+  externalReadGrants?: readonly ExternalReadGrant[];
   /** 事件旁路出口：门工具用它把 clarify_requested / plan_proposed 落进事件流。 */
   emit?: (e: AgentEvent) => void | Promise<void>;
   /** 原工具调用 id（门事件与 tool_result 挂回同一 id 用）。 */
@@ -71,6 +90,10 @@ export interface ToolResult {
   /** D7 覆盖前快照落成的路径（workspace 相对）。缺席 = 没落快照（新建 / 空文件 / 快照自身失败）。
    *  同一个事实有两个读者：正文里那句给模型看（它得知道去哪儿找回原件），这个字段给事件流与界面看。 */
   snapshotId?: string;
+  /** 动作融合的内部标记：写已落盘，随后的 lint 可能失败。
+   *  只给 loop 的收束闸读（决定 auto-verify），**不进事件流**。不用输出里的字符串判：
+   *  失败的 shell/diagnose 也可能打印同一行字，那会把「没写盘」读成「写过盘」。 */
+  fusedWrite?: boolean;
   /** 写工具的结构化变更类型；缺席时事件消费者必须显示 unknown，不能从工具名猜。 */
   change?: "created" | "modified";
   /** 一次工具实际落盘的 workspace 相对路径（多文件工具使用）；缺席表示工具未提供清单。 */
@@ -88,10 +111,14 @@ export interface ToolResult {
   hold?: HarnessHoldReason;
 }
 
-/** 本仓静态工具名的唯一事实源：联合类型与名字表同源（加一个工具只改这一行）。 */
+/** 本仓静态工具名的唯一事实源：联合类型与名字表同源（加一个工具只改这一行）。
+ *  2026-11-05 后台任务三件套：run_shell(background:true) 起后台、task_output 读、task_stop 停
+ *  （对标 ZCode 的 bash-background / task-output / task-stop 家族）。
+ *  2026-11-06 +git_read：只读三合一（status/diff/log），零写权零 shell。 */
 export const TOOL_NAMES = [
   "read_file", "write_file", "edit_file", "apply_patch", "run_shell", "grep", "glob", "lsp",
-  "clarify", "propose_plan", "verify", "read_image", "render_image",
+  "clarify", "propose_plan", "verify", "read_image", "render_image", "todo_write",
+  "task_output", "task_stop", "git_read", "calc", "list_dir", "read_doc",
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];
@@ -107,7 +134,7 @@ export const CC_TOOL_ALIAS: Record<string, ToolName> = {
 export function resolveToolName(raw: string): ToolName | null {
   const t = raw.trim().toLowerCase();
   if ((TOOL_NAMES as readonly string[]).includes(t)) return t as ToolName;
-  return CC_TOOL_ALIAS[t] ?? null;
+  return Object.hasOwn(CC_TOOL_ALIAS, t) ? CC_TOOL_ALIAS[t]! : null;
 }
 
 export interface Tool {
@@ -252,6 +279,35 @@ export async function openContainedFile(
   }
 }
 
+/** Open an already-approved path outside the workspace and bind the handle to
+ * the named inode. The grant decision belongs to resolveReadTarget; this only
+ * makes sure the bytes come from the file that was approved. */
+export async function openVerifiedFile(abs: string, label: string): Promise<ContainedOpen> {
+  let fh: FileHandle | undefined;
+  let target: string;
+  try {
+    target = await realpath(abs);
+  } catch {
+    throw new ToolError(`${label}: 路径不存在或不可解析: ${abs}`);
+  }
+  try {
+    fh = await open(target, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
+    const opened = await fh.stat();
+    const named = await stat(target);
+    if (!sameFileIdentity(opened, named)) {
+      throw new ToolError(`${label}: 路径在打开与复核之间发生变化，拒绝使用不可信句柄: ${abs}`);
+    }
+    return { fh, path: target, stat: opened };
+  } catch (error) {
+    await fh?.close().catch(() => undefined);
+    if (error instanceof ToolError) throw error;
+    const wrapped = new ToolError(`${label}: 路径无法安全打开: ${abs}`);
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== undefined) Object.assign(wrapped, { code });
+    throw wrapped;
+  }
+}
+
 export interface ContainedPathIdentity {
   path: string;
   stat: Stats;
@@ -291,6 +347,39 @@ export async function assertWritablePath(workspace: string, abs: string, label: 
   await assertNotAgentAreaReal(workspace, abs, label);
   await assertNotFrozenReal(workspace, abs, label);
   await assertNotSensitivePathReal(workspace, abs, label);
+}
+
+/** 读取目标解析：工作区内路径走原有 containment 闸；绝对路径只有在**本轮用户已批准**的
+ *  externalReadGrants 里才放行。项目外放行按 realpath 比对（防止批准后把文件换成指向别处的
+ *  软链）；目录 grant 覆盖整棵子树，但子项同样先 realpath 再比对，不跟随到界外。 */
+export async function resolveReadTarget(
+  workspace: string,
+  input: string,
+  label: string,
+  grants: readonly ExternalReadGrant[] | undefined,
+): Promise<{ abs: string; display: string; external: boolean }> {
+  if (isAbsolute(input)) {
+    if (grants === undefined || grants.length === 0) {
+      throw new ToolError(`${label}: 只允许 workspace 相对路径，收到绝对路径: ${input}`);
+    }
+    const lexical = resolve(input);
+    const real = await realpath(lexical).catch(() => null);
+    const candidate = real ?? lexical;
+    for (const grant of grants) {
+      const root = resolve(grant.path);
+      const hit = grant.kind === "file"
+        ? candidate === root
+        : (() => {
+            const rel = relative(root, candidate);
+            return rel === "" || (rel !== ".." && !rel.startsWith(".." + sep) && !isAbsolute(rel));
+          })();
+      if (hit) return { abs: candidate, display: input, external: true };
+    }
+    throw new ToolError(`${label}: 路径不在本轮已批准的项目外附件清单内: ${input}`);
+  }
+  const abs = resolveInWorkspace(workspace, input, label);
+  await assertRealContainment(workspace, abs, label);
+  return { abs, display: input, external: false };
 }
 
 // .agent/ 是系统区（审查 C-11：permissions.json 跨会话提权 / lsp.json 任意 command RCE 面 / plugins / memory）。

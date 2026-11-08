@@ -62,7 +62,7 @@ describe("looksLikeNetworkDenial / annotateNetworkDenial（§11.4 网络审批�
   });
 });
 
-describe("networkProfileFor（§11.4 红线：网络全开永不免批）", () => {
+describe("networkProfileFor（默认必须问过且批准；完全允许档按档放行）", () => {
   it("真值表：三条条件缺一即 deny，全齐才 allow", () => {
     const cases: [boolean, boolean, boolean, "allow" | "deny"][] = [
       [true, true, true, "allow"], // 网络命令 + 问过 + 批了
@@ -74,6 +74,14 @@ describe("networkProfileFor（§11.4 红线：网络全开永不免批）", () =
     ];
     for (const [wantsNetwork, asked, approved, want] of cases) {
       expect(networkProfileFor({ wantsNetwork, asked, approved }), `wants=${String(wantsNetwork)} asked=${String(asked)} approved=${String(approved)}`).toBe(want);
+    }
+  });
+
+  it("完全允许档：没有审批卡可问，网络命令按档放行；非网络命令仍 deny", () => {
+    expect(networkProfileFor({ wantsNetwork: true, asked: false, approved: false, mode: "full-access" })).toBe("allow");
+    expect(networkProfileFor({ wantsNetwork: false, asked: false, approved: false, mode: "full-access" })).toBe("deny");
+    for (const mode of ["read-only", "default", "guided", "auto"] as const) {
+      expect(networkProfileFor({ wantsNetwork: true, asked: false, approved: false, mode })).toBe("deny");
     }
   });
 });

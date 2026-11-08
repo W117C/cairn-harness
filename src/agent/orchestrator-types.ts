@@ -1,7 +1,7 @@
 import type { AgentEvent, AgentPermissionMode, SecurityFinding } from "../events";
 import type { AutonomySession, PermissionRule } from "../permissions";
 import type { ArmKey } from "../routing/bandit";
-import type { ModelTier } from "../providers/registry";
+import type { ModelSpec, ModelTier } from "../providers/registry";
 import type { CompactionConfig, Summarizer } from "./compaction";
 import type { FrozenStage, PluginAgentRoleDef } from "./sequencer";
 import type { StuckConfig, StuckTurn } from "./stuck";
@@ -66,6 +66,11 @@ export interface WorkerContext {
 
 export interface WorkerHandle {
   agentId: string;
+  /** Stable logical conversation across follow-up runs; absent = legacy one-run worker. */
+  threadId?: string;
+  /** Fencing generation for this run. */
+  fence?: string;
+  followUpMessageIds: Set<string>;
   spawnCallId: string;
   mode: "read" | "write";
   task: string;
@@ -157,6 +162,15 @@ export interface WorkerHandle {
   lastResult?: Extract<AgentEvent, { type: "agent_result" }>;
 }
 
+export function workerThreadFields(
+  worker: Pick<WorkerHandle, "threadId" | "fence">,
+): { thread_id?: string; fence?: string } {
+  return {
+    ...(worker.threadId !== undefined ? { thread_id: worker.threadId } : {}),
+    ...(worker.fence !== undefined ? { fence: worker.fence } : {}),
+  };
+}
+
 // ---- M3c pipeline 链状态（sequencer 只读呈现；stages 批准后冻结） ----
 
 export interface PipelineChainStageState {
@@ -197,8 +211,10 @@ export interface OrchestratorOptions {
    *  缺省 undefined = 零行为（只有既有 glob 租约求交，spawn 流程与事件字节完全不变）。
    *  抛错 = 记 warn 并降级为「仅 glob 判定」——语义闸是额外探测器，不得把 spawn 炸掉。 */
   semanticLease?: (resources: string[]) => Promise<string[]>;
-  /** worker 模型解析（演示/验收通道注入脚本模型）；缺省 = GLM 暗卷（需 CAIRN_API_KEY）。 */
+  /** worker 模型解析（演示/验收通道注入脚本模型）；缺省 = defaultModelSpec 或 GLM 暗卷（需对应凭据）。 */
   modelFor?: (args: SpawnArgs) => WorkerModel | undefined;
+  /** 父会话选定的真实模型档位（未开路由且无 modelFor 注入时 worker 沿用父会话同家同档，不偷切 GLM）。 */
+  defaultModelSpec?: ModelSpec;
   /** A1 写侧 prompt 缓存断点（路由分支合成的真实 provider 模型才吃）。
    *  目前只有 Anthropic 有语义（显式 cache_control 打在静态段：末个 tool + system 首块）；
    *  GLM/OpenAI 是自动前缀缓存、Gemini 需另建 cachedContent 资源 ⇒ 传了也是零行为。
@@ -264,6 +280,26 @@ export interface OrchestratorOptions {
    *  只有 harness 的自动拍会跑——这正是「给 worker 的是 autoVerify 证据拍，不是 manual verify 门」。
    *  它产出的证据由 W4b 的 `agent_result.artifacts.verified` 如实标注（含 stale/absent）。 */
   workerVerify?: (repoDir: string) => VerifyHook;
+  /** worker 的自动验证返修：与主会话 `autoVerifyRepair` 同一个设置位；只在 workerVerify 接线时
+   *  有意义。缺省 false = 今日零行为（自动红只落证据、不再要一轮）。 */
+  workerAutoVerifyRepair?: boolean;
+  /** worker 验证红时的经验提醒（宿主注入；缺省 undefined = 零行为）：读主 workspace 的 active 经验，
+   *  只在 worker 会继续修的自动红上调用；不写 assignment、不改变验证语义。 */
+  workerExperienceNudge?: (input: {
+    agentId: string;
+    task: string;
+    mode: "read" | "write";
+    toolNames: readonly string[];
+    signals: readonly string[];
+  }) => Promise<{ note: string; ids: readonly string[] }>;
+  /** worker 起点经验注记（宿主注入；缺省 undefined = 零行为）：按任务面把 active 经验
+   *  接在记忆之后、任务书之前。返回空串 = 不注入；抛错/读不动由编排器吞掉并出声，不阻塞 worker。 */
+  workerExperienceNote?: (input: {
+    agentId: string;
+    task: string;
+    mode: "read" | "write";
+    toolNames: readonly string[];
+  }) => Promise<string>;
   /** §9.10「worker 继承主会话插件启用集」：worker 的 runLoop 拿同一个钩子引擎跑
    *  PreToolUse / PostToolUse / PostToolUseFailure。
    *  **缺省 undefined = 零行为**——那正是此前的状态：worker 有 write_file / edit_file / 可写 shell，

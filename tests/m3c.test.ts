@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createEventLog, replay, type AgentEvent } from "../src/events";
+import { createEventLog, numericCompactionIds, replay, type AgentEvent } from "../src/events";
 import { projectContext } from "../src/agent/context";
 import {
   Orchestrator,
@@ -627,7 +627,7 @@ describe("M3c 卡死检测集成", () => {
       model: () => scriptedWorkerModel(script as Parameters<typeof scriptedWorkerModel>[0]),
       stuckConfig: { maxActionObsRepeats: 4, silenceMs: 0 },
     });
-    const r = await orch.spawn({ mode: "read", task: "会卡死的任务" }, { callId: "stuck-1" });
+    const r = await orch.spawn({ mode: "read", task: "会卡死的任务" }, { callId: "stuck-1", threadId: "thr-stuck" });
     expect(r.ok).toBe(true);
     const id = (JSON.parse(r.output) as { agent_id: string }).agent_id;
     expect(await waitFor(() => events.some((e) => e.type === "agent_status" && (e as { reason?: string }).reason === "stuck"))).toBe(true);
@@ -637,6 +637,10 @@ describe("M3c 卡死检测集成", () => {
     expect(await waitFor(() => events.some((e) => e.type === "agent_message" && (e as { text: string }).text.includes("[stuck]")))).toBe(true);
     const remind = events.find((e) => e.type === "agent_message" && (e as { text: string }).text.includes("[stuck]")) as Extract<AgentEvent, { type: "agent_message" }> | undefined;
     expect(remind?.text).toContain("same_action_obs_x4");
+    // 线程装饰同源钉：卡死提醒是 worker 出口族的一员，thread_id 必须与 agent_status 同源
+    // （此前是同文件唯一漏带 workerThreadFields 的出口 ⇒ 线程化会话里卡片脱离 worker 线程）。
+    expect(remind?.thread_id).toBe("thr-stuck");
+    expect(stuckStatus.thread_id).toBe("thr-stuck");
     // resume：清除卡死态 → worker 收束
     expect(orch.resumeAgent(id)).toBe(true);
     await orch.waitAll(10_000);
@@ -709,7 +713,7 @@ describe("M3c worker 压缩", () => {
     expect(typeof comp!.agent_id).toBe("string");
     expect((comp!.agent_id as string).startsWith("worker-")).toBe(true);
     expect(comp!.trigger).toBe("auto"); // §7.5 worker 触发更晚：非 overflow 兜底，是阈值摘要路径
-    expect(comp!.compressed_event_ids.length).toBeGreaterThanOrEqual(1);
+    expect(numericCompactionIds(comp!).length).toBeGreaterThanOrEqual(1);
     // 摘要 usage 计入该 worker（usage(agent_id) 事件 + agent_result 汇总）
     const usageEvents = events.filter((e) => e.type === "usage" && (e as { agent_id?: string }).agent_id !== undefined) as Extract<AgentEvent, { type: "usage" }>[];
     expect(usageEvents.some((u) => u.inputTokens >= 33 && u.outputTokens >= 7)).toBe(true);

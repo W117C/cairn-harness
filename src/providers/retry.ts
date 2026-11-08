@@ -36,6 +36,55 @@ export function retryAfterMs(header: string | null | undefined, nowMs: number, c
   return Math.min(Math.max(0, Math.round(when - nowMs)), capMs);
 }
 
+/** 流内失败的分类：**重试与否由抛出处决定，不由 catch 处猜字符串**。
+ *  判断「这个错能不能重放」需要的信息（5xx 还是协议错、帧坏还是对端挂了）只在抛出那一刻确定；
+ *  挪到 catch 里靠 message 正则反推，迟早在某个新错误形状上猜错。
+ *  `retryable` 只表示「重放是安全的」——调用方仍要另外确认「本次尝试还没吐过输出」。
+ *  （2026-10-23 从 `openai.ts` 搬来这里：三家适配器现在共用同一套流内重试判据，见
+ *  `retryableStreamErrorFrame`；只留一份，别让下一支再抄一遍名字表。） */
+export class StreamFailure extends Error {
+  readonly retryable: boolean;
+  constructor(message: string, retryable: boolean) {
+    super(message);
+    this.name = "StreamFailure";
+    this.retryable = retryable;
+  }
+}
+
+/** 对端把错误**塞进 SSE 体**时的名字表（HTTP 已是 200，状态码那一半失效）。
+ *  OpenAI 兼容网关实测用 `server_error`（即 502）；Anthropic 用 `overloaded_error` / `api_error`；
+ *  Gemini 用 `UNAVAILABLE` / `RESOURCE_EXHAUSTED` / `INTERNAL` / `DEADLINE_EXCEEDED`（大写）。
+ *  只收「重放有意义的」：`invalid_request_error`、`authentication_error`、`permission_error`
+ *  这类是请求本身的问题，重放只会再错一次并白烧预算。 */
+const RETRYABLE_STREAM_ERROR_NAMES: ReadonlySet<string> = new Set([
+  "server_error", "overloaded_error", "rate_limit_exceeded", "rate_limit_error", "timeout",
+  "api_error", "unavailable", "resource_exhausted", "internal", "deadline_exceeded",
+]);
+
+/** 三家流内 error 帧的统一判据（数值优先，名字其次）。
+ *  `status` / `code` / `type` 都可能带数值，也都可能是**字符串形式的数值**（OpenRouter 实测
+ *  `"type": "502"`，Gemini 用 `"code": 429`）⇒ 两处都取、都转数。名字只补「没有数值」那一半。 */
+export function retryableStreamErrorFrame(fields: {
+  readonly names?: readonly (string | number | null | undefined)[];
+  readonly messages?: string;
+}): boolean {
+  const values = fields.names ?? [];
+  for (const value of values) {
+    const numeric = typeof value === "number" ? value : Number(value);
+    if (Number.isFinite(numeric) && retryableStatus(numeric)) return true;
+  }
+  for (const value of values) {
+    if (typeof value !== "string") continue;
+    if (RETRYABLE_STREAM_ERROR_NAMES.has(value.trim().toLowerCase())) return true;
+  }
+  return false;
+}
+
+/** 流内 catch 处的统一判据：`StreamFailure` 自己声明；未知形状按可重放（网络抖动那一类）。 */
+export function retryableStreamFailure(err: unknown): boolean {
+  return err instanceof StreamFailure ? err.retryable : true;
+}
+
 /** 指数退避 + full jitter（AWS 口径）：同批 worker 齐步重试会把限流窗口二次打满。
  *  attempt 从 1 起 ⇒ 第 1 次重试上限 base、第 2 次 2·base、第 3 次 4·base，封顶 capMs。 */
 export function backoffMs(attempt: number, baseMs: number, capMs: number, rand: () => number): number {

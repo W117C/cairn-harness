@@ -11,7 +11,8 @@
 // 本仓 `mayHaveWrittenDisk` 对任意非白名单命令就是按"可能改盘"管的）：
 // 由 agent-runner 用 `gatedTool` 包装 ⇒ 只读档摘除/拒、方案门挡、沙箱降级时强制审批，四条全在。
 
-import { classifyVerifyFailure, DEFAULT_VERIFY_TIMEOUT_MS, loadVerifyConfig, type ExecFn } from "../agent/verify.js";
+import { classifyVerifyFailure, DEFAULT_VERIFY_TIMEOUT_MS, loadVerifyConfig, type ExecFn, type VerifyConfig } from "../agent/verify.js";
+import type { VerifyProvenance, VerifyTrustDecision } from "../agent/verify-trust.js";
 import { ToolError, type Tool, type ToolResult } from "./base.js";
 import { parseDiagnostics, type DiagnosticEntry } from "./diagnose-parse.js";
 
@@ -43,6 +44,15 @@ export function entryLine(e: DiagnosticEntry): string {
 export interface DiagnoseDeps {
   /** 执行器（agent-runner 传 verifyExec(sandbox)：与 verify 同一条沙箱出口）。 */
   exec: ExecFn;
+  /** 信任闸（**必填**，2026-10-21 评审修）：diagnose 会执行仓库自带配置里的命令，
+   *  与 verify 同一条 S3 门——不批不跑。生产实现复用 verifyTrust resolver。 */
+  authorize: (req: {
+    repoDir: string;
+    config: VerifyConfig;
+    provenance: VerifyProvenance;
+    commands: readonly string[];
+    signal?: AbortSignal;
+  }) => Promise<VerifyTrustDecision>;
 }
 
 /** 模型可见规格（由 agent-runner 与实例同时注入；描述刻意写短——工具面是每轮重送的固定成本）。 */
@@ -86,6 +96,17 @@ export function createDiagnoseTool(deps: DiagnoseDeps): Tool {
         return { ok: false, output: `diagnose: 本工作区没有可诊断面（${why}）。先在配置里补上再调本工具。` };
       }
 
+      const commands = picked.map((p) => p.command);
+      const provenance: VerifyProvenance = source === "config" ? "repo-config" : "repo-probed";
+      const grant = await deps.authorize({
+        repoDir: ctx.workspace,
+        config,
+        provenance,
+        commands,
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      });
+      if (!grant.run) return { ok: false, output: grant.reason };
+
       const timeoutMs = config.timeoutMs ?? DEFAULT_VERIFY_TIMEOUT_MS;
       const out: string[] = [];
       let failed = 0;
@@ -93,7 +114,7 @@ export function createDiagnoseTool(deps: DiagnoseDeps): Tool {
       let errors = 0;
       let warnings = 0;
       for (const { face: f, command } of picked) {
-        const r = await deps.exec(command, ctx.workspace, timeoutMs);
+        const r = await deps.exec(command, ctx.workspace, timeoutMs, ctx.signal);
         if (r.ok) {
           out.push(`[diagnose] ${f} · ${command} → ✅ 通过`);
           continue;

@@ -17,6 +17,7 @@
 //  - entry 是「包根相对」路径（包根按 kind 落在哪棵树，由 Phase 1 Installer 裁决），
 //    所以本层只查形状；对实际 staging 目录的包含性校验在 registry.registerStaged 里补。
 import { isAbsolute } from "node:path";
+import { isRecord } from "../../is-record";
 
 export type BundleKind = "tool" | "service" | "plugin" | "content-pack" | "desktop-panel";
 
@@ -64,10 +65,6 @@ export function isBundleId(value: unknown): value is string {
 
 export function isBundleVersion(value: unknown): value is string {
   return typeof value === "string" && value.length <= MAX_VERSION_LENGTH && BUNDLE_VERSION_RE.test(value);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isBundleKind(value: unknown): value is BundleKind {

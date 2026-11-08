@@ -1,7 +1,7 @@
 // 事件流（Claude 蓝本 v1 重建；锚点契约全保留）：
 //   user 行 = 右侧气泡正文（原型 v3-lite .u：surface-2 + 右下角尾；业主 18.41.11 裁「用户和大模型
 //   的对话左右区分」——样式层落位，DOM 锚不动；hover 出复制/分叉/还原/折叠）；assistant 行 = 左侧 ✦ 标记
-//   + markdown 正文（流式期光标；hover 出复制/回放/朗读/赞踩）；工具行 = 状态字形 + mono 头 + 展开
+//   + markdown 正文（流式期光标；hover 出复制/回放/赞踩）；工具行 = 状态字形 + mono 头 + 展开
 //   （折叠行含 摘要 + 耗时（有 then 显示））；连续工具行成步骤簇；思考行可折叠走动。
 // P3-1 收口（计划稿）：操作条分叉落 user 行（fork 到该轮）、回放落 agent 行（fork + 注入该轮输入不
 //   发送）；四类行带 data-event-id 锚（1-based 行号——timeline 跳转落点）；顶部 .gen-bar 生成中细条。
@@ -12,18 +12,30 @@
 // data-round-anchor、think-live/think-body/think-elapsed/aria 全套、复制/还原 aria-label ——
 // 全部逐字保留（本文件换形态与图标，不动锚）。
 // 图标 = lucide-react（ADR 0003）。
-import { Fragment, memo, useEffect, useId, useState } from "react";
-import { AlertTriangle, Check, ChevronRight, ChevronUp, CircleDashed, Copy, Eye, FileCode2, FileText, Folder, GitBranch, History, Image as ImageIcon, Loader2, Pencil, Pin, RotateCcw, RotateCw, Sparkles, Square, ThumbsDown, ThumbsUp, Volume2 } from "lucide-react";
-import { relativeTime, type StreamRow } from "../projections";
+import { AlertTriangle,BrainCircuit,Check,ChevronRight,ChevronUp,CircleDashed,Copy,Eye,FileCode2,FileText,Folder,GitBranch,Globe,History,Image as ImageIcon,Loader2,SquareTerminal,Undo2,Pin,RotateCcw,RotateCw,ThumbsDown,ThumbsUp } from "lucide-react";
+import { Fragment,memo,useEffect,useId,useRef,useState } from "react";
+import type { ChangeDiffPayload } from "../../../../../src/main/change-diff";
+import { eventRefKey, type EventRef } from "../../../../../src/events/session-ref";
+import { anchorKeyOf, type AnchoredEvent } from "../state/session-identity";
+import { TOOL_VERBS, toolVerb } from "../derived/tool-verbs";
+import { toolFailureReasonOf, toolFailureSummary } from "../derived/tool-failure";
+import { finalAnswerIndex, summarizeProcess } from "../derived/process-fold";
+import { ProcessFold } from "./ProcessFold";
+import { STR } from "../strings";
+import { Markdown } from "../markdown";
+import { relativeTime,type StreamRow } from "../projections";
 import { userMessageCopy } from "../transcript";
 import { useNow } from "../useNow";
-import { Markdown } from "../markdown";
 import type { ViewMode } from "../view-mode";
+// 助手行标不用 lucide（ADR 0003 的例外）：品牌标 = CairnMark，与启动屏/Dock 同一图形。
+import { CairnLoader } from "./CairnLoader";
+import { CairnMark } from "./CairnMark";
 import { DiffView } from "./DiffView";
-import { canFoldRound, truncateSummary } from "./stream-model";
-import type { ChangeDiffPayload } from "../../../../../src/main/change-diff";
+import { canFoldRound,truncateSummary } from "./stream-model";
+import "./stream-process.css";
 
-export { canFoldRound, foldAllButLast, truncateSummary, turnSummaries } from "./stream-model";
+export type { StreamActions } from "../stream-actions";
+export { canFoldRound,foldAllButLast,truncateSummary,turnSummaries } from "./stream-model";
 
 /** 写文件类工具（展开区行内 diff 的判定面；与 ApprovalCard toolIcon 的写族一致）。 */
 const WRITE_TOOLS = new Set(["write_file", "edit_file", "apply_patch"]);
@@ -54,24 +66,8 @@ function RowTime(props: { ts?: number }) {
   );
 }
 
-/** 工具行一句话摘要的动词层（阶段 2 · brief §二.4 例：「抓取 api-docs.deepseek.com/news」）。
- *  已知工具给中文动词；未知工具 null——宁缺不编（渲染层回落「· 摘要」形态）。 */
-const TOOL_VERBS: Readonly<Record<string, string>> = {
-  read_file: "读取",
-  write_file: "写入",
-  edit_file: "编辑",
-  apply_patch: "打补丁",
-  run_shell: "运行",
-  list_dir: "列目录",
-  web_fetch: "抓取",
-  web_search: "搜索",
-  spawn_agent: "派发子任务",
-  read_image: "读图",
-};
-export function toolVerb(tool: string): string | null {
-  return TOOL_VERBS[tool] ?? null;
-}
-
+// 词表本体在派生层（第 918 页）：时间线的步骤标签与这里共用同一份，见 `derived/tool-verbs.ts`。
+export { TOOL_VERBS, toolVerb };
 /** 工具耗时文本（P3-1 · 折叠行「图标 + 摘要 + 耗时 + 状态符」的耗时位）：
  *  <1s 毫秒 / <10s 一位小数秒 / <60s 整数秒 / 其余「XmYs」（秒为 0 省「s」）。负值/非数按 0。 */
 export function formatDuration(ms: number): string {
@@ -85,15 +81,37 @@ export function formatDuration(ms: number): string {
   return rs === 0 ? `${String(m)}m` : `${String(m)}m${String(rs)}s`;
 }
 
+/** 工具类型字形（2026-10-31，R1）：先认得出「在跑什么」，再看状态。
+ *  认不出的工具给通用文件图标，不猜语义。 */
+function ToolKindGlyph({ tool }: { tool: string }): React.JSX.Element {
+  if (tool === "run_shell") return <SquareTerminal size={12} />;
+  if (tool === "web_fetch" || tool === "web_search") return <Globe size={12} />;
+  if (tool === "read_image") return <ImageIcon size={12} />;
+  if (tool === "spawn_agent") return <GitBranch size={12} />;
+  return <FileText size={12} />;
+}
+
+/** 工具状态机（2026-10-31 归一）：中断 > 执行中 > 失败 > 完成 > 未知。
+ *  未返回结果与失败分开，停转后不继续转圈或暗示成功；渲染与簇计数共用这一处。 */
+export type ToolStatus = "interrupted" | "pending" | "failed" | "done" | "unknown";
+export function toolStatusOf(row: { pending?: boolean; interrupted?: boolean; ok?: boolean }): ToolStatus {
+  if (row.interrupted) return "interrupted";
+  if (row.pending) return "pending";
+  if (row.ok === false) return "failed";
+  if (row.ok === true) return "done";
+  return "unknown";
+}
+
 /** 工具状态：未返回结果与失败分开，停转后不继续转圈或暗示成功。 */
 function ToolGlyph(props: { pending?: boolean; interrupted?: boolean; ok?: boolean }) {
   if (props.interrupted) return <span className="glyph interrupted" aria-label="未收到结果"><CircleDashed size={12} /></span>;
-  if (props.pending) return <span className="glyph pending" aria-label="执行中"><Loader2 size={12} /></span>;
+  if (props.pending) return <span className="glyph pending" aria-label="执行中"><CairnLoader /></span>;
   if (props.ok === false) return <span className="glyph failed" aria-label="失败"><AlertTriangle size={12} /></span>;
+  if (props.ok !== true) return <span className="glyph unknown" aria-label="状态未知"><CircleDashed size={12} /></span>;
   return <span className="glyph ok" aria-label="完成"><Check size={12} /></span>;
 }
 
-const ToolRow = memo(function ToolRow(props: Extract<StreamRow, { kind: "tool" }> & { view?: ViewMode; onOpenArtifact?: (a: NonNullable<Extract<StreamRow, { kind: "tool" }>["artifact"]>) => void }) {
+const ToolRow = memo(function ToolRow(props: Extract<StreamRow, { kind: "tool" }> & { view?: ViewMode; onCopyText?: StreamActions["onCopyText"]; onOpenArtifact?: (a: NonNullable<Extract<StreamRow, { kind: "tool" }>["artifact"]>) => void }) {
   // Verbose 档默认全展开（蓝本 §3.4）；不给 view（旧消费者/判卷）保持折叠默认。
   const [open, setOpen] = useState(props.view === "verbose");
   useEffect(() => {
@@ -101,6 +119,16 @@ const ToolRow = memo(function ToolRow(props: Extract<StreamRow, { kind: "tool" }
   }, [props.view]);
   const r = props;
   const verb = toolVerb(r.tool);
+  const bodyId = useId();
+  const state = toolStatusOf(r);
+  const status = { interrupted: "未收到结果", pending: "执行中", failed: "失败", done: "完成", unknown: "状态未知" }[state];
+  const resultNote = {
+    pending: "正在执行，等待工具返回。",
+    interrupted: "本次调用未收到返回结果。",
+    failed: "工具返回失败，未提供错误详情。",
+    done: "工具未提供返回内容。",
+    unknown: "未记录工具结果，状态未知。",
+  }[state];
   // 写文件类行的行内 diff（P3-1 Step 2）：展开 + 成功收口后才懒加载（changeDiff 既有通道）；
   // 失败原文上屏（fail-visible），通道无应答如实说。
   const diffPath = writeDiffPathOf(r.tool, r.args, r.path);
@@ -110,33 +138,50 @@ const ToolRow = memo(function ToolRow(props: Extract<StreamRow, { kind: "tool" }
     let alive = true;
     setDiff({ loading: true, payload: null });
     void window.agent
-      .changeDiff({ path: diffPath })
+      .changeDiff({ path: diffPath, ...(r.snapshotId !== undefined ? { snapshotId: r.snapshotId } : {}) })
       .then((payload) => { if (alive) setDiff({ loading: false, payload: payload ?? { ok: false, error: "通道无应答（主进程未返回差异数据）" } }); })
       .catch((err: unknown) => { if (alive) setDiff({ loading: false, payload: { ok: false, error: err instanceof Error ? err.message : String(err) } }); });
     return () => { alive = false; };
   }, [open, r.ok, diffPath]);
   return (
-    <div className={`row tool${open ? " open" : ""}`} data-event-id={String(r.seq + 1)}>
-      <button className="tool-head" aria-expanded={open} onClick={() => setOpen(!open)}>
+    <div className={`row tool${open ? " open" : ""}`} data-event-id={String(r.seq + 1)} data-state={state} data-tool-status={state}>
+      <button className="tool-head" aria-expanded={open} aria-controls={bodyId} aria-busy={r.pending === true} onClick={() => setOpen(!open)}>
         <span className="chev" aria-hidden="true"><ChevronRight size={10} /></span>
         <ToolGlyph pending={r.pending} interrupted={r.interrupted} ok={r.ok} />
-        <span className="tname">{r.tool}</span>
+        <span className="tool-kind" aria-hidden="true"><ToolKindGlyph tool={r.tool} /></span>
+        {/* 有中文动词的行不再显示原始工具名：同一行先写 run_shell 再写「运行 …」是把一件事
+            说两遍，而实现名本就不该出现在流里（「不暴露实现名」口径）。未知工具没有动词可给，
+            原始名是它唯一的身份 ⇒ 保留（宁缺不编）。 */}
+        {verb === null && <span className="tname">{r.tool}</span>}
         <span className="tsum">{verb !== null ? `${verb} ${r.summary}` : `· ${r.summary}`}</span>
-        {r.interrupted && <span className="tdur">未收到结果</span>}
-        {r.ts !== undefined && r.then !== undefined && (
+        {state !== "done" && <span className="tool-status">{status}</span>}
+        {r.ts !== undefined && r.then !== undefined && Number.isFinite(r.ts) && Number.isFinite(r.then) && r.then >= r.ts && (
           <span className="tdur">{formatDuration(r.then - r.ts)}</span>
         )}
         {/* 2026-10-17：工具行不再挂绝对时间戳。brief §二.4 的折叠行要素 = 图标 + 摘要 + 耗时 + 状态；
             同一行同时出现「5.9s」和「15 分钟前」两份时间，读起来是噪音（真机目验）。
             绝对时间仍可从时间线窗格/事件日志取得，不丢信息。 */}
       </button>
+      {!open && r.ok === false && r.output && <div className="tool-row-notice">{truncateSummary(r.output, 240)}</div>}
       {open && (
-        <div className="tool-body">
+        <div id={bodyId} className="tool-body">
+          {/* 命令行单独一排（对标参照）：跑的是什么命令，是这一行最该被看见的事实，
+              不该埋在「原始参数（JSON）」里让人去捞。复制仍在下面的 JSON 块上，不重复挂第二个。 */}
+          {r.command !== undefined && (
+            <div className="tool-cmd">
+              <span className="tool-cmd-prompt" aria-hidden="true">$</span>
+              <code className="tool-cmd-line">{r.command}</code>
+            </div>
+          )}
           {/* 展开区（brief §二.4）：原始参数 JSON 默认折叠，点击才见；老事件（无 args）回落摘要。 */}
           {r.args !== undefined ? (
             <div className="kv">
-              <span className="k">原始参数（JSON）</span>
+              <div className="tool-payload-head">
+                <span className="k">原始参数（JSON）</span>
+                {props.onCopyText !== undefined && <button className="process-copy" aria-label={r.args.endsWith("…") ? "复制已显示参数" : "复制原始参数"} title="复制当前显示的参数" onClick={() => props.onCopyText?.(r.args!)}><Copy size={12} /> 复制</button>}
+              </div>
               <pre>{r.args}</pre>
+              {r.args.endsWith("…") && <span className="tool-output-note">参数过长，当前为截断视图；完整参数可在事件日志中查看。</span>}
             </div>
           ) : (
             <div className="kv">
@@ -146,11 +191,15 @@ const ToolRow = memo(function ToolRow(props: Extract<StreamRow, { kind: "tool" }
           )}
           {r.output !== undefined && (
             <div className="kv tool-output" data-failed={r.ok === false}>
-              <span className="k">返回内容</span>
+              <div className="tool-payload-head">
+                <span className="k">返回内容</span>
+                {props.onCopyText !== undefined && <button className="process-copy" aria-label={r.outputTruncated ? "复制已显示返回内容" : "复制工具返回内容"} title="复制当前显示的返回内容" onClick={() => props.onCopyText?.(r.output!)}><Copy size={12} /> 复制</button>}
+              </div>
               <pre>{r.output === "" ? "（空输出）" : r.output}</pre>
               {r.outputTruncated && <span className="tool-output-note">仅显示前 10,000 字符；完整内容可在事件日志中查看。</span>}
             </div>
           )}
+          {r.output === undefined && <p className="tool-result-note">{resultNote}</p>}
         {/* 行内 diff（P3-1 Step 2 · 计划稿）：写文件类且已成功收口——changeDiff 懒加载 + DiffView 复用。 */}
         {diffPath !== null && r.ok === true && (
           <div className="kv">
@@ -189,91 +238,93 @@ const ToolRow = memo(function ToolRow(props: Extract<StreamRow, { kind: "tool" }
 });
 
 /** 摘要 → 调用列表 → 单次输入/输出；展开选择不随流式追加或收口重置。 */
-function ToolCluster(props: { rows: Extract<StreamRow, { kind: "tool" }>[]; view?: ViewMode; onOpenArtifact?: StreamActions["onOpenArtifact"] }) {
+function ToolCluster(props: { rows: Extract<StreamRow, { kind: "tool" }>[]; view?: ViewMode; onCopyText?: StreamActions["onCopyText"]; onOpenArtifact?: StreamActions["onOpenArtifact"] }) {
   const [expanded, setExpanded] = useState(false);
   const id = useId();
   const open = props.view === undefined || props.view === "verbose" || expanded;
-  const pending = props.rows.filter((r) => r.pending);
-  const failures = props.rows.filter((r) => r.ok === false);
-  const interrupted = props.rows.filter((r) => r.interrupted);
+  const pending = props.rows.filter((r) => toolStatusOf(r) === "pending");
+  const failures = props.rows.filter((r) => toolStatusOf(r) === "failed");
+  const interrupted = props.rows.filter((r) => toolStatusOf(r) === "interrupted");
+  const unknown = props.rows.filter((r) => toolStatusOf(r) === "unknown");
   const latest = pending.at(-1);
   const failure = failures.at(-1);
+  // 单次调用不再说「1 次工具调用」——那句话把真正有用的工具名/对象挤到省略号后面
+  // （2026-11-03 业主截图：一行只剩「1 次工具调用 执行中」）。一次调用直接用人话动词+对象当标题。
+  const single = props.rows.length === 1 && failures.length === 0 ? props.rows[0] : null;
+  const singleLabel = single === null
+    ? null
+    : `${toolVerb(single.tool) ?? single.tool}${single.summary.trim() === "" ? "" : " " + single.summary}`;
+  // 收起态的失败摘要 = **一行人话**（"web_fetch 未执行 · 审批等待超时"），不是机器面原文
+  // （2026-11-01 真机缺陷 1：原文是写给模型读的解释面，用户读不懂）。原文不丢：
+  // 展开体里仍是 <pre> 全文，收起态悬停（title）也能看到截断版。
+  const failureSummary = failure !== undefined ? toolFailureSummary(failure, STR.toolGroup) : "";
+  const failureTitle = failure !== undefined && failure.output !== undefined && failure.output !== ""
+    ? STR.toolGroup.failureDetailTip.replace("{raw}", truncateSummary(failure.output, 400))
+    : undefined;
+  // 组总耗时（2026-10-31 · 业主「工具执行太丑」）：收起态给一个总时长，
+  // 用户不必展开 3 行去心算。只累加两端都可信的调用（与单行 tDur 同一判据），不补零。
+  const totalMs = props.rows.reduce((sum, r) => {
+    if (r.ts === undefined || r.then === undefined) return sum;
+    if (!Number.isFinite(r.ts) || !Number.isFinite(r.then) || r.then < r.ts) return sum;
+    return sum + (r.then - r.ts);
+  }, 0);
+  // 单次失败且认不出原因 ⇒ 摘要只是「{tool} 调用失败」：直接当标题，不再在下面复述第二遍。
+  const failureAsLabel = props.rows.length === 1 && failure !== undefined && toolFailureReasonOf(failure) === "generic";
+  let groupOk: boolean | undefined;
+  if (failures.length > 0) groupOk = false;
+  else if (unknown.length === 0) groupOk = true;
   return (
-    <div className="toolcluster" data-tool-group={String(props.rows[0]?.seq)}>
+    <div className="toolcluster" data-tool-group={String(props.rows[0]?.seq)} data-open={open ? "true" : "false"}>
       {props.view !== undefined && props.view !== "verbose" && (
         <button className="tool-group-toggle" aria-expanded={open} aria-controls={id} onClick={() => setExpanded(!expanded)}>
-          <ChevronRight className="chev" size={12} aria-hidden="true" />
-          <ToolGlyph pending={latest !== undefined} interrupted={latest === undefined && interrupted.length > 0} ok={failures.length === 0} />
-          <span>{props.rows.length} 次工具调用</span>
-          {latest !== undefined && <span className="tool-group-detail">执行中 · {toolVerb(latest.tool) ?? latest.tool} {latest.summary}</span>}
-          {interrupted.length > 0 && <span className="tool-group-detail">{interrupted.length} 次未收到结果</span>}
-          {failures.length > 0 && <span className="tool-group-failure">{failures.length} 次失败{!open && failure?.output ? ` · ${truncateSummary(failure.output, 80)}` : ""}</span>}
+          <span className="tool-group-main">
+            <ChevronRight className="chev" size={12} aria-hidden="true" />
+            <ToolGlyph pending={latest !== undefined} interrupted={latest === undefined && interrupted.length > 0} ok={groupOk} />
+            {/* 失败数与总数合成一句：此前「1 次工具调用 | 1 次失败」并排，读成两件事。 */}
+            <span className="tool-group-label" {...(failureAsLabel && failureTitle !== undefined ? { title: failureTitle } : {})}>
+              {failureAsLabel ? failureSummary : singleLabel ?? (failures.length > 0
+                ? (props.rows.length === failures.length
+                  ? `${String(failures.length)} 次工具失败`
+                  : `${String(failures.length)} 次工具失败（共 ${String(props.rows.length)} 次）`)
+                : `${String(props.rows.length)} 次工具调用`)}
+            </span>
+            {latest !== undefined && <span className="tool-group-detail">{singleLabel === null ? `执行中 · ${toolVerb(latest.tool) ?? latest.tool} ${latest.summary}` : "执行中"}</span>}
+            {interrupted.length > 0 && <span className="tool-group-detail">{interrupted.length} 次未收到结果</span>}
+            {unknown.length > 0 && <span className="tool-group-detail">{unknown.length} 次状态未知</span>}
+            {totalMs > 0 && <span className="tool-group-duration">{formatDuration(totalMs)}</span>}
+          </span>
+          {failures.length > 0 && !open && failure !== undefined && !failureAsLabel ? (
+            <span className="tool-group-failure" {...(failureTitle !== undefined ? { title: failureTitle } : {})}>
+              <span className="tool-group-failure-detail">{failureSummary}</span>
+            </span>
+          ) : null}
         </button>
       )}
       <div id={id} className="tool-group-body" hidden={!open}>
         {props.rows.map((r) => <ToolRow key={r.seq} {...r}
           {...(props.view !== undefined ? { view: props.view } : {})}
+          {...(props.onCopyText !== undefined ? { onCopyText: props.onCopyText } : {})}
           {...(props.onOpenArtifact !== undefined ? { onOpenArtifact: props.onOpenArtifact } : {})} />)}
       </div>
     </div>
   );
 }
 
-export interface StreamActions {
-  /** eventId → 当前生效评分（listFeedback 投影）；缺席 = 未评。 */
-  feedback?: ReadonlyMap<number, "up" | "down">;
-  feedbackBusy?: (eventId: number) => boolean;
-  pinBusy?: (eventId: number) => boolean;
-  annotationPending?: (eventId: number) => boolean;
-  /** 赞/踩真提交（core submitFeedback 落 sidecar）；rating=null = 撤销。 */
-  onFeedback?: (eventId: number, rating: "up" | "down" | null) => void;
-  /** 文件级回滚（core revertTurn；确认与结果提示在 App）。 */
-  onRevertTurn?: (round: number) => void;
-  /** 复制行文本（剪贴板与失败面在 App）。 */
-  onCopyText?: (text: string) => Promise<boolean> | void;
-  /** 打开用户消息里的附件（2026-10-18）：芯片从纯展示变成可点——点了用系统默认应用打开。 */
-  onOpenAttachment?: (path: string) => void;
-  /** 分叉（P3-1 操作条）：从 user 这条消息所在轮 fork 出新会话（core forkSession；原会话不动）。 */
-  onBranch?: (round: number) => void;
-  /** 编辑并重发（2026-10-18）：在前一轮上下文的**新分支**里填入这条消息原文，用户改完再发；
-   *  原会话不动。第 1 轮没有前置上下文 ⇒ App 侧新建空会话后填入。 */
-  onEditRound?: (round: number, text: string) => void;
-  /** 回放（P3-1 操作条，agent 行）：fork 到该轮 + 切到新会话 + 把该轮用户输入注入输入框（不自动发送）。
-   *  传事件 id（1-based 行号）——轮号与输入原文由 App 从事件日志投影（roundOfEvent/userTextOfRound）。 */
-  onReplay?: (eventId: number) => void;
-  /** 朗读（§2.2 操作条 read aloud）：macOS say；speakingEventId 控按钮态。 */
-  onSpeak?: (eventId: number, text: string) => void;
-  /** 正在朗读的那条（eventId）；缺席/null = 没有在念。 */
-  speakingEventId?: number | null;
-  /** 轮折叠开合（v7.2）：折叠钮与展开钮共用；缺席 = 不渲染折叠面。 */
-  onToggleFold?: (round: number) => void;
-  /** 错误行「重试」（brief 六：「错误态：清晰原因 + 重试」）：用最后一轮的输入再跑一轮
-   *  （追加为新轮，不改写历史；运行中不摆——App 侧同样以 runningSet 兜底）。 */
-  onRetryLast?: () => void;
-  /** 是否正在跑（重试按钮的显隐依据之一；缺席按未运行处理）。 */
-  running?: boolean;
-  /** 打开产物（工具交付物直达）。缺席 = 不渲染产物入口（老调用方与判卷不受影响）。 */
-  onOpenArtifact?: (a: { kind: "image" | "html" | "svg" | "text"; path: string; note?: string }) => void;
-  /** 重跑该轮（Claude 式重试，2026-10-17）：用这一轮的用户输入再发一次（追加为新轮）。
-   *  运行中不渲染——此刻再排一轮语义含糊；App 侧另以 runningSet 兜底。 */
-  onRetryRound?: (round: number) => void;
-  /** 消息置顶（2026-10-20 · 销 G6 / 规范 §3.11 操作条 pin）：落 sidecar pins.jsonl。
-   *  缺席 = 不渲染 pin 钮（老调用方与判卷不受影响）。 */
-  onPin?: (eventId: number, pinned: boolean) => void;
-  /** 当前已置顶的锚点（eventId 集合）；缺席 = 无置顶。渲染即挂载（eager），靠 CSS 显隐。 */
-  pinnedEventIds?: ReadonlySet<number>;
-}
+import type { StreamActions } from "../stream-actions";
 
-function AssistantActions(props: { text: string; eventId: number; round: number; speaking: boolean; actions: StreamActions }) {
-  const current = props.actions.feedback?.get(props.eventId) ?? null;
-  const { onCopyText, onFeedback, onReplay, onSpeak, onRetryRound, onPin } = props.actions;
-  const pinned = props.actions.pinnedEventIds?.has(props.eventId) === true;
-  const feedbackBusy = props.actions.feedbackBusy?.(props.eventId) === true;
-  const pinBusy = props.actions.pinBusy?.(props.eventId) === true;
+function AssistantActions(props: { text: string; eventId: number; eventRef?: EventRef; round: number; actions: StreamActions }) {
+  // 注释锚点：本地行只有 eventId；祖先行带来源引用（父第 2 行与子第 2 行不能共键）。
+  const anchor: AnchoredEvent = { eventId: props.eventId, ...(props.eventRef !== undefined ? { eventRef: props.eventRef } : {}) };
+  const key = anchorKeyOf(anchor);
+  const current = props.actions.feedback?.get(key) ?? null;
+  const { onCopyText, onFeedback, onPin, onRevertTurn, onBranch } = props.actions;
+  const pinned = props.actions.pinnedEventIds?.has(key) === true;
+  const feedbackBusy = props.actions.feedbackBusy?.(anchor) === true;
+  const pinBusy = props.actions.pinBusy?.(anchor) === true;
   const running = props.actions.running === true;
   return (
-    <span className="row-actions" data-saving={props.actions.annotationPending?.(props.eventId) === true}>
-      <button className="row-action" aria-label="复制这行输出" title="复制" onClick={() => onCopyText?.(props.text)}>
+    <span className="row-actions" data-cds="MessageActions" data-saving={props.actions.annotationPending?.(anchor) === true}>
+      <button className="row-action" aria-label="复制这行输出" data-hint="复制" onClick={() => onCopyText?.(props.text)}>
         <Copy size={12} />
       </button>
       {onPin !== undefined && (
@@ -283,34 +334,26 @@ function AssistantActions(props: { text: string; eventId: number; round: number;
           aria-pressed={pinned}
           disabled={pinBusy}
           aria-busy={pinBusy}
-          title={pinned ? "已置顶（再点取消）" : "置顶：钉在会话大纲里，长对话好找"}
-          onClick={() => onPin(props.eventId, !pinned)}
+          data-hint={pinned ? "已置顶（再点取消）" : "置顶：钉在会话大纲里，长对话好找"}
+          onClick={() => onPin(anchor, !pinned)}
         >{pinBusy ? <Loader2 size={12} /> : <Pin size={12} />}</button>
       )}
-      {onRetryRound !== undefined && !running && (
+      {/* 2026-10-24 业主：不要回放/重跑——这一格给 撤回（文件还原）与 分叉（从该轮新会话）。 */}
+      {onRevertTurn !== undefined && (
         <button
           className="row-action"
-          aria-label={`重跑第 ${String(props.round)} 轮`}
-          title="重跑这一轮：用当时的输入再发一次（追加为新的一轮）"
-          onClick={() => onRetryRound(props.round)}
-        ><RotateCw size={12} /></button>
+          aria-label={`撤回第 ${String(props.round)} 轮的文件改动`}
+          data-hint="撤回：把这一轮改过的文件还原"
+          onClick={() => onRevertTurn(props.round)}
+        ><History size={12} /></button>
       )}
-      {onReplay !== undefined && (
+      {onBranch !== undefined && (
         <button
           className="row-action"
-          aria-label={`回放到第 ${String(props.round)} 轮`}
-          title="回放：从该轮起新建会话并填入当时的输入，原会话不动"
-          onClick={() => onReplay(props.eventId)}
-        ><RotateCcw size={12} /></button>
-      )}
-      {onSpeak !== undefined && (
-        <button
-          className={`row-action${props.speaking ? " on" : ""}`}
-          aria-label={props.speaking ? "停止朗读" : "朗读这条输出"}
-          aria-pressed={props.speaking}
-          title={props.speaking ? "停止朗读" : "朗读（macOS 系统语音）"}
-          onClick={() => onSpeak(props.eventId, props.text)}
-        >{props.speaking ? <Square size={11} /> : <Volume2 size={12} />}</button>
+          aria-label={`从第 ${String(props.round)} 轮分叉新会话`}
+          data-hint="分叉：从该轮起新建会话，原会话不动"
+          onClick={() => onBranch(props.round)}
+        ><GitBranch size={12} /></button>
       )}
       <button
         className={`row-action${current === "up" ? " on" : ""}`}
@@ -318,8 +361,8 @@ function AssistantActions(props: { text: string; eventId: number; round: number;
         aria-pressed={current === "up"}
         disabled={feedbackBusy}
         aria-busy={feedbackBusy}
-        title={current === "up" ? "已赞（再点撤销）" : "赞"}
-        onClick={() => onFeedback?.(props.eventId, current === "up" ? null : "up")}
+        data-hint={current === "up" ? "已赞（再点撤销）" : "赞"}
+        onClick={() => onFeedback?.(anchor, current === "up" ? null : "up")}
       >{feedbackBusy ? <Loader2 size={12} /> : <ThumbsUp size={12} />}</button>
       <button
         className={`row-action${current === "down" ? " on" : ""}`}
@@ -327,8 +370,8 @@ function AssistantActions(props: { text: string; eventId: number; round: number;
         aria-pressed={current === "down"}
         disabled={feedbackBusy}
         aria-busy={feedbackBusy}
-        title={current === "down" ? "已踩（再点撤销）" : "踩"}
-        onClick={() => onFeedback?.(props.eventId, current === "down" ? null : "down")}
+        data-hint={current === "down" ? "已踩（再点撤销）" : "踩"}
+        onClick={() => onFeedback?.(anchor, current === "down" ? null : "down")}
       >{feedbackBusy ? <Loader2 size={12} /> : <ThumbsDown size={12} />}</button>
     </span>
   );
@@ -338,18 +381,24 @@ function AssistantActions(props: { text: string; eventId: number; round: number;
  *  默认展开/折叠体）全保留；文案与字形随产品化更新。
  *  view 档位（蓝本 §3.4）：Normal 档默认折叠（思考不进阅读面）；Thinking/Verbose 档默认展开。
  *  **不给 view 时维持旧默认（有正文即展开）**——render-structure 判卷锚依赖该默认。 */
-export function ThinkingLive(props: { seq: number; thinking?: string; running?: boolean; view?: ViewMode }): React.JSX.Element {
+export function ThinkingLive(props: { seq: number; thinking?: string; running?: boolean; view?: ViewMode; onCopyText?: StreamActions["onCopyText"] }): React.JSX.Element {
   const hasBody = props.thinking !== undefined && props.thinking !== "";
   const defaultOpen = props.view === undefined ? hasBody : props.view !== "normal" && hasBody;
-  const [open, setOpen] = useState(defaultOpen);
-  useEffect(() => {
-    if (props.view !== undefined) setOpen(props.view !== "normal" && hasBody);
-  }, [props.view, hasBody]);
-  const [elapsed, setElapsed] = useState(0);
   const running = props.running !== false;
+  const [expanded, setExpanded] = useState<boolean | null>(null);
+  // 生成中且有正文 ⇒ 强制展开（参考库 ThinkingAccordion 的互斥锁）：流式思考持续长高时
+  // 折叠/展开来回切会让阅读面跳；完成后交还用户。无正文时仍可点开说明。
+  const lock = running && hasBody;
+  const open = lock ? true : (expanded ?? defaultOpen);
+  const bodyId = useId();
   useEffect(() => {
-    // running=false 时清掉定时器，elapsed 保留最后一次的值 ⇒ 定格在最终秒数（不继续跳）。
+    setExpanded(null);
+  }, [props.view]);
+  // 这里只能量到本次挂载观察到的时间，历史记录没有可靠起止，不能补一个 0s。
+  const [elapsed, setElapsed] = useState<number | null>(running ? 0 : null);
+  useEffect(() => {
     if (!running) return;
+    setElapsed(0);
     const t0 = Date.now();
     const id = setInterval(() => setElapsed(Math.floor((Date.now() - t0) / 1000)), 1000);
     return () => clearInterval(id);
@@ -358,43 +407,106 @@ export function ThinkingLive(props: { seq: number; thinking?: string; running?: 
     <div
       className={"row think" + (open ? " open" : "")}
       key={`t${props.seq}`}
-      role="button"
-      aria-expanded={open}
-      aria-label="模型思考中，点击展开说明"
-      onClick={() => setOpen((v) => !v)}
-      tabIndex={0}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen((v) => !v); } }}
+      data-running={running}
     >
-      <div className="think-line">
-        <span className="chev" aria-hidden="true"><ChevronRight size={10} /></span>
-        <span className="think-label">{running ? "思考中" : "思考完成"}</span>
-        {running ? (
-          <span className="think-live" aria-hidden="true"><i /><i /><i /></span>
-        ) : (
-          <span className="think-done" aria-label="思考完成"><Check size={12} /></span>
-        )}
-        <span className="think-elapsed" aria-live="polite">{elapsed}s</span>
-      </div>
-      <div className="think-body">
-        {props.thinking !== undefined && props.thinking !== "" ? (
-          // 逐段累计的思考正文（来自 thinking_delta；与正文分开落事件，转录不脏）
-          <span className="think-text">{props.thinking}</span>
-        ) : (
-          <>
-            正在思考（可以调档位；这家没吐思考正文时这里就是空的）。
-            <span className="off-note">思考与正文分开落事件，不把推理内容混进转录。</span>
-          </>
-        )}
+      <button type="button" className="think-toggle think-line" role="button" aria-expanded={open} aria-controls={bodyId}
+        aria-disabled={lock || undefined}
+        aria-label={lock ? "模型思考中，完成后可折叠" : running ? "模型思考中，点击展开说明" : "查看思考记录"}
+        onClick={() => { if (!lock) setExpanded(!open); }}>
+        <span className="think-main">
+          <span className="chev" aria-hidden="true"><ChevronRight size={10} /></span>
+          <BrainCircuit className="think-icon" size={14} aria-hidden="true" />
+          <span className="think-label">{running ? "思考中" : "思考记录"}</span>
+          {running && <span className="think-live" aria-hidden="true"><CairnLoader /></span>}
+          {elapsed !== null && <span className="think-elapsed" role="timer" aria-label={`已思考 ${String(elapsed)} 秒`} title="本次在界面中观察到的时长，不代表完整思考耗时">{elapsed}s</span>}
+        </span>
+        {!open && hasBody && <span className="think-preview">{truncateSummary(props.thinking!, 120)}</span>}
+      </button>
+      {/* 复制入口挂在行头右侧（2026-10-31）：此前它是思考体里的独占一行，正文被推到它下面 30px，
+          展开后先看到一屏空白。现在悬停/聚焦才现身，正文从第一行开始读。 */}
+      {props.onCopyText !== undefined && hasBody && (
+        <div className="thinking-actions">
+          <button className="process-copy" aria-label="复制思考记录" title="复制思考记录" onClick={() => props.onCopyText?.(props.thinking!)}><Copy size={12} /> 复制</button>
+        </div>
+      )}
+      <div id={bodyId} className="think-body" data-open={open ? "true" : "false"} aria-hidden={!open}>
+        <div className="think-body-inner">
+          {props.thinking !== undefined && props.thinking !== "" ? (
+            <div className="think-text"><Markdown text={props.thinking} {...(props.onCopyText !== undefined ? { onCopy: props.onCopyText } : {})} /></div>
+          ) : (
+            <>
+              正在思考（可以调档位；这家没吐思考正文时这里就是空的）。
+              <span className="off-note">思考与正文分开落事件，不把推理内容混进转录。</span>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
 // 历史行按字段复用；增量只更新真正改变的行，完整 DOM 与定位锚继续保留。
-const UserRowView = memo(function UserRowView({ actions, canFold, flash, ...r }: Extract<StreamRow, { kind: "user" }> & { actions?: StreamActions; canFold: boolean; flash: boolean }) {
+/** 祖先行来源标记（计划 Task 5）：这一行属于父/祖会话文件，不是当前子会话自己的行。 */
+function SourceTag(props: { at?: EventRef; inherited?: boolean }) {
+  const ref = props.at;
+  if (ref === undefined || props.inherited !== true) return null;
   return (
-  <div className={"row user" + (flash ? " flash" : "")} data-event-id={String(r.seq + 1)} style={{ scrollMarginTop: 14 }}>
-    <span className="t" data-round-anchor={String(r.round)}>{r.text}</span>
+    <span className="row-source" title={`继承自会话 ${ref.sessionId}（第 ${String(ref.eventId)} 行）`}>
+      来自 {ref.sessionId}
+    </span>
+  );
+}
+
+/** 长用户消息折叠（2026-10-31，R1）：参考库 ChatMessageBubbles 的 collapseThreshold。
+ *  首屏按字数保守折叠（SSR 可判），挂载后再用真实高度量一次；只对确实超高的消息摆「展开全文」。 */
+export const USER_TEXT_COLLAPSE_CHARS = 1200;
+export const USER_TEXT_COLLAPSE_PX = 320;
+
+export function UserText(props: { text: string; round: number }): React.JSX.Element {
+  const [expanded, setExpanded] = useState(false);
+  const [overflowing, setOverflowing] = useState(props.text.length > USER_TEXT_COLLAPSE_CHARS);
+  const ref = useRef<HTMLSpanElement | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (el === null) return;
+    const measure = (): void => {
+      // scrollHeight 是全文高度（max-height 不影响它）；窄窗/长句也能识别。
+      if (el.scrollHeight > USER_TEXT_COLLAPSE_PX) setOverflowing(true);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [props.text]);
+  const collapsed = overflowing && !expanded;
+  return (
+    <>
+      <span
+        ref={ref}
+        className="t"
+        data-round-anchor={String(props.round)}
+        data-collapsed={collapsed ? "true" : "false"}
+      >{props.text}</span>
+      {overflowing && (
+        <button
+          type="button"
+          className="user-more"
+          aria-expanded={expanded}
+          onClick={() => { setExpanded(!expanded); }}
+        >{expanded ? "收起" : "展开全文"}</button>
+      )}
+    </>
+  );
+}
+
+const UserRowView = memo(function UserRowView({ actions, canFold, flash, eventRef, sourceRow, ...r }: Extract<StreamRow, { kind: "user" }> & { actions?: StreamActions; canFold: boolean; flash: boolean; eventRef?: EventRef; sourceRow?: boolean }) {
+  return (
+  <div className={"row user" + (flash ? " flash" : "")} data-cds="UserMessage" data-state="done" data-author="self" data-event-id={String(r.seq + 1)} {...(eventRef !== undefined ? { "data-event-ref": eventRefKey(eventRef), "data-source-session": eventRef.sessionId } : {})} style={{ scrollMarginTop: 14 }}>
+    <UserText text={r.text} round={r.round} />
+    {/* 第 9 点·轮中插话：这一句是同一轮里补的话，不是新任务。标出来，否则用户会以为
+        自己又开了一个任务（而它恰恰**没有**开新轮——见 derived/stream.ts 的轮界分流）。 */}
+    {r.steering === true && <span className="ur-steer" title="这一轮进行中补的话（没开新任务）">插话</span>}
+    <SourceTag at={eventRef} inherited={sourceRow} />
     {/* 用户消息的附件（2026-10-18）：此前发出去就再也看不见——本轮起 user_message 事件带引用，
         历史/重放都能显示“这条消息带了哪些文件”。 */}
     {r.attachments !== undefined && r.attachments.length > 0 && (
@@ -424,25 +536,25 @@ const UserRowView = memo(function UserRowView({ actions, canFold, flash, ...r }:
     )}
     <span className="meta">
       {(actions?.onCopyText !== undefined || actions?.onBranch !== undefined || actions?.onEditRound !== undefined || actions?.onToggleFold !== undefined) && (
-        <span className="row-actions">
+        <span className="row-actions" data-cds="MessageActions">
           {actions?.onCopyText !== undefined && (
-            <button className="row-action" aria-label="复制这条消息" title="复制" onClick={() => actions.onCopyText?.(userMessageCopy(r.text, r.attachments))}>
+            <button className="row-action" aria-label="复制这条消息" data-hint="复制" onClick={() => actions.onCopyText?.(userMessageCopy(r.text, r.attachments))}>
               <Copy size={12} />
             </button>
           )}
           {actions?.onEditRound !== undefined && (
             <button
               className="row-action"
-              aria-label={`编辑第 ${String(r.round)} 轮消息（新建分支）`}
-              title="编辑：在新分支里改后重发，原会话不动"
+              aria-label={`撤回第 ${String(r.round)} 轮消息（停止生成，放回输入框，可改后重发）`}
+              data-hint="撤回：停止生成，这条消息放回输入框——改完再发，原会话保留"
               onClick={() => actions.onEditRound?.(r.round, r.text)}
-            ><Pencil size={12} /></button>
+            ><Undo2 size={12} /></button>
           )}
           {actions?.onBranch !== undefined && (
             <button
               className="row-action"
               aria-label={`从这条消息分叉新会话（到第 ${String(r.round)} 轮）`}
-              title="分叉：从该轮起新建会话，原会话不动"
+              data-hint="分叉：从该轮起新建会话，原会话不动"
               onClick={() => actions.onBranch?.(r.round)}
             ><GitBranch size={12} /></button>
           )}
@@ -450,7 +562,7 @@ const UserRowView = memo(function UserRowView({ actions, canFold, flash, ...r }:
             <button
               className="row-action"
               aria-label={`还原第 ${String(r.round)} 轮改动过的文件`}
-              title={`还原第 ${String(r.round)} 轮的文件改动`}
+              data-hint="还原：把这一轮改过的文件还原"
               onClick={() => actions.onRevertTurn?.(r.round)}
             ><History size={12} /></button>
           )}
@@ -458,7 +570,7 @@ const UserRowView = memo(function UserRowView({ actions, canFold, flash, ...r }:
             <button
               className="row-action"
               aria-label={`折叠第 ${String(r.round)} 轮`}
-              title="折叠这一轮（收成一行）"
+              data-hint="折叠这一轮（收成一行）"
               onClick={() => actions.onToggleFold?.(r.round)}
             ><ChevronUp size={12} /></button>
           )}
@@ -470,10 +582,11 @@ const UserRowView = memo(function UserRowView({ actions, canFold, flash, ...r }:
   );
 });
 
-const AssistantRowView = memo(function AssistantRowView({ actions, caret, ...r }: Extract<StreamRow, { kind: "assistant" }> & { actions?: StreamActions; caret: boolean }) {
+const AssistantRowView = memo(function AssistantRowView({ actions, caret, eventRef, sourceRow, ...r }: Extract<StreamRow, { kind: "assistant" }> & { actions?: StreamActions; caret: boolean; eventRef?: EventRef; sourceRow?: boolean }) {
   return (
-  <div className="row assistant" data-event-id={String(r.eventId)}>
-    <span className="spark" aria-hidden="true"><Sparkles size={13} /></span>
+  <div className="row assistant" data-cds="AssistantMessage" data-cds-reply-type="true" data-event-id={String(r.eventId)} {...(eventRef !== undefined ? { "data-event-ref": eventRefKey(eventRef), "data-source-session": eventRef.sessionId } : {})}>
+    {/* 流式中的行：标记 = 启动屏同款逐格加载动效（业主 2026-10-24：动效放在对话里模型说话的地方）；停转即回静态品牌标。 */}
+    <span className="spark" aria-hidden="true">{caret ? <CairnLoader /> : <CairnMark />}</span>
     <span className="t">
       {/* 追字光标在正文末尾行内（caret 进最后一个文本块），终稿到达或会话停转即消失。 */}
       {r.text !== "" ? (
@@ -486,33 +599,57 @@ const AssistantRowView = memo(function AssistantRowView({ actions, caret, ...r }
         caret && <span className="cursor" aria-hidden="true" />
       )}
     </span>
-    {!r.live && actions && (
-      <AssistantActions
-        text={r.text}
-        eventId={r.eventId}
-        round={r.round}
-        speaking={actions.speakingEventId === r.eventId}
-        actions={actions}
-      />
-    )}
-    <span className="meta"><RowTime ts={r.ts} /></span>
+    <span className="assistant-footer">
+      {!r.live && actions && (
+        <AssistantActions
+          text={r.text}
+          eventId={r.eventId}
+          {...(eventRef !== undefined ? { eventRef } : {})}
+          round={r.round}
+          actions={actions}
+        />
+      )}
+      <span className="meta"><RowTime ts={r.ts} /></span>
+    </span>
+    <SourceTag at={eventRef} inherited={sourceRow} />
   </div>
   );
 });
 
-export function Stream(props: {
+/** 流本体（会话消息流）。
+ *
+ *  **为什么整棵包一层 memo**（2026-10-22 性能面）：这棵树在长会话里能到四万七千个 DOM 节点，
+ *  而 App 是它的父级、每有一个与流无关的状态变化（每秒的计时器、输入框一个字、侧栏拖宽…）
+ *  就会重渲染一次 App ⇒ 整棵树被重新 diff 一遍。实测形态：运行中每秒一跳的计时器，
+ *  让一棵**没有新消息**的流每秒重算一次。
+ *  ⇒ 这里用 memo 把「与流无关的父级重渲染」挡在门外：**props 全部稳定**（rows/actions 在 App 侧
+ *  已是 useMemo，view/streaming/foldedRounds/flashRound 都是 state）⇒ props 没变就不重渲染。
+ *  切会话仍按 App 侧那个 `key` 重挂（行内局部状态不跨会话复用，见 App.tsx 的注释）。
+ *  流里唯一自己跳的计时器在 `ThinkingLive` 子组件里（它自己管自己），不受这一层影响。 */
+export const Stream = memo(function Stream(props: {
   rows: StreamRow[];
   actions?: StreamActions;
   view?: ViewMode;
   streaming?: boolean;
+  /** run 已发起但尚无 live 助手行；不伪造消息或事件锚点。 */
+  waiting?: boolean;
   /** 已折叠的轮（v7.2）；缺席 = 不折。 */
   foldedRounds?: ReadonlySet<number>;
   /** 刚跳到的轮：该轮用户行闪一下（目录跳转的落点反馈）。 */
   flashRound?: number | null;
+  /** 显示序 → 来源引用（指针分叉）：有它就按 eventRefKey 做 DOM 键与来源标记。 */
+  refs?: ReadonlyMap<number, EventRef> | null;
+  /** 祖先行的显示序（来源标记由此挂）。 */
+  inherited?: ReadonlySet<number> | null;
 }) {
   const actions = props.actions;
   const view = props.view;
   const folded = props.foldedRounds;
+  const refOfRow = (seq: number): EventRef | undefined => props.refs?.get(seq);
+  const keyOf = (prefix: string, seq: number): string => {
+    const ref = refOfRow(seq);
+    return ref === undefined ? `${prefix}${String(seq)}` : `${prefix}${eventRefKey(ref)}`;
+  };
   // 追字光标只在**本会话真在跑**时亮：历史里未结的桶（被中断没落终稿）照实渲染文本，
   // 但不摆一个"正在输入"的活光标——那是把停当成了动（诚实口径）。undefined = 旧默认（亮）。
   const caretOn = props.streaming !== false;
@@ -531,7 +668,7 @@ export function Stream(props: {
   const groups: Array<{ key: string; round: number | null; rows: StreamRow[] }> = [];
   for (const r of props.rows) {
     if (r.kind === "user") {
-      groups.push({ key: `g${String(r.seq)}`, round: r.round, rows: [r] });
+      groups.push({ key: keyOf("g", r.seq), round: r.round, rows: [r] });
     } else {
       const cur = groups[groups.length - 1];
       if (cur === undefined) groups.push({ key: "g0", round: null, rows: [r] });
@@ -546,8 +683,20 @@ export function Stream(props: {
     return null;
   })();
 
+  // 思考行节点（过程带的一部分；最终答复自己的思考行也会被折进过程带，故抽成一处）。
+  const thinkingNode = (r: Extract<StreamRow, { kind: "assistant" }>): React.ReactNode => (
+    <ThinkingLive
+      seq={r.seq}
+      thinking={r.thinking}
+      running={streaming && r.live === true && r.text === ""}
+      {...(view !== undefined ? { view } : {})}
+      {...(actions?.onCopyText !== undefined ? { onCopyText: actions.onCopyText } : {})}
+    />
+  );
+
   // 一组行 → 节点（与旧逐行循环同构：连续 tool 行收进同一簇；其余行打断簇）。
-  const renderGroup = (rows: readonly StreamRow[], canFold: boolean): Array<{ key: string; node: React.ReactNode }> => {
+  // skipThinkingSeq：那一行的思考行**不**在这里画（由过程带折叠接手，见 renderGroup）。
+  const renderRows = (rows: readonly StreamRow[], canFold: boolean, skipThinkingSeq?: number): Array<{ key: string; node: React.ReactNode }> => {
     const out: Array<{ key: string; node: React.ReactNode }> = [];
     let cluster: Extract<StreamRow, { kind: "tool" }>[] = [];
     const flush = () => {
@@ -560,6 +709,7 @@ export function Stream(props: {
         node: (
           <ToolCluster rows={toolRows}
             {...(view !== undefined ? { view } : {})}
+            {...(actions?.onCopyText !== undefined ? { onCopyText: actions.onCopyText } : {})}
             {...(actions?.onOpenArtifact !== undefined ? { onOpenArtifact: actions.onOpenArtifact } : {})} />
         ),
       });
@@ -572,9 +722,9 @@ export function Stream(props: {
         case "user": {
           flush();
           out.push({
-            key: `u${r.seq}`,
+            key: keyOf("u", r.seq),
             node: (
-              <UserRowView {...r} canFold={canFold} flash={props.flashRound === r.round} {...(actions !== undefined ? { actions } : {})} />
+              <UserRowView {...r} canFold={canFold} flash={props.flashRound === r.round} {...(refOfRow(r.seq) !== undefined ? { eventRef: refOfRow(r.seq), sourceRow: props.inherited?.has(r.seq) === true } : {})} {...(actions !== undefined ? { actions } : {})} />
             ),
           });
           break;
@@ -582,25 +732,22 @@ export function Stream(props: {
         case "assistant": {
           flush();
           // live 行前挂一条思考行（有思考正文就渲染；正文来自 thinking_delta 桶）。
-          if (r.live || (r.thinking !== undefined && r.thinking !== "")) {
+          if (skipThinkingSeq !== r.seq && (r.live || (r.thinking !== undefined && r.thinking !== ""))) {
             out.push({
               key: `t${r.seq}`,
+              node: thinkingNode(r),
+            });
+          }
+          // thinking-only 行（只想过没说，2026-10-24）：只画思考折叠行，不画空气泡。
+          const thinkingOnly = r.text === "" && r.live !== true;
+          if (!thinkingOnly) {
+            out.push({
+              key: keyOf("a", r.seq),
               node: (
-                <ThinkingLive
-                  seq={r.seq}
-                  thinking={r.thinking}
-                  running={streaming && r.live === true && r.text === ""}
-                  {...(view !== undefined ? { view } : {})}
-                />
+                <AssistantRowView {...r} caret={r.live === true && caretOn && r.seq === lastLiveSeq} {...(refOfRow(r.seq) !== undefined ? { eventRef: refOfRow(r.seq), sourceRow: props.inherited?.has(r.seq) === true } : {})} {...(actions !== undefined ? { actions } : {})} />
               ),
             });
           }
-          out.push({
-            key: `a${r.seq}`,
-            node: (
-              <AssistantRowView {...r} caret={r.live === true && caretOn && r.seq === lastLiveSeq} {...(actions !== undefined ? { actions } : {})} />
-            ),
-          });
           break;
         }
         case "error": {
@@ -636,8 +783,48 @@ export function Stream(props: {
     return out;
   };
 
+  /** 一组（轮）行 → 节点。**过程带折叠**（2026-11-02 业主截图）在这里发生：
+   *  这一轮的最终答复落地后，答复之前的一切（思考记录 / 工具调用 / 过程旁白）收成一行。
+   *  收拢只在这一轮**已经收束**时做（后面没有新一轮，或本会话已停转）——模型还在写的时候，
+   *  过程正在发生，不该被藏；也不在 thinking/verbose 档折（那两档的用途就是把过程摊开看）。 */
+  const renderGroup = (rows: readonly StreamRow[], canFold: boolean, closed: boolean): Array<{ key: string; node: React.ReactNode }> => {
+    const finalAt = view === "normal" && closed ? finalAnswerIndex(rows) : -1;
+    if (finalAt > 0) {
+      // 用户消息留在带外（用户说过的话不许被折进去）；折的是「用户问」之后、「最终答复」之前那几行。
+      const startAt = rows[0]?.kind === "user" ? 1 : 0;
+      const head = rows.slice(startAt, finalAt);
+      const finalRow = rows[finalAt]!;
+      // 过程带里只许有**过程行**（思考 / 工具 / 旁白）。用户自己说的话（轮中插话）与
+      // 错误行不折——用户说过的话不许在转录里消失，错误行也不该被藏进折叠体。
+      const foldable = head.every((r) => r.kind !== "user" && r.kind !== "error");
+      // 摘要连**最终答复自己的思考**一起数：那段思考是「答之前」的思考，不该单独占一行。
+      const summary = summarizeProcess(finalRow.kind === "assistant" ? [...head, finalRow] : head);
+      if (foldable && (summary.tools > 0 || summary.thinks > 0)) {
+        const headNodes = renderRows(head, canFold);
+        const finalThinking = finalRow.kind === "assistant" && finalRow.thinking !== undefined && finalRow.thinking !== ""
+          ? { key: `t${finalRow.seq}`, node: thinkingNode(finalRow) }
+          : null;
+        const bodyNodes = finalThinking === null ? headNodes : [...headNodes, finalThinking];
+        return [
+          ...renderRows(rows.slice(0, startAt), canFold),
+          {
+            key: `pf${keyOf("g", rows[0]!.seq)}`,
+            node: (
+              <ProcessFold summary={summary}>
+                {bodyNodes.map((n) => <Fragment key={n.key}>{n.node}</Fragment>)}
+              </ProcessFold>
+            ),
+          },
+          ...renderRows(rows.slice(finalAt), canFold, finalRow.kind === "assistant" ? finalRow.seq : undefined),
+        ];
+      }
+    }
+    return renderRows(rows, canFold);
+  };
+
   const out: Array<{ key: string; node: React.ReactNode }> = [];
-  for (const g of groups) {
+  const lastGroupIdx = groups.length - 1;
+  for (const [gi, g] of groups.entries()) {
     if (g.round !== null && folded?.has(g.round) === true) {
       const round = g.round;
       const u = g.rows[0];
@@ -663,7 +850,7 @@ export function Stream(props: {
       });
       continue;
     }
-    out.push(...renderGroup(g.rows, g.round !== null && canFoldRound(g.round, lastRound, streaming)));
+    out.push(...renderGroup(g.rows, g.round !== null && canFoldRound(g.round, lastRound, streaming), gi < lastGroupIdx || !streaming));
   }
   // 行数组经 Fragment 带上 key（out 条目本就持有稳定键；此前裸 map 丢键会刷 dev 警告）。
   // 生成中顶栏细进度条（P3-1）：sticky 贴顶不随滚动，running 态跑马灯（styles.css），
@@ -672,6 +859,11 @@ export function Stream(props: {
     <>
       <div className="gen-bar" data-running={streaming ? "true" : "false"} aria-hidden="true" />
       {out.map((o) => <Fragment key={o.key}>{o.node}</Fragment>)}
+      {streaming && props.waiting === true && lastLiveSeq === -1 && (
+        <div className="row assistant assistant-waiting" role="status" aria-label="等待模型输出">
+          <span className="spark" aria-hidden="true"><CairnLoader /></span>
+        </div>
+      )}
     </>
   );
-}
+});

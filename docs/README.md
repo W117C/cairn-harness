@@ -1,31 +1,22 @@
-# DSH core
+# Cairn 文档
 
-This repository contains the agent/core (`src/`, electron-free) plus a desktop shell under `apps/desktop/`. The desktop layer was removed by explicit request on 2026-09-27 and reintroduced as new M1 slices on 2026-10-02; its disposition is decided in [`adr/0001-core-only-vs-desktop.md`](adr/0001-core-only-vs-desktop.md).
+Cairn 是一个可重放的 AI 编码 agent：事件溯源内核 + CLI + macOS 桌面应用。
+先读仓库根目录的 [`README.md`](../README.md) 快速开始。
 
-## Documentation layers
+## 用户与开发者入口
 
-| Layer | File | Holds |
-|---|---|---|
-| Rules | [`../AGENTS.md`](../AGENTS.md) | what you would get wrong this turn without them |
-| Current state | [`../STATE.md`](../STATE.md) | where the work stands, what is in flight, what is undecided — **rewritten wholesale** |
-| Ledger | [`../PROGRESS.md`](../PROGRESS.md) | one page per batch, appended only; page numbers are the citation unit |
-| Archive | [`../archive/`](../archive/) | conclusions that are no longer current |
+| 你想做的事 | 去哪儿 |
+|---|---|
+| 安装、第一次任务、命令参数 | [`../README.md`](../README.md) |
+| 桌面预览包的构建、校验与首次打开 | [`desktop-preview.md`](desktop-preview.md) / [`macos-trial.md`](macos-trial.md) |
+| 架构与符号索引 | [`CODE-WIKI.md`](CODE-WIKI.md) |
+| 路线与非目标 | [`ROADMAP.md`](ROADMAP.md) |
+| 测试与验证分层 | [`TESTING.md`](TESTING.md) |
+| 架构决策记录 | [`adr/`](adr/) |
+| 授权与商业使用 | [`../LICENSING.md`](../LICENSING.md) |
 
-`docs-check` enforces the layer rules mechanically (D-1 budget, D-2 no hand-copied measurements,
-D-4 no append-to-refute, D-5 `STATE.md` names a real commit).
+## 文档纪律
 
-Useful entry points:
-
-- [`ROADMAP.md`](ROADMAP.md) — branch roles, unfinished work, queued work, and optimization priorities
-- `src/agent/loop.ts` — agent loop
-- `src/tools/` — tool implementations
-- `src/providers/` — provider adapters
-- `src/permissions/` — permission policy
-- `src/main/agent-runner.ts` — electron-free application runner
-- `tests/` — core tests
-
-Run the core test suite with:
-
-```sh
-node node_modules/vitest/vitest.mjs run --config tests/vitest.config.ts
-```
+- 用户文档只写**当前对外行为**；不把内部计划、台账、历史证据放进本目录。
+- 历史审计材料由维护者在私有审计仓保存，不在公开仓库分发。
+- 改动用户可见行为时，同步更新 README 与 CHANGELOG。

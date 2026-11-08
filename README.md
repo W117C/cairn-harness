@@ -1,190 +1,85 @@
-# Cairn — 可重放的 agent harness
+# Cairn — 可重放的 AI 编码 agent
 
-> 一个事件溯源（event-sourced）的 agent 内核：每一步都落成 JSONL 事件，因此**同一份日志可以被重放、分叉、审计**。
+> 事件溯源（event-sourced）的 agent 内核：每一步都落成 JSONL 事件，因此**同一份日志可以被重放、分叉、审计**。
 
 [![verify](https://github.com/W117C/cairn-harness/actions/workflows/verify.yml/badge.svg?branch=main)](https://github.com/W117C/cairn-harness/actions/workflows/verify.yml)
-[![release](https://img.shields.io/github/v/release/W117C/cairn-harness?label=release&color=blue)](https://github.com/W117C/cairn-harness/releases)
-[![license](https://img.shields.io/badge/license-%E4%B8%93%E6%9C%89-proprietary-blue)](./LICENSE)
+[![license](https://img.shields.io/badge/license-AGPL--3.0--only-blue)](./LICENSE)
 [![node](https://img.shields.io/badge/node-%3E%3D20.11%20%3C25-5FA04E?logo=node.js)](https://nodejs.org)
 [![pnpm](https://img.shields.io/badge/pnpm-11.21.0-F69220?logo=pnpm)](https://pnpm.io)
 
-**一句话**：给 AI 编码 agent 用的**可审计运行时**——每一步都留痕，事后能重放、能分叉、能审计；
-写操作默认 fail-closed，没人应答时当场拒绝，而不是静默放行。
+Cairn 是一个面向本地项目的 AI 编码助手：CLI 和 macOS 桌面应用共用同一套事件溯源内核。
+它在你的工作区里读代码、改代码、跑测试，并把每一次工具调用、权限判定和验证结果写进可重放的 JSONL。
 
-内核侧**没有构建步骤**：克隆下来装完依赖就有一条 `cairn` 命令。
-桌面壳是另一条路，`apps/desktop/` 下走 Electron + Vite，需要单独构建（见[仓库结构](#仓库结构)）。
+> **当前阶段：开发者预览（Developer Preview）。** 交付面是 CLI；桌面应用在 `apps/desktop/`，需要从源码构建或使用本机 ad-hoc 预览包。首次启动向导、签名安装包与英文界面仍在路线中。许可证见 [`LICENSING.md`](LICENSING.md)。
 
-当前分支职责、未完成事项、待开工与优化项见 [项目路线与仓库状态](docs/ROADMAP.md)。
+## 快速开始
 
----
-
-## 目录
-
-- [30 秒上手](#30-秒上手)
-- [能力面](#能力面)
-  - [量一量：固定开销与任务达成](#量一量固定开销与任务达成)
-  - [零凭据试一下：--provider demo](#零凭据试一下--provider-demo读之前先看这段)
-  - [目标模式：一轮收束 ≠ 目标达成](#目标模式一轮收束--目标达成)
-  - [手动压缩一条会话](#手动压缩一条会话)
-  - [配 provider](#配-provider)
-- [权限与安全边界](#权限与安全边界)
-  - [网络与沙箱边界](#网络与沙箱边界)
-- [事件日志](#事件日志)
-- [设置](#设置)
-- [工具面](#工具面)
-- [退出码](#退出码)
-- [仓库结构](#仓库结构)
-- [文档分层](#文档分层)
-- [开发与验证](#开发与验证)
-- [参与本项目](#参与本项目)
-- [许可](#许可)
-
----
-
-## 30 秒上手
-
-需要 Node `>=20.11 <25`（以 `package.json` 的 `engines` 为准）与 pnpm。
+需要 Node `>=20.11 <25`（以 `package.json` 的 `engines` 为准）与 pnpm 11.21.0（运行 pnpm 需要 Node `>=22.13`）。
 
 ```sh
 git clone https://github.com/W117C/cairn-harness.git
 cd cairn-harness
-pnpm install --frozen-lockfile
+./scripts/install.sh
+./bin/cairn.mjs --doctor
+```
 
+没有 API key 也能看一遍完整流程（预录剧本，不拨号、不花钱）：
+
+```sh
+./bin/cairn.mjs --provider demo --mode auto --workspace /tmp/cairn-demo "随便写点什么"
+```
+
+> **demo 有三件事必须说明：** ① 剧本固定（读 `src/todo.ts` → 写 `src/todo.ts` → 跑 `pnpm test`），与你给的任务无关；② 结尾的「任务完成」是台词，不是判卷结论，请看退出码；③ 它会在 `--workspace` 里真的创建 `src/todo.ts`。想量真实能力用 `pnpm bench`。
+
+真实任务：
+
+```sh
 export OPENAI_API_KEY=<你的 key>
 ./bin/cairn.mjs "把 tests 里失败的那个用例修好"
 ```
 
-> 本包是 `"private": true`，**不经 npm 分发**：没有 `npm install -g cairn` 这条路。
-> 上面是克隆仓库后的用法——tsx 在 devDependencies 里，源码经 tsx 通道直接跑。
-> 不想手动装依赖可以走 `./scripts/install.sh`（按 `engines` 判 Node 版本，有 pnpm 用 pnpm，否则用 npm）。
+## 这是什么
 
-**没有 API key 也能看一遍完整流程**（预录剧本，不拨号、不花钱）：
+- **事件溯源**：每轮一份 JSONL，事件 id 就是 1-based 行号；`replay()` 原样返回事件，控制记录由投影解释。
+- **可分叉**：会话分叉是 `{parent, boundary}` 指针，不复制父会话事件。
+- **fail-closed**：审批没人应答时当场拒绝，不伪装成工具失败；默认档写操作逐次审批。
+- **本地优先**：状态、会话、记忆与插件都在本机；凭据只走环境变量，不落文件。
+- **可审计**：工具调用、权限判定、验证结果都留痕；`--replay` 能回放一条会话的决策链。
 
-```sh
-./bin/cairn.mjs --provider demo --mode auto --workspace /tmp/cairn-demo "随便写点什么"
-```
+## 桌面应用（macOS）
 
-环境自检（Node / 凭据在位 / 沙箱 / 工作区可写，**不回显密钥值**）：
+桌面壳在 `apps/desktop/`（Electron + React + Vite），与 CLI 共用 `src/main/` 服务。
+当前构建是 ad-hoc 签名、未公证的开发者预览。
 
-```sh
-./bin/cairn.mjs --doctor
-```
+![Cairn 首页：项目选择、任务输入与演示模式](assets/readme/cairn-home.png)
 
-版本与受众裁决见 [`docs/adr/0002-v1-audience-b1-internal-beta.md`](docs/adr/0002-v1-audience-b1-internal-beta.md)
-（B1 内测先行，交付面只做 CLI；B2 扩受众清单留门 [`docs/b2-checklist.md`](docs/b2-checklist.md)）。
-变更史见 [`CHANGELOG.md`](CHANGELOG.md)，发布记录见 [Releases](https://github.com/W117C/cairn-harness/releases)。
-
----
-
-## 能力面
+![关于与更新：版本、构建来源、许可证与偏好备份](assets/readme/cairn-settings-about.png)
 
 ```sh
-pnpm typecheck        # tsc --noEmit
-pnpm test             # 整跑（core-only 全部测试文件）
+pnpm install --frozen-lockfile
+pnpm --filter cairn-desktop build
+pnpm --filter cairn-desktop smoke
+node apps/desktop/scripts/package.mjs --out apps/desktop/release-$(date +%Y%m%d)
 ```
 
-### 量一量：固定开销与任务达成
+产物含 `Cairn.app`、`Cairn.dmg`（`hdiutil` 不可用时回退 `Cairn-macOS.zip`）、`build-info.json`
+（版本、lock 哈希、`packagedSmoke: passed`、签名方式、构建时间）。DMG 内是 `Cairn.app` +
+`Applications` 快捷方式与安装说明。当前为 `ad-hoc` 封装，暂不做 Developer ID 签名或 Apple 公证；
+首次打开说明见 [`docs/macos-trial.md`](docs/macos-trial.md)，打包细节见 [`docs/desktop-preview.md`](docs/desktop-preview.md)。
 
-两个尺子，各自回答一个不同的问题：
+发布更新清单：
 
 ```sh
-pnpm prompt-cost      # 每轮固定开销（工具说明书 + 系统提示词），零花费、秒级
-pnpm bench            # 拿真模型跑一套固定任务，出「成功率 / token / 耗时」三读数
+node --import tsx scripts/update-manifest.ts \
+  --version 0.2.0 \
+  --url https://example.com/Cairn.dmg \
+  --notes "桌面端 0.2.0" \
+  --out update.json
 ```
 
-`pnpm bench` 用的是**主 CLI 同一套凭据**：`OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL`，
-或 `CAIRN_API_KEY` / `CAIRN_ENDPOINT` / `CAIRN_MODEL`（前者优先）。凭据一律走环境变量，不落文件——
-和主 CLI 同一条规矩：
+清单严格为 `{ version, url, notes? }`：version 必须三段 semver、url 必须 https。
 
-```sh
-export OPENAI_BASE_URL=https://openrouter.ai/api/v1
-export OPENAI_API_KEY=<你的 key>
-export OPENAI_MODEL=<模型名>
-pnpm bench
-```
-
-任务集在 `fixtures/bench/tasks.json`。想量化一次改动的效果，就跑它前后各一次——
-**别拿单次数字当趋势**，模型自身的方差比改动幅度大是常事：
-
-```sh
-# 多跑几轮看分布（reps 越大越可信，代价线性增长）
-pnpm bench -- --reps 3
-
-# 只跑其中几条（改完某个子系统时先冒烟）
-pnpm bench -- --only B1-bugfix-crossfile
-```
-
-读数落在 `outputs/bench/readings.json`。
-
-跑一轮：
-
-```sh
-# 在当前工作区
-./bin/cairn.mjs "你的任务"
-
-# 在别的工作区
-./bin/cairn.mjs --workspace ~/code/some-repo "把失败的测试修好"
-
-# 接着上一次那条会话跑（不抹掉之前的转录）
-./bin/cairn.mjs --session cli-1756289123456 "接着刚才那个往下做"
-
-# 装成命令（npm link；本包未发布，见上）
-npx cairn --help
-```
-
-### 零凭据试一下：`--provider demo`（**读之前先看这段**）
-
-没有 API key 也能看一遍完整流程——它跑的是**预录剧本**，不拨号、不花钱：
-
-```sh
-./bin/cairn.mjs --provider demo --mode auto --workspace /tmp/cairn-demo "随便写点什么"
-```
-
-**这个通道有三件事必须说在前面**，否则很容易把它读成产品能力：
-
-1. **它跟你的任务无关**。剧本是固定的（`fixtures/mock/todo-fix.jsonl`），
-   内容是「读 `src/todo.ts` → 写 `src/todo.ts` → 跑 `pnpm test`」。
-   你给的任务文本**不进剧本**——写「把 README 翻成英文」，它照样去动 `src/todo.ts`。
-2. **它结尾那句「任务完成」是剧本台词，不是判卷结论**。剧本会这么说，
-   而同一趟运行里工具可能全是失败态（工作区没那个文件、没有测试可跑）。
-   想看真实结论请看**退出码**，不要看台词。
-3. **它会在你的 `--workspace` 里真的建 `src/todo.ts`**（用的是写工具，走同一套权限门）。
-
-它的用途只有一个：**在不花钱的前提下看流程长什么样**（事件流、工具面、审批、退出码）。
-想量能力，用 `pnpm bench`（见上），别用 demo。
-
-### 目标模式：一轮收束 ≠ 目标达成
-
-`--goal` 给这轮挂一个目标，判据不达标就自动再跑一轮，直到达标、撞轮次/美元上限、或者证据红到没救：
-
-```sh
-./bin/cairn.mjs --goal "把 tests 全跑绿" --max-turns 8 --max-usd 0.5 "修掉失败的那些用例"
-```
-
-目标与停止理由都落在事件日志里（`goal_set` / `goal_stopped`），终端上也会打出来——
-**「为什么不跑了」必须是用户看得见的事实**，而不是进程安静地退出。
-
-几个边界：目标只能挂在会话上（所以与 `--log` 互斥）；无人值守的 run（`--unattended`、
-stdin 是管道）**不会自动续跑**——那条路上审批一律 fail-closed 拒，写不了盘也验不出绿，
-续跑只会白烧钱，于是会停下来并把这个理由落到事件流上。美元闸要价表里查得到那个模型才生效，
-查不到时它明写自己没生效，绝不按 $0 继续烧。
-
-### 手动压缩一条会话
-
-```sh
-./bin/cairn.mjs --session cli-1756289123456 --compact
-```
-
-把一条已有会话的历史压成一段摘要，压完退出。**这条命令会调模型**（摘要器
-`createGlmSummarizer` 走 GLM），所以要 `CAIRN_API_KEY`；没有 key 时它 fail-closed 拒绝并退出 1，
-**不会静默截断**历史——把长会话悄悄砍掉比报错糟得多。
-
-边界：只能指一条**已有**会话（缺 `--session` 直接 exit 2，不编一个 id 出来再报「不存在」）；
-与 `--goal` 互斥（压缩的是已有历史，不跑目标轮）；与 `--log` 互斥（`--session` 自己决定落在哪）。
-
-### 配 provider
-
-key 从环境变量读，**缺 key 会明确报错退出，不会静默换一家、也不会悄悄跑演示档**：
+## Provider
 
 | provider | 环境变量 |
 |---|---|
@@ -192,110 +87,23 @@ key 从环境变量读，**缺 key 会明确报错退出，不会静默换一家
 | `openai` | `OPENAI_API_KEY` |
 | `anthropic` | `ANTHROPIC_API_KEY` |
 | `gemini` | `GEMINI_API_KEY` |
+| `deepseek` | `DEEPSEEK_API_KEY` |
 
-**DeepSeek**（`src/providers/` 下**没有** deepseek 专用适配器——它走的是现成的 OpenAI 兼容通道，
-`providers/openai.ts` 的 `baseURL` 本来就可配，`glm.ts` 就是它的预设）：
+OpenAI 兼容网关可直接用 `OPENAI_BASE_URL` + `OPENAI_API_KEY`；表外模型用 `--model` 显式点名。
+缺 key 会明确报错退出，不会静默换一家、也不会悄悄跑演示档。
 
-```sh
-export OPENAI_BASE_URL=https://api.deepseek.com/v1
-export OPENAI_API_KEY=<deepseek key>
-npx cairn "..."
-```
-
-`OPENAI_BASE_URL` 给到 `/v1` 这一层就行，缺 `/chat/completions` 会自动补；已经带全的写法也照样认。
-
-**档位表以外的名字用 `--model`**。默认只拨 `providers/registry.ts` 档位表里登记过的那几档（bandit 与预算折钱
-都按那张表走），但表外的模型——OpenRouter、各家网关的别名、预览版——可以直接点名：
-
-```sh
-export OPENAI_BASE_URL=https://openrouter.ai/api/v1
-export OPENAI_API_KEY=<key>
-npx cairn --provider openai --model stealth/space-bunny-alpha "..."
-```
-
-`--model` 是显式 opt-in：它不进档位表，因此**不参与 bandit 路由**；预算闸查不到它的价时按既有口径惰掉并明写，
-绝不按 $0 继续烧。它的上下文窗口缺省取档位表里**最小**的那个（今天 128k）——这个缺省对**更小**的模型是高估，
-高估会撞远端 400。指向小窗或网关模型时用 `--ctx-window <n>` 申报真实窗口（只配 `--model` 用）：
-
-```sh
-npx cairn --provider openai --model some/small-model --ctx-window 32768 "..."
-```
-
-没给 `--provider` 时按上表顺序找第一个配了 key 的；一个都没配 ⇒ exit 2 并告诉你要设哪个变量。
-
----
-
-## 权限与安全边界
-
-权限档默认 **fail-closed**：
+## 权限档（默认 fail-closed）
 
 | 档 | 含义 |
 |---|---|
 | `read-only` | 只读面，写工具一律拒 |
-| `default` | **默认档**：写操作逐次审批（交互终端里问你 y/a/n） |
+| `default` | **默认档**：写操作逐次审批 |
 | `guided` | 按风险分级放行 |
-| `auto` | 自动放行——**必须显式 `--mode auto`**，不是缺省 |
+| `auto` | 自动放行——必须显式 `--mode auto` |
+| `full-access` | 全部放行（仅限受信任环境） |
 
-审批门在没人能答的时候（管道 / CI）**当场按拒绝收束**，不等超时——一次没人应答的审批不会伪装成工具失败。
-
-模型主动开的两扇门也在终端里问你，没人能答时各自**当场结算**（都不是挂起等超时）：
-
-| 门 | 模型什么时候开 | 交互终端 | 管道 / CI / `--unattended` | `--mode auto` |
-|---|---|---|---|---|
-| `propose_plan` | 要写文件前提交方案 | 打出方案（目标 + 每个文件的动作/路径/摘要），问 `[y] 批准 [n] 拒绝` | **拒绝**；写禁不解除，模型须修订后重提 | **当场批准**（见下） |
-| `clarify` | 任务有歧义 | 逐题问，答选项序号或直接写自由文本 | 提交**空答案** `{}`——如实告诉模型「没人答，自己拿主意」 | 同左 |
-
-两者形状不同是有原因的：`propose_plan` 是**审批**，拒绝即维持写禁；`clarify` 只是**要信息**，
-而 `ClarifyGate` 只有提交、没有拒绝（唯一的负向出口是中止整轮）。
-提交空答案不是批准，也不解除任何门——写禁只由 `propose_plan` 落下。
-**编造答案才是这里唯一真正危险的事**，空 map 恰好是最不编造的那一种。
-
-**`--mode auto` 下方案门当场批准**（2026-09-29 改）：`auto` 是用户在命令行上显式给的授权
-（它不是缺省档），既然整轮写操作都已获授权，方案门再按「没人能答 ⇒ 拒」收束就自相矛盾——
-模型提交方案 → 当场被拒 → 写禁不解除 → 连读工具都进不去，最后什么都没做成。
-实测代价：管道里用 `auto` 建一个文件，两次方案被自动拒、约 32k token 白烧，
-模型还反过来建议用户「去 git 面板点批准」——而 CLI 通道里没有那个面板。
-现在 `auto` 档**当场批准**，并把「批准依据是命令行授权、不是有人看过了」印在 stderr 上，
-免得把一次策略放行读成一次人工审阅。`default` / `guided` 一字未改，仍是 fail-closed。
-
-`run_shell` 在 macOS 上走 Seatbelt 沙箱（写收敛到工作区、`.ssh`/`.aws` 等敏感目录拒读、默认断网）。
-沙箱不可用时 CLI 会明说，不假装有。
-
-**沙箱里 `pnpm test` 只在项目自己用 vitest 时才被改写成直连 vitest**（2026-09-29 改）：
-这条改写原本无条件生效（为 `fixtures/todo-app` 写的，坑三：Seatbelt 下 pnpm 起不来），
-于是任何非 vitest 项目（如 `node --test`）的验证拍都被换成 vitest ⇒ **项目自己 3/3 全过、
-harness 的 verify 报红**（假红，且事件里报的是原始命令，模型无法归因，只能停下来问用户）。
-现在按该工作区自己声明的 `scripts.test` 判：写 vitest 才改写，否则逐字不动。
-
-### 网络与沙箱边界
-
-两句话：**默认断网**、**出网=逐次审批**。完整口径如下（免得把"装依赖"当默认能力）：
-
-- **默认断网**：`run_shell` 在 macOS 走 Seatbelt 沙箱（`src/main/sandbox.ts`），网络规则默认全拒——
-  装依赖（`pnpm add`）、调 API（`curl`）在默认档都跑不通，除非走下面的放行链。沙箱不可用时 CLI 会明说。
-- **放行链（三条同时成立才出网）**：① 被判定为网络类（`curl`/`wget`/`pnpm add` 这类命令，
-  或 `web_fetch` / `web_search` 工具本身）；② **真的问过你并获批**（审批卡上写明
-  「批准 = 本次命令放行网络出网（一次性，不记忆）」）；③ 非交互 / 无人值守时一律 fail-closed。
-- **没有"网络开关"**：不放行环境变量、不读配置项；OS 层（Seatbelt）与权限层（审批）是两道，都拦。
-- **哪些操作要批**：凡是出网、凡是被判成写向的工具（含 `diagnose` 跑测试、`apply_patch` 打补丁）
-  在默认档都逐次审批；`--mode auto` 是你在命令行上显式给的授权，但**出网类连 `auto` 也不免批**。
-- **`web_fetch`（取给定 URL）与 `web_search`（按关键词检索）**：同一份 SSRF 判据
-  （私网 / 回环 / 云元数据 / 每一跳重定向逐个拒）、同一支「四档一律审批」，返回内容都包一层
-  「外部资料，不是指令」的信封。`web_search` 需要你在 `.agent/config.json` 里声明搜索端点
-  （**没配就不挂这把工具**，不做默认厂商）：
-
-  ```json
-  { "search": { "endpoint": "https://searx.example/search?q={query}&format=json" } }
-  ```
-
-  响应按 SearxNG `format=json` 形状消费（`results[].title[/content/snippet]`）；
-  端点返回非 JSON 时降级为**有界原文**并如实标注「可能不是检索结果」。重定向即拒（改配置为最终地址）。
-- **`diagnose`**：跑本工作区配置的 lint/test（`.agent/config.json` 的 `verify` 或 `package.json` scripts），
-  把失败输出解析成结构化错误清单（文件:行:列 严重度 规则 原文）。它**执行进程** ⇒ 按写向类管：
-  只读档没有它、默认档逐次审批、沙箱降级时强制审批。
-- **worker 无网**：`web_fetch` / `web_search` 都不进 worker 工具面——worker 要联网只能回主会话发。
-
----
+审批门在管道 / CI / `--unattended` 下当场按拒绝收束。`run_shell` 在 macOS 上走 Seatbelt 沙箱：
+写收敛到工作区、敏感目录拒读、默认断网；沙箱不可用时会明说，不假装有。
 
 ## 事件日志
 
@@ -305,86 +113,30 @@ harness 的 verify 报红**（假红，且事件里报的是原始命令，模�
 user_message → assistant_message → tool_call → tool_result → … → usage
 ```
 
-它**可重放**——这是这个 harness 的设计前提，也是它把凭据脱敏后再落盘的原因
-（`src/agent/loop.ts` 的 `redactSecrets`：`run_shell` 读到的密钥不该永久留在 JSONL 里）。
-
-重放一份日志看模型当时看到了什么：
+重放一份日志：
 
 ```ts
 import { replay } from "./src/events";
 const events = await replay("<path>.jsonl");
 ```
 
-多 agent 的 worker 事件、目标事件都落同一份。worker 的 diff 借一条 `callId: "diff-<agentId>"`
-的 `tool_result` 落地（`events/` 里没有承载 diff 本体的事件类型），CLI 会把它**整块**打出来——
-stat 和 patch 都在，因为看不见的 diff 等于没有审查面。
+会话分叉、目标、worker 事件都落在同一份；worker 的 diff 借 `callId: "diff-<agentId>"` 的 `tool_result` 落地。
 
----
+## 工具
 
-## 设置（`<workspace>/.agent/settings.json`）
+静态注册表 19 个（[`src/tools/index.ts`](src/tools/index.ts)；`tools-check` 钉着这个数）：
 
-CLI 走 `handleAgentRun` 这个装配入口，所以它第一次真正读盘上的设置。缺省开着的是这些：
+`read_file` · `read_image` · `render_image` · `write_file` · `edit_file` · `apply_patch` ·
+`run_shell` · `grep` · `glob` · `lsp` · `clarify` · `propose_plan` · `todo_write` ·
+`task_output` · `task_stop` · `git_read` · `calc` · `list_dir` · `read_doc`
 
-| 开关 | 缺省 | 做什么 |
-|---|---|---|
-| `impactAnalysis` | **开** | 每次写文件后算一遍跨文件波及面（谁调用了我），把摘要回注给模型——改第二处之前先看见第一处 |
-| `promptCache` | 开 | provider 支持时的稳定前缀缓存 |
-| `autoVerify` | 开 | 收束前补一拍验证（模型没自调 verify 时） |
+`verify` — 系统验证门，由 loop 的 verify 钩子处理（未接线 = fail-closed），不在静态工具表里。
 
-**改真实花钱行为**、因而默认关着需要手开的是 `routingBandit`（每轮按代价换模型）与 `maxBudgetUsd`（美元闸）。
-仓里目前没有外部基准读数可以拿来裁，所以它们没随这版一起翻：
+运行时还会按装配注入 `remember`、`spawn_agent` / `wait_for_agents` / `cancel_agents`、
+`refine_goal`、`web_fetch`、`web_search`、`diagnose`。工具面不是提示词自觉：`allowedTools`
+给出时不在表内的工具一律拒绝执行。
 
-```json
-{ "routingBandit": true, "maxBudgetUsd": 2.5 }
-```
-
----
-
-## 工具面
-
-静态注册表 10 个（`src/tools/index.ts`，`tools-check` 钉着这个数）：
-
-`read_file` · `write_file` · `edit_file` · `apply_patch`（统一 diff 补丁级编辑，跨文件原子落地）·
-`run_shell` · `grep`（真 ripgrep）· `glob` · `lsp`（真 spawn 语言服务器）· `clarify` · `propose_plan`
-
-运行时注入（`installAppTools`，不占静态名额）：`remember`（记忆沉淀）· `spawn_agent` / `wait_for_agents` /
-`cancel_agents`（多 agent 编排，CLI 上真能派 worker——`runAgent` 每轮都建会话级编排器）·
-`refine_goal`（模型改自己目标的措辞）· `web_fetch`（抓一个给定 URL 还原成纯文本，只按 URL 取、不做检索）·
-`web_search`（按关键词检索；配了 `.agent/config.json` 的 `search.endpoint` 才挂）·
-`diagnose`（跑配置的 lint/test，输出结构化错误清单；有可诊断面才挂）。
-
-`web_fetch` 只收 http(s)，私网/回环/云元数据地址与每一跳重定向都逐个判掉，**四档权限一律审批**、
-无人值守 fail-closed——与 `run_shell` 跑 curl 同一条红线（`web-fetch-check` 钉着这条）。它不在 worker 面上：
-worker 要联网只能回主会话发。
-
-另有两个不是普通工具：
-
-- `verify` — 系统验证门，由 loop 的 verify 钩子处理（未接线 = fail-closed），不在工具表里
-- `impact-query` — 跨文件波及面读端，worker 侧按需挂载
-
-工具面不是提示词自觉，是**硬闸**：`allowedTools` 给出时不在表内的工具一律拒绝执行（摘表，不是劝告）。
-路径另有一道 realcontainment 闸——软链解析后越出 workspace 的读写一律拒。
-
-**CLI 上没有 `automation_*` 那五个定时任务工具**。它们要调度器在跑才有意义（60 秒 tick、七天补跑、
-并发闸 ≤2，全是长驻进程语义），而 CLI 是一次性进程。它们**规格面与执行面一起摘**：只摘执行面的话
-模型照样看得见这五把工具、只吃得到一句 `unknown tool`——比现状更糟。摘干净之后模型连看都看不见，
-也就不会去建一个没人会 tick 的任务。调度器与 `Scheduler` 类本身原样保留，长驻服务时再接。
-
----
-
-## 退出码
-
-| 码 | 含义 |
-|---|---|
-| 0 | 成功 |
-| 1 | 跑完了但有失败（工具失败 / 验证红 / provider 报错） |
-| 2 | 用法错或配置错（argv 打错、缺 key） |
-
----
-
-## 仓库结构
-
-内核侧保持 electron-free，应用服务在 `src/main/`。
+## 桌面与 CLI 的结构
 
 - `src/agent/` — 事件循环、编排、worker、压缩、判卷层
 - `src/events/` — append-only 事件流 + 重放 / 分叉
@@ -392,78 +144,37 @@ worker 要联网只能回主会话发。
 - `src/permissions/` — 权限策略
 - `src/providers/` — provider 适配器与模型注册表
 - `src/main/` — electron-free 的应用服务（装配根）
-- `apps/desktop/` — 桌面壳（Electron + React + Vite；独立构建，判卷与边界闸已进根门与 CI）
-- `scripts/` — headless 闸（`pnpm gates` 全跑，清单在 `scripts/gate-manifest.ts`，即事实源）
+- `apps/desktop/` — 桌面壳（Electron + React + Vite）
+- `scripts/` — 构建、安装、评测与维护脚本
 
-**桌面层**曾于 2026-09-27（`69fbb0d`）整体移除，2026-10-02 起以 M1 切片重新入库于 `apps/desktop/`，
-此后持续接线：**94 个 invoke 通道**（现读 `apps/desktop/src/main/channels.ts` 的 `INVOKE_CHANNELS`；
-表长由 `apps/desktop/tests/channels.test.ts` 的断言钉住，改表不改数当场红），
-且是**全键接线**——`channels.ts` 与 main 的 `wired` 表都是全键映射，少一行 typecheck 当场红。
-桌面判卷与 `desktop-boundary-check` 已进 `GATES`/`CERT_GATES`，CI 也单跑
-`pnpm --filter cairn-desktop test`。产品形态仍早（终端/浏览器等面板为后端前置，见
-[apps/desktop/design/desktop-ui-spec.md](apps/desktop/design/desktop-ui-spec.md) §8）。
-存废与受众的裁决见 [docs/adr/0001-core-only-vs-desktop.md](docs/adr/0001-core-only-vs-desktop.md)。
-
----
-
-## 文档分层
-
-本仓的文档分四层，**改错层会让 `docs-check` 判红**——这是新人最容易踩的一格：
-
-| 层 | 落点 | 放什么 | 写法 |
-|---|---|---|---|
-| 规矩层 | [`AGENTS.md`](AGENTS.md) | 不知道就会这一轮做错事的规则 | 只加新规则 |
-| 现态层 | [`STATE.md`](STATE.md)、[`docs/README.md`](docs/README.md)、[`docs/CODE-WIKI.md`](docs/CODE-WIKI.md) | 现在在哪、在飞什么、还有什么没裁 | 整体重写，永不追加 |
-| 台账层 | [`PROGRESS.md`](PROGRESS.md) | 历史与审计链：备案、裁决全文、各轮实录 | 只追加，页号是引用单位 |
-| 档案层 | [`archive/`](archive/) | 不再现行的结论 | 归档 |
-
-另有 ADR（决策记录）：[`docs/adr/`](docs/adr/)。
-
----
+桌面 IPC 现读 **156 个 invoke 通道**（事实源 [`apps/desktop/src/main/channels.ts`](apps/desktop/src/main/channels.ts)，表长判据 [`apps/desktop/tests/channels.test.ts`](apps/desktop/tests/channels.test.ts)）。
 
 ## 开发与验证
 
-| 改动面 | 必跑 |
-|---|---|
-| 任意 | `pnpm typecheck` |
-| 核心行为 | `pnpm test:capped`（或 `pnpm test`） |
-| 桌面行为 | `pnpm --filter cairn-desktop test` |
-| 跨层依赖 | `pnpm desktop-boundary-check` |
-| 规则 / 文档 | `pnpm docs-check` |
-| 提交前全量 | `pnpm gates` |
+```sh
+pnpm verify          # 公开 CI 的 L1 全套
+pnpm typecheck      # 只做类型检查
+pnpm test           # 核心行为测试
+pnpm test:capped    # 核心测试，限两个 worker（8GB 机器上的可复现读数）
+pnpm --filter cairn-desktop test   # 桌面行为测试
+```
 
-> **核心套件读数必须带并发档位**：8GB 机器上默认 worker 数会超订，报出来的超时是**负载假象**，
-> 不是逻辑回归。要一个可复现的整跑读数，用 `pnpm test:capped`。
-> 引用读数时也要说清它覆盖的是**工作树**还是**某个提交**。
+测试与验证分层见 [`docs/TESTING.md`](docs/TESTING.md)。开发规则见 [`AGENTS.md`](AGENTS.md)；
+架构索引见 [`docs/CODE-WIKI.md`](docs/CODE-WIKI.md)。
 
-门禁清单的事实源是 `scripts/gate-manifest.ts`。`pnpm gates` 不带参数跑的是全集，
-比认证面（`CERT_GATES`）慢、面也不同——引用读数时说明跑的是哪一面。
+## 参与、支持与安全
 
-完整贡献流程（四层文档怎么落、提交面纪律、PR 自检清单）见 [`CONTRIBUTING.md`](CONTRIBUTING.md)；
-开发规则见 [`AGENTS.md`](AGENTS.md)；架构与符号索引见 [`docs/CODE-WIKI.md`](docs/CODE-WIKI.md)。
-
----
-
-## 参与本项目
-
-| 入口 | 用途 |
-|---|---|
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | 贡献流程、门禁、提交规范、PR 自检清单 |
-| [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) | 行为准则 |
-| [`SECURITY.md`](SECURITY.md) | **安全漏洞私密报告**（不要开公开 Issue） |
-| [`SUPPORT.md`](SUPPORT.md) | 按问题类型选渠道 |
-
-CI 跑在 `macos-latest`（沙箱与平台分支的判卷按它写）。
-[CodeQL 工作流](.github/workflows/codeql.yml) 对 main 推送与面向 main 的 PR 自动运行，并保留手动入口；
-具体分析结果与功能验证分别查看对应 Actions。
-CI 说明与取舍见 [`scripts/ci/README.md`](scripts/ci/README.md)。
-
----
+- 贡献流程：[`CONTRIBUTING.md`](CONTRIBUTING.md)
+- 问题反馈：[`SUPPORT.md`](SUPPORT.md)
+- 安全漏洞：[`SECURITY.md`](SECURITY.md)（走私密通道，不要开公开 Issue）
+- 行为准则：[`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)
 
 ## 许可
 
-**专有软件，保留所有权利。** 许可与内测授权范围见 [`LICENSE`](LICENSE)。
+Cairn 采用 **open-core** 模式：
 
-本包 `"private": true`，**不经 npm 分发**。B1 内测阶段的受众与范围裁决见
-[`docs/adr/0002-v1-audience-b1-internal-beta.md`](docs/adr/0002-v1-audience-b1-internal-beta.md)，
-扩大受众的清单留门 [`docs/b2-checklist.md`](docs/b2-checklist.md)。
+- 本仓库代码以 **AGPL-3.0-only** 发布，全文见 [`LICENSE`](LICENSE)；
+- Cairn 名称、Logo 与品牌视觉保留；商业版/云端/企业模块不在本仓库；
+- 需要闭源集成、OEM 或 SaaS 托管可联系维护者获取商业授权。
+
+详见 [`LICENSING.md`](LICENSING.md)。

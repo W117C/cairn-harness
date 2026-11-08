@@ -7,25 +7,40 @@
 //   字段级保存（无全局保存键，SettingsStore patch 语义）；校验失败行内红字，不静默。
 // 纯函数资产（panelPatch / providerStatusLabel / …）随迁 settings-sections，
 // 本文件重导出保旧 import 面（settings-panel.test 判卷锚不动）。
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { Search, X } from "lucide-react";
-import type { AppSettings, CapabilityReadout, ProviderInfo } from "../../../../../src/main/ipc-protocol";
-import type { TextSizeSetting, UiSizeSetting } from "../../../../../src/main/settings";
-import { SettingsPage } from "./settings-ui";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ChevronLeft, Search, X } from "lucide-react";
+import type { AgentApi, AppSettings, CapabilityReadout, ProviderInfo } from "../../../../../src/main/ipc-protocol";
+import type { SettingsLoadIssue, TextSizeSetting, UiSizeSetting } from "../../../../../src/main/settings";
+import { SettingsPage, SettingsRow, SettingsSection } from "./settings-ui";
 import {
   AboutSection,
   AdvancedSection,
   GeneralSection,
+  HooksSection,
+  McpSection,
   PermissionsSection,
   ProviderSection,
-  SEARCH_CONFIG_HINT,
+  SettingsIssueBanner,
   ShortcutsSection,
   defaultKeyProvider,
   panelPatch,
 } from "./settings-sections";
 import { AppPageBody, type PageId } from "./AppPage";
 import { ModalSurface } from "./ModalSurface";
-import { PAGE_ORDER, SECTIONS, filterSections, type SectionId } from "./settings-nav";
+import { menuNavIndex } from "./popover-keys";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { isCompositionEnter } from "../ime";
+import { RenderErrorBoundary } from "./RenderErrorBoundary";
+import { UsageSection } from "./settings/UsageSection";
+import { EvolveSection } from "./settings/EvolveSection";
+import { NetworkSection } from "./settings/NetworkSection";
+import { MigrationSection } from "./settings/MigrationSection";
+import { PersonalizationSection } from "./settings/PersonalizationSection";
+import { SubagentsSection } from "./settings/SubagentsSection";
+import { SETTINGS_PAGE_ORDER, SECTIONS, filterSections, sectionLabel, type SectionId } from "./settings-nav";
+import { destinationForSection } from "../navigation";
+import { STR } from "../strings";
+import "./settings-refinement.css";
 
 export { SECTIONS, type SectionId };
 
@@ -41,21 +56,133 @@ export {
   SEARCH_CONFIG_HINT,
 } from "./settings-sections";
 
-const PAGE_SECTION_IDS = new Set<string>(PAGE_ORDER);
+const PAGE_SECTION_IDS = new Set<string>(SETTINGS_PAGE_ORDER);
+/** 三档模板：内容少的分区（Hooks/Migration/Skills/Worktrees）给紧凑双列；表格式分区保留宽列；
+    其余单组分区回标准内容列。模板只改版式，不新增数据、不改分区归属。 */
+const SETTINGS_DENSITY: Readonly<Record<SectionId, "single" | "table" | "compact">> = {
+  general: "single",
+  personalization: "single",
+  subagents: "compact",
+  mcp: "table",
+  hooks: "compact",
+  network: "single",
+  usage: "table",
+  evolve: "table",
+  permissions: "single",
+  advanced: "single",
+  shortcuts: "table",
+  provider: "table",
+  migration: "compact",
+  about: "single",
+  plugins: "table",
+  automation: "table",
+  memory: "table",
+  skills: "compact",
+  worktrees: "compact",
+};
+
+/* ── 更新区（P1 修复 · 2026-10-22）：「发现新版本」不能是一句死胡同 ────────────────
+   实测缺陷：旧实现只把检查结果的 version 拼成「发现新版本 X」⇒ manifest 里的下载页
+   URL 与更新说明被静默丢掉；渲染层对 openExternal 零调用点 ⇒ 用户看到"有新版"却无处可去。
+   现在：available 态带出版本 + 更新说明 + 一个可点动作，动作**只**走主进程通道
+   agent.openExternal（http(s) 白名单在主进程，manifest 注入协议进不来）。 */
+
+/** 主进程检查结果（从 AgentApi 派生——渲染层不直接引 updater 模块）。 */
+type UpdateCheckResult = Awaited<ReturnType<AgentApi["checkUpdate"]>>;
+
+/** 更新区读数。available 变体必须带 url/notes：丢掉它们＝把"有新版"变成死胡同。 */
+export type UpdateState =
+  | { kind: "idle" }
+  | { kind: "checking" }
+  | { kind: "unconfigured" }
+  | { kind: "error"; message: string }
+  | { kind: "up-to-date" }
+  | { kind: "available"; version: string; url: string; notes?: string; openError: string | null };
+
+/** 检查结果 → 读数（url/notes 原样带出，不在这一步丢）。 */
+export function updateStateOf(r: UpdateCheckResult): UpdateState {
+  if (r.state === "available") return { kind: "available", version: r.version, url: r.url, notes: r.notes, openError: null };
+  if (r.state === "error") return { kind: "error", message: r.message };
+  if (r.state === "unconfigured") return { kind: "unconfigured" };
+  return { kind: "up-to-date" };
+}
+
+/** 「检查更新」→ 读数（网络失败也是显式态，绝不静默）。 */
+export async function checkUpdateState(): Promise<UpdateState> {
+  try {
+    return updateStateOf(await window.agent.checkUpdate());
+  } catch (err) {
+    return { kind: "error", message: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** 主进程拒绝打开时把原因并进读数（错误面要看得见，不能吞）。 */
+export function withOpenError(state: UpdateState, message: string): UpdateState {
+  return state.kind === "available" ? { ...state, openError: message } : state;
+}
+
+/** 打开下载页：只走主进程通道 agent.openExternal（http(s) 白名单在主进程）。
+ *  外链不经渲染层——渲染层不自己开浏览器、也不改地址栏。 */
+export async function openUpdateUrl(url: string, onError: (message: string) => void): Promise<void> {
+  let message: string | null = null;
+  try {
+    const r = await window.agent.openExternal(url);
+    if (!r.ok) message = r.error ?? STR.settingsPanel.openPageFail;
+  } catch (err) {
+    message = STR.settingsPanel.openPageFailPrefix + (err instanceof Error ? err.message : String(err));
+  }
+  if (message !== null) onError(message);
+}
+
+/** 「发现新版本」卡：版本 + 更新说明 + 一个可点动作（打开下载页）。 */
+export function UpdateOffer(props: {
+  version: string;
+  url: string;
+  notes?: string;
+  /** 主进程拒绝时的错误文案；null = 无。 */
+  error: string | null;
+  /** 打开失败回调（面板接自己的读数）。 */
+  onError: (message: string) => void;
+}): React.JSX.Element {
+  return (
+    <SettingsSection title={STR.settingsPanel.newVersionTitle}>
+      <SettingsRow label={STR.settingsPanel.foundNewVersion.replace("{v}", props.version)} desc={props.notes}>
+        <button type="button" className="mini-btn" title={props.url} onClick={() => openUpdateUrl(props.url, props.onError)}>
+          {STR.settingsPanel.openDownloadPage}
+        </button>
+      </SettingsRow>
+      {props.error !== null && <div className="sp-note err" role="alert">{props.error}</div>}
+    </SettingsSection>
+  );
+}
 
 export function SettingsPanel(props: {
   onClose: () => void;
   initialSection?: SectionId;
   onSettingsSaved?: () => void;
 }): React.JSX.Element {
-  const [section, setSection] = useState<SectionId>(props.initialSection ?? "general");
+  const [section, setSection] = useState<SectionId>(() =>
+    props.initialSection !== undefined && destinationForSection(props.initialSection) === null
+      ? props.initialSection
+      : "general",
+  );
   const [settings, setS] = useState<AppSettings | null>(null);
+  const [instructionsDraft, setInstructionsDraft] = useState<string | null>(null);
+  const [instructionsSaving, setInstructionsSaving] = useState(false);
+  const [confirmDiscardInstructions, setConfirmDiscardInstructions] = useState(false);
   const [status, setStatus] = useState<{ available: boolean; stored: string[]; envActive: boolean }>({ available: true, stored: [], envActive: false });
-  const [about, setAbout] = useState<{ version: string } | null>(null);
+  const [about, setAbout] = useState<{ version: string; build?: import("../../../../../src/main/build-info").BuildInfo } | null>(null);
+  const [license, setLicense] = useState<import("../../../../../src/main/license").LicenseState | null>(null);
+  // v26：设置文件首读失败（坏 JSON / 读不了）。null = 没有文件或读得动，不摆横幅。
+  const [settingsIssue, setSettingsIssue] = useState<SettingsLoadIssue | null>(null);
+  /** 「重新读取」进行中：按钮禁用（重读是串行进写队列的，连点没有第二份收益）。 */
+  const [reloadingSettings, setReloadingSettings] = useState(false);
   // 能力在场性读数（搜索端点配没配）。null = 还没问到 / 问失败——那一格显示「读不到」，
   // 不显示「已配」：把读不到当成配好，正是这个面板要修的那类假象。
   const [cap, setCap] = useState<CapabilityReadout | null>(null);
-  const [updateMsg, setUpdateMsg] = useState<string | null>(null);
+  // 供应商清单（内置 + 已装自定义）与全量模型——供应商管理列表的数据面（参照 Codex 供应商页）。
+  const [pvInfo, setPvInfo] = useState<ProviderInfo | null>(null);
+  const [update, setUpdate] = useState<UpdateState>({ kind: "idle" });
   const [keyProvider, setKeyProvider] = useState(defaultKeyProvider);
   // 「检查连接」的三态回执：保存成功 ≠ 服务可用，两件事分开显示（主进程只 GET 模型清单，不耗额度）。
   const [checkMsg, setCheckMsg] = useState<{ tone: "wait" | "ok" | "err"; text: string; hint?: string } | null>(null);
@@ -73,7 +200,21 @@ export function SettingsPanel(props: {
   // 分区搜索（2026-10-18）：收窄左栏九个分区；Esc 两级（有字先清空，空着才失焦）。
   const [navQuery, setNavQuery] = useState("");
   const navSearchRef = useRef<HTMLInputElement | null>(null);
+  const navSectionsRef = useRef<HTMLDivElement | null>(null);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
   const visibleSections = useMemo(() => filterSections(navQuery), [navQuery]);
+
+  useLayoutEffect(() => {
+    if (bodyRef.current !== null) bodyRef.current.scrollTop = 0;
+  }, [section]);
+
+  const handleSettingsEscape = (event: KeyboardEvent) => {
+    if (isCompositionEnter(event, null)) { event.preventDefault(); return; }
+    if (document.activeElement !== navSearchRef.current) return;
+    event.preventDefault();
+    if (navQuery !== "") setNavQuery("");
+    else navSearchRef.current?.blur();
+  };
 
   const pulse = (msg: string) => {
     setFlash(msg);
@@ -90,24 +231,85 @@ export function SettingsPanel(props: {
       setError(err instanceof Error ? err.message : String(err));
     });
     void window.agent.providerKeyStatus().then((s) => setStatus({ available: s.available, stored: s.stored, envActive: s.envActive })).catch(() => undefined);
+    void window.agent.getProviderInfo().then(setPvInfo).catch(() => setPvInfo(null));
+  };
+
+  /** getState 面（关于/许可证/设置首读问题）——横幅上的「重新检查」也走这一条。 */
+  const loadState = () => {
+    void window.agent.getState().then((s) => {
+      setAbout(s.about ?? null);
+      setLicense(s.license ?? null);
+      setSettingsIssue(s.settingsIssue ?? null);
+    }).catch(() => { setAbout(null); setSettingsIssue(null); });
   };
 
   useEffect(() => {
     refresh();
-    void window.agent.getState().then((s) => setAbout(s.about ?? null)).catch(() => setAbout(null));
+    loadState();
     void window.agent.capabilities().then(setCap).catch(() => setCap(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /** 关闭设置前先提交正在编辑的输入（v33 真机实测：数字框未失焦时按 Esc，值会随卸载丢掉）。
+   *  blur() 同步触发 React onBlur（失焦即存），再调 props.onClose 卸载面板。
+   *  返回按钮/遮罩/键盘三条关闭路径都走这里。 */
+  const finishClose = () => {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active.closest(".sp-page") !== null) active.blur();
+    props.onClose();
+  };
+  const closeSettings = () => {
+    if (instructionsSaving) { pulse(STR.settingsPanel.savingInstructionsWait); return; }
+    if (instructionsDraft !== null && instructionsDraft !== (settings?.customInstructions ?? "")) {
+      setConfirmDiscardInstructions(true);
+      return;
+    }
+    finishClose();
+  };
+
+  /** 「重新读取」：真重读盘（主进程 SettingsStore.reload）——修好文件后不重启即可恢复。
+   *  重读成功后把盘上值回灌面板与 App 的 live state（主题/档位/字号…），并清掉横幅。 */
+  const reloadFromDisk = async () => {
+    setError(null);
+    setReloadingSettings(true);
+    try {
+      const r = await window.agent.reloadSettings();
+      if (!r.ok) { setError(STR.settingsPanel.reloadFailedPrefix + (r.error ?? STR.settingsPanel.unknownError)); return; }
+      refresh();
+      loadState();
+      props.onSettingsSaved?.();
+      pulse(STR.settingsPanel.reloaded);
+    } catch (err) {
+      setError(STR.settingsPanel.reloadFailedPrefix + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setReloadingSettings(false);
+    }
+  };
 
   const save = async (patch: Record<string, unknown>) => {
     setError(null);
     try {
       const next = await window.agent.setSettings(panelPatch(patch));
       setS(next);
-      pulse("已保存 ✓");
+      pulse(STR.settingsPanel.savedCheck);
       props.onSettingsSaved?.();
     } catch (err) {
-      setError(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+      setError(STR.settingsPanel.saveFailedPrefix + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
+  const saveInstructions = async (value: string): Promise<void> => {
+    setInstructionsSaving(true);
+    setError(null);
+    try {
+      setS(await window.agent.setSettings({ customInstructions: value }));
+      setInstructionsDraft(null);
+      pulse(STR.settingsPanel.savedNextRun);
+      props.onSettingsSaved?.();
+    } catch (err) {
+      setError(STR.settingsPanel.saveFailedPrefix + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setInstructionsSaving(false);
     }
   };
 
@@ -116,10 +318,10 @@ export function SettingsPanel(props: {
     setError(null);
     void window.agent.setSettings({ ctrlTabCycle: next }).then((updated) => {
       setS(updated);
-      pulse("已保存 ✓");
+      pulse(STR.settingsPanel.savedCheck);
       props.onSettingsSaved?.();
     }, (err: unknown) => {
-      setError(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+      setError(STR.settingsPanel.saveFailedPrefix + (err instanceof Error ? err.message : String(err)));
     });
   };
 
@@ -133,10 +335,10 @@ export function SettingsPanel(props: {
     try {
       const next = await window.agent.setSettings({ [key]: value });
       setS(next);
-      pulse("已保存 ✓");
+      pulse(STR.settingsPanel.savedCheck);
       props.onSettingsSaved?.();
     } catch (err) {
-      setError(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+      setError(STR.settingsPanel.saveFailedPrefix + (err instanceof Error ? err.message : String(err)));
     }
   };
 
@@ -145,16 +347,16 @@ export function SettingsPanel(props: {
     setBusy(true);
     try {
       const value = keyInput.current?.value ?? "";
-      if (value.trim() === "") { setError("key 为空，没有保存"); return; }
+      if (value.trim() === "") { setError(STR.settingsPanel.keyEmpty); return; }
       const r = await window.agent.providerKeySet(keyProvider, value);
-      if (!r.ok) { setError(`key 保存失败：${r.error ?? "未知错误"}`); return; }
+      if (!r.ok) { setError(STR.settingsPanel.keySaveFailedPrefix + (r.error ?? STR.settingsPanel.unknownError)); return; }
       if (keyInput.current) keyInput.current.value = "";
       const st = await window.agent.providerKeyStatus();
       setStatus({ available: st.available, stored: st.stored, envActive: st.envActive });
-      pulse(`key 已存入钥匙串（${keyProvider}）`);
+      pulse(STR.settingsPanel.keyStored.replace("{p}", keyProvider));
       props.onSettingsSaved?.();
     } catch (err) {
-      setError(`key 保存失败：${err instanceof Error ? err.message : String(err)}`);
+      setError(STR.settingsPanel.keySaveFailedPrefix + (err instanceof Error ? err.message : String(err)));
     } finally {
       setBusy(false);
     }
@@ -164,57 +366,64 @@ export function SettingsPanel(props: {
     setError(null);
     try {
       const r = await window.agent.providerKeyDelete(provider);
-      if (!r.ok) { setError(`key 删除失败：${r.error ?? "未知错误"}`); return; }
+      if (!r.ok) { setError(STR.settingsPanel.keyDeleteFailedPrefix + (r.error ?? STR.settingsPanel.unknownError)); return; }
       const st = await window.agent.providerKeyStatus();
       setStatus({ available: st.available, stored: st.stored, envActive: st.envActive });
-      pulse(`key 已删除（${provider}）`);
+      pulse(STR.settingsPanel.keyDeleted.replace("{p}", provider));
       props.onSettingsSaved?.();
     } catch (err) {
-      setError(`key 删除失败：${err instanceof Error ? err.message : String(err)}`);
+      setError(STR.settingsPanel.keyDeleteFailedPrefix + (err instanceof Error ? err.message : String(err)));
     }
   };
 
   const runCheck = () => {
-    setCheckMsg({ tone: "wait", text: `正在检查 ${keyProvider} 连接…` });
+    setCheckMsg({ tone: "wait", text: STR.settingsPanel.checkingConnection.replace("{p}", keyProvider) });
     void window.agent.providerCheck(keyProvider).then((r) => {
       if (r.ok) {
-        const sample = r.sample.length > 0 ? `（例如 ${r.sample.join("、")}）` : "";
-        setCheckMsg({ tone: "ok", text: `连接成功：发现 ${String(r.modelCount)} 个可用模型${sample}` });
+        const sample = r.sample.length > 0 ? STR.settingsPanel.sampleSuffix.replace("{s}", r.sample.join("、")) : "";
+        setCheckMsg({ tone: "ok", text: STR.settingsPanel.checkOkPrefix + String(r.modelCount) + STR.settingsPanel.checkOkSuffix + sample });
       } else {
-        setCheckMsg({ tone: "err", text: `连接失败：${r.message}`, hint: r.hint });
+        setCheckMsg({ tone: "err", text: STR.settingsPanel.checkFailPrefix + r.message, hint: r.hint });
       }
     }).catch((err: unknown) => {
-      setCheckMsg({ tone: "err", text: `连接失败：${err instanceof Error ? err.message : String(err)}` });
+      setCheckMsg({ tone: "err", text: STR.settingsPanel.checkFailPrefix + (err instanceof Error ? err.message : String(err)) });
     });
   };
 
   const checkUpdate = () => {
-    setUpdateMsg("检查中…");
-    void window.agent.checkUpdate().then((r) => {
-      setUpdateMsg(
-        r.state === "unconfigured" ? "未配置更新端点"
-        : r.state === "error" ? `检查未完成：${r.message}`
-        : r.state === "up-to-date" ? "已是最新"
-        : `发现新版本 ${r.version}`,
-      );
-    }).catch((err: unknown) => {
-      setUpdateMsg(`检查未完成：${err instanceof Error ? err.message : String(err)}`);
-    });
+    setUpdate({ kind: "checking" });
+    void checkUpdateState().then(setUpdate);
   };
 
-  /** 复制搜索配法（clipboard 访问留在壳层，ProviderSection 纯展示）。 */
-  const copyHint = () => {
-    void navigator.clipboard.writeText(SEARCH_CONFIG_HINT).then(
-      () => pulse("已复制配置片段 ✓"),
-      () => setError("复制失败：剪贴板不可用，请手动选中复制"),
-    );
+  /** 打开下载页被主进程拒绝：原因并进读数（错误面要看得见，不能吞）。 */
+  const onUpdateOpenError = (message: string) => {
+    setUpdate((prev) => withOpenError(prev, message));
   };
+
+  // 「更新」行的文案（读数的唯一出口；措辞与旧实现逐字不变）。
+  const updateMsg =
+    update.kind === "idle" ? null
+    : update.kind === "checking" ? STR.settingsPanel.checking
+    : update.kind === "unconfigured" ? STR.settingsPanel.updateUnconfigured
+    : update.kind === "error" ? STR.settingsPanel.checkFailedPrefix + update.message
+    : update.kind === "up-to-date" ? STR.settingsPanel.upToDate
+    : STR.settingsPanel.foundNewVersion.replace("{v}", update.version);
 
   return (
-    <ModalSurface className="sp-page" label="设置" onClose={props.onClose}>
+    <ModalSurface className="sp-page" label={STR.settingsPanel.label} onClose={closeSettings} initialFocusRef={navSearchRef} onEscapeKeyDown={handleSettingsEscape}>
       <div className="sp-shell">
-        <nav className="sp-nav" aria-label="设置分区">
-          <button className="mini-btn" onClick={props.onClose} aria-label="关闭设置（Esc）">← 返回</button>
+        <nav className="sp-nav" aria-label={STR.settingsPanel.navAria}>
+          <div className="sp-nav-head">
+            {/* 「设置」已由工具栏中央显示；导航列不再重复同一个父级词。
+                返回仍在 ModalSurface 内部（工具栏被 isolateOutside 标成 inert，点不到）。 */}
+            <button className="sp-back" onClick={closeSettings} aria-label={STR.settingsPanel.closeAria}>
+              <ChevronLeft size={13} aria-hidden="true" />
+              <span>{STR.settingsPanel.back}</span>
+            </button>
+          </div>
+          {/* 返回必须在 ModalSurface 内部（2026-10-21 评审抓到的 Critical）：settings 打开时
+              isolateOutside 会把 titlebar/shell 标成 inert，鼠标点不到工具栏上的返回。
+              这里用面板内按钮；工具栏只负责 chrome（设置时不摆侧栏开关）。 */}
           {/* 分区搜索（2026-10-18 补）：此前九个分区只能靠肉眼扫——⌘K 是「跳到某分区」的导航，
               不是「在设置里找东西」。现在导航列顶部一行搜索，边打边收窄。
               口径诚实：匹配的是**分区名与同义词**（SECTION_KEYWORDS），不是每个开关的标签——
@@ -222,67 +431,91 @@ export function SettingsPanel(props: {
           <div className="sp-nav-search">
             <Search size={12} aria-hidden="true" />
             <input
+              ref={navSearchRef}
               className="sp-nav-search-input"
               type="text"
               value={navQuery}
-              placeholder="搜索设置分区…"
-              aria-label="搜索设置分区"
+              placeholder={STR.settingsPanel.searchPlaceholder}
+              aria-label={STR.settingsPanel.searchAria}
               onChange={(e) => setNavQuery(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Escape") {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (navQuery !== "") { setNavQuery(""); return; }
-                  (e.target as HTMLInputElement).blur();
-                  return;
-                }
-                if (e.key === "Enter" || e.key === "ArrowDown") {
-                  const first = visibleSections[0];
-                  if (first !== undefined) { e.preventDefault(); setSection(first); }
+                if (isCompositionEnter(e, null)) return;
+                if (e.key === "Enter" || e.key === "ArrowDown" || e.key === "ArrowUp") {
+                  const index = e.key === "ArrowUp" ? visibleSections.length - 1 : 0;
+                  const next = visibleSections[index];
+                  if (next !== undefined) {
+                    e.preventDefault();
+                    setSection(next);
+                    navSectionsRef.current?.querySelectorAll<HTMLButtonElement>(".sp-nav-item")[index]?.focus();
+                  }
                 }
               }}
             />
             {navQuery.trim() !== "" && (
-              <button className="sp-nav-search-x" aria-label="清空搜索" title="清空搜索" onClick={() => { setNavQuery(""); navSearchRef.current?.focus(); }}>
+              <button className="sp-nav-search-x" aria-label={STR.settingsPanel.clearSearch} title={STR.settingsPanel.clearSearch} onClick={() => { setNavQuery(""); navSearchRef.current?.focus(); }}>
                 <X size={11} />
               </button>
             )}
           </div>
-          {visibleSections.map((id) => {
-            const s = SECTIONS.find((x) => x.id === id);
-            if (s === undefined) return null;
-            const i = SECTIONS.indexOf(s);
+          <div className="sp-nav-sections" ref={navSectionsRef} onKeyDown={(event) => {
+            if (isCompositionEnter(event, null)) return;
+            const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>(".sp-nav-item")];
+            const next = menuNavIndex(event.key, items.indexOf(document.activeElement as HTMLButtonElement), items.length);
+            if (next === null) return;
+            event.preventDefault();
+            items[next]?.focus();
+          }}>
+          {(["settings", "workspace", "system"] as const).map((group) => {
+            const groupIds = visibleSections.filter((id) => {
+              const inWorkspace = (SETTINGS_PAGE_ORDER as readonly string[]).includes(id);
+              return group === "workspace" ? inWorkspace : group === "system" ? id === "about" || id === "migration" : !inWorkspace && id !== "about" && id !== "migration";
+            });
             return (
-              <Fragment key={s.id}>
-                {/* 分组标签：工作台四分区与「设置」本分区在导航上分开（纯标记，不可点）。 */}
-                {s.id === "plugins" && i > 0 && <div className="sp-nav-label" aria-hidden="true">工作台</div>}
-                <button
-                  className={"sp-nav-item" + (section === s.id ? " on" : "")}
-                  aria-current={section === s.id ? "page" : undefined}
-                  onClick={() => setSection(s.id)}
-                >
-                  <span className="sp-ni-ico" aria-hidden="true">{s.icon}</span>
-                  {s.label}
-                </button>
-              </Fragment>
+              <div className="sp-nav-group" data-group={group} key={group}>
+                {/* 分组标签：工作台分区与「设置」本分区在导航上分开（纯标记，不可点）。 */}
+                {group === "workspace" && groupIds.length > 0 && <div className="sp-nav-label" aria-hidden="true">工作台</div>}
+                {groupIds.map((id) => {
+                  const s = SECTIONS.find((x) => x.id === id);
+                  if (s === undefined) return null;
+                  return (
+                    <button
+                      key={s.id}
+                      className={"sp-nav-item" + (section === s.id ? " on" : "")}
+                      aria-current={section === s.id ? "page" : undefined}
+                      onClick={() => setSection(s.id)}
+                    >
+                      <span className="sp-ni-ico" aria-hidden="true">{s.icon}</span>
+                      {s.label}
+                    </button>
+                  );
+                })}
+              </div>
             );
           })}
           {/* 搜索无命中：说清「没有匹配的分区」，别留一个空导航列让人以为设置坏了。 */}
           {visibleSections.length === 0 && (
             <div className="sp-nav-empty">没有匹配「{navQuery.trim()}」的分区</div>
           )}
-          {/* 导航列底部留白（原「修改即保存」静态行已按清单撤除，改为右下瞬时指示）。 */}
-          <div className="sp-nav-foot" aria-hidden="true" />
+          </div>
         </nav>
-        <div className="sp-body">
+        <div className="sp-body" ref={bodyRef} data-density={SETTINGS_DENSITY[section]}>
+          {navQuery.trim() !== "" && visibleSections.length > 0 && (
+            <div className="sp-search-hint" role="status">
+              {STR.design.settingsSearchHint.replace("{query}", navQuery.trim())}
+            </div>
+          )}
           {error !== null && <div className="sp-note err" role="alert">{error}</div>}
-          {settings === null && section !== "about" && !PAGE_SECTION_IDS.has(section) && <div className="sp-note">正在载入设置…</div>}
+          <SettingsIssueBanner issue={settingsIssue} onReload={() => { void reloadFromDisk(); }} reloading={reloadingSettings} />
+          {settings === null && !["about", "usage", "network", "evolve", "migration"].includes(section) && !PAGE_SECTION_IDS.has(section) && <div className="sp-note">正在载入设置…</div>}
 
-          {/* 工作台四分区（并入页体）：自取 getState() 快照，错误走同一错误条。 */}
-          {PAGE_SECTION_IDS.has(section) && <AppPageBody page={section as PageId} onError={setError} />}
+          {/* 分区各自成界：一个分区渲染炸了不许把整窗打回启动占位。
+              key={section}：切分区即重挂，换到好分区自动恢复，不需要先点重试。 */}
+          <RenderErrorBoundary key={section} variant="inline">
+          {/* Skills and Worktrees remain settings pages; durable destinations render outside this overlay. */}
+          {PAGE_SECTION_IDS.has(section) && <AppPageBody page={section as PageId} />}
 
           {section === "general" && settings !== null && (
-            <SettingsPage title="通用">
+            <SettingsPage title={sectionLabel("general")}>
               <GeneralSection
                 settings={settings}
                 textSize={textSize}
@@ -291,15 +524,45 @@ export function SettingsPanel(props: {
                 onCtrlTab={saveCtrlTab}
                 onTextSize={(next) => { setTextSize(next); void saveSettingKey("textSize", next); }}
                 onUiSize={(next) => { setUiSize(next); void saveSettingKey("uiSize", next); }}
+                onWindowVibrancy={(next) => { void saveSettingKey("windowVibrancy", next); }}
+                onNotify={(next) => { void saveSettingKey("notifyOnComplete", next); }}
               />
             </SettingsPage>
           )}
 
+          {section === "personalization" && settings !== null && (
+            <SettingsPage title={sectionLabel("personalization")} desc={STR.settingsPanel.personalizationDesc}>
+              <PersonalizationSection saved={settings.customInstructions ?? ""} draft={instructionsDraft}
+                onDraft={setInstructionsDraft} unavailable={settingsIssue !== null}
+                saving={instructionsSaving} onSave={saveInstructions} />
+            </SettingsPage>
+          )}
+
+          {section === "subagents" && settings !== null && (
+            <SettingsPage title={sectionLabel("subagents")}>
+              <SubagentsSection enabled={settings.subagentTools}
+                onToggle={(next) => saveSettingKey("subagentTools", next)} />
+            </SettingsPage>
+          )}
+
+          {section === "migration" && (
+            <SettingsPage title={sectionLabel("migration")}>
+              <MigrationSection onImported={() => { refresh(); props.onSettingsSaved?.(); }} />
+              <SettingsSection title={STR.settingsPanel.backupTitle}>
+                <SettingsRow label={STR.settingsPanel.backupRow}>
+                  <button className="mini-btn" type="button" onClick={() => setSection("about")}>{STR.settingsPanel.backupGo}</button>
+                </SettingsRow>
+              </SettingsSection>
+            </SettingsPage>
+          )}
+
           {section === "provider" && (
-            <SettingsPage title="模型与 Provider">
+            <SettingsPage title={sectionLabel("provider")}>
               <ProviderSection
                 settings={settings}
                 status={status}
+                providers={pvInfo?.providers ?? []}
+                models={pvInfo?.models ?? []}
                 cap={cap}
                 keyProvider={keyProvider}
                 onKeyProviderChange={setKeyProvider}
@@ -310,19 +573,40 @@ export function SettingsPanel(props: {
                 checkMsg={checkMsg}
                 onCheck={runCheck}
                 onCustomSaved={() => { refresh(); props.onSettingsSaved?.(); }}
-                onCopyHint={copyHint}
+                onOpenSearch={() => setSection("network")}
               />
             </SettingsPage>
           )}
 
+          {section === "mcp" && (
+            <SettingsPage title={sectionLabel("mcp")}>
+              <McpSection />
+            </SettingsPage>
+          )}
+
+          {section === "hooks" && (
+            <SettingsPage title={sectionLabel("hooks")}>
+              <HooksSection />
+            </SettingsPage>
+          )}
+
+          {section === "network" && <NetworkSection onSaved={() => {
+            void window.agent.capabilities().then(setCap).catch(() => setCap(null));
+            props.onSettingsSaved?.();
+          }} />}
+
+          {section === "usage" && <UsageSection />}
+
+          {section === "evolve" && <EvolveSection />}
+
           {section === "permissions" && settings !== null && (
-            <SettingsPage title="权限与安全">
+            <SettingsPage title={sectionLabel("permissions")}>
               <PermissionsSection settings={settings} onSave={(patch) => { void save(patch); }} />
             </SettingsPage>
           )}
 
           {section === "shortcuts" && (
-            <SettingsPage title="快捷键">
+            <SettingsPage title={sectionLabel("shortcuts")}>
               <ShortcutsSection />
             </SettingsPage>
           )}
@@ -331,27 +615,49 @@ export function SettingsPanel(props: {
               走 saveKey 单键直写（不走 panelPatch 白名单——那份白名单与其判卷口径保持原样，
               与 saveCtrlTab 同一条路）。 */}
           {section === "advanced" && settings !== null && (
-            <SettingsPage title="高级">
+            <SettingsPage title={sectionLabel("advanced")}>
               <AdvancedSection settings={settings} onSaveKey={saveSettingKey} />
             </SettingsPage>
           )}
 
           {section === "about" && (
-            <SettingsPage title="关于与更新">
+            <SettingsPage title={sectionLabel("about")}>
               <AboutSection
                 version={about?.version ?? null}
+                build={about?.build ?? null}
                 updateMsg={updateMsg}
                 onCheckUpdate={checkUpdate}
                 updateManifestUrl={settings?.updateManifestUrl ?? ""}
+                license={license}
+                onLicenseChanged={setLicense}
+                onPreferencesImported={setS}
+                onOpenSection={setSection}
                 onSaveManifest={(url) => { void saveSettingKey("updateManifestUrl", url); }}
               />
+              {/* 有新版时给出**去处**：版本 + 更新说明 + 打开下载页（只走主进程通道）。 */}
+              {update.kind === "available" && (
+                <UpdateOffer
+                  version={update.version}
+                  url={update.url}
+                  notes={update.notes}
+                  error={update.openError}
+                  onError={onUpdateOpenError}
+                />
+              )}
             </SettingsPage>
           )}
+          </RenderErrorBoundary>
         </div>
         {flash !== null && (
           <div className="sp-save-flash" role="status" aria-live="polite">{flash}</div>
         )}
       </div>
+      {confirmDiscardInstructions && <ConfirmDialog
+        title={STR.settingsPanel.discardTitle} note={STR.settingsPanel.discardNote}
+        cancelLabel={STR.settingsPanel.discardCancel} confirmLabel={STR.settingsPanel.discardConfirm} danger
+        onClose={() => setConfirmDiscardInstructions(false)}
+        onConfirm={() => { setConfirmDiscardInstructions(false); finishClose(); }}
+      />}
     </ModalSurface>
   );
 }

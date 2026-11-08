@@ -42,9 +42,13 @@ import {
   noiseBand,
   outcomeGate,
   parseReadings,
+  namedSetCounts,
+  namedSetFace,
+  namedSetStateOf,
   renderExitFace,
   renderIdentityFace,
   renderModelFace,
+  renderNamedSetFace,
   renderReport,
   SCRIPTED_FACE,
   taskIds,
@@ -268,7 +272,7 @@ describe("模型归因面：跨模型的差值不许当改动的效果", () => {
   const r = (model: string, over: Partial<Row> = {}): Row => ({
     id: "A", model, headSha: "1111111", ranAt: "2026-10-05T00:00:00Z",
     tokensIn: 1000, tokensOut: 100, seconds: 10,
-    rssPeakMb: 100, toolFailures: 0, repeats: 0, ok: true, ...over,
+    rssPeakMb: 100, toolFailures: 0, repeats: 0, ok: true, namedSetState: "no-face", ...over,
   });
 
   it("两臂同一档 ⇒ same（没有东西被挡时也要印出是哪一档）", () => {
@@ -315,7 +319,10 @@ describe("模型归因面：跨模型的差值不许当改动的效果", () => {
     expect(src, "算出来却不印 ⇒ 与没算同形").toContain("process.stdout.write(renderModelFace(face)");
     const face = src.indexOf("modelFace(baseRows.flat(), candRows.flat())");
     expect(face, "跑器没把两侧所有行交给归因面 ⇒ 同一臂内混档就看不见").toBeGreaterThan(-1);
-    expect(src.indexOf("renderModelFace(face)")).toBeLessThan(src.indexOf("renderReport(cmp, bandSource)"));
+    // 终点取**带 faces 的那次调用**（不是函数签名那一处）——否则把 faces 那一参数整个删掉，
+    // 顺序判据照样成立（签名里也有同一个前缀）＝空尺。这一格同时守住「逐名面在表里印」。
+    expect(src, "算出来却不印 ⇒ 与没算同形").toContain("renderReport(cmp, bandSource, { namedSet })");
+    expect(src.indexOf("renderModelFace(face)")).toBeLessThan(src.indexOf("renderReport(cmp, bandSource, { namedSet })"));
   });
 });
 
@@ -420,10 +427,12 @@ describe("跨指标合取闸：结果类超带退化 ⇒ 整表禁止读作改�
 // 盘上现读的 readings.json **全部**没有 headSha／ranAt／model ⇒ 这道闸今天一定会咬，
 // 这是设计意图：那份 2026-10-01 16:25 的冒烟读数至今在冒充"最新读数"，而它连自己是谁跑的都不知道。
 describe("身份闸：读数缺 headSha／ranAt／model 任一 ⇒ 只当量级", () => {
+  // `namedSetState` 缺省 "no-face"：这一族的用例不涉逐名那一格，而**显式写出来**是为了
+  // 让「读数是哪一格造的」在 fixture 里看得见（隐式缺省会让"忘了盖这一格"与"刻意没有"同形）。
   const r = (over: Partial<Row> = {}): Row => ({
     id: "A", model: "glm-5.2", headSha: "abc1234", ranAt: "2026-10-05T00:00:00Z",
     tokensIn: 1000, tokensOut: 100, seconds: 10,
-    rssPeakMb: 100, toolFailures: 0, repeats: 0, ok: true, ...over,
+    rssPeakMb: 100, toolFailures: 0, repeats: 0, ok: true, namedSetState: "no-face", ...over,
   });
 
   it("★(c) 缺 model 键 ⇒ 走身份闸那一支，且那句逐字印出来", () => {
@@ -784,7 +793,7 @@ describe("接线：配对与未知面真的打进 CLI 出口（不算不印＝�
     expect(src).toContain("...baseRows.flat(), ...candRows.flat()");
     // 配对面排在正式对照表之前：先说"哪些靶翻了、谁没身份"，再谈整体差值
     expect(src.indexOf("renderPairing(indexFaces("), "配对读数排在整表之后 ⇒ 人先读了汇总数")
-      .toBeLessThan(src.indexOf("renderReport(cmp, bandSource)"));
+      .toBeLessThan(src.indexOf("renderReport(cmp, bandSource, { namedSet })"));
   });
 });
 
@@ -872,5 +881,81 @@ describe("端到端：真 CLI 喂文件断出口码（纯函数绿 ≠ 出口码
     const r = run(["--baseline", a, "--baseline", b, "--candidate", c]);
     expect(r.code, "同臂三趟被当成不可比 ⇒ 这把尺自己废了\n" + r.out).toBe(0);
     expect(r.out, "同一面的三趟要印成同一面（不是每行一格）").toContain("同面 3 趟");
+  });
+});
+
+/* ── 逐名判卷面（第 640 页补）────────────────────────────────────────────────────────────
+ * 为什么单独立一户：`ok`（退出码 0）把「该转绿的没绿」与「该保住的坏了」压成同一个 false，
+ * 而这两件事的出路口完全不同。这一格从**原始行**数三态桶，与 `Comparison`（纯逐指标）分开——
+ * 塞进 `Comparison` 会让它同时背两件事，而它的判卷只喂 Totals。
+ *
+ * 三条口径各配反向证人（本仓成文：「A＝B」型断言旁边必须有「A≠旧值」）：
+ *   ⑴ no-face 单列、不算绿也不算红 —— 没有 judge 规格的任务不进分母；
+ *   ⑵ unreadable 不许并进 fail —— 尺接了线没接住料是第三态，修法在取料面不在模型；
+ *   ⑶ 两侧都 no-face ⇒ 印「没有量」，不是印「没问题」。 */
+describe("逐名判卷面：同一枚退出码下的两种结局", () => {
+  const row = (over: Partial<Row> = {}): Row => ({
+    id: "S1", model: "glm-5.2", headSha: "abc1234", ranAt: "2026-10-22T00:00:00Z",
+    tokensIn: 1000, tokensOut: 100, seconds: 10,
+    rssPeakMb: 100, toolFailures: 0, repeats: 0, ok: true, namedSetState: "pass", ...over,
+  });
+
+  it("四个桶都数，0 也印（「这一桶是 0」与「没数这一桶」要分得开）", () => {
+    const c = namedSetCounts([row(), row({ id: "S2", namedSetState: "fail" })]);
+    expect(c).toEqual({ pass: 1, fail: 1, unreadable: 0, "no-face": 0 });
+  });
+
+  it("同一枚退出码 1 的两种结局 ⇒ 逐名面 differs，且文本说清变动的桶", () => {
+    /* 两行 ok 都是 false（退出码 1），逐名却一边「没修好」一边「修坏了别的」。 */
+    const baseline = [row({ id: "S1", ok: false, namedSetState: "fail" })];
+    const candidate = [row({ id: "S1", ok: false, namedSetState: "fail" })];
+    const same = namedSetFace(baseline, candidate);
+    expect(same.state, "两行逐名同态却报 differs ⇒ 这把尺在自己抖").toBe("same");
+    // 反向：换成另一态 ⇒ 必须 differs
+    const other = namedSetFace(baseline, [row({ id: "S1", ok: false, namedSetState: "unreadable" })]);
+    expect(other.state, "逐名从 fail 变 unreadable 却报 same ⇒ 分辨力丢了").toBe("differs");
+    expect(renderNamedSetFace(other)).toContain("unreadable");
+  });
+
+  it("no-face 单列：没有尺的任务不算绿也不算红", () => {
+    const f = namedSetFace([row({ namedSetState: "no-face" })], [row({ namedSetState: "no-face" })]);
+    expect(f.state, "两侧都没尺却报 same/differs ⇒ 把『没有量』印成了『量出来没问题』").toBe("no-face");
+    expect(renderNamedSetFace(f)).toContain("没有量");
+    expect(renderNamedSetFace(f)).not.toContain("✅");
+  });
+
+  it("一侧有尺一侧没有 ⇒ differs（不是 same：尺的有无本身就是差别）", () => {
+    const f = namedSetFace([row({ namedSetState: "no-face" })], [row({ namedSetState: "pass" })]);
+    expect(f.state).toBe("differs");
+    expect(renderNamedSetFace(f)).toContain("no-face 1");
+  });
+
+  it("parseReadings 读得出这一格；没盖（存量语料）⇒ no-face，不抛", () => {
+    // `row()` 只带 face 需要的键；parseReadings 要的是**全套** ⇒ 补上 numeric 字段。
+    // `withoutKey` 就是**存量语料**那一格：除 namedSets 外全齐（跑器第 640 页之前不盖它）。
+    const full = { ...row(), repeatedSameAction: 0 };
+    const withoutKey: Record<string, unknown> = { ...full };
+    delete withoutKey["namedSets"];
+    const stamped = { ...withoutKey, namedSets: { state: "pass", notGreen: [], broken: [], unmatched: [], reasons: [] } };
+    const withIt = parseReadings(JSON.stringify([{ r: stamped, g: { ok: true } }]));
+    expect(withIt[0]!.namedSetState).toBe("pass");
+    const legacy = parseReadings(JSON.stringify([{ r: withoutKey, g: { ok: true } }]));
+    expect(legacy[0]!.namedSetState, "存量语料没这一格 ⇒ 必须落 no-face（取不到 ≠ 没问题）").toBe("no-face");
+  });
+
+  it("判据自己也要被审：盖了但形状不对 ⇒ no-face，不是 pass/fail 任何一桶", () => {
+    expect(namedSetStateOf({ state: "wat" })).toBe("no-face");
+    expect(namedSetStateOf(null)).toBe("no-face");
+    expect(namedSetStateOf(undefined)).toBe("no-face");
+    // 三个合法值各认各的，不许把不认识的并进某一桶
+    expect(namedSetStateOf({ state: "pass" })).toBe("pass");
+    expect(namedSetStateOf({ state: "fail" })).toBe("fail");
+    expect(namedSetStateOf({ state: "unreadable" })).toBe("unreadable");
+  });
+
+  it("接线：CLI 把逐名面喂进成表那次调用（算出来不印 ＝ 与没算同形）", () => {
+    const src = readFileSync(fileURLToPath(new URL("../scripts/eval/report.ts", import.meta.url)), "utf8");
+    expect(src).toContain("renderReport(cmp, bandSource, { namedSet })");
+    expect(src).toContain("namedSetFace(baseRows.flat(), candRows.flat())");
   });
 });

@@ -1,8 +1,9 @@
 // M1c 评估管线（§11.7.1）：纯函数 evaluate(tool, args, session)，四层固定序、先命中先短路：
-//   L0 硬边界（只读档摘除 + M1b 方案门，deny 位次最前——摘除的工具规则库不能复活）
-//   → L1 deny 规则 → L2 ask 规则（任何档位含自主档都绕不过）
+//   L0 硬边界（只读档摘除 + 判卷面冻结闸 + M1b 方案门，deny 位次最前——摘除的工具规则库不能复活）
+//   → 完全允许档短路面（2026-11-03：除判卷面冻结闸外全部放行）
+//   → L1 deny 规则 → L2 ask 规则（其余各档含自主档都绕不过）
 //   → L3 档位层（规则库 allow 命中放行 / session_kind 记忆 / 逐次审批）
-//   → L4 风险层（三通道，critical 任何档强制审批——allow 规则也批不掉 critical）。
+//   → L4 风险层（三通道，critical 对非完全允许档强制审批——allow 规则也批不掉 critical）。
 // 零私有状态：规则库与放行集是仅有的两个输入源；断路器计数在 session 入参里，evaluate 只读不写
 // （调用方经 note* helper 更新）——同一输入两次调用结果一致。
 import { posix } from "node:path";
@@ -71,7 +72,7 @@ export interface GateMeta {
 /** 自动放行来源审计（§11.7.5）：**由 gate 派生**，语义与历史逐字一致——只有规则库 allow 与
  *  scope 记忆两种放行记 auto；末行放行、人工批准、拒绝一律不记。留痕统一由 gate 承担。 */
 export interface AutoMeta {
-  source: "rule" | "session_scope";
+  source: "rule" | "session_scope" | "mode";
   ruleId?: string;
 }
 
@@ -79,6 +80,7 @@ export function autoOf(gate: GateMeta | undefined): AutoMeta | undefined {
   if (gate === undefined || gate.verdict !== "auto-approved") return undefined;
   if (gate.layer === "L3-rule") return { source: "rule", ...(gate.ruleId !== undefined ? { ruleId: gate.ruleId } : {}) };
   if (gate.layer === "L3-scope") return { source: "session_scope", ...(gate.ruleId !== undefined ? { ruleId: gate.ruleId } : {}) };
+  if (gate.layer === "L3-mode") return { source: "mode" };
   return undefined;
 }
 
@@ -143,16 +145,20 @@ export interface ModePolicy {
   readonly scopeMemory: boolean;
   /** 风险层送审线。 */
   readonly riskAskAt: RiskLevel;
+  /** 完全允许档 = 没有审批卡（2026-11-03 起除判卷面冻结闸外什么都不拦：方案门/deny 规则/
+   *  断路器/风险线/critical/未登记工具/出网全部放行）。 */
+  readonly askNothing: boolean;
   /** 卡面文案里的档位名。 */
   readonly label: string;
 }
 
 const MODE_POLICY: Record<PermissionMode, ModePolicy> = {
   // 只读档的写向在 L0 就被摘除，这一行只兜住"写向漏到 L3"的路径（同默认档口径，不静默放行）。
-  "read-only": { writeAsk: true, scopeMemory: true, riskAskAt: "high", label: "只读档" },
-  default: { writeAsk: true, scopeMemory: true, riskAskAt: "high", label: "默认档" },
-  guided: { writeAsk: false, scopeMemory: true, riskAskAt: "medium", label: "引导档" },
-  auto: { writeAsk: false, scopeMemory: false, riskAskAt: "high", label: "自主档" },
+  "read-only": { writeAsk: true, scopeMemory: true, riskAskAt: "high", askNothing: false, label: "只读档" },
+  default: { writeAsk: true, scopeMemory: true, riskAskAt: "high", askNothing: false, label: "默认档" },
+  guided: { writeAsk: false, scopeMemory: true, riskAskAt: "medium", askNothing: false, label: "引导档" },
+  auto: { writeAsk: false, scopeMemory: false, riskAskAt: "high", askNothing: false, label: "自主档" },
+  "full-access": { writeAsk: false, scopeMemory: false, riskAskAt: "critical", askNothing: true, label: "完全允许档" },
 };
 
 /** 导出给对账判卷：表必须**恰好**覆盖 `PERMISSION_MODES`（少一档 = 编译不过 + 判卷红）。 */
@@ -161,7 +167,7 @@ export function modePolicyTable(): Record<PermissionMode, ModePolicy> {
 }
 
 function policyOf(mode: PermissionMode): ModePolicy {
-  // 类型内四档都已列表；走到兜底只可能是未升级的持久化值或外部构造者 ⇒ 按默认档，不按最松档。
+  // 类型内五档都已列表；走到兜底只可能是未升级的持久化值或外部构造者 ⇒ 按默认档，不按最松档。
   return MODE_POLICY[mode] ?? MODE_POLICY.default;
 }
 
@@ -254,8 +260,10 @@ export function isNetworkCommandCall(tool: ToolName, args: Record<string, unknow
   // 之后每次出网都在 `L3-rule` 直接 approve（那一层只豁免 critical）⇒ "出网永不免批"
   // 退化成"出网点一次就永久免批"。与 `run_shell` 跑 curl 同口径：**网络类不放行 scope 记忆**。
   // `as string` 的理由同 `staticRisk` 里那一支：web_fetch 是运行时注入，不在 TOOL_NAMES。
-  // web_search 同族：检索也是出网、返回的也是外部不可信文本 ⇒ 同一条口径（scope 钉 once + 卡面措辞）。
+  // web_search / browser_navigate 同族：检索与侧栏页加载都出网、都带回外部不可信内容
+  // ⇒ 同一条口径（scope 钉 once + 卡面措辞）。runtime 注入名同样不在 TOOL_NAMES 联合里。
   if ((tool as string) === "web_fetch" || (tool as string) === "web_search") return true;
+  if ((tool as string) === "browser_navigate") return true;
   if (!isShellFamily(tool)) return false;
   return isNetworkCommand(typeof args.command === "string" ? args.command : undefined);
 }
@@ -447,19 +455,6 @@ export function evaluate(
       reason: grade === undefined ? "只读档摘除写向工具" : "只读档只放行带 readOnlyHint 注解的 MCP 工具（§11.7.2 只读注解白名单）",
     };
   }
-  // 方案门同样按「写向」的统一口径判：一个 allow 规则能复活未批 plan 期间的 MCP 写调用，
-  // 却复活不了 write_file——同一轮里两种口径就是这条规则的漏洞形状。
-  if (s.planBlocked() && isWriteCall(tool, grade)) {
-    return {
-      verdict: "deny",
-      layer: "L0-hard",
-      reason:
-        grade === undefined
-          ? "方案门：先批后写（当前没有已批准的方案）"
-          : "方案门：先批后写（当前没有已批准的方案；MCP 未标 readOnlyHint 按写处理）",
-    };
-  }
-
   // ---- L0 判卷面：冻结表点名的文件，任何档位、任何 allow 规则都写不了 ----
   // 放在 deny/ask/allow 之前与只读档、方案门同层，理由是同一条：**规则库不许复活被硬闸摘掉的动作**。
   // 真模型评测实测到模型会改 `tests/todo.test.ts`（`BASE_SYSTEM` 纪律 6 明文禁止却没拦住），
@@ -493,6 +488,29 @@ export function evaluate(
           "——判据有缺陷请写 BLOCKED.md 要求换判据，不许改代码去绕",
       };
     }
+  }
+
+  // ---- 完全允许档（2026-11-03 业主裁决）：判卷面冻结闸之后、其余一切之前短路放行 ----
+  // 保留的唯一硬边界是上面那道判卷面冻结闸（评测文件完整性，不是"要不要人点头"）。
+  // 2026-11-03 起不再保留 L0 方案门、L1 deny 规则、出网一次性批准——业主原话是
+  // 「完全允许是什么都允许，让 agent 足够自治」；这条与旧注释（2026-10-24 保留 L1/方案门/出网）
+  // 相反，旧口径作废。撤下的还有 L2 ask 规则、L3 断路器、L4 风险/critical/MCP 未注解。
+  if (policyOf(s.mode).askNothing === true) {
+    return { verdict: "approve", risk, layer: "L3-mode", auto: { source: "mode" } };
+  }
+
+  // ---- L0 方案门：先批后写（完全允许档之外仍生效）----
+  // 同样按「写向」的统一口径判：一个 allow 规则能复活未批 plan 期间的 MCP 写调用，
+  // 却复活不了 write_file——同一轮里两种口径就是这条规则的漏洞形状。
+  if (s.planBlocked() && isWriteCall(tool, grade)) {
+    return {
+      verdict: "deny",
+      layer: "L0-hard",
+      reason:
+        grade === undefined
+          ? "方案门：先批后写（当前没有已批准的方案）"
+          : "方案门：先批后写（当前没有已批准的方案；MCP 未标 readOnlyHint 按写处理）",
+    };
   }
 
   // ---- L1 deny 规则：命中即拦 ----

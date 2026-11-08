@@ -17,7 +17,6 @@ export const GATES: readonly string[] = [
   "sandbox:check",
   "fork-check",
   "gate-check",
-  "docs-check",
   "autonomy-check",
   "compaction-check",
   "tools-check",
@@ -138,7 +137,6 @@ export const GATES: readonly string[] = [
   // 为什么进门：取料与源码同仓把 `git ls-files` 的信噪比压到 41%，而 docs-check / 断言体检 /
   // 变异选择子都以 git 清单为取料面；巨型文件则是多会话并发的冲突源（实测冲突从 5 处涨到 13 处）。
   // 帽取现状上取整而非理想值：**一道永远红的门等于没有门**。W4 拆分落地后再逐波降帽，一次一档。
-  "repo-hygiene-check",
   // 从前挂在这道门上的「整表 20 分钟」这个反对理由，量的其实是整张变异表——两把尺的数不许互借。
   // 它排在 mutate-verify 之前：这道门红的时候，先知道「HEAD 本来就红」比先花上面那 18.1 分钟（1085.3s）跑变异更有用（跑法再变，这个次序都不变）。
   "head-cert-check",
@@ -149,10 +147,30 @@ export const GATES: readonly string[] = [
   // ⚠️ 第 259 页当初写的是「单价 2.06s 高于 <1.5s 那条线 ⇒ 只进 GATES、不进 CERT_GATES，由交笔时手动跑覆盖」——
   //   **那句补偿在 4 笔之后被证伪**（我在 268/269/270/271 都没手动跑，于是自己入库的探针带着 TS7053 落了库）。
   //   第 272 页按「每笔交笔都要成立的判据」这一类把它买进 `CERT_GATES`（单价与预算的现读出处都在那张表里那道门旁边）。
-  "evidence-typecheck-check",
+  // 逐名判卷规格与盘上现读的配平门（2026-10-22 登记的那笔债：`fixtures/bench/` 五份清单
+  //   12/12 条一条 `judge` 都没有 ⇒ 机制在、生产零流量，「该转绿的没绿」与「该保住的坏了」
+  //   在这批基准上同形于同一枚退出码）。进门理由不是「补了规格」，而是**规格会漂**：
+  //   靶子加一条测试、改一个标题，JSON 里那份不会跟着动，而漂掉的那一列要么恒真
+  //   （把本来就绿的写进 failToPass ⇒ 永远转绿成功）要么整格 unmatched。所以这道门每次现跑靶子。
+  //   实测（同笔，主树，独占）：**这道门 1.76s**（16 条靶子各跑一次判卷命令；B12/L30 那两条最贵，
+  //   各 20/30 个文件，合计约 1.2s）；`--check` 在配平的盘上退 0。
+  //   **为什么不进 CERT_GATES，尽管它落在 1.5s 那条线内**：那条线是「买得起」不是「必须买」，
+  //   而这一格有更便宜的同源观测者——`tests/bench-judge-spec.test.ts` 在 `test` 那道门里，
+  //   它判「形状成立 ＋ 两列与盘上现读逐字一致」（逐条 spawn 靶子，约 5s）。真正只在本门里量的
+  //   只剩「漂了但形状仍成立」这一种，而它已经被那条判据的同一次 spawn 覆盖 ⇒ 双买等于付两次同样的账。
+  //   登记在 GATES 而不在 CERT_GATES，理由换成：**它的价值在交笔那人跑一次 `--check`**，
+  //   而不是替 HEAD 遮红（HEAD 若漂了，`test` 那道门先红）。
+  //   判据宿主 `tests/bench-judge-spec.test.ts` 在 `test` 那道门里，规格漂到「形状不成立」会被它当场咬，
+  //   而「形状仍成立、内容与盘上不符」只在这一道门里量 ⇒ 这一格必须留人手跑，不许假装它在认证面上。
+  "bench-judge-spec-check",
   // 桌面端单向依赖红线（AGENTS.md 分层规则的机器面）：src → apps/desktop 或 electron 即红。
   // 原先只挂在 apps/desktop test 链尾——core-only 会话跑根门永远不触发；注册进默认门表补上这个洞
   // （终审 #4）。快尺：纯文本扫 src/，亚秒档；不进 CERT_GATES——门面预算线快到头（见那张表头），不再顺手多买。
+  "renderer-layer-check",
+  "event-semantics-check",
+  "session-semantics-check",
+  "session-search-check",
+  "motion-policy-check",
   "desktop-boundary-check",
   // SEMA Phase 3（docs/sema-proposal.md §12）登记：桌面判卷进 GATES。动因：desktop-panel 包
   // 进自进化流水线后，§3.5 的「必须通过 pnpm --filter cairn-desktop test」要能在账本上表达——
@@ -167,6 +185,46 @@ export const GATES: readonly string[] = [
   //   买入后它在 `CERT_GATES`（预算 10000ms＝实测两倍档），那条线同笔 60000 → 75000ms。
   //   代价（写明）：在 2026-10-12 两笔之前，`apps/` 的 145 条判卷**不在任何 HEAD 口径的认证面里**
   //   （`pnpm gates` 量的是工作树，不是 HEAD）——第 446 页入库的 52 个 `apps/` 文件正落在那一格里。
+  "desktop-test",
+];
+
+/**
+ * 公开仓库每次 PR 跑的最小可信集（L1）：产品行为契约与安全边界。
+ * 内部台账门（docs-check / repo-hygiene / evidence-typecheck）已随内部审计仓迁出；
+ * 重量级发布门（head-cert / mutate-verify / mutate-needles / head-import / gym / bench-judge）留在维护者发布流程。
+ * CI 与 tests/ci-public-face.test.ts 以本表为唯一事实源。
+ */
+export const PUBLIC_GATES: readonly string[] = [
+  "typecheck",
+  "test",
+  "e2e",
+  "sandbox:check",
+  "fork-check",
+  "gate-check",
+  "autonomy-check",
+  "compaction-check",
+  "tools-check",
+  "map-check",
+  "prune-check",
+  "provider:check",
+  "memory-check",
+  "plugins-check",
+  "security-check",
+  "routing-check",
+  "supervisor-check",
+  "model-surface-check",
+  "prefix-churn-check",
+  "prompt-surface-check",
+  "replay-determinism-check",
+  "no-progress-check",
+  "cost-per-progress-check",
+  "web-fetch-check",
+  "renderer-layer-check",
+  "event-semantics-check",
+  "session-semantics-check",
+  "session-search-check",
+  "motion-policy-check",
+  "desktop-boundary-check",
   "desktop-test",
 ];
 
@@ -198,7 +256,6 @@ export const CERT_GATES: readonly { name: string; budgetMs: number }[] = [
   { name: "prune-check", budgetMs: 1100 },           // 实测 524ms
   { name: "fork-check", budgetMs: 1100 },            // 实测 545ms
   { name: "compaction-check", budgetMs: 1200 },      // 实测 574ms
-  { name: "docs-check", budgetMs: 1300 },            // 实测 606ms
   { name: "memory-check", budgetMs: 1300 },          // 实测 638ms
   { name: "head-import-check", budgetMs: 2400 },     // 实测 1180ms（2026-10-02 本机现读，中位；三趟 1.17/1.18/1.33）
   { name: "autonomy-check", budgetMs: 1500 },        // 实测 737ms
@@ -230,7 +287,6 @@ export const CERT_GATES: readonly { name: string; budgetMs: number }[] = [
      买进来后认证门面预算之和 50000 → **55300ms**（现读：`node --import tsx` 直接对本模块求和，判卷钉的是 ≤60000ms 那条线，见 `tests/cert-gate-face.test.ts`）。
      ⚠️ 这一格**在认证树里读的是 HEAD**：主检出那 4 条来自两份隔壁未入库的探针（`scripts/lib/evidence-typecheck.ts` 文件头记着），
      它们一旦入库就会让每次认证红——这正是买这道门想要的效果，不再指望我记得手动跑。 */
-  { name: "evidence-typecheck-check", budgetMs: 5300 }, // 实测 2644ms（证据面危险码，第 259 页建门／第 272 页买进门面）
   { name: "mutate-needles-check", budgetMs: 20000 }, // 实测 9756ms（针脚体检：钉在飞文本／判卷未入库都靠它）
   /* 第 372 页买进认证面（2026-10-05）：仓库体量门。
      为什么必须进：它此前只在 `GATES`、**不在**认证面 ⇒ 这道红不会被任何自动化路径跑出来，
@@ -240,7 +296,6 @@ export const CERT_GATES: readonly { name: string; budgetMs: number }[] = [
      而是"每笔交笔都要成立"的判据（新增取料不能把 `git ls-files` 的信噪比拖垮）。
      单价现读 **595ms**（主检出工作树，2026-10-05），预算 1200ms 是两倍档。
      门面预算之和 57500 → **58700ms**，仍在判卷钉的 ≤60000ms 那条线内。 */
-  { name: "repo-hygiene-check", budgetMs: 1200 },  // 实测 595ms（体量门；2026-10-05 主检出工作树）
   /* 第 454 页买进认证面（2026-10-12）：`e2e` 与 `desktop-test`。
      动因是第 272 页那条规则的一次**逐条体检**：排除登记表里两道的理由被实测推翻——
      `e2e` 写的是「认证这一趟已经自己跑过」，而 `head-cert` 与根判卷**都不跑它**

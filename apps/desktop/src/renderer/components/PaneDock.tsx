@@ -1,25 +1,37 @@
-// 窗格区（蓝本 §3.4 窗格系统，D1 全采纳）：
-//   右列容器——**多窗格同屏、纵向堆叠**（react-resizable-panels v4 的 Grid/Cell/Gridline：
-//   每格一个窗格、格间分割线可拖行高）。每格自带标题头（标签 + 关闭钮），重开/关闭单一入口。
-//   「堆叠要翻」的批评由"格少 + 每格常显标题"回应：≤4 个窗格全可见，没有翻找成本。
+// 窗格区（蓝本 §3.4 窗格系统；2026-10-24 业主重定为**单窗格占满 + 标签页切换**）：
+//   右列容器——一次只显示一个窗格、占满整列；顶部 pane-nav 即标签条（点标签切换，
+//   「＋」开新窗格并激活，标签上的关闭钮关窗格；⌥↑/⌥↓ 调标签顺序）。原 Grid 纵向
+//   堆叠模型（react-resizable-panels Grid/Cell/Gridline）整体撤下。
 //   本轮窗格：变更（diff 审阅，含逐 hunk 展开）/ 方案 / 任务（多 agent）。subagent 详情并入任务窗格。
 //   空态诚实：无数据即说明（不摆空壳）；价格不可知显式写"价格不可知"（不当 0）。
 // 数据面全部来自 panes.ts 纯投影 + turnDelivery（既有）+ changeDiff（v4 通道，懒加载）。
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { isCompositionEnter } from "../ime";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import "@xterm/xterm/css/xterm.css";
-import { AlertTriangle, Check, ChevronRight, Crosshair, ExternalLink, FileText, Folder, GripVertical, Loader2, MoreHorizontal, PanelsTopLeft, Plus, X } from "lucide-react";
+import "./pane-tabs.css";
+import { AlertTriangle, ArrowLeft, ArrowRight, Check, ChevronRight, Crosshair, ExternalLink, Loader2, Maximize2, Minimize2, MoreHorizontal, Plus, RotateCw, X } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Cell, Grid, Gridline, useGridRef } from "react-resizable-panels";
 import type { AgentEvent } from "../../../../../src/events";
-import type { DirEntryView } from "../../../../../src/main/workspace-fs";
 import { turnDelivery } from "../projections";
-import { diffCount, useLazyChangeDiff } from "../change-diff-state";
-import { MIN_PANE_PCT, loadPaneRows, mergePaneRows, paneRowLayout, savePaneRows } from "../pane-layout";
+import { planActionLabel } from "../derived/change-labels";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { clipDiff, parseUnifiedPatch } from "../diff-patch";
+import { ModalSurface } from "./ModalSurface";
+import { RenderErrorBoundary } from "./RenderErrorBoundary";
+import { toast } from "../toast";
 import { DiffView } from "./DiffView";
+import { FilePane } from "./FilePane";
+import { PluginSurface } from "./PluginSurface";
+import { BrowserHome } from "./BrowserHome";
+import { useMaximizedLeft } from "./use-maximized-left";
+import { pickedElementLabel } from "../picked-element";
+import { WORKBENCH_PANES } from "../pane-registry";
+import { SessionPreviewPane,type PreviewSendOutcome } from "./SessionPreviewPane";
 import { SidechatPane } from "./SidechatPane";
+import { OrchestrationPane } from "./OrchestrationPane";
 import { PathMenu } from "./PathMenu";
-import { composeReviewMessage, PANE_META, PANE_OPENABLE, projectPlans, projectWorkers, reorderTarget, sitePermissionFor, type PaneKind, type WorkerPaneItem } from "./panes";
-
+import { ChangesPane, type ChangesFocus } from "./ChangesPane";
+import { changedFileCount, PANE_META, PANE_OPENABLE, paneTabTargetForKey, projectPlans, projectWorkers, reorderTarget, sitePermissionFor, workerCardAction, type PaneKind, type WorkerPaneItem } from "./panes";
 // PaneKind / PANE_META 的唯一事实源在 panes.ts（独立窗口路由同用）；此处 re-export 保接口。
 export { PANE_META, PANE_OPENABLE, type PaneKind } from "./panes";
 
@@ -47,11 +59,20 @@ type BpPickResult = { ok: boolean; selector?: string; snippet?: string; url?: st
  *  外站 first-visit 询问。⌘⇧S / 工具钮 = 元素选择（页内按键由主进程捕获、经 browserState.pick 回程；
  *  结果经 onPickResult 回 App 填入输入框）。清除数据只及本独立 profile（persist:cairn-browser）。 */
 function BrowserPane(props: {
+  /** 窗格标签是否在前台。非前台时原生视图必须收成零矩形（隐藏父容器管不到 WebContentsView）。 */
+  active: boolean;
   initialUrl?: string;
+  /** 聊天链接直达（2026-11-05 业主）：{url, seq} 目标，seq 前进时导航**活动标签**——
+   *  走 go() 的站点授权闸（本地免问、外站首访询问），与地址栏导航同一条闸道。 */
+  openTarget?: { url: string; seq: number };
   /** 元素选择信号（App ⌘⇧S 递增；seq 变化触发一次）。 */
   pickSignal?: number;
   /** 选中结果回调（文进输入框；App 侧拼装）。 */
   onPickResult?: (r: { selector: string; snippet: string; url: string }) => void;
+  onOpenPane?: (kind: PaneKind) => void;
+  /** 放大态：窗格从右栏铺到整个工作区（盖住对话），由 PaneDock 持有状态。 */
+  maximized?: boolean;
+  onToggleMaximize?: () => void;
 }): React.JSX.Element {
   const baseRef = useRef(`bp-${Math.random().toString(36).slice(2, 10)}`);
   const base = baseRef.current;
@@ -68,6 +89,9 @@ function BrowserPane(props: {
   const [allowedHosts, setAllowedHosts] = useState<readonly string[]>([]);
   // 清除浏览数据前确认（2026-10-18）：菜单项带「…」却当场执行，且不可撤销——先问一句。
   const [confirmClear, setConfirmClear] = useState(false);
+  // 原生 WebContentsView 永远盖在 DOM 之上（见 boundsSync 注释）⇒ 浏览器菜单展开期间必须
+  // 把视图收成零矩形，否则菜单只剩工具栏下方那一小条（2026-11-03 业主截图）。
+  const [menuOpen, setMenuOpen] = useState(false);
   const [keepCookies, setKeepCookies] = useState<boolean>(() => {
     try { return window.localStorage.getItem(BROWSER_KEEP_COOKIES_KEY) !== "0"; } catch { return true; }
   });
@@ -83,6 +107,7 @@ function BrowserPane(props: {
   const activeViewId = tabs.find((t) => t.key === activeKey)?.viewId ?? null;
   const activeViewRef = useRef<string | null>(null); activeViewRef.current = activeViewId;
   const activeKeyRef = useRef(activeKey); activeKeyRef.current = activeKey;
+  const paneActiveRef = useRef(props.active); paneActiveRef.current = props.active;
 
   // 站点授权弹出时把焦点送进对话框（2026-10-18）：否则键盘用户还停在地址栏，
   // Tab 要穿过整条工具栏才能到「允许/拒绝」。默认聚焦允许本次（与浏览器首访语义一致）。
@@ -98,7 +123,13 @@ function BrowserPane(props: {
     void window.agent.browserSetAllowedHosts([...hosts]).catch(() => undefined);
   }, []);
 
+  const hideAllViews = (): void => {
+    for (const tab of tabsRef.current) void window.agent.browserBounds(tab.viewId, { x: 0, y: 0, width: 0, height: 0 });
+  };
   const boundsSync = (): void => {
+    // 原生 WebContentsView 不参与 CSS 层叠：窗格标签切走后父容器 visibility:hidden
+    // 挡不住它。必须显式把每张视图收成零矩形，回到前台再按容器矩形放回。
+    if (!paneActiveRef.current) { hideAllViews(); return; }
     const vid = activeViewRef.current;
     const el = containerRef.current;
     if (vid === null || el === null) return;
@@ -108,7 +139,16 @@ function BrowserPane(props: {
 
   // 视图创建/导航统一入口：创建后立即同步一次矩形（新建的原生视图默认不在容器位）。
   const openIn = (viewId: string, url: string): void => {
-    void window.agent.browserOpen(viewId, url).then(() => { requestAnimationFrame(() => { boundsSync(); }); }, () => undefined);
+    setNotice(null);
+    void window.agent.browserOpen(viewId, url).then((result) => {
+      if (!result.ok) {
+        if (activeViewRef.current === viewId) setNotice(`打开失败：${result.error ?? "无法加载网页，请检查地址后重试"}`);
+        return;
+      }
+      requestAnimationFrame(() => { boundsSync(); });
+    }, (err: unknown) => {
+      if (activeViewRef.current === viewId) setNotice(`打开失败：${err instanceof Error ? err.message : String(err)}`);
+    });
   };
 
   // 开窗即就绪（2026-10-18）：⌘⇧B 打开浏览器窗格后，光标应已经在地址栏——否则用户还得先点一下。
@@ -130,6 +170,19 @@ function BrowserPane(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.initialUrl]);
 
+  // 聊天链接直达（2026-11-05 业主）：seq 只前进——同一 seq 重放（StrictMode 重挂、父级重渲）
+  // 不动作；seq 前进 = 新一击。导航走 go()，与地址栏共用站点授权闸；活动标签恒存在（挂载即有 t0）。
+  const openTargetSeqRef = useRef(0);
+  useEffect(() => {
+    const t = props.openTarget;
+    if (t === undefined || t.url === "") return;
+    if (openTargetSeqRef.current >= t.seq) return;
+    openTargetSeqRef.current = t.seq;
+    setUrlDraft(t.url);
+    go(activeKeyRef.current, t.url);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.openTarget]);
+
   // 切换标签：旧视图零矩形（隐藏），新视图同步容器矩形。
   const lastActiveRef = useRef<string | null>(null);
   useEffect(() => {
@@ -139,12 +192,29 @@ function BrowserPane(props: {
     boundsSync();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeViewId]);
+  // 窗格标签切走/切回：原生视图整组藏/显。隐藏父容器不够（见 boundsSync 注释）。
+  useEffect(() => {
+    if (!props.active) { hideAllViews(); return; }
+    const raf = requestAnimationFrame(() => { boundsSync(); });
+    return () => cancelAnimationFrame(raf);
+    // hideAllViews/boundsSync 都是 latest-ref 读取，不随渲染换身份。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.active]);
+
+  // 菜单展开/收起：展开时收起原生视图给 DOM 菜单让位；收起时按容器矩形放回。
+  // hideAllViews/boundsSync 都是 latest-ref 读取，effect 只跟 menuOpen 走。
+  useEffect(() => {
+    if (menuOpen) hideAllViews();
+    else boundsSync();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menuOpen]);
 
   // 选中结果处理（两条来路共用：browserPickElement 直返、页内 ⌘⇧S 经 browserState.pick 回程）。
   const handlePickResult = (r: BpPickResult): void => {
     setPicking(false);
     if (r.ok && r.selector !== undefined) {
-      setNotice(`已选中：${r.selector}`);
+      // 2026-11-03：状态行也只报短标签（完整选择器/HTML 在输入区的 chip 里，发送时自动带上）。
+      setNotice(`已选中页面元素：${pickedElementLabel(r.selector, r.snippet ?? "")}`);
       props.onPickResult?.({ selector: r.selector, snippet: r.snippet ?? "", url: r.url ?? "" });
     } else {
       setNotice(r.error ?? "选择元素失败");
@@ -186,7 +256,7 @@ function BrowserPane(props: {
 
   const doPick = (): void => {
     const vid = activeViewRef.current;
-    if (vid === null) { setNotice("先打开一个网页，再选择元素"); return; }
+    if (vid === null || tabStatesRef.current[activeKeyRef.current] === undefined) { setNotice("先打开一个网页，再选择元素"); return; }
     if (picking) return;
     setPicking(true);
     setNotice("在页面上点选元素（Esc 取消）…");
@@ -295,6 +365,9 @@ function BrowserPane(props: {
 
   return (
     <div className="browser-pane">
+      {/* 2026-11-04 业主：单标签时不再叠第二条 tab 条——外层「浏览器」窗格标签已表明身份，
+          再来一条「新标签页 ×」纯属重复。≥2 个标签时 tab 条才出现，「+」也随之回到条上。 */}
+      {tabs.length > 1 ? (
       <div className="bp-tabs" role="tablist" aria-label="浏览器标签页">
         {tabs.map((t) => (
           <div key={t.key} className={`bp-tab${t.key === activeKey ? " on" : ""}`}>
@@ -316,10 +389,11 @@ function BrowserPane(props: {
           <Plus size={12} />
         </button>
       </div>
+      ) : null}
       <div className="bp-toolbar">
-        <button className="iconbtn sm" aria-label="后退" disabled={actState?.canGoBack !== true} onClick={() => nav("back")}>←</button>
-        <button className="iconbtn sm" aria-label="前进" disabled={actState?.canGoForward !== true} onClick={() => nav("forward")}>→</button>
-        <button className="iconbtn sm" aria-label="刷新" onClick={() => nav("reload")}>⟳</button>
+        <button className="iconbtn sm" aria-label="后退" disabled={actState?.canGoBack !== true} onClick={() => nav("back")}><ArrowLeft size={14} /></button>
+        <button className="iconbtn sm" aria-label="前进" disabled={actState?.canGoForward !== true} onClick={() => nav("forward")}><ArrowRight size={14} /></button>
+        <button className="iconbtn sm" aria-label="刷新" disabled={actState === null} onClick={() => nav("reload")}><RotateCw size={14} /></button>
         <input
           ref={addrRef}
           className="bp-url"
@@ -327,7 +401,7 @@ function BrowserPane(props: {
           placeholder="localhost:5173 或 https://…"
           value={urlDraft}
           onChange={(e) => setUrlDraft(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") go(activeKey, urlDraft); }}
+          onKeyDown={(e) => { if (e.key === "Enter" && !isCompositionEnter(e, null)) go(activeKey, urlDraft); }}
         />
         <button className="mini-btn" onClick={() => go(activeKey, urlDraft)}>打开</button>
         <button
@@ -335,11 +409,27 @@ function BrowserPane(props: {
           data-on={picking}
           aria-label="选择页面元素"
           title="选择页面元素（⌘⇧S）"
+          disabled={actState === null}
           onClick={doPick}
         >
           <Crosshair size={13} />
         </button>
-        <DropdownMenu.Root>
+        {props.onToggleMaximize !== undefined && (
+          <button
+            className="iconbtn sm"
+            data-on={props.maximized === true}
+            aria-label={props.maximized === true ? "还原浏览器窗格" : "放大浏览器窗格"}
+            title={props.maximized === true ? "还原（Esc）" : "放大：铺满工作区并盖住对话"}
+            onClick={props.onToggleMaximize}
+          >
+            {props.maximized === true ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+          </button>
+        )}
+        {/* 单标签态（tab 条隐藏时）「+」落在工具行里，新标签入口不因条隐藏而消失。 */}
+        {tabs.length === 1 ? (
+          <button className="iconbtn sm" aria-label="新标签页" title="新标签页" onClick={addTab}><Plus size={14} /></button>
+        ) : null}
+        <DropdownMenu.Root onOpenChange={setMenuOpen}>
           <DropdownMenu.Trigger asChild>
             <button className="iconbtn sm" aria-label="浏览器菜单" title="浏览器菜单"><MoreHorizontal size={13} /></button>
           </DropdownMenu.Trigger>
@@ -423,16 +513,20 @@ function BrowserPane(props: {
       {actState !== null && (actState.title !== "" || actState.loading) && (
         <div className="bp-status">{actState.loading ? "加载中…" : actState.title}</div>
       )}
-      <div className="bp-view" ref={containerRef} aria-label="网页视图（原生视图叠放区）" />
+      <div className="bp-view" ref={containerRef} aria-label="网页视图（原生视图叠放区）">
+        {actState === null && <BrowserHome onFocusAddress={() => addrRef.current?.focus()} {...(props.onOpenPane !== undefined ? { onOpenPane: props.onOpenPane } : {})} />}
+      </div>
     </div>
   );
 }
 
-/** 终端窗格（v5，macOS）：xterm.js 渲染 + PTY（主进程 script(1) 宿主）。
+declare const __IPC_PROTOCOL_VERSION__: number;
+
+/** 终端窗格（macOS）：xterm.js 渲染 + Python PTY 宿主，行列随面板尺寸同步。
  *  xterm 动态 import（SSR/判卷环境不加载 DOM 依赖）；卸载即 kill 终端（不留孤儿 shell）。 */
 function TerminalPane(): React.JSX.Element {
   const hostRef = useRef<HTMLDivElement | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ message: string; canRetry: boolean } | null>(null);
   // 退出后可就地重启（2026-10-18）：此前只把“已退出”写进终端，唯一出路是关窗格再开。
   // gen 递增触发 effect 重跑：旧 xterm 在 cleanup 里 dispose + kill，新会话接在同一 host 上。
   const [exited, setExited] = useState<string | null>(null);
@@ -441,13 +535,17 @@ function TerminalPane(): React.JSX.Element {
     const host = hostRef.current;
     if (host === null) return;
     let alive = true;
-    let term: { dispose: () => void; write: (d: string) => void; onData: (cb: (d: string) => void) => { dispose: () => void } } | null = null;
+    const showError = (message: string, canRetry = true): void => { if (alive) setNotice({ message, canRetry }); };
+    let term: import("@xterm/xterm").Terminal | null = null;
     let termId: string | null = null;
     let offData: (() => void) | null = null;
     let offExit: (() => void) | null = null;
     let dataSub: { dispose: () => void } | null = null;
-    void Promise.all([import("@xterm/xterm"), import("@xterm/addon-fit")]).then(([{ Terminal }, { FitAddon }]) => {
+    let resizeSub: { dispose: () => void } | null = null;
+    let resizeObserver: ResizeObserver | null = null;
+    void Promise.all([window.agent.protocolVersion(), import("@xterm/xterm"), import("@xterm/addon-fit")]).then(([version, { Terminal }, { FitAddon }]) => {
       if (!alive) return;
+      if (version !== __IPC_PROTOCOL_VERSION__) { showError("桌面协议版本不一致，请关闭并重新打开应用", false); return; }
       const t = new Terminal({
         fontSize: 12,
         cursorBlink: true,
@@ -481,45 +579,64 @@ function TerminalPane(): React.JSX.Element {
       });
       term = t;
       t.open(host);
+      const syncSize = (): void => {
+        const id = termId;
+        if (!alive || id === null || host.clientWidth === 0 || host.clientHeight === 0) return;
+        void window.agent.terminalResize(id, t.cols, t.rows).then((ok) => {
+          if (alive && termId === id && !ok) showError("终端尺寸未能同步，请重新启动终端");
+        }, (error: unknown) => {
+          if (alive && termId === id) showError(`终端尺寸同步失败：${error instanceof Error ? error.message : String(error)}`);
+        });
+      };
+      resizeSub = t.onResize(syncSize);
       // 列数自适应容器宽（此前固定 80 列在窄格被右缘裁切）；容器尺寸变化跟随。
       try { fit.fit(); } catch { /* 容器尺寸为 0 时忽略 */ }
-      const ro = new ResizeObserver(() => { try { fit.fit(); } catch { /* 同上 */ } });
-      ro.observe(host);
-      (t as unknown as { __ro?: ResizeObserver }).__ro = ro;
+      resizeObserver = new ResizeObserver(() => { try { fit.fit(); } catch { /* 同上 */ } });
+      resizeObserver.observe(host);
       offData = window.agent.onTerminalData((e) => { if (termId !== null && e.id === termId) t.write(e.data); });
       offExit = window.agent.onTerminalExit((e) => {
         if (termId !== null && e.id === termId) {
           const why = e.code === null ? "信号终止" : `code ${String(e.code)}`;
           t.write(`\r\n[terminal] 已退出（${why}）——点上方「重新启动」或重开窗格\r\n`);
+          termId = null;
           setExited(why);
         }
       });
-      dataSub = t.onData((d) => { if (termId !== null) void window.agent.terminalWrite(termId, d); });
+      dataSub = t.onData((d) => {
+        const id = termId;
+        if (id === null) return;
+        void window.agent.terminalWrite(id, d).then((ok) => {
+          if (alive && termId === id && !ok) showError("终端已不可写，请重新启动终端");
+        }, (error: unknown) => {
+          if (alive && termId === id) showError(`终端输入失败：${error instanceof Error ? error.message : String(error)}`);
+        });
+      });
       void window.agent.terminalStart().then((r) => {
-        if (r === undefined) { setNotice("通道无应答（主进程未返回终端）"); return; }
+        if (r === undefined) { showError("通道无应答（主进程未返回终端）"); return; }
         if (!alive) { if (r.ok) void window.agent.terminalKill(r.id); return; }
-        if (!r.ok) { setNotice(r.error); t.write(`[terminal] ${r.error}\r\n`); return; }
+        if (!r.ok) { showError(r.error); t.write(`[terminal] ${r.error}\r\n`); return; }
         termId = r.id;
+        syncSize(); // fit 可能早于 IPC 返回 id；创建完成后必须补初次同步。
       }).catch((err: unknown) => {
-        setNotice(err instanceof Error ? err.message : String(err));
+        showError(err instanceof Error ? err.message : String(err));
       });
     }).catch((err: unknown) => {
-      setNotice(`终端组件加载失败：${err instanceof Error ? err.message : String(err)}`);
+      if (alive) showError(`终端无法启动：${err instanceof Error ? err.message : String(err)}`);
     });
     return () => {
       alive = false;
-      offData?.(); offExit?.(); dataSub?.dispose();
-      (term as unknown as { __ro?: ResizeObserver })?.__ro?.disconnect();
+      offData?.(); offExit?.(); dataSub?.dispose(); resizeSub?.dispose();
+      resizeObserver?.disconnect();
       if (termId !== null) void window.agent.terminalKill(termId);
       term?.dispose();
     };
   }, [gen]);
   return (
     <div className="term-pane">
-      {notice !== null && <div className="fp-note err" role="alert">{notice}</div>}
-      {exited !== null && (
+      {notice !== null && <div className="fp-note err" role="alert">{notice.message}</div>}
+      {(exited !== null || notice?.canRetry === true) && (
         <div className="fp-note" role="status">
-          <span>终端已退出（{exited}）</span>
+          {exited !== null && <span>终端已退出（{exited}）</span>}
           <button
             className="mini-btn ghost"
             onClick={() => { setExited(null); setNotice(null); setGen((g) => g + 1); }}
@@ -527,239 +644,6 @@ function TerminalPane(): React.JSX.Element {
         </div>
       )}
       <div className="term-host" ref={hostRef} aria-label="终端会话" />
-    </div>
-  );
-}
-
-/** 文件窗格（v5 只读浏览）：左树懒加载 + 下方文本预览（帽/二进制由通道侧拒，界面如实呈现）。 */
-function FilePane(props: {
-  onPathMenu?: (rel: string, kind: "file" | "directory", x: number, y: number) => void;
-}): React.JSX.Element {
-  type DirNode = DirEntryView[] | { error: string };
-  const [dirs, setDirs] = useState<Record<string, DirNode>>({});
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set([""]));
-  const [preview, setPreview] = useState<{ path: string; loading: boolean; text?: string; truncated?: boolean; error?: string } | null>(null);
-
-  const loadDir = (rel: string): void => {
-    void window.agent.workspaceListDir(rel).then((r) => {
-      setDirs((prev) => ({ ...prev, [rel]: r === undefined ? { error: "通道无应答" } : r.ok ? r.entries : { error: r.error } }));
-    }).catch((err: unknown) => {
-      setDirs((prev) => ({ ...prev, [rel]: { error: err instanceof Error ? err.message : String(err) } }));
-    });
-  };
-  // 首次挂载拉根目录（懒加载树的唯一根；子层展开时才拉）。
-  useEffect(() => { loadDir(""); }, []);
-
-  const child = (rel: string, name: string): string => (rel === "" ? name : `${rel}/${name}`);
-  const toggleDir = (rel: string): void => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(rel)) next.delete(rel);
-      else { next.add(rel); if (dirs[rel] === undefined) loadDir(rel); }
-      return next;
-    });
-  };
-  const openFile = (rel: string): void => {
-    setPreview({ path: rel, loading: true });
-    void window.agent.workspaceReadText(rel).then((r) => {
-      setPreview(r === undefined
-        ? { path: rel, loading: false, error: "通道无应答" }
-        : r.ok
-          ? { path: rel, loading: false, text: r.text, truncated: r.truncated }
-          : { path: rel, loading: false, error: r.error });
-    }).catch((err: unknown) => {
-      setPreview({ path: rel, loading: false, error: err instanceof Error ? err.message : String(err) });
-    });
-  };
-
-  const renderDir = (rel: string, depth: number): React.ReactNode => {
-    const node = dirs[rel];
-    if (node === undefined) return <div className="fp-note">读取中…</div>;
-    if (!Array.isArray(node)) return <div className="fp-note err" role="alert">{node.error}</div>;
-    if (node.length === 0) return <div className="fp-note">{rel === "" ? "工作区为空" : "空目录"}</div>;
-    return node.map((e) => {
-      const p = child(rel, e.name);
-      if (e.kind === "dir") {
-        const open = expanded.has(p);
-        return (
-          <Fragment key={p}>
-            <button
-              className={"fp-row dir" + (open ? " open" : "")}
-              style={{ paddingLeft: 6 + depth * 13 }}
-              onClick={() => { toggleDir(p); }}
-              onContextMenu={(e) => { e.preventDefault(); props.onPathMenu?.(p, "directory", e.clientX, e.clientY); }}
-            >
-              <ChevronRight size={10} className="fp-chev" aria-hidden="true" />
-              <Folder size={12} aria-hidden="true" />
-              <span className="fp-name">{e.name}</span>
-            </button>
-            {open && renderDir(p, depth + 1)}
-          </Fragment>
-        );
-      }
-      return (
-        <button
-          key={p}
-          className={"fp-row file" + (preview?.path === p ? " on" : "")}
-          style={{ paddingLeft: 6 + depth * 13 + 13 }}
-          onClick={() => { openFile(p); }}
-          onContextMenu={(e) => { e.preventDefault(); props.onPathMenu?.(p, "file", e.clientX, e.clientY); }}
-        >
-          <FileText size={12} aria-hidden="true" />
-          <span className="fp-name">{e.name}</span>
-          {e.size !== null && <span className="fp-size num">{e.size}</span>}
-        </button>
-      );
-    });
-  };
-
-  return (
-    <div className="file-pane">
-      <div className="file-tree" aria-label="文件树">{renderDir("", 0)}</div>
-      <div className="file-preview">
-        {preview === null && <div className="fp-note">点文件预览（只读；写入由 agent 走审批）</div>}
-        {preview !== null && preview.loading && <div className="fp-note">读取中…</div>}
-        {preview !== null && !preview.loading && preview.error !== undefined && (
-          <div className="fp-note err" role="alert">{preview.error}</div>
-        )}
-        {preview !== null && !preview.loading && preview.text !== undefined && (
-          <>
-            {preview.truncated === true && <div className="fp-note warn">已截断（超 512 KiB 帽）</div>}
-            <pre className="fp-text">{preview.text}</pre>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/** 变更窗格（diff 审阅面）：按轮列改动清单与验证凭据；点文件行懒加载逐 hunk diff（v4 通道）；
- *  行级评注（蓝本 §3.6）：多处评论汇总为一条消息，⌘Enter 一次性提交（复用 send → 新一轮）。 */
-function ChangesPane(props: {
-  events: readonly AgentEvent[];
-  onReview?: (text: string) => void;
-  onPathMenu?: (rel: string, kind: "file" | "directory", x: number, y: number) => void;
-}): React.JSX.Element {
-  const turns = turnDelivery(props.events).filter((t) => t.files.length > 0);
-  // 展开位（一次一个文件）；diff 懒加载与请求守卫收口在 change-diff-state.ts
-  //（与 Inspector 同一实现；点开才要数据，不预取整会话的全部差异）。
-  const { openKey, diff, toggle } = useLazyChangeDiff();
-  // 每轮一张卡，但默认只展开最新一轮（2026-10-18 与交付卡同一批：23 轮全展开会把检查器塞满）。
-  const [openRound, setOpenRound] = useState<number | null>(() => (turns.length > 0 ? turns[turns.length - 1]!.round : null));
-  // 行级评注（行键 `<path>|<line>` → 文本）；提交后清空。
-  const [comments, setComments] = useState<ReadonlyMap<string, string>>(new Map());
-  const submitReview = (): void => {
-    if (comments.size === 0 || props.onReview === undefined) return;
-    props.onReview(composeReviewMessage(comments));
-    setComments(new Map());
-  };
-  if (turns.length === 0) {
-    return <div className="pane-empty">本会话还没有文件改动。<br />agent 写盘后会在这里按轮列出。</div>;
-  }
-  const verifyWord = (status: string): string =>
-    status === "verified" ? "验证通过"
-    : status === "failed" ? "验证失败"
-    : status === "stale" ? "验证已过期"
-    : status === "absent" ? "未验证"
-    : "无需验证";
-  const verifyCls = (status: string): string =>
-    status === "verified" ? "ok" : status === "failed" ? "bad" : status === "absent" ? "warn" : "dim";
-  return (
-    <div
-      className="changes-pane"
-      onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submitReview(); } }}
-    >
-      {comments.size > 0 && props.onReview !== undefined && (
-        <div className="review-bar" role="status">
-          <span className="rb-count num">{String(comments.size)} 条评注待提交</span>
-          <button className="mini-btn primary" onClick={submitReview}>提交评论（⌘Enter）</button>
-          <button className="mini-btn" onClick={() => setComments(new Map())}>清除</button>
-        </div>
-      )}
-      <div className="pane-list">
-      {turns.map((t) => (
-        <section className="pane-card" key={t.round}>
-          <div className="pane-card-head">
-            <span className="pc-title">第 {String(t.round)} 轮</span>
-            <span className="chip">{String(t.files.length)} 个文件</span>
-            <span className={"chip " + verifyCls(t.verification.status)}>{verifyWord(t.verification.status)}</span>
-            <button
-              type="button"
-              className={"pane-card-toggle" + (openRound === t.round ? " on" : "")}
-              aria-expanded={openRound === t.round}
-              aria-label={openRound === t.round ? "收起这一轮的改动" : "展开这一轮的改动"}
-              onClick={() => { setOpenRound(openRound === t.round ? null : t.round); }}
-            ><ChevronRight size={11} /></button>
-          </div>
-          {openRound === t.round && (
-          <>
-          <ul className="changes-list">
-            {t.files.map((f) => {
-              const key = `${String(t.round)}:${f.path}`;
-              const open = openKey === key;
-              return (
-                <li className="change-item-wrap" key={`${f.path}:${f.change}`}>
-                  <button
-                    className={"change-item" + (open ? " open" : "")}
-                    aria-expanded={open}
-                    onClick={() => toggle(key, f.path, f.snapshotId)}
-                    onContextMenu={(e) => { e.preventDefault(); props.onPathMenu?.(f.path, "file", e.clientX, e.clientY); }}
-                  >
-                    <span className="chev" aria-hidden="true"><ChevronRight size={10} /></span>
-                    <span className={"act " + f.change}>
-                      {f.change === "created" ? "新建" : f.change === "modified" ? "修改" : "变更"}
-                    </span>
-                    <span className="path">{f.path}</span>
-                    {f.snapshotId !== undefined && (
-                      <span className="snap" title="覆盖前快照已保留（.agent/snapshots）">快照</span>
-                    )}
-                  </button>
-                  {open && (
-                    <div className="change-diff-zone">
-                      {diff.loading && <div className="pane-empty">正在读快照与当前文件…</div>}
-                      {!diff.loading && diff.payload !== null && (
-                        diff.payload.ok
-                          ? (
-                            <>
-                              <div className="change-diff-stat num">{`+${String(diffCount(diff.payload.hunks).add)} −${String(diffCount(diff.payload.hunks).del)}`}</div>
-                              <DiffView
-                                hunks={diff.payload.hunks}
-                                truncated={diff.payload.truncated}
-                                {...(props.onReview !== undefined
-                                  ? {
-                                      comment: {
-                                        comments,
-                                        keyPrefix: `${f.path}|`,
-                                        onComment: (lineKey: string, text: string) => {
-                                          setComments((prev) => {
-                                            const next = new Map(prev);
-                                            if (text === "") next.delete(lineKey); else next.set(lineKey, text);
-                                            return next;
-                                          });
-                                        },
-                                      },
-                                    }
-                                  : {})}
-                              />
-                            </>
-                          )
-                          : <div className="ap-notice err" role="alert">{diff.payload.error}</div>
-                      )}
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-          {t.unverifiedFiles.length > 0 && (
-            <div className="consequence">未验证：{t.unverifiedFiles.join("、")}</div>
-          )}
-          {t.nextAction !== "" && <div className="consequence">→ {t.nextAction}</div>}
-          </>
-          )}
-        </section>
-      ))}
-      </div>
     </div>
   );
 }
@@ -784,7 +668,7 @@ function PlanPane(props: { events: readonly AgentEvent[] }): React.JSX.Element {
             {p.files.map((f) => (
               <li className="change-item" key={`${f.action}:${f.path}`}>
                 <span className={"act " + (f.action === "delete" ? "delete" : f.action === "create" ? "created" : "modified")}>
-                  {f.action === "create" ? "新建" : f.action === "delete" ? "删除" : "修改"}
+                  {planActionLabel(f.action)}
                 </span>
                 <span className="path">{f.path}</span>
               </li>
@@ -810,6 +694,8 @@ function PlanPane(props: { events: readonly AgentEvent[] }): React.JSX.Element {
 /** 任务窗格：多 agent 状态（worker 簇）。 */
 function TasksPane(props: { events: readonly AgentEvent[] }): React.JSX.Element {
   const workers = projectWorkers(props.events);
+  const [ask, setAsk] = useState<{ w: WorkerPaneItem; action: "merge" | "reject" } | null>(null);
+  const [diff, setDiff] = useState<{ agentId: string; text: string; hunks: ReturnType<typeof parseUnifiedPatch>; truncated: boolean } | null>(null);
   if (workers.length === 0) {
     return <div className="pane-empty">本会话还没有派过子任务。<br />agent 派出 worker 后会在这里列出。</div>;
   }
@@ -822,7 +708,25 @@ function TasksPane(props: { events: readonly AgentEvent[] }): React.JSX.Element 
     : "已取消";
   const verifiedWord = (v: NonNullable<WorkerPaneItem["verified"]>): string =>
     v === "verified" ? "验证通过" : v === "failed" ? "验证失败" : v === "stale" ? "证据过期" : "无验证";
+  const showDiff = async (w: WorkerPaneItem): Promise<void> => {
+    if (w.diffRef === undefined) return;
+    const r = await window.agent.worktreeDiff(w.diffRef);
+    if (!r.ok) toast.error(`读取改动失败：${r.error}`);
+    else {
+      const clipped = clipDiff(r.patch.trim() === "" ? r.stat : r.patch);
+      setDiff({ agentId: w.agentId, text: clipped.text, hunks: parseUnifiedPatch(clipped.text), truncated: clipped.truncated });
+    }
+  };
+  const settle = async (w: WorkerPaneItem, action: "merge" | "reject"): Promise<void> => {
+    setAsk(null);
+    const r = await window.agent.cardAction({
+      ...workerCardAction(w.agentId, w.resultEventId ?? 0, action),
+    });
+    if (!r.ok) toast.error(`${action === "merge" ? "合并" : "拒绝"}失败：${r.error ?? "未知原因"}`);
+    else toast.success(action === "merge" ? "已合并回主工作区" : "已拒绝并清理 worktree");
+  };
   return (
+    <>
     <div className="pane-list">
       {workers.map((w) => (
         <section className="pane-card" key={w.agentId} data-status={w.status}>
@@ -856,9 +760,36 @@ function TasksPane(props: { events: readonly AgentEvent[] }): React.JSX.Element 
             <div className="evidence-body wk-summary">{w.summary}</div>
           )}
           {w.reason !== undefined && <div className="consequence danger-text">{w.reason}</div>}
+          {w.mode === "write" && w.status === "done" && w.resultEventId !== undefined && (
+            <div className="wk-actions">
+              {w.diffRef !== undefined && <button className="mini-btn ghost" onClick={() => void showDiff(w)}>查看改动…</button>}
+              <button className="mini-btn primary" onClick={() => setAsk({ w, action: "merge" })}>合并…</button>
+              <button className="mini-btn ghost" onClick={() => setAsk({ w, action: "reject" })}>拒绝…</button>
+            </div>
+          )}
         </section>
       ))}
     </div>
+    {diff !== null && (
+      <ModalSurface className="diff-modal" label={`${diff.agentId} 的改动`} onClose={() => setDiff(null)}>
+        <div className="diff-modal-head">{diff.agentId} · 改动</div>
+        {diff.hunks.length > 0 ? <DiffView hunks={diff.hunks} truncated={diff.truncated} /> : <pre className="diff-patch">{diff.text}</pre>}
+        {diff.truncated && <div className="diff-note">patch 超过 {String(200000)} 字符，预览已截断；完整内容请走变更窗格/命令行。</div>}
+      </ModalSurface>
+    )}
+    {ask !== null && (
+      <ConfirmDialog
+        title={ask.action === "merge" ? `合并 ${ask.w.agentId} 的改动？` : `拒绝 ${ask.w.agentId} 的改动？`}
+        note={ask.action === "merge"
+          ? "把该 worker 的 worktree 变更提交并合并回主工作区；冲突时保留 worktree 供人工处理。"
+          : "删除该 worker 的 worktree 与分支；未合并的改动无法恢复。"}
+        confirmLabel={ask.action === "merge" ? "合并" : "拒绝"}
+        danger={ask.action === "reject"}
+        onClose={() => setAsk(null)}
+        onConfirm={() => { if (ask !== null) void settle(ask.w, ask.action); }}
+      />
+    )}
+    </>
   );
 }
 
@@ -875,10 +806,34 @@ export function PaneDock(props: {
   onReorder?: (from: number, to: number) => void;
   /** 弹出为独立窗口（缺省 = 无弹出入口）。 */
   onPopout?: (kind: PaneKind) => void;
+  /** 独立窗格窗口（弹出的单窗格，PopoutApp 传）：**没有多面板可导航/可恢复**
+   *  ⇒ 面板导航行（聚焦某窗格 / 恢复多面板布局）在那里是**死按钮**，
+   *  且和窗格自己的标题行叠成两行同样的字（真机截图：弹出窗里两行「终端」）。
+   *  ⇒ 独立窗格窗口不渲染那一行。 */
+  inPopout?: boolean;
+  /** 交付卡点行：打开变更窗格并选中该轮该文件（seq 递增触发一次）。 */
+  changesFocus?: ChangesFocus;
+  /** 命令面板快速打开：文件路径 + 递增序号；PaneDock 激活文件标签，FilePane 展开并预览。 */
+  fileTarget?: { path: string; seq: number };
+  /** 顶栏工具的显式导航；已挂载的目标也要切到前台，不靠 toggle 卸载重建。 */
+  paneTarget?: { kind: PaneKind; seq: number };
+  /** ⌘+点击侧栏会话：预览目标（可继续发送；seq 递增，新目标自动激活「会话」标签）。 */
+  sessionPreview?: { id: string; workspace?: string; title: string; seq: number } | null;
+  /** 预览头部「切到会话」：把主体会话换过去（预览窗格保留）。 */
+  onSwitchSession?: (id: string, workspace?: string) => void;
+  /** 预览窗格继续发送：与主发送共用插话/队列；running = 目标会话此刻的事件态。 */
+  onSessionPreviewSend?: (text: string, running: boolean) => Promise<PreviewSendOutcome>;
+  onSessionPreviewStop?: () => void;
+  onSessionPreviewResume?: () => void;
   /** v6 预览地址：browser 窗格就绪后自动导航到这里（缺省 = 只显示手动地址栏）。 */
   browserUrl?: string;
+  /** 聊天链接直达（2026-11-05 业主）：markdown http(s) 链接点击 → WorkbenchView 推来的目标
+   *  {url, seq}；seq 前进 = 新一击，浏览器标签切前台并导航**活动标签**（走站点授权闸）。 */
+  browserLinkTarget?: { url: string; seq: number };
+  browserVisible?: boolean;
   /** v7 当前会话 id（sidechat 窗格的父会话面；缺省 = 旁路空态提示先开会话）。 */
   sessionId?: string | null;
+  workspace?: string | null;
   /** v7 附为上下文（§2.3 右键菜单）：工作区相对路径 → App 解析绝对路径后进 composer 附件。 */
   onAttach?: (rel: string, kind: "file" | "directory") => void;
   /** v7 元素选择信号（§3.6 ⌘⇧S，App 递增 seq）：browser 窗格据此对活动标签发起一次选择。 */
@@ -886,170 +841,251 @@ export function PaneDock(props: {
   /** v7 元素选择结果（选择器/片段/页面 URL）→ App 拼文进输入框。 */
   onPickResult?: (r: { selector: string; snippet: string; url: string }) => void;
 }): React.JSX.Element {
-  // 拖拽换位状态（HTML5 DnD；拖动中的格子给视觉反馈）。
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [focusedPane, setFocusedPane] = useState<PaneKind | null>(null);
-  const focused = focusedPane !== null && props.tabs.includes(focusedPane) ? focusedPane : null;
+  // 浏览器放大（2026-11-03 业主）：只对 browser 生效，铺满工作区并盖住对话；切走自动还原。
+  const [maximized, setMaximized] = useState(false);
+  // 放大层的左边界 = 中间对话列的左缘（业主：只盖对话、保留左栏）；量法收在 hook 里。
+  const { maxLeft, sync: measureMaxLeft } = useMaximizedLeft(maximized);
+  const toggleMaximize = (): void => {
+    if (!maximized) measureMaxLeft();
+    setMaximized((v) => !v);
+  };
+  // 单窗格模式（2026-10-24 业主）：侧栏一次只显示一个窗格、占满整列；标签页即窗格切换。
+  // 激活窗格 = 手动点选的那个（仍开着时），否则最新打开的一个——新开窗格自动露出。
+  const active = focusedPane !== null && props.tabs.includes(focusedPane)
+    ? focusedPane
+    : props.tabs[props.tabs.length - 1] ?? null;
+  useEffect(() => {
+    if (active !== "browser" && maximized) setMaximized(false);
+  }, [active, maximized]);
+  // Esc 还原：放大后焦点在网页原生视图里，渲染层收不到按键 ⇒ 同时在 browser 工具栏留还原钮；
+  // 这里兜住「焦点还在 DOM」的那一半（地址栏/工具栏）。
+  useEffect(() => {
+    if (!maximized) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") { e.preventDefault(); setMaximized(false); }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => { window.removeEventListener("keydown", onKey, true); };
+  }, [maximized]);
   const previousTabs = useRef(props.tabs);
   const navRef = useRef<HTMLElement | null>(null);
+  const navItemsRef = useRef<HTMLDivElement | null>(null);
+  const activeTabRef = useRef<HTMLSpanElement | null>(null);
+  const tabsSig = props.tabs.join("\u0001");
+  // 多标签时激活标签必须自己滚进可视区：新开第 6–8 个窗格时标签条会横向溢出，
+  // 内容切过去了但标签还藏在右边，用户会以为没开。滚动只发生在标签条内部（不带动整页）。
+  useEffect(() => {
+    if (active === null) return;
+    const scroller = navItemsRef.current;
+    const tab = activeTabRef.current;
+    if (scroller === null || tab === null) return;
+    const reveal = (behavior: ScrollBehavior): void => {
+      const pad = 4;
+      const bounds = scroller.getBoundingClientRect();
+      const tabBounds = tab.getBoundingClientRect();
+      const left = scroller.scrollLeft + tabBounds.left - bounds.left;
+      const right = left + tabBounds.width;
+      const viewLeft = scroller.scrollLeft;
+      const viewRight = viewLeft + scroller.clientWidth;
+      if (scroller.clientWidth === 0) return;
+      if (left < viewLeft + pad) scroller.scrollTo({ left: Math.max(0, left - pad), behavior });
+      else if (right > viewRight - pad) scroller.scrollTo({ left: right - scroller.clientWidth + pad, behavior });
+    };
+    const raf = window.requestAnimationFrame(() => {
+      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      reveal(reduced || document.documentElement.dataset.reduceMotion === "true" ? "instant" : "smooth");
+    });
+    // 打开上下文侧栏或拖窄面板时，active/tabsSig 不变，仍需把关闭按钮带回视口。
+    const observer = new ResizeObserver(() => reveal("instant"));
+    observer.observe(scroller);
+    observer.observe(tab);
+    return () => { window.cancelAnimationFrame(raf); observer.disconnect(); };
+  }, [active, tabsSig]);
+  // 标签条横向溢出时，左缘那枚标签会被**拦腰切开**（仓库证据：.tmp/sweep/pane-tabs-smoke.out
+  // 01-eight-panes-active-visible.png，激活标签在末尾 ⇒ scrollLeft>0 ⇒ 首个「变更」只剩半个字）。
+  // 切是躲不掉的（8 个标签塞不进 320px 的列），但可以不让它「被切」：给标签条加一层左右渐隐
+  // （mask），溢出部分淡出而不是断在字中间。没溢出时不加 mask（第一个标签不被无故淡化）。
+  useEffect(() => {
+    const scroller = navItemsRef.current;
+    if (scroller === null) return;
+    const sync = (): void => {
+      scroller.dataset.scrolled = scroller.scrollLeft > 0 ? "true" : "false";
+    };
+    sync();
+    scroller.addEventListener("scroll", sync, { passive: true });
+    return () => scroller.removeEventListener("scroll", sync);
+  }, [tabsSig]);
   const closePane = (kind: PaneKind): void => {
+    const last = props.tabs.length === 1;
     props.onClose(kind);
+    if (last) {
+      // 关掉最后一格时整个 PaneDock 会卸载，navRef 里的剩余标签不存在；
+      // 焦点要回到打开窗格的工具栏入口，不能掉到 document.body（2026-11-05 审计）。
+      const opener = document.querySelector<HTMLElement>('[data-workbench-changes="true"]')
+        ?? document.querySelector<HTMLElement>('[aria-label="工作台工具"]');
+      opener?.focus();
+      return;
+    }
     // 关闭按钮卸载后将焦点交给剩余窗格，避免键盘用户掉回文档起点。
     window.requestAnimationFrame(() => {
-      navRef.current?.querySelector<HTMLButtonElement>(".pane-nav-item")?.focus();
+      navRef.current?.querySelector<HTMLButtonElement>('.pane-nav-item[aria-pressed="true"]')?.focus();
     });
   };
   useEffect(() => {
     const added = props.tabs.find((kind) => !previousTabs.current.includes(kind));
-    if (focusedPane !== null) setFocusedPane(added ?? (props.tabs.includes(focusedPane) ? focusedPane : null));
+    if (added !== undefined) setFocusedPane(added);
+    else if (focusedPane !== null && !props.tabs.includes(focusedPane)) setFocusedPane(null);
     previousTabs.current = props.tabs;
   }, [props.tabs, focusedPane]);
+  // 命令面板快速打开：即使文件标签早已开着但不在前台，也要切过去（openPane 只保证标签存在）。
+  useEffect(() => {
+    if (props.paneTarget !== undefined) setFocusedPane(props.paneTarget.kind);
+  }, [props.paneTarget]);
+  // 聊天链接直达（2026-11-05 业主）：链接点击 = 显式导航，浏览器标签必须切前台（同 paneTarget 语义；
+  // 否则用户手动聚焦过别的窗格时，新链接会把页面加载到身后的浏览器标签里）。
+  useEffect(() => {
+    if (props.browserLinkTarget !== undefined) setFocusedPane("browser");
+  }, [props.browserLinkTarget]);
+  useEffect(() => {
+    if (props.fileTarget !== undefined) setFocusedPane("file");
+  }, [props.fileTarget]);
+  // ⌘+点击侧栏会话：新目标即激活「会话」标签（即使它早已开着但不在前台）。
+  useEffect(() => {
+    if (props.sessionPreview !== undefined && props.sessionPreview !== null) setFocusedPane("session");
+  }, [props.sessionPreview]);
   // 右键路径菜单（§2.3）：窗格内坐标 + 目标；渲染层自绘（见 PathMenu）。
   const [pathMenu, setPathMenu] = useState<{ x: number; y: number; rel: string; kind: "file" | "directory" } | null>(null);
   const openPathMenu = (rel: string, kind: "file" | "directory", x: number, y: number): void => {
     setPathMenu({ x, y, rel, kind });
   };
-  // 行高记忆：Grid 的行轨 id 用窗格 kind（不是行下标），重排/关开后尺寸跟着窗格走。
-  const gridRef = useGridRef();
-  const tabsSig = props.tabs.join("\u0001");
-  const rowTracks = useMemo(
-    () => props.tabs.map((kind) => ({ id: kind, minSize: `${MIN_PANE_PCT}%` })),
-    // 数组每次渲染都是新引用；tabsSig 是内容签名，等价于「窗格集变了没有」。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tabsSig],
-  );
-  const defaultRows = useMemo(
-    () => paneRowLayout(props.tabs, loadPaneRows()),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tabsSig],
-  );
-  // 窗格集变化（恢复上次布局 / 新开 / 关闭）时把记下的行高放回去。
-  // setLayout 触发的 onLayoutChanged 带 isUserInteraction=false，不会回写存储。
-  useEffect(() => {
-    const grid = gridRef.current;
-    if (grid === null || props.tabs.length === 0) return;
-    grid.setLayout({ rows: paneRowLayout(props.tabs, loadPaneRows()) });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tabsSig]);
   if (props.tabs.length === 0) {
     return (
       <aside className="pane-dock" aria-label="窗格区">
-        <div className="pane-empty">没有打开的窗格。<br />顶栏「变更」或 ⋮ 菜单可开。</div>
+        <div className="pane-empty">没有打开的窗格。<br />从顶栏「改动」或「工具」打开。</div>
       </aside>
     );
   }
   return (
-    <div className="pane-workbench">
+    <div className="pane-workbench" data-maximized={maximized ? "true" : "false"} style={maximized ? ({ "--pane-max-left": `${maxLeft}px` } as CSSProperties) : undefined}>
+    {/* 面板导航行只对「多窗格同屏」有意义：独立窗格窗口里它是死按钮（见 inPopout 注释）。 */}
+    {props.inPopout !== true && (
     <nav className="pane-nav" aria-label="面板导航" ref={navRef}>
-      <div className="pane-nav-items">
-        {props.tabs.map((kind) => <button key={kind} className="pane-nav-item"
-          aria-label={`聚焦${PANE_META[kind].label}窗格`} aria-pressed={focused === kind}
-          onClick={() => setFocusedPane(kind)}>{PANE_META[kind].label}</button>)}
+      <div className="pane-nav-items" ref={navItemsRef}>
+        {props.tabs.map((kind) => (
+          <span key={kind} ref={kind === active ? activeTabRef : undefined} className={"pane-tab" + (kind === active ? " on" : "")}>
+            <button className="pane-nav-item" aria-label={`切换到${PANE_META[kind].label}窗格`}
+              aria-pressed={kind === active}
+              tabIndex={kind === active ? 0 : -1}
+              title={props.onReorder !== undefined ? "←/→ 切换；⌥↑ / ⌥↓ 调整标签顺序" : "←/→ 切换"}
+              onKeyDown={(e) => {
+                if (e.target !== e.currentTarget) return;
+                if (e.altKey) {
+                  if (props.onReorder === undefined || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+                  const i = props.tabs.indexOf(kind);
+                  const to = reorderTarget(i, e.key, props.tabs.length);
+                  if (to === null) return;
+                  e.preventDefault();
+                  props.onReorder?.(i, to);
+                  return;
+                }
+                const i = props.tabs.indexOf(kind);
+                const next = paneTabTargetForKey(e.key, i, props.tabs.length);
+                if (next === null) return;
+                e.preventDefault();
+                const nextKind = props.tabs[next];
+                if (nextKind === undefined) return;
+                setFocusedPane(nextKind);
+                navItemsRef.current?.querySelectorAll<HTMLButtonElement>(".pane-nav-item")[next]?.focus();
+              }}
+              onClick={() => setFocusedPane(kind)}>{PANE_META[kind].label}</button>
+            {/* 临时预览窗格（session）没有独立窗口路由：弹出后 PopoutApp 拿不到预览目标，
+                只会开一个空壳。可选窗格集合才是「能脱离主窗存在」的那一组。 */}
+            {kind === active && props.onPopout !== undefined && PANE_OPENABLE.includes(kind) && (
+              <button className="pane-tab-act" aria-label={`弹出${PANE_META[kind].label}窗格`} title="弹出为独立窗口"
+                onClick={() => { props.onPopout?.(kind); }}><ExternalLink size={11} /></button>
+            )}
+            {kind === active && (
+              <button className="pane-tab-act" aria-label={`关闭${PANE_META[kind].label}窗格`}
+                onClick={() => { closePane(kind); }}><X size={11} /></button>
+            )}
+          </span>
+        ))}
       </div>
-      <button className="iconbtn sm" aria-label="恢复多面板布局" title="恢复多面板布局" aria-pressed={focused === null}
-        onClick={() => setFocusedPane(null)}><PanelsTopLeft size={15} /></button>
       {props.onOpen !== undefined && <DropdownMenu.Root>
         <DropdownMenu.Trigger asChild><button className="iconbtn sm" aria-label="添加面板" title="添加面板"><Plus size={15} /></button></DropdownMenu.Trigger>
         <DropdownMenu.Portal><DropdownMenu.Content className="pop-rd" sideOffset={5} align="end">
-          {PANE_OPENABLE.map((kind) => <DropdownMenu.Item key={kind} className="menu-item"
+          {WORKBENCH_PANES.map((kind) => <DropdownMenu.Item key={kind} className="menu-item"
             onSelect={() => { if (!props.tabs.includes(kind)) props.onOpen?.(kind); setFocusedPane(kind); }}>
             <span>{PANE_META[kind].label}</span>{props.tabs.includes(kind) && <Check size={12} />}
           </DropdownMenu.Item>)}
         </DropdownMenu.Content></DropdownMenu.Portal>
       </DropdownMenu.Root>}
     </nav>
-    <Grid
-      gridRef={gridRef}
-      columns={1}
-      rows={rowTracks}
-      defaultLayout={{ rows: defaultRows }}
-      onLayoutChanged={(layout, meta) => {
-        if (focused !== null) return;
-        if (!meta.isUserInteraction) return;
-        savePaneRows(mergePaneRows(loadPaneRows(), layout.rows, props.tabs));
-      }}
-      className="pane-grid"
-      id="cairn-panes"
-      data-focused={focused ?? undefined}
-    >
-      {props.tabs.map((kind, i) => (
-        <Fragment key={kind}>
-          {i > 0 && <Gridline type="row" row={i} className="pane-gridline" />}
-          <Cell column={0} row={i} className="pane-cell" data-pane={kind} data-focused={focused === kind}>
-            <section className="pane-chunk" aria-label={`${PANE_META[kind].label}窗格`}>
-              <div
-                className="pane-chunk-head"
-                draggable={props.onReorder !== undefined}
-                data-dragging={dragIndex === i}
-                onDragStart={(e) => {
-                  if (props.onReorder === undefined) return;
-                  setDragIndex(i);
-                  e.dataTransfer.effectAllowed = "move";
-                }}
-                onDragOver={(e) => {
-                  if (dragIndex !== null && dragIndex !== i) e.preventDefault();
-                }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  if (dragIndex !== null && dragIndex !== i) props.onReorder?.(dragIndex, i);
-                  setDragIndex(null);
-                }}
-                onDragEnd={() => setDragIndex(null)}
-                // 键盘换位（2026-10-18）：拖拽此前是唯一的换位路径，键盘用户够不着「⋮⋮」。
-                // 焦点在窗格头本身时 ⌥↑/⌥↓ 与拖拽同语义（共用 movePane）；方向键留给内部控件。
-                tabIndex={props.onReorder !== undefined ? 0 : undefined}
-                onKeyDown={(e) => {
-                  if (props.onReorder === undefined || e.target !== e.currentTarget) return;
-                  if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
-                  const to = reorderTarget(i, e.key, props.tabs.length);
-                  if (to === null) return;
-                  e.preventDefault();
-                  props.onReorder(i, to);
-                }}
-                title={props.onReorder !== undefined ? "拖动换位（键盘：⌥↑ / ⌥↓）" : undefined}
-              >
-                {props.onReorder !== undefined && <span className="pc-grip" aria-hidden="true"><GripVertical size={12} /></span>}
-                <span className="pc-label">{PANE_META[kind].label}</span>
-                {props.onPopout !== undefined && (
-                  <button
-                    className="pt-x"
-                    aria-label={`弹出${PANE_META[kind].label}窗格`}
-                    title="弹出为独立窗口"
-                    onClick={() => { props.onPopout?.(kind); }}
-                  ><ExternalLink size={12} /></button>
-                )}
-                <button
-                  className="pt-x"
-                  aria-label={`关闭${PANE_META[kind].label}窗格`}
-                  onClick={() => { closePane(kind); }}
-                ><X size={11} /></button>
-              </div>
-              <div className="pane-chunk-body">
-                {kind === "changes" && (
-                  <ChangesPane
-                    events={props.events}
-                    {...(props.onReview !== undefined ? { onReview: props.onReview } : {})}
-                    onPathMenu={openPathMenu}
-                  />
-                )}
-                {kind === "plan" && <PlanPane events={props.events} />}
-                {kind === "tasks" && <TasksPane events={props.events} />}
-                {kind === "file" && <FilePane onPathMenu={openPathMenu} />}
-                {kind === "terminal" && <TerminalPane />}
-                {kind === "browser" && (
-                  <BrowserPane
-                    {...(props.browserUrl !== undefined ? { initialUrl: props.browserUrl } : {})}
-                    {...(props.pickSignal !== undefined ? { pickSignal: props.pickSignal } : {})}
-                    {...(props.onPickResult !== undefined ? { onPickResult: props.onPickResult } : {})}
-                  />
-                )}
-                {kind === "sidechat" && <SidechatPane sessionId={props.sessionId ?? null} />}
-              </div>
-            </section>
-          </Cell>
-        </Fragment>
-      ))}
-    </Grid>
+    )}
+    {active !== null && (
+      <div className="pane-stack">
+        {props.tabs.map((kind) => (
+          <section
+            key={kind}
+            className="pane-chunk"
+            aria-label={`${PANE_META[kind].label}窗格`}
+            data-pane={kind}
+            data-active={kind === active}
+          >
+            <div className="pane-chunk-body">
+              {/* 每个窗格各自成界：一个窗格炸掉不牵连标签条与其他窗格；
+                  无错时边界返回 Fragment，直接子元素关系不变。 */}
+              <RenderErrorBoundary variant="inline">
+              {kind === "changes" && (
+                <ChangesPane
+                  // 评注与展开位按会话隔离：不换 key 时，A 会话的行级评论会跟着切到 B，
+                  // ⌘Enter 一提交就发进 B 的新一轮（2026-11-05 审计抓到的跨会话串话）。
+                  key={props.sessionId ?? "no-session"}
+                  events={props.events}
+                  {...(props.onReview !== undefined ? { onReview: props.onReview } : {})}
+                  {...(props.changesFocus !== undefined ? { focus: props.changesFocus } : {})}
+                  onPathMenu={openPathMenu}
+                />
+              )}
+              {kind === "plan" && <PlanPane events={props.events} />}
+              {kind === "tasks" && <><OrchestrationPane workspace={props.workspace ?? null} sessionId={props.sessionId ?? null} active={kind === active} /><TasksPane events={props.events} /></>}
+              {kind === "file" && (
+                <FilePane
+                  onPathMenu={openPathMenu}
+                  {...(props.fileTarget !== undefined ? { openTarget: props.fileTarget } : {})}
+                />
+              )}
+              {kind === "terminal" && <TerminalPane />}
+              {kind === "browser" && (
+                <BrowserPane
+                  active={kind === active && props.browserVisible !== false}
+                  maximized={maximized && kind === active}
+                  onToggleMaximize={toggleMaximize}
+                  {...(props.onOpen !== undefined ? { onOpenPane: (target: PaneKind) => { props.onOpen?.(target); setFocusedPane(target); } } : {})}
+                  {...(props.browserUrl !== undefined ? { initialUrl: props.browserUrl } : {})}
+                  {...(props.browserLinkTarget !== undefined ? { openTarget: props.browserLinkTarget } : {})}
+                  {...(props.pickSignal !== undefined ? { pickSignal: props.pickSignal } : {})}
+                  {...(props.onPickResult !== undefined ? { onPickResult: props.onPickResult } : {})}
+                />
+              )}
+              {kind === "sidechat" && <SidechatPane sessionId={props.sessionId ?? null} />}
+              {kind === "plugins" && <PluginSurface />}
+              {kind === "session" && (
+                <SessionPreviewPane
+                  target={props.sessionPreview ?? null}
+                  {...(props.onSwitchSession !== undefined ? { onSwitch: props.onSwitchSession } : {})}
+                  {...(props.onSessionPreviewSend !== undefined ? { onSend: props.onSessionPreviewSend } : {})}
+                  {...(props.onSessionPreviewStop !== undefined ? { onStop: props.onSessionPreviewStop } : {})}
+                  {...(props.onSessionPreviewResume !== undefined ? { onResume: props.onSessionPreviewResume } : {})}
+                />
+              )}
+              </RenderErrorBoundary>
+            </div>
+          </section>
+        ))}
+      </div>
+    )}
     {pathMenu !== null && (
       <PathMenu
         x={pathMenu.x}

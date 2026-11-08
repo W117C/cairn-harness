@@ -15,9 +15,10 @@ import { SettingsStore } from "../../../src/main/settings";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { readAppShell } from "./helpers/app-surface";
 
 const tokens = readFileSync(fileURLToPath(new URL("../src/renderer/tokens.css", import.meta.url)), "utf8");
-const appSrc = readFileSync(fileURLToPath(new URL("../src/renderer/App.tsx", import.meta.url)), "utf8");
+const appSrc = readAppShell();
 const panelSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/SettingsPanel.tsx", import.meta.url)), "utf8");
 const sectionsSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/settings-sections.tsx", import.meta.url)), "utf8");
 
@@ -120,8 +121,8 @@ describe("接线（属性有人写、控件有人点）", () => {
   it("设置页有控件，且走单键直写（不动 panelPatch 白名单）", () => {
     expect(sectionsSrc).toContain("aria-label=\"文字大小\"");
     expect(panelSrc).toContain('onTextSize={(next) => { setTextSize(next); void saveSettingKey("textSize", next); }}');
-    // 反向：白名单仍是六键（那份判卷钉的）
-    expect(sectionsSrc).toContain('export const PANEL_PATCH_KEYS = ["provider", "model", "mode", "theme", "planRequiredByDefault", "locale"] as const;');
+    // 反向：白名单仍是五键（那份判卷钉的；planRequiredByDefault 2026-11-03 出列）
+    expect(sectionsSrc).toContain('export const PANEL_PATCH_KEYS = ["provider", "model", "mode", "theme", "locale"] as const;');
   });
 
   it("三档预览各自变字号（点下去之前就看见差别）", () => {

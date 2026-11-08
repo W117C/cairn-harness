@@ -32,7 +32,16 @@ afterEach(() => {
 // 共享靶子 fixtures/todo-app 的写入方：与 gated-tools / replay-faces 互斥（见 tests/app-fixture-lock.ts）。
 let releaseAppFixture: (() => Promise<void>) | undefined;
 beforeAll(async () => { releaseAppFixture = await acquireAppFixtureLock(); }, 360_000);
-afterAll(async () => { await releaseAppFixture?.(); });
+afterAll(async () => {
+  // 收束缝会把自进化账本写进靶子的 .agent/（第 707 页）。evolution-ledger.jsonl 是
+  // fixtures 下的 **.jsonl**，projection-invariant 的语料尺只认 git 看得见的文件 ⇒
+  // 这里与 gated-tools 一样在放锁前清掉；evolution.json/memory 等非 .jsonl 运行态保留。
+  await rm(join(APP, ".agent", "evolution-ledger.jsonl"), { force: true });
+  // Evolve P0/P1 的收束面还会写 .agent/evolve/（episodes/playbook/index）。同样是 fixtures
+  // 下的运行态；留着会让 projection-invariant 的 tracked 语料尺把干净树与脏树读成两把尺。
+  await rm(join(APP, ".agent", "evolve"), { recursive: true, force: true });
+  await releaseAppFixture?.();
+});
 
 describe("三门 IPC 接线（runAgent + card_action 处理函数）", () => {
   it(

@@ -201,6 +201,26 @@ describe("findDanglingImports ＋ 豁免表", () => {
   it("同一文件指自己不算悬空（副作用式 `import \"./x\"` 会解析回自己）", () => {
     expect(findDanglingImports([{ from: "src/a.ts", spec: "./a" }], new Set(["src/a.ts"]), noDisk)).toEqual([]);
   });
+
+  // 跨面 import（量面里的文件 import 桌面层）：存在性问**整版**，不是问量面。
+  // 这组是本次修法的专破坏输入：修完不许把尺子改成"看不见跨面就不报"的瞎子。
+  it("跨面 import：模块在这一版里（哪怕不在量面里）⇒ 不许报悬空", () => {
+    const rev = new Set([...FILES, "apps/desktop/src/main/channels.ts"]);
+    expect(findDanglingImports([{ from: "tests/readme.test.ts", spec: "../apps/desktop/src/main/channels" }], rev, allDisk)).toEqual([]);
+  });
+
+  it("跨面 import：模块**真不在**这一版 ⇒ 照样报悬空（修法不许把尺子改成瞎子）", () => {
+    const rev = new Set([...FILES]);
+    const d = findDanglingImports([{ from: "tests/readme.test.ts", spec: "../apps/desktop/src/main/typo" }], rev, noDisk);
+    expect(d.map((x) => x.target)).toEqual(["apps/desktop/src/main/typo.ts"]);
+    expect(checkHeadImportFace(d, {})[0]?.detail).toContain("盘上也没有");
+  });
+
+  it("量面内的模块没入库 ⇒ 照样报悬空（存在性放宽只跨面，不许顺手放过面内的）", () => {
+    const rev = new Set([...FILES].filter((f) => f !== "src/gone.ts"));
+    const d = findDanglingImports([{ from: "src/a.ts", spec: "./gone" }], rev, noDisk);
+    expect(d.map((x) => x.target)).toEqual(["src/gone.ts"]);
+  });
 });
 
 describe("真表自证：这把尺不许是空载的，也不许对事故那笔失明", () => {
@@ -224,7 +244,7 @@ describe("真表自证：这把尺不许是空载的，也不许对事故那笔�
   it("HEAD 现读：悬空集合必须**落在存量名单里**，且 finding 为 0（新增即红；名单里的补好了由 stale 那条逼人来删名）", () => {
     const got = collectHeadEdges();
     if (got === null) return; // 上一条已经红了
-    const dang = findDanglingImports(got.edges, got.headFiles, () => true);
+    const dang = findDanglingImports(got.edges, got.revFiles, () => true);
     for (const d of dang) expect(Object.keys(HEAD_DANGLING_WAIVERS)).toContain(d.target);
     expect(checkHeadImportFace(dang)).toEqual([]);
   });
@@ -240,7 +260,7 @@ describe("真表自证：这把尺不许是空载的，也不许对事故那笔�
   it("事故那一笔（`834ba3a`）必须整条咬住：4 条模块悬空 ＋ `SessionTransport` 符号缺失", () => {
     const got = collectHeadEdges("834ba3a");
     if (got === null) return; // rev 不在了不算红（本仓不 rewrite history，真在时这条必过）
-    const dang = findDanglingImports(got.edges, got.headFiles, () => true);
+    const dang = findDanglingImports(got.edges, got.revFiles, () => true);
     const missing = findMissingExports(got.edges, got.headFiles, (rel) => got.texts.get(rel) ?? null);
     expect(dang.map((d) => d.target).sort()).toEqual([
       "src/main/provider-runtime.ts", "src/main/run-attachments.ts", "src/main/run-request.ts", "src/providers/capabilities.ts",
@@ -253,7 +273,7 @@ describe("真表自证：这把尺不许是空载的，也不许对事故那笔�
   it("干净的那一笔（`69fbb0d`）必须 0 项：尺不许靠假红证明自己在干活", () => {
     const got = collectHeadEdges("69fbb0d");
     if (got === null) return;
-    expect(findDanglingImports(got.edges, got.headFiles, () => true)).toEqual([]);
+    expect(findDanglingImports(got.edges, got.revFiles, () => true)).toEqual([]);
     expect(findMissingExports(got.edges, got.headFiles, (rel) => got.texts.get(rel) ?? null)).toEqual([]);
   });
 

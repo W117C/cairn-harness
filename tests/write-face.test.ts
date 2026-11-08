@@ -41,6 +41,21 @@ const writePair = (id: string): AgentEvent[] => [
   { type: "tool_call", id, name: "write_file", args: { path: "a.ts" } },
   okResult(id),
 ];
+/** 动作融合：写已落盘，随后 lint 红 ⇒ 工具 ok:false，但结构字段 fusedWrite 为真。 */
+const fusedPair = (id: string): AgentEvent[] => [
+  { type: "tool_call", id, name: "write_file", args: { path: "a.ts" } },
+  { type: "tool_result", callId: id, ok: false, output: "written then lint failed", fusedWrite: true },
+];
+
+describe("融合写盘的证据面（ok:false 不等于没写）", () => {
+  it("hasSessionWrites：fusedWrite 的写盘算产出，不许把 goal 判成「压根没产出」", () => {
+    expect(hasSessionWrites(fusedPair("w1"))).toBe(true);
+  });
+
+  it("workerVerificationEvidence：绿拍之后的融合写盘让证据变 stale，不是 verified", () => {
+    expect(workerVerificationEvidence([...writePair("w0"), beat(true), ...fusedPair("w1")])).toBe("stale");
+  });
+});
 
 describe("mayHaveWrittenDisk：写向判据的唯一事实源", () => {
   it("两个显式写工具 ⇒ 算改盘", () => {
@@ -103,6 +118,19 @@ describe("mayHaveWrittenDisk：写向判据的唯一事实源", () => {
         "read_image",
         // 2026-10-16 渲染：起浏览器进程但截图落临时目录，不改本工作区的盘。
         "render_image",
+        // 2026-11-04 任务清单：只写会话日志（面板数据），不改任何盘 ⇒ 与 remember 同档。
+        "todo_write",
+        // 2026-11-05 后台任务三件套：读任务输出 / 进程组组杀——都不落盘 ⇒ 只读面登记。
+        "task_output",
+        "task_stop",
+        // 2026-11-06 只读 git 三合一：spawn 固定 argv 的 git 子进程（status/diff/log），
+        // 零写权零 shell——只读档与 worker 面都可放行。
+        "git_read",
+        // 2026-11-06 第三批小件：确定性算术（纯解析器，零 eval 零子进程）+ 目录总览（只读 stat）。
+        "calc",
+        "list_dir",
+        // 2026-11-06 第二批大件：文档读取（zip/zlib 原生解析 + pdf 文本层，只读）。
+        "read_doc",
       ] as const;
       const names = Object.keys(TOOLS);
       const unclassified = names.filter(

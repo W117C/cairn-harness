@@ -38,10 +38,14 @@ export function buildQuickStarts(input: QuickStartInput): string[] {
   return out.slice(0, 4);
 }
 
-/** 问候语按时段：0–11 早上 / 12–17 下午 / 18–23 晚上（越界小时数取模归一）。 */
-export function greetingFor(hour: number): string {
+/** 问候语按时段分组：0–5 深夜 / 5–11 早上 / 12–17 下午 / 18–23 晚上（越界小时数取模归一）。
+ *  组内多条文案按 rand 轮换（默认 Math.random，传确定值可测）——同一时段不再永远同一句；
+ *  rand 越界（NaN / ≥1）回落到组内第一条。 */
+export function greetingFor(hour: number, rand: () => number = Math.random): string {
   const h = ((Math.trunc(hour) % 24) + 24) % 24;
-  if (h < 12) return STR.empty.greetingMorning;
-  if (h < 18) return STR.empty.greetingAfternoon;
-  return STR.empty.greetingEvening;
+  const group = h < 5 ? STR.empty.greetingNight
+    : h < 12 ? STR.empty.greetingMorning
+    : h < 18 ? STR.empty.greetingAfternoon
+    : STR.empty.greetingEvening;
+  return group[Math.floor(rand() * group.length)] ?? group[0]!;
 }

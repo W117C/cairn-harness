@@ -1,0 +1,894 @@
+.plugins-workspace {
+  position: relative;
+  min-height: 100%;
+}
+
+.plugins-workspace .page-frame {
+  max-width: 1080px;
+  gap: var(--space-md);
+}
+
+.plugins-workspace button {
+  font: inherit;
+}
+
+.plugin-command,
+.plugin-primary,
+.plugin-secondary,
+.plugin-danger-text,
+.plugin-row-action,
+.plugin-icon-btn,
+.plugin-text-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.plugin-command,
+.plugin-secondary {
+  padding: 0 10px;
+  border-color: var(--hairline-strong);
+  background: hsl(var(--bg-000));
+  color: hsl(var(--text-200));
+}
+
+.plugin-command:hover,
+.plugin-secondary:hover {
+  color: hsl(var(--text-000));
+  border-color: hsl(var(--text-400) / 42%);
+}
+
+.plugin-primary {
+  min-height: 32px;
+  padding: 0 13px;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-fg);
+}
+
+.plugin-primary:hover {
+  background: var(--btn-primary-bg-hover);
+}
+
+.plugin-danger-text {
+  padding: 0 9px;
+  color: hsl(var(--color-danger-ink));
+  background: transparent;
+}
+
+.plugin-danger-text:hover {
+  border-color: hsl(var(--color-danger) / 45%);
+  background: hsl(var(--color-danger) / 6%);
+}
+
+.plugin-text-btn {
+  min-height: 24px;
+  padding: 0 4px;
+  color: hsl(var(--accent-control-text));
+  background: transparent;
+}
+
+.plugin-icon-btn,
+.plugin-row-action {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  padding: 0;
+  color: hsl(var(--text-400));
+  background: transparent;
+}
+
+.plugin-icon-btn:hover,
+.plugin-row-action:hover {
+  color: hsl(var(--text-000));
+  background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover));
+}
+
+.plugin-icon-btn:disabled,
+.plugin-row-action:disabled,
+.plugin-primary:disabled,
+.plugin-secondary:disabled,
+.plugin-command:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.plugin-danger:hover {
+  color: hsl(var(--color-danger-ink));
+}
+
+.plugin-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.plugin-tabs button {
+  position: relative;
+  min-height: 34px;
+  padding: 0 10px;
+  color: hsl(var(--text-400));
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.plugin-tabs button:hover {
+  color: hsl(var(--text-000));
+}
+
+.plugin-tabs button[aria-current="page"] {
+  color: hsl(var(--text-000));
+  font-weight: var(--fw-medium);
+}
+
+.plugin-tabs button[aria-current="page"]::after {
+  position: absolute;
+  right: 8px;
+  bottom: -1px;
+  left: 8px;
+  height: 2px;
+  border-radius: 2px;
+  background: hsl(var(--accent-brand));
+  content: "";
+}
+
+/* 「技能中心…」是去另一处的出口，不是第三个视图：把它推到标签条右端，
+   用弱色小字，避免和「发现/已安装/可更新」被读成同一组。 */
+.plugin-tabs button.plugin-tabs-link {
+  margin-left: auto;
+  color: hsl(var(--text-400));
+  font-size: var(--fs-caption-sm);
+}
+.plugin-tabs button.plugin-tabs-link:hover {
+  color: hsl(var(--text-000));
+}
+
+.plugin-view-body {
+  min-width: 0;
+}
+
+.plugin-notice,
+.plugin-job,
+.plugin-inline-state,
+.plugin-cache-banner {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  color: hsl(var(--text-200));
+  background: hsl(var(--bg-000));
+  font-size: var(--fs-caption-sm);
+}
+
+.plugin-notice {
+  justify-content: space-between;
+}
+
+.plugin-inline-error {
+  border-color: hsl(var(--color-danger) / 32%);
+  color: hsl(var(--color-danger-ink));
+}
+
+.plugin-job {
+  color: hsl(var(--accent-control-text));
+}
+
+.plugin-muted {
+  color: hsl(var(--text-400));
+}
+
+.plugin-spin {
+  animation: plugin-spin 900ms linear infinite;
+}
+
+@keyframes plugin-spin {
+  to { transform: rotate(360deg); }
+}
+
+.plugin-discover {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.plugin-cache-banner {
+  color: hsl(var(--color-risk-ink));
+  background: hsl(var(--color-risk) / 7%);
+  border-color: hsl(var(--color-risk) / 24%);
+}
+
+.plugin-cache-banner time {
+  margin-left: auto;
+  color: hsl(var(--text-400));
+  font-variant-numeric: tabular-nums;
+}
+
+.plugin-state-block {
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: var(--space-xl);
+  color: hsl(var(--text-400));
+  text-align: center;
+}
+
+.plugin-state-block strong {
+  color: hsl(var(--text-100));
+  font-size: var(--fs-body-md);
+}
+
+.plugin-shelf {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.plugin-shelf h2,
+.plugin-operational-list h2 {
+  margin: 0;
+  padding: 0 2px 7px;
+  color: hsl(var(--text-000));
+  font-size: var(--fs-body-md);
+  line-height: 1.3;
+  font-weight: var(--fw-bold);
+}
+
+.plugin-shelf-rows,
+.plugin-operational-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.plugin-discover-row,
+.plugin-operational-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-top: 1px solid var(--hairline);
+}
+
+.plugin-discover-row:last-child,
+.plugin-operational-row:last-child {
+  border-bottom: 1px solid var(--hairline);
+}
+
+.plugin-discover-main,
+.plugin-operational-main {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(180px, 0.9fr);
+  align-items: center;
+  gap: 12px;
+  padding: 11px 8px;
+  border: 0;
+  border-radius: 5px;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.plugin-operational-main {
+  grid-template-columns: minmax(0, 1fr) minmax(240px, auto);
+}
+
+.plugin-discover-main:hover,
+.plugin-operational-main:hover {
+  background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover));
+}
+
+.plugin-mark {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  color: hsl(var(--accent-brand));
+  background: hsl(var(--accent-brand) / 9%);
+}
+
+.plugin-row-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.plugin-row-copy strong {
+  min-width: 0;
+  overflow: hidden;
+  color: hsl(var(--text-000));
+  font-size: var(--fs-body-md);
+  line-height: 1.35;
+  font-weight: var(--fw-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plugin-row-copy > span {
+  min-width: 0;
+  overflow: hidden;
+  color: hsl(var(--text-400));
+  font-size: var(--fs-caption-sm);
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plugin-row-meta {
+  min-width: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px 10px;
+  flex-wrap: wrap;
+  color: hsl(var(--text-400));
+  font-size: var(--fs-caption-xs);
+  line-height: 1.4;
+}
+
+.plugin-row-meta > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.plugin-row-actions,
+.plugin-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+.plugin-operational-list {
+  gap: 2px;
+}
+
+.plugin-operational-list + .plugin-operational-list {
+  margin-top: var(--space-lg);
+}
+
+.plugin-operational-row {
+  min-height: 52px;
+  padding-right: 6px;
+}
+
+.plugin-skeleton-row {
+  height: 56px;
+  border-top: 1px solid var(--hairline);
+  background: linear-gradient(90deg, transparent, hsl(var(--text-000) / 4%), transparent);
+  background-size: 240% 100%;
+  animation: plugin-skeleton 1.4s ease-in-out infinite;
+}
+
+@keyframes plugin-skeleton {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+
+.plugin-updates {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.plugin-updates-toolbar {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  color: hsl(var(--text-400));
+  font-size: var(--fs-caption-sm);
+}
+
+.plugin-import-menu {
+  position: relative;
+}
+
+.plugin-import-popover {
+  position: absolute;
+  top: calc(100% + 7px);
+  right: 0;
+  z-index: 70;
+  width: min(340px, calc(100vw - 32px));
+  padding: 8px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 8px;
+  background: hsl(var(--bg-elevated));
+  box-shadow: 0 12px 36px hsl(60 6% 4% / 16%);
+}
+
+.plugin-import-head {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2px 4px 7px;
+  color: hsl(var(--text-000));
+  font-size: var(--fs-body-sm);
+  font-weight: var(--fw-semibold);
+}
+
+.plugin-import-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.plugin-import-choices button {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  color: hsl(var(--text-200));
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.plugin-import-choices button:hover {
+  color: hsl(var(--text-000));
+  background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover));
+}
+
+.plugin-import-form {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 4px;
+}
+
+.plugin-import-form label,
+.plugin-config-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: hsl(var(--text-400));
+  font-size: var(--fs-caption-xs);
+}
+
+.plugin-import-form input,
+.plugin-import-form select,
+.plugin-config-form input {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 5px;
+  outline: 0;
+  color: hsl(var(--text-000));
+  background: hsl(var(--bg-100));
+}
+
+.plugin-import-form input:focus,
+.plugin-import-form select:focus,
+.plugin-config-form input:focus {
+  border-color: hsl(var(--accent-control) / 60%);
+}
+
+.plugin-import-path {
+  overflow: hidden;
+  padding: 8px;
+  border-radius: 5px;
+  color: hsl(var(--text-300));
+  background: hsl(var(--bg-300));
+  font-family: var(--mono);
+  font-size: var(--fs-caption-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plugin-form-error {
+  color: hsl(var(--color-danger-ink));
+  font-size: var(--fs-caption-xs);
+  overflow-wrap: anywhere;
+}
+
+.plugin-import-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.plugin-sheet {
+  position: fixed;
+  /* 应用标题栏是 38px（styles.css .app grid-template-rows）；48px 会在抽屉上方
+     留一条 10px 的底层页面缝，既像被裁掉的头也能点到后面。 */
+  top: 38px;
+  right: 0;
+  bottom: 0;
+  z-index: 90;
+  width: min(440px, calc(100vw - 48px));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  border-left: 1px solid var(--hairline-strong);
+  background: hsl(var(--bg-000));
+  box-shadow: -16px 0 36px hsl(60 6% 4% / 12%);
+}
+
+.plugin-sheet-head {
+  min-width: 0;
+  min-height: 64px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: 13px 14px 11px 16px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.plugin-sheet-head > div:first-child {
+  min-width: 0;
+}
+
+.plugin-sheet-head h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: hsl(var(--text-000));
+  font-size: var(--fs-heading-sm);
+  line-height: 1.3;
+}
+
+.plugin-sheet-head > div:first-child > div {
+  margin-top: 2px;
+  overflow: hidden;
+  color: hsl(var(--text-400));
+  font-size: var(--fs-caption-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plugin-sheet-body {
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 16px 20px;
+}
+
+.plugin-sheet-footer {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: 10px 16px;
+  border-top: 1px solid var(--hairline);
+  color: hsl(var(--text-400));
+  background: hsl(var(--bg-000));
+  font-size: var(--fs-caption-xs);
+}
+
+.plugin-sheet-footer > div {
+  display: flex;
+  gap: 7px;
+}
+
+.plugin-detail-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.plugin-review-state {
+  color: hsl(var(--accent-control-text)) !important;
+  font-weight: var(--fw-medium);
+}
+
+.plugin-review-section {
+  padding: 15px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.plugin-review-section:last-child {
+  border-bottom: 0;
+}
+
+.plugin-review-section h3 {
+  margin: 0 0 8px;
+  color: hsl(var(--text-400));
+  font-size: var(--fs-caption-xs);
+  font-weight: var(--fw-semibold);
+}
+
+.plugin-facts {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 7px 10px;
+  margin: 0;
+  font-size: var(--fs-caption-sm);
+}
+
+.plugin-facts dt {
+  color: hsl(var(--text-400));
+}
+
+.plugin-facts dd {
+  min-width: 0;
+  margin: 0;
+  color: hsl(var(--text-200));
+}
+
+.plugin-break {
+  overflow-wrap: anywhere;
+}
+
+.plugin-mono {
+  font-family: var(--mono);
+  font-size: var(--fs-caption-xs);
+}
+
+.plugin-warning-line,
+.plugin-fact-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  color: hsl(var(--text-300));
+  font-size: var(--fs-caption-sm);
+}
+
+.plugin-warning-line svg {
+  flex: none;
+  color: hsl(var(--color-risk-ink));
+}
+
+.plugin-plain-list,
+.plugin-risk-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: hsl(var(--text-300));
+  font-size: var(--fs-caption-sm);
+}
+
+.plugin-plain-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  overflow-wrap: anywhere;
+}
+
+.plugin-risk-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  overflow-wrap: anywhere;
+}
+
+.plugin-risk-list svg {
+  flex: none;
+  margin-top: 2px;
+  color: hsl(var(--color-risk-ink));
+}
+
+.plugin-config-form {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.plugin-config-form .plugin-secondary {
+  align-self: flex-start;
+}
+
+.plugin-favorite[aria-pressed="true"] {
+  color: hsl(var(--accent-brand-ink));
+}
+
+@media (max-width: 1119px) {
+  .plugins-workspace .page-frame {
+    max-width: 100%;
+  }
+
+  .plugin-discover-main {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .plugin-discover-main .plugin-row-meta {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+
+  .plugin-sheet {
+    width: min(440px, calc(100vw - 48px));
+  }
+}
+
+@media (max-width: 880px) {
+  .plugin-sheet {
+    left: 0;
+    width: 100%;
+    border-left: 0;
+  }
+
+  .plugin-sheet-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .plugin-sheet-footer > div,
+  .plugin-detail-actions {
+    width: 100%;
+  }
+
+  .plugin-sheet-footer > div > button {
+    flex: 1;
+  }
+
+  .plugin-operational-main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .plugin-row-meta {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .plugin-row-actions {
+    display: grid;
+    grid-template-columns: repeat(2, 30px);
+  }
+
+  .plugin-shelf h2,
+  .plugin-operational-list h2 {
+    font-size: var(--fs-body-sm);
+  }
+
+  .plugin-import-popover {
+    right: auto;
+    left: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plugin-spin,
+  .plugin-skeleton-row {
+    animation: none;
+  }
+}
+
+/* ---- 2026-11-05 业主裁：市场对齐开源 ZCode PluginStoreCard ----
+   双列卡片网格（发现页）+ 卡片行（已安装页）：40px 能力方块 + 名称/版本/来源徽标 +
+   单行描述 + 能力行；动作区：安装胶囊钮 / 启停 Switch + 悬停露出的次要动作（收藏/更新/卸载）。 */
+.plugin-discover .plugin-shelf-rows {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 0 10px;
+}
+
+.plugin-store-card {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 8px;
+  border-radius: var(--radius-md);
+  transition: background var(--t-instant);
+}
+
+.plugin-store-card:hover { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover)); }
+
+.plugin-store-main {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.plugin-mark.lg { width: 40px; height: 40px; border-radius: 9px; }
+
+.plugin-store-copy { min-width: 0; flex: 1 1 auto; display: flex; flex-direction: column; gap: 2px; }
+
+.plugin-store-title { min-width: 0; display: flex; align-items: center; gap: 6px; }
+
+.plugin-store-title strong {
+  min-width: 0;
+  overflow: hidden;
+  color: hsl(var(--text-000));
+  font-size: var(--fs-body-md);
+  font-weight: var(--fw-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 描边徽标（与 MCP/模型弹窗同族：h-5 描边胶囊）。 */
+.plugin-pill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  background: hsl(var(--bg-100));
+  color: hsl(var(--text-300));
+  font-size: var(--fs-caption-2xs);
+  line-height: 1;
+}
+.plugin-pill.subtle { border-color: transparent; background: hsl(var(--bg-200)); }
+.plugin-pill.warn { color: hsl(var(--color-risk, var(--accent-brand))); }
+
+.plugin-store-desc {
+  min-width: 0;
+  overflow: hidden;
+  color: hsl(var(--text-300));
+  font-size: var(--fs-caption-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plugin-store-meta { min-width: 0; overflow: hidden; color: hsl(var(--text-400)); font-size: var(--fs-caption-2xs); text-overflow: ellipsis; white-space: nowrap; }
+
+.plugin-store-actions { flex: none; display: flex; align-items: center; gap: 6px; }
+
+/* 悬停露出的次要动作（收藏 / 更新 / 卸载）：卡片 hover 或键盘聚焦时才出现，ZCode 同款。 */
+.plugin-store-card .plugin-hover-act { opacity: 0; transition: opacity var(--t-fast); }
+.plugin-store-card:hover .plugin-hover-act,
+.plugin-store-card:focus-within .plugin-hover-act { opacity: 1; }
+@media (hover: none) {
+  .plugin-store-card .plugin-hover-act { opacity: 1; }
+}
+
+/* 安装胶囊钮（ZCode 的 rounded-full secondary）。 */
+.plugin-pill-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 12px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  background: hsl(var(--bg-100));
+  color: hsl(var(--text-000));
+  font-size: var(--fs-caption-sm);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+}
+.plugin-pill-btn:hover:not(:disabled) { background: hsl(var(--bg-200)); }
+.plugin-pill-btn:disabled { opacity: 0.55; cursor: default; }
+
+.spin { animation: spin var(--t-spin) infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 详情抽屉的能力徽标行（2026-11-05）：替代六格大卡——非零能力才出格，全零收成一行小字。 */
+.plugin-capability-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* 详情抽屉的导入 CTA（2026-11-05）：主行动作提到正文顶部，按钮与说明同一行呼吸。 */
+.plugin-import-cta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--hairline);
+}

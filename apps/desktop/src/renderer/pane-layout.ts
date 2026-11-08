@@ -1,15 +1,12 @@
 // 窗格行高记忆（批 98）：react-resizable-panels 的 Grid 布局以**轨道 id**为键。
 // 行轨 id 取窗格 kind（不是行下标）——重排/关开后尺寸跟着窗格走，不会串到邻居；
 // 关闭的窗格把尺寸留在存储里，重开即回原位（而不是回到均分）。
+import { isRecord } from "../../../../src/is-record";
 export const PANE_ROWS_KEY = "cairn.paneRows.v1";
 /** 每格的保底高度（百分比）。Grid 的 minSize 同用这一枚，免得两处各写一个数。 */
 export const MIN_PANE_PCT = 10;
 
 export type PaneRowMap = Record<string, number>;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 /** 存储串 → 行高表；坏 JSON / 非数 / 非正 / 非有限一律丢（不编默认值）。 */
 export function decodePaneRows(raw: string | null): PaneRowMap {

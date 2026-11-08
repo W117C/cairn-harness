@@ -96,7 +96,7 @@ export function workerVerificationEvidence(events: AgentEvent[]): WorkerEvidence
     }
     if (e.type === "tool_result") {
       const c = callById.get(e.callId);
-      if (e.ok && c !== undefined && mayHaveWrittenDisk(c.name, c.args)) lastWrite = i;
+      if ((e.ok || e.fusedWrite === true) && c !== undefined && mayHaveWrittenDisk(c.name, c.args)) lastWrite = i;
       return;
     }
     if (e.type === "verify_result") {
@@ -121,7 +121,7 @@ export function hasSessionWrites(events: AgentEvent[]): boolean {
     if (e.type === "tool_call") callById.set(e.id, { name: e.name, args: e.args });
     else if (e.type === "tool_result") {
       const c = callById.get(e.callId);
-      if (e.ok && c !== undefined && mayHaveWrittenDisk(c.name, c.args)) return true;
+      if ((e.ok || e.fusedWrite === true) && c !== undefined && mayHaveWrittenDisk(c.name, c.args)) return true;
     }
   }
   return false;

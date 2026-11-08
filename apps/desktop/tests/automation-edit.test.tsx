@@ -25,7 +25,7 @@ describe("scheduleToForm（反向映射）", () => {
 
 describe("编辑态接线", () => {
   it("抽屉有编辑入口；保存时带整条任务、只覆盖表单字段", () => {
-    const src = read("../src/renderer/components/AppPage.tsx");
+    const src = read("../src/renderer/components/AutomationPane.tsx");
     expect(src).toContain(">编辑任务</button>");
     expect(src).toContain("const fields = scheduleToForm(selected.schedule);");
     expect(src).toContain("setEditing(selected);");

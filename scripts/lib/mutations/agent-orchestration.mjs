@@ -143,7 +143,7 @@ export const MUTATIONS = [
     src: "src/agent/orchestrator.ts",
     test: "tests/session-spend-ruler.test.ts",
     desc: "拆桶时把主会话那一段漏掉（只统计带 agent_id 的）⇒ 闸只看得到 worker，主 loop 烧的钱不进账",
-    apply: (s) => s.replace("          if (e.agent_id === undefined) {", "          if (false) {"),
+    apply: (s) => s.replace("          if (event.agent_id === undefined) {", "          if (false) {"),
     expectFail: "主会话那一桶与 worker 那一桶各算一次：不漏 main，也不因为拆桶而双计",
   },
   // ---- #97：用户自定义子代理的 CC 连字符字段名必须被那一份投影读到（此前 `allowed-tools` 落进未知键被丢）----
@@ -335,7 +335,7 @@ export const MUTATIONS = [
     src: "src/agent/worker-report.ts",
     test: "tests/worker-evidence.test.ts",
     desc: "被权限门拒掉的写也算「改过盘」⇒ 一次没落盘的 tool_call 就把绿证据打成 stale（读数反过来不诚实）",
-    apply: (s) => s.replace("      if (e.ok && c !== undefined && mayHaveWrittenDisk(c.name, c.args)) lastWrite = i;", "      if (c !== undefined && mayHaveWrittenDisk(c.name, c.args)) lastWrite = i;"),
+    apply: (s) => s.replace("      if ((e.ok || e.fusedWrite === true) && c !== undefined && mayHaveWrittenDisk(c.name, c.args)) lastWrite = i;", "      if (c !== undefined && mayHaveWrittenDisk(c.name, c.args)) lastWrite = i;"),
     expectFail: "被拒的写（ok:false）不构成过期证据",
   },
     // ---- W3② 价格标签（tests/worker-spent-usd.test.ts）：钱的话只准一处说，且不可知 ≠ 免费 ----
@@ -448,11 +448,12 @@ export const MUTATIONS = [
     src: "src/agent/orchestrator.ts",
     test: "tests/worker-hooks.test.ts",
     desc: "发了 SubagentStart 却不把 additionalContext 传进 system ⇒ 钩子跑了、模型一个字也没看到——「收下即丢」的第三种写法（前两种：字段不读、回执不接）",
-    apply: (s) => s.replace('      const system = await buildWorkerSystemMessages(w, this.opts.workspace, startContext);', '      const system = await buildWorkerSystemMessages(w, this.opts.workspace);'),
+    apply: (s) => s.replace('buildWorkerSystemMessages(w, this.opts.workspace, startContext, experienceNote)', 'buildWorkerSystemMessages(w, this.opts.workspace, experienceNote)'),
     expectFail: "SubagentStart 的 additionalContext 真的进模型收到的 system 块（不是发完就丢）",
   },
   {
     id: "subagent-stop-not-fired",
+    // 终态漏斗的跨模块包装留在 orchestrator.ts；finishInner 实现在 worker-finish.ts。
     src: "src/agent/orchestrator.ts",
     test: "tests/worker-hooks.test.ts",
     desc: "不发 SubagentStop ⇒ 「每次子任务收束都过一次审计钩子」这条承诺（§9.10 的另一半）落空，且终态已经写完才发现没人验收",
@@ -587,6 +588,7 @@ export const MUTATIONS = [
   },
   {
     id: "finish-throw-orphans-terminal-waiters",
+    // 异常收尾放行等待方的跨模块包装留在 orchestrator.ts；finishInner 实现在 worker-finish.ts。
     src: "src/agent/orchestrator.ts",
     test: "tests/terminal-sync-window.test.ts",
     desc: "收尾中途抛异常时只置标志不放行等待方 ⇒ sequencer 在没有超时的等待上永挂（整链无终态、worktree 清不掉、cancel 又被 finished 拒）",
@@ -808,7 +810,9 @@ export const MUTATIONS = [
     src: "src/agent/orchestrator.ts",
     test: "tests/worker-role.test.ts",
     desc: "重派改回逐字段列写（漏掉 role 等四位）⇒ 映射端补了、转发端没跟上，这一跳静默丢参数",
-    apply: (s) => s.replace("    return await this.spawn(respawnSpawnArgs(args), ctx);", "    return await this.spawn({ task: args.task, mode: args.mode }, ctx);"),
+    // 2026-10-22：`971fe18c` 给这一跳加了 recovery 承载（`carried`）⇒ 针脚跟着实现走：
+    // 旧行整行不再逐字存在，突变会变成空操作（no-effect），表就少了一条分辨力。
+    apply: (s) => s.replace("    return await this.spawn(respawnSpawnArgs(args), carried === undefined ? ctx : { ...ctx, recovery: carried });", "    return await this.spawn({ task: args.task, mode: args.mode }, carried === undefined ? ctx : { ...ctx, recovery: carried });"),
     expectFail: "真链：落流的角色 → respawnArgsFrom → respawn() 的新 agent_spawned 仍带同一角色（全新 agent_id）",
   },
   // 署名（规则 57：没有锚点的那一格要有名字与理由）：worker 侧**非工具档**那行 `frozenJudgePaths`
@@ -1126,6 +1130,33 @@ export const MUTATIONS = [
     desc: "空 slug 的 `task` 兜底被摘 ⇒ 折叠到空的 task 会造出空分支名/空 slug 目录",
     apply: (s) => s.replace("return s === \"\" ? \"task\" : s;", "return s;"),
     expectFail: "折叠到空 ⇒ 落 `task`（不许产出空分支名）",
+  },
+  {
+    id: "orphan-ignores-owned-agents",
+    src: "src/agent/worktree.ts",
+    test: "tests/worktree-pure.test.ts",
+    desc: "孤儿过滤不看 orchestrator 归属 ⇒ 另一会话运行中/待合并的 worker 在本会话日志里没有终态，"
+      + "目录却是 workspace 级，于是被列进「可清理」面板——用户一点就删掉别人正在干活的树",
+    apply: (s) => s.replace("!ownedAgentIds.has(agentId) && ", ""),
+    expectFail: "进程内仍有归属（运行中/待合并）⇒ 不算孤儿；未归属的 running 仍算（崩溃遗留仍要捞）",
+  },
+  {
+    id: "orphan-scan-drops-owned-wiring",
+    src: "src/main/state-handlers.ts",
+    test: "tests/orphan-cross-session.test.ts",
+    desc: "扫描入口不把归属集合接进去 ⇒ 纯函数那一格写对了但这一格永远传空集：跨会话活 worker 照样进清理面板"
+      + "（规则 230：只写纯函数不接＝没有读数）",
+    apply: (s) => s.replace("    new Set(ownedWorktreeAgentIds()),", "    new Set(),"),
+    expectFail: "orchestrator 仍归属的 w1 ⇒ 即使本会话日志没有终态，也不列孤儿",
+  },
+  {
+    id: "orphan-clean-ignores-live-owner",
+    src: "src/agent/worktree.ts",
+    test: "tests/worktree-branch-reuse.test.ts",
+    desc: "显式 clean 不看归属 ⇒ 旧界面/脚本直接调 clean 就能删掉运行中/待合并的活树；"
+      + "展示层过滤不是删除决策的闸，clean 自己必须再拒一次",
+    apply: (s) => s.replace("  if (opts.ownedAgentIds?.has(agentId)) {", "  if (false) {"),
+    expectFail: "仍归属的 agent：cleanOrphanWorktree 也拒绝，文件原样保留（clean 不假定调用方筛过）",
   },
   {
     id: "worktree-slug-dangling-hyphen-kept",

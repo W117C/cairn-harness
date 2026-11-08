@@ -4,14 +4,33 @@
 // `tierToMode` 返回类型），而最坏的一处是 `checkPermission` 以 `return "allow"` 收尾——
 // **加一档（或持久化里冒出个陌生值）不会报错，只会静默拿到"全放行"**。
 // 本文件把"少一份抄本没跟上"与"表外值拿宽权限"两件事变成红。
+import { readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { trackedExistingFiles } from "../scripts/lib/scan-scope";
 import { AGENT_PERMISSION_MODES } from "../src/events";
-import { PERMISSION_MODES, isPermissionMode, permissionModeRank, type PermissionMode } from "../src/permissions/modes";
+import { PERMISSION_MODES, isPermissionMode, nextPermissionMode, permissionModeRank, type PermissionMode } from "../src/permissions/modes";
 import { checkPermission, gate, sideEffectDecisionTable } from "../src/permissions";
 import { PERMISSION_MODES as SETTINGS_PERMISSION_MODES } from "../src/main/settings";
 import { isPermissionMode as workerIsPermissionMode, clampTier } from "../src/agent/worker-report";
 
+const ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
+
 describe("档位集合只有一个事实源", () => {
+  it("下一档循环走满选择面的四档（2026-11-03 起 guided 只是旧值，不再是循环的一站）", () => {
+    expect(PERMISSION_MODES.map(nextPermissionMode)).toEqual(["default", "auto", "auto", "full-access", "read-only"]);
+    expect(nextPermissionMode("guided"), "旧 guided 先落到合并后的智能审批").toBe("auto");
+    expect(nextPermissionMode("weird" as PermissionMode), "未知值从第一档开始").toBe("read-only");
+  });
+
+  it("renderer 不另抄档位顺序：命令面板经 nextPermissionMode，旧四档字面量已撤", () => {
+    const scope = trackedExistingFiles(ROOT, "apps/desktop/src/renderer");
+    const offenders = scope.files.filter((path) => readFileSync(join(ROOT, path), "utf8").includes('["read-only", "default", "guided", "auto"]'));
+    expect(offenders, "renderer 里又抄了一份缺 full-access 的四档顺序：" + offenders.join("、")).toEqual([]);
+    expect(readFileSync(join(ROOT, "apps/desktop/src/renderer/state/workbench.ts"), "utf8")).toContain("nextPermissionMode(mode)");
+  });
+
   it("events 的抄本与 permissions 的事实源逐位相同（顺序=松紧序，clampTier 依赖它）", () => {
     expect([...AGENT_PERMISSION_MODES]).toEqual([...PERMISSION_MODES]);
   });
@@ -24,8 +43,8 @@ describe("档位集合只有一个事实源", () => {
     expect(workerIsPermissionMode).toBe(isPermissionMode);
   });
 
-  it("名次：read-only < default < guided < auto，且每档的名次都非负（-1 会被 clampTier 当成最松侧）", () => {
-    expect(PERMISSION_MODES.map(permissionModeRank)).toEqual([0, 1, 2, 3]);
+  it("名次：read-only < default < guided < auto < full-access，且每档的名次都非负（-1 会被 clampTier 当成最松侧）", () => {
+    expect(PERMISSION_MODES.map(permissionModeRank)).toEqual([0, 1, 2, 3, 4]);
   });
 
   // 上面两条的**标题**都点了 clampTier，正文却一次都没调用它——「已按父档裁剪」那句 worker 看得见的
@@ -36,7 +55,10 @@ describe("档位集合只有一个事实源", () => {
     expect([clamped.mode, clamped.clamped]).toEqual(["guided", true]);
     expect(clamped.warning).toContain("worker 档位 auto 越界（父会话 guided）——已按父档裁剪");
     expect(clamped.warning, "警告得说清为什么夹：单调继承、worker 不可提权").toContain("worker 不可提权");
-    for (const [requested, parent] of [["guided", "auto"], ["read-only", "default"], ["default", "default"]] as const) {
+    // full-access 也必须遵守单调序：子档比父档松就夹回，不可提权。
+    const over = clampTier("full-access", "auto");
+    expect([over.mode, over.clamped]).toEqual(["auto", true]);
+    for (const [requested, parent] of [["guided", "auto"], ["read-only", "default"], ["default", "default"], ["full-access", "full-access"]] as const) {
       const kept = clampTier(requested, parent);
       expect([kept.mode, kept.clamped, kept.warning], requested + " 派在父 " + parent + " 之内，不该被动过").toEqual([requested, false, undefined]);
     }
@@ -46,7 +68,9 @@ describe("档位集合只有一个事实源", () => {
 describe("档位→裁决表：少一行就编译不过，表外值不许拿到 allow", () => {
   it("表恰好覆盖每一档，且逐档等于 §11.7.2 的档位语义（只读拒 / 默认问 / 引导按风险 / 自主放）", () => {
     expect(Object.keys(sideEffectDecisionTable()).sort()).toEqual([...PERMISSION_MODES].sort());
-    expect(sideEffectDecisionTable()).toEqual({ "read-only": "deny", default: "ask", guided: "allow", auto: "allow" });
+    // full-access（2026-10-24 业主）：最松档，粗档表里与 auto 同为 allow；
+    // 硬边界（L0 方案门 / L1 deny 规则 / 出网一次性批准）不在这张粗表里，另有判卷。
+    expect(sideEffectDecisionTable()).toEqual({ "read-only": "deny", default: "ask", guided: "allow", auto: "allow", "full-access": "allow" });
     for (const m of PERMISSION_MODES) {
       expect(checkPermission(m, "write_file")).toBe(sideEffectDecisionTable()[m]);
       expect(checkPermission(m, "run_shell")).toBe(sideEffectDecisionTable()[m]);

@@ -1,22 +1,69 @@
 // CX-01 Session Metadata：JSONL 仍是会话事实核心；pin/archive/project 只是 Session 平面组织记录。
 // 本仓库刻意不追加业务事件：置顶/归档不是 agent 行为，重放它们会污染 live/replay 等价性。
+//
+// ============================ 边界（本文件最重要的一段）============================
+// **sidecar 记录，不是事件**：这里存的是「会话平面」的组织/审计事实（标题、置顶、归档、项目归属、
+// 最后查看/归档/空闲时刻、恢复次数）。它们**一律不进会话事件流**，也**不新增事件种类**——
+// 理由与 pin/archive 一致：重放这些 UI/审计动作会污染 live/replay 等价性，也会让「模型做了什么」
+// 与「用户在界面上点了什么」混成同一件事。
+// **事实分工**：会话里发生了什么 = JSONL（唯一真身）；会话被怎么组织/审阅过 = 本 sidecar。
+// **「最后活动」的真身只有一个**：`updatedAt`（= 本 sidecar 的最后一次写入时刻）。
+//   - 本文件**不**另立 `lastActivityAt`：两个都叫「最后活动」的字段迟早分叉，读的人还得猜信哪个。
+//   - 对话本身的最后活动时间不在这里——那是 JSONL 的 mtime（`listSessions()` 的 `mtimeMs`），
+//     两件不同的事不互相冒充。
+// ============================ 缺席 ≠ 0（审计面的读法）============================
+// 审计字段**全部可选**，且**缺席一律不读成 0 / false / epoch 0**：
+//   · viewedAt 缺席      = **从未被查看过**（不是「查看于 1970 年」）
+//   · archivedAt 缺席    = 归档时刻**未记录**（旧记录；且 archived=false 时我们会把这一格摘掉）
+//   · idleSince 缺席     = **没有空闲记录**（还在跑，或从未记过）
+//   · resumeAttempts 缺席 = **未记录（未知）**——与 `0`（记过、一次都没恢复过）是**两态**，
+//     把「未知」读成 0 就是把「没量到」说成「没有」。要数字请用 `resumeAttemptsOf()`（缺省 undefined）。
+// 老 sidecar（本次改动之前写的）原样加载，新字段**保持缺席**（不补默认值）——`SCHEMA_VERSION` 不动。
 import { readFile } from "node:fs/promises";
 import { writeFileAtomic } from "../atomic-write";
+import { isRecord } from "../is-record";
+import { isSessionId } from "./session-id";
 
 const SCHEMA_VERSION = 1 as const;
-const MAX_SESSION_ID_LENGTH = 80;
 const MAX_PROJECT_ID_LENGTH = 128;
 const MAX_TITLE_LENGTH = 160;
 
-export interface SessionMetadataRecord {
+/**
+ * 审计面（四个字段**全部可选**：缺席 = 没记录过，不许读成 0/false/epoch 0）。
+ * 时刻一律 ISO 字符串（本文件既有 `createdAt`/`updatedAt` 的口径，不另立一套纪元）。
+ */
+export interface SessionAuditFields {
+  /** 最后一次被打开/查看的时刻（ISO）。**缺席 = 从未被查看过。** */
+  viewedAt?: string;
+  /**
+   * 归档时刻（ISO）。只在 `archived === true` 时有意义：取消归档时这一格被**摘掉**
+   * （留着一个归档时刻却 archived=false ⇒ 两格互相矛盾，读的人得猜信哪个）。
+   * 缺席 + archived=true = 归档时刻**未记录**（本次改动之前归档的旧记录）。
+   */
+  archivedAt?: string;
+  /** 最后一次进入空闲的时刻（ISO）。**缺席 = 没有空闲记录**（还在跑，或从未记过）。 */
+  idleSince?: string;
+  /**
+   * 恢复（打开）次数。**缺席 = 未记录（未知）**；`0` = 记过、一次都没恢复过。两态不许合并。
+   * 计数器从「开始记录」起算：老记录里真实发生过几次无从得知（这一格只能自此往后数）。
+   */
+  resumeAttempts?: number;
+}
+
+export interface SessionMetadataRecord extends SessionAuditFields {
   /** 与主会话 JSONL 的 id 一致；这里不存事件内容。 */
   id: string;
   title: string;
   pinned: boolean;
   archived: boolean;
   projectId?: string;
+  /** 会话级模型（registry id）。**缺席 = 跟随全局设置**；清除即摘掉这一格（不存 null）。 */
+  model?: string;
+  /** 会话级思考档（provider 声明的 level）。**缺席 = 跟随全局/会话缺省**。 */
+  thinking?: string;
   /** sidecar 记录首次建立时间；老会话首次被组织时也以真实建档时间为准，不反推虚构创建时刻。 */
   createdAt: string;
+  /** 本 sidecar 的最后一次写入时刻 ＝「会话平面的最后活动」的唯一真身（不另立 lastActivityAt）。 */
   updatedAt: string;
 }
 
@@ -31,24 +78,10 @@ export interface SessionMetadataRepositoryOptions {
 
 export class SessionMetadataCorruptError extends Error {
   constructor(filePath: string, reason: string) {
-    super(`会话元数据损坏，已拒绝覆盖: ${filePath} (${reason})`);
+    // 出路跟着拒因一起给：这句话会原样上屏（会话列表的失败行），只说「损坏」用户不知道下一步。
+    super(`会话元数据损坏，已拒绝覆盖: ${filePath} (${reason})——修好或删除该文件后重试`);
     this.name = "SessionMetadataCorruptError";
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isSessionId(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= MAX_SESSION_ID_LENGTH &&
-    value.trim() === value &&
-    !value.startsWith(".") &&
-    !/[\\/\u0000-\u001f\u007f]/.test(value)
-  );
 }
 
 function isProjectId(value: unknown): value is string {
@@ -59,6 +92,12 @@ function isProjectId(value: unknown): value is string {
     value.trim() === value &&
     !/[\\/\u0000-\u001f\u007f]/.test(value)
   );
+}
+
+/** 会话偏好字符串（模型 id / 思考档）：非空、去首尾空白不变、无控制字符、长度受限。 */
+export function isSessionPreferenceString(value: unknown, max: number): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= max
+    && value.trim() === value && !/[\u0000-\u001f\u007f]/.test(value);
 }
 
 function isTimestamp(value: unknown): value is string {
@@ -91,7 +130,20 @@ function validateMetadata(raw: unknown, key: string): SessionMetadataRecord {
   if (typeof raw.pinned !== "boolean") throw new Error(`sessions.${key}.pinned 非法`);
   if (typeof raw.archived !== "boolean") throw new Error(`sessions.${key}.archived 非法`);
   if (raw.projectId !== undefined && !isProjectId(raw.projectId)) throw new Error(`sessions.${key}.projectId 非法`);
+  if (raw.model !== undefined && !isSessionPreferenceString(raw.model, 200)) throw new Error(`sessions.${key}.model 非法`);
+  if (raw.thinking !== undefined && !isSessionPreferenceString(raw.thinking, 40)) throw new Error(`sessions.${key}.thinking 非法`);
   if (!isTimestamp(raw.createdAt) || !isTimestamp(raw.updatedAt)) throw new Error(`sessions.${key} 时间戳非法`);
+  // 审计字段：老记录**没有**这些字段（合法，必须原样加载且保持缺席）；有则校验。
+  if (raw.viewedAt !== undefined && !isTimestamp(raw.viewedAt)) throw new Error(`sessions.${key}.viewedAt 非法`);
+  if (raw.archivedAt !== undefined && !isTimestamp(raw.archivedAt)) throw new Error(`sessions.${key}.archivedAt 非法`);
+  if (raw.idleSince !== undefined && !isTimestamp(raw.idleSince)) throw new Error(`sessions.${key}.idleSince 非法`);
+  const resumeAttempts = raw.resumeAttempts;
+  if (
+    resumeAttempts !== undefined &&
+    (typeof resumeAttempts !== "number" || !Number.isInteger(resumeAttempts) || resumeAttempts < 0)
+  ) {
+    throw new Error(`sessions.${key}.resumeAttempts 非法`);
+  }
 
   return {
     id: raw.id,
@@ -99,6 +151,13 @@ function validateMetadata(raw: unknown, key: string): SessionMetadataRecord {
     pinned: raw.pinned,
     archived: raw.archived,
     ...(raw.projectId !== undefined ? { projectId: raw.projectId } : {}),
+    ...(raw.model !== undefined ? { model: raw.model } : {}),
+    ...(raw.thinking !== undefined ? { thinking: raw.thinking } : {}),
+    // 审计字段**原样保留缺席**：不补 0 / false / epoch 0（缺席的含义写在 SessionAuditFields 上）。
+    ...(raw.viewedAt !== undefined ? { viewedAt: raw.viewedAt } : {}),
+    ...(raw.archivedAt !== undefined ? { archivedAt: raw.archivedAt } : {}),
+    ...(raw.idleSince !== undefined ? { idleSince: raw.idleSince } : {}),
+    ...(resumeAttempts !== undefined ? { resumeAttempts } : {}),
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
   };
@@ -182,15 +241,49 @@ export class SessionMetadataRepository {
     return await this.mutate(id, (record) => ({ ...record, pinned }));
   }
 
+  /**
+   * 归档 / 取消归档（**状态位与审计时刻一起改**，不许只改一半）。
+   * 归档 ⇒ 记 `archivedAt`；取消归档 ⇒ 把 `archivedAt` **摘掉**（留着一个归档时刻却 archived=false
+   * ⇒ 两格互相矛盾）。老记录可能是 `archived=true` 而 `archivedAt` 缺席（归档时刻未记录），照实留着。
+   */
   async setArchived(id: string, archived: boolean): Promise<SessionMetadataRecord> {
     if (typeof archived !== "boolean") throw new Error(`会话 archived 非法: ${JSON.stringify(archived)}`);
-    return await this.mutate(id, (record) => ({ ...record, archived }));
+    return await this.mutate(id, (record, now) => {
+      if (!archived) {
+        const { archivedAt: _removed, ...withoutArchivedAt } = record;
+        return { ...withoutArchivedAt, archived: false };
+      }
+      return { ...record, archived: true, archivedAt: now };
+    });
   }
 
   /** 只改显示标题（第十八遍：首条消息自动命名）——id/文件名一字不动，改名走 rename 那条路。 */
   async setTitle(id: string, title: string): Promise<SessionMetadataRecord> {
     assertTitle(title);
     return await this.mutate(id, (record) => ({ ...record, title }));
+  }
+
+  /** 自动命名专用：在**单个入队操作内**完成「读当前标题 → 真标题才写」，消除外层 find（直读，
+   *  不进写队列）与并发懒建 mutate（markViewed/markActive 同拍懒建 title=id 占位记录）的竞态
+   *  （2026-11-07 判卷实锤：autoTitle 的 find 读到懒建前空态 → create 撞「已存在」→ 标题丢失）。
+   *  语义与 autoTitleFirstMessage 原三步逐字同参：已有真标题（title ≠ id）不动；占位题（= id）
+   *  换真标题；缺记录 = 懒建并落真标题（mutate 的懒建语义，非空会话不会走到这——调用方已闸）。 */
+  async ensureTitle(id: string, title: string): Promise<SessionMetadataRecord> {
+    assertSessionId(id);
+    assertTitle(title);
+    return await this.enqueue(async () => {
+      const state = await this.load();
+      const now = this.timestamp();
+      const current: SessionMetadataRecord = Object.prototype.hasOwnProperty.call(state.sessions, id)
+        ? state.sessions[id]
+        : { id, title: id, pinned: false, archived: false, createdAt: now, updatedAt: now };
+      const next: SessionMetadataRecord = current.title === id ? { ...current, title, updatedAt: now } : current;
+      if (next !== current) {
+        state.sessions[id] = next;
+        await this.persist(state);
+      }
+      return cloneMetadata(next);
+    });
   }
 
   async assignProject(id: string, projectId: string | null): Promise<SessionMetadataRecord> {
@@ -202,6 +295,85 @@ export class SessionMetadataRepository {
       }
       return { ...record, projectId };
     });
+  }
+
+  /** 会话级偏好（模型 / 思考档）。语义：undefined = 不改；null = 摘掉（回到跟随全局）。 */
+  async setPrefs(id: string, patch: { model?: string | null; thinking?: string | null }): Promise<SessionMetadataRecord> {
+    if (patch.model !== undefined && patch.model !== null && !isSessionPreferenceString(patch.model, 200)) {
+      throw new Error(`会话 model 非法: ${JSON.stringify(patch.model)}`);
+    }
+    if (patch.thinking !== undefined && patch.thinking !== null && !isSessionPreferenceString(patch.thinking, 40)) {
+      throw new Error(`会话 thinking 非法: ${JSON.stringify(patch.thinking)}`);
+    }
+    return await this.mutate(id, (record) => {
+      const next = { ...record };
+      if (patch.model !== undefined) {
+        if (patch.model === null) delete next.model; else next.model = patch.model;
+      }
+      if (patch.thinking !== undefined) {
+        if (patch.thinking === null) delete next.thinking; else next.thinking = patch.thinking;
+      }
+      return next;
+    });
+  }
+
+  // ---- 审计面（sidecar 记录，不是事件；边界见文件头）----
+
+  /**
+   * 记一次「被查看」：盖上 `viewedAt`。
+   * **缺席 = 从未被查看过**（不是「查看于 epoch 0」）：所以这是「盖一个时刻」而不是「把 0 改成 1」。
+   */
+  async markViewed(id: string): Promise<SessionMetadataRecord> {
+    return await this.mutate(id, (record, now) => ({ ...record, viewedAt: now }));
+  }
+
+  /** 记「进入空闲」：盖上 `idleSince`。**缺席 = 没有空闲记录**。 */
+  async markIdle(id: string): Promise<SessionMetadataRecord> {
+    return await this.mutate(id, (record, now) => ({ ...record, idleSince: now }));
+  }
+
+  /**
+   * 记「回到活跃」：把 `idleSince` **摘掉**。
+   * 没有这一支的话，idleSince 会永远停在那儿 ⇒ 界面会一直说「还闲着」= 谎报当前状态。
+   */
+  async markActive(id: string): Promise<SessionMetadataRecord> {
+    return await this.mutate(id, (record) => {
+      const { idleSince: _removed, ...withoutIdle } = record;
+      return withoutIdle;
+    });
+  }
+
+  /**
+   * 记一次恢复（打开）尝试：`resumeAttempts` 递增。
+   * **首次记录 = 1**（不是 0）：从 0 起数会把「刚发生过一次」记成「一次都没发生过」。
+   * 老记录（`resumeAttempts` 缺席 ＝ 未记录）第一次被记 ⇒ 写 1；从这一刻起计数器才有意义。
+   */
+  async recordResumeAttempt(id: string): Promise<SessionMetadataRecord> {
+    return await this.mutate(id, (record) => ({ ...record, resumeAttempts: (record.resumeAttempts ?? 0) + 1 }));
+  }
+
+  /**
+   * 读审计面。**缺席就是缺席**：没记录过的字段一律不出现（不补 0 / false / epoch 0）。
+   * 没有 sidecar 记录的会话 ⇒ 四个字段全缺席（＝ 从未查看 / 未归档 / 无空闲记录 / 恢复次数未知）。
+   */
+  async audit(id: string): Promise<SessionAuditFields> {
+    const record = await this.find(id);
+    if (record === undefined) return {};
+    return {
+      ...(record.viewedAt !== undefined ? { viewedAt: record.viewedAt } : {}),
+      ...(record.archivedAt !== undefined ? { archivedAt: record.archivedAt } : {}),
+      ...(record.idleSince !== undefined ? { idleSince: record.idleSince } : {}),
+      ...(record.resumeAttempts !== undefined ? { resumeAttempts: record.resumeAttempts } : {}),
+    };
+  }
+
+  /**
+   * 恢复次数：**`undefined` = 未记录（未知）**；`0` = 记过、一次都没恢复过。
+   * 这两态不许合并——把「未知」读成 0 就是把「没量到」说成「没有」。
+   */
+  async resumeAttemptsOf(id: string): Promise<number | undefined> {
+    const record = await this.find(id);
+    return record?.resumeAttempts;
   }
 
   async rename(oldId: string, newId: string, title: string = newId): Promise<SessionMetadataRecord | null> {
@@ -255,7 +427,7 @@ export class SessionMetadataRepository {
 
   private async mutate(
     id: string,
-    update: (record: SessionMetadataRecord) => SessionMetadataRecord,
+    update: (record: SessionMetadataRecord, now: string) => SessionMetadataRecord,
   ): Promise<SessionMetadataRecord> {
     return await this.enqueue(async () => {
       assertSessionId(id);
@@ -271,7 +443,9 @@ export class SessionMetadataRepository {
             createdAt: now,
             updatedAt: now,
           };
-      const next = { ...update(current), updatedAt: now };
+      // 同一笔写入里的时刻只有一个（`now` 透传给 update）：两处各取一次时钟会差一毫秒，
+      // 于是 archivedAt 与 updatedAt 互相矛盾（读的人得猜哪个是真的）。
+      const next = { ...update(current, now), updatedAt: now };
       state.sessions[id] = next;
       await this.persist(state);
       return cloneMetadata(next);

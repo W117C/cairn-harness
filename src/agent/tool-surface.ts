@@ -22,6 +22,11 @@ export const INJECTED_TOOLS: readonly InjectedToolSurface[] = [
   { name: "wait_for_agents", specFace: "static", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
   // 撤自己派出的活（能力 4 动态调整）。worker 两面都不给：让 worker 撤兄弟 = 深度恒 1 的反面。
   { name: "cancel_agents", specFace: "static", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
+  // Lifecycle controls operate on logical threads, never on another run's session runtime.
+  { name: "send_agent", specFace: "static", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
+  { name: "list_agents", specFace: "static", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
+  { name: "resume_agent", specFace: "static", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
+  { name: "close_agent", specFace: "static", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
   // 只改目标措辞、不写盘也不派活 ⇒ 不是写向；只读档也留着（长任务可以在只读档跑）
   { name: "refine_goal", specFace: "static", workerReachable: false, reachableWhenReadOnly: true, mainSessionSideEffect: false },
   { name: "remember", specFace: "static", workerReachable: "write", reachableWhenReadOnly: false, mainSessionSideEffect: false },
@@ -29,6 +34,8 @@ export const INJECTED_TOOLS: readonly InjectedToolSurface[] = [
   { name: "impact_query", specFace: "runtime", workerReachable: "both", reachableWhenReadOnly: true, mainSessionSideEffect: false },
   // 与 impact_query 同族：运行期按开关（solpiEnabled）注入，worker 面不开放
   { name: "obs_recall", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
+  // Raw current-session recall is read-only and bound to the run's own session.
+  { name: "search_history", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: true, mainSessionSideEffect: false },
   // M3 诊断工具：按「本工作区真有可诊断面」（配了 lint/test 命令）运行期注入，口径同 lsp。
   // 写向类＝true（它执行进程；测试会写缓存/产物）：只读档从模型面与执行面一起拒（gatedTool 包装），
   // 方案门挡它，沙箱降级时沙箱通道强制审批。worker 面不给：worker 已有 shell，诊断是主会话的省上下文件。
@@ -39,6 +46,18 @@ export const INJECTED_TOOLS: readonly InjectedToolSurface[] = [
   { name: "web_search", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: true, mainSessionSideEffect: false },
   // 插件 skill：实例面在 agent-runner 里 `table["skill"] =`，规格走运行期（插件装载了才有）
   { name: "skill", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },
+  // 浏览器驾驶三件（2026-11-06 业主①）：桌面注册了才注入（registerBrowserAgentTools），
+  // worker 面不给（子代理不该驾驶用户的浏览器）。navigate 与 web_fetch 同族（模型发起
+  // 外部页面加载，GOLDEN 实测对齐 web_fetch 行）；snapshot/pick 只内省已加载页面。
+  { name: "browser_navigate", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: true, mainSessionSideEffect: false },
+  { name: "browser_snapshot", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: true, mainSessionSideEffect: false },
+  { name: "browser_pick", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: true, mainSessionSideEffect: false },
+  // MCP 服务器级懒加载的三个元工具：只改 active 集，不执行外部工具 ⇒ 只读档也保留。
+  { name: "mcp_list", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: true, mainSessionSideEffect: false },
+  { name: "mcp_activate", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: true, mainSessionSideEffect: false },
+  { name: "mcp_release", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: true, mainSessionSideEffect: false },
+  // 延迟工具目录：只读检索，不激活也不执行；执行仍过 gatedMcpTool 的同一条权限门。
+  { name: "tool_search", specFace: "runtime", workerReachable: false, reachableWhenReadOnly: true, mainSessionSideEffect: false },
   // 定时任务五件（§12.2.5）：实现一直有，规格第 42 页才补上 ⇒ 登记进表，让 G-B 从此盯着这一族。
   // worker 面不给（它们已在 WORKER_FORBIDDEN_TOOLS 里）；只读档也不给（只读会话不该排下一次无人值守的写）。
   { name: "automation_create", specFace: "static", workerReachable: false, reachableWhenReadOnly: false, mainSessionSideEffect: false },

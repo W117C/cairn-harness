@@ -4,41 +4,50 @@
 // spawn_agent（非运行时报错）；worker 上下文 = task + context + 项目记忆注入，永不继承主对话。
 // 事件纪律（§4.4.9 / 任务书裁决 1）：worker 事件落主会话 JSONL（子流：agent_* + 带 agent_id 的
 // tool_call/tool_result/usage），agent_spawned 携 parent_event_id 建立血缘树；重放主流后投影一致。
+import { execFile } from "node:child_process";
+import { readFile, stat } from "node:fs/promises";
+import { join } from "node:path";
+import { promisify } from "node:util";
 import type { AgentEvent, HarnessHoldReason } from "../events";
 import { replay } from "../events";
 import type { ModelOutput, Provider } from "../providers";
 import { glmDefaultModelName, type GlmMessage, type GlmToolSpec } from "../providers/glm";
-import { envKeyOf } from "../providers/env-keys";
-import { effectiveModelTable, resolveModel, toWorkerModel, type ModelTier } from "../providers/registry";
+import { envKeyOf, providerApiKey } from "../providers/env-keys";
+import { effectiveModelTable, findSpecByNameOrId, resolveModel, type ModelTier } from "../providers/registry";
+import { toWorkerModel } from "../providers/worker-adapters";
 import { routeFor, TIER_ORDER as MODEL_TIER_ORDER } from "../routing/policy";
 import type { ToolResult } from "../tools/base";
+import { glob } from "../tools/glob";
+import { run_shell } from "../tools/run_shell";
+import { write_file } from "../tools/write_file";
+import { remember } from "../tools/remember";
 import { runLoop } from "./loop";
 import { redactEventForLog } from "../events";
 import { DELIVERY_GUARD_CALL_ID, EMPTY_RUN_DELIVERY } from "./delivery-guard";
-import { projectContext, type ContextMessage } from "./context";
-import {
-  estimateContextTokens,
-  calibrateFactor,
-  runCompaction,
-  shouldCompact,
-  type CompactionConfig,
-  type Summarizer,
-} from "./compaction";
 import {
   dependsOnCycle,
+  type FrozenStage,
+  type PluginAgentRoleDef,
+  type ResolvedPluginRole,
 } from "./sequencer";
-import { DEFAULT_STUCK_CONFIG, detectStuck, stuckActionOf, stuckObservationOf, type StuckConfig } from "./stuck";
+import { DEFAULT_STUCK_CONFIG, detectStuck, stuckActionOf, stuckObservationOf, type StuckConfig, type StuckTurn } from "./stuck";
 import { unconsumedSpawnArgs } from "./spawn-surface";
 import { respawnSpawnArgs, type RespawnArgs } from "./recovery";
 import {
+  branchForAgent,
   createWorktree,
   removeWorktree,
   worktreeDiff,
   worktreePathFor,
 } from "./worktree";
 import {
+  evaluate,
   newAutonomySession,
+  scopeKey,
   type AskScope,
+  type AutonomySession,
+  type EvaluateDecision,
+  type PermissionRule,
   type RiskLevel,
 } from "../permissions";
 import { frozenJudgePathSet } from "../frozen";
@@ -46,15 +55,17 @@ import { frozenJudgePathSet } from "../frozen";
 // 常量与纯函数按职责抽到同级轻模块（同 provider-key-inject 的先例：抽实现、原路径留公开面，
 // importer 与变异锚点不必跟着改）。本地引用走 import，公开面由文件尾的 re-export 维持逐字不变。
 import { ApprovalsChainsSupervise } from "./orchestrator-approvals";
+import { createWorkerProvider } from "./worker-runtime";
+import { WorkerFinish } from "./worker-finish";
 import { BudgetCascadeBandit } from "./orchestrator-budget";
 import { WorkerMergeReview } from "./worker-merge";
-import { MAX_CONCURRENT_WORKERS, READ_MODE_MAX_TURNS, SPAWN_MODES, workerBudgetConfig, workerToolTable } from "./orchestrator-config";
-import { workerToolSpecs } from "./worker-shell-tools";
+import { MAX_CONCURRENT_WORKERS, READ_MODE_MAX_TURNS, SPAWN_MODES, WORKER_TOOL_TABLE, WRITE_WORKER_TOOL_TABLE, workerBudgetConfig, workerToolTable } from "./orchestrator-config";
+import { shell_rw, workerToolSpecs } from "./worker-shell-tools";
 import { clampTier, clipWorkerSummary, isPermissionMode, parseSpawnedAgentId, scanModelOutput, workerVerificationEvidence } from "./worker-report";
 import { priceForModel, priceTagText, spentUsdFor, type JoinPayloadBody, type WorkerPrice } from "./orchestrator-join";
 import { WorkerCancelled, defaultWorkerModel, isScriptedModel, usageNameOf, type WorkerModel } from "./worker-model";
-import { type OrchestratorOptions, type PipelineChain, type SpawnArgs, type StageRoleResolution, type WorkerHandle } from "./orchestrator-types";
-import { filterWorkerSpecs, filterWorkerTable, parseStringList, parseWorkerContext, withAgentId } from "./worker-projection";
+import { workerThreadFields, type OrchestratorOptions, type PipelineChain, type SpawnArgs, type StageRoleResolution, type WorkerContext, type WorkerHandle } from "./orchestrator-types";
+import { filterWorkerSpecs, filterWorkerTable, parseStringList, parseWorkerContext, scanStreamEvent, withAgentId } from "./worker-projection";
 import { globIntersects, semanticConflictsVia } from "./lease-conflicts";
 import { findToolCallEventId } from "./call-id-index";
 import { buildWorkerSystemMessages, lastAssistantText } from "./worker-prompt";
@@ -75,6 +86,13 @@ function nextAgentId(): string {
   return "worker-" + String(++globalAgentSeq);
 }
 
+/** 进程内仍归属某个编排器的 agent id：运行中（`agentOwners`）或待合并/待清理（`mergeOwners`）。
+ *  给孤儿 worktree 扫描用：目录是 workspace 级，事件流是 session 级——多会话共用一个 workspace 时，
+ *  另一会话**正在跑**或**刚跑完还没合并**的 worker 在当前会话日志里没有终态，不能因此被判成可清理。 */
+export function ownedWorktreeAgentIds(): string[] {
+  return [...new Set([...agentOwners.keys(), ...mergeOwners.keys()])];
+}
+
 export function orchestratorForAgent(agentId: string): Orchestrator | null {
   return agentOwners.get(agentId) ?? null;
 }
@@ -83,12 +101,32 @@ export function orchestratorForApproval(approvalId: string): Orchestrator | null
   return approvalOwners.get(approvalId) ?? null;
 }
 
+/** 一次 git 调用（只给「重派基线复位」用；worktree 面的其余纪律仍在 worktree.ts）。 */
+const execFileP = promisify(execFile);
+
 /** 合并控制塔路由（§4.3：批准合并是唯一写主分支通道；路由面只给 card_action 协议，不给任何工具表）。 */
 export function orchestratorForMerge(agentId: string): Orchestrator | null {
   return mergeOwners.get(agentId) ?? null;
 }
 
 // ---- 编排器 ----
+
+/** 崩溃恢复重派带回来的基线三件（worktree / 基线提交 / 归因模型）。
+ *
+ *  走**模型可见参数面之外**的通道（ctx），不进 `SpawnArgs`：那面的闸（`unconsumedSpawnArgs`）把
+ *  不在 `SPAWN_ARG_KEYS` 里的键判成 unknown ⇒ 这三个键一旦回到模型可见参数面，重派会被整条拒掉
+ *  （2026-10-19 那次修法的由来：宁可丢参数也要让重派跑得起来）。那一面不能动，这三个字段又不能丢
+ *  ⇒ 只能走 ctx 这条内部通道：重派 worker 接着原派活基线、接着原归因模型。
+ *
+ *  字段来源：`RespawnArgs`（恢复卡载荷，`respawnArgsFrom` 从 `agent_spawned` 逐字取）⇒ 对外形状不变。 */
+export interface RecoveryBaseline {
+  /** 崩溃 worker 的 worktree（主 checkout 根相对路径）。 */
+  worktree?: string;
+  /** 崩溃 worker 的派活基线提交（重派 worker 的 diff 比对面）。 */
+  base_commit?: string;
+  /** 崩溃 worker 的归因模型名（token 成本归因键）。 */
+  usage_model?: string;
+}
 
 export class Orchestrator {
   private seq = 0;
@@ -128,6 +166,10 @@ export class Orchestrator {
   private readonly deferredSpawns = new Map<string, { callId: string; args: SpawnArgs; dependsOn: string[] }>();
   /** pipeline 链（callId → 链状态；stages 批准后冻结，重复请求 = 变更请求被拒）。 */
   private readonly chains = new Map<string, PipelineChain>();
+  /** `waitAll` 的空闲等待者：worker 的 `closed` 全部翻真时同步放行，替代 25ms 轮询。 */
+  private readonly idleWaiters = new Set<() => void>();
+  /** 终态收束箱：构造期注入活引用与跨模块回调（见 worker-finish.ts）。 */
+  private wf!: WorkerFinish;
 
   constructor(opts: OrchestratorOptions) {
     this.approvalTimeoutMs = opts.approvalTimeoutMs ?? 120_000;
@@ -138,16 +180,24 @@ export class Orchestrator {
     this.opts = {
       ...opts,
       emit: async (e: AgentEvent) => {
-        if (e.type === "usage") {
-          this.sessionUsage.inputTokens += e.inputTokens;
-          this.sessionUsage.outputTokens += e.outputTokens;
-          // 带 agent_id 的是 worker 子流（各自有档位，按 handle 上的真价单独成桶）
-          if (e.agent_id === undefined) {
-            this.mainUsage.inputTokens += e.inputTokens;
-            this.mainUsage.outputTokens += e.outputTokens;
+        let event = e;
+        if (event.type === "agent_spawned" || event.type === "agent_status" ||
+            event.type === "agent_message" || event.type === "agent_result") {
+          const worker = this.workers.get(event.agent_id);
+          if (worker !== undefined) {
+            event = { ...workerThreadFields(worker), ...event } as AgentEvent;
           }
         }
-        await rawEmit(e);
+        if (event.type === "usage") {
+          this.sessionUsage.inputTokens += event.inputTokens;
+          this.sessionUsage.outputTokens += event.outputTokens;
+          // 带 agent_id 的是 worker 子流（各自有档位，按 handle 上的真价单独成桶）
+          if (event.agent_id === undefined) {
+            this.mainUsage.inputTokens += event.inputTokens;
+            this.mainUsage.outputTokens += event.outputTokens;
+          }
+        }
+        await rawEmit(event);
       },
     };
     // A 簇状态基座：三份**活引用**（上面的 emit 包装照旧在原地累加 usage）+ 窄 opts 面 + 收尾回调。
@@ -209,6 +259,24 @@ export class Orchestrator {
       markAgentOwner: (agentId) => agentOwners.set(agentId, this),
       runWorker: (w) => this.runWorker(w),
       releaseWorkerMemory: (w) => this.releaseWorkerMemory(w),
+      rootSignal: this.root.signal, // 评审重启消费（B3 同族：拒绝已取消会话的重启 + 重挂监听）
+    });
+    this.wf = new WorkerFinish({
+      emit: this.opts.emit,
+      workspace: this.opts.workspace,
+      rootSignal: this.root.signal,
+      safeMode: this.safeMode,
+      pendingApprovals: this.pendingApprovals,
+      diffVersions: this.diffVersions,
+      wmr: this.wmr,
+      rewardBandit: (w, status) => this.rewardBandit(w, status),
+      subagentHook: (w, event) => this.subagentHook(w, event),
+      resolveTerminalWaiters: (id, status, result) => this.resolveTerminalWaiters(id, status, result),
+      resolveDependents: (id, status) => this.resolveDependents(id, status),
+      notifyIdleIfIdle: () => this.notifyIdleIfIdle(),
+      dropAgentOwner: (id) => agentOwners.delete(id),
+      dropApprovalOwner: (id) => approvalOwners.delete(id),
+      hasMergeOwner: (id) => mergeOwners.has(id),
     });
   }
 
@@ -261,7 +329,7 @@ export class Orchestrator {
 
   /** spawn_agent 工具体（loop 经 TOOLS 注入调用；验收脚本可携 ctx.callId 直调）。
    *  M3c：pipeline mode = 哑 sequencer（一个审批授权全链，零 LLM 展开）；depends_on 事件驱动依赖链。 */
-  async spawn(args: SpawnArgs, ctx: { callId?: string }): Promise<ToolResult> {
+  async spawn(args: SpawnArgs, ctx: { callId?: string; recovery?: RecoveryBaseline; threadId?: string; fence?: string }): Promise<ToolResult> {
     const mode = typeof args.mode === "string" ? args.mode : "";
     if (!SPAWN_MODES.includes(mode)) {
       // 取值清单取自事实源：写死 "read|write|pipeline" 时 supervise 早已在册，
@@ -337,7 +405,12 @@ export class Orchestrator {
    *  `RespawnArgs` 里没有 `depends_on`（依赖链已断），所以展开不会把不该带上的参数带进来。 */
   async respawn(args: RespawnArgs, ctx: { callId?: string } = {}): Promise<ToolResult> {
     // 只转 spawn_agent 真正接受的顶层参数（见 respawnSpawnArgs 的注释：旧实现对真实 worker 必拒）。
-    return await this.spawn(respawnSpawnArgs(args), ctx);
+    // 基线三件（worktree / 基线提交 / 归因模型）**不走**模型可见参数面（那面会把它们判成 unknown 键
+    // ⇒ 整条重派被拒），走 ctx 这条内部通道：`RespawnArgs` 的对外形状一个字不变。
+    const carried = args.worktree !== undefined || args.base_commit !== undefined || args.usage_model !== undefined
+      ? { worktree: args.worktree, base_commit: args.base_commit, usage_model: args.usage_model }
+      : undefined;
+    return await this.spawn(respawnSpawnArgs(args), carried === undefined ? ctx : { ...ctx, recovery: carried });
   }
 
   /** M5c Best-of-N 竞争编排（§m5-proposal 步骤 12）：N 个候选并行，judge 命中即早停取消其余。
@@ -384,30 +457,46 @@ export class Orchestrator {
       }
       agentIds.push(id);
     }
-    // 竞速：等 agent_result 到达，judge 命中即早停（取消其余候选，返回胜者）
-    const deadline = Date.now() + this.raceDeadlineMs;
-    const winners: Array<Extract<AgentEvent, { type: "agent_result" }>> = [];
-    while (Date.now() < deadline) {
-      if (this.root.signal.aborted) break; // 审查 S2-8：主会话已取消就不再空转竞速轮（旧实现最坏再等满 120s）
-      const log = await replay(this.opts.logPath).catch(() => [] as AgentEvent[]);
-      for (const id of agentIds) {
-        const done = log.find(
-          (e: AgentEvent): e is Extract<AgentEvent, { type: "agent_result" }> =>
-            e.type === "agent_result" && e.agent_id === id && !winners.some((w) => w.agent_id === id),
-        );
-        if (done) {
-          winners.push(done);
-          if (judge(done)) {
-            for (const other of agentIds) if (other !== id) this.cancelAgent(other); // 早停：取消其余
-            return {
-              ok: true,
-              output: JSON.stringify({ race: true, picked: id, candidates: agentIds, early_stop: true }),
-            };
-          }
+    // 竞速：事件驱动等候选终态到达（复用 terminalWaiters，避免每 25ms 全量读盘解析 JSONL；
+    // 同时修复候选被取消时不落 agent_result 导致旧轮询空转满 120s 的隐患），judge 命中即早停。
+    if (!this.root.signal.aborted) {
+      const picked = await new Promise<string | null>((resolve) => {
+        let settled = 0;
+        let finished = false;
+        const done = (winner: string | null): void => {
+          if (finished) return;
+          finished = true;
+          clearTimeout(timer);
+          this.root.signal.removeEventListener("abort", onAbort);
+          resolve(winner);
+        };
+        const onAbort = (): void => done(null);
+        const timer = setTimeout(() => done(null), this.raceDeadlineMs);
+        timer.unref?.();
+        this.root.signal.addEventListener("abort", onAbort, { once: true });
+        if (agentIds.length === 0) {
+          done(null);
+          return;
         }
+        for (const id of agentIds) {
+          void this.acs.waitForAgentTerminal(id).then(({ result }) => {
+            if (finished) return;
+            settled += 1;
+            if (result !== null && judge(result)) {
+              done(id);
+              return;
+            }
+            if (settled >= agentIds.length) done(null);
+          });
+        }
+      });
+      if (picked !== null) {
+        for (const other of agentIds) if (other !== picked) this.cancelAgent(other); // 早停：取消其余
+        return {
+          ok: true,
+          output: JSON.stringify({ race: true, picked, candidates: agentIds, early_stop: true }),
+        };
       }
-      if (agentIds.length > 0 && winners.length >= agentIds.length) break; // 全收敛且无 judge 命中
-      await new Promise((resolve) => setTimeout(resolve, 25));
     }
     // 审查 S2-9：超时 / 全收敛无命中 / 主会话取消 —— 退出竞速前一律收杀未终态候选。
     // 旧实现直接 return 失败，被判负与未收敛的 worker 继续在后台跑（占并发预算、烧 token，
@@ -457,7 +546,8 @@ export class Orchestrator {
   private spawnReserve = 0;
 
   /** spawn 内核入口（模型面与 sequencer 逐环共用；stageRole 只由 sequencer 代码注入）。 */
-  private async spawnInternal(args: SpawnArgs, ctx: { callId?: string; cascadeFrom?: ModelTier }, task: string, stageRole?: StageRoleResolution): Promise<ToolResult> {
+  private async spawnInternal(args: SpawnArgs, ctx: { callId?: string; cascadeFrom?: ModelTier; recovery?: RecoveryBaseline; threadId?: string; fence?: string }, task: string, stageRole?: StageRoleResolution): Promise<ToolResult> {
+    const mode = typeof args.mode === "string" ? args.mode : "";
     // H2（审查 B-3）：入口 fail-closed——主会话已取消时不再派发任何 worker
     //（addEventListener 对已 abort 的 signal 不会触发，靠入口检查补上取消窗口）。
     if (this.root.signal.aborted) {
@@ -481,7 +571,7 @@ export class Orchestrator {
   /** spawn 预留段（占位后执行）。B2（审查）：read-only 父会话不允许派 write worker——
    *  worker 有效权限 ≤ 父（§11.7.6）：write worker 文件面/shell 面恒 auto，read-only 父放行
    *  等于把只读会话变成可写（permission_mode 记 read-only 实写 auto 的记录失真一并消除）。 */
-  private async spawnReserved(args: SpawnArgs, ctx: { callId?: string; cascadeFrom?: ModelTier }, task: string, stageRole?: StageRoleResolution): Promise<ToolResult> {
+  private async spawnReserved(args: SpawnArgs, ctx: { callId?: string; cascadeFrom?: ModelTier; recovery?: RecoveryBaseline; threadId?: string; fence?: string }, task: string, stageRole?: StageRoleResolution): Promise<ToolResult> {
     const mode = typeof args.mode === "string" ? args.mode : "";
     if (mode === "write" && this.opts.parentMode === "read-only") {
       return { ok: false, output: "spawn_agent: 父会话为 read-only 档，不允许派 write worker（worker 权限 ≤ 父会话，§11.7.6）" };
@@ -544,21 +634,29 @@ export class Orchestrator {
     //    在 routeDecision 非空时永不成立 → 无凭据也照派 worker，第一跳 401 才死
     //    （白烧一轮 + 占并发预算 + 留一条必败 worker 记录）。现在同样要求凭据。
     const routedSpec = !this.opts.modelFor && routeDecision ? resolveModel(effectiveModelTable(), routeDecision.picked) : null;
+    const fallbackSpec = !this.opts.modelFor && !routedSpec ? (this.opts.defaultModelSpec ?? null) : null;
+    const effectiveSpec = routedSpec ?? fallbackSpec;
     const model = this.opts.modelFor
       ? this.opts.modelFor(args)
       : routedSpec
         ? toWorkerModel(routedSpec, this.opts.promptCache === true ? { promptCache: true } : {})
-        : undefined;
+        : fallbackSpec
+          ? toWorkerModel(fallbackSpec, this.opts.promptCache === true ? { promptCache: true } : {})
+          : undefined;
     // 凭据按**选中的 provider** 判：旧实现硬编码 CAIRN_API_KEY ⇒ 只配 ANTHROPIC_API_KEY 时
     // 路由到 anthropic 档位会被判「无凭据」；反之只有 GLM key 时又放行一个必败 worker。
-    const routedProviderId = routedSpec?.provider ?? "glm";
+    // 未开路由时若有父会话 defaultModelSpec，同样按父会话 provider 核验凭据并复用该家传输面。
+    const routedProviderId = effectiveSpec?.provider ?? "glm";
     const routedEnvName = envKeyOf(routedProviderId);
-    const hasRoutedCredential = routedEnvName !== null && process.env[routedEnvName] !== undefined;
+    const hasRoutedCredential = providerApiKey(routedProviderId) !== undefined;
     if (!model && !hasRoutedCredential) {
       return { ok: false, output: `spawn_agent: 无可用模型（无 ${routedEnvName ?? "provider"} 凭据且未接 modelFor；fail-closed 不造必败 worker）` };
     }
     if (routeDecision && !this.opts.modelFor && !hasRoutedCredential) {
       return { ok: false, output: `spawn_agent: 路由路径需要 ${routedEnvName ?? "provider"} 凭据（无注入模型且无凭据；fail-closed 不造必败 worker）` };
+    }
+    if (fallbackSpec && !this.opts.modelFor && !hasRoutedCredential) {
+      return { ok: false, output: `spawn_agent: 无可用模型（无 ${routedEnvName ?? "provider"} 凭据且未接 modelFor；fail-closed 不造必败 worker）` };
     }
     // W3②「价格标签」：worker 的钱此前只喂 bandit（rewardBandit 里算完即丢），派工时模型看不到单价、
     // 收队时看不到花了多少、终态里也没有机器可读的花费。档位以路由决策为准；没路由时 worker 走
@@ -574,6 +672,14 @@ export class Orchestrator {
       // 旧实现里没有第一档，而 `modelFor` 注入时 `routedSpec` 被强制成 null ⇒ 注入的模型无论拨谁都记成缺省那一档
       // （第 148 页点名的盲区）。只剩"注入且没自述名"这一格仍落缺省档，那是诚实的：注入方是缺省那一路的替身。
       usageModel = usageNameOf(model) || routedSpec?.model || glmDefaultModelName();
+      price = priceForModel(usageModel, routeDecision?.picked);
+    }
+    // 崩溃恢复重派：归因模型**带走**原 worker 那一档，不按此刻的解析重算——重派发生在崩溃之后，
+    // 此刻的模型解析可能已经变了（路由/级联/注入面），重算就把这笔重试的成本记到别的模型名下
+    // （登记缺陷：崩溃恢复重派丢 usage_model ⇒ token 成本无模型归属）。
+    // 剧本通道原 worker 本来就不落 usage_model ⇒ 没有可带的东西，这里也就什么都不改。
+    if (ctx.recovery?.usage_model !== undefined) {
+      usageModel = ctx.recovery.usage_model;
       price = priceForModel(usageModel, routeDecision?.picked);
     }
     const requested = isPermissionMode(args.tier) ? args.tier : this.opts.parentMode;
@@ -602,7 +708,14 @@ export class Orchestrator {
         if (!approved) {
           return { ok: false, output: "spawn_agent: 未获批准（写租约相交未强行批准：" + detail + "）" };
         }
-        await this.opts.emit({ type: "agent_message", agent_id: agentId, kind: "progress", text: "[lease] 租约相交但已强行批准：" + detail } as AgentEvent);
+        await this.opts.emit({
+          type: "agent_message",
+          agent_id: agentId,
+          ...(ctx.threadId !== undefined ? { thread_id: ctx.threadId } : {}),
+          ...(ctx.fence !== undefined ? { fence: ctx.fence } : {}),
+          kind: "progress",
+          text: "[lease] 租约相交但已强行批准：" + detail,
+        } as AgentEvent);
       }
     }
 
@@ -621,11 +734,37 @@ export class Orchestrator {
       } catch (err) {
         return { ok: false, output: "spawn_agent: worktree 创建失败（fail-visible，未造半成品 worker）：" + (err instanceof Error ? err.message : String(err)) };
       }
+      // ---- 崩溃恢复重派：语义②「新树，但基于原 base_commit 起」----
+      // 新树的 HEAD 拨回原派活基线 ⇒ 重派 worker 的 diff 仍比**原基线**（不是比"此刻的 HEAD"）：
+      // 崩溃期间别人推的提交不会混进这次 worker 的 diff（登记缺陷：重派 worker 的 diff 比错基线）。
+      // 崩溃 worker 那棵旧树不续用（它进孤儿列表，语义与恢复卡的文案一致：旧 worktree 走孤儿列表、
+      // 可清理、不自动删）⇒ 重派是"从原基线重来一遍"，不是"在半截树上接着写"。
+      //
+      // 归宿说明：git 纪律的单一事实源在 worktree.ts，把「基线可指定」做成 createWorktree 的参数才是
+      // 正解（待收口）；这里只借一次 reset，不复制 worktree.ts 的其余纪律。失败即 fail-visible：
+      // 宁可这次重派不派发，也不派一个"基线对不上"的 worker。
+      const carriedBase = ctx.recovery?.base_commit;
+      if (carriedBase !== undefined && worktree !== undefined) {
+        try {
+          await execFileP("git", ["-C", join(this.opts.workspace, worktree), "reset", "--hard", carriedBase]);
+        } catch (err) {
+          return {
+            ok: false,
+            output:
+              "spawn_agent: 重派基线复位失败（fail-visible，不派发比错基线的 worker）：" +
+              (err instanceof Error ? err.message : String(err)),
+          };
+        }
+        baseCommit = carriedBase;
+      }
     }
 
     const parentEventId = ctx.callId ? await findToolCallEventId(this.opts.logPath, ctx.callId) : 0;
     const handle: WorkerHandle = {
       agentId,
+      ...(ctx.threadId !== undefined ? { threadId: ctx.threadId } : {}),
+      ...(ctx.fence !== undefined ? { fence: ctx.fence } : {}),
+      followUpMessageIds: new Set(),
       spawnCallId: ctx.callId ?? "",
       mode: mode as "read" | "write",
       task,
@@ -701,6 +840,7 @@ export class Orchestrator {
     const spawned: AgentEvent = {
       type: "agent_spawned",
       agent_id: agentId,
+      ...workerThreadFields(handle),
       parent_event_id: parentEventId,
       mode: mode as "read" | "write",
       task,
@@ -736,7 +876,12 @@ export class Orchestrator {
         } as AgentEvent);
       }
       await this.opts.emit(spawned);
-      await this.opts.emit({ type: "agent_status", agent_id: agentId, status: "running" } as AgentEvent);
+      await this.opts.emit({
+        type: "agent_status",
+        agent_id: agentId,
+        ...workerThreadFields(handle),
+        status: "running",
+      } as AgentEvent);
     } catch (err) {
       // 落流失败 = spawn 未成立：write worker 的 worktree 必须回收（不留孤儿）
       if (mode === "write") await removeWorktree(this.opts.workspace, agentId, { branch }).catch(() => {});
@@ -752,14 +897,27 @@ export class Orchestrator {
       handle.finished = true;
       handle.closed = true;
       handle.controller.abort();
+      this.notifyIdleIfIdle();
       return { ok: false, output: "spawn_agent: 事件落流失败，已回滚：" + (err instanceof Error ? err.message : String(err)) };
     }
     for (const w2 of symlinkWarnings) {
-      await this.opts.emit({ type: "agent_message", agent_id: agentId, kind: "progress", text: "[worktree] " + w2 } as AgentEvent);
+      await this.opts.emit({
+        type: "agent_message",
+        agent_id: agentId,
+        ...workerThreadFields(handle),
+        kind: "progress",
+        text: "[worktree] " + w2,
+      } as AgentEvent);
     }
     // M3c 插件角色 frontmatter 警告（hooks/mcpServers/permissionMode 忽略 + 警告，§9.6）落 worker 子流
     for (const w3 of stageRole?.warnings ?? []) {
-      await this.opts.emit({ type: "agent_message", agent_id: agentId, kind: "progress", text: "[role] " + w3 } as AgentEvent);
+      await this.opts.emit({
+        type: "agent_message",
+        agent_id: agentId,
+        ...workerThreadFields(handle),
+        kind: "progress",
+        text: "[role] " + w3,
+      } as AgentEvent);
     }
     void this.runWorker(handle).catch(() => {}); // 失败隔离：worker 边界永不炸主 loop（双保险，runWorker 内已 catch-all）
     return {
@@ -828,6 +986,39 @@ export class Orchestrator {
     }
     w.controller.abort();
     return true;
+  }
+
+  /** Append one idempotent parent follow-up at the next worker turn boundary. */
+  async followUp(
+    agentId: string,
+    messageId: string,
+    text: string,
+    threadId?: string,
+    fence?: string,
+  ): Promise<{ ok: boolean; duplicate?: boolean; reason?: string }> {
+    const w = this.workers.get(agentId);
+    if (!w) return { ok: false, reason: "unknown worker" };
+    if (w.finished) return { ok: false, reason: "worker already reached a terminal state" };
+    if (fence !== undefined && w.fence !== undefined && fence !== w.fence) {
+      return { ok: false, reason: "stale fence" };
+    }
+    if (threadId !== undefined && w.threadId !== undefined && threadId !== w.threadId) {
+      return { ok: false, reason: "thread identity mismatch" };
+    }
+    if (w.followUpMessageIds.has(messageId)) return { ok: true, duplicate: true };
+    if (text.trim() === "") return { ok: false, reason: "follow-up text is empty" };
+    await this.opts.emit({
+      type: "agent_message",
+      agent_id: agentId,
+      ...workerThreadFields(w),
+      message_id: messageId,
+      direction: "to_agent",
+      kind: "progress",
+      text,
+    } as AgentEvent);
+    w.events.push({ type: "user_message", content: text });
+    w.followUpMessageIds.add(messageId);
+    return { ok: true };
   }
 
   /** 仍在途（未终态）的 agent_id 清单。给模型面用：回执报"手上还有几个"，拒绝语报"哪些才是真的"。 */
@@ -946,7 +1137,12 @@ export class Orchestrator {
     w.pauseWaiters.length = 0;
     for (const fn of waiters) fn();
     this.armStuckSilence(w); // 重新武装静默计时
-    void this.opts.emit({ type: "agent_status", agent_id: agentId, status: "running" } as AgentEvent).catch(() => {});
+    void this.opts.emit({
+      type: "agent_status",
+      agent_id: agentId,
+      ...workerThreadFields(w),
+      status: "running",
+    } as AgentEvent).catch(() => {});
     return true;
   }
 
@@ -990,10 +1186,20 @@ export class Orchestrator {
     if (w.stuckActive || w.finished || w.controller.signal.aborted) return;
     w.stuckActive = true;
     w.paused = true;
-    await this.opts.emit({ type: "agent_status", agent_id: w.agentId, status: "waiting_input", reason: "stuck" } as AgentEvent);
+    await this.opts.emit({
+      type: "agent_status",
+      agent_id: w.agentId,
+      ...workerThreadFields(w),
+      status: "waiting_input",
+      reason: "stuck",
+    } as AgentEvent);
     await this.opts.emit({
       type: "agent_message",
       agent_id: w.agentId,
+      // 线程装饰由构造器 emit 包装器统一补（agent_message 属装饰族）；这里的明写与同族出口对齐，
+      // 判卷钉住的是包装器的保证（变异核对：摘掉本行仍绿 = 装饰确实在中央出口）。
+      ...workerThreadFields(w),
+      // 线程化会话里这条卡片会脱离 worker 线程（投影按 thread_id 分组），同族出口各抄一份的形状。
       kind: "progress",
       text: "[stuck] 疑似卡死：" + detail + "。人决定：继续（resume 清除卡死态）或取消（既有取消链）。worker 已在事件边界暂停。",
     } as AgentEvent);
@@ -1026,11 +1232,30 @@ export class Orchestrator {
     }
   }
 
+  /** 只在最后一个活跃 worker 的 `closed` 翻真时放行 `waitAll`；超时仍按既有契约静默返回。 */
+  private notifyIdleIfIdle(): void {
+    if (this.activeCount() !== 0) return;
+    for (const wake of [...this.idleWaiters]) wake();
+  }
+
   async waitAll(timeoutMs = 30_000): Promise<void> {
-    const deadline = Date.now() + timeoutMs;
-    while (this.activeCount() > 0 && Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, 25));
-    }
+    if (this.activeCount() === 0) return;
+    await new Promise<void>((resolve) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const done = (): void => {
+        if (timer !== undefined) clearTimeout(timer);
+        this.idleWaiters.delete(done);
+        resolve();
+      };
+      this.idleWaiters.add(done);
+      // 登记后复查：消除「检查 activeCount → 登记 waiter」之间 worker 已收队而无人通知的缝。
+      if (this.activeCount() === 0) {
+        done();
+        return;
+      }
+      timer = setTimeout(done, Math.max(0, timeoutMs));
+      timer.unref?.();
+    });
   }
 
   // ---- 内部：worker 运行体 ----
@@ -1045,7 +1270,6 @@ export class Orchestrator {
       // §9.5 SubagentStart：matcher 字段 = agent 类型；stdout 的 additionalContext 必须进 worker 的
       // system 块——只发事件不接回执，就是本面点过多次的「收下即丢」。
       const startContext = await this.subagentHook(w, "SubagentStart");
-      const system = await buildWorkerSystemMessages(w, this.opts.workspace, startContext); // 记忆注入恒读主 checkout（裁决 2）
       // M3c：插件角色工具面裁剪（frontmatter.tools 白名单 − disallowedTools；裁剪后必须非空）
       // M7：影响面读端三处同源（规格 / 实例 / loop 白名单），开关关着时一处都不加 ⇒ 零行为。
       const impactOn = this.opts.impactAnalysis === true;
@@ -1056,6 +1280,23 @@ export class Orchestrator {
       });
       const table = filterWorkerTable(w, baseTable);
       const specs = filterWorkerSpecs(w, workerToolSpecs(w.mode, { impactAnalysis: impactOn }));
+      // Evolve 起点注记：按 worker 的任务面取 active 经验，排在记忆之后、任务书之前。
+      // 读不动/抛错只出声——worker 不能因为经验面读账失败而起不来。
+      let experienceNote = "";
+      if (this.opts.workerExperienceNote !== undefined) {
+        try {
+          experienceNote = await this.opts.workerExperienceNote({
+            agentId: w.agentId,
+            task: w.task,
+            mode: w.mode,
+            toolNames: specs.map((spec) => spec.function.name),
+          });
+        } catch (err) {
+          console.warn("[evolve] worker 经验注记失败（不影响 worker）: "
+            + (err instanceof Error ? err.message : String(err)));
+        }
+      }
+      const system = await buildWorkerSystemMessages(w, this.opts.workspace, startContext, experienceNote); // 记忆注入恒读主 checkout（裁决 2）
       const provider = createWorkerProvider({
         readEvents: () => w.events,
         system,
@@ -1102,7 +1343,24 @@ export class Orchestrator {
         signal: w.controller.signal,
         agentId: w.agentId,
         ...(workerHooks ? { hooks: workerHooks } : {}),
-        ...(workerVerify ? { verify: workerVerify, autoVerify: true } : {}),
+        ...(workerVerify
+          ? {
+              verify: workerVerify,
+              autoVerify: true,
+              ...(this.opts.workerAutoVerifyRepair === true ? { autoVerifyRepair: true } : {}),
+            }
+          : {}),
+        ...(this.opts.workerExperienceNudge !== undefined
+          ? {
+              experienceNudge: (signals: readonly string[]) => this.opts.workerExperienceNudge!({
+                agentId: w.agentId,
+                task: w.task,
+                mode: w.mode,
+                toolNames: specs.map((spec) => spec.function.name),
+                signals,
+              }),
+            }
+          : {}),
       });
       // loop 可以在取消后正常返回；终态看信号，不能只靠 catch 判断取消。
       if (w.controller.signal.aborted) {
@@ -1208,34 +1466,19 @@ export class Orchestrator {
     }
   }
 
+  /** 终态收束漏斗：finishInner 的整箱实现住在 worker-finish.ts，
+   *  奖励回灌 / SubagentStop / 异常时放行等待方 / closed 通知留在编排器本体——
+   *  这四处是跨模块生命周期契约，也是既有变异锚点盯的落点。 */
   private async finish(w: WorkerHandle, status: "done" | "failed" | "cancelled", reason?: string): Promise<void> {
     try {
-      await this.finishInner(w, status, reason);
-      // M5b 步骤 9：终态事件已落流 → 回灌奖励（学习侧信道：best-effort，内部自吞错误，不阻断收束）
+      await this.wf.finishInner(w, status, reason);
       await this.rewardBandit(w, status);
-      // §9.5 SubagentStop：排在终态事件全部落流之后——审计型钩子要读得到这份产出。
-      // 位置即「每 worker 恰好一次」：三条调用路（done/failed/cancelled）互斥，
-      // 且 finishInner 有 w.finished 幂等闸兜住重入；w.closed 尚未置真，进程不会在钩子中途退出。
       await this.subagentHook(w, "SubagentStop");
     } catch (err) {
-      // 收尾中途抛（emit 落盘失败 / 窗口已销毁 / diff 流水炸）⇒ lastResult 再也挂不上来。
-      // 必须放行等待方与后环，否则这是一次**永挂**：finished 已真 → cancelAgent 拒绝、
-      // finishInner 幂等闸短路，而 waitForAgentTerminal 没有超时。判它 failed（拿不出终态
-      // 产出就是没过），并把错误照旧上抛给 runWorker 的 catch-all——不新增吞错误的路。
       if (!w.terminalResolved) {
         w.terminalResolved = true;
-        // **终态要改口**（2026-10-19 独立评审追出的 HIGH）：`finishInner` 在发 done 之前就把
-        // `w.terminalStatus = "done"` 盖上了；`emit(doneResult)` 一抛（磁盘满 / 事件形状非法），
-        // 后面那几行（lastResult / terminalResolved / resolveTerminalWaiters）全被跳过 ⇒
-        // ① 终态仍读成 "done" ⇒ 父会话拿到 `{"status":"done","summary":""}` ——
-        //    **一句"成功但没有产出"的谎**（那正是 terminal-sync-window 那组判据要防的东西）；
-        // ② 耐久日志里只有 agent_status:done、没有 agent_result ⇒ 重启后 interruptedWorkers
-        //    看见终态就返回 [] ⇒ 永远补不上 failed(interrupted) ⇒ 僵尸 worker；
-        // ③ `agentOwners` 与内存回收（下面两行）被跳过 ⇒ 路由表里永远留着这个 agent
-        //    ⇒ 崩溃恢复的过滤器（`orchestratorForAgent(id) === null`）跳过它 ⇒ 救不回来。
-        // 这里把三样都补齐：终态改口成 failed、路由表摘掉、内存回收照做。
         w.terminalStatus = "failed";
-        w.lastResult = undefined; // 拿不出产出就是没有产出（不装一份空报告）
+        w.lastResult = undefined;
         this.resolveTerminalWaiters(w.agentId, "failed", null);
         this.resolveDependents(w.agentId, "failed");
         agentOwners.delete(w.agentId);
@@ -1246,172 +1489,15 @@ export class Orchestrator {
       throw err;
     } finally {
       w.closed = true;
+      this.notifyIdleIfIdle();
     }
   }
 
-  private async finishInner(w: WorkerHandle, status: "done" | "failed" | "cancelled", reason?: string): Promise<void> {
-    if (w.finished) return;
-    w.finished = true;
-    w.closed = false;
-    w.terminalStatus = status;
-    if (w.stuckTimer !== null) {
-      clearTimeout(w.stuckTimer);
-      w.stuckTimer = null;
-    }
-    for (const [id, p] of this.pendingApprovals) {
-      if (p.agentId === w.agentId) {
-        clearTimeout(p.timer);
-        p.cleanup?.();
-        approvalOwners.delete(id);
-        this.pendingApprovals.delete(id);
-        p.resolve({ approved: false, scope: "once", note: "worker 已终态（" + status + "）" });
-      }
-    }
-    const ts = Date.now();
-    if (status === "cancelled") {
-      if (w.mode === "write") await this.wmr.cleanupWrite(w, "cancelled");
-      await this.opts.emit({ type: "agent_status", agent_id: w.agentId, status: "cancelled", ...(reason ? { reason } : {}), ts } as AgentEvent);
-      await this.wmr.emitSyntheticResult(w, {
-        ok: false,
-        body: { agent_id: w.agentId, status: "cancelled", reason: reason ?? "用户取消" },
-      });
-      // M3c：sequencer 同步点 + 依赖链（cancelled 也是依赖失败——后环不静默跳过）
-      w.terminalResolved = true; // 无 result 也要放行等待方：否则 sequencer 永挂（cancel 分支本就不发 agent_result）
-      this.resolveTerminalWaiters(w.agentId, "cancelled", null);
-      this.resolveDependents(w.agentId, "cancelled");
-      agentOwners.delete(w.agentId);
-      this.releaseWorkerMemory(w);
-      return;
-    }
-    const report = lastAssistantText(w.events) ?? "";
-    const scanned = scanModelOutput(report).text;
-    const clipped = clipWorkerSummary(scanned);
-    if (status === "done") {
-      // ---- M3b write mode：done → diff 快照 + 安全 gate 流水（先于 agent_result，面板先有 diff）----
-      let diff: { stat: string; patch: string; files: string[] } | null = null;
-      let llmNote = "";
-      if (w.mode === "write" && w.worktree && w.baseCommit) {
-        diff = await worktreeDiff(worktreePathFor(this.opts.workspace, w.agentId), w.baseCommit).catch(() => null);
-        if (diff !== null && this.safeMode !== "off") {
-          llmNote = await this.wmr.emitWorkerDiffSecurity(w, diff);
-        }
-        if (diff !== null) await this.wmr.emitWorkerDiffSnapshot(w, diff, llmNote);
-      }
-      await this.opts.emit({ type: "agent_message", agent_id: w.agentId, kind: "report", text: clipped.text } as AgentEvent);
-      await this.opts.emit({ type: "agent_status", agent_id: w.agentId, status: "done", ts } as AgentEvent);
-      const filesChanged = diff?.files ?? [];
-      const diffRef = w.mode === "write" && w.worktree && w.baseCommit ? w.worktree + "@" + w.baseCommit : undefined;
-      // W4b：只在本次真改过文件时标证据（没写代码就无所谓「跑过了」）。
-      const evidence = filesChanged.length > 0 ? workerVerificationEvidence(w.events) : undefined;
-      // W3②：钱与证据同桌——「这份交付花了多少、跑没跑过测试」两条都得是机器可读的。
-      const spent = spentUsdFor(w.price, w.usage);
-      const spentFields = spent ? { spent_usd: spent.usd, price_calibrated: spent.calibrated } : {};
-      const doneResult: Extract<AgentEvent, { type: "agent_result" }> = {
-        type: "agent_result",
-        agent_id: w.agentId,
-        status: "done",
-        summary: clipped.text,
-        ...(clipped.truncated ? { summary_truncated: true } : {}),
-        artifacts: {
-          report: clipped.text,
-          ...(filesChanged.length > 0 ? { files_changed: filesChanged } : {}),
-          ...(diffRef ? { diff_ref: diffRef } : {}),
-          ...(evidence ? { verified: evidence } : {}),
-          ...spentFields,
-        },
-        usage: { inputTokens: w.usage.inputTokens, outputTokens: w.usage.outputTokens },
-        tool_stats: { ...w.toolStats },
-      } as Extract<AgentEvent, { type: "agent_result" }>;
-      await this.opts.emit(doneResult);
-      // M3c：sequencer 同步点 + 依赖链（done 唤醒后环，事件驱动无轮询）
-      w.lastResult = doneResult;
-      w.terminalResolved = true;
-      this.resolveTerminalWaiters(w.agentId, "done", doneResult);
-      this.resolveDependents(w.agentId, "done");
-      await this.wmr.emitSyntheticResult(w, {
-        ok: true,
-        body: {
-          agent_id: w.agentId,
-          status: "done",
-          summary: clipped.text,
-          ...(clipped.truncated ? { summary_truncated: true } : {}),
-          artifacts: {
-            report: clipped.text,
-            ...(filesChanged.length > 0 ? { files_changed: filesChanged } : {}),
-            ...(diffRef ? { diff_ref: diffRef } : {}),
-            ...(evidence ? { verified: evidence } : {}),
-            ...spentFields,
-          },
-          usage: { ...w.usage },
-          tool_stats: { ...w.toolStats },
-        },
-      });
-    } else {
-      if (w.mode === "write") await this.wmr.cleanupWrite(w, "failed");
-      // failed：错误永不冒充结果——status/reason 分型；max_turns 附 partial 报告（§4.4.8 闸门）
-      await this.opts.emit({ type: "agent_status", agent_id: w.agentId, status: "failed", reason, ts } as AgentEvent);
-      const failedSpent = spentUsdFor(w.price, w.usage);
-      const failedResult: Extract<AgentEvent, { type: "agent_result" }> = {
-        type: "agent_result",
-        agent_id: w.agentId,
-        status: "failed",
-        ...(reason ? { reason } : {}),
-        summary: clipped.text,
-        ...(clipped.truncated ? { summary_truncated: true } : {}),
-        // 失败的 worker 同样付过钱——「花了 $0.01 没拿到东西」正是判分工值不值的分子，缺席就等于免费失败。
-        artifacts: {
-          report: clipped.text,
-          ...(failedSpent ? { spent_usd: failedSpent.usd, price_calibrated: failedSpent.calibrated } : {}),
-        },
-        usage: { inputTokens: w.usage.inputTokens, outputTokens: w.usage.outputTokens },
-        tool_stats: { ...w.toolStats },
-      } as Extract<AgentEvent, { type: "agent_result" }>;
-      await this.opts.emit(failedResult);
-      // M3c：sequencer 同步点 + 依赖链（failed → 后环 dependency_failed，不静默跳过）
-      w.lastResult = failedResult;
-      w.terminalResolved = true;
-      this.resolveTerminalWaiters(w.agentId, "failed", failedResult);
-      this.resolveDependents(w.agentId, "failed");
-      await this.wmr.emitSyntheticResult(w, {
-        ok: false,
-        body: {
-          agent_id: w.agentId,
-          status: "failed",
-          ...(reason ? { reason } : {}),
-          summary: clipped.text,
-          usage: { ...w.usage },
-          tool_stats: { ...w.toolStats },
-        },
-      });
-    }
-    agentOwners.delete(w.agentId);
-    this.releaseWorkerMemory(w);
-  }
-
-  /** B7（审查）：终态资源回收——root abort 监听器摘除（once 监听不触发即永久驻留，长会话单调增长）
-   *  + 子流内存态裁剪（w.events 是 handle 的内存大头）。handle 本体保留：依赖链 terminalStatus 查询 /
-   *  合并控制塔 / 评审重启都要读终态 handle（直接 workers.delete 会砍断这三条路由）。
-   *  评审重启（injectComment：write 且合并决策未决）需要 w.events 作上下文——只在不可重启态
-   *  （read worker，或 write 已过合并决策点）裁剪。幂等，可多处调用。 */
+  /** 薄委托：终态资源回收（root abort 摘除 + 内存态裁剪 + diff 版本计数同门槛）。 */
   private releaseWorkerMemory(w: WorkerHandle): void {
-    if (w.onRootAbort) {
-      this.root.signal.removeEventListener("abort", w.onRootAbort);
-      w.onRootAbort = undefined;
-    }
-    if (w.mode !== "write" || !mergeOwners.has(w.agentId)) {
-      w.events.length = 0;
-      // P2-8（审查）：diff 版本计数同批回收（diffVersions 以 agentId 为键、只增不减，见
-      // worker-merge.ts 的 diffVersion）。**与 w.events 同门槛**：write worker 合并决策未决时可被
-      // injectComment 评审重启（第二次 done → diff v2），该计数必须跨重启存活——否则 v2 会被重置回 v1。
-      // 只在不可重启态（read worker / write 已过合并决策点）回收，泄漏被 cleanupWrite 兜底。
-      this.diffVersions.delete(w.agentId);
-    }
+    this.wf.releaseWorkerMemory(w);
   }
 
-  // ---- M3b 合并控制塔（§4.3/§4.4.5：合并唯一出口 = git 面板；本组方法只被 card_action 协议路由调用）----
-  // 三枚薄委托，实现整箱在 worker-merge.ts。
-
-  /** 薄委托：批准合并（唯一出口的登记校验 / gate 二次确认 / commit → merge --no-ff → 清理在 worker-merge.ts）。 */
   async mergeWorker(agentId: string, opts: { force?: boolean } = {}): Promise<{ ok: boolean; error?: string }> {
     return await this.wmr.mergeWorker(agentId, opts);
   }
@@ -1440,95 +1526,6 @@ export class Orchestrator {
 
 // ---- 模块级辅助（纯函数为主） ----
 
-/** worker 会话型 provider：忽略 loop 传入 messages，每轮从 worker 内存态事件现拼上下文（sidechat 同构）。
- *  M3c：worker 压缩（§7.5）挂在每轮组装前——超阈值走同一 runCompaction 链路（零第二套摘要实现），
- *  compaction 事件进 worker 内存态（投影生效）+ 落主流（agent_id 归因）+ 摘要 usage 计入该 worker。 */
-export interface WorkerCompactionRuntime {
-  agentId: string;
-  config: CompactionConfig;
-  summarizer?: Summarizer;
-  toolsSchemaChars: number;
-  /** 压缩事件落流口（主流 emit；agent_id 已在事件上）。 */
-  onCompaction: (e: AgentEvent) => Promise<void>;
-  /** 摘要调用 usage 归因（§7.5 计入 usage(agent_id)，§4.4.10 不破例）。 */
-  onUsage: (u: { inputTokens: number; outputTokens: number }) => void;
-}
-
-export function createWorkerProvider(opts: {
-  readEvents: () => AgentEvent[];
-  system: GlmMessage[];
-  model?: WorkerModel;
-  tools?: GlmToolSpec[];
-  signal?: AbortSignal;
-  /** M3c：worker 压缩运行时（缺省 undefined = 不压缩——既有路径字节不变）。 */
-  compaction?: WorkerCompactionRuntime;
-}): Provider {
-  const tools = opts.tools ?? workerToolSpecs();
-  return {
-    stream(): AsyncIterable<ModelOutput> {
-      return runOneRound();
-    },
-  };
-  async function* runOneRound(): AsyncGenerator<ModelOutput> {
-    if (opts.signal?.aborted) throw new WorkerCancelled();
-    // B9（审查）：每轮只投影一次——压缩估算与消息组装共用同一投影，压缩真正发生时才重投影
-    //（旧实现估算投影一次、组装再投影一次，O(n)×2/轮）。跨轮增量投影留位第三批：compaction
-    // 追加会使既有投影整体失效（excludedIds/summary_offset 改写历史），增量折叠需显式失效语义。
-    const events = opts.readEvents();
-    const factor = calibrateFactor(events);
-    let projected: ContextMessage[] = projectContext(events);
-    if (opts.compaction) {
-      const compacted = await maybeCompactWorkerEvents(opts.compaction, events, projected, factor, opts.system);
-      if (compacted) {
-        projected = projectContext(opts.readEvents());
-      }
-    }
-    const msgs: GlmMessage[] = [...opts.system, ...(projected as GlmMessage[])];
-    const model = opts.model ?? defaultWorkerModel;
-    yield* model(msgs, tools);
-    if (opts.signal?.aborted) throw new WorkerCancelled();
-  }
-}
-
-/** worker 子流压缩（§7.5）：估算（system+工具 schema 全量计入）→ shouldCompact → runCompaction。
- *  成功：compaction 事件（agent_id 归因）进 worker 内存态 + 落主流；摘要 usage 追加 usage(agent_id) 事件。
- *  B9：投影由调用方传入（每轮一次）；返回是否发生了压缩（调用方据此重投影）。 */
-async function maybeCompactWorkerEvents(
-  c: WorkerCompactionRuntime,
-  events: AgentEvent[],
-  projected: ContextMessage[],
-  factor: number,
-  system: GlmMessage[],
-): Promise<boolean> {
-  const systemChars = system.reduce((n, m) => n + (m.content?.length ?? 0), 0);
-  const estimate = estimateContextTokens(projected, { systemChars, toolSchemaChars: c.toolsSchemaChars }, factor);
-  const decision = shouldCompact(estimate, c.config);
-  if (!decision) return false;
-  const outcome = await runCompaction({
-    events,
-    trigger: decision.trigger,
-    reason: decision.reason,
-    ...(decision.trigger !== "overflow" && c.summarizer ? { summarizer: c.summarizer } : {}),
-    config: c.config,
-  });
-  if (!outcome.ok) return false; // 压缩失败不阻断 worker（下一轮重判；overflow 兜底仍在）
-  // worker 内存态推入**不带 agent_id** 的压缩事件（worker 投影生效，keep_first=task+context 由
-  // system 块结构性保障）；落主流时才加 agent_id 归因（主投影按 agent_id 跳过 worker 压缩事件，
-  // 其 compressed_event_ids 是 worker 内存态序号，对主流照搬会错误摘除主事件——context.isWorkerCompaction）。
-  events.push(outcome.event);
-  await c.onCompaction({ ...outcome.event, agent_id: c.agentId } as AgentEvent);
-  if (outcome.event.usage) {
-    c.onUsage(outcome.event.usage);
-    await c.onCompaction({
-      type: "usage",
-      inputTokens: outcome.event.usage.inputTokens,
-      outputTokens: outcome.event.usage.outputTokens,
-      agent_id: c.agentId,
-    } as AgentEvent);
-  }
-  return true;
-}
-
 // ---- 公开面（拆分后不变）：以下符号的实现住在轻模块里，本文件按原路径继续导出 ----
 export {
   MAX_CONCURRENT_WORKERS, MAX_PIPELINE_STAGES, ORCHESTRATOR_STUCK_CONFIG, READ_MODE_MAX_TURNS,
@@ -1555,3 +1552,4 @@ export { globIntersects, semanticConflictsVia } from "./lease-conflicts";
 export { findToolCallEventId } from "./call-id-index";
 export { WORKER_SYSTEM, WORKER_WRITE_SYSTEM, buildWorkerSystemMessages, lastAssistantText } from "./worker-prompt";
 export { buildWorkerToolTable } from "./worker-tool-table";
+export { createWorkerProvider, type WorkerCompactionRuntime } from "./worker-runtime";

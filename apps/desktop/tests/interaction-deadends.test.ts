@@ -4,9 +4,12 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { userMessageCopy } from "../src/renderer/transcript";
+import { readAppSurface, readRendererFile } from "./helpers/app-surface";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
-const app = read("../src/renderer/App.tsx");
+const app = readAppSurface();
+const workbenchView = readRendererFile("panes/WorkbenchView.tsx");
+const workbenchSidebar = readRendererFile("panes/WorkbenchSidebar.tsx");
 const composer = read("../src/renderer/components/Composer.tsx");
 const picker = read("../src/renderer/components/ModelPicker.tsx");
 const sidebar = read("../src/renderer/components/Sidebar.tsx");
@@ -19,7 +22,7 @@ describe("快捷键静默死点（F6/F7 + F5）", () => {
     // 判据跟着从「键位块里有这两行」升到「出口里有这两行 + 两个入口都走它」。
     expect(app).toContain("const closeSessionToHome = useCallback((): void => {");
     expect(app).toContain("toast(STR.shortcut.alreadyHome)");
-    expect(app).toContain("const wasRunning = runningSet.current.has(sid);");
+    expect(app).toContain("const wasRunning = runningSet.current.has(runKey(activeWorkspaceRef.current, sid));");
     expect(app).toContain("if (wasRunning) toast(STR.shortcut.leftRunning);");
     expect(app).toContain("h.closeSessionToHome();");
     expect(app).toContain('"close-session": closeSessionToHome,');
@@ -63,16 +66,18 @@ describe("快捷键静默死点（F6/F7 + F5）", () => {
 describe("⌘⇧E 的落点（不再与 ⌘⇧I 完全同路）", () => {
   it("信号层：effort → pickerFocus=effort；model → model；用户点开复位 model", () => {
     expect(composer).toContain('setPickerFocus(sig.kind === "effort" ? "effort" : "model");');
-    expect(composer).toContain('onUserOpen={() => setPickerFocus("model")}');
+    expect(composer).toContain('onUserOpen={() => setPickerFocus(undefined)}');
     expect(composer).toContain("initialFocus={pickerFocus}");
   });
 
-  it("菜单层：effort 首帧聚焦思考分段（禁用时聚焦分组本身），带可驱动锚点", () => {
-    expect(picker).toContain('if (props.initialFocus !== "effort") { searchRef.current?.focus(); return; }');
-    expect(picker).toContain('box.querySelector<HTMLButtonElement>("button:not(:disabled)") ?? box');
-    expect(picker).toContain('data-effort-anchor="true"');
-    expect(picker).toContain("target.focus({ preventScroll: true });");
-    expect(picker).toContain('target.scrollIntoView({ block: "nearest" });');
+  it("菜单层：⌘⇧I 直落模型面聚焦搜索，⌘⇧E 直落思考面聚焦当前档（2026-11-04 DeepSeek 两级面板）", () => {
+    // 打开落点由面板初值决定：effort 优先，未选模型（演示）直落模型面，其余 = root 面。
+    expect(picker).toContain('props.initialFocus === "effort" ? "effort"');
+    expect(picker).toContain('props.initialFocus === "model" || props.value === null ? "model"');
+    // 模型面聚焦搜索（⌘⇧I）；思考面聚焦当前档那一行（⌘⇧E）。
+    expect(picker).toContain("searchRef.current?.focus({ preventScroll: true });");
+    expect(picker).toContain(".focus({ preventScroll: true })");
+    expect(picker).toContain('.scrollIntoView({ block: "nearest" });');
   });
 });
 
@@ -95,7 +100,7 @@ describe("侧栏首屏：加载 ≠ 空，失败 ≠ 空", () => {
   it("Sidebar 接 loading / loadError / onRetryLoad，并有骨架与重试", () => {
     expect(sidebar).toContain("loading?: boolean;");
     expect(sidebar).toContain("loadError?: boolean;");
-    expect(sidebar).toContain('aria-busy={props.loading === true}');
+    expect(sidebar).toContain('aria-busy={props.loading === true || props.refreshing === true}');
     expect(sidebar).toContain("side-skeleton-row");
     expect(sidebar).toContain("STR.sidebar.loadFailed");
     expect(sidebar).toContain("props.onRetryLoad");
@@ -109,8 +114,8 @@ describe("侧栏首屏：加载 ≠ 空，失败 ≠ 空", () => {
     expect(failBranch).not.toContain("setSessionsLoaded(true)");
     expect(app).toContain("loading={!sessionsLoaded && !sessionsLoadError}");
     expect(app).toContain("const retrySessions = useCallback(() => {");
-    expect(app).toContain("loadError={sessionsLoadError}");
-    expect(app).toContain("onRetryLoad={retrySessions}");
+    expect(workbenchView).toContain("loadError: sessionsLoadError,");
+    expect(workbenchView).toContain("onRetryLoad: retrySessions,");
   });
 
   it("CSS：骨架条只表示读取中（reduced-motion 由全局块停掉动画）", () => {
@@ -120,24 +125,24 @@ describe("侧栏首屏：加载 ≠ 空，失败 ≠ 空", () => {
 });
 
 describe("侧栏宽度把手（键盘 / 可读名 / 复位）", () => {
-  it("范围与复位值取自常量——不再手写 240–280 / 240px", () => {
-    // 2026-10-20 真机：常量已改成 200–280（缺省 200），把手上的 aria-label/title 还写着
-    // 240–280 / 双击回 240；读屏用户被告知一个不存在的下限，双击也会跳到非缺省值。
+  it("范围与复位值取自常量——不再手写固定像素", () => {
+    // 2026-10-21 设计重做：缺省 200 在 1440 宽下过窄（标题两行截断、画布失衡）⇒ 256；
+    // 上限 320 让多项目/长标题有伸展空间。三个数仍只从常量来，把手文案跟着走。
     expect(app).toContain("const SIDEBAR_MIN = 200;");
-    expect(app).toContain("const SIDEBAR_MAX = 280;");
-    expect(app).toContain("const SIDEBAR_DEFAULT = 200;");
-    expect(app).toContain("aria-label={`调整侧栏宽度（${SIDEBAR_MIN}–${SIDEBAR_MAX}px）`}");
-    expect(app).toContain("title={`拖动调整侧栏宽度；双击回到 ${SIDEBAR_DEFAULT}px`}");
+    expect(app).toContain("const SIDEBAR_MAX = 320;");
+    expect(app).toContain("const SIDEBAR_DEFAULT = 256;");
+    expect(workbenchSidebar).toContain("aria-label={`调整侧栏宽度（${SIDEBAR_MIN}–${SIDEBAR_MAX}px）`}");
+    expect(workbenchSidebar).toContain("title={`拖动调整侧栏宽度；双击回到 ${SIDEBAR_DEFAULT}px`}");
     expect(app).not.toContain("240–280px");
     expect(app).not.toContain("双击回到 240px");
-    expect(app).toContain("persistSidebarWidth(SIDEBAR_DEFAULT)");
+    expect(workbenchSidebar).toContain("props.onPersistWidth(SIDEBAR_DEFAULT)");
   });
 
   it("separator 暴露当前值与范围；左右键各步进 16px", () => {
-    expect(app).toContain("aria-valuemin={SIDEBAR_MIN}");
-    expect(app).toContain("aria-valuemax={SIDEBAR_MAX}");
-    expect(app).toContain("aria-valuenow={sidebarWidth}");
-    expect(app).toContain("sidebarWidthRef.current + (e.key === \"ArrowRight\" ? 16 : -16)");
+    expect(workbenchSidebar).toContain("aria-valuemin={SIDEBAR_MIN}");
+    expect(workbenchSidebar).toContain("aria-valuemax={SIDEBAR_MAX}");
+    expect(workbenchSidebar).toContain("aria-valuenow={props.sidebarWidth}");
+    expect(workbenchView).toContain("sidebarWidthRef.current + (e.key === \"ArrowRight\" ? 16 : -16)");
   });
 });
 

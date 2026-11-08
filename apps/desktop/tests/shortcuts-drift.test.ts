@@ -6,9 +6,10 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { SHORTCUT_GROUPS } from "../src/renderer/shortcuts";
 import { PANE_SHORTCUTS } from "../src/renderer/pane-shortcuts";
+import { readAppSurface } from "./helpers/app-surface";
 
 const src = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
-const app = src("../src/renderer/App.tsx");
+const app = readAppSurface();
 const composer = src("../src/renderer/components/Composer.tsx");
 
 /** keys → 证人（文件 + 必须同时出现的片段）。窗格族不在此表：由 PANE_SHORTCUTS 单源生成。 */
@@ -23,7 +24,9 @@ const WITNESSES: Record<string, { file: "app" | "composer"; needles: string[] }>
   "Ctrl+Tab / Ctrl+⇧+Tab": { file: "app", needles: ['e.key === "Tab" && e.ctrlKey', "h.cycleSessionOrToast(e.shiftKey ? -1 : 1)"] },
   "⌘⇧] / ⌘⇧[": { file: "app", needles: ['case "BracketRight"', 'case "BracketLeft"', "h.cycleSessionOrToast(1)", "h.cycleSessionOrToast(-1)"] },
   "⌘B": { file: "app", needles: ['case "KeyB"', "h.toggleSidebar()"] },
-  "⌘⌥B": { file: "app", needles: ['case "KeyB"', "h.toggleInspector()"] },
+  "⌘⌥B": { file: "app", needles: ['case "KeyB"', "h.togglePluginSidebar()"] },
+  "⌘⌥I": { file: "app", needles: ['case "KeyI"', "h.toggleInspector()"] },
+  "⌘⌥M": { file: "app", needles: ['case "KeyM"', "h.togglePluginSidebar()"] },
   "⌘\\": { file: "app", needles: ['case "Backslash"', "h.closeLastPane()"] },
   "⌘⇧S": { file: "app", needles: ['case "KeyS"', "h.requestPickElement()"] },
   "Ctrl+O": { file: "app", needles: ['case "KeyO"', "h.cycleView()"] },
@@ -36,7 +39,7 @@ const WITNESSES: Record<string, { file: "app" | "composer"; needles: string[] }>
   "⌘↑ / ⌘↓": { file: "app", needles: ['case "ArrowUp"', "h.jumpTop()", 'case "ArrowDown"', "h.jumpBottom()"] },
   Tab: { file: "composer", needles: ['e.key === "Tab" && !e.shiftKey', "props.onSuggestNext"] },
   Enter: { file: "composer", needles: ['e.key !== "Enter"', "submit("] },
-  "⌘↩": { file: "composer", needles: ["e.metaKey || e.ctrlKey ? { interrupt: true }"] },
+  "⌘↩": { file: "composer", needles: ["e.metaKey || e.ctrlKey ? { interrupt: true, forceQueue: true }"] },
   "⌘.": { file: "app", needles: ['case "Period"', "h.cancelRun(h.activeId)"] },
   Esc: { file: "app", needles: ['e.key === "Escape"', "h.cancelRun(h.activeId)"] },
 };

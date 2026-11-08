@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import { handleWorkspaceListDir, handleWorkspaceReadText } from "../../../src/main/session-handlers";
 import { memorySnapshot } from "../../../src/main/memory-handlers";
 import { projectMemoryDir } from "../../../src/agent/memory/store";
+import { readAppSurface } from "./helpers/app-surface";
 
 const dir = mkdtempSync(join(tmpdir(), "cairn-wsctx-"));
 mkdirSync(join(dir, "src"), { recursive: true });
@@ -31,11 +32,25 @@ describe("活动工作区上下文（override）", () => {
     expect(read("src/main/ipc-protocol.ts")).toContain("setWorkspaceContext(path: string)");
     expect(read("apps/desktop/src/main/channels.ts")).toContain('setWorkspaceContext: "agent:set-workspace-context"');
     const main = read("apps/desktop/src/main/index.ts");
-    expect(main).toContain("let workspaceContext: string | null = null");
-    expect(main).toContain("resolveWorkspace");
-    expect(main).toContain("handleChangeDiff(req as never, workspaceContext)");
-    const app = read("apps/desktop/src/renderer/App.tsx");
-    expect(app).toContain('window.agent.setWorkspaceContext(activeWorkspace ?? "")');
+    expect(main).toContain("new WindowWorkspaceContext<WebContents>(canonicalKnownProjectPath)");
+    expect(main).toContain("windowWorkspaces.run(event.sender");
+    expect(main).toContain("windowWorkspaces.inherit(win.webContents)");
+    expect(main).toContain("handleChangeDiff(req as never, resolveWorkspace())");
+    // 自定义 provider 也必须跟窗口工作区走：保存/预填若用进程启动时的 workspace，
+    // 切项目后会把新项目的模型写进旧项目的 .agent/providers.json，选择器也继续挂着旧家。
+    expect(main).toContain("prepareCustomProvider(resolveWorkspace(),");
+    expect(main).toContain("loadCustomProviders(resolveWorkspace())");
+    expect(main).toContain("const loaded = current === null ? null : loadCustomProviders(current);");
+    expect(main).toContain('installCustomProviders(loaded?.kind === "ok" ? loaded.derived : []);');
+    const app = readAppSurface();
+    expect(app).toContain("applyWorkspaceContext(activeWorkspace)");
+    expect(app).toContain("void applyWorkspaceContext(sessionWs)");
+    // 空屏默认工作区：createSession 回包带回实际归属，渲染层采纳它（否则 activeWorkspace 恒 null，
+    // 文件/终端/diff/回滚整路「工作区未知」，侧栏也不高亮新会话）。
+    expect(read("src/main/ipc-protocol.ts")).toContain("createSession(name?: string): Promise<{ id: string; workspace: string }>");
+    expect(app).toContain("if (activeWorkspace === null) setActiveWorkspace(created.workspace);");
+    // 选择被拒时不许沿用旧根：显式清空并把原因说出来。
+    expect(app).toContain("void window.agent.setWorkspaceContext(\"\");");
   });
 });
 

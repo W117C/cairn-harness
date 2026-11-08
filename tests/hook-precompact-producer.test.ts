@@ -133,7 +133,7 @@ describe("PreCompact 发点在 runCompaction（三条压缩路径的唯一必经
     );
   });
 
-  it("压缩没开始就不发：decision=null 不发；摘要停用后 auto 不发，overflow 截断照发", async () => {
+  it("压缩没开始就不发：decision=null 不发；摘要停用后 auto 由微压缩接管（真开始 ⇒ 发），overflow 截断照发", async () => {
     const fired: string[] = [];
     const boom = async () => { throw new Error("摘要器不可用"); };
     const coord = new CompactionCoordinator({
@@ -146,13 +146,15 @@ describe("PreCompact 发点在 runCompaction（三条压缩路径的唯一必经
     expect(fired).toEqual([]); // 没开始压缩就没有"压缩前"
     expect((await coord.maybeCompact(session(), auto))?.ok).toBe(false);
     expect((await coord.maybeCompact(session(), auto))?.ok).toBe(false);
-    expect(fired).toEqual(["auto", "auto"]);
+    // 2026-11-06 V2 微压缩链：每次 auto 调用 = 摘要尝试 + 微压缩兜底，两个都真开始 ⇒ 都发
+    //（这里的 session() 夹具释放量不足，微压缩被拒不落流，但尝试本身真开始）。
+    expect(fired).toEqual(["auto", "auto", "auto", "auto"]);
     expect(coord.summarizerDisabled).toBe(true);
     expect(await coord.maybeCompact(session(), auto)).toBeNull();
-    expect(fired.length, "停用后 auto 档直接跳过，不得白发一次钩子").toBe(2);
+    expect(fired.length, "停用后 auto 由微压缩接管：真开始 ⇒ 发（被拒不落流）").toBe(5);
     const overflow: CompactDecision = { trigger: "overflow", reason: "hard_buffer" };
     expect((await coord.maybeCompact(session(), overflow))?.ok).toBe(true);
-    expect(fired).toEqual(["auto", "auto", "auto"]); // 截断仍是压缩
+    expect(fired.length, "截断仍是压缩").toBe(6);
   });
 });
 
@@ -167,6 +169,10 @@ describe("自动档经 session-provider 接到生产者（provider 是唯一发�
     const factor = calibrateFactor(session());
     const est = estimateContextTokens(projectContext(session()), {}, factor);
     const provider = createSessionProvider(logPath, {
+      // 工作区钉在这条用例自己的临时目录：缺省值 process.cwd() 会把仓库真实的
+      // `.agent/memory` 注进来，可用预算（est+4）随记忆增长而被吃掉，判据就会在
+      // 「压缩后没走到模型」这一步假红——那时断言的仍是 CAIRN_API_KEY，修法不是放宽预算。
+      workspace: dir,
       compaction: {
         // 自整定（同 compaction.test.ts 的接线用例）：可用 = est+4，ratio 0.5 → 必然触发，
         // 且压缩后的投影（tail ≤200 + 摘要）仍落在预算内 → 一路走到"要调模型"才因无 key 抛错。

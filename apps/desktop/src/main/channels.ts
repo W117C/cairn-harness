@@ -2,7 +2,7 @@
 // AgentApi 新增方法而这里不加行 ⇒ typecheck 红（ipc-protocol 删键同理）。
 import type { AgentApi } from "../../../../src/main/ipc-protocol";
 
-export type PushChannel = "onEvent" | "onAsk" | "onAskDone" | "onTerminalData" | "onTerminalExit" | "onBrowserState" | "onPreviewState" | "onMenu";
+export type PushChannel = "onEvent" | "onAsk" | "onAskDone" | "onTerminalData" | "onTerminalExit" | "onBrowserState" | "onPreviewState" | "onMenu" | "onNotificationOpen";
 export type InvokeChannel = Exclude<keyof AgentApi, PushChannel>;
 
 export const PUSH_CHANNELS: { [K in PushChannel]: string } = {
@@ -14,6 +14,7 @@ export const PUSH_CHANNELS: { [K in PushChannel]: string } = {
   onBrowserState: "agent:browser-state",
   onPreviewState: "agent:preview-state",
   onMenu: "agent:menu-command",
+  onNotificationOpen: "agent:notification-open",
 };
 
 export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
@@ -23,13 +24,42 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   decidePlan: "agent:plan-decide",
   setGoal: "agent:goal-set",
   runCancel: "agent:run-cancel",
+  // 第 9 点：轮中插话（与 run-cancel 相邻，语义相反：一个收束、一个继续）。
+  runSteer: "agent:run-steer",
   compact: "agent:compact",
   getState: "agent:state",
   getProviderInfo: "agent:provider-info",
   getOnboarding: "agent:onboarding",
   getSettings: "agent:settings-get",
   setSettings: "agent:settings-set",
+  reloadSettings: "agent:settings-reload",
+  searchSettingsGet: "agent:search-settings-get",
+  searchSettingsSave: "agent:search-settings-save",
+  searchSettingsTest: "agent:search-settings-test",
   listSessions: "agent:sessions-list",
+  sessionPrefsSet: "agent:session-prefs-set",
+  // v14：跨会话用量账本（头像菜单「用量统计」→「全部会话」；main 只读扫描各工作区日志）。
+  usageLedger: "agent:usage-ledger",
+  // v25：Evolve 只读报告（设置页「进化」分区；main 现读 .agent/evolve）。
+  evolveReport: "agent:evolve-report",
+  evolveSetFrozen: "agent:evolve-set-frozen",
+  // v45：人工激活一条过门经验（写 playbook active；拒绝原因随结果返回）。
+  evolveActivate: "agent:evolve-activate",
+  // v46：人工把一条 active 经验转 dormant（负证据/人工裁决出口）。
+  evolveDormant: "agent:evolve-dormant",
+  // v47：撤销一条全局经验（全局账 patch → dormant；跨 workspace 注入停用）。
+  evolveGlobalRevoke: "agent:evolve-global-revoke",
+  // v48：全局经验冻结开关（写/删全局 STOP；与 workspace STOP 分开）。
+  evolveGlobalSetFrozen: "agent:evolve-global-set-frozen",
+  // v49：恢复一条 dormant 全局经验（复核 ≥3 库证据；失败保持 dormant）。
+  evolveGlobalActivate: "agent:evolve-global-activate",
+  // v52：读 LSP 状态（只读、不起进程、不写授权）。
+  lspStatus: "agent:lsp-status",
+  orchestrationView: "agent:orchestration-view",
+  orchestrationSubmit: "agent:orchestration-submit",
+  orchestrationControl: "agent:orchestration-control",
+  // v15：会话日志尾部（错误条 / 命令面板「查看日志」；main 只读）。
+  sessionLog: "agent:session-log",
   createSession: "agent:sessions-create",
   openSession: "agent:sessions-open",
   queueGet: "agent:session-queue-get",
@@ -42,6 +72,8 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   changeDiff: "agent:change-diff",
   // v5 窗格后端：file 窗格（列目录 + 读文本）。
   setWorkspaceContext: "agent:set-workspace-context",
+  reportViewing: "agent:report-viewing",
+  doctor: "agent:doctor",
   workspaceListDir: "agent:workspace-list-dir",
   workspaceReadText: "agent:workspace-read-text",
   // v7：路径动作（复制绝对路径 / Finder 显示 / 默认应用打开）。
@@ -52,6 +84,7 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   // v5 窗格后端：terminal 窗格（PTY 起停 + 输入）。
   terminalStart: "agent:terminal-start",
   terminalWrite: "agent:terminal-write",
+  terminalResize: "agent:terminal-resize",
   terminalKill: "agent:terminal-kill",
   // v5 窗格弹出：独立窗口路由。
   panePopout: "agent:pane-popout",
@@ -75,6 +108,11 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   projectExport: "agent:project-export",
   providerCheck: "agent:provider-check",
   exportTranscript: "agent:transcript-export",
+  exportMemory: "agent:memory-export",
+  exportDiagnostics: "agent:diagnostics-export",
+  exportPreferences: "agent:preferences-export",
+  importPreferences: "agent:preferences-import",
+  resetPreferences: "agent:preferences-reset",
   listSkills: "agent:list-skills",
   skillBody: "agent:skill-body",
   submitFeedback: "agent:feedback-submit",
@@ -83,14 +121,30 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   listMessagePins: "agent:message-pin-list",
   listProjects: "agent:projects-list",
   addProject: "agent:projects-add",
+  relocateProject: "agent:projects-relocate",
   removeProject: "agent:projects-remove",
   setSessionPinned: "agent:session-pin",
   setSessionArchived: "agent:session-archive",
   sessionWorktree: "agent:session-worktree",
+  worktreeClean: "agent:worktree-clean",
+  worktreeDiff: "agent:worktree-diff",
   assignSessionProject: "agent:session-assign",
   deleteMemory: "agent:memory-delete",
   pluginDecide: "agent:plugin-decide",
   pluginUserConfigSet: "agent:plugin-user-config-set",
+  marketplaceCatalog: "agent:marketplace-catalog",
+  pluginPickLocalSource: "agent:plugin-pick-local-source",
+  marketplacePluginImport: "agent:marketplace-plugin-import",
+  marketplacePluginUpdate: "agent:marketplace-plugin-update",
+  marketplacePluginCheckUpdate: "agent:marketplace-plugin-check-update",
+  pluginConfigureInstalled: "agent:plugin-configure-installed",
+  marketplacePluginInstall: "agent:marketplace-plugin-install",
+  marketplacePluginInstallStatus: "agent:marketplace-plugin-install-status",
+  marketplacePluginInstallCommit: "agent:marketplace-plugin-install-commit",
+  marketplacePluginInstallCancel: "agent:marketplace-plugin-install-cancel",
+  pluginSetEnabled: "agent:plugin-set-enabled",
+  pluginUninstall: "agent:plugin-uninstall",
+  pluginsInstalled: "agent:plugins-installed",
   sidechatCreate: "agent:sidechat-create",
   sidechatAsk: "agent:sidechat-ask",
   sidechatPromote: "agent:sidechat-promote",
@@ -103,9 +157,18 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   providerKeySet: "agent:provider-key-set",
   providerKeyDelete: "agent:provider-key-delete",
   providerKeyStatus: "agent:provider-key-status",
+  importLicense: "agent:license-import",
   createProject: "agent:project-create",
   providerDiscover: "agent:provider-discover",
   providerSave: "agent:provider-save",
+  providerCustomList: "agent:provider-custom-list",
+  // 用户级 MCP 服务器管理（ZCode 独立管理对应面，2026-11-05）：配置读写 + 单台探测。
+  mcpUserConfig: "agent:mcp-user-config",
+  mcpUserSave: "agent:mcp-user-save",
+  mcpUserProbe: "agent:mcp-user-probe",
+  // 用户级 hooks（ZCode Hooks 管理对应面，2026-11-05）：配置读写。
+  hooksUserConfig: "agent:hooks-user-config",
+  hooksUserSave: "agent:hooks-user-save",
   checkUpdate: "agent:check-update",
   openExternal: "agent:open-external",
   // M4-5：dialog 选目录（M3 deferred 收口）——main 端 dialog.showOpenDialog({ openDirectory })，
@@ -118,6 +181,17 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   suggestNext: "agent:suggest-next",
   // SEMA §3.5/§12：协议版本握手——main 实况版本（IPC_PROTOCOL_VERSION）→ renderer 与构建期
   // 注入的期望版本比对，失配 fail-closed。
+  subagentSettingsList: "agent:subagent-settings-list",
+  subagentSettingsRead: "agent:subagent-settings-read",
+  subagentSettingsSave: "agent:subagent-settings-save",
+  subagentSettingsRemove: "agent:subagent-settings-remove",
+  settingsPreviewMigration: "agent:settings-preview-migration",
+  settingsApplyMigration: "agent:settings-apply-migration",
+  idleTaskList: "agent:idle-task-list",
+  idleTaskEnqueue: "agent:idle-task-enqueue",
+  idleTaskUpdate: "agent:idle-task-update",
+  backgroundTaskList: "agent:background-task-list",
+  backgroundTaskStop: "agent:background-task-stop",
   protocolVersion: "agent:protocol-version",
   // v10：能力在场性——搜索端点配没配（口径同 CLI --doctor 的 search 那一格）。
   // 它回答的是「模型为什么少了一把工具」：没配 search.endpoint 时 web_search 整族不注入。
@@ -126,6 +200,8 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   gitStatus: "agent:git-status",
   gitClone: "agent:git-clone",
   workspaceSearch: "agent:workspace-search",
+  // v18：会话正文全文检索（只读；主进程扫会话 JSONL，渲染层不碰盘）。
+  sessionSearch: "agent:session-search",
   touchProject: "agent:project-touch",
   saveTempFile: "agent:save-temp-file",
   snapshotRestore: "agent:snapshot-restore",

@@ -8,6 +8,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { isSessionEndDistillAsk } from "../src/renderer/send-queue";
+import { readAppShell } from "./helpers/app-surface";
 
 describe("isSessionEndDistillAsk（沉淀审批辨识）", () => {
   it("distill 合并审批（args.trigger=session_end_distill）命中", () => {
@@ -28,7 +29,7 @@ describe("isSessionEndDistillAsk（沉淀审批辨识）", () => {
 });
 
 describe("接线哨兵（源码级）", () => {
-  const appSrc = readFileSync(new URL("../src/renderer/App.tsx", import.meta.url), "utf8");
+  const appSrc = readAppShell();
   const hostSrc = readFileSync(new URL("../src/main/kernel-host.ts", import.meta.url), "utf8");
   const queueSrc = readFileSync(new URL("../src/renderer/send-queue.ts", import.meta.url), "utf8");
 
@@ -41,7 +42,13 @@ describe("接线哨兵（源码级）", () => {
 
   it("onAsk：队列在场即拒沉淀审批（快销 + notice 明示），不占卡位不上屏", () => {
     expect(appSrc).toContain("isSessionEndDistillAsk(p)");
-    expect(appSrc).toContain("(sendQueue.current.get(sid)?.length ?? 0) > 0");
+    // 2026-10-28（第 750 页）：读队列表必须与写**同键**——写方按 `runKey(workspace, sid)`
+    // （限定键）存，此前这里按**裸 sid** 读 ⇒ 永远读到 undefined ⇒ 这条守卫**从不触发**
+    // ⇒ 本该被快销的沉淀审批卡照样弹出来，挡住用户已经排队的下一条消息。
+    // 哨兵因此从「裸 id 读」升到「限定键读」：钉住的是**意图**（守卫要读对那张表），
+    // 不是某一行写法。
+    expect(appSrc).toContain("(sendQueue.current.get(runKey(");
+    expect(appSrc).not.toContain("sendQueue.current.get(sid)");
     expect(appSrc).toContain("window.agent.decide(p.askId, false)");
     expect(appSrc).toContain("已跳过本轮全局记忆写入（你在继续对话；下次收尾再试）");
   });
@@ -55,7 +62,7 @@ describe("接线哨兵（源码级）", () => {
   it("openSession 开会对账：running 实况收敛陈旧标记（在跑补上、已收束摘掉）", () => {
     expect(appSrc).toContain("running?: boolean");
     expect(appSrc).toContain('typeof r.running === "boolean"');
-    expect(appSrc).toContain("runningSet.current.delete(id)");
+    expect(appSrc).toContain("runningSet.current.delete(runId)");
   });
 
   it("kernel-host 收束补发合成终态：三态映射 + openSession.running 实况", () => {
@@ -65,7 +72,8 @@ describe("接线哨兵（源码级）", () => {
     // push-only 的机械面：直调 deps.outbox（不经 setAppHooks.onEvent 的 ownAppends 计数链）——
     // 「不落 JSONL」由 kernel-host.test.ts 的盘面语义断言钉住。
     expect(hostSrc).toContain('deps.outbox("onEvent", {');
-    expect(hostSrc).toContain("running: runControllers.has(id)");
+    expect(hostSrc).toContain("const running = runControllers.get(id)?.workspace === ws;");
+    expect(hostSrc).toContain("return { events, session, view, running,");
   });
 });
 

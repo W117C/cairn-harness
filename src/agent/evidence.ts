@@ -4,6 +4,7 @@
 // 事件侧无新类型：收据在 computePrune 之后由 SolpiRuntime 校验并投影，原始输出前缀不授予免剪权。
 
 import { createHash } from "node:crypto";
+import { isRecord } from "../is-record";
 
 /** 收据行的序列化前缀；仅用于识别，不代表内容已受信任或通过校验。 */
 export const EVIDENCE_RECEIPT_PREFIX = "dsh_evidence_receipt_v1";
@@ -115,10 +116,6 @@ export function parseReceipt(line: string): EvidenceReceipt | null {
 }
 
 const KINDS: readonly EvidenceKind[] = ["fatal", "failure", "warning", "target", "summary"];
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null;
-}
 
 /**
  * 四态校验（0 容忍）：任一条 quote 不在原文逐字出现 → 整单作废。

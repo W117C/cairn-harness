@@ -14,9 +14,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { AgentEvent } from "../../../src/events";
 import { formatDuration, Stream, writeDiffPathOf } from "../src/renderer/components/Stream";
 import { projectStream, roundOfEvent, userTextOfRound } from "../src/renderer/projections";
+import { readAppSurface } from "./helpers/app-surface";
 
 const styles = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
-const appSrc = readFileSync(fileURLToPath(new URL("../src/renderer/App.tsx", import.meta.url)), "utf8");
+const appSrc = readAppSurface();
 const streamSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/Stream.tsx", import.meta.url)), "utf8");
 
 // 六事件夹具：user/assistant/user/tool_call/tool_result/assistant（工具 ts 2100→3300 = 1.2s）。
@@ -58,9 +59,19 @@ describe("③ 工具卡折叠行：图标 + 摘要 + 耗时（有 then 显示）
     // 仅 t1 有 then（3300-2100=1.2s）；t2 pending 无耗时
     expect(html.match(/class="tdur"/g)?.length).toBe(1);
     expect(html).toContain(">1.2s<");
-    // 状态符与摘要仍在（折叠行三件套不丢）
-    expect(html).toContain("run_shell");
+    // 状态符与摘要仍在（折叠行三件套不丢）。但**实现名不再上屏**（2026-10-31 R1：
+    // 有中文动词的行只说人话——`run_shell` 紧跟「运行 ls」是把一件事说两遍）。
+    expect(html).not.toContain("run_shell");
     expect(html).toContain("运行 ls");
+    // 反面必须同时钉住：未知工具没有动词可给，原始名就是它唯一的身份，那时必须保留
+    // （`Stream.tsx` 的 `verb === null && <span className="tname">`，宁缺不编）。
+    const unknownTool = renderToStaticMarkup(
+      <Stream rows={projectStream([
+        { type: "tool_call", id: "u1", name: "mystery_tool", args: { q: "x" }, ts: 5000 },
+        { type: "tool_result", callId: "u1", ok: true, ts: 5100 },
+      ] as unknown as AgentEvent[])} />,
+    );
+    expect(unknownTool).toContain("mystery_tool");
   });
 });
 
@@ -81,16 +92,19 @@ describe("④ 生成中顶栏细进度条（.gen-bar[data-running]）", () => {
   });
 });
 
-describe("⑤ hover 操作：user 复制+分叉 / agent 复制+回放（tooltip 同句说明）", () => {
-  it("tooltip 句「从该轮起新建会话，原会话不动」在两处各 2 枚", () => {
+describe("⑤ hover 操作：user 复制+分叉+撤回 / agent 复制+撤回+分叉（2026-10-24 业主：不要回放/重跑）", () => {
+  it("tooltip 句「从该轮起新建会话，原会话不动」在两处各 2 枚；撤回同数；回放/重跑零残留", () => {
     const html = renderToStaticMarkup(
       <Stream
         rows={projectStream(events)}
-        actions={{ onCopyText: () => undefined, onBranch: () => undefined, onReplay: () => undefined }}
+        actions={{ onCopyText: () => undefined, onBranch: () => undefined, onRevertTurn: () => undefined }}
       />,
     );
-    expect(html.match(/title="分叉：从该轮起新建会话，原会话不动"/g)?.length).toBe(2);
-    expect(html.match(/title="回放：从该轮起新建会话并填入当时的输入，原会话不动"/g)?.length).toBe(2);
+    // 分叉在 user 行与 agent 行都有（2026-10-24 起代理行也带）⇒ 2 行 × 2 条 = 4；撤回在 agent 行 2 枚
+    expect(html.match(/data-hint="分叉：从该轮起新建会话，原会话不动"/g)?.length).toBe(4);
+    expect(html.match(/data-hint="撤回：把这一轮改过的文件还原"/g)?.length).toBe(2);
+    expect(html).not.toContain("回放");
+    expect(html).not.toContain("重跑");
   });
 });
 
@@ -139,7 +153,7 @@ describe("⑦ 纯函数：roundOfEvent / userTextOfRound（事件日志 fork/rep
   });
 });
 
-describe("⑧ App 接线哨兵（滚动记忆 / 回放链）", () => {
+describe("⑧ App 接线哨兵（滚动记忆）", () => {
   it("滚动记忆：Map(sessionId → scrollTop) 离场存回场取；owner 守卫 + 可达等帧（回底钮逻辑不动）", () => {
     expect(appSrc).toContain("const scrollMemory = useRef(new Map<string, number>())");
     // owner 守卫：没滚动过的会话不落盘（lastScrollTop 揣着上个会话的数，直接存会记错人头）。
@@ -159,11 +173,9 @@ describe("⑧ App 接线哨兵（滚动记忆 / 回放链）", () => {
     expect(src).toContain("restoreTo: (top: number, behavior?: ScrollBehavior) => void");
   });
 
-  it("回放链：fork → 切换 → 注入该轮输入不发送（round/userText 从事件投影）", () => {
-    expect(appSrc).toContain("const handleReplay = useCallback((eventId: number)");
-    expect(appSrc).toContain("roundOfEvent(eventsRef.current, eventId)");
-    expect(appSrc).toContain("userTextOfRound(eventsRef.current, round)");
-    expect(appSrc).toContain("setInjectedText(text)");
+  it("回放/重跑链已整体撤下（2026-10-24 业主）：App 面不再有 handleReplay/handleRetryRound", () => {
+    expect(appSrc).not.toContain("handleReplay");
+    expect(appSrc).not.toContain("handleRetryRound");
   });
 });
 
@@ -195,7 +207,7 @@ describe("⑨ 工具卡行内 diff（写文件类）", () => {
   });
 
   it("懒加载源文哨兵：changeDiff({ path: diffPath }) 调既有通道 + DiffView 复用 + 失败原文上屏", () => {
-    expect(streamSrc).toContain(".changeDiff({ path: diffPath })");
+    expect(streamSrc).toContain(".changeDiff({ path: diffPath, ...(r.snapshotId !== undefined ? { snapshotId: r.snapshotId } : {}) })");
     expect(streamSrc).toContain("<DiffView hunks=");
     expect(streamSrc).toContain("正在读快照与当前文件…");
     expect(streamSrc).toContain("通道无应答（主进程未返回差异数据）");

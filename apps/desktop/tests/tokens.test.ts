@@ -91,12 +91,14 @@ describe("暗色分层与文字（2026-10-20 真机还原更正 · 原 2026-10-1
     expect(dark).not.toMatch(/--btn-primary-bg:\s*hsl\(var\(--text-000\)\);/);
   });
 
-  it("语义三色挂角色层（亮暗分档由角色承担，语义层只写引用）", () => {
-    // 2026-10-20：success/risk/danger 改为引用 role-* 而非写死色值。
-    // 这样暗色块只需重定义 role-*，语义名自动换档——组件始终只写一个名。
-    expect(tokens).toMatch(/--success:\s*var\(--role-success-450\);/);
+  it("语义三色挂官方 purpose 令牌（本地 role 名与官方撞名，整色不能进 hsl()）", () => {
+    // 2026-10-31：官方 CDS 的 --role-danger-300 / --role-success-450 是整色，
+    // 覆盖本地同名三元组；hsl(var(--role-*)) 会整条失效。语义层改桥到官方 purpose：
+    // fill = 实心底、text = 文字色；from … h s l 仍是三元组，组件 hsl(var(--…)) 不变。
+    expect(tokens).toMatch(/--success:\s*from var\(--fill-success\) h s l;/);
     expect(tokens).toMatch(/--color-risk:\s*var\(--role-warning-450\);/);
-    expect(tokens).toMatch(/--color-danger:\s*var\(--role-danger-300\);/);
+    expect(tokens).toMatch(/--color-danger:\s*from var\(--fill-danger\) h s l;/);
+    expect(tokens).toMatch(/--color-danger-ink:\s*from var\(--text-danger\) h s l;/);
   });
 
   it("角色层四族齐全（accent / danger / success / warning），每族带 fill / fill-hover / on", () => {
@@ -201,7 +203,7 @@ describe("动效刻度（2026-10-20 · Claude 实测 5 档时长 × 4 缓动）"
   });
 });
 
-describe("字重刻度（2026-10-20 · Claude 实测非标准字重 + 暗色减重补偿）", () => {
+describe("字重刻度（2026-10-22 按 Claude v3 暗色轴实测更正 · 亮色 2026-10-20 建）", () => {
   it("五档语义字重齐备，semibold = 580（不是 600）", () => {
     expect(tokens).toMatch(/--fw-regular:\s*400;/);
     expect(tokens).toMatch(/--fw-medium:\s*500;/);
@@ -210,35 +212,63 @@ describe("字重刻度（2026-10-20 · Claude 实测非标准字重 + 暗色减�
     expect(tokens).toMatch(/--fw-heavy:\s*700;/);
   });
 
-  it("暗色整体减重（regular 360 / bold 580），换主题自动补偿", () => {
+  it("暗色换的是**可变字体轴实例** 360/460/540/560（四档各减 40），不是逐档减 20", () => {
+    // 实测源：/Applications/Claude.app v3.1623.0（app.asar sha 760e7cbb…）的
+    // `.vite/renderer/main_window/assets/MainWindowPage-Bbug2Ph5.css`：
+    //   亮色作用域 `--cds-font-weight-*` = 400 / 500 / 580 / 600；
+    //   暗色作用域 `--cds-font-wght-*` = "wght" 360 / 460 / 540 / 560
+    //   （三个暗色作用域一致：[data-mode=dark] .cds-root、prefers-color-scheme:dark + [data-mode=system]、
+    //    .cds-dark-scope[data-mode=dark]）。
+    // 本仓此前写成 360/480/560/580 —— medium 与 semibold 仍是按「逐档减 20」推的，与蓝本不符。
     const dark = tokens.slice(tokens.search(/\[data-theme="dark"\]\s*\{/));
     expect(dark).toMatch(/--fw-regular:\s*360;/);
-    expect(dark).toMatch(/--fw-semibold:\s*560;/);
-    expect(dark).toMatch(/--fw-bold:\s*580;/);
+    expect(dark).toMatch(/--fw-medium:\s*460;/);
+    expect(dark).toMatch(/--fw-semibold:\s*540;/);
+    expect(dark).toMatch(/--fw-bold:\s*560;/);
     // 暗色每一档都必须 ≤ 亮色同名档（减重，不是加重）
     const light = tokens.slice(0, tokens.search(/\[data-theme="dark"\]\s*\{/));
     const pick = (src: string, n: string) => Number(new RegExp(`${n}:\\s*(\\d+);`).exec(src)?.[1] ?? -1);
     for (const n of ["--fw-regular", "--fw-medium", "--fw-semibold", "--fw-bold", "--fw-heavy"]) {
       expect(pick(dark, n), n).toBeLessThanOrEqual(pick(light, n));
     }
+    // 蓝本四档**各减 40**（heavy 是 Cairn 自有档，蓝本没有 ⇒ 不参与这条断言）。
+    for (const n of ["--fw-regular", "--fw-medium", "--fw-semibold", "--fw-bold"]) {
+      expect(pick(light, n) - pick(dark, n), n).toBe(40);
+    }
   });
 });
 
 describe("刻度重钉：4px 栅格 / 圆角三档 / 正文字号 / 阅读列 / 过渡区间", () => {
-  it("圆角收敛 6 / 10 / 14", () => {
-    expect(tokens).toMatch(/--radius-sm:\s*calc\(0\.375rem \* var\(--size-scale\)\);/);     // 6
+  it("圆角收敛 7 / 10 / 14（2026-10-28 按 CDS 桌面档对齐 --radius-sm：6→7）", () => {
+    // 依据：Claude Desktop 3.6556.2 渲染层 `--cds-radius--sm` 在
+    // `.cds-root[data-platform=desktop]` / `[data-density=comfortable]` 两个作用域下都是
+    // calc(.4375rem)=7px（基础档 .cds-root 才是 6px）。Cairn 走桌面档 ⇒ 取 7。
+    // 取料：MainWindowPage-*.css（sha256 记在 vendor/cds-official/UPSTREAM.json 的同批记录）。
+    expect(tokens).toMatch(/--radius-sm:\s*calc\(0\.4375rem \* var\(--size-scale\)\);/);    // 7
     expect(tokens).toMatch(/--radius-md:\s*calc\(0\.625rem \* var\(--size-scale\)\);/);     // 10
     expect(tokens).toMatch(/--radius-composer:\s*calc\(0\.875rem \* var\(--size-scale\)\);/); // 14
   });
 
-  it("正文 14.5 / 辅助 12.5 / 间距下探到 4 档", () => {
-    expect(tokens).toMatch(/--fs-body-md:\s*calc\(0\.90625rem \* var\(--rem-scale\)\);/); // 14.5
-    expect(tokens).toMatch(/--fs-caption-md:\s*calc\(0\.78125rem \* var\(--rem-scale\)\);/); // 12.5
+  it("间距下限对齐 CDS pad-xs = 6px（2026-10-28；旧 4px 全仓 0 处引用）", () => {
+    expect(tokens).toMatch(/--pad-xs:\s*calc\(0\.375rem \* var\(--size-scale\)\);/);        // 6
+  });
+
+  it("正文 14 / caption 四档 10·11·12·13 / 间距下探到 4 档（业主 §4.4 刻度，2026-10-21 更正）", () => {
+    // 业主 §4.4：caption .625/.6875/.75/.8125（10/11/12/13）＋ body .75/.8125/.875/.9375（12/13/14/15）。
+    // 此前实现把 caption 三档压平成 12.5、body-md 落 14.5（不在四档里）⇒ 按规格与 v3 实测改回。
+    expect(tokens).toMatch(/--fs-body-md:\s*calc\(0\.875rem \* var\(--rem-scale\)\);/); // 14
+    expect(tokens).toMatch(/--fs-body-sm:\s*calc\(0\.8125rem \* var\(--rem-scale\)\);/); // 13
+    expect(tokens).toMatch(/--fs-caption-2xs:\s*calc\(0\.625rem \* var\(--rem-scale\)\);/); // 10
+    expect(tokens).toMatch(/--fs-caption-xs:\s*calc\(0\.6875rem \* var\(--rem-scale\)\);/); // 11
+    expect(tokens).toMatch(/--fs-caption-sm:\s*calc\(0\.75rem \* var\(--rem-scale\)\);/); // 12
+    expect(tokens).toMatch(/--fs-caption-md:\s*calc\(0\.8125rem \* var\(--rem-scale\)\);/); // 13
+    expect(tokens).toMatch(/--fs-footnote:\s*calc\(0\.75rem \* var\(--rem-scale\)\);/); // 12
+    expect(tokens).toMatch(/--fs-code:\s*calc\(0\.8125rem \* var\(--rem-scale\)\);/); // 13
     expect(tokens).toMatch(/--space-xs:\s*calc\(0\.25rem \* var\(--size-scale\)\);/); // 4
   });
 
   it("尺寸轴落到外壳/按钮：固定行高也乘 --size-scale（不再只有 1 处菜单项吃令牌）", () => {
-    for (const name of ["--h-row", "--h-btn", "--h-btn-sm", "--h-btn-lg", "--h-btn-xs", "--h-btn-2xs", "--w-row-action", "--h-row-action", "--w-switch", "--h-switch", "--d-switch-knob", "--sw-knob-inset", "--w-theme-thumb", "--h-theme-thumb", "--h-send"]) {
+    for (const name of ["--h-row", "--h-btn", "--h-btn-sm", "--h-btn-lg", "--h-btn-xs", "--h-btn-2xs", "--w-row-action", "--h-row-action", "--w-switch", "--h-switch", "--d-switch-knob", "--sw-knob-inset", "--h-send"]) {
       expect(tokens).toMatch(new RegExp(`${name}:\\s*calc\\([^)]*\\* var\\(--size-scale\\)\\)`));
     }
     expect(styles).toContain("height: var(--h-row)");
@@ -252,11 +282,10 @@ describe("刻度重钉：4px 栅格 / 圆角三档 / 正文字号 / 阅读列 / 
     expect(styles).toContain("width: 100%; height: 100%; transform: rotate(-90deg)");
     expect(styles).toContain("width: var(--w-switch); height: var(--h-switch)");
     expect(styles).toContain("left: calc(100% - var(--d-switch-knob) - var(--sw-knob-inset))");
-    expect(styles).toContain(".theme-thumb { width: var(--w-theme-thumb); height: var(--h-theme-thumb)");
   });
 
-  it("阅读列 760px（P3-1 收口：brief 六 · 内容列限宽 760）；过渡 140ms ease-out（120–160ms 区间内）", () => {
-    expect(tokens).toMatch(/--reading:\s*47\.5rem;/);
+  it("阅读列 832px（2026-10-21 设计重做：1440 下 760 留白过大）；过渡 140ms ease-out（120–160ms 区间内）", () => {
+    expect(tokens).toMatch(/--reading:\s*52rem;/);
     // 2026-10-20：缓动改走 --ease-out 令牌（Claude --cds-ease-out 实测值），
     // 断言「时长 140ms」这个真正的行为契约，不再钉 ease-out 的拼写。
     expect(tokens).toMatch(/--t-fast:\s*140ms var\(--ease-out\);/);
@@ -312,6 +341,16 @@ describe("样式层纪律与四态", () => {
     // 语义别名经 hsl(var()) 消费（裸三元组直用判卷记忆坑：别名层不许复制色值）
     expect(tokens).toMatch(/--mode-readonly:\s*hsl\(var\(--color-mode-readonly\)\);/);
     expect(tokens).toMatch(/--mode-auto:\s*hsl\(var\(--color-mode-auto\)\);/);
+  });
+
+  it("上下文容量六桶：亮暗都是三元组，组件用 hsl(var()) 消费", () => {
+    const dark = themeBlock("dark");
+    for (const key of ["messages", "tools", "skills", "memory", "system", "other"]) {
+      expect(themeBlock("light")).toMatch(new RegExp(`--ctx-seg-${key}:\\s*[\\d.]+\\s+[\\d.]+%\\s+[\\d.]+%;`));
+      expect(dark).toMatch(new RegExp(`--ctx-seg-${key}:\\s*[\\d.]+\\s+[\\d.]+%\\s+[\\d.]+%;`));
+      expect(styles).toMatch(new RegExp(`\\.ctx-seg-${key}\\s*\\{\\s*background:\\s*hsl\\(var\\(--ctx-seg-${key}\\)\\);`));
+    }
+    expect(themeBlock("light")).not.toMatch(/--ctx-seg-[a-z]+:\s*hsl\(/);
   });
 
   it("紧凑控件族有按下态（:active）", () => {

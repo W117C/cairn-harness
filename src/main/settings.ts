@@ -1,8 +1,11 @@
+import { CUSTOM_INSTRUCTIONS_MAX_BYTES } from "../user-instructions";
+export { CUSTOM_INSTRUCTIONS_MAX_BYTES } from "../user-instructions";
 // 主进程 settings 存储（§10.7 layout.get|set + §13 设置页）：JSON 文件，原子写，加载时逐字段校验，
 // 非法值回退默认（验收：写入后重新加载得到相同布局 / 非法布局值回退默认）。electron-free，可 headless 单测。
 import { readFile } from "node:fs/promises";
 import { writeFileAtomic } from "../atomic-write";
 import { ENV_KEYED_PROVIDERS } from "../providers/env-keys";
+import { PROVIDER_ID_RE } from "../providers/provider-identifiers";
 import { effectiveModelTable, findSpecByNameOrId, isKnownProviderId } from "../providers/registry";
 
 // M2d：第四面板 memory（两层记忆快照 + 会话内 remember 审计投影）；M2e：第五面板 plugins（插件容器）；
@@ -36,7 +39,7 @@ export type TextSizeSetting = "sm" | "md" | "lg";
 export type UiSizeSetting = "1" | "2" | "3" | "4" | "5";
 /** v2.14：界面语言（i18n 偏好）——V1 只做持久化与校验（先让偏好可存可回读），渲染层文案翻译逐段接线。 */
 export type LocaleSetting = "zh-CN" | "en-US";
-/** 主对话模型通道：demo 是冻结剧本；内置四家与 worker registry / env-key 表同源；
+/** 主对话模型通道：demo 是冻结剧本；内置家与 worker registry / env-key 表同源；
  *  自定义 provider（`.agent/providers.json` 里声明的）是**运行时**才知道的 id —— 静态枚举不出来，
  *  所以用 `(string & {})` 保留内置字面量的编辑器提示、同时允许任意 id。
  *  代价是类型不再是封闭联合 ⇒ 判据必须落在运行时那一道：`validateSettings` 里问 `isKnownProviderId`。 */
@@ -51,6 +54,8 @@ export interface AppSettings {
   locale: LocaleSetting;
   /** 当前会话（JSONL 即会话；重启还原用）。 */
   currentSession: string | null;
+  /** 用户级指令。每次 Agent 运行开始时读取。 */
+  customInstructions: string;
   /** M2d：会话结束自动沉淀开关（记忆面板/设置页可关，默认开，§8.1.4 双轨）。 */
   autoMemory: boolean;
   /** 子代理三件套（spawn_agent / wait_for_agents / cancel_agents）挂不挂到模型面上。
@@ -72,8 +77,15 @@ export interface AppSettings {
   onboarded: boolean;
   /** M4b §2.3：更新 manifest URL（缺省空 = 「未配置更新源」显式态；V1 轻量检查不做自动下载）。 */
   updateManifestUrl: string;
+  /** 联网免批（2026-11-05 业主裁「为什么每次都要问」）：开 = web_search / web_fetch 在所有档
+   *  免审批（以内存 allow 规则种进每场 run，不落 permissions.json）；关（缺省）= 照旧逐次出卡。
+   *  出网仍是「外部不可信输入」——开关只是把「问不问」的决定权交给用户，风险通道（SSRF 面的
+   *  命令侧判据）原样不动。 */
+  webAutoApprove: boolean;
   /** M4b §2.6：遥测开关（§13 默认关；V1 无上报实现 = 最强「零数据出门」保证，关于页注明）。 */
   telemetry: boolean;
+  /** 完成通知开关（缺省开 = 与既有行为一致）：窗口不在前台时，run 收束发系统通知。 */
+  notifyOnComplete: boolean;
   /** M5b §m5-proposal 步骤 9：bandit 在线学习开关（缺省 false = 零行为，不写 routing-bandit.json）。 */
   routingBandit: boolean;
   /** M5b 步骤 10 的产品侧接法（任务 #45）：pipeline 环跑完若**客观判据**（worker 事件流里的
@@ -109,6 +121,12 @@ export interface AppSettings {
   /** plan 模式默认档：新对话是否默认武装「未批准方案即写禁」（composer 里的即时开关以此为初值）。
    *  缺省 false = 逐字同武装前（写禁只在模型自愿 propose_plan 后成立）。零 token 成本，只是谓词。 */
   planRequiredByDefault: boolean;
+  /** 自动化页的保唤开关（2026-11-04 业主截图那行）：运行会话期间阻止系统休眠。
+   *  缺省开；桌面主进程经 powerSaveBlocker('prevent-app-suspension') 落地，headless 无实现。 */
+  keepAwake: boolean;
+  /** 实验：macOS 窗口材质（侧栏半透明）。默认关；改动需重启窗口才生效。
+   *  未做视觉验收前不默认开，避免把原型当 Claude 对齐。 */
+  windowVibrancy: boolean;
   /** 桌面蓝本 §3.6：Ctrl+Tab / Ctrl+Shift+Tab 循环会话开关。缺省**开**（文档把这对键列为主力）；
    *  §7.3.3 点名「别做成不可关闭」——误触用户可在此关掉，只留 ⌘⇧[ / ]。 */
   ctrlTabCycle: boolean;
@@ -135,6 +153,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   theme: "system",
   locale: "zh-CN",
   currentSession: null,
+  customInstructions: "",
   autoMemory: true,
   subagentTools: true,
   maxBudgetUsd: 0,
@@ -143,6 +162,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   onboarded: false,
   updateManifestUrl: "",
   telemetry: false,
+  webAutoApprove: false,
+  notifyOnComplete: true,
   routingBandit: false,
   routingCascade: false,
   provider: "demo",
@@ -166,18 +187,20 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoVerify: true,
   autoVerifyRepair: false,
   planRequiredByDefault: false,
+  keepAwake: true,
+  windowVibrancy: false,
   ctrlTabCycle: true,
   textSize: "md",
   uiSize: "2",
 };
 
-const SAFE_MODES = ["off", "report", "gate"] as const;
-const THEMES = ["system", "light", "dark"] as const;
-const LOCALES = ["zh-CN", "en-US"] as const;
+export const SAFE_MODES = ["off", "report", "gate"] as const;
+export const THEMES = ["system", "light", "dark"] as const;
+export const LOCALES = ["zh-CN", "en-US"] as const;
 /** 字号三档（与 tokens.css 的 html[data-text-size=…] 选择器逐字对应——改一处必须改另一处）。 */
-const TEXT_SIZES = ["sm", "md", "lg"] as const;
+export const TEXT_SIZES = ["sm", "md", "lg"] as const;
 /** 尺寸五档（与 tokens.css 的 html[data-ui-size="…"] 选择器逐字对应——改一处必须改另一处）。 */
-const UI_SIZES = ["1", "2", "3", "4", "5"] as const;
+export const UI_SIZES = ["1", "2", "3", "4", "5"] as const;
 /** 设置面可持久化的主会话 provider 的**内置**子集：demo + 四个真实 adapter。
  *  自定义 provider 不在这个字面量里（它们是运行时才知道的），由 `isPersistableProvider` 一并放行。 */
 export const PROVIDER_KINDS = ["demo", ...ENV_KEYED_PROVIDERS] as const;
@@ -239,6 +262,8 @@ export function validateSettings(raw: unknown): AppSettings {
     locale: LOCALES.includes(r.locale as LocaleSetting) ? (r.locale as LocaleSetting) : d.locale,
     currentSession: typeof r.currentSession === "string" && r.currentSession.length > 0 ? r.currentSession : null,
     autoMemory: typeof r.autoMemory === "boolean" ? r.autoMemory : d.autoMemory,
+    customInstructions: typeof r.customInstructions === "string" && Buffer.byteLength(r.customInstructions) <= CUSTOM_INSTRUCTIONS_MAX_BYTES
+      ? r.customInstructions : d.customInstructions,
     subagentTools: typeof r.subagentTools === "boolean" ? r.subagentTools : d.subagentTools,
     maxBudgetUsd: nonNegNumber(r.maxBudgetUsd) ?? d.maxBudgetUsd,
     budgetPricePerMTok: nonNegNumber(r.budgetPricePerMTok) ?? d.budgetPricePerMTok,
@@ -247,6 +272,9 @@ export function validateSettings(raw: unknown): AppSettings {
     onboarded: typeof r.onboarded === "boolean" ? r.onboarded : d.onboarded,
     updateManifestUrl: typeof r.updateManifestUrl === "string" ? r.updateManifestUrl : d.updateManifestUrl,
     telemetry: typeof r.telemetry === "boolean" ? r.telemetry : d.telemetry,
+    webAutoApprove: typeof r.webAutoApprove === "boolean" ? r.webAutoApprove : d.webAutoApprove,
+    // 缺省开的键走 `d.` 回退（promptCache 同族）：老 settings.json 没有这个键时保持「发通知」。
+    notifyOnComplete: typeof r.notifyOnComplete === "boolean" ? r.notifyOnComplete : d.notifyOnComplete,
     routingBandit: typeof r.routingBandit === "boolean" ? r.routingBandit : d.routingBandit,
     routingCascade: typeof r.routingCascade === "boolean" ? r.routingCascade : d.routingCascade,
     actionFusion: r.actionFusion === true,
@@ -266,7 +294,9 @@ export function validateSettings(raw: unknown): AppSettings {
     // 缺省关的键才用 `=== true`（上面那条规矩的反面：默认关时严格真值才不会把 false 读成缺省）
     autoVerifyRepair: r.autoVerifyRepair === true,
     planRequiredByDefault: r.planRequiredByDefault === true,
-    // 缺省开的键走 `d.` 回退（promptCache 同族）：老 settings.json 无此键时保持「开」，不被静默关掉。
+    // 缺省开的键走 `d.` 回退（promptCache 同族）：老 settings.json 无此键时保持「唤醒」不被静默关掉。
+    keepAwake: typeof r.keepAwake === "boolean" ? r.keepAwake : d.keepAwake,
+    windowVibrancy: r.windowVibrancy === true,
     ctrlTabCycle: typeof r.ctrlTabCycle === "boolean" ? r.ctrlTabCycle : d.ctrlTabCycle,
     // 2026-10-18 字号档：白名单外（含旧档案没这个键）回退 "md" = --rem-scale 1 = 与今天逐像素一致。
     textSize: TEXT_SIZES.includes(r.textSize as TextSizeSetting) ? (r.textSize as TextSizeSetting) : d.textSize,
@@ -283,8 +313,23 @@ export function validateSettings(raw: unknown): AppSettings {
 }
 
 /** settings 存储：内存缓存 + 每次写盘（原子写），多实例（重新加载 = 新实例）读到磁盘真相。 */
+/** 首次读盘发现的问题。`missing` 不算：新档案没有文件是正常的。 */
+export interface SettingsLoadIssue {
+  kind: "invalid-json" | "unreadable";
+  message: string;
+  /** 出问题的那个文件（界面横幅/CLI 警告要能指向盘上位置）。 */
+  path: string;
+}
+
 export class SettingsStore {
   private cache: AppSettings | null = null;
+  /** 只记第一次读盘的结论；写盘成功后清空（文件已被修好）。字段级回退（宽度越界之类）不在此列。 */
+  private issue: SettingsLoadIssue | null = null;
+
+  /** 调用方（CLI 提示 / 设置页横幅）据此把「你的设置没有生效」说出来，而不是静默用缺省。 */
+  loadIssue(): SettingsLoadIssue | null {
+    return this.issue;
+  }
   /* 写队列。此前「取合并基 → 写盘 → 更新缓存」三步之间没有串行化，同窗口两笔 set 会撞两台：
      ① 临时文件名只用 pid + 毫秒（那次硬化治的是**跨进程**固定名覆写，同进程同毫秒仍是同一个名）
        ⇒ 先 rename 的把文件搬走，后 rename 的直接抛 ENOENT，用户看到「保存设置失败」而屏幕已经改了；
@@ -297,15 +342,55 @@ export class SettingsStore {
   /** 读取：首读落盘校验（坏文件回退默认），后续走缓存。 */
   async get(): Promise<AppSettings> {
     if (this.cache) return this.cache;
-    let raw: unknown = null;
-    try {
-      raw = JSON.parse(await readFile(this.filePath, "utf8")) as unknown;
-    } catch {
-      raw = null; // 文件不存在 / JSON 损坏 → 默认（验收②）
+    const read = await this.readDisk();
+    // 首读可能晚于另一笔 get/set 完成，迟到的旧结果不能覆盖已更新的缓存（也不能把已修好的文件记成坏的）。
+    if (this.cache === null) {
+      this.cache = read.settings;
+      if (read.issue !== null) this.issue = read.issue;
     }
-    // 首读可能晚于另一笔 get/set 完成，迟到的旧结果不能覆盖已更新的缓存。
-    if (this.cache === null) this.cache = validateSettings(raw);
     return this.cache;
+  }
+
+  /** A run resolves these preferences against its own workspace, independent of the UI cache. */
+  async runModelPreferences(): Promise<Pick<AppSettings, "provider" | "model">> {
+    const raw = await this.readRaw();
+    const cached = await this.get();
+    return {
+      provider: typeof raw?.provider === "string" && PROVIDER_ID_RE.test(raw.provider) ? raw.provider : cached.provider,
+      model: typeof raw?.model === "string" && raw.model.length <= 200 ? raw.model : cached.model,
+    };
+  }
+
+  /** 重新读盘（外部修好/改坏文件后由设置页「重新读取」触发）：丢掉缓存与旧失败结论，按盘上内容重来。
+   *  排在写队列里——不能与在写的 patch 交错，否则会把刚写的字段读回旧值。 */
+  async reload(): Promise<AppSettings> {
+    const next = this.writes.then(async () => {
+      const read = await this.readDisk();
+      this.cache = read.settings;
+      this.issue = read.issue; // 修好 ⇒ 清空；仍坏 ⇒ 换成这一次的结论
+      return this.cache;
+    });
+    this.writes = next.catch(() => undefined);
+    return next;
+  }
+
+  private async readDisk(): Promise<{ settings: AppSettings; issue: SettingsLoadIssue | null }> {
+    let raw: unknown = null;
+    let issue: SettingsLoadIssue | null = null;
+    try {
+      const text = await readFile(this.filePath, "utf8");
+      try {
+        raw = JSON.parse(text) as unknown;
+      } catch (error) {
+        issue = { kind: "invalid-json", message: `JSON 解析失败：${error instanceof Error ? error.message : String(error)}`, path: this.filePath };
+      }
+    } catch (error) {
+      // 文件不存在 = 新档案（不是问题）；其余（权限 / 路径是目录）都该被说出来。
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        issue = { kind: "unreadable", message: `读取失败：${error instanceof Error ? error.message : String(error)}`, path: this.filePath };
+      }
+    }
+    return { settings: validateSettings(raw), issue };
   }
 
   /** 部分更新：深合并 layout，其余浅合并；原子写盘后返回新值。写入按发起顺序串行。 */
@@ -316,8 +401,27 @@ export class SettingsStore {
     return next;
   }
 
+  /** 迁移只在现有指令为空时写入，检查和提交共用设置写队列。 */
+  async importCustomInstructions(content: string): Promise<boolean> {
+    const next = this.writes.then(async () => {
+      const current = await this.get();
+      if (this.issue !== null) throw new Error("请先修复设置文件");
+      const raw = (await this.readRaw())?.customInstructions;
+      if (current.customInstructions.trim() !== "" || (typeof raw === "string" && raw.trim() !== "")) return false;
+      await this.applyPatch({ customInstructions: content });
+      return true;
+    });
+    this.writes = next.catch(() => undefined);
+    return next;
+  }
+
   private async applyPatch(patch: Partial<Omit<AppSettings, "layout">> & { layout?: Partial<LayoutState> }): Promise<AppSettings> {
+    if ("customInstructions" in patch &&
+      (typeof patch.customInstructions !== "string" || Buffer.byteLength(patch.customInstructions) > CUSTOM_INSTRUCTIONS_MAX_BYTES)) {
+      throw new Error(`自定义指令最多 ${CUSTOM_INSTRUCTIONS_MAX_BYTES} 字节`);
+    }
     const cur = await this.get();
+    if ("customInstructions" in patch && this.issue !== null) throw new Error("请先修复设置文件");
     /* 标量字段整体浅合并——旧写法把 26 个键名手抄成一条布尔表达式，只有列在里面的键才生效：
        往 AppSettings 加一个字段而忘了抄进名单，set() 会把它**连同整笔 patch** 静默丢成 {}
        （与 606fe7f 那两份名单同族）。名单由类型本身覆盖，没有可漂移的副本。 */
@@ -346,6 +450,7 @@ export class SettingsStore {
     }
     await this.persist(persisted);
     this.cache = validated;
+    this.issue = null;
     return validated;
   }
 
@@ -361,6 +466,6 @@ export class SettingsStore {
 
   /** 原子写（临时文件 + rename，中断自愈）。 */
   private async persist(s: Record<string, unknown>): Promise<void> {
-    await writeFileAtomic(this.filePath, JSON.stringify(s, null, 2));
+    await writeFileAtomic(this.filePath, JSON.stringify(s, null, 2), { mode: 0o600 });
   }
 }

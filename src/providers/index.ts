@@ -19,6 +19,7 @@ export interface ProviderMessage {
   content: string | null;
   tool_calls?: { id: string; type: "function"; function: { name: string; arguments: string } }[];
   tool_call_id?: string;
+  reasoning?: import("../events/types").ProviderReasoningState;
   /** 多模态图片块（识图）。**缺席 = 这条消息没有图片**（绝大多数消息）⇒ 缺省零行为：
    *  纯文本消息在每一处 wire 映射里都逐字保持 `content: "..."` 原形状。
    *

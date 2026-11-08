@@ -44,7 +44,8 @@ const CONFIG = {
   version: 1,
   providers: [
     {
-      id: "deepseek",
+      // 2026-10-25 起 "deepseek" 是内置家名（同名自定义家被校验拒收），fixture 改用 mydeepseek
+      id: "mydeepseek",
       label: "DeepSeek",
       protocol: "openai",
       baseURL: "https://api.deepseek.com/v1",
@@ -71,9 +72,9 @@ describe("①-a 缺省通道是 demo 时，模型面也必须有真模型", () =
   it("装了自定义家之后：它的模型出现在模型面里（用户回对话页就能选到）", () => {
     installDeepseek();
     const info = buildProviderInfo(resolveMainModel({ configuredKind: "demo", settingsModel: "" }));
-    const custom = info.models.find((m) => m.id === "deepseek-chat");
+    const custom = info.models.find((m) => m.id === "mydeepseek-chat");
     expect(custom).toBeDefined();
-    expect(custom?.provider).toBe("deepseek");
+    expect(custom?.provider).toBe("mydeepseek");
     // 能力面也跟着走：用户声明了 low/high，选择器据此知道能调档位
     expect(custom?.capability.thinking.supported).toBe(true);
     expect(custom?.capability.thinking.values).toEqual(["off", "low", "high"]);
@@ -81,18 +82,20 @@ describe("①-a 缺省通道是 demo 时，模型面也必须有真模型", () =
 
   it("从 demo 直接选一条自定义模型 ⇒ 解析成那家 provider（不是回落 demo）", () => {
     installDeepseek();
-    const selection = resolveMainModel({ configuredKind: "demo", settingsModel: "", requestModel: "deepseek-chat" });
-    expect(selectionProviderId(selection)).toBe("deepseek");
+    const selection = resolveMainModel({ configuredKind: "demo", settingsModel: "", requestModel: "mydeepseek-chat" });
+    expect(selectionProviderId(selection)).toBe("mydeepseek");
     if (selection.kind === "demo") throw new Error("不该回落 demo");
     expect(selection.spec.model).toBe("deepseek-chat");
   });
 
   it("providers 清单里既有内置也有自定义（设置页据此渲染下拉，不再写死在渲染层）", () => {
-    expect(knownProviders().map((p) => p.id)).toEqual(["glm", "openai", "anthropic", "gemini"]);
+    expect(knownProviders().map((p) => p.id)).toEqual(["glm", "openai", "anthropic", "gemini", "deepseek"]);
     installDeepseek();
     const list = knownProviders();
-    expect(list.map((p) => p.id)).toContain("deepseek");
-    expect(list.find((p) => p.id === "deepseek")?.custom).toBe(true);
+    expect(list.map((p) => p.id)).toContain("mydeepseek");
+    expect(list.find((p) => p.id === "mydeepseek")?.custom).toBe(true);
+    // 内置 deepseek 也在清单里，且不标 custom（设置页的下拉由此区分内置/自定义）
+    expect(list.find((p) => p.id === "deepseek")?.custom).toBe(false);
     expect(list.find((p) => p.id === "openai")?.custom).toBe(false);
     // 选择器与设置页拿的是同一份清单
     expect(buildProviderInfo(resolveMainModel({ configuredKind: "demo", settingsModel: "" })).providers).toEqual(list);
@@ -101,12 +104,14 @@ describe("①-a 缺省通道是 demo 时，模型面也必须有真模型", () =
 
 describe("①-b 首次添加一家：判据不动、改顺序", () => {
   it("白名单仍是「已装上」：未装时拒收（既有判据没被放宽）", async () => {
-    expect(isProviderId("deepseek")).toBe(false);
+    expect(isProviderId("mydeepseek")).toBe(false);
     // 保留名与未知 id 照样拒（这条判据是本仓既有契约，不该为了修 bug 把它放宽成来者不拒）
     expect(isProviderId("demo")).toBe(false);
     expect(isProviderId("unknown")).toBe(false);
+    // 内置家白放行：deepseek 2026-10-25 起是一等家，钥匙面天然认它
+    expect(isProviderId("deepseek")).toBe(true);
     const vault = useMemoryVault();
-    const rejected = await putProviderKey("deepseek", "sk-test");
+    const rejected = await putProviderKey("mydeepseek", "sk-test");
     expect(rejected.ok).toBe(false);
     if (!rejected.ok) expect(rejected.error).toContain("未知 provider"); // 拒的理由是白名单（不是没有后端）
     expect(vault.size).toBe(0); // 拒了就真的没存
@@ -115,16 +120,16 @@ describe("①-b 首次添加一家：判据不动、改顺序", () => {
   it("装上之后同一把钥匙就存得进（正是「先装、再存钥匙」这一步的意义）", async () => {
     const vault = useMemoryVault();
     installDeepseek();
-    expect(isProviderId("deepseek")).toBe(true);
-    expect(await putProviderKey("deepseek", "sk-test")).toEqual({ ok: true });
-    expect(vault.get("deepseek")).toBe("sk-test");
+    expect(isProviderId("mydeepseek")).toBe(true);
+    expect(await putProviderKey("mydeepseek", "sk-test")).toEqual({ ok: true });
+    expect(vault.get("mydeepseek")).toBe("sk-test");
   });
 
   it("两段式：prepare 只算不写，commit 才落盘，中途可以整体不要", async () => {
     const ws = mkdtempSync(join(tmpdir(), "cairn-2phase-"));
     dirs.push(ws);
     const prepared = prepareCustomProvider(ws, {
-      id: "deepseek",
+      id: "mydeepseek",
       label: "DeepSeek",
       protocol: "openai",
       baseURL: "https://api.deepseek.com/v1",
@@ -137,7 +142,7 @@ describe("①-b 首次添加一家：判据不动、改顺序", () => {
     expect(() => readFileSync(customProvidersPath(ws), "utf8")).toThrow();
     // ② 装上：此刻钥匙面才放行这一家
     installCustomProviders(prepared.derived);
-    expect(isProviderId("deepseek")).toBe(true);
+    expect(isProviderId("mydeepseek")).toBe(true);
     // ③ 落盘
     const wrote = await commitCustomProvider(prepared);
     expect(wrote.ok).toBe(true);
@@ -148,7 +153,7 @@ describe("①-b 首次添加一家：判据不动、改顺序", () => {
     const ws = mkdtempSync(join(tmpdir(), "cairn-2phase-"));
     dirs.push(ws);
     const prepared = prepareCustomProvider(ws, {
-      id: "deepseek",
+      id: "mydeepseek",
       protocol: "openai",
       baseURL: "https://api.deepseek.com/v1",
       apiKeyEnv: "DEEPSEEK_API_KEY",
@@ -158,7 +163,7 @@ describe("①-b 首次添加一家：判据不动、改顺序", () => {
     const previous = installedCustomProviders();
     installCustomProviders(prepared.derived);
     installCustomProviders(previous); // 失败回滚（桌面 handler 走的就是这一句）
-    expect(isProviderId("deepseek")).toBe(false);
+    expect(isProviderId("mydeepseek")).toBe(false);
     expect(installedCustomProviders()).toEqual([]);
     expect(() => readFileSync(customProvidersPath(ws), "utf8")).toThrow();
   });
@@ -168,9 +173,9 @@ describe("⑥ worker 面也看得见自定义家（spawn_agent 的模型参数�
   it("按 id / 按上游名反查都能命中自定义模型（worker 拿到的 spec 带着真 provider）", () => {
     installDeepseek();
     const table = effectiveModelTable();
-    expect(findSpecByNameOrId(table, "deepseek-chat")?.provider).toBe("deepseek");
-    expect(findSpecByNameOrId(table, "deepseek-chat")?.model).toBe("deepseek-chat");
-    expect(resolveModel(table, "deepseek-chat")?.id).toBe("deepseek-chat");
+    expect(findSpecByNameOrId(table, "mydeepseek-chat")?.provider).toBe("mydeepseek");
+    expect(findSpecByNameOrId(table, "mydeepseek-chat")?.model).toBe("deepseek-chat");
+    expect(resolveModel(table, "mydeepseek-chat")?.id).toBe("mydeepseek-chat");
   });
 
   it("worker 与会话两条路径都不许再用内置四家的静态表（回归哨兵）", () => {
@@ -193,11 +198,11 @@ describe("写设置通道与读设置通道必须同口径（用户实测：保�
     dirs.push(ws);
     initSettingsStore(join(ws, "settings.json"));
     installDeepseek();
-    // 旧实现这两行都会抛：`未知 provider: deepseek` / `未知模型: "deepseek-chat"`
-    const next = await setSettings({ provider: "deepseek", model: "deepseek-chat" });
-    expect(next.provider).toBe("deepseek");
-    expect(next.model).toBe("deepseek-chat");
-    expect((await getSettings()).provider).toBe("deepseek");
+    // 旧实现这两行都会抛：`未知 provider: mydeepseek` / `未知模型: "mydeepseek-chat"`
+    const next = await setSettings({ provider: "mydeepseek", model: "mydeepseek-chat" });
+    expect(next.provider).toBe("mydeepseek");
+    expect(next.model).toBe("mydeepseek-chat");
+    expect((await getSettings()).provider).toBe("mydeepseek");
   });
 
   it("没装上的 id 仍然拒（闸门没有被拆掉，只是换了判据）", async () => {
@@ -233,8 +238,8 @@ describe("在界面上选过模型 ⇒ 就算缺省通道是 demo 也要用它�
 
   it("选的是自定义家的模型也认", () => {
     installDeepseek();
-    const sel = resolveMainModel({ configuredKind: "demo", settingsModel: "deepseek-chat" });
-    expect(selectionProviderId(sel)).toBe("deepseek");
+    const sel = resolveMainModel({ configuredKind: "demo", settingsModel: "mydeepseek-chat" });
+    expect(selectionProviderId(sel)).toBe("mydeepseek");
   });
 
   it("没有 settings.model ⇒ 照旧回落 demo（缺省行为不变）", () => {
@@ -251,8 +256,8 @@ describe("在界面上选过模型 ⇒ 就算缺省通道是 demo 也要用它�
 describe("settings 里 provider 与 model 分属两家：认模型自带的那家（用户实测：整份设置被卡死）", () => {
   it("provider=openai + 自定义家的模型 ⇒ 解析成那家（旧实现抛「不匹配」）", () => {
     installDeepseek();
-    const sel = resolveMainModel({ configuredKind: "openai", settingsModel: "deepseek-chat" });
-    expect(selectionProviderId(sel)).toBe("deepseek");
+    const sel = resolveMainModel({ configuredKind: "openai", settingsModel: "mydeepseek-chat" });
+    expect(selectionProviderId(sel)).toBe("mydeepseek");
   });
 
   it("内置之间不一致也认模型自带的那家", () => {

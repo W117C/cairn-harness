@@ -130,8 +130,8 @@ function tapBlock(fileRel: string, pick: (block: string) => boolean): string {
   throw new Error(`留档 ${fileRel} 里取不到满足选择器的 TAP 段 ⇒ 证人缺席，这条判卷没有尺`);
 }
 
-const TAP_RED_REAL = tapBlock("../outputs/eval-long30-2026-10-02/L30-long-horizon-rep1-base.events.jsonl", (b) => /^not ok 23 - /m.test(b));
-const TAP_GREEN_REAL = tapBlock("../outputs/eval-chain32-2026-10-02/L32-long-chain-rep1-base.events.jsonl", (b) => /# fail 0/.test(b));
+const TAP_RED_REAL = tapBlock("../fixtures/eval/L30-long-horizon-rep1-base.events.jsonl", (b) => /^not ok 23 - /m.test(b));
+const TAP_GREEN_REAL = tapBlock("../fixtures/eval/L32-long-chain-rep1-base.events.jsonl", (b) => /# fail 0/.test(b));
 /** 逐字取自上面那份留档（下面把它拼回结果行核对，见「取料侧的逐字证人」那一行）。 */
 const REAL_RED_NAME = "maxnum：数值最大值（不是字典序）";
 const REAL_RED_LINE = "not ok 23 - " + REAL_RED_NAME;
@@ -615,7 +615,7 @@ describe("真料证人：留档原文逐字对得上", () => {
   });
 
   it("同一段真 TAP 拿去判 SWE-bench 那两列 ⇒ 全部 unmatched（逐名面诚实到点名，而不是退出码那种糊）", () => {
-    const spec = fromSweBenchJsonl(read("../outputs/eval-benchmark-adapter-2026-09-24/swebench-sample.jsonl")).tasks[0]!.judge;
+    const spec = fromSweBenchJsonl(read("../fixtures/eval/swebench-sample.jsonl")).tasks[0]!.judge;
     expect(spec, "SWE-bench 路径没产出逐名规格 ⇒ 接线断了").toBeDefined();
     const v = judgeNamedSets(parseTestResults(TAP_RED_REAL), spec!);
     expect(v.state).toBe("unreadable");
@@ -634,7 +634,7 @@ describe("真料证人：留档原文逐字对得上", () => {
   });
 
   it("vitest JSON 切片：逐名读出的名字与既有那位读者（suiteRows）一模一样，而 status 正是这里补上的那一半", () => {
-    const full = JSON.parse(read("../outputs/judge-timeout-2026-10-01/suite-quiet.json")) as { testResults: { name?: string }[] };
+    const full = JSON.parse(read("../fixtures/eval/suite-quiet.json")) as { testResults: { name?: string }[] };
     const failing = full.testResults.filter((f) => typeof f.name === "string" && f.name.includes("prose-needle-scan"));
     expect(failing).toHaveLength(1); // 取料面自己：切片确实只取到那一个文件，取不到就炸
     const sliceText = JSON.stringify({ ...full, testResults: failing });

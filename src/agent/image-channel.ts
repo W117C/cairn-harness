@@ -17,6 +17,13 @@ export interface ImageBlock {
 export interface ImageChannel {
   push: (images: readonly ImageBlock[]) => void;
   take: () => ImageBlock[];
+  /** 只读一眼待发图，**不拿走**。
+   *
+   *  为什么必须有一条不消费的读口（2026-11-03 实测）：预算要在 `take` 之前知道这一轮带了
+   *  多重的图（两张 900×1200 的帧 base64 就有 285,240 字符），而 `take` 一旦发生，
+   *  硬闸拦下的那一轮就等于把图吞了 —— 请求没发出去，图也没了，重试时模型看不到它刚渲的帧，
+   *  历史里的 tool_result 却还写着「已作为图片内容块附上」。⇒ 读用 peek，清空放到硬闸之后。 */
+  peek: () => ImageBlock[];
   /** 当前盒里待发的张数（观测用：识图到底有没有送到，不能只看模型说没说到）。 */
   size: () => number;
 }
@@ -33,6 +40,10 @@ export function createImageChannel(): ImageChannel {
       const out = pending;
       pending = [];
       return out;
+    },
+    peek() {
+      // 返回副本：调用方拿去量预算，不该顺手改盒里的东西。
+      return pending.map((p) => ({ type: p.type, dataUrl: p.dataUrl }));
     },
     size: () => pending.length,
   };

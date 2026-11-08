@@ -18,7 +18,8 @@ import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentEvent } from "../src/events";
-import { projectContext, type ContextMessage } from "../src/agent/context";
+import { createContextProjector, projectContext, type ContextMessage } from "../src/agent/context";
+import { acquireAppFixtureLock } from "./app-fixture-lock";
 
 const user = (content: string): AgentEvent => ({ type: "user_message", content });
 const call = (id: string, name = "spawn_agent"): AgentEvent =>
@@ -165,7 +166,11 @@ describe("真语料回归（tracked 面）：孤儿必须 0，且分母自己出
     return disk.filter((p) => !seen.has(p));
   }
 
-  it("每个含 tool_call 的语料文件过真投影：孤儿 0 且悬空 0（两条合取）", () => {
+  it("每个含 tool_call 的语料文件过真投影：孤儿 0 且悬空 0（两条合取）", async () => {
+    // 共享靶子的写入方（gated-tools 等）会在测试中途把 .agent/evolution-ledger.jsonl 落到盘上，
+    // 收尾才清。这把锁让「读语料面」落在它们的临界区之外，否则读到的是一条正在写的运行态文件。
+    const release = await acquireAppFixtureLock();
+    try {
     // 两态各钉一次（第 354 页）：先证明这把新尺咬得住，再拿它去量真语料
     expect(untrackedOnDisk(["fixtures/a.jsonl"], ["fixtures/a.jsonl"])).toEqual([]);
     expect(untrackedOnDisk(["fixtures/x/.agent/snapshots/1--c/a.jsonl"], ["fixtures/a.jsonl"])).toEqual([
@@ -198,5 +203,85 @@ describe("真语料回归（tracked 面）：孤儿必须 0，且分母自己出
     }
     expect(withCalls, "含 tool_call 的语料为 0 ⇒ 没有尺").toBeGreaterThanOrEqual(10);
     expect(bad.join("\n"), `孤儿 ${String(orphanTotal)} / 悬空 ${String(danglingTotal)}`).toBe("");
+    } finally { await release(); }
   });
 });
+
+describe("B9 跨轮增量投影", () => {
+  const completeBatch = (...extra: AgentEvent[]): AgentEvent[] => {
+    // 每批都以 usage 收尾：避免把未 flush 的 assistant_delta 留在 finalize 边界上——
+    // 全量投影会把跨边界的同 callId delta 并成一条，而折叠器在 finalize 时已把上一段落位。
+    return [...extra, { type: "usage", inputTokens: 1, outputTokens: 1 }] as AgentEvent[];
+  };
+
+  it("append-only 每轮只折叠增量；失效窗口弃缓存重建，产物与全量投影逐格相等", () => {
+    const events: AgentEvent[] = [
+      user("原始任务"),
+      { type: "thinking_delta", callId: "d1", text: "想", reasoning: { id: "r1", source: "s" } },
+      { type: "assistant_delta", callId: "d1", text: "开始" },
+      { type: "tool_call", id: "c1", name: "read_file", args: { path: "a.ts" } },
+      result("c1", "a.ts 内容"),
+      { type: "usage", inputTokens: 4, outputTokens: 2 },
+    ];
+    let projector = createContextProjector(events);
+    expect(projector.pushes).toBe(events.length);
+    expect(JSON.stringify(projector.finalize())).toBe(JSON.stringify(projectContext(events)));
+    expect(JSON.stringify(projector.finalize()), "finalize 可重复运行").toBe(JSON.stringify(projectContext(events)));
+
+    const windows: { events: AgentEvent[]; invalidation: boolean }[] = [
+      { events: completeBatch({ type: "assistant_message", content: "继续读" }), invalidation: false },
+      { events: completeBatch(
+        { type: "assistant_delta", callId: "d2", text: "流式" },
+        { type: "assistant_delta", callId: "d2", text: "回复" },
+        { type: "tool_call", id: "c2", name: "grep", args: { pattern: "x" } },
+        result("c2", "命中"),
+      ), invalidation: false },
+      { events: completeBatch(result("derivative-1", "无主回执")), invalidation: false },
+      // 以下四种都改写投影元数据：必须弃缓存重建。
+      { events: [{
+        type: "compaction", trigger: "manual", reason: "user_request", compressed_event_ids: [2, 3],
+        summary: "S", summary_offset: events.length + 2, tokens_before: 9000, tokens_after: 100,
+      }, { type: "assistant_message", content: "压缩后" }], invalidation: true },
+      { events: [{
+        type: "verify_result", callId: "v1", auto: true, ok: false, attempt: 1, maxAttempts: 3,
+        results: [{ command: "test", ok: false, output: "red", cause: "code", exitCode: 1 }],
+      }, { type: "assistant_message", content: "看到红" }], invalidation: true },
+      { events: [{
+        type: "session_meta_update", patch: {}, verify: { commands: ["pnpm test"] },
+      }, { type: "assistant_message", content: "声明之后" }], invalidation: true },
+      { events: [user("新任务"), { type: "assistant_message", content: "换题了" }], invalidation: true },
+    ];
+    for (const [round, window] of windows.entries()) {
+      const start = events.length;
+      events.push(...window.events);
+      const why = projector.invalidation(events);
+      if (window.invalidation) expect(why, `第 ${String(round + 1)} 个窗口本该判失效`).not.toBeNull();
+      else expect(why, `第 ${String(round + 1)} 个 append-only 窗口不该判失效`).toBeNull();
+      const beforePushes = projector.pushes;
+      if (why !== null) projector = createContextProjector(events);
+      else for (let i = start; i < events.length; i++) projector.push(i);
+      if (why === null) expect(projector.pushes - beforePushes).toBe(events.length - start);
+      expect(JSON.stringify(projector.finalize()), `第 ${String(round + 1)} 个窗口差分`).toBe(JSON.stringify(projectContext(events)));
+    }
+  });
+
+  it("显式失效：换事件数组 / 事件数回缩 / 追加 session_rewind 都不许继续折叠", () => {
+    const events: AgentEvent[] = [user("t"), { type: "assistant_message", content: "a" }];
+    const projector = createContextProjector(events);
+    expect(projector.invalidation([...events])).toBe("事件数组已替换");
+    const shortened = events.slice(0, 1);
+    events.length = 1; // 同一份数组原地回缩：换数组那一格上面已单独钉过。
+    expect(shortened).toHaveLength(1);
+    expect(projector.invalidation(events)).toContain("事件数回缩");
+    events.push({ type: "assistant_message", content: "a" }); // 回到原长度：再单独验追加窗口的 rewind
+    events.push({ type: "session_rewind", to_event_id: 1 });
+    expect(projector.invalidation(events)).toContain("session_rewind");
+    // 重建之后仍与全量重投影一致：失效不是「跳过窗口」，是完整重折叠。
+    expect(JSON.stringify(createContextProjector(events).finalize())).toBe(JSON.stringify(projectContext(events)));
+  });
+
+/** B9 差分判卷：全量重投影与跨轮增量折叠在每一个窗口上都必须逐字节同形。
+ *  反证人不是「两段都非空」：折叠器一旦漏了失效语义（compaction / verify_result / 声明 / 回缩），
+ *  下面的逐窗口比对会立刻拿到一份和 projectContext 不同的上下文。 */
+});
+

@@ -1,0 +1,20 @@
+{
+  "model": "demo-model",
+  "provider": "stub",
+  "toolPolicy": "read-only",
+  "startedAt": "2026-10-27T00:00:00.000Z",
+  "finishedAt": "2026-10-27T00:30:00.000Z",
+  "runs": [
+    {
+      "taskId": "harbor-demo-1",
+      "outcome": "failed",
+      "failure": "visible test still failing",
+      "startedAt": "2026-10-27T00:01:00.000Z",
+      "finishedAt": "2026-10-27T00:05:00.000Z",
+      "usage": {
+        "inputTokens": 1200,
+        "outputTokens": 340
+      }
+    }
+  ]
+}

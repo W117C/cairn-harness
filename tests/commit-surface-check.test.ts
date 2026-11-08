@@ -205,8 +205,8 @@ describe("gateFaceDiff：门本体面分三档（HEAD 里有／HEAD 里没这支
   });
   it("真仓事实源：GATES 里的名字确实能匹配到 `scripts/<名字>.ts` 那一族（名单没被换成手抄件）", () => {
     expect(GATES.length).toBeGreaterThan(20);
-    const r = gateFaceDiff(["scripts/docs-check.ts"], GATES, HEAD(["scripts/docs-check.ts"]));
-    expect(r.gates).toEqual(["scripts/docs-check.ts"]);
+    const r = gateFaceDiff(["scripts/gate-check.ts"], GATES, HEAD(["scripts/gate-check.ts"]));
+    expect(r.gates).toEqual(["scripts/gate-check.ts"]);
   });
   it("空清单 ⇒ 三档都空（不许凭空报出「门在飞」）", () => {
     expect(gateFaceDiff([], GATES, HEAD([]))).toEqual({ gates: [], absentInHead: [], other: [] });

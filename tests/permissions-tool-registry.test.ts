@@ -50,15 +50,16 @@ const session = (mode: PermissionMode) => newAutonomySession(mode, { sandboxAvai
  *  为什么不按档位「归纳」成几条通则：归纳出的通则本身就是这个模块的**被改对象**——
  *  一旦行为变了，通则会跟着一起漂，于是判卷跟着被测物一起变绿。这里宁可啰嗦。
  *  读法：RO=只读档、DF=默认档、GD=引导档、AU=自主档。 */
-type Golden = readonly [ro: string, df: string, gd: string, au: string];
+type Golden = readonly [ro: string, df: string, gd: string, au: string, fa: string];
+// 第 5 列 = full-access（2026-10-24 业主新增档）：现跑实测，不是按 auto 推断。
 const GOLDEN: Readonly<Record<string, Golden>> = {
   // 只读面：四档全部照常放行。**worker 只读档全靠这一段**（read_file/grep/glob/shell_ro/impact_query）。
-  read_file: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
+  read_file: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
   // read_image（2026-10-15 识图）：与 read_file 同族——只读界内图片进上下文，不改盘、不出网
   // （图片是工作区内文件读出来的 data URL，不是 http(s) 拉取）⇒ 四档全放行，不出卡。
-  read_image: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
-  grep: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
-  glob: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
+  read_image: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  grep: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  glob: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
   // **2026-10-05 显式改判（#58）**：lsp 从「四档照常放行」移出，四档一律走风险线送审。
   //  理由：`lsp` 会 spawn **工作区配置里写的命令**（`.agent/lsp.json` 的 `command`），
   //  那是仓库自带的外部输入——与 verify 的 S3 同一条形状。写那份配置已被 S2 的路径通道
@@ -68,48 +69,79 @@ const GOLDEN: Readonly<Record<string, Golden>> = {
   //  未值守（worker）侧因此会 fail-closed 拒绝——那正是想要的：无人可问时，
   //  不许按一份仓库带来的配置起进程。
   //  这条金标准的用途正是**逼着改的人显式写下来**——它当初红的时候，红的就是这一格。
-  lsp: ["ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "ask/L4-risk"],
+  lsp: ["ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "approve/L3-mode"],
   // render_image（2026-10-16）：spawn 真实浏览器渲染工作区内的 HTML/SVG ⇒ 与 lsp 同族
   // （执行外部进程、外部输入、不改盘）⇒ 四档一律走风险线送审，逐字同形于 lsp。
   // 未值守（worker）侧因此 fail-closed 拒绝——无人可问时不许起浏览器。
-  render_image: ["ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "ask/L4-risk"],
-  shell_ro: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
-  impact_query: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
-  clarify: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
-  propose_plan: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
-  verify: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
-  wait_for_agents: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
-  cancel_agents: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
-  refine_goal: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
-  remember: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
-  obs_recall: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
-  skill: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
-  automation_create: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
-  automation_update: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
-  automation_delete: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
-  automation_run_now: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
-  automation_list: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass"],
+  render_image: ["ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "approve/L3-mode"],
+  shell_ro: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  impact_query: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  clarify: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  propose_plan: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  verify: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  // todo_write（2026-11-04 工作状态面板）：无用户数据副作用（只写会话日志）⇒ 与 clarify 同族，
+  // 五档全部放行不出卡；只读档同样在面（清单是过程数据，不是写盘）。
+  todo_write: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  // task_output / task_stop（2026-11-05 后台任务三件套）：读任务输出 / 进程组组杀——
+  // 无用户数据副作用，与 todo_write/clarify 同族，五档放行不出卡。
+  task_output: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  task_stop: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  wait_for_agents: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  cancel_agents: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  send_agent: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  list_agents: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  resume_agent: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  close_agent: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  refine_goal: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  remember: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  obs_recall: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  search_history: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  skill: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  // MCP 服务器级懒加载元工具：只改 active 集，不执行外部工具 ⇒ 四档均按无副作用工具放行。
+  mcp_list: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  mcp_activate: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  mcp_release: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  // 延迟工具目录：只读检索，不激活也不执行；执行仍过 gatedMcpTool 的同一条权限门。
+  tool_search: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  automation_create: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  automation_update: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  automation_delete: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  automation_run_now: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  automation_list: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
   // 写向：只读档 L0 摘除 / 默认档逐次审批 / 自主档放行。shell_ro 刻意不在此列
   // （autonomy.ts 注释：它靠执行期静态白名单，计入写向会把只读 shell 一并摘掉）。
-  write_file: ["deny/L0-hard", "ask/L3-mode", "approve/L4-pass", "approve/L4-pass"],
-  run_shell: ["deny/L0-hard", "ask/L3-mode", "approve/L4-pass", "approve/L4-pass"],
-  shell_rw: ["deny/L0-hard", "ask/L3-mode", "approve/L4-pass", "approve/L4-pass"],
-  spawn_agent: ["deny/L0-hard", "ask/L3-mode", "approve/L4-pass", "approve/L4-pass"],
+  write_file: ["deny/L0-hard", "ask/L3-mode", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  run_shell: ["deny/L0-hard", "ask/L3-mode", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  shell_rw: ["deny/L0-hard", "ask/L3-mode", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  spawn_agent: ["deny/L0-hard", "ask/L3-mode", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
   // edit_file 在引导档走**风险线**（编辑是 medium，guided 的线是 medium）⇒ 与上面四个不同行。
   // 这格是本段存在的理由：归纳成「写向 ⇒ 其余档全放行」会正好写错它。
-  edit_file: ["deny/L0-hard", "ask/L3-mode", "ask/L4-risk", "approve/L4-pass"],
+  edit_file: ["deny/L0-hard", "ask/L3-mode", "ask/L4-risk", "approve/L4-pass", "approve/L3-mode"],
   // apply_patch 是**合并期**点名的（zcode 的 M2 补丁工具 `8d267bb` 在本表写死之后才进来）。
   // 值是合并后现跑出来的，不是推的：只读档 L0 摘除 / 默认档逐次审批 / 引导与自主档放行
   // —— 与上面四个写向逐字同形，正是 autonomy.ts 把它登记进 `SIDE_EFFECT_TOOLS` 的结果。
   // 这条点名本身就是本表存在的理由：不点名它，B1 会红并把「新增工具必须点名」这条规矩变成摆设。
-  apply_patch: ["deny/L0-hard", "ask/L3-mode", "approve/L4-pass", "approve/L4-pass"],
+  apply_patch: ["deny/L0-hard", "ask/L3-mode", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
   // diagnose 同属合并期（zcode 的 M3 诊断工具 `0b37ad2`）：执行进程、写入缓存/产物 ⇒ 计写向，
   // 逐字同形于上面四个。与 web_search 一并补，是因为「缺口一次列全」比一次撞一个便宜。
-  diagnose: ["deny/L0-hard", "ask/L3-mode", "approve/L4-pass", "approve/L4-pass"],
-  // web_search：出网 ⇒ 四档一律走风险线送审，逐字同形于 web_fetch。非交互四档全放行。
-  web_search: ["ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "ask/L4-risk"],
-  // 出网：四档一律走风险线送审（web_fetch 的既有判定，与本笔无关但一并钉住防漂移）。
-  web_fetch: ["ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "ask/L4-risk"],
+  diagnose: ["deny/L0-hard", "ask/L3-mode", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  // web_search：出网 ⇒ 前四档走风险线送审；完全允许档（2026-11-03 业主：什么都允许）免卡。
+  web_search: ["ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "approve/L3-mode"],
+  // 出网：web_fetch 与 web_search 同形；完全允许档按档放行（旧口径"出网永不免批"作废）。
+  web_fetch: ["ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "approve/L3-mode"],
+  // 2026-11-06 只读 git 三合一：spawn 固定 argv、零写权、不出网 ⇒ 全档放行（含只读档），
+  // 与 glob/read_file 家族同形。
+  git_read: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  // 2026-11-06 第三批小件：纯解析器与目录 stat，零写权零出网 ⇒ 与 git_read 同形。
+  calc: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  list_dir: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  // 2026-11-06 文档读取：zip/zlib 原生解析，只读不出网 ⇒ 同形。
+  read_doc: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  // 2026-11-06 浏览器驾驶三件：navigate 与 web_fetch 同族（模型发起外部页面加载，出网面）
+  // ⇒ 实测对齐 web_fetch 行；snapshot/pick 只内省已加载页面 ⇒ 与只读家族同形。
+  browser_navigate: ["ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "approve/L3-mode"],
+  browser_snapshot: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  browser_pick: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
 };
 
 describe("M7 · 工具名登记册", () => {
@@ -124,7 +156,7 @@ describe("M7 · 工具名登记册", () => {
     for (const n of KNOWN_TOOL_NAMES) expect(ALL_NAMES).toContain(n);
   });
 
-  it("B1 · 零回归：26 个既有工具名在四档下的 evaluate 裁决逐格不变（改前实测金标准）", () => {
+  it("B1 · 零回归：既有工具名在五档下的 evaluate 裁决逐格不变（前四档＝改前实测金标准，第五档现跑）", () => {
     for (const name of ALL_NAMES) {
       const expected = GOLDEN[name];
       expect(expected, `金标准缺 ${name}——新增工具必须在这里点名，否则本段会跟着行为一起漂`).toBeDefined();
@@ -156,11 +188,27 @@ describe("M7 · 工具名登记册", () => {
   });
 
   it("C · 新守卫确实开火：未登记工具名在四档下都要审批（改前是四档全 approve）", () => {
+    // full-access 是业主明确的「不再有任何审批卡」档（modes.ts 注释）；2026-11-03 起
+    // 连出网也免卡（下一条用例钉住），未登记工具同样走短路面。
+    const ASKING = PERMISSION_MODES.filter((mode) => mode !== "full-access");
     for (const name of ["brand_new_write_tool", "ghost_tool", "totally_made_up"]) {
-      for (const mode of PERMISSION_MODES) {
+      for (const mode of ASKING) {
         const d = evaluate(asTool(name), { path: "src/x.ts" }, session(mode));
         expect(d.verdict, `${name} @ ${mode} 改前是 approve`).toBe("ask");
         expect(d.layer).toBe("L4-mcp-unannotated");
+      }
+      const fa = evaluate(asTool(name), { path: "src/x.ts" }, session("full-access"));
+      expect(`${fa.verdict}/${fa.layer}`, `${name} @ full-access 是业主裁决的免卡档`).toBe("approve/L3-mode");
+    }
+  });
+
+  it("C2 · 2026-11-03 业主裁决：full-access 连出网也不再出卡（其余四档仍逐次批准）", () => {
+    for (const name of ["web_fetch", "web_search"]) {
+      const d = evaluate(asTool(name), {}, session("full-access"));
+      expect(`${d.verdict}/${d.layer}`, `${name} @ full-access 应免卡`).toBe("approve/L3-mode");
+      for (const mode of PERMISSION_MODES.filter((m) => m !== "full-access")) {
+        const asked = evaluate(asTool(name), {}, session(mode));
+        expect(`${asked.verdict}/${asked.layer}`, `${name} @ ${mode} 出网仍要批`).toMatch(/^ask\/L4-(risk|network)$/);
       }
     }
   });

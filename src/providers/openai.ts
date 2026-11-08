@@ -2,28 +2,16 @@
 // baseURL / model / 额外 body 参数（extraBody）/ 环境变量名均可配，GLM 是它的一组预设（见 glm.ts）。
 // 解码规则与迁移前逐字一致：增量在 choices[0].delta.content；tool_calls 按 index 跨块累积
 //（id 首块、name 非空即记、arguments 拼接）；末 chunk 带 usage（后到覆盖）；data: [DONE] 结束。
+import { createHash, randomUUID } from "node:crypto";
 import { DEFAULT_STALL_MS } from "../net";
-import { backoffMs, establishStream, retryableStatus, waitRetryDelay } from "./retry";
+import { backoffMs, establishStream, retryableStreamErrorFrame, retryableStreamFailure, StreamFailure, waitRetryDelay } from "./retry";
 import { turnStopMissingEvent, turnTruncatedEvent } from "./stop-reason";
 import type { ModelOutput, ProviderContentImage, ProviderMessage, ProviderMessageWithImage, ProviderToolSpec } from "./index";
 import type { RequestMeter, RequestCategory, MeterUsage, RequestOutcome } from "../agent/metering";
 
-/** 流内失败的分类（2026-09-30）：重试与否由**抛出处**决定，不由 catch 处猜字符串。
- *  理由：判断「这个错能不能重放」需要的信息（是 5xx 还是协议错、是帧坏还是对端挂了）
- *  只在抛出的那一刻是确定的；拿到 catch 里再靠 message 正则反推，迟早在某个新错误形状上猜错。
- *  `retryable` 只表示「重放是安全的」——调用方仍要另外确认「本次尝试还没吐过输出」。 */
-export class StreamFailure extends Error {
-  readonly retryable: boolean;
-  constructor(message: string, retryable: boolean) {
-    super(message);
-    this.name = "StreamFailure";
-    this.retryable = retryable;
-  }
-}
-
-/** 流内 error 帧的类型名 → 是否可重放。数值状态码走 `retryableStatus`（唯一事实源）；
- *  这里的名字是 OpenRouter / 各家网关把 5xx 塞进 body 时用的形状（实测 `server_error` 即 502）。 */
-const RETRYABLE_ERROR_TYPES = new Set(["server_error", "overloaded_error", "rate_limit_exceeded", "timeout"]);
+/** `StreamFailure` 与流内 error 帧的判据已搬到 `retry.ts`（2026-10-23）：三家适配器共用同一套，
+ *  名字表与「数值优先」的读法只留一份。这里再导出，保持既有 import 路径不变。 */
+export { StreamFailure } from "./retry";
 
 export type OpenAiMessage = ProviderMessage;
 export type OpenAiToolSpec = ProviderToolSpec;
@@ -54,10 +42,16 @@ export interface OpenAiOptions {
   fetchImpl?: typeof fetch;
   /** 停滞守卫静默窗口 ms（根因 4）；缺省 60s，<=0 关闭守卫。 */
   stallTimeoutMs?: number;
-  /** 思考档位（"low"|"medium"|"high"）：非空则写 body.reasoning_effort。
+  /** 思考档位（"low"|"medium"|"high"|"max"|"off"）：非空则写 body.reasoning_effort（max 只有上游声明时才会到达）。
    *  传的是**档位名**而不是数值——OpenAI 兼容族收的就是这个名字（DeepSeek 的 /models 自述里
-   *  `effort.supported_levels` 写明的也是这些名字）。undefined = 逐字旧行为（不出现这个字段）。 */
+   *  `effort.supported_levels` 写明的也是这些名字）。undefined = 逐字旧行为（不出现这个字段）。
+   *  **例外（native DeepSeek）**：见 `deepseekNative`——那一家「不发字段」被服务端读成默认开思考，
+   *  所以它的 undefined/"" 与 "off" 同样显式写 `thinking:{type:"disabled"}`，effort 放进
+   *  `thinking.reasoning_effort`（官方形状）而不是顶层。 */
   reasoningEffort?: string;
+  /** 预设身份自述（deepseek.ts 传 true）：按 DeepSeek 官方 wire 形状发（thinking 对象、
+   *  显式开关），不靠 hostname 猜——端点被镜像/中转覆盖时形状也不能变。 */
+  deepseekNative?: boolean;
   /** Opt-in wire-boundary accounting; never stores payload/key text. */
   metering?: { meter: RequestMeter; category: RequestCategory };
 }
@@ -78,10 +72,10 @@ interface ChatChunk {
       reasoning?: string;
       tool_calls?: DeltaToolCall[];
     };
-    message?: { content?: string; tool_calls?: DeltaToolCall[] };
+    message?: { content?: string; reasoning_content?: string; tool_calls?: DeltaToolCall[] };
     finish_reason?: string | null;
   }[];
-  usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number }; cache_creation_input_tokens?: number } | null;
+  usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number }; completion_tokens_details?: { reasoning_tokens?: number }; cache_creation_input_tokens?: number; prompt_cache_hit_tokens?: number } | null;
   // OpenAI 流中段错误事件（如内容审查），出现即按协议错误抛出
   error?: { message?: string; type?: string; code?: string } | null;
 }
@@ -101,21 +95,26 @@ function tokenCount(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null;
 }
 
+/** 缓存命中读数：OpenAI 形状（`prompt_tokens_details.cached_tokens`）优先，DeepSeek 旧字段
+ *  `prompt_cache_hit_tokens` 兜底——官方文档写明两者同值（2026-10-25 实读），谁在场读谁；
+ *  都缺报仍是 null（未上报 ≠ 0 命中）。只此一处，流式/非流式/计量三张脸共用。 */
+function cacheReadTokens(u: NonNullable<ChatChunk["usage"]>): number | null {
+  return tokenCount(u.prompt_tokens_details?.cached_tokens) ?? tokenCount(u.prompt_cache_hit_tokens);
+}
+
 function toUsage(u: NonNullable<ChatChunk["usage"]>): ModelOutput & { type: "usage" } {
   // prompt_tokens 本身含缓存命中量 → 事件口径已一致；这里只是把分块透出，让命中率可见（缺报不落 0）
-  const read = tokenCount(u.prompt_tokens_details?.cached_tokens);
+  const read = cacheReadTokens(u);
   const write = tokenCount(u.cache_creation_input_tokens);
+  const reasoning = tokenCount(u.completion_tokens_details?.reasoning_tokens);
   return {
     type: "usage",
     inputTokens: u.prompt_tokens ?? 0,
     outputTokens: u.completion_tokens ?? 0,
     ...(read !== null ? { cacheReadInputTokens: read } : {}),
     ...(write !== null ? { cacheWriteInputTokens: write } : {}),
+    ...(reasoning !== null ? { reasoningOutputTokens: reasoning } : {}),
   };
-}
-
-function toWireMessages(messages: OpenAiMessage[]): unknown[] {
-  return toOpenAiWireMessages(messages);
 }
 
 /** 带图消息的 wire 形状：content 从字符串换成 OpenAI 的 parts 数组。
@@ -138,20 +137,23 @@ function toWireImageMessage(m: OpenAiMessage, parts: readonly ProviderContentIma
 }
 
 /** 一条消息的 wire 形状（识图那一支在这里分叉）。 */
-function toWireMessage(m: OpenAiMessage): unknown {
+function toWireMessage(m: OpenAiMessage, reasoningSource?: string): unknown {
   const parts = (m as ProviderMessageWithImage).contentParts;
-  if (parts !== undefined && parts.length > 0) return toWireImageMessage(m, parts);
+  const native = m.role === "assistant" && reasoningSource !== undefined && m.reasoning?.source === reasoningSource
+    ? { reasoning_content: m.reasoning.content } : {};
+  if (parts !== undefined && parts.length > 0) return { ...(toWireImageMessage(m, parts) as object), ...native };
   return {
     role: m.role,
     content: m.content,
     ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
     ...(m.tool_call_id !== undefined ? { tool_call_id: m.tool_call_id } : {}),
+    ...native,
   };
 }
 
 /** 识图消息表（纯函数，供判卷直接钉 wire 形状）。 */
-export function toOpenAiWireMessages(messages: OpenAiMessage[]): unknown[] {
-  return messages.map(toWireMessage);
+export function toOpenAiWireMessages(messages: OpenAiMessage[], reasoningSource?: string): unknown[] {
+  return messages.map(message => toWireMessage(message, reasoningSource));
 }
 
 function toWireTools(tools: OpenAiToolSpec[]): unknown[] {
@@ -187,12 +189,38 @@ export async function* streamOpenAI(
   );
   const stream = opts.stream ?? true;
   const rawFetch = opts.fetchImpl ?? fetch;
+  // 缺失原生 id 时，序号只在这一逻辑请求内有效；重试沿用同一前缀，新请求不得碰撞。
+  const toolRequestScope = randomUUID();
 
-  const body: Record<string, unknown> = { model, messages: toWireMessages(messages), stream };
+  const effectiveModel = opts.extraBody?.model ?? model;
+  const reasoningSource = createHash("sha256").update(endpoint + "\0" + String(effectiveModel)).digest("hex");
+  const endpointUrl = new URL(endpoint);
+  const nativeDeepSeek = opts.deepseekNative === true || endpointUrl.hostname === "api.deepseek.com";
+  // reasoning_content 作为**输入**回放：官方文档（2026-10-25 实读）写明这是 beta 通道的
+  // Chat Prefix Completion 能力（base 必须是 …/beta）；reasoner 时代的标准端点对输入里的
+  // reasoning_content 是 400。所以回放的来源分域判据不变（同端点+同模型才回放），但发给
+  // **标准端点**的 wire 一律不带这个字段——回放只在 beta 路径上发生。事件层的思考记录
+  // （thinking_delta 的 source 域）不受影响：状态留档，只是不回传。
+  const deepSeekBetaInput = nativeDeepSeek && endpointUrl.pathname.startsWith("/beta");
+  const wireReasoningSource = nativeDeepSeek && !deepSeekBetaInput ? undefined : reasoningSource;
+  const body: Record<string, unknown> = { model, messages: toOpenAiWireMessages(messages, wireReasoningSource), stream };
   // C8（审查 P2）：流式计量——OpenAI 兼容端点默认不回 usage，须显式开启 stream_options.include_usage，
   // 否则流式会话 token 恒 0（成本闸/用量面板全失真）。extraBody 仍可覆盖（自建网关不兼容时）。
   if (stream) body.stream_options = { include_usage: true };
-  if (opts.reasoningEffort !== undefined && opts.reasoningEffort !== "") body.reasoning_effort = opts.reasoningEffort;
+  if (nativeDeepSeek) {
+    // DeepSeek V4.1 官方文档（2026-10-25 实读）：`thinking.type` 缺省 **enabled**（effort 缺省 high）
+    // ——「一个字不加」在别家是逐字旧行为，在这家被服务端读成「要思考」：更慢、更贵、输出上限
+    // 也按思考档（64K）给。所以 native DeepSeek **永远写显式开关**；effort 同按官方形状放进
+    // `thinking.reasoning_effort`，顶层 reasoning_effort 是 OpenAI 家的形状，这家不发
+    // （档位按 reasoning.ts 的直发表：xhigh 自 2026-11-05 起自成一档，不再折叠成 high）。
+    if (opts.reasoningEffort === undefined || opts.reasoningEffort === "" || opts.reasoningEffort === "off") {
+      body.thinking = { type: "disabled" };
+    } else {
+      body.thinking = { type: "enabled", reasoning_effort: opts.reasoningEffort };
+    }
+  } else if (opts.reasoningEffort !== undefined && opts.reasoningEffort !== "" && opts.reasoningEffort !== "off") {
+    body.reasoning_effort = opts.reasoningEffort;
+  }
   if (opts.extraBody) Object.assign(body, opts.extraBody);
   if (tools && tools.length > 0) body.tools = toWireTools(tools);
 
@@ -222,7 +250,7 @@ export async function* streamOpenAI(
     }
   };
   const observeUsage = (u: NonNullable<ChatChunk["usage"]>): void => {
-    const input = tokenCount(u.prompt_tokens), read = tokenCount(u.prompt_tokens_details?.cached_tokens);
+    const input = tokenCount(u.prompt_tokens), read = cacheReadTokens(u);
     // OpenAI/GLM do not report a disjoint cache-write bucket. Do not invent zero.
     const write = tokenCount(u.cache_creation_input_tokens);
     meterUsage = { inputTokens: input !== null ? Math.max(0, input - (read ?? 0) - (write ?? 0)) : null,
@@ -257,16 +285,32 @@ export async function* streamOpenAI(
     const resNs = estNs.res;
     try {
       const data = (await resNs.json()) as ChatChunk;
+      // HTTP 200 + 错误对象是网关的常见形状（配额/内容审查/上游 5xx 被包成 200）。
+      // 非流式分支以前只读 choices ⇒ 空回复被记成 ok，摘要器把配额错误伪装成「摘要为空」。
+      if (data.error) {
+        const e = data.error;
+        const named = typeof e.type === "string" ? e.type : undefined;
+        throw new StreamFailure(
+          `${label} 响应错误 ${named ?? e.code ?? "unknown"}: ${e.message ?? ""}`,
+          retryableStreamErrorFrame({ names: [e.type, e.code] }),
+        );
+      }
       if (data.usage) observeUsage(data.usage);
       const callId = data.id ?? "a-0";
       const msg = data.choices?.[0]?.message;
+      if (msg === undefined) {
+        throw new StreamFailure(`${label} 非流式响应缺少 choices[0].message（HTTP 200 但无回复体）`, false);
+      }
+      const nativeReasoning = typeof msg?.reasoning_content === "string" && msg.reasoning_content !== "";
+      if (nativeReasoning) yield { type: "thinking_delta", callId, text: msg!.reasoning_content!, reasoning: { id: toolRequestScope, source: reasoningSource } };
       if (msg?.content) yield { type: "assistant_delta", callId, text: msg.content };
-      for (const c of msg?.tool_calls ?? []) {
+      for (const [index, c] of (msg?.tool_calls ?? []).entries()) {
         yield {
           type: "tool_call",
-          id: c.id ?? `call-${String(c.index)}`,
+          id: c.id ?? `call-${toolRequestScope}-${String(c.index ?? index)}`,
           name: c.function?.name ?? "",
           args: parseArgs(c.function?.arguments, label),
+          ...(nativeReasoning ? { reasoningId: toolRequestScope } : {}),
         };
       }
       if (data.usage) yield toUsage(data.usage);
@@ -315,16 +359,25 @@ export async function* streamOpenAI(
       let buf2 = "";
       let finished2 = false;
       let callId2 = "a-0";
+      let nativeReasoning2 = false;
       const pending2 = new Map<number, { id?: string; name: string; args: string }>();
       let usage2: (ModelOutput & { type: "usage" }) | null = null;
       let finishReason2: string | null | undefined;
       let retryError: unknown;
       try {
-        while (!finished2) {
+        let eof2 = false;
+        while (!finished2 && !eof2) {
           const { done, value } = await reader2.read();
-          if (done) break;
-          est.guard.bump();
-          buf2 += decoder.decode(value, { stream: true });
+          if (done) {
+            eof2 = true;
+            const tail = decoder.decode();
+            if (tail) buf2 += tail;
+            if (buf2.trim() !== "") buf2 += "\n";
+            else break;
+          } else {
+            est.guard.bump();
+            buf2 += decoder.decode(value, { stream: true });
+          }
           let nl: number;
           while ((nl = buf2.indexOf("\n")) >= 0) {
             const line = buf2.slice(0, nl).trim();
@@ -343,16 +396,11 @@ export async function* streamOpenAI(
             if (chunk.error) {
               const e = chunk.error;
               const named = typeof e.type === "string" ? e.type : undefined;
-              // 数值可能落在 `type` 也可能落在 `code`，且可能是字符串形式：
-              // OpenRouter 实测用 `"type": "502"`（字符串），官方文档用 `"type":"server_error"`。
-              // 两处都取、都转数，否则「5xx 塞进 body」这个形状会被判成不可重放而继续打死任务。
-              const numeric = [e.type, e.code]
-                .map((v) => (typeof v === "number" ? v : Number(v)))
-                .find((n) => Number.isFinite(n));
-              const retryable = (numeric !== undefined && retryableStatus(numeric))
-                || (named !== undefined && RETRYABLE_ERROR_TYPES.has(named));
+              // 数值可能落在 `type` 也可能落在 `code`，且可能是字符串形式（OpenRouter 实测
+              // `"type": "502"`）。判据住 `retry.ts`：三家共用一份名字表与「数值优先」的读法。
               throw new StreamFailure(
-                `${label} 流错误 ${named ?? e.code ?? "unknown"}: ${e.message ?? ""}`, retryable,
+                `${label} 流错误 ${named ?? e.code ?? "unknown"}: ${e.message ?? ""}`,
+                retryableStreamErrorFrame({ names: [e.type, e.code] }),
               );
             }
             if (chunk.id) callId2 = chunk.id;
@@ -367,7 +415,9 @@ export async function* streamOpenAI(
             const thinking = delta?.reasoning_content ?? delta?.reasoning;
             if (typeof thinking === "string" && thinking !== "") {
               emitted = true;
-              yield { type: "thinking_delta", callId: callId2, text: thinking };
+              if (typeof delta?.reasoning_content === "string") nativeReasoning2 = true;
+              yield { type: "thinking_delta", callId: callId2, text: thinking,
+                ...(typeof delta?.reasoning_content === "string" ? { reasoning: { id: toolRequestScope, source: reasoningSource } } : {}) };
             }
             if (delta?.content) {
               emitted = true;
@@ -400,9 +450,10 @@ export async function* streamOpenAI(
         for (const [index, acc] of ordered) {
           yield {
             type: "tool_call",
-            id: acc.id ?? `call-${String(index)}`,
+            id: acc.id ?? `call-${toolRequestScope}-${String(index)}`,
             name: acc.name,
             args: parseArgs(acc.args, label),
+            ...(nativeReasoning2 ? { reasoningId: toolRequestScope } : {}),
           };
         }
         if (usage2) yield usage2;
@@ -413,7 +464,7 @@ export async function* streamOpenAI(
         // 不可重放的失败（协议级：帧损坏 / 非 5xx 的 error 帧）立刻抛，不拿它去打转。
         // stall 守卫触发也不重放：重放会把静默窗当网络抖动再烧一遍全长超时。
         const stalledByGuard = est.guard.stalled();
-        const retryable = stalledByGuard ? false : err instanceof StreamFailure ? err.retryable : true; // 未知形状按可重放（网络抖动那一类）
+        const retryable = stalledByGuard ? false : retryableStreamFailure(err);
         if (emitted || attempt >= STREAM_ATTEMPTS || cancelled || !retryable) throw err;
         retryError = err;
       } finally {

@@ -203,16 +203,20 @@ export async function readChangeDiff(
   };
   const beforeSide = await readSide(snapshotAbs);
   const afterSide = await readSide(abs);
-  if (afterSide.missing) {
-    return { ok: false, error: `当前文件不存在：${relPath}（可能已被删除——删除审阅待后续切片）` };
+  // 删除收尾（2026-11-04 交付卡口径）：文件已被删但**有真实原件**（快照在场且读得到）⇒
+  // 出「全删除」差异（after 侧按空内容对照，del 行 newNo 全空），交付卡/变更窗格不再落到「—」；
+  // 没有原件可对照（没快照，或快照声明在场却读不到）时保持 fail-visible，不冒充任何一侧。
+  const deletedWithOriginal = afterSide.missing && snapshotAbs !== null && !beforeSide.missing;
+  if (afterSide.missing && !deletedWithOriginal) {
+    return { ok: false, error: `当前文件不存在：${relPath}（可能已被删除，且没有可对照的覆盖前快照）` };
   }
   if (snapshotAbs !== null && beforeSide.missing) {
     // 快照声明在场但真读不到 ⇒「原件取不到」——绝不降级成"全新增"（那会把审阅读成假事实）。
     return { ok: false, error: "覆盖前快照不存在（可能已被清理）——无法展示真实差异" };
   }
   const beforeBuf = beforeSide.buf;
-  const afterBuf = afterSide.buf!;
-  if (!isTextish(afterBuf) || (beforeBuf !== null && !isTextish(beforeBuf))) {
+  const afterBuf = afterSide.buf; // 删除对照时为 null（按空内容对照）
+  if ((afterBuf !== null && !isTextish(afterBuf)) || (beforeBuf !== null && !isTextish(beforeBuf))) {
     return { ok: false, error: "二进制文件不展示差异" };
   }
   let truncated = false;
@@ -222,7 +226,7 @@ export async function readChangeDiff(
     return b.subarray(0, MAX_SIDE_BYTES);
   };
   const beforeText = beforeBuf === null ? "" : cut(beforeBuf).toString("utf8");
-  const afterText = cut(afterBuf).toString("utf8");
+  const afterText = afterBuf === null ? "" : cut(afterBuf).toString("utf8");
   let hunks = diffHunks(splitLines(beforeText), splitLines(afterText));
   let lineCount = hunks.reduce((n, h) => n + h.lines.length, 0);
   if (lineCount > MAX_PATCH_LINES) {
@@ -253,7 +257,7 @@ export async function readChangeDiff(
     created: snapshotAbs === null,
     hunks,
     truncated,
-    bytes: { before: beforeBuf?.byteLength ?? 0, after: afterBuf.byteLength },
+    bytes: { before: beforeBuf?.byteLength ?? 0, after: afterBuf?.byteLength ?? 0 },
   };
 }
 

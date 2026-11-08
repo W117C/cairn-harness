@@ -16,7 +16,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
-  PLUGIN_TRUST_FILE_NAME, defaultPluginDataRoot, pluginDataRootOf, trustFilePathOf, PluginRuntime,
+  PLUGIN_TRUST_FILE_NAME, defaultPluginDataRoot, defaultUserPluginsDir, pluginDataRootOf, trustFilePathOf, userPluginsDirOf, PluginRuntime,
 } from "../src/agent/plugins";
 
 const RUNNER_SRC = fileURLToPath(new URL("../src/main/agent-runner.ts", import.meta.url));
@@ -35,6 +35,11 @@ describe("插件数据根的缺省落点（信任表与 userConfig 同顶）", (
     const root = defaultPluginDataRoot("/home/u");
     expect(root.startsWith(tmpdir())).toBe(false);
     expect(root).not.toContain("m2e-plugin-data");
+  });
+
+  it("②b 用户级安装目录只指向数据根下的 plugins，不扫描 disabled/staging", () => {
+    expect(defaultUserPluginsDir("/home/u"))
+      .toBe(join("/home/u", ".config", "cairn", "plugin-data", "plugins"));
   });
 
   it("③ 显式 M2E_PLUGIN_DATA 优先，且原样返回（老行为一字不动）", () => {
@@ -60,7 +65,9 @@ describe("装配面真的用这条取址（不是纯函数自证）", () => {
   const source = readFileSync(RUNNER_SRC, "utf8") + "\n" + readFileSync(STATE_SRC, "utf8");
   // 先收成「这一处装配有几行」再判内容：直接对整份 3100 行文件做 toMatch，红起来把全文打进度里
   // （实测一份红读数 270KB），而「不许有第二条取址」这件事本身就是条要数的量。
-  const lines = source.split("\n").filter((l) => /^\s*pluginDataRoot:/.test(l));
+  const lines = source.split("\n").filter((l) =>
+    /^\s*const pluginDataRoot = pluginDataRootOf\(process\.env,\s*homedir\(\)\);/.test(l)
+  );
 
   it("⑥ 装配面上这一格只有一条取址（不许有第二条派生）", () => {
     expect(lines).toHaveLength(1);
@@ -68,8 +75,16 @@ describe("装配面真的用这条取址（不是纯函数自证）", () => {
 
   it("⑦ 那一条接的是 pluginDataRootOf 连入参，且同一行不再出现临时区", () => {
     // 接线钉整条调用连入参（规则 230）：只钉函数名的话「算出来不接」这一变异照样存活。
-    expect(lines[0]).toMatch(/pluginDataRoot:\s*pluginDataRootOf\(process\.env,\s*homedir\(\)\)/u);
+    expect(lines[0]).toMatch(/const pluginDataRoot = pluginDataRootOf\(process\.env,\s*homedir\(\)\);/u);
     expect(lines[0]).not.toMatch(/tmpdir\(\)/u);
+    expect(source).toMatch(/^\s*pluginDataRoot,$/mu);
+  });
+
+  it("⑦b 用户级插件根接 M2E_USER_PLUGINS 或同一数据根下的 plugins", () => {
+    expect(source).toMatch(
+      /userPluginsDir:\s*process\.env\.M2E_USER_PLUGINS\s*\|\|\s*userPluginsDirOf\(pluginDataRoot\)/u,
+    );
+    expect(userPluginsDirOf("/explicit/root")).toBe(join("/explicit/root", "plugins"));
   });
 
   // 行为证人：决议**物理落在**取址函数给出的那一顶。它同时钉住两件事——

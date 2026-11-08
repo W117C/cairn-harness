@@ -6,11 +6,14 @@
 // 能力 19 L0：凡**本文件自己拼进正文**的文本（工具输出、裁剪替换、摘要、自动验证拍、补位/截断提示）
 // 一律过 escapeControlTags；唯一例外是用户与助手自己说的话，逐字保留。中和只改投影，
 // 绝不写回事件流（与 closeDanglingToolCalls 同一条纪律）。判卷 = tests/instruction-provenance.test.ts。
-import type { AgentEvent, CompactionEvent, TurnTruncatedEvent, VerifyCommandResult } from "../events";
+import { isNumericCompaction, findEffectiveVerifyDeclaration, type AgentEvent, type CompactionEvent, type TurnTruncatedEvent, type VerifyCommandResult } from "../events";
 import { failureDigest } from "./verify";
 import { clampTailToTokenBudget } from "./text-budget";
 import { escapeControlTags } from "./control-tags";
 import { DELIVERY_GUARD_CALL_ID } from "./delivery-guard";
+import { acceptanceContractNote } from "./acceptance-contract";
+import { effectiveBoundary } from "../events/projection";
+import { hasWorkerId } from "./subflow";
 
 /** OpenAI 兼容消息（投影产物；system 由调用方按需前置）。 */
 export interface ContextMessage {
@@ -18,6 +21,7 @@ export interface ContextMessage {
   content: string | null;
   tool_calls?: { id: string; type: "function"; function: { name: string; arguments: string } }[];
   tool_call_id?: string;
+  reasoning?: import("../events/types").ProviderReasoningState;
 }
 
 /** 最新一份摘要的注入包装：交接叙事 + 免疫声明（§7.3(g)，分析用户意图时排除本消息）。
@@ -43,15 +47,17 @@ export function isCompaction(e: AgentEvent): e is CompactionEvent {
  *  其 compressed_event_ids 是 worker 内存态事件序，对主流照搬会错误摘除主事件/注入 worker 摘要。
  *  worker 自身投影不受影响：worker 内存态里的压缩事件不带 agent_id（落主流时才加 agent_id 归因）。 */
 export function isWorkerCompaction(e: AgentEvent): boolean {
-  return isCompaction(e) && typeof e.agent_id === "string" && e.agent_id !== "";
+  return isCompaction(e) && hasWorkerId(e);
 }
 
 /** 全部 compaction 事件声明的摘除 id 并集（滚动合并：多次压缩的排除集累加）。
  *  M3c：worker 子流压缩事件（agent_id 在场）不参与主投影的排除集。 */
-export function excludedIds(events: AgentEvent[]): Set<number> {
+export function excludedIds(events: readonly AgentEvent[]): Set<number> {
   const out = new Set<number>();
   for (const e of events) {
-    if (isCompaction(e) && !isWorkerCompaction(e)) for (const id of e.compressed_event_ids) out.add(id);
+    if (isCompaction(e) && !isWorkerCompaction(e) && isNumericCompaction(e)) {
+      for (const id of e.compressed_event_ids) out.add(id);
+    }
   }
   return out;
 }
@@ -60,7 +66,7 @@ export function excludedIds(events: AgentEvent[]): Set<number> {
  *  抽成一份判定是因为自动验证拍的投影也要走同一条闸——两份「谁算子流」的写法迟早漂移。
  *  导出给读数投影（tool-choice）等外部消费者，别再各写一份 `typeof e.agent_id === "string"`。 */
 export function hasWorkerAttribution(e: AgentEvent): boolean {
-  return "agent_id" in e && typeof e.agent_id === "string" && e.agent_id !== "";
+  return hasWorkerId(e);
 }
 
 /** 自动验证拍（能力 5 收束闸）验出的红：harness 补拍没有配对的 tool_call，裸 tool_result 会让
@@ -72,7 +78,7 @@ export const AUTO_VERIFY_NOTE_TOKEN_BUDGET = 1200;
 export const AUTO_VERIFY_COMMANDS_TOKEN_BUDGET = 200;
 
 /** 会被投影成「系统补拍红」的事件下标（未摘除、非子流、auto 且 ok:false）。 */
-function autoVerifyFailureIdx(events: AgentEvent[], excluded: Set<number>): number[] {
+function autoVerifyFailureIdx(events: readonly AgentEvent[], excluded: Set<number>): number[] {
   const out: number[] = [];
   events.forEach((e, i) => {
     if (excluded.has(eventIdAt(i)) || hasWorkerAttribution(e)) return;
@@ -90,7 +96,7 @@ function autoVerifyNote(results: VerifyCommandResult[], earlierCount: number): s
       ? "；此前另有 " + String(earlierCount) + " 次同类补拍未通过（旧拍不再重投，本上下文里没有它们的原文）" +
         "⇒ 要看完整红文就显式跑一次 verify，别去翻事件流（工具面读不到它）"
       : "") +
-    " ⇒ 先处理这条再继续新任务（判断它与本任务无关就显式说明理由）。\n";
+    " ⇒ 探究并修复根因，消除红字后再继续新任务（若经调查确认与本任务无关，请显式说明证据理由）。\n";
   // 留尾会砍掉前几段的正文，但命令名一条都不能少：不然模型只看到最后一条日志，不知道该重跑哪条
   // （repeatDigestNote 同族理由——缺「是哪条在红」这句，模型只能把三次额度烧在猜上）。
   const cmds = results.filter((r) => !r.ok).map((r) => r.command).join(", ");
@@ -223,31 +229,110 @@ export function demoteOrphanToolResults(msgs: ContextMessage[]): ContextMessage[
   return out;
 }
 
-/** 组装投影：events（内存态或 replay 产物）→ 消息序列。
- *  M2b：replacements（事件 id → 替换文本）= prune 类型化裁剪投影（§7.4）——
- *  只动 tool_result 的 content，不动消息结构；缺省空 = 零行为（既有路径字节不变）。
- *  出口处过三道合法性收束（都只动投影、不动事件流）：`mergeToolResultsById` 并同 id 多份回执、
- *  `demoteOrphanToolResults` 降级无前驱的回执、`closeDanglingToolCalls` 补没有被回答的调用。
- *  后两者是同一条协议的两半：OpenAI 兼容端要求「带 tool_calls 的 assistant 之后必须紧跟覆盖这些 id 的
- *  tool 消息」，Anthropic 要求每个 tool_use 恰好一条 tool_result——哪一半不满足都是 400 而不是"历史少一句"。 */
-export function projectContext(
-  events: AgentEvent[],
+/** 三道投影出口收束的**唯一**落点：全量重投影与增量折叠都从这里出去。
+ *  保持这一行的字面形状，变异锚点靠它同时守住两条路径。 */
+function finishProjection(msgs: ContextMessage[]): ContextMessage[] {
+  return closeDanglingToolCalls(demoteOrphanToolResults(mergeToolResultsById(msgs)));
+}
+/** `projectContext` 的组装选项。`acceptanceNote` 留给来源视图：它已编译过声明；
+ *  `undefined` = 调用方没意见（按事件流自行判定），`null` = 明确判定没有有效判据。 */
+export interface ContextProjectorOptions {
+  acceptanceNote?: string | null;
+  /** 仅用于差分判卷：从哪个下标开始折叠。生产全量路径缺省 0。 */
+  startIndex?: number;
+}
+
+/** 跨轮增量投影器：`push(index)` 吃一条事件，`finalize()` 出一份完整投影。
+ *  全量路径与增量路径共用同一份循环体，差分判卷见 tests/projection-invariant.test.ts。 */
+export interface ContextProjector {
+  push(index: number): void;
+  finalize(): ContextMessage[];
+  readonly pushes: number;
+  readonly count: number;
+  /** 追加窗口是否破坏「append-only 且投影元数据不变」这条前提；null = 可继续折叠。 */
+  invalidation(newEvents: readonly AgentEvent[]): string | null;
+}
+
+/** 会让既有缓存整体失效的事件。plan 点名的 compaction / verify_result 之外，
+ *  session_meta(_update) 改任务判据、user_message 改契约锚点、session_rewind 改有效边界，
+ *  同样不是 append-only 的局部量，必须弃缓存全量重折叠。 */
+const PROJECTOR_INVALIDATING_TYPES: ReadonlySet<string> = new Set([
+  "compaction", "verify_result", "session_meta", "session_meta_update", "user_message", "session_rewind",
+]);
+
+/** 折叠器的可变状态快照。finalize 只吃快照，绝不把尾部补注 / delta 落位写回活状态，
+ *  所以同一次缓存可以连续 finalize 多轮，后续 append 仍与全量重投影逐字同形。 */
+interface ProjectorSnapshot {
+  msgs: ContextMessage[];
+  deltaBuf: Map<string, string>;
+  deltaOrder: string[];
+  reasoning: Map<string, import("../events/types").ProviderReasoningState>;
+  reasoningByCall: Map<string, string>;
+  reasoningMessages: Map<string, number>;
+}
+
+function cloneMessages(msgs: readonly ContextMessage[]): ContextMessage[] {
+  return msgs.map((m) => ({
+    ...m,
+    ...(m.tool_calls ? { tool_calls: m.tool_calls.map((tc) => ({ ...tc, function: { ...tc.function } })) } : {}),
+    ...(m.reasoning ? { reasoning: { ...m.reasoning } } : {}),
+  }));
+}
+
+function flushDeltasInto(s: ProjectorSnapshot): void {
+  for (const callId of s.deltaOrder) {
+    const reasoningId = s.reasoningByCall.get(callId);
+    const state = reasoningId === undefined ? undefined : s.reasoning.get(reasoningId);
+    if (reasoningId !== undefined) s.reasoningMessages.set(reasoningId, s.msgs.length);
+    s.msgs.push({
+      role: "assistant",
+      content: s.deltaBuf.get(callId) ?? "",
+      ...(state ? { reasoning: { ...state } } : {}),
+    });
+    s.reasoningByCall.delete(callId);
+  }
+  s.deltaBuf.clear();
+  s.deltaOrder.length = 0;
+}
+
+/** 构造折叠器并全量折叠 `events`。调用方持有它跨轮复用：新事件只 push 增量；
+ *  invalidation() 非空时丢弃并重建（compaction 改写排除集、verify 改「只投最新一份」等）。
+ *  传入的 `events` 必须是调用方持有并原地 append 的那一份数组，不能每轮换快照。 */
+export function createContextProjector(
+  events: readonly AgentEvent[],
   replacements?: Map<number, string>,
-): ContextMessage[] {
+  options: ContextProjectorOptions = {},
+): ContextProjector {
   const excluded = excludedIds(events);
-  // 只投最新一份（与 compaction「投影只出现最新一份摘要」同一条口径）：这条是**每轮重送**的
-  // 面，旧拍的全文重投既贵又零增益，但计数如实保留——不假装「只红过一次」。
+  const useCallerNote = options.acceptanceNote !== undefined;
+  const effectiveContract = useCallerNote
+    ? null
+    : findEffectiveVerifyDeclaration(events, effectiveBoundary(events), excluded);
+  const contract = useCallerNote
+    ? (options.acceptanceNote ?? undefined)
+    : (effectiveContract === null ? undefined : acceptanceContractNote(effectiveContract.declaration));
+  const acceptanceAnchorIdx = useCallerNote || effectiveContract === null
+    ? -1
+    : effectiveContract.anchorEventId - 1;
+  // 锚点 0（日志里还没有用户消息）的契约放进上下文**开头**——verify-declaration.ts 的
+  // 口径「0 = 放上下文开头」在这里兑现：循环里没有可挂的锚点消息，finalize 头部注入。
+  // 调用方注释面（view 路径）维持末尾追加：它的位置语义就是「这一轮的补充判据」。
+  const contractAtHead = !useCallerNote && effectiveContract !== null && effectiveContract.anchorEventId === 0;
   const autoIdx = autoVerifyFailureIdx(events, excluded);
   const lastAutoIdx = autoIdx.length > 0 ? (autoIdx[autoIdx.length - 1] as number) : -1;
 
-  // 最新一份 compaction（滚动合并：其摘要已整合旧摘要，旧摘要不再单独注入）
-  // M3c：worker 子流压缩事件（agent_id 在场）不作为主投影的摘要注入源。
-  let latest: (typeof events)[number] | null = null;
-  for (const e of events) if (isCompaction(e) && !isWorkerCompaction(e)) latest = e;
-  const offset = latest ? latest.summary_offset : Number.POSITIVE_INFINITY;
-  const envelope = latest ? summaryEnvelope(latest.summary) : null;
-
   const msgs: ContextMessage[] = [];
+  let contractInjected = false;
+  const injectContract = (): void => {
+    if (contractInjected || contract === undefined) return;
+    msgs.push({ role: "user", content: contract });
+    contractInjected = true;
+  };
+  let latest: (typeof events)[number] | null = null;
+  for (const e of events) if (isCompaction(e) && !isWorkerCompaction(e) && isNumericCompaction(e)) latest = e;
+  const offset = latest !== null ? latest.summary_offset : Number.POSITIVE_INFINITY;
+  const envelope = latest !== null ? summaryEnvelope(latest.summary) : null;
+
   let injected = false;
   const injectOnce = (): void => {
     if (injected || !envelope) return;
@@ -257,60 +342,83 @@ export function projectContext(
 
   const deltaBuf = new Map<string, string>();
   const deltaOrder: string[] = [];
-  const flushDeltas = (): void => {
-    for (const callId of deltaOrder) {
-      msgs.push({ role: "assistant", content: deltaBuf.get(callId) ?? "" });
-    }
-    deltaBuf.clear();
-    deltaOrder.length = 0;
-  };
+  const reasoning = new Map<string, import("../events/types").ProviderReasoningState>();
+  const reasoningByCall = new Map<string, string>();
+  const reasoningMessages = new Map<string, number>();
+  const live: ProjectorSnapshot = { msgs, deltaBuf, deltaOrder, reasoning, reasoningByCall, reasoningMessages };
+  const flushDeltas = (): void => { flushDeltasInto(live); };
 
-  events.forEach((e, i) => {
+  let pushes = 0;
+  // startIndex 语义 =「前缀已由调用方折叠，从这里续」：count 必须从同一起点计，
+  // 否则追加窗口（invalidation）与逐格连续性都以错误的 0 为基准。
+  let count = options.startIndex ?? 0;
+  const push = (i: number): void => {
+    const e = events[i] as AgentEvent | undefined;
+    if (e === undefined) throw new Error(`context projector: event index ${i} out of range`);
+    // 增量喂入必须逐格连续：跳格/重推都是换历史，投影会静默错位（排除集、摘要注入位都是
+    // 构造期冻结的量）。唯一复用方 worker-runtime 是「count 起逐格推」的纪律，这里把纪律
+    // 升级为硬约束——调用方违约时当场出声，而不是产一份看似正常的错投影。
+    if (i !== count) throw new Error(`context projector: push(${String(i)}) 跳格（当前已折叠到 ${String(count)}）`);
     const id = eventIdAt(i);
-    if (isCompaction(e)) return; // 压缩事件本体不进消息（其效果 = 排除集 + 注入）
-    if (excluded.has(id)) return; // 被摘除事件按 id 引用排除（幂等的关键）
-    // M3a §4.4.4：worker 子流事件（带 agent_id 的 tool_call/tool_result/usage + agent_* 事件）
-    // 不进主上下文——父上下文唯一接收物 = agent_result（合成 tool_result，不带 agent_id）。
-    if (hasWorkerAttribution(e)) return; // 见上：子流不进主上下文
+    pushes++;
+    count = Math.max(count, i + 1);
+    if (isCompaction(e)) return;
+    if (excluded.has(id)) return;
+    if (hasWorkerAttribution(e)) return;
     if (
       e.type === "agent_spawned" || e.type === "agent_status" || e.type === "agent_message" ||
       e.type === "approval_requested" || e.type === "approval_resolved" || e.type === "card_action" ||
       e.type === "diff_comment"
     ) {
-      return; // 编排/审批协议事件：语义在面板与卡片侧，模型上下文不需要（与 clarify/plan 同口径）
+      return;
     }
-    if (id >= offset) {
-      flushDeltas(); // offset 之前的待并 delta 先落位，保证注入点次序
-      injectOnce(); // 到达注入位（首个 tail 事件或末尾）
+    if (!injected && id >= offset) {
+      flushDeltas();
+      injectOnce();
     }
     if (e.type === "user_message") {
       flushDeltas();
+      reasoningByCall.clear();
       msgs.push({ role: "user", content: e.content });
+      if (i === acceptanceAnchorIdx) injectContract();
     } else if (e.type === "assistant_message") {
       flushDeltas();
       msgs.push({ role: "assistant", content: e.content });
+    } else if (e.type === "thinking_delta") {
+      if (e.reasoning && typeof e.reasoning.id === "string" && typeof e.reasoning.source === "string") {
+        const prior = reasoning.get(e.reasoning.id);
+        reasoning.set(e.reasoning.id, {
+          source: e.reasoning.source,
+          content: (prior?.source === e.reasoning.source ? prior.content : "") + e.text,
+        });
+        reasoningByCall.set(e.callId, e.reasoning.id);
+      }
     } else if (e.type === "assistant_delta") {
       if (!deltaBuf.has(e.callId)) deltaOrder.push(e.callId);
       deltaBuf.set(e.callId, (deltaBuf.get(e.callId) ?? "") + e.text);
     } else if (e.type === "tool_call") {
       flushDeltas();
-      msgs.push({
-        role: "assistant",
-        content: null,
-        tool_calls: [
-          { id: e.id, type: "function", function: { name: e.name, arguments: JSON.stringify(e.args) } },
-        ],
-      });
+      const state = e.reasoningId === undefined ? undefined : reasoning.get(e.reasoningId);
+      const previousAt = e.reasoningId === undefined ? undefined : reasoningMessages.get(e.reasoningId);
+      const previous = previousAt === undefined ? undefined : msgs[previousAt];
+      const tool = { id: e.id, type: "function" as const, function: { name: e.name, arguments: JSON.stringify(e.args) } };
+      const answeredIds = new Set(previous?.tool_calls?.map(call => call.id) ?? []);
+      if (state && previous?.role === "assistant" && previousAt !== undefined &&
+          msgs.slice(previousAt + 1).every(msg => msg.role === "tool" && answeredIds.has(msg.tool_call_id ?? ""))) {
+        previous.tool_calls = [...(previous.tool_calls ?? []), tool];
+      } else {
+        if (state && e.reasoningId !== undefined) reasoningMessages.set(e.reasoningId, msgs.length);
+        msgs.push({
+          role: "assistant",
+          content: null,
+          tool_calls: [tool],
+          ...(state ? { reasoning: { ...state } } : {}),
+        });
+      }
+      if (state) reasoningByCall.clear();
     } else if (e.type === "tool_result") {
       flushDeltas();
       const pruned = replacements?.get(id);
-      // 交付断言那一拍（能力 12）：它没有配对的 tool_call，直接当 tool 消息塞进去会让 provider
-      // 侧 tool 消息失去前置 tool_calls 而 400 ⇒ 与自动验证拍同路：投成 user 消息。
-      // 为什么不并入下面的 verify_result 分支：那支的措辞是「补跑的 verify 未通过」，
-      // 而这条说的是「你承诺的文件根本不存在」——两件事的模型处置完全不同
-      // （一个去改代码，一个去补写文件或收回说法），混成一条等于让模型猜该做哪个。
-      // 这里用 if/else 而不是 `continue`：这段活在 forEach 的回调里，`continue` 会跳出
-      // 函数边界（TS1107）——而改成 return 又会漏掉回调尾部的别的事。两分支互斥就够了。
       if (e.callId === DELIVERY_GUARD_CALL_ID) {
         msgs.push({ role: "user", content: escapeControlTags(e.output) });
       } else {
@@ -318,21 +426,73 @@ export function projectContext(
       }
     } else if (e.type === "verify_result") {
       flushDeltas();
-      // 只有「系统补拍且红」这一种 verify_result 进上下文（见 autoVerifyNote 的理由）；
-      // 手动拍的红早已由配对的 tool_result 带进来了，这里再注一次就是同一拍的两份事实。
       if (i === lastAutoIdx) msgs.push({ role: "user", content: autoVerifyNote(e.results, autoIdx.length - 1) });
     } else if (e.type === "turn_truncated") {
-      flushDeltas(); // 先把那段被砍断的正文落位，「上一条」才指得清是哪条
+      flushDeltas();
+      reasoningByCall.clear();
       msgs.push({ role: "user", content: truncationNote(e) });
+    } else if (e.type === "usage") {
+      flushDeltas();
+      reasoningByCall.clear();
     }
-    // clarify_requested / plan_proposed / plan_approved / usage / session_meta：
-    // 语义已在 tool_result / 卡片侧，模型上下文不需要（与既有 buildSessionHistory 口径一致）
-    // surface_account（P0 装配账）**显式**归在这里，不靠「上面没写分支」的落空：
-    // 它一旦进模型面，就会改写可缓存前缀（`cacheableFace` = 首条 system + tools，见 prefix-churn.ts），
-    // 那是缓存命中率的账，不是观测量该付的代价。
-    // turn_stop_missing（第 471 页：停止原因缺席的证据）同一档：观测 only，不进模型面。
-  });
-  flushDeltas();
-  injectOnce(); // offset 越过全部事件（tail 为空）时补注
-  return closeDanglingToolCalls(demoteOrphanToolResults(mergeToolResultsById(msgs)));
+  };
+
+  const finalize = (): ContextMessage[] => {
+    // 只把「已落位的消息」拷进快照，再在快照上 flush 尚未收口的 delta 与尾部补注。
+    // 活状态原封不动：后续同 callId 的 delta 仍会并进同一条正文，与全量重投影同形。
+    const snapshot: ProjectorSnapshot = {
+      msgs: cloneMessages(msgs),
+      deltaBuf: new Map(deltaBuf),
+      deltaOrder: [...deltaOrder],
+      reasoning: new Map(reasoning),
+      reasoningByCall: new Map(reasoningByCall),
+      reasoningMessages: new Map(reasoningMessages),
+    };
+    flushDeltasInto(snapshot);
+    if (!injected && envelope) snapshot.msgs.push({ role: "user", content: envelope });
+    if (!contractInjected && contract !== undefined) {
+      if (contractAtHead) snapshot.msgs.unshift({ role: "user", content: contract });
+      else snapshot.msgs.push({ role: "user", content: contract });
+    }
+    return finishProjection(snapshot.msgs);
+  };
+
+  const invalidation = (newEvents: readonly AgentEvent[]): string | null => {
+    // 调用方必须把**同一份数组**原地 append 后递回来：换数组就是换历史，
+    // 只有数组身份相同才谈得上「追加窗口」。O(1) 判定，不重扫前缀。
+    if (newEvents !== events) return "事件数组已替换";
+    if (newEvents.length < count) return `事件数回缩（${count} → ${newEvents.length}）`;
+    // 尾部补注（摘要 / 判据）上一轮只进过 finalize 的快照：一旦新事件到达，
+    // 全量投影会把它放在「首个满足 offset/锚点的事件」之前，位置整体前移。
+    // 这类待落位补注不是 append-only 局部量，必须重建，不能继续折叠。
+    if (newEvents.length > count && ((!injected && envelope) || (!contractInjected && contract !== undefined))) {
+      return "尾部补注尚未落位且新增事件会改写注入位";
+    }
+    for (let i = count; i < newEvents.length; i++) {
+      const type = (newEvents[i] as AgentEvent | undefined)?.type;
+      if (type !== undefined && PROJECTOR_INVALIDATING_TYPES.has(type)) return `追加窗口含 ${type}（下标 ${i}）`;
+    }
+    return null;
+  };
+
+  for (let i = options.startIndex ?? 0; i < events.length; i++) push(i);
+  return {
+    push,
+    finalize,
+    get pushes() { return pushes; },
+    get count() { return count; },
+    invalidation,
+  };
+}
+
+/** 全量投影：events（内存态或 replay 产物）→ 消息序列。
+ *  M2b：replacements（事件 id → 替换文本）= prune 类型化裁剪投影（§7.4）——
+ *  只动 tool_result 的 content，不动消息结构；缺省空 = 零行为（既有路径字节不变）。
+ *  `acceptanceNote` 由来源视图编译后递进来；缺省按事件流自行判定声明。 */
+export function projectContext(
+  events: AgentEvent[],
+  replacements?: Map<number, string>,
+  options: ContextProjectorOptions = {},
+): ContextMessage[] {
+  return createContextProjector(events, replacements, options).finalize();
 }

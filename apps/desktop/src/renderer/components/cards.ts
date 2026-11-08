@@ -1,5 +1,6 @@
 // 三卡共享纯函数（M2-5）：只做数据组形/校验，不碰 React 与 IPC——组件与测试共用同一份语义。
 import type { ClarifyAnswerMap, ClarifyQuestion, PlanFileChange } from "../../../../../src/events";
+import { parsePatch } from "../../../../../src/tools/patch-parse";
 
 /**
  * 澄清表单值 ⇒ 可提交的 ClarifyAnswerMap（key = 问题原文）。
@@ -48,6 +49,31 @@ export interface AskDigest {
   subject?: string;
 }
 
+/** 统一 diff 的抬头（纯函数）：`3 个文件 · +12 −4 · a.ts、b.ts、c.ts`。解析不了返回 undefined
+ *  （宁可不摆抬头，也不猜——补丁原文仍整段在卡上）。 */
+export function patchHeadline(patch: string): string | undefined {
+  let files;
+  try {
+    files = parsePatch(patch);
+  } catch {
+    return undefined;
+  }
+  if (files.length === 0) return undefined;
+  let add = 0;
+  let del = 0;
+  for (const f of files) {
+    for (const h of f.hunks) {
+      for (const l of h.lines) {
+        if (l.mark === "+") add += 1;
+        else if (l.mark === "-") del += 1;
+      }
+    }
+  }
+  const names = files.slice(0, 3).map((f) => f.path).join("、");
+  const more = files.length > 3 ? ` 等 ${String(files.length)} 个` : "";
+  return `${String(files.length)} 个文件 · +${String(add)} −${String(del)} · ${names}${more}`;
+}
+
 export function describeAsk(ask: { tool?: string; args?: Record<string, unknown> }): AskDigest {
   const tool = ask.tool ?? "";
   const args = ask.args ?? {};
@@ -55,8 +81,17 @@ export function describeAsk(ask: { tool?: string; args?: Record<string, unknown>
   if (tool === "run_shell") return { title: "运行命令", body: s(args.command) ?? JSON.stringify(args) };
   if (tool === "write_file") return { title: "写入文件", body: s(args.path) ?? JSON.stringify(args) };
   if (tool === "edit_file") return { title: "编辑文件", body: s(args.path) ?? JSON.stringify(args) };
-  if (tool === "apply_patch") return { title: "应用补丁", body: s(args.patch) ?? JSON.stringify(args) };
+  if (tool === "apply_patch") {
+    const patch = s(args.patch);
+    // 第 933 页：补丁正文在卡上是一个 132px 的滚动框——大补丁只看得到开头几行。
+    // 先把「改了几个文件、增删多少行、动了谁」摆到副行，正文仍是补丁原文（可滚动）。
+    const head = patch === undefined ? undefined : patchHeadline(patch);
+    return { title: "应用补丁", ...(head !== undefined ? { subject: head } : {}), body: patch ?? JSON.stringify(args) };
+  }
   if (tool === "web_fetch") return { title: "访问网络", subject: s(args.url) };
+  if (tool === "browser_navigate") return { title: "打开浏览器页面", subject: s(args.url) };
+  if (tool === "browser_snapshot") return { title: "读取浏览器页面" };
+  if (tool === "browser_pick") return { title: "查找网页元素", body: s(args.selector) };
   if (tool === "web_search") {
     // 端点必须在卡上（2026-10-19 独立评审追出）：端点不在模型给的 args 里
     // （它来自工作区的 `.agent/config.json`）⇒ 卡上只有 `{"query":"…"}`，人不知道这次要把
@@ -70,6 +105,23 @@ export function describeAsk(ask: { tool?: string; args?: Record<string, unknown>
       ...(local !== undefined ? { body: local } : {}),
     };
   }
+  if (tool === "attachment") {
+    const paths = Array.isArray(args.paths)
+      ? args.paths.filter((p): p is string => typeof p === "string" && p !== "")
+      : [];
+    // 图片已自动放行，卡面只列还需要人点头的非图片路径；但「自动了几张」要说出来，
+    // 否则用户看到清单比拖进来的少，会怀疑附件丢了。
+    const autoImages = typeof args.autoApprovedImages === "number" && Number.isInteger(args.autoApprovedImages) && args.autoApprovedImages > 0
+      ? args.autoApprovedImages
+      : 0;
+    return {
+      title: "读取项目外附件",
+      ...(paths.length > 0
+        ? { subject: `${String(paths.length)} 项${autoImages > 0 ? ` · 另有 ${String(autoImages)} 张图片已自动放行` : ""}` }
+        : {}),
+      body: paths.length > 0 ? paths.map((p) => JSON.stringify(p)).join("\n") : JSON.stringify(args),
+    };
+  }
   if (tool === "remember") {
     if (args.trigger === "session_end_distill") {
       return { title: "写入全局记忆", subject: "会话沉淀：把本场要点写进跨项目记忆（影响你的所有项目）" };
@@ -81,5 +133,25 @@ export function describeAsk(ask: { tool?: string; args?: Record<string, unknown>
     return { title: `写入${layer}`, subject: topic !== undefined ? `${kind}「${topic}」` : kind };
   }
   if (tool.startsWith("automation_")) return { title: "变更定时任务", subject: s(args.name) };
-  return { title: "需要你批准", body: JSON.stringify(args) };
+  // 读族与渲染/诊断（第 932 页）：它们在沙箱降级或严格档下也会弹批准卡，此前一律落到
+  // 「需要你批准 + 参数 JSON」——批的是「读哪个文件 / 查什么 / 渲染哪张图」看不出来。
+  if (tool === "read_file") {
+    const one = s(args.path);
+    const many = Array.isArray(args.paths) ? args.paths.filter((x): x is string => typeof x === "string") : [];
+    return { title: "读取文件", body: one ?? (many.length > 0 ? many.join("、") : JSON.stringify(args)) };
+  }
+  if (tool === "grep") return { title: "查找内容", body: s(args.pattern) ?? JSON.stringify(args) };
+  if (tool === "glob") return { title: "找文件", body: s(args.pattern) ?? JSON.stringify(args) };
+  if (tool === "lsp") {
+    const what = s(args.symbol) ?? s(args.operation) ?? s(args.path);
+    return { title: "查符号", ...(what !== undefined ? { subject: what } : {}), ...(s(args.path) !== undefined && s(args.symbol) !== undefined ? { body: s(args.path) } : {}) };
+  }
+  if (tool === "render_image") return { title: "渲染图", body: s(args.path) ?? JSON.stringify(args) };
+  if (tool === "diagnose") {
+    const face = s(args.face);
+    return { title: "跑诊断", body: face === undefined ? "全部检查" : face === "lint" ? "只跑 lint" : "只跑 test" };
+  }
+  // 名单外（MCP scoped 工具、运行期注入的诊断/检索等）也得看见**批的是哪把工具**：
+  // 卡片原来只给「需要你批准」+ 参数 JSON，工具名只藏在 aria-label 里 ⇒ 视觉上无从判断。
+  return { title: "需要你批准", subject: s(tool), body: JSON.stringify(args) };
 }

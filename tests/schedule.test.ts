@@ -1,7 +1,7 @@
 // M4a 定时任务单测：任务模型校验矩阵 / 双轨存储 / next-run 计算 / 准入三闸 / catchUp 补跑 /
 // occurrenceKey 去重 / unattended 语义前置（tier 映射）/ summarizeRun 投影。
 // 时钟/抖动/执行器全部注入，禁真实 sleep 等触发（超时双闸用毫秒级真实定时器测机制本身）。
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -153,6 +153,20 @@ describe("M4a 任务模型（automations.ts）", () => {
 });
 
 describe("M4a 双轨存储", () => {
+  it("任务定义损坏 ⇒ upsert / remove 拒绝覆盖（文件字节不变，无 tmp 残留）", async () => {
+    const { s, data } = makeScheduler();
+    await mkdir(data, { recursive: true });
+    const file = join(data, "automations.json");
+    await writeFile(file, "{ 不是 JSON", "utf8");
+    const up = await s.upsert(base({ id: makeUlid() }));
+    expect(up.ok).toBe(false);
+    if (!up.ok) expect(up.errors.join()).toMatch(/调度任务文件损坏/);
+    const del = await s.remove("whatever");
+    expect(del.ok).toBe(false);
+    expect(await readFile(file, "utf8"), "被拒的写把坏档盖掉了").toBe("{ 不是 JSON");
+    expect((await readdir(data)).filter((f) => f.includes(".tmp"))).toEqual([]);
+  });
+
   it("automations.json 原子写往返 + 无 .tmp 残留", async () => {
     const file = join(dir, "automations.json");
     const v = validateAutomation(base({ id: makeUlid() }));
@@ -172,6 +186,10 @@ describe("M4a 双轨存储", () => {
     await writeFile(bad, "{ 不是 JSON", "utf8");
     const r1 = await loadAutomationsFile(bad);
     expect(r1.tasks).toHaveLength(0);
+    // 坏文件与缺文件必须分开：缺文件是空清单，坏文件要标记 corrupt（写路径据此拒绝覆盖）。
+    expect(r1.corrupt, "坏 JSON 没有标 corrupt ⇒ 下一次 upsert 会把整份任务表盖掉").toBe(true);
+    expect(r1.warnings.join()).toMatch(/调度任务文件损坏/);
+    expect((await loadAutomationsFile(join(dir, "absent.json"))).corrupt).toBe(false);
     const partial = join(dir, "partial.json");
     const good = validateAutomation(base({ id: makeUlid() }));
     if (!good.ok) throw new Error("fixture invalid");
@@ -179,6 +197,7 @@ describe("M4a 双轨存储", () => {
     const r2 = await loadAutomationsFile(partial);
     expect(r2.tasks).toHaveLength(1);
     expect(r2.warnings.join()).toContain("无效已跳过");
+    expect(r2.corrupt, "坏条目被跳过不是文件损坏：写路径仍可继续").toBe(false);
   });
 
   it("journal append-only + 坏行跳过 + occurrenceKey 去重查询", async () => {
@@ -228,6 +247,22 @@ describe("M4a 双轨存储", () => {
     expect(tail.filter((k) => !keys.has(k))).toEqual([]);
   });
 
+  it("journal 跨进程写锁：另一实例持锁时 append 不落盘，释放后照常写入", async () => {
+    const file = join(dir, "journal-cross-process.jsonl");
+    const lock = join(dir, "automations-journal.lock");
+    const at = new Date("2026-09-12T02:00:00.000Z").toISOString();
+    // 模拟另一个活进程：锁内容就是本测试进程的 pid（processLiveness 会读成 alive）。
+    await writeFile(lock, String(process.pid), "utf8");
+    const pending = appendJournalEntry(file, {
+      task_id: "t", occurrence_key: "cross-1", due_at: at, decision: "triggered", at,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    await expect(readFile(file, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    await rm(lock, { force: true });
+    await pending;
+    expect((await readJournalFile(file)).entries.map((e) => e.occurrence_key)).toEqual(["cross-1"]);
+  });
+
   // X2（P0-A 同族）：journal 改常驻句柄后，收敛（read 快照 → rename 覆盖写）必须让旧句柄失效
   // ——rename 之后旧句柄指向已被覆盖的旧 inode，后续写入会静默丢失（丢的正是"该 occurrence
   // 已决"的唯一凭据，重启后重复补跑）。当前实现里 resolveHandle 的 inode 校验已能捕获该覆盖，
@@ -248,6 +283,22 @@ describe("M4a 双轨存储", () => {
     expect(entries).toHaveLength(4_005);
     const keys = new Set(entries.map((e) => e.occurrence_key));
     expect(post.filter((k) => !keys.has(k))).toEqual([]); // 后写的 5 条一条不丢
+  });
+
+  it("journal 压缩保留每个任务最后一条已决账：稀疏任务不被全局窗口挤掉", async () => {
+    const file = join(dir, "journal-watermark.jsonl");
+    const at = new Date("2026-09-12T02:00:00.000Z").toISOString();
+    const rows: string[] = [
+      JSON.stringify({ task_id: "sparse", occurrence_key: "sparse:last", due_at: at, decision: "triggered", at }),
+    ];
+    for (let i = 0; i < 10_001; i++) {
+      rows.push(JSON.stringify({ task_id: "noisy", occurrence_key: "noisy-" + String(i), due_at: at, decision: "skipped", reason: "too-old", at }));
+    }
+    await writeFile(file, rows.join("\n") + "\n", "utf8");
+    const kept = await compactJournalIfLarge(file);
+    expect(kept).toBeGreaterThan(4_000); // 4000 条窗口 + sparse 的那一条
+    const { entries } = await readJournalFile(file);
+    expect(entries.some((e) => e.task_id === "sparse" && e.occurrence_key === "sparse:last"), "稀疏任务的已决水位被压缩丢掉了").toBe(true);
   });
 });
 
@@ -297,6 +348,27 @@ describe("M4a next-run 计算（croner + 锚点步进）", () => {
     expect(occ).toHaveLength(12); // +5min … +60min
     expect(occ[0]!.toISOString()).toBe("2026-09-12T00:05:00.000Z");
     expect(occurrencesBetween(iv, new Date("2026-09-12T00:00:00Z"), new Date("2026-09-12T00:03:00Z"))).toHaveLength(0);
+  });
+
+  it("custom 在东十区按墙钟日步进：everyDays>1 不因时区偏移提前一天", () => {
+    // 悉尼 2026-01-01 09:00 = 2025-12-31T22:00Z（夏令时 +11）。锚点必须是墙钟 1 月 1 日，
+    // 不是把 instant 再减一次偏移后的 12 月 31 日。
+    const c2 = def({
+      schedule: { kind: "custom", everyDays: 2, time: "09:00" },
+      timeZone: "Australia/Sydney",
+      createdAt: "2026-01-01T09:00:00+11:00",
+    });
+    expect(nextOccurrence(c2, new Date("2026-01-01T00:00:00Z"))?.toISOString()).toBe("2026-01-02T22:00:00.000Z");
+    const c7 = def({
+      schedule: { kind: "custom", everyDays: 7, time: "09:00" },
+      timeZone: "Australia/Sydney",
+      createdAt: "2026-01-01T09:00:00+11:00",
+    });
+    expect(nextOccurrence(c7, new Date("2026-01-01T00:00:00Z"))?.toISOString()).toBe("2026-01-07T22:00:00.000Z");
+    // 对照：UTC 的同一相位保持不变（修时区不改变原口径）。after 取在锚点之后，
+    // 才能看到 everyDays 的步进；取在锚点之前时下一拍就是当天 09:00。
+    const u = def({ schedule: { kind: "custom", everyDays: 2, time: "09:00" }, timeZone: "UTC", createdAt: "2026-01-01T09:00:00Z" });
+    expect(nextOccurrence(u, new Date("2026-01-01T10:00:00Z"))?.toISOString()).toBe("2026-01-03T09:00:00.000Z");
   });
 
   it("formatLocal 输出任务时区墙钟", () => {
@@ -761,6 +833,23 @@ describe("tick 拒绝护栏（P1 回归）", () => {
     };
     await expect(s.tick()).rejects.toThrow("boom-manual");
   });
+
+  it("stop→start 重启：抖动期内的 tick 不吃上一轮的 firstTickDone（启动判定语义必须重新走）", async () => {
+    // firstTickDone 残留 ⇒ 重启后的第一个常规 tick 直接进常规触发路：catchUp=skip 的任务
+    // 在停止期间错过的 occurrence 会被真跑（违背「对齐不补跑」的属主意图）。
+    // 抖动给 10min（验收时钟不动）：interval/手动 tick 都先于 startup tick ⇒ 可判定。
+    const { s } = makeScheduler({ jitterMs: () => 600_000 });
+    await s.start();
+    const created = await s.upsert(base({ createdAt: CREATED }));
+    if (!created.ok) throw new Error(created.errors.join("；"));
+    await s.tick({ startup: true }); // ① 第一轮启动判定完成
+    s.stop();
+    await s.start(); // ② 重启：装载重跑；firstTickDone 必须随 start 复位
+    const report = await s.tick(); // ③ 抖动期内：必须空转，等启动判定
+    expect(report.considered).toBe(0);
+    expect(report.startup).toBe(false);
+    s.stop();
+  });
 });
 
 // 2026-10-19 独立评审：调度 journal 在 spawn **前**写（崩溃窗口不双跑），因此条目天然没有
@@ -898,5 +987,99 @@ describe("同根多实例：journal 去重与任务表合并", () => {
     expect(r2.ok).toBe(true);
     const disk = await loadAutomationsFile(join(data, "automations.json"));
     expect(disk.tasks.map((t) => t.name).sort()).toEqual(["任务 A", "任务 B"]);
+  });
+});
+
+// 2026-10-30：装载问题必须出现在**快照**里。桌面端没有控制台可看——只 `console.warn` 的后果
+// 是「automations.json 坏了 ⇒ 页面写着还没有定时任务，新建又被拒」，用户无从知道原因。
+describe("调度快照把装载问题带上屏（桌面无控制台）", () => {
+  it("坏档 ⇒ warnings 点名文件与出路、definitionsCorrupt=true、任务表空", async () => {
+    const { s, data } = makeScheduler();
+    await mkdir(data, { recursive: true });
+    const file = join(data, "automations.json");
+    await writeFile(file, "{ 不是 JSON", "utf8");
+    await s.start();
+    try {
+      const snap = await s.snapshot();
+      expect(snap.tasks).toEqual([]);
+      expect(snap.definitionsCorrupt, "坏档没有标 corrupt ⇒ 面板无从解释任务为什么空了").toBe(true);
+      expect(snap.warnings.join()).toMatch(/调度任务文件损坏/);
+      expect(snap.warnings.join()).toContain(file);
+    } finally { s.stop(); }
+  });
+
+  it("缺文件 ⇒ 快照无警告（缺席不是失败）", async () => {
+    const { s } = makeScheduler();
+    await s.start();
+    try {
+      const snap = await s.snapshot();
+      expect(snap.warnings).toEqual([]);
+      expect(snap.definitionsCorrupt).toBe(false);
+    } finally { s.stop(); }
+  });
+
+  it("坏条目被跳过 ⇒ 有警告但 definitionsCorrupt=false（写路径仍可继续）", async () => {
+    const { s, data } = makeScheduler();
+    await mkdir(data, { recursive: true });
+    const good = validateAutomation(base({ id: makeUlid() }));
+    if (!good.ok) throw new Error("fixture invalid");
+    await writeFile(join(data, "automations.json"), JSON.stringify({ version: 1, tasks: [good.value, { name: "坏条目" }] }), "utf8");
+    await s.start();
+    try {
+      const snap = await s.snapshot();
+      expect(snap.tasks).toHaveLength(1);
+      expect(snap.definitionsCorrupt).toBe(false);
+      expect(snap.warnings.join()).toContain("无效已跳过");
+    } finally { s.stop(); }
+  });
+
+  it("修好盘上坏档后 upsert 成功 ⇒ 快照警告清空（不许永远挂着旧失败）", async () => {
+    const { s, data } = makeScheduler();
+    await mkdir(data, { recursive: true });
+    const file = join(data, "automations.json");
+    await writeFile(file, "{ 不是 JSON", "utf8");
+    await s.start();
+    try {
+      expect((await s.snapshot()).definitionsCorrupt).toBe(true);
+      await writeFile(file, JSON.stringify({ version: 1, tasks: [] }), "utf8");
+      const up = await s.upsert(base({ id: makeUlid() }));
+      expect(up.ok).toBe(true);
+      const snap = await s.snapshot();
+      expect(snap.definitionsCorrupt).toBe(false);
+      expect(snap.warnings).toEqual([]);
+    } finally { s.stop(); }
+  });
+
+  it("正常触发的 tick 不误计 duplicates，且本进程刚收束的历史条目保留 session_id", async () => {
+    const okExecutor: TriggerExecutor = async () => ({ ok: true });
+    const { s } = makeScheduler({ runSession: okExecutor, now: new Date("2026-09-12T02:00:00Z").getTime() });
+    await s.start();
+    s.stop();
+    await s.upsert(base({ name: "归属回归靶", schedule: { kind: "once", at: "2026-09-12T02:30:00Z" }, createdAt: CREATED }));
+    await s.tick({ startup: true });
+    const rep = await s.tick({ now: new Date("2026-09-12T02:30:00Z").getTime() });
+    expect(rep.triggered).toBe(1);
+    expect(rep.duplicates).toBe(0);
+    await s.whenIdle;
+    const snap = await s.snapshot();
+    expect(snap.history).toHaveLength(1);
+    expect(snap.history[0]?.state).toBe("succeeded");
+    expect(snap.history[0]?.session_id).toBeTruthy();
+  });
+
+  it("跨进程准入锁持有者 PID 已死 ⇒ 不必傻等 2 分钟立即回收锁并正常触发", async () => {
+    const okExecutor: TriggerExecutor = async () => ({ ok: true });
+    const { s, data } = makeScheduler({ runSession: okExecutor, now: new Date("2026-09-12T02:00:00Z").getTime() });
+    await mkdir(data, { recursive: true });
+    // 写入一个必然不存在的极大死进程 PID，且 mtime 就是此刻（未满 2 分钟）
+    await writeFile(join(data, "automations.lock"), "99999999", "utf8");
+    await s.start();
+    s.stop();
+    await s.upsert(base({ name: "死锁回收靶", schedule: { kind: "once", at: "2026-09-12T02:30:00Z" }, createdAt: CREATED }));
+    await s.tick({ startup: true });
+    const rep = await s.tick({ now: new Date("2026-09-12T02:30:00Z").getTime() });
+    expect(rep.triggered).toBe(1);
+    expect(rep.duplicates).toBe(0);
+    await s.whenIdle;
   });
 });

@@ -1,10 +1,10 @@
 // 批 5（《全局 UI 视觉重构》细则 §五「弹层与菜单（统一组件）」）：
-// ① 底座统一：所有 popover = 14 圆角（--radius-pop）+ 8 内距（--space-sm）+ 条目 36px（--h-menu-item）；
+// ① 底座统一：所有 popover = v3 的 10 圆角（--radius-pop-v3）+ 8 内距（--space-sm）+ 条目 36px（--h-menu-item）；
 // ② 选中态统一：右侧对勾 + 条目文字变 primary（.menu-item:has(.check)）；
 // ③ 权限菜单：每项图标 + 两行（标题/副标题）、「自动」行 warning 图标 +「危险」小标签（不整行变色）、
 //    选「自动」先二次确认（未确认不调 onModeChange）；
 // ④ 模型弹层：思考分段选中 = elevated 背景 + primary 文字、未选 = secondary（不再用近隐灰）；
-//    「未声明 reasoningEfforts」= 一行 12.5px info 行（小图标 + 文案 + 「了解如何配置」折叠），
+//    「未声明 reasoningEfforts」= 一行 caption 档 info 行（小图标 + 文案 + 「了解如何配置」折叠），
 //    去掉大块棕底。
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -14,6 +14,7 @@ import { ModelMenu } from "../src/renderer/components/ModelPicker";
 import type { PermissionMode } from "../../../src/main/ipc-protocol";
 
 const styles = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
+const menuCss = readFileSync(new URL("../src/renderer/components/model-menu.css", import.meta.url), "utf8");
 const tokens = readFileSync(new URL("../src/renderer/tokens.css", import.meta.url), "utf8");
 const permSrc = readFileSync(new URL("../src/renderer/components/PermissionMenu.tsx", import.meta.url), "utf8");
 
@@ -24,16 +25,16 @@ function block(css: string, sel: string): string {
   return css.slice(i, css.indexOf("}", i));
 }
 
-describe("批 5：弹层底座统一（14 圆角 / 8 内距 / 36 条目）", () => {
-  it("tokens：--radius-pop = 14、--h-menu-item = 36（rem 缩放制）", () => {
-    expect(tokens).toContain("--radius-pop: calc(0.875rem * var(--size-scale))");
+describe("批 5：弹层底座统一（10 圆角 / 8 内距 / 36 条目）", () => {
+  it("tokens：--radius-pop-v3 = 10、--h-menu-item = 36（rem 缩放制）", () => {
+    expect(tokens).toContain("--radius-pop-v3: calc(0.625rem * var(--size-scale))");
     expect(tokens).toContain("--h-menu-item: calc(2.25rem * var(--size-scale))");
   });
 
-  it(".pop / .pop-rd / .path-menu 三个浮层底座同口径：var(--radius-pop) + var(--space-sm) 内距", () => {
+  it(".pop / .pop-rd / .path-menu 三个浮层底座同口径：var(--radius-pop-v3) + var(--space-sm) 内距", () => {
     for (const sel of [".pop", ".pop-rd", ".path-menu"]) {
       const b = block(styles, sel);
-      expect(b, sel).toContain("border-radius: var(--radius-pop)");
+      expect(b, sel).toContain("border-radius: var(--radius-pop-v3)");
       expect(b, sel).toContain("padding: var(--space-sm)");
     }
   });
@@ -59,50 +60,53 @@ describe("批 5：权限菜单（图标 + 两行 + 危险标签 + 自动二次�
 
   it("四档每项：图标（perm-ico×4）+ 标题 + 副标题两行；无旧 risk-dot", () => {
     const h = html();
-    for (const s of ["只读", "默认", "引导", "自动"]) expect(h).toContain(s);
-    // auto 那行的副标题口径 2026-10-16 改过：旧文案「全部放行（出网仍审批）」是名不副实的
-    // （MODE_POLICY 里 auto 是 writeAsk:false 而 riskAskAt:"high"，高风险动作照样送审），
-    // 业主据此判「切换没用」。现在判的是"它真的做什么"。
-    for (const d of ["写工具一律拒", "写/跑逐次审批出卡", "低风险自动、高风险出卡", "低风险免批；高风险仍出卡"]) {
+    // 2026-11-03 业主：引导与自动文案重叠 ⇒ 合并成「智能审批」，选择面只留四档。
+    for (const s of ["只读", "需要审批", "智能审批", "完全允许"]) expect(h).toContain(s);
+    for (const d of ["写工具一律拒", "写/跑逐次审批出卡", "按风险自动放行：低风险直接做，高风险再出卡", "什么都允许：出网、方案门与禁止规则都放行"]) {
       expect(h).toContain(d);
     }
     // 反向钉：那句谎话不许回来
     expect(h).not.toContain("全部放行");
     expect((h.match(/class="perm-ico/g) ?? []).length).toBe(4);
     expect((h.match(/class="perm-text"/g) ?? []).length).toBe(4);
-    for (const m of ["read-only", "default", "guided", "auto"]) expect(h).toContain(`data-mode="${m}"`);
+    for (const m of ["read-only", "default", "auto", "full-access"]) expect(h).toContain(`data-mode="${m}"`);
+    expect(h).not.toContain('data-mode="guided"');
     expect(h).not.toContain("risk-dot");
   });
 
-  it("「自动」= warning 图标（perm-ico warn）+「危险」小标签恰一枚，不整行变色", () => {
+  it("危险档（自动/完全允许）= warning 图标 +「危险」小标签恰两枚，不整行变色", () => {
     const h = html();
     expect(h).toContain('class="perm-ico warn"');
-    expect((h.match(/危险<\/span>/g) ?? []).length).toBe(1);
+    expect((h.match(/危险<\/span>/g) ?? []).length).toBe(2);
     expect(h).toContain('class="tag-warn"');
   });
 
-  it("选中态 = 右侧对勾恰一枚（当前档所在行）", () => {
+  it("选中态 = 右侧对勾恰一枚（当前档所在行；旧 guided 落到智能审批行）", () => {
     expect((html("guided").match(/class="check"/g) ?? []).length).toBe(1);
     const h = html("guided");
-    const guidedAt = h.indexOf('data-mode="guided"');
     const autoAt = h.indexOf('data-mode="auto"');
-    expect(h.indexOf('class="check"')).toBeGreaterThan(guidedAt);
-    expect(h.indexOf('class="check"')).toBeLessThan(autoAt);
+    const fullAt = h.indexOf('data-mode="full-access"');
+    expect(h.indexOf('class="check"')).toBeGreaterThan(autoAt);
+    expect(h.indexOf('class="check"')).toBeLessThan(fullAt);
   });
 
-  it("二次确认：点「自动」先置 confirming（未确认不动权限），确认后才调 onModeChange(\"auto\") + 关菜单", () => {
-    // 列表行分支：auto 且非当前档 ⇒ 只开确认，绝不直调
-    expect(permSrc).toContain('if (m === "auto" && props.mode !== "auto")');
-    expect(permSrc).toContain("setConfirming(true)");
-    expect(permSrc).toContain('props.onModeChange("auto")');
+  it("二次确认：点危险档先置 confirming（未确认不动权限），确认后才调 onModeChange + 关菜单", () => {
+    // 列表行分支：危险档（自动/完全允许）且非当前档 ⇒ 只开确认，绝不直调
+    expect(permSrc).toContain('if ((m === "auto" || m === "full-access") && props.mode !== m)');
+    expect(permSrc).toContain("setConfirming(m)");
+    expect(permSrc).toContain("props.onModeChange(target)");
     // 确认按钮才带 onModeChange + onClose 串联
-    expect(permSrc).toMatch(/onConfirm[\s\S]{0,160}props\.onModeChange\("auto"\)[\s\S]{0,60}props\.onClose\(\)/);
+    expect(permSrc).toMatch(/onConfirm[\s\S]{0,160}props\.onModeChange\(target\)[\s\S]{0,60}props\.onClose\(\)/);
+    // 完全允许档有自己的确认文案（2026-10-31 抽成 permissionConfirmCopy 单一来源，
+    // composer 内联确认与 Workbench 模态确认共用；判据跟着契约走，原意不变）
+    expect(permSrc).toContain('mode === "full-access"');
+    expect(permSrc).toContain("permissionConfirmCopy(props.mode)");
   });
 
   it("确认卡文案：标题 + 危险说明 +〔取消 / 确认切换（danger）〕", () => {
-    const h = renderToStaticMarkup(<PermissionConfirm onCancel={() => undefined} onConfirm={() => undefined} />);
-    expect(h).toContain("切到「自动」权限档？");
-    expect(h).toContain("不再逐次出卡");
+    const h = renderToStaticMarkup(<PermissionConfirm mode="auto" onCancel={() => undefined} onConfirm={() => undefined} />);
+    expect(h).toContain("切到「智能审批」权限档？");
+    expect(h).toContain("不再逐笔出卡");
     expect(h).toContain("出网仍要审批");
     expect(h).toContain("取消");
     expect(h).toContain("确认切换");
@@ -115,21 +119,21 @@ describe("批 5：权限菜单（图标 + 两行 + 危险标签 + 自动二次�
     expect(composerSrc).toContain('{menu === "perm" && (');
     expect(composerSrc).toContain("<PermissionMenu");
     // ② 确认路径也显式清（防御：将来若改回常驻挂载，state 也不残留）
-    expect(permSrc).toMatch(/onConfirm=\{\(\) => \{[\s\S]{0,240}setConfirming\(false\);/);
+    expect(permSrc).toMatch(/onConfirm=\{\(\) => \{[\s\S]{0,240}setConfirming\(null\);/);
   });
 });
 
-describe("批 5：模型弹层（分段 selected=elevated / 未声明收成 info 行）", () => {
-  it("思考分段：选中 = elevated 背景 + primary；未选 = secondary（不再近隐灰）", () => {
+describe("批 5：模型弹层（DeepSeek 两级面板：选中=尾随✓不铺色 / 未声明收成 info 行）", () => {
+  it("选中行不铺品牌色底，勾是主色细勾（DeepSeek：✓ 就是选中的记号）", () => {
     // token 是 HSL 三元组——必须 hsl() 包裹（裸用 var() 是无效值：真机曾读回透明背景，判卷哨兵补上精确形态）
-    expect(block(styles, '.th-row button[aria-pressed="true"]')).toContain("background: hsl(var(--bg-elevated))");
-    expect(block(styles, '.th-row button[aria-pressed="true"]')).toContain("color: hsl(var(--text-000))");
-    expect(block(styles, ".th-row button")).toContain("color: hsl(var(--text-200))");
+    expect(block(menuCss, '.mp-pop [role="option"][aria-selected="true"]')).toContain("background: transparent");
+    expect(block(menuCss, '.mp-pop [role="option"] .check')).toContain("background: transparent");
+    expect(block(menuCss, '.mp-pop [role="option"] .check')).toContain("color: hsl(var(--text-000))");
   });
 
-  it("未声明 reasoningEfforts：一行 info（th-info + 小图标 + 「了解如何配置」折叠），配置句收进折叠内", () => {
+  it("未声明 reasoningEfforts：思考面空态（th-info + 小图标 + 「了解如何配置」折叠），配置句收进折叠内", () => {
     const h = renderToStaticMarkup(
-      <ModelMenu options={[]} value={null} onPick={() => undefined} onThinkingChange={() => undefined} thinkingSupported={false} />,
+      <ModelMenu options={[]} value={null} onPick={() => undefined} onThinkingChange={() => undefined} thinkingSupported={false} initialFocus="effort" />,
     );
     expect(h).toContain("th-info");
     expect(h).toContain("th-info-ico");

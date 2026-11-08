@@ -250,6 +250,65 @@ export interface SignTest {
   skipped: number;
   /** 能报符号的方向；分母为 0 时 null，**不许读成 0/0=100%**。 */
   tokenDirection: { sign: "a-below-b" | "a-above-b"; agree: number; against: number } | null;
+  /** 符号检验的 p 值（精确二项、双侧；H0＝同向与反向各半）。可比格为 0 时 null。 */
+  pValue: number | null;
+  /** 同向比例的 95% Wilson 区间（下界才是能引用的那个数：5/5 的下界只有 0.57）。 */
+  agreementCi: { lower: number; upper: number } | null;
+  /** 这个 p 值够不够当结论（`SIGN_ALPHA`＝0.05，双侧）。分母为 0 时 null。 */
+  verdict: "significant" | "not-significant" | "no-comparison";
+}
+
+/** 符号检验的 α（双侧 0.05）。**不许为了让某个读数过关而调它**——那是本仓的规矩：
+ *  门槛是裁决，不是参数；调它等于把「没测出来」读成「测过了」。 */
+export const SIGN_ALPHA = 0.05;
+
+/** 符号检验的 p 值：精确二项（双侧）。
+ *
+ *  为什么必须是**精确**而不是正态近似：格数常在 5–12 这个量级，近似式在 n<10 时会把
+ *  「5/5 同向」读成 p≈0.05 上下——而精确值是 2×0.5^5＝**0.0625**，**没到 0.05**。
+ *  换句话说：语料里常见的「5/5 全同向」其实**不足以**在 α=0.05 下当结论，
+ *  差一格（6/6 → 0.03125）才够。精确式把这个差别如实说出来，近似式会把它抹平。
+ *  做法：双侧 p＝2×P(X ≤ min(agree, pairs−agree))，X~Binom(pairs, 0.5)；
+ *  逐项递推 C(n,i)·0.5^n（0.5^n 与后面的每项都是二进制分数 ⇒ 这个量级上没有浮点漂移）。
+ *
+ *  对照的开源做法（本轮实读，不是凭记忆）：
+ *  · `google-research/rliable` 的 `probability_of_improvement` 用**每任务**的 Mann–Whitney U
+ *    （单侧 greater）再跨任务平均，代价是每格要多次重复（`num_runs × num_tasks` 矩阵）；
+ *    本仓的语料多数格只有单次重复 ⇒ 那条路现在还量不了，精确符号检验是**当前数据形状下够用**的那条。
+ *  · `promptfoo/promptfoo` 的 `src/util/eval/repeatStability.ts` 用 Wilson 分数区间给重复组配区间，
+ *    并把区间不稳的组标成 `unstable`——本仓的 `agreementCi` 抄的是同一个闭式。
+ */
+export function exactSignP(pairs: number, agree: number): number | null {
+  if (!Number.isInteger(pairs) || pairs < 1) return null;
+  if (!Number.isInteger(agree) || agree < 0 || agree > pairs) return null;
+  const k = Math.min(agree, pairs - agree);
+  let term = Math.pow(0.5, pairs);
+  let sum = term;
+  for (let i = 1; i <= k; i++) {
+    term = (term * (pairs - i + 1)) / i;
+    sum += term;
+  }
+  return Math.min(1, 2 * sum);
+}
+
+/** 同向比例的 95% Wilson 分数区间（闭式，无依赖）。
+ *
+ *  为什么比例要配区间而不是只报一个数：「5/5 同向」这个**点估计**读起来像「基本全对」，
+ *  但同向比例的 95% 区间是 [0.57, 1.00]——真实比例的下界只有一半多。
+ *  区间端点是 Wilson 分数区间（不是 Clopper–Pearson：后者要解不完全 Beta 函数，
+ *  而 Wilson 是闭式且在 n 小、比例靠边时更稳；口径必须写在读数上，所以这里把它说清楚）。
+ *  上界压到 1、下界抬到 0（比例的定义域）。
+ */
+export function wilsonInterval(successes: number, trials: number): { lower: number; upper: number } | null {
+  if (!Number.isInteger(successes) || !Number.isInteger(trials)) return null;
+  if (trials < 1 || successes < 0 || successes > trials) return null;
+  const z = 1.959963984540054; // 95% 双侧
+  const p = successes / trials;
+  const z2 = z * z;
+  const denom = 1 + z2 / trials;
+  const center = (p + z2 / (2 * trials)) / denom;
+  const margin = (z / denom) * Math.sqrt((p * (1 - p)) / trials + z2 / (4 * trials * trials));
+  return { lower: Math.max(0, center - margin), upper: Math.min(1, center + margin) };
 }
 
 /** 符号（谁更省）与幅度（省几倍）是两件事：n=1 的配对仍支持"5/5 同向"这种陈述，
@@ -266,14 +325,22 @@ export function signTestToken(mags: readonly AbMagnitude[]): SignTest {
     else if (a > b) above += 1;
   }
   const comparable = below + above;
+  const agree = Math.max(below, above);
+  // p 值与区间都挂在**同一个分母**上（可比格数）：分母为 0 时两者都是 null，
+  // 不许拿 0 分母算出 p=1 或 100%（那是"没测"读成"测过了"）。
+  const pValue = exactSignP(comparable, agree);
+  const agreementCi = comparable > 0 ? wilsonInterval(agree, comparable) : null;
   return {
     pairs: comparable,
     ties: usable.length - comparable,
     skipped: mags.length - usable.length,
     tokenDirection: comparable === 0 ? null : {
       sign: below >= above ? "a-below-b" : "a-above-b",
-      agree: Math.max(below, above),
+      agree,
       against: Math.min(below, above),
     },
+    pValue,
+    agreementCi,
+    verdict: pValue === null ? "no-comparison" : pValue <= SIGN_ALPHA ? "significant" : "not-significant",
   };
 }

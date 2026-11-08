@@ -89,7 +89,7 @@ describe("loadCatalog：三个来源的优先级", () => {
     );
     expect(fetchImpl).not.toHaveBeenCalled();
     expect(r.origin).toBe("cache");
-    expect(r.note).toContain("未刷新");
+    expect(r.note).toBe("缓存仍新鲜，未刷新");
   });
 
   it("auto + 缓存过期 ⇒ 联网，用 live，并把新的那份写回缓存", async () => {
@@ -122,7 +122,7 @@ describe("loadCatalog：失败必须说得出理由", () => {
       },
     );
     expect(r.origin).toBe("cache");
-    expect(r.note).toContain("刷新失败");
+    expect(r.note).toMatch(/^刷新失败：/u);
     expect(r.note).toContain(CAUSE);
   });
 
@@ -141,7 +141,7 @@ describe("loadCatalog：失败必须说得出理由", () => {
       { ...layout({ snap: snapshot() }), fetchImpl: async () => jsonResponse("", 302) },
     );
     // 第 447 页：`重定向` 在盘上 13 处生产者里都有 ⇒ 换成只有 catalog-store 那一句产出的短语。
-    expect(r.note).toContain("数据源返回重定向");
+    expect(r.note).toBe("刷新失败：数据源返回重定向 302（不跟随）");
     expect(r.origin).toBe("snapshot");
   });
 
@@ -151,7 +151,7 @@ describe("loadCatalog：失败必须说得出理由", () => {
       { ...layout({ snap: snapshot() }), fetchImpl: async () => jsonResponse({ oops: true }) },
     );
     expect(r.origin).toBe("snapshot");
-    expect(r.note).toContain("刷新失败");
+    expect(r.note).toMatch(/^刷新失败：/u);
   });
 
   it("内置快照缺失 ⇒ 记账后继续（目录是帮填表的辅助，不该拖垮任务）", async () => {
@@ -173,6 +173,6 @@ describe("loadCatalog：失败必须说得出理由", () => {
     writeFileSync(join(store.dir, "models-dev.json"), "not json at all", "utf8");
     const r = await loadCatalog({ refresh: "never" }, store);
     expect(r.origin).toBe("snapshot");
-    expect(r.note).toContain("本地缓存损坏");
+    expect(r.note).toMatch(/^本地缓存损坏：/u);
   });
 });

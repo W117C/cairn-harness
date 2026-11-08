@@ -2,6 +2,8 @@
 // 只做 YAML 子集：key: value 标量、一层嵌套 map（metadata 等）、行内数组；解析失败返回空
 // frontmatter + 保留原文（扩展内容是数据不是代码，永不因 frontmatter 缺陷炸加载器）。
 
+import { isRecord } from "../../is-record";
+
 export interface ParsedMarkdown {
   frontmatter: Record<string, unknown>;
   body: string;
@@ -31,9 +33,13 @@ function parseScalar(raw: string): unknown {
  *  这里显式拒绝：`__proto__` 是唯一的访问器键（必须拦），`constructor`/`prototype` 属卫生拦截。 */
 const UNSAFE_KEYS: ReadonlySet<string> = new Set(["__proto__", "constructor", "prototype"]);
 
-/** 取安全的 frontmatter 键名；空键与原型链危险键一律返回 null（该行整体忽略）。 */
+/** 取安全的 frontmatter 键名；空键与原型链危险键一律返回 null（该行整体忽略）。
+ *  键两侧的引号按 YAML 语义剥掉：`"*": false`（opencode 的 tools 通配键）不能当成字面 `"*"`。 */
 function safeKey(raw: string): string | null {
-  const t = raw.trim();
+  let t = raw.trim();
+  if (t.length >= 2 && ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'")))) {
+    t = t.slice(1, -1);
+  }
   if (t === "" || UNSAFE_KEYS.has(t)) return null;
   return t;
 }
@@ -63,7 +69,7 @@ export function parseFrontmatter(text: string): ParsedMarkdown {
       const nestedKey = safeKey(nested[1]);
       if (nestedKey === null) continue;
       const cur = ownValue(fm, lastTop);
-      if (typeof cur === "object" && cur !== null && !Array.isArray(cur)) {
+      if (isRecord(cur)) {
         (cur as Record<string, unknown>)[nestedKey] = parseScalar(nested[2]);
       } else {
         const obj: Record<string, unknown> = {};

@@ -208,9 +208,20 @@ export function mergeDiscoveredWithCatalog(input: MergeInput): MergeResult {
     }
     const contextWindow = m.contextWindow ?? s.model?.contextWindow;
     const maxOutputTokens = m.maxOutputTokens ?? s.model?.maxOutputTokens;
-    const price = s.model?.pricing;
-    const anyDiscovery = m.contextWindow !== undefined || m.maxOutputTokens !== undefined || m.reasoningEfforts !== undefined;
-    const anyCatalog = s.model?.contextWindow !== undefined || s.model?.maxOutputTokens !== undefined || price !== undefined;
+    // 探测值也能带价（OpenRouter 的 per-token 字符串已在 discovery 里换算成每百万 token）。
+    // 目录有价时目录优先（第三方快照与探测同权时取更稳定的一份）；目录没价才用探测值。
+    const discoveredPrice = m.priceInPerMTok !== undefined || m.priceOutPerMTok !== undefined
+      ? {
+          ...(m.priceInPerMTok !== undefined ? { inputPerMTok: m.priceInPerMTok } : {}),
+          ...(m.priceOutPerMTok !== undefined ? { outputPerMTok: m.priceOutPerMTok } : {}),
+        }
+      : undefined;
+    const price = s.model?.pricing ?? discoveredPrice;
+    const anyDiscovery = m.contextWindow !== undefined || m.maxOutputTokens !== undefined || m.reasoningEfforts !== undefined
+      || m.priceInPerMTok !== undefined || m.priceOutPerMTok !== undefined;
+    // 来源判定只看**目录自己**给了什么：price 可能来自探测值，不能因为合并后的 price 非空
+    // 就把一条纯探测行标成 both。
+    const anyCatalog = s.model?.contextWindow !== undefined || s.model?.maxOutputTokens !== undefined || s.model?.pricing !== undefined;
     const inputModalities = m.inputModalities ?? s.model?.inputModalities;
     rows.push({
       id: m.id,

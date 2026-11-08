@@ -1,6 +1,6 @@
 // M2a LSP 框架测试：stub server（fixtures/lsp/stub-server.mjs）+ 六操作 + 生命周期 + 诊断回流。
 // 坑：stub 用 plain node 跑（fixtures 不进 tsc），workspace 每用例独立，收尾 closeAllLspClients。
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { snapshotNote } from "../src/tools/snapshot.js";
 
 /** 剥掉「覆盖前原件已存 …」那句尾巴：它属于快照面，不是本条判卷要判的东西。
@@ -26,7 +26,11 @@ import {
   loadLspConfig,
   lsp,
   lspPrefetchEnabled,
+  lspServerStatus,
+  formatLspStatus,
   prefetchLsp,
+  SYMBOL_KIND_NAMES,
+  symbolKindValues,
 } from "../src/tools/lsp";
 import type { ToolContext } from "../src/tools";
 
@@ -193,6 +197,170 @@ describe("LSP 框架（M2a 任务 5）", () => {
   });
 });
 
+/* ---- 第 920 页：能力协商 ----
+ * 此前 initialize 发的是 `capabilities: {}`，而服务器的应答（含 `textDocumentSync` 与各 provider
+ * 声明）**整个丢掉**。三件事因此悄悄出错：真实服务器按"最保守形状"回包（我们收哪种都行，但它本可以
+ * 给更好的）；改了盘之后 didChange 的形状与服务器声明的同步方式不符（增量服务器会**沉默丢掉**这条
+ * 更新，于是六操作端回旧文本，看着像"代码没变"）；服务器没实现的那一支操作我们照样发，等 8 秒超时。
+ */
+describe("能力协商（第 920 页）", () => {
+  const stubCfg = (extra: string[]) => ({
+    lsp: { stub: { command: "node", args: [STUB, ...extra], extensions: [".ts", ".js"] } },
+  });
+
+  it("客户端把**真会用到的**能力声明出去：没声明的降级是静默的", async () => {
+    const ctx = await newCtx();
+    const capsFile = join(ws, "caps.json");
+    // 配置是每次调用现读的：先建工作区，再把带 --caps-to 的那份写进去
+    await writeFile(join(ws, ".agent", "lsp.json"), JSON.stringify(stubCfg(["--caps-to=" + capsFile])), "utf8");
+    await writeSample();
+    await lsp.run({ operation: "hover", path: "src/sample.ts", line: 3, column: 9 }, ctx);
+    const caps = JSON.parse(await readFile(capsFile, "utf8")) as Record<string, any>;
+    // 这三条各对应一种"不声明就白拿"的降级形状：
+    expect(caps.textDocument.definition.linkSupport).toBe(true); // 不声明 ⇒ 只回 Location，不回 LocationLink
+    expect(caps.textDocument.hover.contentFormat).toContain("markdown"); // 不声明 ⇒ 服务器有权只回 plaintext
+    expect(caps.textDocument.documentSymbol.hierarchicalDocumentSymbolSupport).toBe(true); // 不声明 ⇒ 平铺符号表
+    // 值集声明 = "这 26 种我都叫得出名字"，而名字就来自同一份枚举（下面那条判卷钉这个）
+    expect(caps.textDocument.documentSymbol.symbolKind.valueSet).toEqual(symbolKindValues());
+    expect(caps.textDocument.documentSymbol.symbolKind.valueSet).toHaveLength(26);
+    // 工作区符号的客户端能力键是 `workspace.symbol.symbolKind.valueSet`
+    // （`workspaceSymbol` 这一格协议里不存在——写错键 = 发一段没人听的 JSON）
+    expect(caps.workspace.symbol.symbolKind.valueSet).toEqual(symbolKindValues());
+    // **不吹**：没实现的面不许声明（声明了就把服务器引到我们根本不处理的通知上）
+    expect(caps.textDocument.completion).toBeUndefined();
+    expect(caps.workspace?.didChangeWatchedFiles).toBeUndefined();
+    expect(caps.workspace?.executeCommand).toBeUndefined();
+  });
+
+  it("服务器没声明 hoverProvider ⇒ 当场说不支持，不把协议黑话甩给模型", async () => {
+    const ctx = await newCtx(stubCfg(["--no-hover"]));
+    await writeSample();
+    const err = await lsp
+      .run({ operation: "hover", path: "src/sample.ts", line: 3, column: 9 }, ctx)
+      .catch((e: Error) => e);
+    const message = (err as Error).message;
+    expect(message).toContain("hover");
+    expect(message).toContain("未声明");
+    // 原句证人（第 915 页）：这句的用途是让模型**换路**而不是重跑，所以「能力的边界、不是一次
+    // 失败」必须真在话里。抄原句是刻意的——改措辞时这条会红，逼人重新确认那句话还对。
+    expect(message).toContain("这是该服务器的能力边界，不是这次调用失败");
+    expect(message).toContain("grep / read_file");
+    // stub 在 --no-hover 下**不注册** hover handler ⇒ 不设门控拿到的是 jsonrpc 的
+    // MethodNotFound 黑话（"Unhandled method"一类）：模型读不懂，也只能原样重跑。
+    expect(message).not.toMatch(/Unhandled method|Method not found|jsonrpc/i);
+    // 门控只拦没声明的那一支，其余五操作照旧
+    const def = await lsp.run({ operation: "definition", path: "src/sample.ts", line: 3, column: 9 }, ctx);
+    expect(def.output).toBe("src/sample.ts:2:1");
+  });
+
+  it("增量同步（change:2）：didChange 不带 range 就被服务器沉默丢掉，结果停在旧文本", async () => {
+    const ctx = await newCtx(stubCfg(["--incremental"]));
+    const abs = await writeSample();
+    const first = await lsp.run({ operation: "hover", path: "src/sample.ts", line: 3, column: 9 }, ctx);
+    expect(first.output).toBe("hover: alpha（stub）");
+    await writeFile(abs, SAMPLE.replace(/REF\(alpha\)/g, "REF(beta)"), "utf8");
+    const second = await lsp.run({ operation: "hover", path: "src/sample.ts", line: 3, column: 9 }, ctx);
+    expect(second.output).toBe("hover: beta（stub）");
+  });
+
+  it("不接受增量（change:0）：改盘后走 didClose+didOpen 重开，而不是发一条没人认的 didChange", async () => {
+    const ctx = await newCtx(stubCfg(["--sync-none"]));
+    const abs = await writeSample();
+    const first = await lsp.run({ operation: "hover", path: "src/sample.ts", line: 3, column: 9 }, ctx);
+    expect(first.output).toBe("hover: alpha（stub）");
+    await writeFile(abs, SAMPLE.replace(/REF\(alpha\)/g, "REF(beta)"), "utf8");
+    const second = await lsp.run({ operation: "hover", path: "src/sample.ts", line: 3, column: 9 }, ctx);
+    expect(second.output).toBe("hover: beta（stub）");
+  });
+
+  it("符号 kind 名派生自协议枚举：手抄那份把 25 抄成了 TypeParameter", () => {
+    // 旧表少 6 格（Object/Key/Null/EnumMember/Event/TypeParameter 一律落成 "Symbol"），
+    // 而 25 抄错 = **主动给模型一句假话**（协议里 25 是 Operator，26 才是 TypeParameter）。
+    expect(SYMBOL_KIND_NAMES[25]).toBe("Operator");
+    expect(SYMBOL_KIND_NAMES[26]).toBe("TypeParameter");
+    expect(SYMBOL_KIND_NAMES[19]).toBe("Object");
+    expect(SYMBOL_KIND_NAMES[22]).toBe("EnumMember");
+    expect(symbolKindValues()).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]);
+    for (const v of symbolKindValues()) expect(SYMBOL_KIND_NAMES[v]).toBeTruthy();
+  });
+
+  it("workspaceSymbol 允许「有名字没位置」的条目：不许一条坏形状带走整支工具", async () => {
+    const ctx = await newCtx(stubCfg(["--symbol-no-location"]));
+    await writeSample();
+    // stub 的索引来自"打开过的文档"：先把文档递进去（真服务器有自己的索引，不需要这一步）
+    await lsp.run({ operation: "documentSymbol", path: "src/sample.ts" }, ctx);
+    const res = await lsp.run({ operation: "workspaceSymbol", symbol: "alpha" }, ctx);
+    expect(res.ok).toBe(true);
+    expect(res.output).toContain("alpha");
+    expect(res.output).toContain("无位置");
+    expect(res.output).not.toContain("undefined");
+    expect(res.output).not.toMatch(/NaN|:0:0/);
+  });
+});
+
+/* ---- workspaceSymbol 的路由（下一批）----
+ * 旧实现问的是 `Object.keys(cfg.servers)[0]`：哪台服务器在 `.agent/lsp.json` 里排第一，
+ * 整支工作区查询就只归它答。多语言仓库（ts + py）里其余服务器的符号**静默缺席**，
+ * 模型看到的「无结果」于是是一个**错答案**——它会据此判定"这个符号不存在"。
+ */
+describe("workspaceSymbol 问全部服务器", () => {
+  const twoServers = (tsExtra: string[] = [], pyExtra: string[] = []) => ({
+    lsp: {
+      ts: { command: "node", args: [STUB, ...tsExtra], extensions: [".ts"] },
+      py: { command: "node", args: [STUB, ...pyExtra], extensions: [".py"] },
+    },
+  });
+
+  /** 两台服务器各持有一个符号（`documentSymbol` 会把对应文件 didOpen 进它那台）。 */
+  async function seedBoth(ctx: ToolContext): Promise<void> {
+    await mkdir(join(ws, "src"), { recursive: true });
+    await writeFile(join(ws, "src", "a.ts"), "SYM(alpha_ts) x\n", "utf8");
+    await writeFile(join(ws, "src", "b.py"), "SYM(beta_py) x\n", "utf8");
+    await lsp.run({ operation: "documentSymbol", path: "src/a.ts" }, ctx);
+    await lsp.run({ operation: "documentSymbol", path: "src/b.py" }, ctx);
+  }
+
+  it("两种语言各有一个符号 ⇒ 两台都要问，且每条结果标来源", async () => {
+    const ctx = await newCtx(twoServers());
+    await seedBoth(ctx);
+    const res = await lsp.run({ operation: "workspaceSymbol", symbol: "_" }, ctx);
+    expect(res.output).toContain("alpha_ts");
+    expect(res.output).toContain("beta_py"); // 旧实现：只有排第一的 ts 那台说话，beta_py 永远缺席
+    expect(res.output).toMatch(/^ts\b/m);
+    expect(res.output).toMatch(/^py\b/m);
+  });
+
+  it("排第一的那台没声明 workspaceSymbolProvider ⇒ 换下一台问，不是当场拒", async () => {
+    const ctx = await newCtx(twoServers(["--no-workspace-symbol"]));
+    await seedBoth(ctx);
+    const res = await lsp.run({ operation: "workspaceSymbol", symbol: "beta" }, ctx);
+    expect(res.output).toContain("beta_py");
+  });
+
+  it("有一台起不来 ⇒ 点名它，别让「无结果」替它沉默", async () => {
+    const ctx = await newCtx({
+      lsp: {
+        ts: { command: "node", args: [STUB], extensions: [".ts"] },
+        bad: { command: "definitely-not-exist-cmd-m14", extensions: [".py"] },
+      },
+    });
+    await mkdir(join(ws, "src"), { recursive: true });
+    await writeFile(join(ws, "src", "a.ts"), "SYM(alpha_ts) x\n", "utf8");
+    await lsp.run({ operation: "documentSymbol", path: "src/a.ts" }, ctx);
+    const res = await lsp.run({ operation: "workspaceSymbol", symbol: "alpha" }, ctx);
+    expect(res.output).toContain("alpha_ts");
+    expect(res.output).toMatch(/bad[^\n]*(未答上|不可用|失败)/);
+  });
+
+  it("一台都没答上 ⇒ fail loud，不许退化成「无结果」", async () => {
+    const ctx = await newCtx(twoServers(["--no-workspace-symbol"], ["--no-workspace-symbol"]));
+    await seedBoth(ctx);
+    await expect(lsp.run({ operation: "workspaceSymbol", symbol: "alpha" }, ctx)).rejects.toThrow(
+      /都没声明 workspaceSymbolProvider/,
+    );
+  });
+});
+
 describe("诊断回流（M2a 任务 6）", () => {
   it("只取 ERROR 级，≤20 条，附 <diagnostics> 块在输出尾部", async () => {
     const ctx = await newCtx();
@@ -218,6 +386,73 @@ describe("诊断回流（M2a 任务 6）", () => {
     await writeFile(join(ws, "src", "clean.ts"), "const a = 1;\nWARN_HERE\n", "utf8");
     const diag = await collectDiagnostics(ws, join(ws, "src", "clean.ts"));
     expect(diag).toBe("");
+  });
+
+  it("diagnostics.maxPerFile 兑现：配置 2 就只回流 2 条 ERROR", async () => {
+    await newCtx({
+      lsp: {
+        stub: {
+          command: "node", args: [STUB], extensions: [".ts"],
+          diagnostics: { enabled: true, maxPerFile: 2 },
+        },
+      },
+    });
+    await mkdir(join(ws, "src"), { recursive: true });
+    const lines = Array.from({ length: 5 }, (_, i) => "ERROR_HERE " + String(i));
+    await writeFile(join(ws, "src", "few.ts"), lines.join("\n") + "\n", "utf8");
+    const diag = await collectDiagnostics(ws, join(ws, "src", "few.ts"));
+    expect(diag.split("\n").filter((l) => l.startsWith("ERROR [")).length).toBe(2);
+  });
+
+  it("宿主 diagnostics.enabled:false 兑现：写后不回流诊断", async () => {
+    await newCtx({
+      lsp: {
+        stub: {
+          command: "node", args: [STUB], extensions: [".ts"],
+          diagnostics: { enabled: false },
+        },
+      },
+    });
+    await mkdir(join(ws, "src"), { recursive: true });
+    await writeFile(join(ws, "src", "err.ts"), "ERROR_HERE\n", "utf8");
+    expect(await collectDiagnostics(ws, join(ws, "src", "err.ts"))).toBe("");
+  });
+
+  it("startupTimeout 兑现：慢 initialize 按配置预算失败，不坠进 8s 缺省", async () => {
+    await newCtx({
+      lsp: {
+        stub: {
+          command: "node", args: [STUB, "--slow-init"], extensions: [".ts"],
+          startupTimeout: 200,
+        },
+      },
+    });
+    const cfg = loadLspConfig(ws);
+    const started = Date.now();
+    await expect(getLspClient(ws, cfg, "stub")).rejects.toThrow(/initialize 超时（200ms/);
+    expect(Date.now() - started).toBeLessThan(1500);
+    expect(isLspBroken(ws, "stub")).toBe(true);
+  });
+
+  it("restartOnCrash 兑现：首次崩溃后下一次调用惰性重启并可用", async () => {
+    await newCtx();
+    const marker = join(ws, "crash-once.marker");
+    await writeFile(join(ws, ".agent", "lsp.json"), JSON.stringify({
+      lsp: {
+        stub: {
+          command: "node", args: [STUB, "--crash-until=" + marker], extensions: [".ts"],
+          restartOnCrash: true, startupTimeout: 3000,
+        },
+      },
+    }), "utf8");
+    const cfg = loadLspConfig(ws);
+    await expect(getLspClient(ws, cfg, "stub")).rejects.toThrow();
+    expect(isLspBroken(ws, "stub")).toBe(true);
+
+    await writeFile(join(ws, "a.ts"), "function alpha() {}\n", "utf8");
+    const hover = await lsp.run({ operation: "hover", path: "a.ts", line: 1, column: 10 }, { workspace: ws });
+    expect(hover.output).toContain("hover: alpha");
+    expect(isLspBroken(ws, "stub")).toBe(false);
   });
 
   it("LSP 未配置：edit/write 输出保持不变（空串回流）", async () => {
@@ -302,6 +537,97 @@ describe("S1：预热默认关，且不吞掉显式开启", () => {
         lsp: { only: { command: "node", args: [evil], extensions: [".md"] } },
       }), "utf8");
       expect(prefetchLsp(root, join(root, "a.ts"), true)).toBe("skipped-no-server");
+      expect(existsSync(marker)).toBe(false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+/* ---- LSP 状态可见（任务 #15 第一脚）----
+ * 此前"这台支持什么、起没起来、被没被信任门拦下"只在**失败那一刻被动说半句**：模型要想知道就得逐支试，
+ * CLI 与桌面则一个字都看不到（`src/cli.ts` 只 import 了 closeAllLspClients，桌面搜 lspStatus 零命中）。
+ * 关键约束：读状态**绝不 spawn**——状态面不能变成第二个起进程入口（那会把 S1 那条纪律从后门破掉）。
+ */
+describe("lspServerStatus：状态面（不 spawn）", () => {
+  /** 命令会留痕的工作区：marker 出现＝真 spawn 过（与 S1 同一证据形状）。 */
+  async function traceWs(trusted: boolean): Promise<{ root: string; marker: string; target: string }> {
+    const root = await mkdtemp(join(tmpdir(), "lsp-status-"));
+    await mkdir(join(root, ".agent"), { recursive: true });
+    const marker = join(root, "spawned.marker");
+    const evil = join(root, "trace.mjs");
+    await writeFile(evil, 'import { appendFileSync } from "node:fs";\nappendFileSync(' + JSON.stringify(marker) + ', "x");\nsetTimeout(() => process.exit(0), 50);\n', "utf8");
+    await writeFile(join(root, ".agent", "lsp.json"), JSON.stringify({
+      lsp: { trace: { command: "node", args: [evil], extensions: [".ts"] } },
+    }), "utf8");
+    const target = join(root, "a.ts");
+    await writeFile(target, "export const a = 1;\n", "utf8");
+    if (trusted) setLspTrustedRepos([root]);
+    else setLspTrustedRepos([]);
+    return { root, marker, target };
+  }
+
+  it("没配 lsp.json ⇒ enabled:false 并且话说清楚（空清单不是「一切正常」）", async () => {
+    const root = await mkdtemp(join(tmpdir(), "lsp-status-off-"));
+    try {
+      const st = await lspServerStatus(root);
+      expect(st.enabled).toBe(false);
+      expect(st.trust).toBe("not-configured");
+      expect(st.servers).toEqual([]);
+      expect(formatLspStatus(st)).toContain("未启用");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("配了但没起过 ⇒ state 是 not-started，provider 这一格**缺着**而不是空数组", async () => {
+    const { root, marker } = await traceWs(true);
+    try {
+      const st = await lspServerStatus(root);
+      expect(st.enabled).toBe(true);
+      expect(st.servers[0]?.state).toBe("not-started");
+      expect(st.servers[0]?.providers).toBeUndefined(); // 空数组会被读成"它什么都没声明"＝把没验过说成结论
+      expect(formatLspStatus(st)).toContain("没验过");
+      // 「在跑 / 不可用」是**当前进程**的事实：文案必须自己说清楚，否则换个进程读同一份工作区
+      // 会把"这个进程没起过"误读成"整个仓库没起起来"。
+      expect(formatLspStatus(st)).toContain("当前进程");
+      expect(existsSync(marker)).toBe(false);           // 读状态不是第二个起进程入口
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("起过一次 ⇒ 实测的 provider 清单与同步方式都在（说的是服务器**答的**，不是配置写的）", async () => {
+    const ctx = await newCtx();
+    await writeSample();
+    await lsp.run({ operation: "hover", path: "src/sample.ts", line: 3, column: 9 }, ctx);
+    const st = await lspServerStatus(ws);
+    const entry = st.servers.find((s) => s.id === "stub");
+    expect(entry?.state).toBe("running");
+    expect(entry?.providers).toEqual(expect.arrayContaining(["hoverProvider", "definitionProvider"]));
+    expect(entry?.providers).toHaveLength(6);
+    expect(entry?.sync).toBe("full");
+    expect(formatLspStatus(st)).toContain("hoverProvider");
+  });
+
+  it("起不来 ⇒ 点名原因，别再谎报它能答", async () => {
+    const ctx = await newCtx({ lsp: { bad: { command: "definitely-not-exist-cmd-m15", extensions: [".ts"] } } });
+    await writeSample();
+    await lsp.run({ operation: "hover", path: "src/sample.ts", line: 2, column: 5 }, ctx).catch(() => undefined);
+    const st = await lspServerStatus(ws);
+    const entry = st.servers.find((s) => s.id === "bad");
+    expect(entry?.state).toBe("broken");
+    expect(entry?.note).toBeTruthy();
+    expect(entry?.providers).toBeUndefined();
+    expect(formatLspStatus(st)).toMatch(/bad.*(不可用|退出|失败)/);
+  });
+
+  it("等授权的那台 ⇒ 说「未授权」，而且**没起进程**", async () => {
+    const { root, marker } = await traceWs(false);
+    try {
+      const st = await lspServerStatus(root);
+      expect(st.trust).toBe("pending");
+      expect(formatLspStatus(st)).toContain("未授权");
       expect(existsSync(marker)).toBe(false);
     } finally {
       await rm(root, { recursive: true, force: true });

@@ -9,12 +9,13 @@ import { useEffect, useState } from "react";
 import type { AskPayload } from "../../../../../src/main/ipc-protocol";
 import { AlertTriangle, BookOpen, ChevronDown, FileText, Globe, SquareTerminal, Timer } from "lucide-react";
 import { describeAsk } from "./cards";
+import { STR } from "../strings";
 
 /** 风险中文化 + 分级：low/none 不出 chip（低风险的日常动作不摆警示），medium 起才说话。 */
 const RISK_CHIP: Record<string, { label: string; cls: string } | undefined> = {
-  medium: { label: "中风险", cls: "chip risk" },
-  high: { label: "高风险", cls: "chip danger" },
-  critical: { label: "极高风险", cls: "chip danger" },
+  medium: { label: STR.gate.riskMedium, cls: "chip risk" },
+  high: { label: STR.gate.riskHigh, cls: "chip danger" },
+  critical: { label: STR.gate.riskCritical, cls: "chip danger" },
 };
 
 /** 工具 → 头行图标（认不出的工具不硬凑图标，留给 ⚠/空位）。 */
@@ -23,6 +24,7 @@ function toolIcon(tool: string) {
   if (tool === "write_file" || tool === "edit_file" || tool === "apply_patch") return FileText;
   if (tool === "web_fetch") return Globe;
   if (tool === "remember") return BookOpen;
+  if (tool === "attachment") return FileText;
   if (tool.startsWith("automation_")) return Timer;
   return undefined;
 }
@@ -47,14 +49,22 @@ export function ApprovalCard(props: {
   }, [alwaysArmed]);
   const a = props.ask;
   const digest = describeAsk(a);
+  // 项目外附件是**本轮一次性**读取授权：不提供「本会话此类 / 总是允许」——
+  // 那两个按钮的语义是持久 scope，而附件 grant 按设计不落盘、不跨 run。
+  const oneShot = a.tool === "attachment";
   const chip = a.risk !== undefined ? RISK_CHIP[a.risk] : undefined;
   const dangerHead = a.risk === "high" || a.risk === "critical";
   const Icon = dangerHead ? AlertTriangle : toolIcon(a.tool);
-  const isNet = a.riskReasons?.some((r) => r.includes("网络") || r.toLowerCase().includes("net")) ?? false;
+  const isNet = a.riskReasons?.some((r) => r.includes(STR.gate.networkKeyword) || r.toLowerCase().includes("net")) ?? false;
   return (
     <div
       className="card"
+      data-gate="approval"
+      data-risk={a.risk ?? "none"}
+      data-status="pending_approval"
       data-exp={expanded ? "true" : "false"}
+      role="region"
+      aria-label={STR.gate.approvalAria.replace("{tool}", a.tool)}
       tabIndex={0}
       onKeyDown={(e) => {
         // ⏎ = 允许一次（P3-1 Step 3）：仅当焦点在卡本体（按钮自带原生 ⏎，不抢不双发）。
@@ -68,12 +78,17 @@ export function ApprovalCard(props: {
         <h3>{digest.title}</h3>
         {chip !== undefined && <span className={chip.cls}>{chip.label}</span>}
         <span className="spacer" />
-        <button className="iconbtn sm" data-card-exp aria-label={expanded ? "收起详情" : "展开详情"} onClick={() => setExpanded(!expanded)}>
+        <button className="iconbtn sm" data-card-exp aria-label={expanded ? STR.gate.collapse : STR.gate.expand} onClick={() => setExpanded(!expanded)}>
           <span style={{ display: "inline-flex", transform: expanded ? "rotate(180deg)" : undefined, transition: "transform var(--t-fast)" }}><ChevronDown size={12} /></span>
         </button>
       </div>
-      {digest.subject !== undefined && <div className="ask-subject" title={digest.subject}>{digest.subject}</div>}
-      {digest.body !== undefined && <div className="cmdline" title={digest.body}>{digest.body}</div>}
+      <div className="card-evidence">
+        {digest.subject !== undefined && <div className="ask-subject" title={digest.subject}>{digest.subject}</div>}
+        {digest.body !== undefined && <div className="cmdline" title={digest.body}>{digest.body}</div>}
+        {digest.subject === undefined && digest.body === undefined && (
+          <div className="consequence">{a.reason ?? STR.gate.approvalRegion}</div>
+        )}
+      </div>
       {expanded && (
         <>
           {a.reason && <div className="why">{a.reason}</div>}
@@ -83,7 +98,7 @@ export function ApprovalCard(props: {
           {isNet && (
             <div className="note-net">
               <span aria-hidden="true"><Globe size={13} /></span>
-              <span>批准 = 本次命令放行网络出网（一次性，不记忆）</span>
+              <span>{STR.gate.networkNote}</span>
             </div>
           )}
         </>
@@ -92,24 +107,27 @@ export function ApprovalCard(props: {
         <div className="note-tier" role="status">
           <span>{a.tierWarning}</span>
           {props.onDowngrade !== undefined && (
-            <button className="btn ghost" onClick={() => { props.onDowngrade?.(); }}>降档回默认档</button>
+            <button className="btn ghost" onClick={() => { props.onDowngrade?.(); }}>{STR.gate.downgrade}</button>
           )}
         </div>
       )}
       <div className="card-actions">
-        <button className="btn primary" onClick={() => props.onDecide(true)}>允许 · 本次</button>
-        <button className="btn secondary" onClick={() => props.onDecide(false)}>拒绝</button>
-        {!alwaysArmed ? (
-          <button className="btn ghost" onClick={() => setAlwaysArmed(true)}>总是允许 <ChevronDown size={11} /></button>
+        {/* 动作次序（2026-10-31，R1）：拒绝 / 总是允许 / 允许一次（主钮最右）。
+            与 open-claude-ui McpToolDecisionCard 的三阶决议同序；危险动作不摆在主位。 */}
+        <button className="btn secondary" data-gate-reject onClick={() => props.onDecide(false)}>{STR.gate.reject}</button>
+        {!oneShot && (!alwaysArmed ? (
+          <button className="btn ghost" onClick={() => setAlwaysArmed(true)}>{STR.gate.alwaysAllow} <ChevronDown size={11} /></button>
         ) : (
           <>
-            <button className="btn ghost" onClick={() => props.onDecide(true, "session_kind")}>确认 · 本会话此类</button>
-            <button className="btn danger-text" onClick={() => props.onDecide(true, "always")}>确认 · 总是</button>
-            <button className="btn ghost" onClick={() => setAlwaysArmed(false)}>取消</button>
+            <button className="btn ghost" onClick={() => props.onDecide(true, "session_kind")}>{STR.gate.confirmSessionKind}</button>
+            <button className="btn danger-text" onClick={() => props.onDecide(true, "always")}>{STR.gate.confirmAlways}</button>
+            <button className="btn ghost" onClick={() => setAlwaysArmed(false)}>{STR.gate.cancel}</button>
           </>
-        )}
+        ))}
+        {/* 2026-11-02：提示贴在次要动作后面，不再夹在 spacer 与主按钮之间把两枚动作挤开。 */}
+        <span className="consequence">{STR.gate.escHint}</span>
         <span className="spacer" />
-        <span className="consequence">Esc 不做决议</span>
+        <button className="btn primary" data-gate-accept onClick={() => props.onDecide(true)}>{STR.gate.approve}</button>
       </div>
     </div>
   );

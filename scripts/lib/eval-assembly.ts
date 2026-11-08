@@ -69,7 +69,30 @@ export const BENCH_KNOBS: Readonly<Record<string, BenchDeclaration>> = {
     face: "not-applicable",
     why: "纯渲染层快捷键闸（App.tsx 的 hotkeysRef：Ctrl+Tab 切会话），不进 runLoop 也不进 agent-runner——基准是 CLI 跑器，根本没有键盘面可拦",
   },
+  notifyOnComplete: {
+    face: "not-applicable",
+    why: "桌面壳的完成通知开关（Notification 只在 Electron 主进程发）；基准是 CLI 跑器，没有系统通知面——开关只影响桌面壳",
+  },
+  keepAwake: {
+    face: "not-applicable",
+    why: "桌面壳的保唤开关（powerSaveBlocker 只在 Electron 主进程，kernel-host 注入缝）；基准是 CLI 跑器，没有电源管理面——开关只影响桌面壳",
+  },
 };
+
+/** 产品缺省态之外、但每一趟读数必须自带身份的装配面。
+ *  这些键不是 DEFAULT_SETTINGS 里的开关，放进 BENCH_KNOBS 会被 stale 判卷当成假存量；
+ *  单独渲染进读数串，才既出声又不谎称「产品默认开着」。 */
+export const BENCH_FACE_ONLY_KNOBS: Readonly<Record<string, BenchDeclaration>> = {
+  taskAcceptanceContract: {
+    face: "off-here",
+    why: "产品会话可能带宿主 --verify 声明并由 projectContext 注入验收契约；基准任务集没有这类事件，这一列明确读数缺少该面",
+  },
+};
+
+export const BENCH_FACE_ONLY: string = Object.entries(BENCH_FACE_ONLY_KNOBS)
+  .sort(([a], [b]) => a.localeCompare(b))
+  .map(([key, value]) => `${key}:${value.face}`)
+  .join(" ");
 
 /** 跑器可以按命令行**改口**的键（只有真接了的才许改口，见 `assemblyOverrides` 与 loop-eval 的三枚旗标）。 */
 export type KnobOverrides = Readonly<Record<string, BenchDeclaration>>;

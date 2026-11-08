@@ -19,10 +19,13 @@ describe("userVisibleText", () => {
   });
 
   it("投影行 / 重跑取值 / 导出都走用户面原文", () => {
-    const src = read("../src/renderer/projections.ts");
+    // 投影真身已搬进 derived/（Phase 2 · 批 2.2）：projections.ts 现在只是门面（逐名转发）。
+    // 两处断言分别落在 derived/stream.ts（投影行）与 derived/session.ts（按轮取值）⇒ 各读各的。
+    const streamSrc = read("../src/renderer/derived/stream.ts");
+    const sessionSrc = read("../src/renderer/derived/session.ts");
     // 2026-10-18：user 行改为多行对象（新增可选 attachments），哨兵跟随形状但口径不变。
-    expect(src).toContain('kind: "user", text: userVisibleText(e)');
-    expect(src).toContain('if (rounds === round) return userVisibleText(e);');
+    expect(streamSrc).toContain('kind: "user", text: userVisibleText(e)');
+    expect(sessionSrc).toContain('if (rounds === round) return userVisibleText(e);');
     const md = transcriptMarkdown([
       ev({ type: "user_message", content: "整份技能正文…", skill: { invoke: "/demo", args: "你好" } }),
       ev({ type: "assistant_message", content: "收到" }),

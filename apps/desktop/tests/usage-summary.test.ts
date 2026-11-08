@@ -44,6 +44,7 @@ describe("usageSummary（头像菜单「用量统计」）", () => {
   it("对话轮数 = user_message 条数（worker 的 user_message 不算主会话轮）", () => {
     const s = usageSummary([
       ev({ type: "user_message", content: "一" } as AgentEvent),
+      ev({ type: "user_message", content: "子任务描述", agent_id: "w1" } as AgentEvent),
       ev({ type: "assistant_message", content: "回" } as AgentEvent),
       ev({ type: "user_message", content: "二" } as AgentEvent),
     ]);

@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import { openContainedFile, resolveInWorkspace, type Tool, type ToolResult } from "./base.js";
+import { openContainedFile, openVerifiedFile, resolveReadTarget, type Tool, type ToolResult } from "./base.js";
 
 /** 识图工具：把工作区内的一张图片读成 data URL，作为多模态内容块进上下文。
  *
@@ -37,7 +37,7 @@ export const READ_IMAGE_DESCRIPTION =
   "读取工作区内的一张图片并放入上下文（识图）。" +
   "何时用：用户发了截图/设计稿/报错界面图片，或需要核对刚生成的可视化产物；" +
   "何时不用：要读源码、配置、日志等文本内容用 read_file；不要用它试探任意二进制文件。" +
-  "约束：只接受工作区内路径；单图 ≤ " + String(Math.floor(MAX_IMAGE_BYTES / 1024 / 1024)) + "MB；" +
+  "约束：接受工作区内路径，或本轮用户已批准的项目外附件路径；单图 ≤ " + String(Math.floor(MAX_IMAGE_BYTES / 1024 / 1024)) + "MB；" +
   "图片按 data URL 整体进上下文，一次别读太多张。";
 
 export const read_image: Tool = {
@@ -47,18 +47,22 @@ export const read_image: Tool = {
     if (typeof rel !== "string" || rel.trim() === "") {
       throw new Error("read_image: path 参数必须是非空字符串");
     }
-    const abs = resolveInWorkspace(ctx.workspace, rel.trim(), "read_image");
-    // 软链穿透：与 read_file/grep/glob 同一道闸（词法 resolve 挡不住「界内软链指向界外」）。
+    // 与 read_file 同一道读取目标解析：工作区内走 containment，项目外只认本轮已批准清单
+    // （realpath 比对，批准后把文件换成指向别处的软链也不会被跟随）。
+    const target = await resolveReadTarget(ctx.workspace, rel.trim(), "read_image", ctx.externalReadGrants);
+    const abs = target.abs;
     let opened;
     try {
-      opened = await openContainedFile(ctx.workspace, abs, "read_image");
-    } catch (error) {
-      if (error instanceof Error && !("code" in error)) throw error;
+      opened = target.external
+        ? await openVerifiedFile(abs, "read_image")
+        : await openContainedFile(ctx.workspace, abs, "read_image");
+    } catch {
       throw new Error("read_image: 文件不存在或不可读: " + rel);
     }
     let buf: Buffer;
-    const { fh, stat: st } = opened;
+    let size: number;
     try {
+      const st = opened.stat;
       if (!st.isFile()) throw new Error("read_image: 不是文件: " + rel);
       if (st.size > MAX_IMAGE_BYTES) {
         throw new Error(
@@ -70,17 +74,18 @@ export const read_image: Tool = {
       buf = Buffer.allocUnsafe(st.size);
       let offset = 0;
       while (offset < buf.length) {
-        const { bytesRead } = await fh.read(buf, offset, buf.length - offset, offset);
+        const { bytesRead } = await opened.fh.read(buf, offset, buf.length - offset, offset);
         if (bytesRead === 0) break;
         offset += bytesRead;
       }
       if (offset !== st.size) throw new Error("read_image: 文件在读取期间发生变化: " + rel);
-      const after = await fh.stat();
+      const after = await opened.fh.stat();
       if (after.dev !== st.dev || after.ino !== st.ino || after.size !== st.size || after.mtimeMs !== st.mtimeMs) {
         throw new Error("read_image: 文件在读取期间发生变化: " + rel);
       }
+      size = st.size;
     } finally {
-      await fh.close().catch(() => undefined);
+      await opened.fh.close().catch(() => undefined);
     }
     const mime = sniffImageMime(buf);
     if (mime === null) {
@@ -93,10 +98,11 @@ export const read_image: Tool = {
     return {
       ok: true,
       // output 是给人/日志看的摘要；真正进上下文的是下面这个结构化块。
-      output: "[image] " + basename(rel) + "（" + mime + "，" + String(st.size) + " 字节）已作为图片内容块附上",
+      output: "[image] " + basename(rel) + "（" + mime + "，" + String(size) + " 字节）已作为图片内容块附上",
       images: [{ type: "image", dataUrl }],
       // 用户面引用（同 render_image）：图片只进模型上下文，聊天里是看不见的。
-      artifact: { kind: "image", path: rel.trim() },
+      // 项目外路径不属于工作区产物面，界面无法按 workspacePathAction 打开 ⇒ 不产 artifact。
+      ...(target.external ? {} : { artifact: { kind: "image", path: rel.trim() } }),
     };
   },
 };

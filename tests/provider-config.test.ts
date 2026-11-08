@@ -16,7 +16,9 @@ const GOOD = {
   version: 1,
   providers: [
     {
-      id: "deepseek",
+      // 自定义家用 "mydeepseek"：id "deepseek" 自 2026-10-25 起是内置家名（保留名单），
+      // 会被校验拒收——那条判据在下面「保留名拒收」用例里单独立着。
+      id: "mydeepseek",
       label: "DeepSeek",
       protocol: "openai",
       baseURL: "https://api.deepseek.com/v1",
@@ -67,17 +69,29 @@ describe("好配置：解析通过并派生", () => {
   it("派生出的档位 id = <provider>-<model>，provider 指向自定义 id，tier 缺省 standard", () => {
     const file = okFile(GOOD);
     const [d] = deriveCustomProviders(file, { builtinTable: TABLE });
-    expect(d.id).toBe("deepseek");
+    expect(d.id).toBe("mydeepseek");
     expect(d.label).toBe("DeepSeek");
     expect(d.apiKeyEnv).toBe("DEEPSEEK_API_KEY");
     expect(d.specs).toEqual([
       {
-        id: "deepseek-chat", provider: "deepseek", model: "deepseek-chat", tier: "standard", ctxWindow: 131072,
+        id: "mydeepseek-chat", provider: "mydeepseek", model: "deepseek-chat", tier: "standard", ctxWindow: 131072,
         reasoningEfforts: ["low", "high"],
       },
     ]);
-    expect(d.prices).toEqual({ "deepseek-chat": { inputPerMTok: 0.28, outputPerMTok: 0.42 } });
+    expect(d.prices).toEqual({ "mydeepseek-chat": { inputPerMTok: 0.28, outputPerMTok: 0.42 } });
     expect(d.warnings).toEqual([]);
+  });
+
+  it("保留名拒收：自定义家占用内置家名（deepseek 等）是判错，不是提示", () => {
+    // 2026-10-25 起深求是一等内置家；同名自定义家会被 registry 的 switch 先命中内置分支、
+    // 自定义配置被静默忽略——所以这道门必须在配置校验期就关上。
+    const kinds = kindsOf(mutate((f, p) => {
+      p.id = "deepseek";
+    }));
+    expect(kinds).toContain("provider-id");
+    for (const builtin of ["glm", "openai", "anthropic", "gemini", "demo"]) {
+      expect(kindsOf(mutate((_f, p) => { p.id = builtin; }))).toContain("provider-id");
+    }
   });
 
   it("registryId 可以显式指定全局档位 id", () => {
@@ -105,6 +119,48 @@ describe("好配置：解析通过并派生", () => {
     }));
     expect(ps.map((p) => p.kind)).toContain("model");
     expect(ps.find((p) => p.kind === "model")?.message).toContain("只能是下列取值之一");
+  });
+});
+
+// 思考声明（2026-11-03）：档位与首选档都由用户自己写进 `models[]`，判错句同样要**原句证人**
+// （`tests/promise-recall-inventory.test.ts` 那把尺：欠证人帽 0 —— 每一句能力断言都得有判卷点它）。
+describe("思考声明：认不出的档位与越界的首选档都拒（不是静默丢）", () => {
+  it("档位写不在四档里 ⇒ 拒，并交出允许的取值清单", () => {
+    const ps = problemsOf(mutate((_f, _p, m) => {
+      m.reasoningEfforts = ["low", "turbo"];
+    }));
+    const hit = ps.find((p) => p.where.endsWith(".reasoningEfforts"));
+    expect(hit?.kind).toBe("model");
+    expect(hit?.message).toContain("认不出的思考档位");
+    expect(hit?.message).toContain("只认下列取值");
+  });
+
+  it("首选档不在声明的档位里 ⇒ 拒（静默落回 off 等于用户写的字一点效果都没有）", () => {
+    const ps = problemsOf(mutate((_f, _p, m) => {
+      m.reasoningEfforts = ["low"];
+      m.reasoningDefault = "high";
+    }));
+    const hit = ps.find((p) => p.where.endsWith(".reasoningDefault"));
+    expect(hit?.kind).toBe("model");
+    expect(hit?.message).toContain("必须是所声明的档位之一");
+  });
+
+  it("首选档写了个不存在的档名 ⇒ 同样拒，且位置指到那个框（不是笼统指模型）", () => {
+    const ps = problemsOf(mutate((_f, _p, m) => {
+      m.reasoningDefault = "turbo";
+    }));
+    const hit = ps.find((p) => p.where.endsWith(".reasoningDefault"));
+    expect(hit?.kind).toBe("model");
+    expect(hit?.message).toContain("认不出的思考档位");
+  });
+
+  it("没声明档位却写了首选档 ⇒ 拒，并说清首选档以档位声明为前提", () => {
+    const ps = problemsOf(mutate((_f, _p, m) => {
+      delete m.reasoningEfforts;
+      m.reasoningDefault = "high";
+    }));
+    const hit = ps.find((p) => p.where.endsWith(".reasoningDefault"));
+    expect(hit?.message).toContain("只有在声明了");
   });
 });
 
