@@ -98,7 +98,7 @@
     "tree-sitter-wasms": "0.1.13",
     "tar": "7.5.22",
     "vscode-languageserver-protocol": "^3.18.3",
-    "web-tree-sitter": "0.25.10"
+    "web-tree-sitter": "0.27.1"
   },
   "license": "AGPL-3.0-only",
   "description": "Cairn — a replayable, audit-first AI coding agent (event-sourced core, CLI + macOS desktop).",
