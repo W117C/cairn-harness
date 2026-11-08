@@ -37404,3 +37404,26 @@ Error: 未知主会话 provider: agnes-ai（内置 5 家，或在 .agent/provide
 ### 四、边界
 
 - 未跑 `pnpm gates` / `head-cert-check` / `mutate-verify`；不提交、不推送。
+
+## 2026-11-08 · 第 1041 页：安全移植第 1 笔——atomic-write 临时名软链 fail-closed
+
+本页记录把 main 安全线的一格移植到 0.2.0 开发线。移植对象是 `main` 的
+`49ea7686`（code scanning 修复批）里的 atomic-write 切片，不是整笔 cherry-pick。
+
+**问题（先有判卷，后有实现）**：把 `tests/atomic-write.test.ts` 原样放进开发线跑，
+在 `ccf35864` 上 1 条失败——`writeFileAtomic` 的临时名被预占为软链时，旧实现
+`writeFile(tmp, ...)` 跟随软链写穿到链接目标，测试的 `rejects` 断言拿到 `undefined`。
+这不是「代码看起来有」能替代的读数：开发线此前没有这份判卷。
+
+**改动**：`src/atomic-write.ts` 采用 main 的 `open(O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW)` +
+同一句柄写数据与 chmod + rename 前 guard 重校验；临时名被预占为软链时 fail-closed，
+不再写穿。`mode`、`Uint8Array` 入参与 `guard` 均保留。
+
+**验证**：
+- `tests/atomic-write.test.ts`：开发线原实现 1 failed；移植后 1 passed。
+- `node --import tsx scripts/typecheck.ts`：通过，0 条报错。
+- 未跑：全量 `pnpm test:capped`、桌面测试、变异表。本笔只声明上述两条读数，
+  不把定向测试绿读成整条安全线已平账。
+
+**边界**：这是 8 笔安全/供应链移植中的第 1 笔；`plugins/trust`、`plugins/discover`、
+`evolution/canary` 三处是架构分叉，按 C.4 的 `redesign` 路径另办，不在本页冒充已修。
