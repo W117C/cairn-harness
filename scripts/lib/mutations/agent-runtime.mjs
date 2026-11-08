@@ -273,7 +273,7 @@ export const MUTATIONS = [
     src: "src/agent/loop.ts",
     test: "tests/loop-repeat-nudge.test.ts",
     desc: "检测照跑、提示却没落进 tool_result（模型看到的仍是裸错误 ⇒ 换路压力为零，重复照旧烧到 maxSteps）",
-    apply: (s) => s.replace("output: redactSecrets(result.output + postContext + repeatNote).text,", "output: redactSecrets(result.output + postContext).text,"),
+    apply: (s) => s.replace("output: redactSecrets(toolOutputText(result.output) + postContext + repeatNote).text,", "output: redactSecrets(toolOutputText(result.output) + postContext).text,"),
     expectFail: "同一调用连败 3 次：提示挂在那条 tool_result 尾部，前两次一字不加",
   },
   {
