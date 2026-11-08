@@ -37538,3 +37538,33 @@ main 的信任模型要求「指纹与装载消费同一份字节快照」，不
 **边界**：`readSkillResources` 的资源索引仍按盘上 stat（只产 path+bytes，不读正文），
 不在本页的快照承诺内；`foreign.ts` 的子集指纹与装载仍走旧 walk；`canary` 锁未动；
 `user-mcp` / `user-hooks` 虚拟插件不变。
+
+## 2026-11-08 · 第 1046 页：安全移植第 6 笔——canary 锁的稳定快照与身份化释放
+
+本页把 main 安全线的观察档锁重写移植到开发线。探针先红：main 的
+`tests/canary-lock-reclaim.test.ts` 原样放进开发线，2 条都失败——第一条 30s 超时
+（两个 stale-lock 竞争者同时进入临界区），第二条释放时把替换锁删掉（ENOENT）。
+移植后 2 条全过。
+
+**改动**：
+- 增加 `StableFile` / `readStableTextFile`：锁文件用同一句柄 fstat + 读，软链 ⇒ `symlink`，
+  非独立常规文件（nlink≠1）⇒ 拒绝，大小/类型/内容一次快照。
+- `withLock` 改为：
+  - 首次取锁 `open(lockPath, "wx", 0o600)`；
+  - 陈旧回收先抢 `.canary.lock.reclaim` 独占名，两个回收者不会互相删掉对方刚拿到的活锁；
+  - 回收写入新临时文件（`O_CREAT|O_EXCL|O_NOFOLLOW`）后 `rename` 到锁名，不写穿被检查的 inode；
+  - 释放写 `"released"` 并关闭；随后只在**路径仍指向自己持有的 inode** 时删除锁名，
+    替换锁不会被误删（开发线原判据「零档取锁不留残余」与 main 的「release 不能删替换锁」两条都保住）。
+- 探活改走共享 `processLiveness`（`process-liveness.ts` 的唯一实现），不新立第二份
+  `process.kill` 探活；`beginLocked` 里开发线原有的 `maxSamples` / `maxConsecutiveFailures`
+  ≥1 整数校验保留。
+
+**判卷**：
+- `tests/canary-lock-reclaim.test.ts`：2 passed（移植前 2 failed）。
+- `tests/evolution-canary.test.ts`：38 passed；`tests/process-liveness.test.ts`：5 passed。
+- canary/evolution 7 个文件：163 passed。
+- 全量 capped：7,952 passed / 2 failed；两条仍是基线 `ccf35864` 同红的
+  `gated-tools` / `runner-gates`。
+- `typecheck`：0 条报错；`docs-check` 全绿。
+
+**边界**：本页只动锁段；观察档判据、回滚与 lesson 逻辑未改；桌面与 trust/discover 已在前几页。
