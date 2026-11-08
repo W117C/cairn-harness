@@ -37,8 +37,12 @@
 
 ## 工作树与在途改动
 
-- 主树：0 项。
-- 2026-11-04 清理后 `.worktrees/` 为空。两棵 code-scanning 树已回收：未跟踪的 3 份 head-cert 凭证移入 `outputs/` 并随 `33db88d0` 入库；未提交的源码与判卷收编为 `rescue/code-scanning-closure-wip-20261104`（`a16837a1`，未经判卷）。
+- 主树 `/Users/ze/Downloads/Cairn/cairn`：29 项未提交（第 1041–1043 页桌面设计、思考与工具调用批次；
+  17 个 tracked 改动 + 12 个未跟踪文件），**不在集成分支内**，需业主确认是否补提交并重做集成。
+- 集成分支与公开候选工作树：0 项。
+- `gate-mutate-verify`：1 项未提交（变异跑器残留，可重建）。
+- `review-fixes-20261107`：38 项未提交（旧评审树，归属待确认）。
+- 2026-11-04 清理后的 code-scanning 树处置记录保留如下：未跟踪的 3 份 head-cert 凭证移入 `outputs/` 并随 `33db88d0` 入库；未提交的源码与判卷收编为 `rescue/code-scanning-closure-wip-20261104`（`a16837a1`，未经判卷）。
 - `gate-mutate-verify` 不再常驻：`pnpm mutate-verify` 缺树时自行 `worktree add`，存在时先 `checkout --detach --force` 到当前 HEAD，属于可重建的跑器目录。
 - 同日清空 `.tmp/`（scratch，门禁与测试会重建）与 `.mimosa/hook-state` 的陈旧 baseline；`git prune-packed` 回收了已入包的重复松散对象。`outputs/desktop-permission-2026-11-03/` 内的五份 Chromium profile 运行缓存已删（截图与读数保留，见 `40ddb2c6`）。
 
