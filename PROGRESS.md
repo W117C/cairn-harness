@@ -37445,3 +37445,36 @@ main 的信任模型要求「指纹与装载消费同一份字节快照」，不
 **边界（必须明说）**：本页只入库原件与判卷，**没有**把 `trust.ts` / `discover.ts` 切到
 `pluginSnapshot`；开发线当前的指纹仍走 `pluginFingerprintEx` 的旧 walk。接线是下一笔
 `redesign`，不在本页冒充已完成。
+
+## 2026-11-08 · 第 1043 页：安全移植第 3 笔——写边界绑定路径身份
+
+本页把 main 安全线的「写入前复核路径身份」这一层移植到开发线，接上 `write_file` /
+`edit_file` / `apply_patch` 三把写工具。动因不是代码看起来缺，而是判卷先红：
+
+**判卷先行**：`tests/write-boundary-race.test.ts` 原样移植后在 `ccf35864` 上 **4 条全红**——
+三把工具都会跟随「初检之后被换成指向 `.agent` 的软链」的父目录，把 `changed` 写进系统区；
+`apply_patch` 还把 EACCES 读失败当成「文件不存在」。移植后 **4 条全绿**。
+
+**改动**：
+- `src/tools/base.ts` 增加 `openContainedFile` / `captureContainedPath` /
+  `assertContainedPathIdentity` / `assertWritablePath`，并把 `assertRealContainment`
+  改为返回解析后的落点（原调用方忽略返回值，行为不变）。
+- `src/tools/write_file.ts`、`edit_file.ts`：读走稳定句柄；`mkdir` 后捕获父目录身份，
+  写前与 rename 前各复核一次；原子写带 `guard`。
+- `src/tools/apply_patch.ts`：采用 main 的两阶段实现（临时文件全部就绪再 rename、
+  回滚走原子写、写前复核父目录身份），保留开发线「ENOENT ≠ 其他读失败」的三态语义，
+  错误文案同时保留「读取失败」与「不可读」两个词。
+- `tests/apply-patch.test.ts`：回滚失败注入点从 `writeFile` 改到 `rename`（回滚已改走
+  `writeFileAtomic`，旧的注入点不再命中）；**断言一条未改**。
+
+**验证**：
+- `tests/write-boundary-race.test.ts`：4 passed（移植前 4 failed）。
+- 相关 10 个测试文件：121 passed（apply-patch 四份、edit-file、path-boundary、snapshot-d7、
+  atomic-write、plugin-snapshot-encoding、write-boundary-race）。
+- 全量 `vitest run --maxWorkers=2`：7,948 passed / 2 failed；两条失败是
+  `tests/gated-tools.test.ts` 与 `tests/runner-gates.test.ts`，在基线 `ccf35864` 的干净
+  worktree 上单独复跑同样失败 ⇒ 不是本笔引入。
+- `node --import tsx scripts/typecheck.ts`：通过，0 条报错。
+
+**边界**：`plugins/trust` / `plugins/discover` 仍未切到 `pluginSnapshot`；`evolution/canary`
+的锁段未动；桌面写路径未验。本页只声明上述读数。

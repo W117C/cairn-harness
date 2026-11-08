@@ -680,7 +680,11 @@ vi.mock("node:fs/promises", async (importOriginal) => {
       // 只对**目标路径**命中失败一次：第一个文件落盘成功，第二个失败 ⇒ 必须回滚第一个。
       if (String(args[1]) === failRenameOn.target) {
         failRenameOn.target = "";
+        failRollbackOn.armed = true;
         throw Object.assign(new Error("注入的 rename 失败"), { code: "EACCES" });
+      }
+      if (failRollbackOn.armed && String(args[1]) === failRollbackOn.target) {
+        throw Object.assign(new Error("注入的回滚写回失败"), { code: "EACCES" });
       }
       return fs.rename(...args);
     },
@@ -743,7 +747,7 @@ describe("apply_patch 多文件原子性", () => {
     const { dir, ctx } = await setup();
     failRenameOn.target = join(dir, "b.txt"); // a.txt 落盘后，b.txt 失败
     failRollbackOn.target = join(dir, "a.txt"); // 回滚 a.txt 时也失败 ⇒ stuck 非空
-    failRollbackOn.armed = true;
+    failRollbackOn.armed = false; // 由 b.txt 的 rename 失败注入点置位，避免误伤第一笔正常落盘
     let err: unknown;
     try {
       await apply_patch.run({ patch: PATCH }, ctx());
