@@ -95,7 +95,19 @@ export function stuckActionOf(name: string, args: Record<string, unknown>): stri
   return name + " " + safeJsonSummary(args).slice(0, 200);
 }
 
+/** 将外部工具的异常输出转成可读正文，正常字符串原样保留。 */
+export function toolOutputText(output: unknown): string {
+  if (typeof output === "string") return output;
+  if (output === undefined) return "[这条工具回执没有正文]";
+  if (output === null) return "[工具回执的正文是 null]";
+  try {
+    return "[非字符串正文] " + (JSON.stringify(output) ?? "[无法序列化]");
+  } catch {
+    return "[非字符串正文·无法序列化]";
+  }
+}
+
 /** 观察摘要（tool_result → 稳定可比的 observation 串；截断防长输出抖动）。 */
-export function stuckObservationOf(output: string): string {
-  return output.slice(0, 200);
+export function stuckObservationOf(output: unknown): string {
+  return toolOutputText(output).slice(0, 200);
 }

@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 export interface ShellUrlOptions {
   /** VITE_DEV_SERVER_URL（生产为空串）。 */
   devServerUrl?: string;
-  /** app.getAppPath()（dev = apps/desktop；打包 = asar 根）。 */
+  /** 包含 dist/index.html 的桌面应用目录。 */
   appPath: string;
 }
 

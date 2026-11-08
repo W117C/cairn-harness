@@ -7,7 +7,7 @@ import { projectContext } from "./context";
 import type { LegacyNextProvider, ModelOutput, Provider } from "../providers";
 import { streamFromNextSource } from "../providers";
 import { failureDigest, repeatDigestNote, verifyOutcomeCause, type VerifyHook, type VerifyOutcome } from "./verify";
-import { DEFAULT_STUCK_CONFIG, detectStuck, stuckActionOf, stuckObservationOf, type StuckTurn } from "./stuck";
+import { DEFAULT_STUCK_CONFIG, detectStuck, stuckActionOf, stuckObservationOf, toolOutputText, type StuckTurn } from "./stuck";
 // M10②：无进展阶梯接进运行循环（此前 `no-progress.ts` 全树零生产消费者，只在门里跑）。
 // 取的全是纯判据：`no-progress.ts` 只做判断，出声与措辞在本文件（判据别抄第二份）。
 import { detectAlternatingThrash, detectVerifyStagnation, noProgressLadder, verifySignature, type VerifyBeat } from "./no-progress";
@@ -692,7 +692,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
         type: "tool_result",
         callId: output.id,
         ok: result.ok,
-        output: redactSecrets(result.output + postContext + repeatNote).text,
+        output: redactSecrets(toolOutputText(result.output) + postContext + repeatNote).text,
         // 执行面没有这把工具：上面 `if (!tool)` 只造了 `result`，落盘在这一格 ⇒ 原因也在这里补，
         // 而不是在分支里改 `result`（那是工具的返回体，不是闸的留痕）。
         ...(tool === undefined ? { blockedBy: "unknown-tool" } : {}),

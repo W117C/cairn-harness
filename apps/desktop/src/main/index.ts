@@ -795,7 +795,7 @@ void webContents; // 显式留痕：推送经 BrowserWindow.getAllWindows()
  *  窗口里加载外部页面——应用壳的 preload 暴露 window.agent（全量 IPC），把渲染层交给
  *  远程页面等于把本机能力一起交出去。只放行「应用壳自身」的导航（dist/index.html 或
  *  dev server 根）；http(s) 外链 shell.openExternal，其余协议直接丢。 */
-const shellUrlOptions = { devServerUrl: process.env.VITE_DEV_SERVER_URL ?? "", appPath: app.getAppPath() };
+const shellUrlOptions = { devServerUrl: process.env.VITE_DEV_SERVER_URL ?? "", appPath: join(distElectron, "..") };
 const isShellUrl = (raw: string): boolean => isAppShellUrl(raw, shellUrlOptions);
 
 /** IPC 来源校验：只有应用壳页面（含 popout，同一 dist/index.html）能调 window.agent。

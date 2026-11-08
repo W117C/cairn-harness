@@ -128,8 +128,8 @@ pnpm bench -- --only B1-bugfix-crossfile
 # 接着上一次那条会话跑（不抹掉之前的转录）
 ./bin/cairn.mjs --session cli-1756289123456 "接着刚才那个往下做"
 
-# 装成命令（npm link；本包未发布，见上）
-npx cairn --help
+# 查看命令帮助
+./bin/cairn.mjs --help
 ```
 
 ### 零凭据试一下：`--provider demo`（**读之前先看这段**）
@@ -199,7 +199,7 @@ key 从环境变量读，**缺 key 会明确报错退出，不会静默换一家
 ```sh
 export OPENAI_BASE_URL=https://api.deepseek.com/v1
 export OPENAI_API_KEY=<deepseek key>
-npx cairn "..."
+./bin/cairn.mjs "..."
 ```
 
 `OPENAI_BASE_URL` 给到 `/v1` 这一层就行，缺 `/chat/completions` 会自动补；已经带全的写法也照样认。
@@ -210,7 +210,7 @@ npx cairn "..."
 ```sh
 export OPENAI_BASE_URL=https://openrouter.ai/api/v1
 export OPENAI_API_KEY=<key>
-npx cairn --provider openai --model stealth/space-bunny-alpha "..."
+./bin/cairn.mjs --provider openai --model stealth/space-bunny-alpha "..."
 ```
 
 `--model` 是显式 opt-in：它不进档位表，因此**不参与 bandit 路由**；预算闸查不到它的价时按既有口径惰掉并明写，
@@ -218,7 +218,7 @@ npx cairn --provider openai --model stealth/space-bunny-alpha "..."
 高估会撞远端 400。指向小窗或网关模型时用 `--ctx-window <n>` 申报真实窗口（只配 `--model` 用）：
 
 ```sh
-npx cairn --provider openai --model some/small-model --ctx-window 32768 "..."
+./bin/cairn.mjs --provider openai --model some/small-model --ctx-window 32768 "..."
 ```
 
 没给 `--provider` 时按上表顺序找第一个配了 key 的；一个都没配 ⇒ exit 2 并告诉你要设哪个变量。
