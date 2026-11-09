@@ -1,6 +1,6 @@
 import { Badge, Button, Select, Switch, Text, TextField } from "@radix-ui/themes";
 import { Book, Brain, Clock, Key, Layers, Plus, Search, Settings as SettingsIcon, Shield, Target, Timer, X } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactElement } from "react";
 
 type AppState = ReturnType<typeof import("./appState").useAppState>;
 
@@ -11,7 +11,7 @@ const NAV = [
   { group: "系统", items: ["键盘快捷键", "关于与更新"] },
 ];
 
-const ICONS: Record<string, JSX.Element> = {
+const ICONS: Record<string, ReactElement> = {
   常规: <SettingsIcon size={14} />,
   外观: <Layers size={14} />,
   通知: <Clock size={14} />,
