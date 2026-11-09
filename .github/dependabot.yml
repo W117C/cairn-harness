@@ -23,6 +23,13 @@ updates:
       - npm
     commit-message:
       prefix: "chore(deps)"
+    ignore:
+      # TypeScript 7 是原生编译器，没了 JS compiler API；本仓测试直接用 ts.createSourceFile，
+      # 升级会让 typecheck 成片失败。等上游恢复 API 或本仓测试迁走后再开。
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      # tree-sitter-wasms 0.1.13 的 grammar ABI 只到 0.25；0.27 会 126 条 impact 测试失败。
+      - dependency-name: "web-tree-sitter"
     groups:
       # 同族一起升，避免锁文件被拆成一串碎片 PR
       typescript:
