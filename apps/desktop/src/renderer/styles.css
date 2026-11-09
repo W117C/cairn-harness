@@ -3277,16 +3277,6 @@ body[data-dsh-claude-style] .md-body .md-code pre { font-size: var(--fs-code); l
 .home-banner-text strong { font-size: var(--fs-body-sm); color: hsl(var(--text-000)); font-weight: var(--fw-bold); }
 .home-banner-text span { font-size: var(--fs-caption-xs); color: hsl(var(--text-300, var(--text-200))); }
 .home-banner .mini-btn { flex: none; }
-/* 演示模式：标题栏常驻胶囊（不占空屏弹性高度；页脚状态点另有「演示模式」文字）。 */
-.tb-demo {
-  display: inline-flex; align-items: center; gap: 5px; flex: none;
-  height: 22px; padding: 0 8px; border-radius: var(--radius-pill);
-  border: 1px solid hsl(var(--hairline)); color: hsl(var(--text-300));
-  font-size: var(--fs-caption-2xs); transition: color var(--t-instant), border-color var(--t-instant);
-}
-.tb-demo:hover { color: hsl(var(--text-000)); border-color: var(--hairline-strong); }
-.tb-demo-dot { width: 5px; height: 5px; border-radius: 50%; background: hsl(var(--color-run)); }
-
 /* 输入类控件的键盘焦点环（2026-10-20 收口）：焦点环已改为全局 `:focus-visible` 的三层
    box-shadow（见文件头），不再依赖 outline —— 组件写 `outline:0` 也盖不掉它。旧的那条
    元素级 outline 规则反而与三层环叠成「双环」（真机实测搜索框/面板输入框两圈描边），

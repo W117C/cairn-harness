@@ -71,9 +71,6 @@ interface AppToolbarProps {
   togglePluginSidebar: () => void;
   focusMode: boolean;
   toggleFocusMode: () => void;
-  /** demo provider：标题栏常驻「演示模式」小胶囊，点开模型设置。 */
-  demo?: boolean;
-  onOpenProviderSettings?: () => void;
   /** 工作状态面板（2026-11-04 截图右上角）：运行读数 + todo_write 清单。 */
   running?: boolean;
   phaseLabel?: string;
@@ -83,7 +80,7 @@ interface AppToolbarProps {
 }
 
 export function renderAppToolbar(deps: AppToolbarProps) {
-  const { settingsOpen, activeId, activeWorkspace, activeProjectLabel, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, onOpenPane, inspectorOpen, onToggleInspector, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode, demo, onOpenProviderSettings } = deps;
+  const { settingsOpen, activeId, activeWorkspace, activeProjectLabel, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, onOpenPane, inspectorOpen, onToggleInspector, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode } = deps;
   const toolbarContext = !settingsOpen && activeId !== null && activeWorkspace !== null && activeProjectLabel !== null ? (
     <span className="tb-workspace" title={activeWorkspace} aria-label={`${STR.composer.workspaceAria}：${activeProjectLabel}`}>
       <Folder size={12} aria-hidden="true" />
@@ -165,17 +162,6 @@ export function renderAppToolbar(deps: AppToolbarProps) {
   // 右组：对话目录按内容出现，改动直达，其余工具按需打开；窄窗保留文字入口。
   const toolbarRight = !settingsOpen && (
     <>
-      {demo === true && (
-        <button
-          className="tb-demo"
-          title={STR.demoBanner.tip}
-          aria-label={STR.demoBanner.tip}
-          onClick={onOpenProviderSettings}
-        >
-          <span className="tb-demo-dot" aria-hidden="true" />
-          {STR.demoBanner.chip}
-        </button>
-      )}
       {activeId !== null && (
         <div className="tb-cluster">
           {/* 工作状态 pill（2026-11-04 截图右上角）：当前任务/阶段一行，点开进程面板。 */}

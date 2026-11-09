@@ -9,7 +9,7 @@ const profile = mkdtempSync(join(tmpdir(), "cairn-control-ipc-"));
 const out = resolve(process.argv[2]); mkdirSync(out, { recursive: true });
 app.setPath("userData", join(profile, "profile"));
 app.on("quit", () => rmSync(profile, { recursive: true, force: true }));
-for (const key of ["M3A_AGENTS_DEMO", "M1B_GATE_FLOW", "M1C_AUTONOMY_SCRIPT", "M2A_LSP_DEMO", "M0A_PROVIDER", "CAIRN_MODEL", "M0B_WORKSPACE"]) delete process.env[key];
+for (const key of ["M3A_AGENTS_DEMO", "M1B_GATE_FLOW", "M1C_AUTONOMY_SCRIPT", "M0A_PROVIDER", "CAIRN_MODEL", "M0B_WORKSPACE"]) delete process.env[key];
 process.env.M3A_MAIN_SCRIPT = join(repo, "fixtures/agents/main-approval-demo.jsonl");
 require(require.resolve("tsx/cjs", { paths: [repo] }));
 const { createKernelHost } = require("../src/main/kernel-host.ts");

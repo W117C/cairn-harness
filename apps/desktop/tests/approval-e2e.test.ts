@@ -28,7 +28,7 @@ writeFileSync(join(userData, "settings.json"), JSON.stringify({ provider: "demo"
 // 剧本/通道 env 的外部残留会劫持判卷（M3A_MAIN_SCRIPT 优先级最高；M0A_PROVIDER 强推真 provider
 // 会拨号；M0B_WORKSPACE 会把 run 的工作区拽走）——进门前清场，出门后还原。
 const ambientKeys = [
-  "M3A_MAIN_SCRIPT", "M3A_AGENTS_DEMO", "M1B_GATE_FLOW", "M1C_AUTONOMY_SCRIPT", "M2A_LSP_DEMO",
+  "M3A_MAIN_SCRIPT", "M3A_AGENTS_DEMO", "M1B_GATE_FLOW", "M1C_AUTONOMY_SCRIPT",
   "M0A_PROVIDER", "CAIRN_MODEL", "M0B_WORKSPACE",
 ] as const;
 const ambientBackup = ambientKeys.map((k) => [k, process.env[k]] as const);

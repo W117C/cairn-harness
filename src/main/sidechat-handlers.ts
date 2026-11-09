@@ -4,13 +4,10 @@
 // 主会话零打扰：sidechat 只读主会话 JSONL，永不 append 它（唯一写主会话的路径是用户显式 /promote）。
 // 本模块不反向依赖装配根：它需要装配根的三处活状态（事件推送、最近 run 日志、当前工作区），
 // 由装配根启动时 `setSidechatHandlerDeps` 注入（同 settings-handlers 的 `setSettingsHostDeps` 形态）。
-import { readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { AgentEvent } from "../events";
-import { createMockSummarizer, type Summarizer } from "../agent/compaction";
+import type { Summarizer } from "../agent/compaction";
 import { createSessionSummarizer } from "../agent/session-provider";
-import { promoteToMain, runSidechatTurn, scriptedSidechatModel, type SidechatModel } from "../agent/sidechat";
+import { promoteToMain, runSidechatTurn, type SidechatModel } from "../agent/sidechat";
 import { isEventRef, type EventRef } from "../events";
 import { glob } from "../tools/glob";
 import { grep } from "../tools/grep";
@@ -45,56 +42,21 @@ function D(): SidechatHandlerDeps {
   return deps;
 }
 
-/** 演示剧本落点（装配根时是 `join(DEMO_DIR, "sidechat-demo.jsonl")`；本模块自带同一份式子）。 */
-const SIDECHAT_DEMO_FIXTURE = join(resolve(dirname(fileURLToPath(import.meta.url)), "..", ".."), "fixtures", "demo", "sidechat-demo.jsonl");
-
 // ---- M2f：辅助对话（sidechat）IPC 面 ----
 // 独立会话：own JSONL 文件组 + own loop + own 上下文；写向工具从工具表摘除（只读白名单硬闸）。
 // 主会话零打扰：sidechat 只读主会话 JSONL，永不 append 它（唯一写主会话的路径是用户显式 /promote）。
 
-/** M2F_SIDECHAT_DEMO 演示剧本（env 门控；缺省零行为）——截图/演示用，不进验收链。
- *  M2g：剧本外置为 fixtures/demo/sidechat-demo.jsonl（冻结 sha 在 scripts/frozen-demo-sha256.json）；
- *  读不到时回退这份内联常量并告警（fail-visible，不静默换剧本）。 */
-const SIDECHAT_DEMO_INLINE = [
-  {
-    type: "assistant_message",
-    content:
-      "旁路只读调查（不改主会话）：我读了 src/agent/loop.ts 与 src/agent/context.ts。" +
-      "结论：runLoop 的上下文来自 projectContext(seen) 投影，压缩只产出 compaction 事件、事件流零删改（loop.ts:67 / context.ts:46）。",
-  },
-] as Parameters<typeof scriptedSidechatModel>[0];
-
-function sidechatDemoScript(): ReturnType<typeof scriptedSidechatModel> {
-  let script: Parameters<typeof scriptedSidechatModel>[0] = SIDECHAT_DEMO_INLINE;
-  try {
-    const raw = readFileSync(SIDECHAT_DEMO_FIXTURE, "utf8");
-    const parsed = raw
-      .split("\n")
-      .map((l) => l.trim())
-      .filter((l) => l !== "")
-      .map((l) => JSON.parse(l) as Parameters<typeof scriptedSidechatModel>[0][number]);
-    if (parsed.length > 0) script = parsed;
-  } catch (err) {
-    console.warn("[sidechat] 演示剧本读取失败，回退内联常量:", err instanceof Error ? err.message : String(err));
-  }
-  return scriptedSidechatModel(script);
-}
-
-/** 选模型：CAIRN_API_KEY 在场 → GLM（createSidechatProvider 缺省）；演示通道 → 脚本；否则 fail-closed。 */
+/** 选模型：CAIRN_API_KEY 在场 → GLM（createSidechatProvider 缺省）；否则 fail-closed。 */
 function resolveSidechatModel(explicit?: SidechatModel): { model?: SidechatModel; error?: string } {
   if (explicit) return { model: explicit };
   if (process.env.CAIRN_API_KEY) return {}; // 缺省 = GLM 暗卷
-  if (process.env.M2F_SIDECHAT_DEMO === "1") return { model: sidechatDemoScript() };
   return { error: "无 CAIRN_API_KEY：sidechat 真实模型不可用（fail-closed，可注入脚本模型）" };
 }
 
 /** M2g §7.5：sidechat 自身历史压缩用的摘要器（与主会话**同一实现**，参数独立配置）。
- *  CAIRN_API_KEY → GLM；演示通道 → 冻结 mock；都没有 → undefined（走既有 overflow 紧急截断）。 */
+ *  CAIRN_API_KEY → GLM；否则 undefined（走既有 overflow 紧急截断）。 */
 function resolveSidechatSummarizer(): ReturnType<typeof createSessionSummarizer> | undefined {
   if (process.env.CAIRN_API_KEY) return createSessionSummarizer();
-  if (process.env.M2F_SIDECHAT_DEMO === "1") {
-    return createMockSummarizer("## Objective\n- 旁路会话自身历史压缩（演示通道，冻结摘要）。\n");
-  }
   return undefined;
 }
 
@@ -269,33 +231,3 @@ export async function handleSidechatState(parentSessionId?: string): Promise<Sid
   return { parentSessionId: parent, sessions, promoted };
 }
 
-/** M2F_SIDECHAT_DEMO=1：主 run 收束后跑 3 轮 sidechat + 一次 promote（截图/演示通道，缺省零行为）。 */
-export async function runSidechatDemo(sessionId: string | undefined, parentLogPath: string, pipeline: (e: AgentEvent) => Promise<void>): Promise<void> {
-  try {
-    const dir = requireSessionsDir();
-    const parentId = sessionId ?? (await store().get()).currentSession ?? "demo";
-    const id = await createSidechatSession(dir, parentId, "旁路调查");
-    const questions = [
-      "主会话现在在改哪个文件？",
-      "压缩之后上下文是怎么重组的？",
-      "总结一句可提升的结论。",
-    ];
-    for (const q of questions) {
-      await handleSidechatAsk(id, q, { parentSessionId: parentId, model: sidechatDemoScript() });
-    }
-    const events = await readSidechatEvents(dir, id);
-    const lastAssistant = [...events.keys()].filter((i) => events[i].type === "assistant_message").pop();
-    if (lastAssistant !== undefined) {
-      const res = await promoteToMain({
-        mainLogPath: parentLogPath,
-        sidechatLogPath: sidechatEventsPath(dir, id),
-        sidechatId: id,
-        sourceEventIds: [lastAssistant + 1],
-        note: "旁路结论提升（演示）",
-      });
-      if (res.ok && res.event) await pipeline(res.event);
-    }
-  } catch (err) {
-    console.warn("[sidechat] 演示通道失败:", err instanceof Error ? err.message : String(err));
-  }
-}

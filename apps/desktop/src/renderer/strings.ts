@@ -303,10 +303,6 @@ export const STR = {
     dropHint: "也可以直接拖入文件夹",
     firstRunSub: "描述任务，agent 在工作区里读代码、改代码、跑测试、交付结果。",
   },
-  demoBanner: {
-    chip: "演示模式",
-    tip: "回复来自预录剧本，不产生真实调用，也不读取你的项目。点这里连接模型。",
-  },
   sessionProject: {
     /** 行上的项目标签（会话已归到某个项目时才有）。 */
     tag: "归属项目",
@@ -714,7 +710,7 @@ export const STR = {
     envActive: "环境变量在位：",
     storedCount: "设置页已存 {n} 家：",
     noCredentials: "环境变量与设置页都没有可用凭据",
-    keysHint: "到「模型与 Provider」保存一把密钥；或用 demo 通道零凭据看流程",
+    keysHint: "到「模型与 Provider」保存一把密钥",
     verdictPass: "总档：{verdict}（{n} 项全过）",
     verdictFailing: "总档：{verdict}（{n} 项要处理）",
     reportTitle: "Cairn 诊断报告",

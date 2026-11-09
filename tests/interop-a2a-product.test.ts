@@ -11,7 +11,7 @@ const roots: string[] = [];
 const saved = new Map<string, string | undefined>();
 const ENV_KEYS = [
   "M3A_MAIN_SCRIPT", "M3A_AGENTS_DEMO", "M1B_GATE_FLOW", "M1C_AUTONOMY_SCRIPT",
-  "M2A_LSP_DEMO", "M0A_PROVIDER", "M0B_WORKSPACE", "CAIRN_MODEL",
+  "M0A_PROVIDER", "M0B_WORKSPACE", "CAIRN_MODEL",
 ] as const;
 for (const key of ENV_KEYS) saved.set(key, process.env[key]);
 

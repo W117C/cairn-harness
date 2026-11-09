@@ -307,7 +307,7 @@ const USAGE_LEDGER = {
 const DOCTOR_REPORT = {
   checks: [
     { id: "node", ok: true, fatal: true, detail: "Node v24.19.0（engines >=20.11.0 <25）" },
-    { id: "keys", ok: false, fatal: false, detail: "四个 provider key 全部未设", hint: "export OPENAI_API_KEY=<key>；或 --provider demo 零凭据看流程" },
+    { id: "keys", ok: false, fatal: false, detail: "四个 provider key 全部未设", hint: "export OPENAI_API_KEY=<key>" },
     { id: "tiers", ok: true, fatal: false, detail: "模型档位表 12 条（cheap 4 / standard 5 / strong 3）" },
     { id: "sandbox", ok: true, fatal: false, detail: "沙箱可用" },
     { id: "workspace", ok: true, fatal: false, detail: "工作区可写" },

@@ -711,14 +711,12 @@ function resolveProviderSelection(flagProvider: string | undefined, flagModel?: 
     // demo 是预录剧本、不拨号。显式点名了模型却落到 demo = 静默把用户的意图换掉，
     // 与 resolveMainModel 里 requestModel 对 demo 的拒绝同一条纪律。
     if (explicitModel !== undefined) {
-      throw new UsageError(`--model ${explicitModel} 与 --provider demo 不匹配（demo 不拨号、不选模型）`);
+      throw new UsageError(`--model ${explicitModel} 与预录剧本档不匹配（不拨号、不选模型）`);
     }
     return { kind: "demo" };
   }
   if (forced === undefined) {
-    // 没显式给：谁配了 key 就用谁。一个都没配 ⇒ **报错退出，不落 demo**。
-    // 落 demo 等于拿一段预录剧本冒充真跑：用户看到「跑完了」，实际什么都没发生。
-    // demo 必须显式 `--provider demo`（它是个演示档，不是缺 key 时的兜底）。
+    // 没显式给：谁配了 key 就用谁。一个都没配 ⇒ **报错退出**，不静默换一家、也不静默回落预录剧本。
     //
     // 顺序：**内置家在前、自定义家在后**。理由不是偏好，是稳定：内置那四家的先后是一份写死的
     // 产品裁决（见注释上文的「否则加一个 provider 就静默改默认」），把自定义家插进去会让老用户
@@ -747,8 +745,7 @@ function resolveProviderSelection(flagProvider: string | undefined, flagModel?: 
       `没有配置任何 provider 的 API key（查过：${names}${custom.length > 0 ? `，以及自定义家的 ${custom.map((p) => p.apiKeyEnv).join(" / ")}` : ""}）。\n` +
         "  设一个再跑，例如：export CAIRN_API_KEY=<你的 key>\n" +
         customHint +
-        "  想接一家自己的（不改源码）：写 .agent/providers.json，或在设置页里填地址与钥匙\n" +
-        "  只想看演示（预录剧本，不调真模型）：加 --provider demo",
+        "  想接一家自己的（不改源码）：写 .agent/providers.json，或在设置页里填地址与钥匙\n"
     );
   }
   return forward(forced);
@@ -1186,10 +1183,7 @@ function printHelp(): void {
 
 选项：
   --mode <档>          read-only | default | guided | auto | full-access（默认 default = 逐次审批）
-  --provider <哪家>    glm | openai | anthropic | gemini | deepseek | demo（默认：按已配置的 key 推断）
-                       demo = 预录剧本：零凭据、不拨号，但与你给的任务无关
-                       （固定演「读→写 src/todo.ts→跑测试」），台词「任务完成」也是剧本的一部分，
-                       结论请看退出码。想量能力用 pnpm bench，别用 demo。
+  --provider <哪家>    glm | openai | anthropic | gemini | deepseek（默认：按已配置的 key 推断）
   --model <模型名>     自由档位：直接点名线上模型（如 stealth/space-bunny-alpha），不进档位表
   --ctx-window <n>     只配 --model：申报该模型的真实上下文窗口（token 数）。
                        缺省取档位表里最小的那个，对更小的模型是高估 ⇒ 撞远端 400。
@@ -1224,7 +1218,7 @@ function printHelp(): void {
                              --model <名字>（只挑一条）｜--provider-name <id>｜--allow-local｜--json
   -h, --help           本帮助
   --                   之后的 token 一律按位置参数（任务以 - 或 -- 开头时用：
-                       cairn --provider demo -- "--以破折号开头的任务"）
+                       cairn --provider deepseek -- "--以破折号开头的任务"）
   取值型旗标也可写 --flag=value（值以 - 开头时只有这一种写法：--message=--差量）
 
 退出码：0 成功 / 1 跑完但失败 / 2 用法错

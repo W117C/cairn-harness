@@ -163,10 +163,7 @@ import {
 import {
   emitGoalEvent, emitGoalStoppedOnThrow, goalNextTurn, setGoalHandlerDeps,
 } from "./goal-handlers";
-import {
-  runSidechatDemo,
-  setSidechatHandlerDeps,
-} from "./sidechat-handlers";
+import { setSidechatHandlerDeps } from "./sidechat-handlers";
 import { compactSessionLog, firePreCompactHook, runSecurityReportHook } from "./compact-and-report";
 import { currentWorkspace, pluginRuntimeOpts, setPluginSnapshot, setStateHandlerDeps } from "./state-handlers";
 import {
@@ -1738,10 +1735,6 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       const safeMode = (await store().get()).safeMode;
       await runSecurityReportHook(opts.logPath, safeMode, pipeline, rawWriteEvents);
     }
-    // M2f sidechat 演示通道（env 门控，缺省零行为）：3 轮旁路问答 + 一次 /promote 上屏
-    if (process.env.M2F_SIDECHAT_DEMO === "1") {
-      await runSidechatDemo(opts.sessionId, opts.logPath, pipeline);
-    }
     // M1d 演示通道：M1D_COMPACTION_DEMO=1 时每轮跑完对手动压缩走一遍真实链路
     //（compactSessionLog 同 handleCompact 共用代码，事件经会话管线上屏压缩卡）。缺省零行为。
     // 钩子引擎同 handleCompact 一路取 `rt.hooks`：不带 = 这条演示通道上的 PreCompact 永不触发，
@@ -1751,7 +1744,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       if (!res.ok) console.warn("[compaction] 演示通道压缩未发生:", res.error);
     }
     // M2b 演示通道：M2B_MAP_DEMO=1 时对本次事件流跑真实 buildMap + computePrune，
-    // 结果以 tool_result 气泡上屏（renderer 零改动；M2A_LSP_DEMO 同族）。缺省零行为。
+    // 结果以 tool_result 气泡上屏（renderer 零改动）。缺省零行为。
     // M2B_MAP_WORKSPACE 可指定地图扫描工作区（缺省本次 run 的工作区）。
     if (process.env.M2B_MAP_DEMO === "1") {
       try {

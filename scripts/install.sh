@@ -40,6 +40,5 @@ fi
 
 echo
 echo "[cairn] 装好了。下一步三条："
-echo "  1) 零凭据看流程：./bin/cairn.mjs --provider demo --mode auto --workspace /tmp/cairn-demo \"随便写点什么\""
-echo "  2) 真跑：export OPENAI_API_KEY=<你的 key> && ./bin/cairn.mjs \"你的任务\""
-echo "  3) 自检：./bin/cairn.mjs --doctor"
+echo "  1) 真跑：export OPENAI_API_KEY=<你的 key> && ./bin/cairn.mjs \"你的任务\""
+echo "  2) 自检：./bin/cairn.mjs --doctor"

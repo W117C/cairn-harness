@@ -217,15 +217,13 @@ describe("运行黄的前景档（--color-run-ink）", () => {
       .map((m) => m[1].trim().replace(/\s+/g, " "));
     expect(fills.sort()).toEqual([
       ".dot.running",
-      ".tb-demo-dot",
     ].sort());
   });
 
   it("从未发出的类名不许留在样式里（.home-banner-demo 属横幅旧形制残留）", () => {
     const css = read("../src/renderer/styles.css");
     expect(css).not.toContain("home-banner-demo");
-    // 反向：真在用的横幅类名与标题栏演示胶囊都还在（不是把整族误删）。
+    // 反向：真在用的横幅类名还在（不是把整族误删）。
     expect(css).toContain(".home-banner ");
-    expect(css).toContain(".tb-demo-dot");
   });
 });

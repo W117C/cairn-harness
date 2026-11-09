@@ -63,14 +63,9 @@ async function main() {
   win.webContents.on('console-message', (details) => { if (details.level === 'error') errors.push(details.message); });
   const js = (source) => win.webContents.executeJavaScript(source);
   await waitFor(() => js('!!document.querySelector(".composer-card textarea")'), 'composer');
-  await waitFor(() => js('document.querySelector(".mp-trigger")?.textContent.includes("演示")'), 'demo provider settings');
+  await waitFor(() => js('!!document.querySelector(".mp-trigger")'), 'model picker');
   await waitFor(() => js('!document.getElementById("boot") || getComputedStyle(document.getElementById("boot")).visibility === "hidden"'), 'startup overlay dismissed');
-  // 演示模式仍由标题栏明确标注；页脚只留用户菜单。
-  check('标题栏常驻「演示模式」胶囊（说明在 title 里）', await js(`(() => {
-    const el = document.querySelector('.tb-demo');
-    if (!el) return false;
-    return el.textContent.includes('演示模式') && (el.getAttribute('title') ?? '').includes('预录剧本');
-  })()`));
+  // 页脚只留用户菜单。
   check('页脚不显示服务状态，用户菜单名称可见', await js(`!document.querySelector('.provider-dot') && document.querySelector('.side-foot .avatar')?.textContent.includes('设置与偏好') === true`));
   check('首启直接进入工作界面，不显示设置检查、说明或开始使用按钮', await js(`!document.querySelector('.onboard') && !document.querySelector('.empty-sub') && ![...document.querySelectorAll('button')].some(el => el.textContent.trim() === '开始使用')`));
   check('首启输入框和模型入口可直接操作', await js(`!!document.querySelector('.composer-card textarea:not(:disabled)') && !!document.querySelector('.mp-trigger:not(:disabled)')`));

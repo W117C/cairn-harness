@@ -99,14 +99,13 @@ describe("collectDoctorChecks（九项固定清单，spec §2 ＋ 第 432 页信
     expect(text).not.toMatch(/sk-[A-Za-z0-9]/);
   });
 
-  it("keys：全缺 ⇒ ✗＋指路 --provider demo（只报不红，非致命）", () => {
+  it("keys：全缺 ⇒ ✗＋指路配置 key（只报不红，非致命）", () => {
     const c = collectDoctorChecks(
       facts({ keyPresence: { CAIRN_API_KEY: false, OPENAI_API_KEY: false, ANTHROPIC_API_KEY: false, GEMINI_API_KEY: false } }),
     );
     const keys = c.find((x) => x.id === "keys")!;
     expect(keys.ok).toBe(false);
     expect(keys.fatal).toBe(false);
-    expect(keys.hint).toContain("--provider demo");
     // DeepSeek 入表后计数与变量名必须现读（此前写死「四个 provider key」= 对第五家的谎报）。
     expect(keys.detail).toContain(`${String(ENV_KEYED_PROVIDERS.length)} 个 provider key 全部未设`);
     expect(keys.detail).toContain(PROVIDER_ENV_KEYS.deepseek);

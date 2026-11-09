@@ -38,7 +38,7 @@ const spawned = (agentId: string, usageModel?: string, model?: string): AgentEve
     ...(usageModel !== undefined ? { usage_model: usageModel } : {}),
   }) as AgentEvent;
 
-const SCRIPTED_ENVS = ["M3A_MAIN_SCRIPT", "M3A_AGENTS_DEMO", "M1B_GATE_FLOW", "M1C_AUTONOMY_SCRIPT", "M2A_LSP_DEMO"];
+const SCRIPTED_ENVS = ["M3A_MAIN_SCRIPT", "M3A_AGENTS_DEMO", "M1B_GATE_FLOW", "M1C_AUTONOMY_SCRIPT"];
 const envBackup: Record<string, string | undefined> = {};
 for (const k of [...SCRIPTED_ENVS, "M0A_PROVIDER", "CAIRN_MODEL"]) envBackup[k] = process.env[k];
 afterEach(() => {
@@ -192,7 +192,7 @@ describe("mainUsageModelOf / scriptedMainModelPath：装配与归因答同一个
     expect(mainUsageModelOf(sel)).toBe(MAIN);
   });
 
-  it("五个剧本通道逐个枚举 ⇒ 各指向自己的剧本，且归因键一律置空", () => {
+  it("四个剧本通道逐个枚举 ⇒ 各指向自己的剧本，且归因键一律置空", () => {
     clearScripted();
     const sel = resolveRunModel({ provider: "glm", model: "" });
     process.env.M3A_MAIN_SCRIPT = "fixtures/scripted.jsonl";
@@ -201,7 +201,7 @@ describe("mainUsageModelOf / scriptedMainModelPath：装配与归因答同一个
     expect(mainUsageModelOf(sel)).toBe("");
 
     for (const [k, v] of [["M3A_MAIN_SCRIPT", ""], ["M3A_AGENTS_DEMO", "1"], ["M1B_GATE_FLOW", "1"],
-      ["M1C_AUTONOMY_SCRIPT", "fixtures/x.jsonl"], ["M2A_LSP_DEMO", "1"]] as const) {
+      ["M1C_AUTONOMY_SCRIPT", "fixtures/x.jsonl"]] as const) {
       if (v === "") delete process.env[k]; else process.env[k] = v;
     }
     expect(scriptedMainModelPath()).toContain("main-demo.jsonl");
@@ -214,8 +214,6 @@ describe("mainUsageModelOf / scriptedMainModelPath：装配与归因答同一个
     process.env.M1C_AUTONOMY_SCRIPT = "fixtures/auto.jsonl";
     expect(scriptedMainModelPath()).toBe("fixtures/auto.jsonl");
     delete process.env.M1C_AUTONOMY_SCRIPT;
-    process.env.M2A_LSP_DEMO = "/abs/lsp.jsonl";
-    expect(scriptedMainModelPath()).toBe("/abs/lsp.jsonl");
     clearScripted();
     expect(scriptedMainModelPath()).toBeNull();
   });
@@ -338,7 +336,7 @@ describe("接线：盖章点=主会话＋基准跑器两处，且不许再抄第
     const fn = all.slice(all.indexOf("export function scriptedMainModelPath"), all.indexOf("export function mainUsageModelOf"));
     expect(fn.length).toBeGreaterThan(50); // 切片本身不许静默为空，否则下面全是恒真
     // `env.X` 这个形状只在真读 env 时出现（注释与文档写作裸名），所以按它计数。
-    for (const k of ["M3A_MAIN_SCRIPT", "M1B_GATE_FLOW", "M1C_AUTONOMY_SCRIPT", "M2A_LSP_DEMO"]) {
+    for (const k of ["M3A_MAIN_SCRIPT", "M1B_GATE_FLOW", "M1C_AUTONOMY_SCRIPT"]) {
       const re = new RegExp("env\\." + k + "\\b", "g");
       const total = [...all.matchAll(re)].length;
       expect(total, k + " 一处都没读 ⇒ 切片判据空载").toBeGreaterThanOrEqual(1);

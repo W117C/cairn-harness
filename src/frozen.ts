@@ -105,9 +105,7 @@ export async function frozenCoverageDrift(root: string): Promise<{
   };
 }
 
-/** M2g：通用实现——按给定冻结表（相对 root 的路径）逐个校验。
- *  判卷区与演示区共用一个实现、**两张独立的表**：往判卷表加演示条目 = 把演示剧本升格成判卷文件，
- *  且会动到判卷基线本身（审查方更正，见任务书任务 6 硬约束）。 */
+/** 通用实现——按给定冻结表（相对 root 的路径）逐个校验；表路径由调用方给出。 */
 export async function sha256MatchesFrozenFile(
   root: string,
   relTablePath: string,
@@ -119,9 +117,4 @@ export async function sha256MatchesFrozenFile(
     if (actual !== expected) return { ok: false, broken: rel };
   }
   return { ok: true };
-}
-
-/** 演示区冻结校验（演示通道 fixture 化；**不进验收链**，仅供重跑截图前自检）。 */
-export async function sha256MatchesDemoFrozen(root: string): Promise<{ ok: boolean; broken?: string }> {
-  return await sha256MatchesFrozenFile(root, join("scripts", "frozen-demo-sha256.json"));
 }

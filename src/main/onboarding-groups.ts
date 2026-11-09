@@ -24,7 +24,7 @@ export interface OnboardingGroup {
 }
 
 export const ONBOARDING_GROUPS: readonly OnboardingGroup[] = [
-  { id: "provider", label: "连接模型", step: 1, entry: "填入 API Key，或先用演示模式看流程" },
+  { id: "provider", label: "连接模型", step: 1, entry: "填入 API Key，连接模型" },
   { id: "permission", label: "确认权限与安全", step: 2, entry: "写文件、联网与审批的边界都在这里" },
   { id: "ui", label: "主题与布局", step: 2, entry: "深浅色与字号可随时换，布局在右栏调" },
   { id: "schedule", label: "定时任务", step: 3, entry: "到点会自动发起新的对话。" },

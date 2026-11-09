@@ -23,14 +23,6 @@ cd cairn-harness
 ./bin/cairn.mjs --doctor
 ```
 
-没有 API key 也能看一遍完整流程（预录剧本，不拨号、不花钱）：
-
-```sh
-./bin/cairn.mjs --provider demo --mode auto --workspace /tmp/cairn-demo "随便写点什么"
-```
-
-> **demo 有三件事必须说明：** ① 剧本固定（读 `src/todo.ts` → 写 `src/todo.ts` → 跑 `pnpm test`），与你给的任务无关；② 结尾的「任务完成」是台词，不是判卷结论，请看退出码；③ 它会在 `--workspace` 里真的创建 `src/todo.ts`。想量真实能力用 `pnpm bench`。
-
 真实任务：
 
 ```sh
@@ -51,7 +43,7 @@ export OPENAI_API_KEY=<你的 key>
 桌面壳在 `apps/desktop/`（Electron + React + Vite），与 CLI 共用 `src/main/` 服务。
 当前构建是 ad-hoc 签名、未公证的开发者预览。
 
-![Cairn 首页（演示环境）：项目选择、任务输入与演示模式](assets/readme/cairn-home.png)
+![Cairn 首页：项目选择、任务输入与工作区](assets/readme/cairn-home.png)
 
 ![关于与更新：版本、构建来源、许可证与偏好备份](assets/readme/cairn-settings-about.png)
 

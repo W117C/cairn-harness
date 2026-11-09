@@ -34,7 +34,7 @@ describe("a2a-server CLI", () => {
     const script = join(root, "main.jsonl");
     await writeFile(script, JSON.stringify({ type: "assistant_message", content: "hello a2a cli" }) + "\n", "utf8");
     const env: NodeJS.ProcessEnv = { ...process.env, M3A_MAIN_SCRIPT: script };
-    for (const key of ["M3A_AGENTS_DEMO", "M1B_GATE_FLOW", "M1C_AUTONOMY_SCRIPT", "M2A_LSP_DEMO", "M0A_PROVIDER", "M0B_WORKSPACE", "CAIRN_MODEL"]) {
+    for (const key of ["M3A_AGENTS_DEMO", "M1B_GATE_FLOW", "M1C_AUTONOMY_SCRIPT", "M0A_PROVIDER", "M0B_WORKSPACE", "CAIRN_MODEL"]) {
       delete env[key];
     }
     const child = spawn(process.execPath, [

@@ -321,7 +321,7 @@ export function collectDoctorChecks(f: DoctorFacts): DoctorCheck[] {
         (missing.length > 0 ? "；未设：" + missing.map((p) => PROVIDER_ENV_KEYS[p]).join(" ") : "")
       : String(ENV_KEYED_PROVIDERS.length) + " 个 provider key 全部未设（" +
         ENV_KEYED_PROVIDERS.map((p) => PROVIDER_ENV_KEYS[p]).join(" / ") + "）",
-    hint: present.length > 0 ? undefined : "export DEEPSEEK_API_KEY=<key>（或其它家）；或 --provider demo 零凭据看流程（预录剧本，不拨号）",
+    hint: present.length > 0 ? undefined : "export DEEPSEEK_API_KEY=<key>（或其它家）",
   });
   checks.push({
     id: "tiers",

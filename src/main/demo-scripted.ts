@@ -42,15 +42,9 @@ export const MOCK_FIXTURE = join(ROOT, "fixtures", "mock", "todo-fix.jsonl");
 // M1b 三门演示通道：M1B_GATE_FLOW=1 时用 fixtures/gate/gate-flow.jsonl 驱动（clarify/plan 卡片真人交互）。
 // env 门控缺省关闭，M0 事件流字节不变。
 const GATE_FIXTURE = join(ROOT, "fixtures", "gate", "gate-flow.jsonl");
-// M2g 任务 6：演示通道剧本外部化（fixtures/demo/**，带冻结 sha 于 scripts/frozen-demo-sha256.json；
-// **独立**于判卷区 frozen-sha256.json）。缺省零行为不变；显式给路径的旧用法保留。
-const DEMO_DIR = join(ROOT, "fixtures", "demo");
-const LSP_DEMO_FIXTURE = join(DEMO_DIR, "lsp-demo.jsonl");
-// `sidechat-demo.jsonl` 的路径**不在这里**：它随 sidechat 面搬去了 `./sidechat-handlers.ts`
-// （那份自己算 ROOT，见该文件 :42）。装配根里那一份声明从搬走起就再无人读——2026-10-17 顺手删掉。
 
 /** 这一轮主会话走的是**预录剧本**吗？是 ⇒ 返回那份剧本的路径；否 ⇒ null。
- *  这五行 env 判定原先只活在 `createProvider` 里，而"这笔用量是不是真钱"要问的是同一件事
+ *  这四行 env 判定原先只活在 `createProvider` 里，而"这笔用量是不是真钱"要问的是同一件事
  *  ⇒ 抄第二份迟早漂（第十三族）。现在装配与归因都吃这一个式子。
  *  顺序即语义：越靠前的通道越优先（`M3A_MAIN_SCRIPT` 指的是显式文件路径，故要 resolve）。 */
 export function scriptedMainModelPath(env: NodeJS.ProcessEnv = process.env): string | null {
@@ -58,7 +52,6 @@ export function scriptedMainModelPath(env: NodeJS.ProcessEnv = process.env): str
   if (env.M3A_AGENTS_DEMO === "1") return join(ROOT, "fixtures", "agents", "main-demo.jsonl");
   if (env.M1B_GATE_FLOW === "1") return GATE_FIXTURE;
   if (env.M1C_AUTONOMY_SCRIPT) return env.M1C_AUTONOMY_SCRIPT;
-  if (env.M2A_LSP_DEMO) return env.M2A_LSP_DEMO === "1" ? LSP_DEMO_FIXTURE : env.M2A_LSP_DEMO;
   return null;
 }
 

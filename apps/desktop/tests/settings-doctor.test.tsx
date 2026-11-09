@@ -16,7 +16,7 @@ const check = (id: DoctorCheck["id"], ok: boolean, detail: string, hint?: string
 const REPORT: DoctorReport = {
   checks: [
     check("node", true, "Node v24.19.0（engines >=20.11.0 <25）"),
-    check("keys", false, "四个 provider key 全部未设", "export OPENAI_API_KEY=<key>；或 --provider demo 零凭据看流程"),
+    check("keys", false, "四个 provider key 全部未设", "export OPENAI_API_KEY=<key>"),
     check("tiers", true, "模型档位表 12 条"),
     check("sandbox", true, "沙箱可用"),
     check("workspace", true, "工作区可写"),

@@ -30,14 +30,6 @@ pnpm test:capped    # 核心测试，限两个 worker（8GB 机器上的可复�
 pnpm --filter cairn-desktop test   # 桌面行为测试
 ```
 
-没有 API key 也能看流程：
-
-```sh
-./bin/cairn.mjs --provider demo --mode auto --workspace /tmp/cairn-demo "随便写点什么"
-```
-
-`demo` 是**预录剧本**：不拨号、不花钱，但剧本内容与你的任务无关，结尾的「任务完成」是台词而不是判卷结论——看退出码。
-
 ## 3. 改动纪律
 
 - 先读 [`AGENTS.md`](AGENTS.md) 的架构、渲染层与事件日志规则。

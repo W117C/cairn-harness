@@ -44,7 +44,6 @@ beforeEach(async () => {
     lastLogPath: () => null,
     currentWorkspace: async () => wsA,
   });
-  vi.stubEnv("M2F_SIDECHAT_DEMO", "0");
 });
 
 afterEach(async () => {
