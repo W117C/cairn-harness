@@ -85,7 +85,7 @@
     "gates:all": "node --import tsx scripts/gates.ts"
   },
   "devDependencies": {
-    "@types/node": "^26.5.0",
+    "@types/node": "^26.6.6",
     "typescript": "^5.9.3",
     "vitest": "^5.0.5"
   },
@@ -97,7 +97,7 @@
     "smol-toml": "1.9.0",
     "tree-sitter-wasms": "0.1.13",
     "tar": "7.5.22",
-    "vscode-languageserver-protocol": "^3.18.3",
+    "vscode-languageserver-protocol": "^3.18.5",
     "web-tree-sitter": "0.25.10"
   },
   "license": "AGPL-3.0-only",
