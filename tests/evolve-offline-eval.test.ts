@@ -90,6 +90,34 @@ describe("离线配对评估", () => {
     expect(result.holdoutScores?.costUsd).toBe(25);
     expect(result.reason).toMatch(/^正确性不劣；holdout 成本 25 ≤ 基线 50/u);
   });
+
+  it("零成本改善阈值仍要求实际节省", () => {
+    const holdout = tasks(5);
+    const both = runs(holdout, () => true);
+    const result = evaluateOffline({ tasks: holdout, baseline: both, candidate: both, minCostImprovement: 0 });
+    expect(result.decision).toBe("keep-old");
+  });
+
+  const valid = {
+    tasks: tasks(1),
+    baseline: [{ taskId: "t0", ok: true, costUsd: 1 }],
+    candidate: [{ taskId: "t0", ok: true, costUsd: 1 }],
+  };
+
+  it.each([
+    ["同一任务出现在两个分片", { tasks: [...valid.tasks, { id: "t0", split: "search" }] }, /重复任务/u],
+    ["无效分片", { tasks: [{ id: "t0", split: "test" }] }, /split/u],
+    ["重复基线运行", { baseline: [...valid.baseline, ...valid.baseline] }, /baseline.*重复/u],
+    ["未注册任务的运行", { candidate: [{ taskId: "other", ok: true }] }, /candidate.*未登记/u],
+    ["运行缺少结果", { baseline: [{ taskId: "t0" }] }, /baseline.*ok/u],
+    ["运行结果是字符串", { baseline: [{ taskId: "t0", ok: "false" }] }, /baseline.*ok/u],
+    ["成本是负数", { candidate: [{ taskId: "t0", ok: true, costUsd: -1 }] }, /candidate.*costUsd/u],
+    ["延迟超出有限数范围", { candidate: [{ taskId: "t0", ok: true, latencyMs: Infinity }] }, /candidate.*latencyMs/u],
+    ["负数阈值", { minCostImprovement: -0.1 }, /minCostImprovement/u],
+    ["字符串阈值", { minCostImprovement: "0.1" }, /minCostImprovement/u],
+  ] as const)("拒绝%s", (_name, overrides, error) => {
+    expect(() => evaluateOffline({ ...valid, ...overrides })).toThrow(error);
+  });
 });
 
 describe("离线评估落候选档案", () => {

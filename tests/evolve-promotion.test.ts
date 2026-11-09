@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -14,6 +14,7 @@ import { candidatePathFor, createCandidate, listCandidates, loadCandidate, saveC
 import { createCandidateFromExperiment } from "../src/main/evolve/experiment-candidate";
 import { PROMOTION_GATES, promoteCandidateToSema } from "../src/main/evolve/promotion";
 import { openEvolutionRegistry } from "../src/main/evolution/activation-host";
+import { runEvolveEval } from "../scripts/evolve-eval";
 
 const workspaces: string[] = [];
 
@@ -218,5 +219,28 @@ describe("候选 → SEMA staging", () => {
     const result = await promoteCandidateToSema(workspace, candidate.id);
     expect(result.outcome).toBe("refused");
     expect(result.outcome === "refused" ? result.reason : "").toBe("没有可用的离线 holdout 评分（需要 success>0 且 safety=pass；先跑 evolve-eval）");
+  });
+
+  it("重复 holdout 任务不能把一对运行结果变成可晋升候选", async () => {
+    const workspace = await tempWorkspace();
+    await mkdir(join(workspace, "modules"));
+    await seedPlaybook(workspace);
+    const candidate = syntheticCandidate(workspace, "candidate body", "evaluating", null);
+    await createCandidate(workspace, candidate);
+    const file = join(workspace, "offline.json");
+    await writeFile(file, JSON.stringify({
+      tasks: Array.from({ length: 6 }, () => ({ id: "same-task", split: "holdout" })),
+      baseline: [{ taskId: "same-task", ok: false }],
+      candidate: [{ taskId: "same-task", ok: true }],
+    }));
+
+    const recorded = await runEvolveEval(["record", candidate.id, "--workspace", workspace, "--file", file])
+      .catch((error: unknown) => error);
+    const promotion = await promoteCandidateToSema(workspace, candidate.id);
+
+    expect(promotion.outcome).toBe("refused");
+    expect(recorded).toBeInstanceOf(Error);
+    expect((recorded as Error).message).toMatch(/重复任务/u);
+    expect(await loadCandidate(workspace, candidate.id)).toEqual(candidate);
   });
 });

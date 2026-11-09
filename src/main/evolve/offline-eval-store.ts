@@ -3,7 +3,6 @@
 
 import {
   evaluateOffline,
-  type OfflineEvalInput,
   type OfflineEvalResult,
 } from "../../agent/evolve/offline-eval";
 import { applyOfflineEvaluation } from "../../agent/evolve/offline-apply";
@@ -18,7 +17,7 @@ export interface RecordOfflineEvalResult {
 export async function recordOfflineEvaluation(
   workspace: string,
   candidateId: string,
-  input: OfflineEvalInput,
+  input: unknown,
   now: number = Date.now(),
 ): Promise<RecordOfflineEvalResult> {
   const candidate = await loadCandidate(workspace, candidateId);
