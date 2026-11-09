@@ -82,7 +82,7 @@ node --import tsx scripts/update-manifest.ts \
 | `deepseek` | `DEEPSEEK_API_KEY` |
 
 OpenAI 兼容网关可直接用 `OPENAI_BASE_URL` + `OPENAI_API_KEY`；表外模型用 `--model` 显式点名。
-缺 key 会明确报错退出，不会静默换一家、也不会悄悄跑演示档。
+缺 key 会明确报错退出，不会静默换一家。
 
 ## 权限档（默认 fail-closed）
 
