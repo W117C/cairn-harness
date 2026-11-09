@@ -426,7 +426,7 @@ export function useChrome(deps: ChromeDeps): ChromeState {
   // 检查器收起 ⇒ 整列 inert（2026-10-18）：屏外控件不许进 Tab 序与无障碍树。
   // 为什么不用 hidden/display:none：那会把 react-resizable-panels 正在做的宽度收起动画
   // 一刀砍掉（⌘⌥I 退化成硬切）。inert 同样移出 Tab 序/无障碍树，但保留布局、过渡照常播完。
-  // 走 setAttribute（同 ModalSurface 的 imperative 口径）——@types/react 18.3 没有 inert prop。
+  // 走 setAttribute（同 ModalSurface 的 imperative 口径）——属性在 DOM 层直接落，不依赖 JSX 类型版本。
   useEffect(() => {
     const el = inspectorColRef.current;
     if (el === null) return;

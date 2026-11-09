@@ -19,9 +19,9 @@ export function DestinationWorkspace(props: DestinationWorkspaceProps): React.JS
     setVisited((current) => addVisitedDestination(current, props.destination));
   }, [props.destination]);
 
-  const chatInert = hidden
-    ? ({ inert: "" } as unknown as React.HTMLAttributes<HTMLDivElement>)
-    : {};
+  // React 19 起 `inert` 是布尔 attribute（React 18 的 @types 缺这个 prop，旧实现用空串绕过）。
+  // 传空串会被当成 false，React 19 还会发 warning；这里直接走真布尔。
+  const chatInert = hidden ? { inert: true } : {};
 
   return (
     <div className="workspace-host">
@@ -35,9 +35,7 @@ export function DestinationWorkspace(props: DestinationWorkspaceProps): React.JS
       </div>
       {visiblePages.map((destination) => {
         const pageHidden = props.destination !== destination;
-        const inertProps = pageHidden
-          ? ({ inert: "" } as unknown as React.HTMLAttributes<HTMLElement>)
-          : {};
+        const inertProps = pageHidden ? { inert: true } : {};
         return (
           <section
             key={destination}

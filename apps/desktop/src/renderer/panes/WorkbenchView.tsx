@@ -973,8 +973,8 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                   正在做的宽度收起动画一刀砍掉，⌘⌥I 开合退化成硬切；
                 · inert 同样把内部控件移出 Tab 序与无障碍树（屏外不劫持键盘、不被读屏念到），
                   但保留布局，宽度过渡照常播完。
-                实现走 setAttribute（同 ModalSurface 的 imperative 口径）：@types/react 18.3
-                的 HTMLAttributes 还没有 inert 这个 prop，写成 JSX 属性会直接编译红。
+                实现走 setAttribute（同 ModalSurface 的 imperative 口径）：属性在 DOM 层直接落，
+                不依赖 JSX 类型版本。
                 收起瞬间若仍能 Tab 进检查器，是因为过渡还在跑（width > 0）——此刻控件在屏上，
                 可聚焦是正确的；inert 在宽度归 0 的那一刻由 onResize 置上。 */}
             {/* 单窗格占满侧栏（2026-10-24 业主）：开着窗格 → 栏内检查器内容让位（CSS 隐藏 .isp），
