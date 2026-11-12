@@ -71,14 +71,28 @@ describe("判卷面硬闸（权限层 L0）", () => {
     expect(d.verdict).toBe("deny");
   });
 
-  it("⑥ 已声明的覆盖边界：run_shell 不解析命令面 ⇒ 本闸不拦 shell 写；逃逸路径不当判卷面处理", () => {
+  it("⑥号边界已关（2026-11-13）：shell 写/毁原语的目标进冻结闸（覆盖集逐原语钉住）", () => {
     const s = newAutonomySession("auto", {
       rules: rules([allowShell, allowWrite]),
       frozenJudgePaths: new Set([JUDGE]),
     });
-    // 这一条是**故意**钉住"闸覆盖到哪"：shell 写面由沙箱/审批那两条通道管，
-    // 不把本闸说成全防（全防会让人以为判卷面从此安全）。
-    expect(evaluate("run_shell", { command: `sed -i '' 's/a/b/' ${JUDGE}` }, s).verdict).not.toBe("deny");
+    // 声明的覆盖集（见 judgeTargetsOf 注释）：重定向 / tee / cp 末位 / mv·rm 全部实参 / sed -i。
+    for (const cmd of [
+      `echo x > ${JUDGE}`,
+      `echo x >> ${JUDGE}`,
+      `echo x 2> ${JUDGE}`,
+      `echo x | tee ${JUDGE}`,
+      `cp other.ts ${JUDGE}`,
+      `mv ${JUDGE} other.ts`,
+      `rm ${JUDGE}`,
+      `rm -f ${JUDGE}`,
+      `sed -i '' 's/a/b/' ${JUDGE}`,
+    ]) {
+      expect(evaluate("run_shell", { command: cmd }, s).verdict, cmd).toBe("deny");
+    }
+    // 非冻结目标零打扰：同原语写非判卷文件照旧走常规层；读判卷文件照旧不拦。
+    expect(evaluate("run_shell", { command: "echo x > scratch.txt" }, s).verdict).not.toBe("deny");
+    expect(evaluate("run_shell", { command: `cat ${JUDGE}` }, s).verdict).not.toBe("deny");
     // 归一化只认工作区相对路径：`../` 与绝对路径落在工作区外，不属于本张表。
     expect(evaluate("write_file", { path: "../" + JUDGE }, s).verdict).not.toBe("deny");
     expect(evaluate("write_file", { path: "/etc/" + JUDGE }, s).verdict).not.toBe("deny");
@@ -310,10 +324,11 @@ describe("判卷面硬闸的批量形态（apply_patch：目标路径在补丁�
     const s = armed([JUDGE]);
     expect(denyReason(evaluate("write_file", { path: JUDGE, content: "x" }, s))).toContain(`判卷文件冻结：${JUDGE}`);
     expect(denyReason(evaluate("edit_file", { path: "./" + JUDGE, old_string: "a", new_string: "b" }, s))).toContain(`判卷文件冻结：${JUDGE}`);
-    // ⑥ 那三条口径不许被顺手改宽／改窄。
+    // ⑥ 那三条口径不许被顺手改宽：越界路径仍不归本闸管；sed -i 打冻结文件那半边已随
+    // ⑥号边界关闭转成 deny（见上面对应用例），这里钉的是非冻结目标零打扰的另一半。
     expect(evaluate("write_file", { path: "../" + JUDGE }, s).verdict).not.toBe("deny");
     expect(evaluate("write_file", { path: "/etc/" + JUDGE }, s).verdict).not.toBe("deny");
-    expect(evaluate("run_shell", { command: `sed -i '' 's/a/b/' ${JUDGE}` }, s).verdict).not.toBe("deny");
+    expect(evaluate("run_shell", { command: `sed -i '' 's/a/b/' scratch.txt` }, s).verdict).not.toBe("deny");
     // 补丁里的越界目标与 `args.path` 同口径：认得出、但不归本闸管（不是「读不出」）。
     expect(evaluate("apply_patch", { patch: seg("../" + JUDGE) }, s).verdict).not.toBe("deny");
   });
