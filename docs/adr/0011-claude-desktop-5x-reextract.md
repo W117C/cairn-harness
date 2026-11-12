@@ -41,6 +41,12 @@ ADR 0010 是**只出报告**的一轮（业主定案），它把差距排成五�
 
 - 本仓 `cds-components.css` 消费的 6 个官方契约变量（`--cds-message-bubble-measure/radius/pad-y/pad-x`、
   `--cds-assistant-message-text-stop/inset`）在新抽取里**全部仍有定义**。
+- **取值级差分（重抽前后逐条比）**：这 6 个契约变量的**取值一个都没变**
+  （measure 85%、radius `calc(var(--radius) + .25rem)`、pad-y `var(--pad-md)`、pad-x `var(--pad-lg)`、
+  stop `clamp(0px, (100% - 384px) * .175, 56px)`、inset `4px`）⇒ **重抽取不会让本仓界面发生任何位移**。
+  官方层里取值变了的只有 `--cds-font-size-body` / `--cds-leading-body`（上游改了 body 字号轴的命名：
+  `textsm/textmd/textlg` → `own/xs/sm/lg`），而本仓**不消费**这两个。
+  vanilla 薄里取值变了的只有 `--opacity-icon-secondary`（0.4 → 0.3），本仓同样**不消费**。
 - 本仓的正文排版**不吃**上游私有 `--_prose-*` 变量（自己的端口：官方 em 标题阶 + 自有 font-size/leading 令牌），
   ⇒ 上游把 prose 的屏幕排版规则撤出 CDS 层，本仓无感。
 - 骨架呼吸关键帧 `cds-skeleton-breathe` 与其选择器在新抽取里**仍在**。
