@@ -1,10 +1,11 @@
-/* Cairn ⇄ CDS 组件层（2026-10-28 · 第 734 页）。
+/* Cairn ⇄ CDS 组件层（2026-10-28 · 第 734 页；2026-11-12 随上游 5.1231.2 重抽）。
  *
  * 上游：`vendor/cds-official/components.css`——由 `scripts/extract-cds-components.mjs` 从
- * Claude Desktop 3.6556.2 的渲染层 CSS（237,153 B，sha256 93ee8d85…）里逐条抽出的
- * 45 个 `[data-cds=*]` 组件规则（115 条 / 465 条声明）。抽取只做两个变换：
+ * Claude Desktop 5.1231.2 的渲染层 CSS（246,160 B）里逐条抽出的 48 个 `[data-cds=*]`
+ * 组件规则（112 条 / 468 条声明；成员名与摘要见同目录 `UPSTREAM.json` 的
+ * `componentExtraction`，那是唯一事实源）。抽取只做两个变换：
  *   `.cds-root` → `body[data-dsh-claude-style]`；`var(--cds-x)` → `var(--x)`（仅当官方
- *   vanilla 薄里有同名公共令牌）。见同目录 `components.json` 与 `UPSTREAM.json`。
+ *   vanilla 薄里有同名公共令牌）。
  *
  * 本文件不复制官方规则，只补两件事：
  *   ① **消费契约**：官方把一部分几何留在 React 的 utility 类里，CSS 只留变量
@@ -13,8 +14,8 @@
  *   ② **DOM 锚**：Cairn 组件根写同名 `data-cds=…` 后才命中官方规则；标记点见各节注释。
  *
  * 逐组件状态表在 `vendor/cds-official/component-map.json`：
- *   ported / no-cairn-counterpart / no-component-css 三档，45 条一条不落。
- * 判卷：`tests/cds-components.test.ts`（45/45 覆盖 + 契约变量解析 + 真机几何）。
+ *   ported / no-cairn-counterpart / no-component-css 三档，48 条一条不落。
+ * 判卷：`tests/cds-components.test.ts`（48/48 覆盖 + 契约变量解析 + 减弱动效覆盖 + 真机几何）。
  */
 
 /* ── UserMessage：气泡几何 ─────────────────────────────────────────────
@@ -209,4 +210,31 @@ body[data-dsh-claude-style] .empty h1.empty-greet[data-dsh-claude-part~="hero-he
   font-size: var(--fs-title-lg);
   line-height: 1.3;
   font-weight: var(--fw-medium);
+}
+
+/* ── 应用内「减弱动效」：官方组件层那几条动画也要停 ──────────────────────
+ * 实测缺口（2026-11-12 · 对标 ADR 0010）：系统偏好那条走全局媒体查询
+ * （styles.css 的 `* { animation-duration: .01ms !important }`），官方组件层的
+ * 骨架呼吸（`cds-skeleton-breathe` 2s infinite）与占位揭示（`cds-placeholder-reveal`）
+ * 会被停掉；但**应用内**那个开关（`html[data-reduce-motion="true"]`）只覆盖了 Cairn
+ * 自有的几处动效（.md-word / .mp-name / .cursor / .cairn-loader / think 标签…），
+ * 官方组件层**一条都没覆盖** ⇒ 用户在应用里关掉动效，骨架照样呼吸。
+ *
+ * 上游 5.1231.2 的做法（一手）：对每个带动画的族各挂一条
+ * `.cds-root:where([data-reduce-motion=true],[data-reduce-motion=true] *) <族> { … }`
+ * ——全编译产物里共 88 处；骨架那族写的是
+ * `animation-duration:.01ms; animation-iteration-count:1`。
+ *
+ * 本仓改成**对整层一刀切**（`[data-cds]` 属性存在即命中）⇒ 上游日后新增带动画的组件
+ * 也自动被覆盖，不必再逐条补；值与本仓全局媒体查询那条一致（.01ms / 迭代 1 / 过渡 .01ms），
+ * 也与上游骨架那族的写法同语义。
+ * 为什么不是 `animation: none`：那样动画停在**首帧**（骨架是暗的那一帧），
+ * 看着像卡住；「立刻跑完」才会落在**最后一帧**（与上游同语义）。
+ * `!important` 是必须的——官方规则的选择器特异性更高
+ * （`body[data-dsh-claude-style] [data-cds=SkeletonGroup][data-motion=wave] [data-cds=Skeleton]`）。
+ */
+html[data-reduce-motion="true"] body[data-dsh-claude-style] [data-cds] {
+  animation-duration: .01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: .01ms !important;
 }

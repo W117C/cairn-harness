@@ -97,16 +97,18 @@ ADR 0009 记的是「插件声明的 `rea` stdio MCP 未挂载、`npx -y rea-age
 4. **桥面归属域**列为候选（待办清单第 3 条）：本仓桥是单一扁平面（`contextBridge.exposeInMainWorld("agent", api)`），
    好处是窄；代价是渲染层拿不到「这块能力属于哪个域」。取的是**域可枚举**这一点，不是上游的 21 个全局名的数量。
    ⇒ **已落地**：见 `docs/adr/0011-claude-desktop-5x-reextract.md` 的姊妹页 `docs/adr/0012-bridge-channel-domains.md`。
-5. **`[data-reduce-motion]` 同形属性开关**——**这条候选作废**：本仓**早已实装**根节点属性形态。
+5. **`[data-reduce-motion]` 同形属性开关**——**这条候选的判法要改**：机制**早已实装**，但覆盖面缺了一块。
    > **更正（2026-11-12 晚些时候）**：本条初稿写「本仓已有媒体查询归零；上游用根节点属性承载 ⇒ 本仓可考虑加同形属性开关」，
-   > **那是错的**：本仓在 **2026-10-28 第 758 页**就已经照上游做了根属性开关
+   > **机制那半是错的**：本仓在 **2026-10-28 第 758 页**就已经照上游做了根节点属性开关
    > （`apps/desktop/src/renderer/state/motion-pref.ts`，文件头原话「对标 Claude 的 `data-reduce-motion` 根属性」）——
    > 偏好（跟系统 / 应用内强制减弱）、localStorage 持久化、根属性 `html[data-reduce-motion="true"]`、
-   > CSS 侧 `styles.css` 与 `stream-process.css` 两处停动规则、JS 侧 `appMotionReduced()`
-   > （`useStickyScroll.ts` 的平滑滚动降级正在读它）。
-   > ⇒ 上游那 88 处 `[data-reduce-motion]` 是事实，本仓当时也已照做；**这条不是差距，是重复劳动的候选**。
+   > CSS 侧停动规则、JS 侧 `appMotionReduced()`（`useStickyScroll.ts` 的平滑滚动降级正在读它）。
+   > **真缺口是覆盖面**：上游那 88 处 `[data-reduce-motion]` 钩子**逐族覆盖**，本仓的应用内开关只停了**自有**动效，
+   > **官方 CDS 组件层一条都没盖** ⇒ 用户在应用里关掉动效，**骨架照样呼吸、消息操作条照样显现**
+   > （系统偏好那条走全局媒体查询，才停得住）。
+   > ⇒ 该缺口已由 `docs/adr/0013-reduce-motion-official-layer.md` 补上（对官方层一刀切）。
    > 同批被更正的是第 3 条（pill 弹跳形状，见上），两条都是同一个病根：**先断言「本仓没有 X」、
-   > 再去改，其实 X 早就在**。教训记在 ADR 0011 与台账第 1174 页。
+   > 再去改，其实 X 早就在**（或早就在、只是覆盖不全）。教训记在 ADR 0011 与台账第 1174/1175 页。
 6. **明确不抄**（理由见 `outputs/claude-desktop-benchmark-2026-11-12/03-产品面对照表.md` 第七节）：
    artifact/frame 的进程边界与 `cowork-artifact://` 协议（是 Web 应用架构的产物，本仓无 artifact 概念）、
    129 版 frame 契约的规模（本仓没有那份历史）、动态通道 uuid 拼装（本仓显式 `IPC_PROTOCOL_VERSION` 更强）、

@@ -196,6 +196,79 @@ describe("消费规则的关键声明（文本层：防止有人删掉变量改�
   });
 });
 
+describe("应用内「减弱动效」要盖住官方组件层（2026-11-12 对标 ADR 0010 的实测缺口）", () => {
+  /**
+   * 顶层规则（跳过 @media/@supports 的外壳，递归进去取里面的规则）。
+   * 为什么不用正则一把抓：正则会把媒体查询的**外壳**当成选择器
+   * （`@media (prefers-reduced-motion:reduce){ … }` 的 prelude 里没有 `}`），
+   * 抓出来的「选择器」根本不是选择器 ⇒ 那条判据会假红。
+   */
+  function topLevelRules(css: string): { selector: string; body: string }[] {
+    const out: { selector: string; body: string }[] = [];
+    const walk = (start: number, end: number): void => {
+      let pos = start;
+      while (pos < end) {
+        const open = css.indexOf("{", pos);
+        if (open < 0 || open >= end) return;
+        const prelude = css.slice(pos, open).trim();
+        let depth = 0;
+        let close = open;
+        for (; close < end; close += 1) {
+          if (css[close] === "{") depth += 1;
+          else if (css[close] === "}") {
+            depth -= 1;
+            if (depth === 0) break;
+          }
+        }
+        const body = css.slice(open + 1, close);
+        if (prelude.startsWith("@")) walk(open + 1, close);
+        else out.push({ selector: prelude, body });
+        pos = close + 1;
+      }
+    };
+    walk(0, css.length);
+    return out;
+  }
+
+  /** 官方层里带 animation 的规则（顶层规则，不含媒体查询外壳）。 */
+  const animatedRules = topLevelRules(componentsCss).filter((rule) => rule.body.includes("animation"));
+
+  it("官方组件层确实有动画（这一格若为 0 条 ⇒ 下面的规则是空转）", () => {
+    expect(animatedRules.length).toBeGreaterThan(0);
+    expect(componentsCss).toContain("cds-skeleton-breathe");
+  });
+
+  it("官方层每一条带动画的规则都挂在 [data-cds=…] 上（⇒ 一条整层规则就盖得住）", () => {
+    for (const rule of animatedRules) {
+      expect(rule.selector, rule.selector).toContain("[data-cds=");
+    }
+  });
+
+  it("本仓层有一条覆盖整层的减弱规则，值与本仓全局媒体查询那条一致", () => {
+    const blanket = layer.match(
+      /html\[data-reduce-motion="true"\][^{]*\[data-cds\][^{]*\{([^}]*)\}/,
+    );
+    expect(blanket, "cds-components.css 里缺应用内减弱动效的整层规则").not.toBeNull();
+    expect(blanket?.[1]).toContain("animation-duration: .01ms");
+    expect(blanket?.[1]).toContain("animation-iteration-count: 1");
+    expect(blanket?.[1]).toContain("transition-duration: .01ms");
+    // !important 是必须的：官方规则的选择器特异性更高，靠顺序压不住。
+    expect(blanket?.[1]).toContain("!important");
+  });
+
+  it("不得改成 animation:none（那会让动画停在首帧，骨架永远停在暗的一帧）", () => {
+    const blanket = layer.match(
+      /html\[data-reduce-motion="true"\][^{]*\[data-cds\][^{]*\{([^}]*)\}/,
+    );
+    expect(blanket?.[1]).not.toContain("animation: none");
+    expect(blanket?.[1]).not.toContain("animation:none");
+  });
+
+  it("系统偏好那条（全局媒体查询）仍然在——两条入口都要在", () => {
+    expect(readRenderer("styles.css")).toContain("@media (prefers-reduced-motion: reduce)");
+  });
+});
+
 describe("真机几何：官方契约变量在 renderer 里解析成官方值", () => {
   const measuredPath = fileURLToPath(new URL("../outputs/cds-parity-verify/values.json", import.meta.url));
   const hasMeasured = existsSync(measuredPath);
