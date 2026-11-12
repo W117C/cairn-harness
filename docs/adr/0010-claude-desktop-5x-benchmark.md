@@ -73,8 +73,16 @@ ADR 0009 记的是「插件声明的 `rea` stdio MCP 未挂载、`npx -y rea-age
    自有组件与适配层一处都没有。⇒ 重抽取时它们会被自然带走，本仓不需要先做适配。
 2. `cds-parity.test.ts` **此刻仍绿**：它钉的是「vendored 文件自身与 `UPSTREAM.json` 记录一致」，
    **不是**「vendored 与本机上游一致」。⇒ **上游漂移不会被现有判卷发现**，这是判卷缺口。
-3. ADR 0009 照抄的那条「值变了要弹一下」在**上游已被拆形**：本版编译产物里是 `cds-pill-pop-up` + `cds-pill-pop-down`
-   **两条分开**的关键帧，不是 0009 记的「一条动画内上冲 40% ＋回落 60%」。本仓照抄的是**旧一代形状**。
+3. ADR 0009 照抄的那条「值变了要弹一下」，**本仓的端口形状与 5.1231.2 逐字同形**：
+   新版上游是 `cds-pill-pop-up` + `cds-pill-pop-down` 两条关键帧（`to{transform:scale(1.32)}` /
+   `0%{transform:scale(1.32)}`），本仓 `styles.css` 里是 `mp-name-pop-up` + `mp-name-pop-down`，
+   关键帧体与 40%／60%（回落用 overshoot）的时间切分都一致 ⇒ **本仓不需要改代码**。
+   两代之间真正变的是**上游的关键帧命名**（0009 记的 `cds-pill-pop` / `cds-pill-dip` 这条单名没有了，
+   变成 `-up`/`-down` 一对，另新增 `cds-pill-roll-in-down` / `cds-pill-roll-out` / `cds-pill-out`），
+   而本仓从不引用上游的关键帧名（自有 `mp-name-*`），所以命名变化对本仓无影响。
+   > **更正（2026-11-12 晚些时候）**：本条初稿写的是「本仓照抄的是旧一代形状」——**那句话是错的**，
+   > 它把「上游改了关键帧命名」误读成「本仓的形状落后」。上游 5.1231.2 的关键帧体与本仓端口逐字相同，
+   > 详见 `docs/adr/0011-claude-desktop-5x-reextract.md` 与台账第 1173 页。
 
 ## 四、裁决
 

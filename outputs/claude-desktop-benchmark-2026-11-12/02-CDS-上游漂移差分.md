@@ -59,13 +59,17 @@ python3 apps/desktop/scripts/extract-cds-tokens.py --check
    绝大多数属于**本仓从未 vendored 的组件族**（working-dot、scroll-fade、sticky-edge、skeleton），
    ⇒ 现有 `components.css` 的 45 个组件面**大概率不受影响**，但这是推断，需要重抽取时实测确认（见下）。
 
-4. **ADR 0009 记的动效结论有一处需要修正**：
-   0009 记的是 `cds-pill-pop`（一次「上冲 1.32 再落回」）；
-   5.1231.2 的编译产物里是 **`cds-pill-pop-up` + `cds-pill-pop-down` 两条分开的关键帧**
-   （上冲与下落各一条），另有 `cds-pill-dip-up` / `cds-pill-dip-down`、`cds-pill-roll-in-up` / `cds-pill-roll-in-down` /
-   `cds-pill-roll-out`、`cds-pill-in` / `cds-pill-out`。
-   ⇒ **弹跳动画在上游被拆成了「上冲」「下落」两段**，本仓照抄的「一条动画里上冲 40% + 回落 60%」是旧版形状。
-   这一条是**读编译产物得到的形状差异**，具体时长/缓动值要从新 CSS 里逐条量（本次未逐条量，见第七节未知项）。
+4. **ADR 0009 记的动效结论：上游改了关键帧命名，但本仓的端口形状本来就是对的**：
+   0009 记的是 `cds-pill-pop`（上冲 1.32 再落回：40% 时长上冲、60% 时长 overshoot 落回）；
+   5.1231.2 的编译产物里是 **`cds-pill-pop-up` + `cds-pill-pop-down` 两条关键帧**
+   （`to{transform:scale(1.32)}` / `0%{transform:scale(1.32)}`），另有 `cds-pill-dip-up` / `cds-pill-dip-down`、
+   `cds-pill-roll-in-up` / `cds-pill-roll-in-down` / `cds-pill-roll-out`、`cds-pill-in` / `cds-pill-out`。
+   ⇒ **两代之间变的是关键帧的命名与成员数，不是弹跳的几何**。
+   本仓 `apps/desktop/src/renderer/styles.css` 里是 `mp-name-pop-up` + `mp-name-pop-down`，
+   关键帧体与 40%／60%（回落用 `--ease-overshoot`）的时间切分**与 5.1231.2 逐字同形**，
+   且本仓从不引用上游的关键帧名（自有 `mp-name-*`）⇒ **本仓不需要改代码**。
+   > **更正（2026-11-12 晚些时候）**：本条初稿写的是「本仓照抄的是旧版形状」——**那句话是错的**，
+   > 它把「上游改了命名」误读成「本仓落后」。更正后的结论见 `docs/adr/0011-claude-desktop-5x-reextract.md`。
 
 ## 四、重抽取要动的东西（尚未执行）
 

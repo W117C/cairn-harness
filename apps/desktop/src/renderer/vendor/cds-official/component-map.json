@@ -1,7 +1,7 @@
 {
   "source": "vendor/cds-official/components.css",
-  "sourceSha256": "948bac16bdceb510a49a832778b3c0bb7de6bc1fac86ebc10672a0c3cbd97960",
-  "note": "45 个 data-cds 组件逐条对账；ported 由 cds-components.css 消费，其余两档原因见 reason。",
+  "sourceSha256": "1be41faf06028ae594f077095575181d3d34008183e1492caedd27a28d9e9fbf",
+  "note": "48 个 data-cds 组件逐条对账；ported 由 cds-components.css 消费，其余两档原因见 reason。三档含义：ported＝Cairn 消费该组件的官方契约；no-cairn-counterpart＝官方有规则但 Cairn 无对应形态、规则无处落；no-component-css＝官方产物里没有该组件的规则体（只在 Tailwind 工具类里被引用）。本版相对上一版：新增 4 个（CellChartContainer、CoachMark、ShimmerText、Spinner）、上游删掉 1 个（Heatmap）；规则数与声明数取自 components.json（唯一事实源），状态与理由见本表逐条。",
   "components": [
     {
       "name": "Card",
@@ -28,12 +28,12 @@
       "reason": "Cairn 没有“整卡可点”的组件；点击目标都是卡片内部的具体按钮，不能冒充 CardLink"
     },
     {
-      "name": "Prose",
-      "status": "ported",
+      "name": "MessageAttachmentsVideo",
+      "status": "no-cairn-counterpart",
       "rules": 13,
-      "declarations": 33,
-      "cairn": "[data-cds-reply-type] .md-body[data-cds=\"Prose\"]",
-      "reason": "回复正文标题阶：h1/h2 = 1em+2px，h3–h6 = 1em，字重 580；官方只把值留在 --_prose-* 变量里"
+      "declarations": 22,
+      "cairn": null,
+      "reason": "官方本版给 video 补了一条 natural 档缩略图规则（13 条）；官方 Video 与 Image 共用同一档尺寸规则，Cairn 正文没有 video 节点，等有视频渲染面时再挂。"
     },
     {
       "name": "AssistantMessage",
@@ -52,12 +52,12 @@
       "reason": "单图 natural 档：max-width 480px、max-height 320px（原 100% / 480px）"
     },
     {
-      "name": "MessageAttachmentsVideo",
+      "name": "Icon",
       "status": "no-cairn-counterpart",
-      "rules": 12,
-      "declarations": 21,
+      "rules": 10,
+      "declarations": 30,
       "cairn": null,
-      "reason": "Cairn 正文没有 video 节点；官方 Video 与 Image 共用同一档尺寸规则，等有视频渲染面时再挂"
+      "reason": "官方本版补了 RTL 镜像与 data-cds-icon-layer=secondary 层（共 10 条）；但规则针对 Anthropicons 字体字形（:not(svg)），Cairn 全部用 lucide 内联 SVG、尺寸由 size prop 控制，套字体规则会破坏图标。"
     },
     {
       "name": "SkeletonGroup",
@@ -66,14 +66,6 @@
       "declarations": 15,
       "cairn": ".side-skeleton[data-cds=\"SkeletonGroup\"]",
       "reason": "骨架组：data-motion=wave 触发官方 cds-skeleton-breathe 规则"
-    },
-    {
-      "name": "Icon",
-      "status": "no-cairn-counterpart",
-      "rules": 9,
-      "declarations": 28,
-      "cairn": null,
-      "reason": "官方 Icon 规则针对 Anthropicons 字体字形（:not(svg)）；Cairn 全部用 lucide 内联 SVG，尺寸由 size prop 控制，套字体规则会破坏图标"
     },
     {
       "name": "MessageAttachments",
@@ -132,6 +124,14 @@
       "reason": "Cairn 没有 DataTable 组件；官方规则是 dimmed 行的变量重映射，落到普通 table 上语义不成立"
     },
     {
+      "name": "ShimmerText",
+      "status": "no-cairn-counterpart",
+      "rules": 4,
+      "declarations": 4,
+      "cairn": null,
+      "reason": "上游本版新增的正文扫光组件（@supports color-mix 门控，定义 --cds-shimmer-text-ink/-peak/-bell-stops）；ADR 0009 已裁决本仓走 Codex 的逐词到达、不做扫光克隆层，两条不叠加。"
+    },
+    {
       "name": "Skeleton",
       "status": "ported",
       "rules": 4,
@@ -149,19 +149,43 @@
     },
     {
       "name": "Button",
-      "status": "no-component-css",
-      "rules": 2,
-      "declarations": 3,
+      "status": "no-cairn-counterpart",
+      "rules": 3,
+      "declarations": 7,
       "cairn": null,
-      "reason": "官方 CSS 只有触摸设备下 ChatComposerChin 内的 margin 补偿和窗口失焦时的 brand 色降档；按钮本体样式在 React utility 类里，产物未下发"
+      "reason": "官方只下发触摸设备（pointer:coarse）与 screen 媒体查询下的 margin 补偿与失焦降档共 3 条；按钮本体样式仍在 React utility 类里、产物未下发，Cairn 的按钮是自有语义层组件，不套官方按钮规则。"
+    },
+    {
+      "name": "ButtonGroup",
+      "status": "no-cairn-counterpart",
+      "rules": 3,
+      "declarations": 7,
+      "cairn": null,
+      "reason": "与 Button 同族：官方只下发触摸设备与 screen 媒体查询下的 margin 补偿共 3 条，无独立按钮组样式；Cairn 的按钮组是自有布局，规则无处落。"
+    },
+    {
+      "name": "Prose",
+      "status": "ported",
+      "rules": 3,
+      "declarations": 10,
+      "cairn": "[data-cds-reply-type] .md-body[data-cds=\"Prose\"]",
+      "reason": "上游本版把 prose 的屏幕排版规则撤出 CDS 层（只剩 @media print 三条）；Cairn 的正文排版是自己的端口——官方 em 标题阶（h1/h2 = 1em+2px，h3–h6 = 1em、字重 580）加自有 font-size/leading 令牌，不依赖官方 --_prose-* 私有变量。"
+    },
+    {
+      "name": "SplitDropdownButton",
+      "status": "no-cairn-counterpart",
+      "rules": 3,
+      "declarations": 7,
+      "cairn": null,
+      "reason": "与 Button 同族：官方只下发触摸设备与 screen 媒体查询下的 margin 补偿共 3 条，无独立分裂按钮样式；Cairn 没有分裂按钮形态，规则无处落。"
     },
     {
       "name": "ChatComposerChin",
       "status": "no-cairn-counterpart",
       "rules": 2,
-      "declarations": 16,
+      "declarations": 17,
       "cairn": null,
-      "reason": "官方 chin 是输入卡底部工具行（触摸设备下的控件高度继承与负 margin）；Cairn 的底部行是 .composer-foot 自有布局，没有 data-touch-size 两档"
+      "reason": "官方触摸设备下 chin 的控件高度继承补了一条声明（2 条 17 声明）；Cairn 的底部行是 .composer-foot 自有布局，没有 data-touch-size 两档。"
     },
     {
       "name": "ChatComposerEditor",
@@ -212,12 +236,12 @@
       "reason": "官方 Banner 仅出现在 AssistantMessage 容器重置名单；Cairn 的提示条是 .notice-strip/.error-strip"
     },
     {
-      "name": "ButtonGroup",
-      "status": "no-component-css",
+      "name": "CellChartContainer",
+      "status": "no-cairn-counterpart",
       "rules": 1,
-      "declarations": 1,
+      "declarations": 2,
       "cairn": null,
-      "reason": "同上：仅触摸设备下 ChatComposerChin 内的负 margin 一条，无独立组件样式"
+      "reason": "上游本版新增；与官方 ChartContainer / PointChartContainer 同族，只出现在 AssistantMessage 的容器重置名单里（置 text-inset/text-stop 为 0）；Cairn 无图表组件，规则无处落。"
     },
     {
       "name": "ChartContainer",
@@ -234,6 +258,14 @@
       "declarations": 1,
       "cairn": null,
       "reason": "官方只给 dock 内 notices 一条 margin-bottom；Cairn 的错误/notice 条不在输入卡 dock 内"
+    },
+    {
+      "name": "CoachMark",
+      "status": "no-cairn-counterpart",
+      "rules": 1,
+      "declarations": 2,
+      "cairn": null,
+      "reason": "上游本版新增；在 screen 媒体查询下给新手引导气泡一条规则；Cairn 没有引导气泡形态（首屏是空态面），规则无处落。"
     },
     {
       "name": "CommentCard",
@@ -260,14 +292,6 @@
       "reason": "官方 FileDiff 仅出现在 AssistantMessage 容器重置名单；Cairn 的 DiffView 是自有实现，行高/字体另有判卷"
     },
     {
-      "name": "Heatmap",
-      "status": "no-cairn-counterpart",
-      "rules": 1,
-      "declarations": 2,
-      "cairn": null,
-      "reason": "官方 Heatmap 仅出现在 AssistantMessage 容器重置名单；Cairn 无热力图组件"
-    },
-    {
       "name": "MessageAttachmentsFile",
       "status": "no-cairn-counterpart",
       "rules": 1,
@@ -285,19 +309,19 @@
     },
     {
       "name": "ModelSelector",
-      "status": "no-component-css",
+      "status": "no-cairn-counterpart",
       "rules": 1,
       "declarations": 1,
       "cairn": null,
-      "reason": "同上：仅触摸设备下 ChatComposerChin 内的负 margin 一条，无独立组件样式"
+      "reason": "官方只下发触摸设备下 ChatComposerChin 内的负 margin 一条；Cairn 的模型选择器是 ADR 0009 批次 A 的多轴自有实现，不套官方规则。"
     },
     {
       "name": "ModelSelectorEffort",
-      "status": "no-component-css",
+      "status": "no-cairn-counterpart",
       "rules": 1,
       "declarations": 1,
       "cairn": null,
-      "reason": "同上：仅触摸设备下 ChatComposerChin 内的负 margin 一条，无独立组件样式"
+      "reason": "官方只下发触摸设备下 ChatComposerChin 内的负 margin 一条；Cairn 的思考档选择是自有组件（ADR 0009 批次 A），不套官方规则。"
     },
     {
       "name": "Panel",
@@ -322,14 +346,6 @@
       "declarations": 2,
       "cairn": null,
       "reason": "官方 PreviewCard 仅出现在 AssistantMessage 容器重置名单；Cairn 无此组件"
-    },
-    {
-      "name": "SplitDropdownButton",
-      "status": "no-component-css",
-      "rules": 1,
-      "declarations": 1,
-      "cairn": null,
-      "reason": "同上：仅触摸设备下 ChatComposerChin 内的负 margin 一条，无独立组件样式"
     },
     {
       "name": "Surface",
@@ -362,11 +378,19 @@
       "declarations": 0,
       "cairn": null,
       "reason": "官方只在工具类选择器里引用 Pulse（.has-[>[data-cds=Pulse]]…），没有 data-cds=Pulse 的组件规则"
+    },
+    {
+      "name": "Spinner",
+      "status": "no-component-css",
+      "rules": 0,
+      "declarations": 0,
+      "cairn": null,
+      "reason": "上游本版新增，但只在 Tailwind 工具类选择器里被引用（.has-[>[data-cds=Spinner]]…），没有 data-cds=Spinner 的组件规则体，抽取器拿不到东西。"
     }
   ],
   "totals": {
     "ported": 10,
-    "no-cairn-counterpart": 29,
-    "no-component-css": 6
+    "no-cairn-counterpart": 36,
+    "no-component-css": 2
   }
 }

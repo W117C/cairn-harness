@@ -44,6 +44,12 @@
 - **模型/数值芯片的动效族**（`cds-pill-*`）：
   `cds-pill-in`（scale .8→1 + 淡入，overshoot）/ `cds-pill-pop`（**上冲 1.32 再落回**：
   上冲 40% 时长、下落 60% 时长用 overshoot）/ `cds-pill-dip`（按下 scale .82）/ `cds-pill-roll-in-up`（translateY 70% + 淡入）。
+  > **追记（2026-11-12，Claude Desktop 5.1231.2）**：上游后来把这条族的**命名**改了——
+  > `cds-pill-pop` 变成 `cds-pill-pop-up` + `cds-pill-pop-down` 两条关键帧（`to{transform:scale(1.32)}` /
+  > `0%{transform:scale(1.32)}`），`cds-pill-dip` 变成 `-up`/`-down` 一对，并新增 `cds-pill-roll-in-down` /
+  > `cds-pill-roll-out` / `cds-pill-out`。**几何没变**（还是 1.32、还是 40% 上冲 60% overshoot 落回），
+  > 而本仓 `styles.css` 的 `mp-name-pop-up` / `mp-name-pop-down` 本来就与新上游**逐字同形** ⇒ 本仓无需改代码。
+  > 证据与更正见 `docs/adr/0011-claude-desktop-5x-reextract.md`。
   ⇒ **值变了要弹一下**是 Claude 的既有做法，不是自创。
 
 ### 2.2 Codex 桌面端 26.1023.51421
