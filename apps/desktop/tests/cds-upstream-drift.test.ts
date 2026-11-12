@@ -67,6 +67,13 @@ describe("上游钉：版本与摘要必须记在仓里（与机器无关，永�
     expect(upstream.upstreamDrift.why.trim().length).toBeGreaterThan(10);
   });
 
+  it("抽取器止点是 JS 模板串的闭合反引号，不是 </style>（第 1175 页）", () => {
+    const src = readFileSync(extractor, "utf8");
+    expect(src).toContain('if chunk[i] == "`":');
+    expect(src).toContain("js_unescape(chunk[start:end])");
+    // 旧写法 chunk[start:chunk.find(TOKENS_END, start)] 会把压缩 JS 尾巴一起写进 CSS。
+    expect(src).not.toContain("end = chunk.find(TOKENS_END, start)");
+  });
   it("判据自身的接线：抽取脚本在仓里（缺席 ⇒ 这一格恒真）", () => {
     expect(existsSync(extractor)).toBe(true);
   });

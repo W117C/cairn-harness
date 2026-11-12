@@ -13,8 +13,8 @@
   "files": [
     {
       "file": "tokens.css",
-      "sha256": "1a40aa7a3c11998feefc34184de5075f1e5eeedeeaabe9ec894a577fca91184e",
-      "bytes": 38918,
+      "sha256": "953a209173f38e70f421d8c5285b66b252fe3f60f1aa9121bb89825816a6d2f5",
+      "bytes": 38913,
       "adapted": false,
       "note": "Byte-for-byte the extracted sheet. Do not hand-edit: re-extract instead."
     },

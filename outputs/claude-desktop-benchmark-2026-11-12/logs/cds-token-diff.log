@@ -1,10 +1,10 @@
-vendored : bytes=41,505  declarations=1,021  uniqueNames=704
-current  : bytes=38,918  declarations=957  uniqueNames=674
-delta    : bytes=-2,587  declarations=-64  names=-30
+旧代(3.6556.2): bytes=41,505 declarations=1,021 uniqueNames=704
+新代(5.1231.2): bytes=38,913 declarations=957 uniqueNames=674
+delta: bytes=-2,592 declarations=-64 names=-30
 
-=== ADDED upstream (0) ===
+=== ADDED (0) ===
 
-=== REMOVED upstream (30) ===
+=== REMOVED (30) ===
   - --bg-git-opened
   - --bg-git-queued
   - --border-git-opened
@@ -36,11 +36,11 @@ delta    : bytes=-2,587  declarations=-64  names=-30
   - --text-git-opened
   - --text-git-queued
 
-=== COMMON names with CHANGED values (1 / 674) ===
+=== CHANGED VALUES (1) ===
   ~ --opacity-icon-secondary
-      vendored: ['0.4']
-      current : ['0.3']
+      old: ['0.4']
+      new: ['0.3']
 
-=== added by family ===
-=== removed by family ===
-                           30
+=== 纯 CSS 自检（新代薄） ===
+  末尾 repr: '    color-scheme: dark;\n  }\n}\n'
+  含 ',b=' : False | 含 '</style>': False | 含反引号: False

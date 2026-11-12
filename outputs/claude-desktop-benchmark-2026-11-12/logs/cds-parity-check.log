@@ -2,8 +2,8 @@
   "asar": "/Applications/Claude.app/Contents/Resources/app.asar",
   "tokens": {
     "member": "/.vite/build/index.chunk-SLtcb4nU.js",
-    "bytes": 38918,
-    "sha256": "1a40aa7a3c11998feefc34184de5075f1e5eeedeeaabe9ec894a577fca91184e"
+    "bytes": 38913,
+    "sha256": "953a209173f38e70f421d8c5285b66b252fe3f60f1aa9121bb89825816a6d2f5"
   },
   "rendererCss": {
     "member": "/.vite/renderer/main_window/assets/MainWindowPage-CinbABxl.css",
@@ -12,17 +12,17 @@
   },
   "expected": {
     "tokens.css": {
-      "sha256": "8386ae2ddb7a712a01ac2d2d404f9e4a5526d3f2aa1b04702363e033a5c01280",
-      "bytes": 41505
+      "sha256": "953a209173f38e70f421d8c5285b66b252fe3f60f1aa9121bb89825816a6d2f5",
+      "bytes": 38913
     },
     "rendererCss": {
-      "sha256": "948bac16bdceb510a49a832778b3c0bb7de6bc1fac86ebc10672a0c3cbd97960",
-      "bytes": 237153
+      "sha256": "1be41faf06028ae594f077095575181d3d34008183e1492caedd27a28d9e9fbf",
+      "bytes": 246160
     }
   },
   "match": {
-    "tokens.css": false,
-    "rendererCss": false
+    "tokens.css": true,
+    "rendererCss": true
   },
-  "verdict": "FAIL"
+  "verdict": "PASS"
 }

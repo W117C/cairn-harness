@@ -61,7 +61,7 @@ ADR 0009 记的是「插件声明的 `rea` stdio MCP 未挂载、`npx -y rea-age
 | 项 | vendored 记录（3.6556.2） | 本机上游（5.1231.2） |
 |---|---|---|
 | tokens 成员 | `.vite/build/index.chunk-CbnfBP-3.js` | `.vite/build/index.chunk-SLtcb4nU.js` |
-| tokens 字节 / 声明 / 名 | 41,505 / 1,021 / 704 | 38,918 / 957 / 674 |
+| tokens 字节 / 声明 / 名 | 41,505 / 1,021 / 704 | 38,913 / 957 / 674 |
 | 渲染层 CSS | `MainWindowPage-BjVtjJFx.css`（237,153 B） | `MainWindowPage-CinbABxl.css`（246,160 B） |
 
 令牌级差分：**新增 0 个；删除 30 个，全部是 git-diff 状态色族**（`--fill-git-*` / `--on-git-*` / `--text-git-*` / `--bg-git-*` / `--border-git-*`）；

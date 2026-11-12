@@ -15,8 +15,8 @@ python3 apps/desktop/scripts/extract-cds-tokens.py --check
 | 项 | 记录值（= 仓库 vendored 记录的 3.6556.2） | 本机现读（5.1231.2） | 一致 |
 |---|---|---|---|
 | tokens 成员 | `.vite/build/index.chunk-CbnfBP-3.js` | `.vite/build/index.chunk-SLtcb4nU.js` | ✗ |
-| tokens 字节 | 41,505 | 38,918 | ✗ |
-| tokens sha256 | `8386ae2ddb7a712a01ac2d2d404f9e4a5526d3f2aa1b04702363e033a5c01280` | `1a40aa7a3c11998feefc34184de5075f1e5eeedeeaabe9ec894a577fca91184e` | ✗ |
+| tokens 字节 | 41,505 | 38,913 | ✗ |
+| tokens sha256 | `8386ae2ddb7a712a01ac2d2d404f9e4a5526d3f2aa1b04702363e033a5c01280` | `953a209173f38e70f421d8c5285b66b252fe3f60f1aa9121bb89825816a6d2f5` | ✗ |
 | 渲染层 CSS 成员 | `MainWindowPage-BjVtjJFx.css`（237,153 B） | `MainWindowPage-CinbABxl.css`（246,160 B） | ✗ |
 | 渲染层 CSS sha256 | `948bac16bdceb510a49a832778b3c0bb7de6bc1fac86ebc10672a0c3cbd97960` | `1be41faf06028ae594f077095575181d3d34008183e1492caedd27a28d9e9fbf` | ✗ |
 
@@ -32,7 +32,7 @@ python3 apps/desktop/scripts/extract-cds-tokens.py --check
 
 | 量 | vendored（3.6556.2） | 上游（5.1231.2） | 差 |
 |---|---|---|---|
-| 字节 | 41,505 | 38,918 | **−2,587** |
+| 字节 | 41,505 | 38,913 | **−2,592** |
 | 声明数 | 1,021 | 957 | **−64** |
 | 不同名 | 704 | 674 | **−30** |
 
@@ -109,6 +109,32 @@ python3 apps/desktop/scripts/extract-cds-tokens.py --write /tmp/cds_current
 
 - **逐条量新 CSS 的 `@keyframes` 具体时长/缓动值**本轮未做（只量了关键帧名单、时长令牌与 `cubic-bezier` 取值集合），
   因此 ADR 0009 的「上冲 1.32 / 40% 时长 / overshoot」在新版是否仍同值**未证**。
-- 新 CSS 里 `components.css` 那 45 个组件的规则是否**逐条不变**，未实测（判据是推断，见第三节第 3 条）。
+- 新 CSS 里 `components.css` 那 48 个组件的规则是否**逐条不变**，未实测（判据是推断，见第三节第 3 条）。
 - 上游 3.6556.2 → 5.1231.2 之间**经历了哪些版本**本轮没查（只知两端）。
 - `--opacity-icon-secondary` 是**编译产物里的值**，vanilla 薄里该名的定义本轮未单独定位。
+
+## 八、抽取器的一次事故（2026-11-12 晚些时候补记）：摘要自洽，但产物不是 CSS
+
+**这一节记的是本轮自己踩的坑**，不是上游的问题。
+
+- **现象**：第一次重抽（提交 `319db983`）产出的 `vendor/cds-official/tokens.css` 末尾是 `}\n`,b=``——
+  末尾混进了 **5 字节的压缩 JS**。`vite build` 当场红：`Unknown word ,b=`（postcss-import）。
+  ⇒ **那一笔提交把桌面构建弄坏了**。
+- **根因（一手取料）**：抽取脚本 `apps/desktop/scripts/extract-cds-tokens.py` 原来用 `</style>` 当止点。
+  5.1231.2 把样式薄改成**多段模板串拼接**（`,b=`</style>`…），bundle 里闭合反引号在偏移 39914，
+  之后才是 `,b=`</style>` ⇒ 旧切片多带 5 字节 JS。3.6556.2 的尾部干净，所以这条锚点以前**碰巧成立**。
+- **修法**：止点改为**该 JS 模板串自己的未转义闭合反引号**（跳过被反斜杠转义的反引号），
+  并保留「其后必须仍有 `</style>`」的形状校验；走官方 `--write` 重抽（**不手改 vendor 字节**），
+  `UPSTREAM.json` 的摘要按实测改成 **38,913 B / `953a2091…`**。
+- **判据补上被绕过的那一类**：`cds-parity.test.ts` 加「薄是纯 CSS」一格（末尾必须是 `}`、
+  不得含 `,b=` / `</style>` / JS 赋值行）；`cds-upstream-drift.test.ts` 加「抽取器止点是闭合反引号、
+  旧 `</style>` 切片不许回来」。
+- **教训（值得留在账上）**：**只钉摘要的判卷，会在产物根本不是 CSS 时照样全绿**——
+  摘要与记录自洽 ≠ 产物合法。本轮那几支判卷（sha256 / 字节数 / 声明数 / 名数）当时**全绿**，
+  而构建是红的。⇒ 凡是**生成物**，判卷必须至少有一格钉**形状**（能解析、尾部形状对、无夹带），
+  不能只钉摘要。
+- **更正**：本文件与 `docs/adr/0010-claude-desktop-5x-benchmark.md`、`docs/adr/0011-claude-desktop-5x-reextract.md`
+  里原先记的 **38,918 B / `1a40aa7a…`** 是那次**带 5 字节垃圾的错误抽取值**，
+  已统一更正为 **38,913 B / `953a2091…`**（声明数 1,021→957、名数 704→674、
+  删除 30 个 git 族令牌、改值 1 个 `--opacity-icon-secondary` 0.4→0.3 —— **这些结论不变**，
+  已用修正后的薄重跑差分核对过，`logs/cds-token-diff.log` 是重生成后的版本）。
