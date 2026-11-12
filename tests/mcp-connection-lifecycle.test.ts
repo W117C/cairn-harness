@@ -212,11 +212,13 @@ describe("MCP 连接的并发与退出收束", () => {
   it("真实 PluginRuntime 的并发 connectMcp 不重复启动同一受信服务", async () => {
     const dir = await mkdtemp(join(tmpdir(), "mcp-runtime-connect-"));
     dirs.push(dir);
+    const tdir = await mkdtemp(join(tmpdir(), "dsh-trust-"));
+    dirs.push(tdir);
     const runtime = await PluginRuntime.load({
       workspace: dir, home: dir, userPluginsDir: join(dir, "user-plugins"),
       projectPluginsDir: join(process.cwd(), "fixtures/plugins/project"),
       projectSkillsDir: join(dir, "project-skills"), looseRoots: [],
-      pluginDataRoot: join(dir, "data"), trustFile: join(dir, "trust.json"),
+      pluginDataRoot: join(dir, "data"), trustFile: join(tdir, "trust.json"),
     });
     const { manager, factory } = setup();
     runtime.mcp = manager;
