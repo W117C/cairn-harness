@@ -1,6 +1,6 @@
 # Cairn / DSH —— 现态
 
-rev: a7a1a03c
+rev: 21d47ec9
 
 核对日期 2026-11-12（Asia/Shanghai）。`rev` 指本地集成的代码基线。分支、GitHub CI
 与清理状态见[仓库状态与分支](docs/REPOSITORY-STATUS.md)，历史证据见 `PROGRESS.md` 与 `outputs/`。
@@ -8,14 +8,14 @@ rev: a7a1a03c
 ## 当前工作
 
 - `integration/security-closure-20261112` 是本地集成入口。`a404c825` 汇入开发线已提交的桌面变更
-  与权限修复，`c0a227ad` 补入离线评估证据校验，`a7a1a03c` 贯通宿主联网免批——2026-11-05 业主裁的
-  设置总闸此前被 L4-risk 裸 allow 守卫拦回审批（评审遗留 F4，其余四条评审遗留的处置见台账评审页）。
-  主工作树的未提交改动保留在各自工作树。
-- GitHub `main` 是 AGPL 公开主线，`750913ef` 更新权限与审批行为，该提交的 verify 与 CodeQL Actions
-  均绿。内测开发历史保留在本地集成线；`a7a1a03c` 的公开线移植未做。
-- 集成判据四件套在 tip `a7a1a03c` 工作树现跑全绿：core 663 文件 / 8006 条（`pnpm test:capped`，exit 0）、
-  desktop 334 文件 / 2321 条（`VITEST_MAX_WORKERS=2`，exit 0）、根 typecheck 0、`docs-check` 全绿；
-  desktop build 绿。`a7a1a03c` 修复本体另有红绿证明：gate-audit 两格先红后绿（43/43）＋相邻权限面 136/136。
+  与权限修复，`c0a227ad` 补入离线评估证据校验，`a7a1a03c` 贯通宿主联网免批（评审遗留 F4），
+  `2f7aa8de` 并入开发线第 1041–1181 页在飞工作（`be41e26b`），`21d47ec9` 修自动合并复活的老写法
+  （profile-cleanup 判卷逮住）。主工作树的未提交改动保留在各自工作树。
+- GitHub `main` 是 AGPL 公开主线，`6fb20860` 移植宿主联网免批贯通（F4 公开移植，红绿独立取证：
+  gate-audit 先红 1/42 后绿 43/43、core 646 文件 / 7346 条全绿、tsc 0）。内测开发历史保留在本地集成线。
+- 集成判据在 tip `21d47ec9` 现跑：desktop 385 文件 / 2489 条全绿（exit 0）、根 typecheck 0、
+  `docs-check` 全绿、desktop build 绿；core 全量见[读数表](docs/REPOSITORY-STATUS.md)（8104 条全绿）。
+  F4 修复本体另有红绿证明：gate-audit 两格先红后绿（43/43）＋相邻权限面 136/136。
 - 历史证据已按[归档记录](docs/history-evidence-migration.md)做过解包和哈希回读。原始材料继续保留。
 
 ## 代码入口
