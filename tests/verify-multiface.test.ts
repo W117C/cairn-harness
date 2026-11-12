@@ -142,11 +142,11 @@ describe("M5 · 零回归金标准（加一个面最容易悄悄改的是「原�
     await rm(dir, { recursive: true, force: true });
 
     await repo({ "Makefile": "build:\n\t@true\n\ntest: deps\n\tpytest -q\n" });
-    expect(await loadVerifyConfig(dir)).toEqual({ config: { test: ["make test"], timeoutMs: PROBED_LANG_TIMEOUT_MS }, source: "probed" });
+    expect(await loadVerifyConfig(dir)).toEqual({ config: { test: ["make test"], timeoutMs: PROBED_LANG_TIMEOUT_MS, makefilesDigest: expect.stringMatching(/^[0-9a-f]{64}$/) }, source: "probed" });
     await rm(dir, { recursive: true, force: true });
 
     await repo({ "package.json": JSON.stringify({ scripts: { test: "vitest run" } }) });
-    expect(await loadVerifyConfig(dir)).toEqual({ config: { test: ["pnpm run test"] }, source: "probed" });
+    expect(await loadVerifyConfig(dir)).toEqual({ config: { test: ["pnpm run test"], packageScriptsDigest: expect.stringMatching(/^[0-9a-f]{64}$/) }, source: "probed" });
     await rm(dir, { recursive: true, force: true });
 
     await repo({ "README.md": "hi\n" });

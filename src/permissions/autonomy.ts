@@ -15,7 +15,7 @@ import type { PermissionMode } from "./index";
 import { isKnownToolName, isMcpScopedName } from "./tool-registry";
 // 方案门的活判据。直接从 plan-state 拿（不能拿 ./index——index 正 re-export 本文件的符号）。
 import { planGateLive } from "./plan-state";
-import { judgeChain, normalizeCommand, type ChainVerdict, type PermissionRule } from "./rules";
+import { judgeChain, type ChainVerdict, type PermissionRule } from "./rules";
 import {
   isNetworkCommand,
   isShellFamily,
@@ -242,11 +242,11 @@ export function isSideEffectTool(tool: string): boolean {
   return SIDE_EFFECT_TOOLS.has(tool);
 }
 
-/** scope 记忆键：shell 类按归一化命令全串（出网审计粒度），其余按工具级（「此类」语义）。
+/** scope 记忆键：shell 类保留批准的原始命令，引号内的空白可能属于参数。其余按工具级。
  *  键里保留字面工具名——主会话 run_shell 与 worker shell_rw/shell_ro 的放行集不互相串门。 */
-export function scopeKey(tool: ToolName, args: Record<string, unknown>): string {
+export function scopeKey(tool: string, args: Record<string, unknown>): string {
   if (isShellFamily(tool) && typeof args.command === "string") {
-    return tool + "\u241F" + normalizeCommand(args.command);
+    return tool + "\u241F" + args.command;
   }
   return tool + "\u241F*";
 }

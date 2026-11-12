@@ -117,22 +117,22 @@ describe("worker 的 remember：全局层要人点头（与主会话同一份口
     expect(res.ok).toBe(true);
   });
 
-  it("auto 档：worker 与主会话**同一个答案**（auto 档的粗档表是「全放行」——这一格不另立口径）", async () => {
+  it("auto 档：worker 与主会话都需要批准才能写全局记忆", async () => {
     ws = await mkdtemp(join(tmpdir(), "worker-remember-"));
     memHome = await mkdtemp(join(tmpdir(), "worker-mem-"));
     process.env.M2D_MEMORY_HOME = memHome;
     const { orch, asked } = fakeOrch(false, ws);
     const table = buildWorkerToolTable(fakeW("write", "auto"), orch as never, {});
     const res = await table.remember!.run(GLOBAL_WRITE, { workspace: ws } as ToolContext);
-    // 主会话那一侧在 auto 档也是「放行」（`SIDE_EFFECT_DECISION.auto = allow`）
     const main = createGatedRemember({
       getMode: () => "auto",
       isPlanBlocked: () => false,
       getAsk: () => async () => false,
     });
     const mainRes = await main.run(GLOBAL_WRITE, { workspace: ws } as ToolContext);
-    expect(res.ok, "worker 与主会话必须同一个答案").toBe(mainRes.ok);
-    expect(asked.length, "auto 档主会话不问 ⇒ worker 也不该问（口径漂移的方向是 worker 更松）").toBe(0);
+    expect([res.ok, mainRes.ok]).toEqual([false, false]);
+    expect(asked).toEqual(["remember"]);
+    expect(await globalFiles()).not.toContain("worker-escalated.md");
   });
 
   it("两个出口对同一组 (档位, scope) 必须给同一个答案（漂移的方向是 worker 更松）", async () => {

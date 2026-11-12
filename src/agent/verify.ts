@@ -1,6 +1,7 @@
 // 验证门执行器：按目标仓库的 verify 配置跑 lint/test。
 // 配置来源（规格 §5.4）：①目标仓库 .agent/config.json 的 verify 字段；②缺省探测 package.json 的
 // scripts（lint/test 存在才收）。两者皆无 → fail-closed（ok:false，验证门不空转放行）。
+import { createHash } from "node:crypto";
 import { access, readFile } from "node:fs/promises";
 import { constants } from "node:fs";
 import { join } from "node:path";
@@ -98,6 +99,9 @@ export interface VerifyConfig {
   typecheck?: string[];
   /** 单条 verify 命令的墙钟上限（毫秒）；缺省见 DEFAULT_VERIFY_TIMEOUT_MS。 */
   timeoutMs?: number;
+  /** 来自同次探测的 package.json scripts 内容，用于绑定仓库验证授权。 */
+  packageScriptsDigest?: string;
+  makefilesDigest?: string;
 }
 
 /** 判据来源（spec 2026-11-04）：声明 > 仓库配置 > 探测。`none` = 没有可验面。 */
@@ -256,6 +260,37 @@ export async function probeTypecheckCommands(repoDir: string): Promise<string[]>
   return [TSC_BIN + " --noEmit -p tsconfig.json"];
 }
 
+async function readPackageScripts(repoDir: string): Promise<Record<string, unknown> | undefined> {
+  try {
+    const raw = await readFile(join(repoDir, "package.json"), "utf8");
+    const pkg = JSON.parse(raw) as { scripts?: Record<string, unknown> } | null;
+    return pkg?.scripts;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err; // package.json 存在但坏 → fail loud
+    return undefined;
+  }
+}
+
+function bindPackageScripts(config: VerifyConfig, scripts: Record<string, unknown> | undefined): void {
+  if (!scripts || typeof scripts !== "object") return;
+  const entries = Object.keys(scripts).sort().flatMap((key) => typeof scripts[key] === "string" ? [[key, scripts[key]]] : []);
+  if (entries.length > 0) config.packageScriptsDigest = createHash("sha256").update(JSON.stringify(entries)).digest("hex");
+}
+
+async function bindMakefiles(repoDir: string, config: VerifyConfig): Promise<void> {
+  if (!verifyCommands(config).some((command) => /\bmake\b/u.test(command))) return;
+  const candidates = await Promise.all(["GNUmakefile", "makefile", "Makefile"].map(async (name) => {
+    try {
+      return [name, await readFile(join(repoDir, name), "utf8")] as const;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      return null;
+    }
+  }));
+  const makefiles = candidates.filter((entry) => entry !== null);
+  if (makefiles.length > 0) config.makefilesDigest = createHash("sha256").update(JSON.stringify(makefiles)).digest("hex");
+}
+
 /** 读 verify 配置：① .agent/config.json 优先；② package.json scripts；③ 非 npm 工具链探测。 */
 export async function loadVerifyConfig(
   repoDir: string,
@@ -287,30 +322,33 @@ export async function loadVerifyConfig(
         }
         config.timeoutMs = t;
       }
+      if (verifyCommands(config).length > 0) bindPackageScripts(config, await readPackageScripts(repoDir));
+      await bindMakefiles(repoDir, config);
       return { config, source: "config" };
     }
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err; // 配置存在但坏 → fail loud
   }
-  // ② 缺省探测 package.json scripts
-  try {
-    const raw = await readFile(join(repoDir, "package.json"), "utf8");
-    const pkg = JSON.parse(raw) as { scripts?: Record<string, string> };
-    const config: VerifyConfig = {};
-    for (const key of ["lint", "test"] as const) {
-      if (typeof pkg.scripts?.[key] === "string") {
-        config[key] = [`pnpm run ${key}`];
-      }
-    }
-    if (Object.keys(config).length > 0) return { config, source: "probed" };
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err; // package.json 存在但坏 → fail loud（与 config.json 同口径）
+  // ② 缺省探测 package.json scripts。命令名和正文来自同一次读取。
+  const scripts = await readPackageScripts(repoDir);
+  const config: VerifyConfig = {};
+  for (const key of ["lint", "test"] as const) {
+    if (typeof scripts?.[key] === "string") config[key] = [`pnpm run ${key}`];
+  }
+  if (Object.keys(config).length > 0) {
+    bindPackageScripts(config, scripts);
+    return { config, source: "probed" };
   }
   // ③ 没有 package.json、或有 package.json 却没 lint/test 脚本 ⇒ 探非 npm 工具链。
   //    旧实现在这里直接返回 "none"，非 JS 仓库因此永远没有验证面。
   const lang = await probeLanguageTestCommands(repoDir);
   // 探测档自带超时：这条命令不是用户写的，超时预期由我们这一侧负责说清楚。
-  if (lang.length > 0) return { config: { test: lang, timeoutMs: PROBED_LANG_TIMEOUT_MS }, source: "probed" };
+  if (lang.length > 0) {
+    config.test = lang;
+    config.timeoutMs = PROBED_LANG_TIMEOUT_MS;
+    await bindMakefiles(repoDir, config);
+    return { config, source: "probed" };
+  }
   // 类型面（M5）走**独立的一行 return**，不碰上面那行——`scripts/mutate-verify.mjs` 有两条锚点
   // 逐字钉着它（`probe-invents-lint-commands` / `verify-lang-timeout-same-as-npm`）。
   // 与语言面互斥：语言面命中就整段返回，所以这条只在「没有 go/cargo/pytest/make 测试面」时才会走到。
@@ -330,6 +368,7 @@ export async function runVerifyOutcome(
   exec: ExecFn = defaultExec,
   signal?: AbortSignal,
   resolved?: { config: VerifyConfig; source: VerifySource },
+  isCurrent?: () => Promise<boolean>,
 ): Promise<VerifyOutcome> {
   const { config, source } = resolved ?? (await loadVerifyConfig(repoDir));
   const commands = verifyCommands(config);
@@ -353,6 +392,9 @@ export async function runVerifyOutcome(
   const results: VerifyCommandResult[] = [];
   const timeoutMs = config.timeoutMs ?? DEFAULT_VERIFY_TIMEOUT_MS;
   for (const command of commands) {
+    if (isCurrent && !await isCurrent()) {
+      return { ok: false, results, source, skipped: "验证配置已变更，请重新确认后再运行。" };
+    }
     try {
       results.push(await exec(command, repoDir, timeoutMs, signal));
     } catch (err) {
@@ -376,6 +418,14 @@ export interface VerifyHook {
    *  没东西可验还回注「未找到 verify 配置」= 白烧一轮模型调用。缺省视为有面。 */
   surface?(signal?: AbortSignal): Promise<boolean>;
   run(signal?: AbortSignal): Promise<VerifyOutcome>;
+}
+
+function provenanceOf(source: VerifySource): VerifyProvenance {
+  return source === "config" ? "repo-config" : source === "probed" ? "repo-probed" : "host";
+}
+
+export function verifyConfigFingerprint(resolved: { config: VerifyConfig; source: VerifySource }): string {
+  return verifySurfaceFingerprint(resolved.config, provenanceOf(resolved.source));
 }
 
 /** 面向 gate-check / agent-runner 的标准钩子：目标仓库 + 可注入执行器（沙箱路径传沙箱 exec）。
@@ -421,20 +471,17 @@ export function createVerifyHook(
    *  而且只记否不记是：批准过的那次由表负责（写不进表就下次再问，绝不靠这份内存冒充已授权——
    *  于是「批准但落盘失败」这一场后续几拍按已问过处理，缺的那一拍 fail-closed 拒）。 */
   const alreadyAsked = new Set<string>();
-  /** 把命令来源折成信任闸认得的 provenance：`loadVerifyConfig` 的两个来源都是仓库自带文件。 */
   const loadConfig = async (): Promise<{ config: VerifyConfig; source: VerifySource }> =>
     opts.resolved ?? (await loadVerifyConfig(repoDir));
-  const trustOf = async (signal?: AbortSignal): Promise<VerifyTrustDecision> => {
-    const { config, source } = await loadConfig();
+  const trustOf = async (resolved: { config: VerifyConfig; source: VerifySource }, signal?: AbortSignal): Promise<VerifyTrustDecision> => {
+    const { config, source } = resolved;
     const commands = verifyCommands(config);
-    const provenance: VerifyProvenance =
-      // 任务声明是人手输入的（不是仓库里的文件），provenance 记 host：不冒充仓库自带判据的信任面。
-      source === "config" ? "repo-config" : source === "probed" ? "repo-probed" : "host";
+    const provenance = provenanceOf(source);
     if (trusted) return verifyTrustDecision({ provenance, commands, trusted: true });
     // 空面根本没有可验东西，不是信任问题（`surface()` 那层另有专门的判据）⇒ 不查表也不问人。
     if (commands.length === 0) return verifyTrustDecision({ provenance, commands, trusted: false });
     if (resolver === null) return verifyTrustDecision({ provenance, commands, trusted: false });
-    const fingerprint = verifySurfaceFingerprint(config, provenance);
+    const fingerprint = verifyConfigFingerprint(resolved);
     const req: VerifyTrustRequest = { repoDir, fingerprint, commands, provenance, ...(signal ? { signal } : {}) };
     if (await resolver.isTrusted(req)) return verifyTrustDecision({ provenance, commands, trusted: true });
     if (alreadyAsked.has(fingerprint)) return verifyTrustDecision({ provenance, commands, trusted: false });
@@ -447,11 +494,11 @@ export function createVerifyHook(
     surface: async (signal?: AbortSignal) => {
       // 已经取消的 run 不发信任卡：直接判「无可验面」，不造一张没人收的卡。
       if (signal?.aborted) return false;
-      const { config } = await loadConfig();
+      const resolved = await loadConfig();
       // 类型面也算「有可验面」：只有 tsconfig 的仓库此前被判成没面 ⇒ harness 整段跳过 verify，
       // 而它其实能验（M5 交付物 1 的另一半：补上的面要真的被跑到，不能只躺在配置里）。
-      if (verifyCommands(config).length === 0) return false;
-      const d = await trustOf(signal);
+      if (verifyCommands(resolved.config).length === 0) return false;
+      const d = await trustOf(resolved, signal);
       if (!d.run) {
         console.warn(d.reason);
         return false; // fail-closed：宁可这一拍不验，也不执行未经授权的仓库命令
@@ -459,9 +506,14 @@ export function createVerifyHook(
       return true;
     },
     run: async (signal?: AbortSignal) => {
-      const d = await trustOf(signal);
+      const resolved = await loadConfig();
+      const d = await trustOf(resolved, signal);
       if (!d.run) return { ok: false, results: [], skipped: d.reason };
-      return runVerifyOutcome(repoDir, opts.exec, signal, opts.resolved);
+      const fingerprint = verifyConfigFingerprint(resolved);
+      const isCurrent = opts.resolved === undefined
+        ? async () => verifyConfigFingerprint(await loadVerifyConfig(repoDir)) === fingerprint
+        : undefined;
+      return runVerifyOutcome(repoDir, opts.exec, signal, resolved, isCurrent);
     },
   };
 }

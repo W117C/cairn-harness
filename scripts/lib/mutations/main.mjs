@@ -869,7 +869,7 @@ export const MUTATIONS = [
     desc: "项目层免批那一支被摘掉 ⇒ default 档下每次 remember 都出卡，而无 ask gate 时 fail-closed。" +
       "实测代价（2026-10-15 桌面端会话）：agent 两次想把「本仓 verify 全量 219s 跑不进 60s 帽」" +
       "写进项目记忆，两次被挡 ⇒ 下一场会话从零开始踩同一个坑。",
-    apply: (s) => s.replace('if (decision === "ask" && opts.scope === "global") return "ask";', 'if (decision === "ask") return "ask";'),
+    apply: (s) => s.replace('if (opts.scope === "global") return "ask";', 'if (opts.scope === "global" || decision === "ask") return "ask";'),
     expectFail: "default 档项目层免批直写（与沉淀轮的分层裁决同一条口径）",
   },
   {

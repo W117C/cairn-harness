@@ -54,8 +54,8 @@ let settingsStore: SettingsStore | null = null;
  *  「<appData>/license.json」那一格。此前只有 initLicenseStore 这个死锚点，没有任何真实初始化路径
  *  调它，agent:state 应答里的 license 因此永远是 {state:"inactive"}。
  */
-export function initSettingsStore(filePath: string, opts: { licensePublicKey?: string } = {}): void {
-  settingsStore = new SettingsStore(filePath);
+export function initSettingsStore(filePath: string, opts: { licensePublicKey?: string; source?: "host" | "workspace" } = {}): void {
+  settingsStore = new SettingsStore(filePath, opts.source);
   initLicenseStore(join(dirname(filePath), "license.json"), { publicKey: opts.licensePublicKey });
 }
 

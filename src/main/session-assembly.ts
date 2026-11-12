@@ -13,7 +13,6 @@
 // 本模块**不反向依赖装配根**（同 state-handlers / scheduler-runtime 那一族）：四处模块级活状态
 // 按回调注入。
 import { existsSync } from "node:fs";
-import { projectAgentPath } from "../app-data";
 import { extractTaskPaths } from "../agent/evolve/task-context";
 import { affectedFilesOf } from "../agent/impact/index.js";
 import { scanStreamEvent } from "../agent/worker-projection";
@@ -21,8 +20,7 @@ import { Orchestrator, type OrchestratorOptions } from "../agent/orchestrator";
 import { recoveryParentMode } from "../agent/recovery";
 import type { VerifyTrustResolver } from "../agent/verify-trust";
 import { createEventLog, replay, type AgentEvent } from "../events";
-import { loadPermissionRules } from "../permissions";
-import { globalPermissionsPath } from "../permissions/rules";
+import { loadWorkspacePermissionRules } from "../permissions";
 import { resolveSafeMode } from "./compact-and-report";
 import { experienceSignalNudge } from "./evolve/experience-nudge";
 import { baselineEvolutionNote } from "./evolve/runtime";
@@ -105,7 +103,7 @@ export async function buildSessionOrchestrator(a: {
   parentMode: OrchestratorOptions["parentMode"];
   emit: OrchestratorOptions["emit"];
   sandbox: SandboxStatus | null;
-  rules: ReturnType<typeof loadPermissionRules>;
+  rules: ReturnType<typeof loadWorkspacePermissionRules>;
   modelFor?: OrchestratorOptions["modelFor"];
   /** 本 run 已解析的模型选择（逐请求指定的档位在这里）；缺省 = 按 env + 设置盘现算（同一把纯函数）。 */
   runModel?: MainModelSelection;
@@ -205,7 +203,7 @@ async function buildRecoveredOrchestrator(logPath: string): Promise<Orchestrator
       D().onEvent(e);
     },
     sandbox: D().sandboxState(),
-    rules: loadPermissionRules(projectAgentPath(workspace, "permissions.json"), globalPermissionsPath()),
+    rules: loadWorkspacePermissionRules(workspace),
   
   });
   D().setActiveOrchestrator(orch);

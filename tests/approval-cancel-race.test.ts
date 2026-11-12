@@ -1,3 +1,4 @@
+import { alwaysRulesPath } from "../src/permissions/rules";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -107,7 +108,7 @@ describe("批准与实际执行之间的取消不能丢失", () => {
 
   it("等待授权落盘期间取消，也不继续执行已批准的文件写入", async () => {
     const s = await setup("default", "always", false);
-    const alwaysPath = join(s.workspace, ".agent", "permissions.always.json");
+    const alwaysPath = alwaysRulesPath(s.workspace);
     renameHook.before = (target) => { if (target === alwaysPath) s.controller.abort(); };
     const result = await s.writer.run(s.args, s.ctx) as ToolResultWithAudit;
     expect(s.controller.signal.aborted).toBe(true);

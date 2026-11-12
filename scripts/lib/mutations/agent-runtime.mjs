@@ -498,7 +498,7 @@ export const MUTATIONS = [
     src: "src/agent/verify.ts",
     test: "tests/verify-probe.test.ts",
     desc: "把探到的测试命令同时当 lint 用 ⇒ action-fusion 会拿「风格未整理」把干净改动报成失败",
-    apply: (s) => s.replace("if (lang.length > 0) return { config: { test: lang, timeoutMs: PROBED_LANG_TIMEOUT_MS }, source: \"probed\" };", "if (lang.length > 0) return { config: { test: lang, lint: lang, timeoutMs: PROBED_LANG_TIMEOUT_MS }, source: \"probed\" };"),
+    apply: (s) => s.replace("config.test = lang;", "config.test = lang; config.lint = lang;"),
     expectFail: "只补 test 不凭空造 lint（action-fusion 读 config.lint，造出来会把干净改动报成失败）",
   },
   {
@@ -506,7 +506,7 @@ export const MUTATIONS = [
     src: "src/agent/verify.ts",
     test: "tests/verify-probe.test.ts",
     desc: "package.json 的 scripts 不再优先 ⇒ 仓库明明配了 `vitest run` 却去跑别的 runner，验证结果与项目自己的口径脱节",
-    apply: (s) => s.replace("if (Object.keys(config).length > 0) return { config, source: \"probed\" };", "if (Object.keys(config).length > 99) return { config, source: \"probed\" };"),
+    apply: (s) => s.replace("if (Object.keys(config).length > 0) {", "if (Object.keys(config).length > 99) {"),
     expectFail: "package.json 有 test 脚本时优先，语言探测不参与（零回归）",
   },
   {
@@ -546,7 +546,7 @@ export const MUTATIONS = [
     src: "src/agent/verify.ts",
     test: "tests/verify-probe.test.ts",
     desc: "探测档沿用 npm 的 60s ⇒ 探出验证面却让它必然超时（比探不出来更坏：给出「已经验过」的错觉）",
-    apply: (s) => s.replace("if (lang.length > 0) return { config: { test: lang, timeoutMs: PROBED_LANG_TIMEOUT_MS }, source: \"probed\" };", "if (lang.length > 0) return { config: { test: lang, timeoutMs: DEFAULT_VERIFY_TIMEOUT_MS }, source: \"probed\" };"),
+    apply: (s) => s.replace("config.timeoutMs = PROBED_LANG_TIMEOUT_MS;", "config.timeoutMs = DEFAULT_VERIFY_TIMEOUT_MS;"),
     expectFail: "Cargo.toml → cargo test",
   },
   {
@@ -1774,8 +1774,8 @@ export const MUTATIONS = [
     desc: "撞帽路不再补那一拍 ⇒ 被帽砍掉的 run 又回到「一条 verify 证据都没有」。#69 的原形状"
       + "（真模型面实测 5/43≈12% 整趟跑废，且这批恰是写得最多、最可能失败的那一批）",
     apply: (s) => s.replace(
-      "      if (opts.verify && opts.autoVerify === true && wroteThisRun && (firstBeat || repairBeat)) {",
-      "      if (!capReached && opts.verify && opts.autoVerify === true && wroteThisRun && (firstBeat || repairBeat)) {",
+      "      if (opts.verify && opts.autoVerify === true && wroteThisRun && (firstBeat || repairBeat || qualityRefresh)) {",
+      "      if (!capReached && opts.verify && opts.autoVerify === true && wroteThisRun && (firstBeat || repairBeat || qualityRefresh)) {",
     ),
     expectFail: "撞帽 + 写过盘 + 开闸 ⇒ 恰一拍 auto 证据落流，且 run 照旧抛错（帽没被藏起来）",
   },

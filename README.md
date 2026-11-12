@@ -250,6 +250,8 @@ npx cairn --provider openai --model some/small-model --ctx-window 32768 "..."
 
 审批门在没人能答的时候（管道 / CI）**当场按拒绝收束**，不等超时——一次没人应答的审批不会伪装成工具失败。
 
+项目里的 `.agent/permissions.json` 可以要求审批或拒绝操作。本机的「总是允许」记录按工作区保存在用户应用数据目录。旧项目里的 `permissions.always.json` 不会自动迁移；原来放行的操作需要重新批准。除完全允许档外，写入全局记忆需要逐次批准。
+
 模型主动开的两扇门也在终端里问你，没人能答时各自**当场结算**（都不是挂起等超时）：
 
 | 门 | 模型什么时候开 | 交互终端 | 管道 / CI / `--unattended` | `--mode auto` |

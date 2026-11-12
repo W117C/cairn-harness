@@ -178,7 +178,7 @@ function pathSurface(tool: string, args: Record<string, unknown>): string[] {
     for (const p of args.paths) if (typeof p === "string" && p !== "") parts.push(p);
   }
   // apply_patch：patch 正文**总是**进这一面（哪怕同时带了 path/paths）。
-  if (tool === "apply_patch" && typeof args.patch === "string" && args.patch !== "") parts.push(args.patch);
+  if (tool === "apply_patch" && typeof args.patch === "string") return parts.concat(args.patch.split(/\s+/u));
   return parts;
 }
 
@@ -206,41 +206,15 @@ function normalizePathToken(token: string): string {
   return out.join("/");
 }
 
-/** 路径通道：命中敏感片段 ⇒ high。**不命中就是 NONE**，刻意不抬高文件工具的基线风险——
- *  若给 write_file 补一个常规 medium，引导/自主两档的每一次写向调用都会被拦（两档
- *  `writeAsk=false`、风险线分别是 medium/high），那是远超本条要堵的口子的行为变更。
- *  high 的选择理由与 web_fetch 同源：四档的 `RISK_ORDER[risk] >= RISK_ORDER[riskAskAt]`
- *  一条出口全中，复用既有 `L4-risk` 层，不新增判据层（GATE_LAYERS 与 gate-audit 判卷不动）。
- *
- *  匹配面：候选串按**空白切成 token**，每个 token 先归一（见 normalizePathToken）再查表。
- *  为什么切 token：patch 正文里路径是嵌在 `+++ b/.git/hooks/x` 这类行里的，
- *  而路径参数本身通常不含空白——一刀切按 token 处理，两种形态共用同一份归一，
- *  不用在"这是路径"还是"这是补丁"之间分叉（分叉两处各写一份就会漂）。
- *  归一 + 分段是**只增不减**的：原文能命中的写法，归一后仍在某个 token 里命中。 */
+/** 结构化路径按整段判定，只有补丁正文需要分词。 */
 function pathRisk(candidates: readonly string[], opts: { recursive: boolean }): RiskFinding {
   for (const candidate of candidates) {
-    if (candidate.trim() === "") continue;
-    for (const token of candidate.split(/\s+/u)) {
-      if (token === "") continue;
-      const normalized = normalizePathToken(token).toLowerCase();
-      if (normalized === "") continue;
-      const hay = normalized;
-      const hit = SENSITIVE_PATH_SEGMENTS.find((seg) => hay.includes(seg));
-      if (hit) {
-        return { level: "high", reason: `敏感路径（${hit}）：持久化执行面/凭证面，文件面路径通道` };
-      }
-      // 递归扫描面：参数是目录 ⇒ 覆盖面是整棵子树。落在敏感根下（`.git` / `.agent`）
-      // ⇒ 整棵子树都要过这道门（子树里就有 `.git/config` 这样的凭证面与 `.git/hooks/` 这样的执行面）。
-      // 只对递归工具生效：read_file/write_file 指的是**那个文件**，子树不在它的覆盖面里。
-      // **看任意一段**（不是只看第一段）：`sub/.git` 同样是一棵 .git 子树（里面照样有 config），
-      // 只看首段会漏掉它；而 `.gitignore` 是一**段**且不等于 `.git`，不会被误伤。
-      if (opts.recursive) {
-        for (const seg of normalized.split("/")) {
-          if (SENSITIVE_SCAN_ROOTS.includes(seg)) {
-            return { level: "high", reason: `敏感目录（${seg}）：递归扫描会覆盖整棵子树（含持久化执行面/凭证面）` };
-          }
-        }
-      }
+    const normalized = normalizePathToken(candidate).toLowerCase();
+    const hit = SENSITIVE_PATH_SEGMENTS.find((segment) => normalized.includes(segment));
+    if (hit) return { level: "high", reason: `敏感路径（${hit}）：持久化执行面/凭证面，文件面路径通道` };
+    if (opts.recursive) {
+      const root = normalized.split("/").find((segment) => SENSITIVE_SCAN_ROOTS.includes(segment));
+      if (root) return { level: "high", reason: `敏感目录（${root}）：递归扫描会覆盖整棵子树（含持久化执行面/凭证面）` };
     }
   }
   return NONE;

@@ -4,8 +4,9 @@
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, expect, it } from "vitest";
+import { afterAll, expect, it, vi } from "vitest";
 import { handleAgentRun, initSettingsStore } from "../src/main/agent-runner";
+import { alwaysRulesPath, savePermissionRules } from "../src/permissions/rules";
 import type { AgentEvent } from "../src/events";
 import { HARNESS_VERIFY_CALL_ID } from "../src/agent/loop";
 import { newExperience } from "../src/agent/evolve/playbook";
@@ -14,6 +15,7 @@ import { buildEvolveReport, formatEvolveReport } from "../src/main/evolve/report
 
 const dirs: string[] = [];
 afterAll(async () => {
+  vi.unstubAllEnvs();
   delete process.env.M3A_MAIN_SCRIPT;
   for (const dir of dirs) await rm(dir, { recursive: true, force: true }).catch(() => {});
 });
@@ -25,11 +27,8 @@ it("生产入口：自动验证红的回执带 active 的 verify:red 经验与�
   initSettingsStore(join(home, "settings.json"));
   await writeFile(join(home, "settings.json"), JSON.stringify({ autoVerifyRepair: true }), "utf8");
   await mkdir(join(workspace, ".agent"), { recursive: true });
-  await writeFile(
-    join(workspace, ".agent", "permissions.json"),
-    JSON.stringify({ rules: [{ behavior: "allow", tool: "write_file", scope: "always" }] }),
-    "utf8",
-  );
+  vi.stubEnv("DSH_APPDATA", join(home, "appdata"));
+  await savePermissionRules(alwaysRulesPath(workspace), [{ behavior: "allow", tool: "write_file", scope: "always" }]);
   await writeFile(
     join(workspace, ".agent", "config.json"),
     JSON.stringify({ verify: { test: ["echo 'FAIL: 1 failed' && exit 1"] } }),

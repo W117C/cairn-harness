@@ -15,7 +15,7 @@ import {
   appendDecisionEntry,
   appendRootFile,
   globalMemoryDir,
-  projectMemoryDir,
+  projectMemoryWriteDir,
   readTextOrNull,
   appendTopic,
   replaceRootFileIfMatches,
@@ -122,7 +122,7 @@ export const remember: Tool = {
       if (typeof topic !== "string" || topic.length === 0) {
         throw new MemoryError("call_failed", "remember: kind=memory 必带 topic（1-64 位字母/数字/连字符/下划线）");
       }
-      const dir = scope === "project" ? projectMemoryDir(ctx.workspace) : globalMemoryDir();
+      const dir = scope === "project" ? await projectMemoryWriteDir(ctx.workspace, topic) : globalMemoryDir();
       if (op === "replace") {
         const oldContent = rawArgs.old_content;
         if (typeof oldContent !== "string") {

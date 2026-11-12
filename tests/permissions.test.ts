@@ -165,9 +165,9 @@ describe("全局层的 deny 是地板（S4）", () => {
     expect(v.verdict).toBe("deny");
   });
 
-  it("方向只此一条：项目层内部（deny 短、allow 长）仍按最长前缀，地板不越界", () => {
+  it("项目内的 allow 不能盖住项目的 deny", () => {
     const v = judgeChain([gr("deny", "git push", "project"), gr("allow", "git push --force", "project")], "run_shell", "git push --force origin main");
-    expect(v.verdict).toBe("allow");
+    expect(v.verdict).toBe("deny");
   });
 
   it("不带层归属的规则不触发地板（手写/单条面的老形状）", () => {

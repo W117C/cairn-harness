@@ -2,7 +2,7 @@ import { lstat, readlink, realpath } from "node:fs/promises";
 import type { Stats } from "node:fs";
 import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { frozenJudgePathSet } from "../frozen";
-import { SENSITIVE_PATH_SEGMENTS } from "../sensitive-paths";
+import { isSensitivePath, SENSITIVE_PATH_SEGMENTS } from "../sensitive-paths";
 import type { AgentEvent, ClarifyAnswerMap, HarnessHoldReason, ImpactReportEvent } from "../events";
 
 /** 工具可预期失败的统一错误类型：loop 捕获后转成 ok:false 的 tool_result。 */
@@ -184,7 +184,7 @@ async function lstatOrNull(p: string): Promise<Stats | null> {
  * 父目录在界内，真实落点却在界外，门就这么放行了。lstat 对软链本身成功且不跟随，
  * 正好分得开「不存在」（退回接余段）与「是软链」（readlink 后从落点重走）。
  */
-async function resolveDeepest(abs: string, label: string): Promise<string> {
+export async function resolveDeepest(abs: string, label: string): Promise<string> {
   const root = parse(abs).root;
   const pending = abs.slice(root.length).split(sep).filter((s) => s.length > 0);
   let cur = root;
@@ -208,17 +208,32 @@ async function resolveDeepest(abs: string, label: string): Promise<string> {
   return cur;
 }
 
-export async function assertRealContainment(workspace: string, abs: string, label: string): Promise<void> {
+async function containedPath(workspace: string, abs: string, label: string) {
   let wsReal: string;
   try {
     wsReal = await realpath(workspace);
   } catch {
     throw new ToolError(`${label}: workspace 不可解析: ${workspace}`);
   }
-  const relBack = relative(wsReal, await resolveDeepest(abs, label));
+  const real = await resolveDeepest(abs, label);
+  const relBack = relative(wsReal, real);
   if (relBack !== "" && (relBack.startsWith("..") || isAbsolute(relBack))) {
     throw new ToolError(`${label}: 路径经软链解析后越出 workspace 边界: ${abs}`);
   }
+  return { workspace: wsReal, abs: real, rel: relBack };
+}
+
+export async function assertRealContainment(workspace: string, abs: string, label: string): Promise<void> {
+  await containedPath(workspace, abs, label);
+}
+
+/** 使用校验过的目标。敏感落点必须以真实路径提交，让权限层能按该路径审批。 */
+export async function resolveWorkspaceReadPath(workspace: string, abs: string, label: string, recursive = false) {
+  const landed = await containedPath(workspace, abs, label);
+  if (relative(resolve(workspace), abs) !== landed.rel && isSensitivePath(landed.rel, recursive)) {
+    throw new ToolError(`${label}: 敏感路径不能通过别名访问，请使用真实相对路径 ${landed.rel}`);
+  }
+  return landed;
 }
 
 /** 读取目标解析：工作区内路径走原有 containment 闸；绝对路径只有在**本轮用户已批准**的
@@ -249,8 +264,7 @@ export async function resolveReadTarget(
     }
     throw new ToolError(`${label}: 路径不在本轮已批准的项目外附件清单内: ${input}`);
   }
-  const abs = resolveInWorkspace(workspace, input, label);
-  await assertRealContainment(workspace, abs, label);
+  const { abs } = await resolveWorkspaceReadPath(workspace, resolveInWorkspace(workspace, input, label), label);
   return { abs, display: input, external: false };
 }
 
