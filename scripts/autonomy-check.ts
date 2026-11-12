@@ -8,6 +8,7 @@
 //   暗卷（任务 7，有 key 才跑）：真实 GLM requires_approval 约定；无 key → 退出码 0 跳过
 // 任一断言失败 → 退出码非 0。
 import { existsSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -25,9 +26,10 @@ import {
   toolTableFor,
   type PermissionRule,
 } from "../src/permissions";
+import { alwaysRulesPath } from "../src/permissions/rules";
 import { sha256MatchesFrozen } from "../src/frozen";
 import { streamGlm } from "../src/providers/glm";
-import { mergeAssistantDeltas, replay, type AgentEvent } from "../src/events";
+import { mergeAssistantDeltas, type AgentEvent } from "../src/events";
 import type { PermissionMode } from "../src/permissions";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -78,7 +80,7 @@ console.log("[autonomy-check] 任务 2 规则库六断言");
   const dir1 = await mkdtemp(join(tmpdir(), "m1c-rules1-"));
   const p1 = join(dir1, ".agent", "permissions.json");
   await savePermissionRules(p1, [rule({ behavior: "allow", pattern: "pnpm test" })]);
-  const loaded = loadPermissionRules(p1);
+  const loaded = loadPermissionRules(undefined, p1);
   const s1 = newAutonomySession("default", { rules: loaded });
   const d1 = evaluate("run_shell", { command: "pnpm test" }, s1);
   assert(
@@ -234,7 +236,7 @@ async function runScript(
   gate: AskGate | undefined,
 ): Promise<AgentEvent[]> {
   await assertScriptReadTargets(script);
-  const logPath = join(tmpdir(), `m1c-autonomy-${mode}-${String(Date.now())}-${String(Math.random()).slice(2, 6)}.jsonl`);
+  const logPath = join(tmpdir(), `m1c-autonomy-${mode}-${String(Date.now())}-${randomUUID()}.jsonl`);
   process.env.M1C_AUTONOMY_SCRIPT = script;
   try {
     return await runAgent({
@@ -282,7 +284,7 @@ console.log("[autonomy-check] 任务 6 明卷·默认档（fixtures/autonomy/def
     "默认档：事件序列 tool_call → tool_result → tool_call → tool_result 与 §4.6 走查一致",
   );
   assert(
-    !existsSync(join(APP, ".agent", "permissions.json")),
+    !existsSync(alwaysRulesPath(APP)),
     "默认档：session_kind 记忆不落盘（会话内存放行）",
   );
   assertAuditCoverage(log, "默认档");
@@ -340,7 +342,7 @@ console.log("[autonomy-check] 拒绝不生成规则（集成面）");
   const gate = driverGate("deny-all", records);
   await runScript(DEFAULT_SCRIPT, "default", gate); // 拒绝路径跑完
   assert(
-    !existsSync(join(APP, ".agent", "permissions.json")),
+    !existsSync(alwaysRulesPath(APP)),
     "拒绝路径：没有生成任何 allow 条目（拒绝永不自动生成规则）",
   );
 }

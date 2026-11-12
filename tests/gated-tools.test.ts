@@ -1,6 +1,7 @@
 // 工具门接线测试（任务 3）：default 档 ask → 批准才执行；拒绝不执行；沙箱不可用时写工具强制审批。
 // runAgent 即 main 暴露的同一入口；AskGate 用即时决议的 stub 模拟 UI 点击。
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -273,7 +274,9 @@ describe("出网工具门接线（web_fetch + AskGate）", () => {
   // 形状要点：启动时规则库必须合法（runAgent 入口就 load 一次，坏的在那里就炸，走不到要测的
   // 那一格）；坏掉发生在**批准之后、重载之前**——用审批回调当那个时间窗。
   it("规则库重载失败不吃掉已批准的执行（always 授权成立，执行仍发生）", { timeout: 120_000 }, async () => {
-    const dir = await mkdtemp(join(tmpdir(), "m0b-t-always-reload-"));
+    const temp = await mkdtemp(join(tmpdir(), "m0b-t-always-reload-"));
+    const dir = join(temp, "workspace");
+    vi.stubEnv("DSH_APPDATA", join(temp, "appdata"));
     await mkdir(join(dir, ".agent"), { recursive: true });
     await writeFile(join(dir, ".agent", "permissions.json"), JSON.stringify({ rules: [] }), "utf8");
     // 剧本通道让工具调用确定化（同本文件上面几条的口径）：这一格要的是"write_file 拿到 always
@@ -290,7 +293,7 @@ describe("出网工具门接线（web_fetch + AskGate）", () => {
         timeoutMs: 1000,
         notify: (req) => {
           asked.push(req.tool);
-          void writeFile(join(dir, ".agent", "permissions.json"), "{ 这不是合法 JSON", "utf8");
+          writeFileSync(join(dir, ".agent", "permissions.json"), "{ 这不是合法 JSON", "utf8");
           gate.decide(req.askId, true, "user", "always");
         },
       });
@@ -306,10 +309,11 @@ describe("出网工具门接线（web_fetch + AskGate）", () => {
       const ok = resultsFor(events, "write_file").filter((r) => r.ok);
       expect(ok, "规则库重载失败时，这次已批准的 write_file 仍必须真的执行").toHaveLength(1);
       // 授权记录确实落了盘（重载失败与落库失败是两件事，不许互相顶包）
-      const always = await readFile(join(dir, ".agent", "permissions.always.json"), "utf8");
+      const always = await readFile(alwaysRulesPath(dir), "utf8");
       expect(always).toContain("write_file");
     } finally {
       vi.unstubAllEnvs();
+      await rm(temp, { recursive: true, force: true });
     }
   });
 });

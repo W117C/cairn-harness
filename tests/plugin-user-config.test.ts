@@ -15,6 +15,18 @@ import {
 import { McpManager } from "../src/agent/plugins/mcp";
 import { loadLspConfig } from "../src/tools/lsp";
 
+// F2 余项迁移（2026-11-13）：信任表不得落工作区（PluginRuntime 装载 fail loud 拒载）。
+// 共享一个工作区外的信任目录：本测试文件内复用，文件级 afterEach 清尾。
+let trustHome = "";
+afterEach(async () => {
+  if (trustHome) await rm(trustHome, { recursive: true, force: true }).catch(() => {});
+  trustHome = "";
+});
+const trustRoot = async (): Promise<string> => {
+  if (!trustHome) trustHome = await mkdtemp(join(tmpdir(), "dsh-trust-out-"));
+  return trustHome;
+};
+
 const KEY = "sk-token-value-1234";
 
 /** 内存版密钥后端（等价 safeStorage 的读侧语义；不依赖 Electron）。 */
@@ -136,7 +148,7 @@ describe("userConfig 进激活面（§9.5 的三条通道）", () => {
       userPluginsDir: join(dir, "user-plugins"),
       workspace: dir,
       pluginDataRoot: join(dir, "plugin-data"),
-      trustFile: join(dir, "trust.json"),
+      trustFile: join(await trustRoot(), "trust.json"),
     });
     if (opts.withValue && !opts.preWrite) {
       await writePluginUserConfig({
@@ -352,7 +364,7 @@ describe("端到端：写入口按类型拒值，坏值到不了 MCP/LSP argv（
       userPluginsDir: join(dir, "user-plugins"),
       workspace: dir,
       pluginDataRoot: join(dir, "plugin-data"),
-      trustFile: join(dir, "trust.json"),
+      trustFile: join(await trustRoot(), "trust.json"),
     });
   }
 

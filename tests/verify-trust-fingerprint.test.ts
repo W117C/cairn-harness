@@ -1,3 +1,4 @@
+import { alwaysRulesPath, savePermissionRules } from "../src/permissions/rules";
 // 信任键的形状：**(repoDir, verify 面内容) → 那份现成的信任表**，首次经审批卡问人，同指纹之后免问。
 //
 // 断在哪一环（现读，不是推断）：`src/main/agent-runner.ts` 的三处装配点传的是**常量** `trustedRepo ?? false`，
@@ -158,6 +159,57 @@ beforeEach(async () => {
   repo = await makeRepo("repo", [TEST_CMD]);
   // worker 那一侧的 verify 面**内容逐字相同**，只有目录不同 —— ⑥ 的全部前提。
   worktree = await makeRepo("worktree", [TEST_CMD]);
+});
+
+it("trust fingerprints change when the package script body changes, including explicit verify config", async () => {
+  const path = join(repo, "package.json");
+  await rig.writeSurface(repo, JSON.stringify({ verify: { test: ["pnpm run test"] } }));
+  await writeFile(path, JSON.stringify({ scripts: { test: "echo one", lint: "echo lint" } }));
+  const before = await rig.fingerprintOf(repo);
+  await writeFile(path, JSON.stringify({ scripts: { lint: "echo lint", test: "echo one" } }, null, 2));
+  expect(await rig.fingerprintOf(repo)).toBe(before);
+  await writeFile(path, JSON.stringify({ scripts: { test: "echo two", lint: "echo lint" } }));
+  expect(await rig.fingerprintOf(repo)).not.toBe(before);
+});
+
+it("trust fingerprints include the Makefile selected by make", async () => {
+  await rig.writeSurface(repo, JSON.stringify({ verify: { test: ["make test"] } }));
+  const path = join(repo, "Makefile");
+  await writeFile(path, "test:\n\t@echo one\n");
+  const before = await rig.fingerprintOf(repo);
+  await writeFile(path, "test:\n\t@echo two\n");
+  expect(await rig.fingerprintOf(repo)).not.toBe(before);
+});
+
+it("stops the rest of a verification batch if its config changes between commands", async () => {
+  const seen: string[] = [];
+  await rig.writeSurface(repo, JSON.stringify({ verify: { test: ["echo first", "echo second"] } }));
+  const out = await createVerifyHook(repo, {
+    trustedRepo: true,
+    exec: async (command) => {
+      seen.push(command);
+      await rig.writeSurface(repo, JSON.stringify({ verify: { test: ["echo newer"] } }));
+      return { command, ok: true, output: "", exitCode: 0 };
+    },
+  }).run();
+  expect(out).toMatchObject({ ok: false, skipped: expect.stringContaining("已变更") });
+  expect(seen).toEqual(["echo first"]);
+});
+
+it("skips a verification when the repository config changed while consent was pending", async () => {
+  const { exec, seen } = spyExec();
+  const result = await createVerifyHook(repo, {
+    exec,
+    trustResolver: {
+      isTrusted: async () => false,
+      requestTrust: async () => {
+        await rig.writeSurface(repo, JSON.stringify({ verify: { test: ["echo another check"] } }));
+        return true;
+      },
+    },
+  }).run();
+  expect(result).toMatchObject({ ok: false, skipped: expect.stringContaining("已变更") });
+  expect(seen).toHaveLength(0);
 });
 
 afterEach(async () => {
@@ -519,11 +571,7 @@ describe("⑦生产装配：runAgent 不再吃常量 false（缺省开着的自�
   });
 
   it("生产入口 handleAgentRun + 无人值守 ⇒ 不发卡、不悬等、那一拍不跑仓库命令（写照样成功）", async () => {
-    await writeFile(
-      join(repo, ".agent", "permissions.json"),
-      JSON.stringify({ rules: [{ behavior: "allow", tool: "write_file", scope: "always" }] }),
-      "utf8",
-    );
+    await savePermissionRules(alwaysRulesPath(repo), [{ behavior: "allow", tool: "write_file", scope: "always" }]);
     const logPath = join(rig.dir, `events-${String(seq++)}.jsonl`);
     const res = await handleAgentRun({ message: "改一下 target", mode: "auto" }, { workspace: repo, logPath, unattended: true });
     expect(res.ok, JSON.stringify(res)).toBe(true);

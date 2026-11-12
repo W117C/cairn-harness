@@ -13,7 +13,6 @@ import { read_file } from "../tools/read_file";
 import { read_doc } from "../tools/read_doc";
 import { read_image } from "../tools/read_image";
 import { remember } from "../tools/remember";
-import { run_shell } from "../tools/run_shell";
 import { write_file } from "../tools/write_file";
 import type { Tool } from "../tools/base";
 import { evaluate, gateBase, getPlanState, planGateBlocks, rememberDecision, scopeKey, type AskScope, type AutonomySession, type EvaluateDecision, type ToolResultWithAudit } from "../permissions";

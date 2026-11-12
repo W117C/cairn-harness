@@ -14,3 +14,6 @@ onlyBuiltDependencies:
 # （`^1.2.1`）已经容得下 1.2.2，但 `pnpm update -r` 没能把它抬上去 ⇒ 用 overrides 钉死补丁线。
 overrides:
   source-map-js: "^1.2.2"
+  # GHSA-mrhx-c7xc-m3w5：zod 3.x 没有补丁线，MCP SDK 已声明兼容 ^4.0，
+  # 因此把传递依赖抬到 4.6.7。zod-to-json-schema 同样声明支持 zod 4。
+  zod: "^4.6.7"

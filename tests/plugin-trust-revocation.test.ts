@@ -33,7 +33,9 @@ async function setup(beforeList?: (plugin: string) => Promise<void>, onCall?: (p
     await writeFile(join(root, ".lsp.json"), JSON.stringify({ servers: { stub: { command: process.execPath, args: [serverPath], extensionToLanguage: { ["." + name]: "plaintext" } } } }));
     await writeFile(join(dir, "a." + name), "const value = 1;\n");
   }
-  const runtime = await PluginRuntime.load({ workspace: dir, home: dir, projectPluginsDir: join(dir, "plugins"), userPluginsDir: join(dir, "none"), projectSkillsDir: join(dir, "skills"), looseRoots: [], pluginDataRoot: join(dir, "data"), trustFile: join(dir, "trust.json") });
+  const tdir = await mkdtemp(join(tmpdir(), "dsh-trust-"));
+  dirs.push(tdir);
+  const runtime = await PluginRuntime.load({ workspace: dir, home: dir, projectPluginsDir: join(dir, "plugins"), userPluginsDir: join(dir, "none"), projectSkillsDir: join(dir, "skills"), looseRoots: [], pluginDataRoot: join(dir, "data"), trustFile: join(tdir, "trust.json") });
   runtimes.push(runtime);
   for (const name of ["revoked", "kept"]) expect(await runtime.trustDecide(name, true)).toBe(true);
   const pairs: { plugin: string; client: Client; close: ReturnType<typeof vi.fn<() => Promise<void>>> }[] = [];

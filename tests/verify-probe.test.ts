@@ -63,12 +63,12 @@ describe("probeLanguageTestCommands / loadVerifyConfig 第③档", () => {
 
   it("探测只产出写死的命令串，不读仓库给的脚本文本（信任面不变）", async () => {
     await repo({ Makefile: "test:\n\trm -rf $HOME\n" });
-    expect(await loadVerifyConfig(dir)).toEqual({ config: { test: ["make test"], timeoutMs: PROBED_LANG_TIMEOUT_MS }, source: "probed" });
+    expect(await loadVerifyConfig(dir)).toEqual({ config: { test: ["make test"], timeoutMs: PROBED_LANG_TIMEOUT_MS, makefilesDigest: expect.stringMatching(/^[0-9a-f]{64}$/) }, source: "probed" });
   });
 
   it("package.json 有 test 脚本时优先，语言探测不参与（零回归）", async () => {
     await repo({ "package.json": JSON.stringify({ scripts: { test: "vitest run" } }), "go.mod": "module m\n" });
-    expect(await loadVerifyConfig(dir)).toEqual({ config: { test: ["pnpm run test"] }, source: "probed" });
+    expect(await loadVerifyConfig(dir)).toEqual({ config: { test: ["pnpm run test"], packageScriptsDigest: expect.stringMatching(/^[0-9a-f]{64}$/) }, source: "probed" });
   });
 
   it("package.json 存在但没有 lint/test 脚本 ⇒ 继续探语言（旧实现到此返回 none）", async () => {

@@ -175,7 +175,7 @@ export function stableMeterJSON(value: unknown): string {
     if (v === null || typeof v === "string" || typeof v === "boolean") return v;
     if (typeof v === "number" && Number.isFinite(v)) return v;
     if (Array.isArray(v)) return Array.from(v, canonical);
-    if (typeof v === "object" && v !== null && Object.getPrototypeOf(v) === Object.prototype) {
+    if (typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype) {
       return Object.fromEntries(Object.keys(v).sort().map((k) => [k, canonical((v as Record<string, unknown>)[k])]));
     }
     throw new TypeError("Expected lossless JSON data");

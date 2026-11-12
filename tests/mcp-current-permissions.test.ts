@@ -40,7 +40,9 @@ async function setup(mode: PermissionMode, initial = definition(true), gate: Ask
     await mkdir(root, { recursive: true });
     await writeFile(join(root, "plugin.json"), JSON.stringify({ name: plugin, version: "1.0.0", mcpServers: { stub: { command: "unused" } } }));
   }
-  const runtime = await PluginRuntime.load({ workspace: dir, home: dir, projectPluginsDir: join(dir, "plugins"), userPluginsDir: join(dir, "none"), projectSkillsDir: join(dir, "skills"), looseRoots: [], pluginDataRoot: join(dir, "data"), trustFile: join(dir, "trust.json") });
+  const tdir = await mkdtemp(join(tmpdir(), "dsh-trust-"));
+  dirs.push(tdir);
+  const runtime = await PluginRuntime.load({ workspace: dir, home: dir, projectPluginsDir: join(dir, "plugins"), userPluginsDir: join(dir, "none"), projectSkillsDir: join(dir, "skills"), looseRoots: [], pluginDataRoot: join(dir, "data"), trustFile: join(tdir, "trust.json") });
   runtimes.push(runtime);
   let definitions = [initial];
   const calls: { plugin: string; tool: string }[] = [];
@@ -185,7 +187,9 @@ describe("run 中途批准的插件：模型看得见，执行面也必须动得
       await mkdir(root, { recursive: true });
       await writeFile(join(root, "plugin.json"), JSON.stringify({ name: plugin, version: "1.0.0", mcpServers: { stub: { command: "unused" } } }));
     }
-    const runtime = await PluginRuntime.load({ workspace: dir, home: dir, projectPluginsDir: join(dir, "plugins"), userPluginsDir: join(dir, "none"), projectSkillsDir: join(dir, "skills"), looseRoots: [], pluginDataRoot: join(dir, "data"), trustFile: join(dir, "trust.json") });
+    const tdir = await mkdtemp(join(tmpdir(), "dsh-trust-"));
+  dirs.push(tdir);
+  const runtime = await PluginRuntime.load({ workspace: dir, home: dir, projectPluginsDir: join(dir, "plugins"), userPluginsDir: join(dir, "none"), projectSkillsDir: join(dir, "skills"), looseRoots: [], pluginDataRoot: join(dir, "data"), trustFile: join(tdir, "trust.json") });
     runtimes.push(runtime);
     const calls: { plugin: string; tool: string }[] = [];
     runtime.mcp = new McpManager(async (_config, plugin) => {

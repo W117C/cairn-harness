@@ -24,7 +24,7 @@
  *  用法：`node --import tsx scripts/anim-js-geometry-check.ts <file.html> […]`
  *  退出码 0 = 全过；1 = 有发现（每条带 文件:行）；2 = 用法错（没有参数不假装干净）。
  */
-import { readFileSync, statSync } from "node:fs";
+import { readTextFileSnapshotSync } from "./lib/file-snapshot";
 import { isAbsolute, resolve } from "node:path";
 
 interface Finding {
@@ -76,19 +76,14 @@ function termsOf(expr: string, baseLine: number, absOffset: number): Term[] {
 function checkFile(abs: string, rel: string): void {
   let text: string;
   try {
-    const st = statSync(abs);
-    if (!st.isFile()) {
-      findings.push({ file: rel, line: 1, what: "不是文件" });
-      return;
-    }
-    text = readFileSync(abs, "utf8");
+    text = readTextFileSnapshotSync(abs).text;
   } catch (err) {
     findings.push({ file: rel, line: 1, what: "读不到：" + (err instanceof Error ? err.message : String(err)) });
     return;
   }
 
   // 只取 `<script>` 段：CSS 那条路本格不判（@keyframes 的旋转是声明式的，另有判法）。
-  const scripts = [...text.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)];
+  const scripts = [...text.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\b[^>]*>/gi)];
   const hasScript = scripts.length > 0;
   // ---- 第 ⑥ 格：没有脚本 = 本格无可判对象，**不许读成「干净」** ----
   // 与 `anim-geometry-check` 的第 ⑧ 格同一条纪律（那边踩过一次实测假绿）：

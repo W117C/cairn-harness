@@ -419,7 +419,7 @@ function memorySecretBackend(): { backend: PluginSecretBackend; dump: () => Reco
 }
 
 async function darkBox(): Promise<void> {
-  const target = join(tmpdir(), "m2g-darkbox-" + String(Date.now()));
+  const target = await mkdtemp(join(tmpdir(), "m2g-darkbox-"));
   const repos: [string, string][] = [
     ["https://github.com/anthropics/skills", "anthropics-skills"],
     ["https://github.com/anthropics/claude-plugins-community", "community-plugins"],

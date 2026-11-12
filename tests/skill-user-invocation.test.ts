@@ -10,6 +10,18 @@ import { PluginRuntime, expandSkillInvocation } from "../src/agent/plugins";
 import type { AgentEvent, CompactionEvent, UserMessageEvent } from "../src/events";
 import { runAgent } from "../src/main/agent-runner";
 
+// F2 余项迁移（2026-11-13）：信任表不得落工作区（PluginRuntime 装载 fail loud 拒载）。
+// 共享一个工作区外的信任目录：本测试文件内复用，文件级 afterEach 清尾。
+let trustHome = "";
+afterEach(async () => {
+  if (trustHome) await rm(trustHome, { recursive: true, force: true }).catch(() => {});
+  trustHome = "";
+});
+const trustRoot = async (): Promise<string> => {
+  if (!trustHome) trustHome = await mkdtemp(join(tmpdir(), "dsh-trust-out-"));
+  return trustHome;
+};
+
 /** 一个插件：say（模型与用户都可）/ hidden（只有用户可）/ dual（与同名命令撞车）。 */
 async function seedPlugin(root: string): Promise<void> {
   const p = join(root, "user-plugins", "sk-demo");
@@ -78,7 +90,7 @@ describe("两条 face 的门不同：模型侧拒、用户侧放行", () => {
       userPluginsDir: join(dir, "user-plugins"),
       workspace: dir,
       pluginDataRoot: join(dir, "plugin-data"),
-      trustFile: join(dir, "trust.json"),
+      trustFile: join(await trustRoot(), "trust.json"),
     });
   });
   afterEach(async () => {

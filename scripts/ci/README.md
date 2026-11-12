@@ -6,7 +6,7 @@
 
 ## L1（已落地，零打扰）：`.github/workflows/verify.yml`
 
-- **覆盖**：`pnpm install --frozen-lockfile` → `pnpm typecheck` → `pnpm test:capped`（全量判卷，2 workers）→
+- **覆盖**：`pnpm install --frozen-lockfile` → `pnpm typecheck` → `pnpm test:capped`（全量核心判卷，maxWorkers=2）→
   **快门面** `pnpm gates --only=…`（= `CERT_GATES` 那 25 道，唯一定义在 `scripts/gate-manifest.ts`，
   逐道点名在 workflow 里；10-02 起不再减门，见下一节）。
 - **工具链版本钉在一处**（第 475 页）：`package.json` 的 `packageManager` 与 workflow 里的
@@ -79,6 +79,52 @@ git config core.hooksPath .githooks     # 撤销：git config --unset core.hooks
 
 **反悔条件（写清才叫裁决）**：若出现"同一类型错连穿两笔 CI"或"CI 因类型错红了 ≥2 次且本可
 本地拦住"这类证据，把上面两条命令跑一遍翻回来。
+
+## L1 的增量（2026-10-25 仓库标准化）
+
+这一段记的是**在 L1 之上加的东西**，以及**为什么这么加**。
+L1 本身的取舍（快门面 25 道、更重的门不进每次 push、pre-commit 不做）一个字没动。
+
+### 并发组：同一 ref 上只留最新的一趟
+
+```yaml
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+```
+
+**为什么**：本仓每趟 verify 要跑完整判卷 + 快门面。连续推送时会叠出好几趟并行——
+**重复的是同一份树，浪费的是计费分钟**。取消的是**被取代**的那一趟，不是最新那一趟：
+最新那趟仍会跑完并给出读数。
+
+> ⚠️ 这条只省算力，**不改变任何判读口径**：被取消的那一趟本来就要被更新的那趟取代。
+> 想看历史某一趟的读数，被取消的 run 在 Actions 里仍留记录（状态是 cancelled）。
+
+### 最小权限
+
+```yaml
+permissions:
+  contents: read
+```
+
+这道门只需要读仓库（checkout + 跑判卷）。默认的写权限是**能用上但用不到**的权限面——
+在能给的最小面上给，是 CI 的基本卫生。
+
+### L1′：公开仓库的 CodeQL 分析
+
+静态分析与 verify 分别取证。仓库已于 2026-10-26 转为公开，原来“私有仓库无此能力”的前提已不适用。
+
+- 触发：main 的 push、面向 main 的 pull_request，以及 workflow_dispatch；不新增周期任务。
+- JavaScript/TypeScript 使用上游 Action 的 `languages` 输入和 `build-mode: none`，不构建产品。
+- 扫描 src、apps/desktop/src、bin、scripts；历史工件、夹具和 node_modules 不混入生产源码分析。
+- CodeQL 告警是待核对的静态证据；不把数量当成已验证可利用漏洞数，也不替代 core/desktop 回归。
+- 配置、权限与执行记录以 `.github/workflows/codeql.yml` 和对应 GitHub Actions 为准。
+
+### 当前 CI 状态与旧账单阻塞
+
+公开前的 verify 有账户付款/支出限制，任务没有启动；这些失败记录仍保留。
+公开后已在原提交上重新启动真实 CI，不能再把旧账单限制当成当前必然阻塞。
+最新运行链接和剩余事项见 `docs/ROADMAP.md`；必须核对 run 的提交与结论再报告通过。
 
 ## 反向验证（L1 的判据有没有分辨力）
 

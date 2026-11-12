@@ -25,9 +25,10 @@
 //    触发者仍是"装上位的那个宿主"（begin），账本只做校验（档里的候选还是不是当前 active）：
 //    active/previous 的 activatedAt 会被 rollback 重新盖章，拿时间戳反过来推"谁是候选"会翻车。
 //  · 读不动观察档不许折成"没有档"（那等于把连败计数静默清零）：一个点名 refused，一个不动账。
-import { mkdir, open, readdir, readFile, rm, stat } from "node:fs/promises";
+import { constants } from "node:fs";
+import { mkdir, open, readdir, readFile, rename, rm, stat, type FileHandle } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
-import { writeFileAtomic } from "../../atomic-write";
+import { tmpPathFor, writeFileAtomic } from "../../atomic-write";
 import { processLiveness } from "../../process-liveness";
 import { EVIDENCE_LINE_PREFIX, LESSON_MEMORY_TYPE, LESSON_TOPIC_PREFIX, SESSION_LINE_PREFIX } from "../../agent/memory/lessons";
 import { projectMemoryDir, writeTopic } from "../../agent/memory/store";
@@ -46,6 +47,50 @@ export class CanaryRefusedError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "CanaryRefusedError";
+  }
+}
+
+type StableFile =
+  | { kind: "ok"; size: number; mtimeMs: number; nlink: number; text: string }
+  | { kind: "too-large"; size: number }
+  | { kind: "missing" | "unreadable" | "not-file" | "changed" | "symlink" };
+
+/** Read metadata and bytes through one descriptor so the size/type decision and
+ * the bytes cannot refer to different path targets. */
+async function readStableTextFile(abs: string, maxBytes = Number.MAX_SAFE_INTEGER): Promise<StableFile> {
+  let fh;
+  try {
+    fh = await open(abs, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    return { kind: code === "ENOENT" ? "missing" : code === "ELOOP" ? "symlink" : "unreadable" };
+  }
+  try {
+    const before = await fh.stat();
+    if (!before.isFile()) return { kind: "not-file" };
+    if (before.size > maxBytes) return { kind: "too-large", size: before.size };
+    const data = Buffer.allocUnsafe(before.size);
+    let offset = 0;
+    while (offset < data.length) {
+      const { bytesRead } = await fh.read(data, offset, data.length - offset, offset);
+      if (bytesRead === 0) break;
+      offset += bytesRead;
+    }
+    const after = await fh.stat();
+    if (
+      offset !== before.size ||
+      after.dev !== before.dev ||
+      after.ino !== before.ino ||
+      after.size !== before.size ||
+      after.mtimeMs !== before.mtimeMs
+    ) {
+      return { kind: "changed" };
+    }
+    return { kind: "ok", size: before.size, mtimeMs: before.mtimeMs, nlink: before.nlink, text: data.toString("utf8") };
+  } catch {
+    return { kind: "unreadable" };
+  } finally {
+    await fh.close().catch(() => undefined);
   }
 }
 
@@ -461,37 +506,93 @@ export class CanaryController {
     // tickAll 在零档时只取锁不该顺手建出那个目录（判据钉着「没有档 = 目录不存在」）。
     const lockPath = join(dir, ".canary.lock");
     await mkdir(dir, { recursive: true });
-    const acquire = async (): Promise<Awaited<ReturnType<typeof open>>> => {
-      try {
-        return await open(lockPath, "wx");
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-        const st = await stat(lockPath).catch(() => null);
-        // 锁文件被外部删掉 ⇒ 没有持锁者可言，直接重取（这一支不靠 mtime，删了就是删了）。
-        if (st === null) return await open(lockPath, "wx");
-        const text = await readFile(lockPath, "utf8").then((t) => t.trim(), () => "");
-        const holder = /^\d+$/u.test(text) ? Number(text) : Number.NaN;
-        // 探活三态：活人 ⇒ 拒；确认退出 ⇒ 直接收回，**不看时钟**（旧逻辑在这里仍要求
-        // "超过 60s"，时钟一回跳，死进程留下的锁永远读不出超时，canary 从这一秒起永远
-        // refused，而盘上没有任何东西能解开它）。不知道（空文件 / 非数字 / 其它 errno）
-        // ⇒ 退回 60s 时间兜底，不猜。
-        const liveness = processLiveness(holder);
-        if (liveness === "alive") throw new CanaryRefusedError("另一实例正在更新观察档，请稍后重试");
-        if (liveness === "unknown" && Date.now() - st.mtimeMs <= 60_000) {
-          throw new CanaryRefusedError("另一实例正在更新观察档，请稍后重试");
+    const acquire = async (): Promise<FileHandle> => {
+      for (;;) {
+        try {
+          return await open(lockPath, "wx", 0o600);
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+          // Serialize stale-lock inspection AND replacement. Without this second
+          // exclusive name, two reclaimers can each read a dead PID and the later
+          // one can delete the other's newly acquired live lock.
+          const reclaimPath = lockPath + ".reclaim";
+          let reclaim: FileHandle;
+          try {
+            reclaim = await open(reclaimPath, "wx", 0o600);
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+            throw new CanaryRefusedError("另一实例正在恢复观察档锁；若恢复进程已退出，请确认后清理 .agent/.canary.lock.reclaim");
+          }
+          let acquired: FileHandle | null = null;
+          let retry = false;
+          try {
+            await reclaim.writeFile(String(process.pid));
+            const lock = await readStableTextFile(lockPath, 1024);
+            if (lock.kind === "missing") retry = true;
+            else if (lock.kind === "symlink") {
+              throw new CanaryRefusedError("观察档锁是软链，拒绝跟随；请人工检查 .agent/.canary.lock");
+            }
+            else if (lock.kind !== "ok") {
+              throw new CanaryRefusedError("观察档锁不能形成稳定快照，请人工检查 .agent/.canary.lock");
+            } else if (lock.nlink !== 1) {
+              throw new CanaryRefusedError("观察档锁不是独立常规文件，请人工检查 .agent/.canary.lock");
+            } else {
+              const holder = Number.parseInt(lock.text.trim(), 10);
+              const released = lock.text.trim() === "released";
+              // 探活走共享实现（process-liveness.ts）：EPERM＝存在但不是我的进程 ⇒ 算活着；
+              // 坏 pid / 空正文 ⇒ unknown，退回 60s 时间兜底，不猜。
+              const liveness = processLiveness(holder);
+              if (liveness === "alive") throw new CanaryRefusedError("另一实例正在更新观察档，请稍后重试");
+              if (liveness === "unknown" && !released && Date.now() - lock.mtimeMs <= 60_000) {
+                throw new CanaryRefusedError("另一实例正在更新观察档，请稍后重试");
+              }
+              // Never write through the inspected inode. A hardlink made after
+              // inspection cannot be redirected into a victim because takeover
+              // creates a fresh inode and atomically replaces only the lock name.
+              const replacement = tmpPathFor(lockPath);
+              let next: FileHandle | undefined;
+              try {
+                next = await open(
+                  replacement,
+                  constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0),
+                  0o600,
+                );
+                await next.write(String(process.pid), 0);
+                await rename(replacement, lockPath);
+                acquired = next;
+              } catch (error) {
+                if (next !== undefined) await next.close().catch(() => undefined);
+                await rm(replacement, { force: true }).catch(() => undefined);
+                throw error;
+              }
+            }
+          } finally {
+            await reclaim.close().catch(() => undefined);
+            await rm(reclaimPath, { force: true }).catch(() => undefined);
+          }
+          if (acquired !== null) return acquired;
+          if (retry) continue;
         }
-        await rm(lockPath, { force: true }).catch(() => undefined);
-        return await open(lockPath, "wx");
       }
     };
     const fh = await acquire();
     this.lockDepth += 1;
     try {
-      try { await fh.writeFile(String(process.pid)); } finally { await fh.close().catch(() => undefined); }
+      await fh.write(String(process.pid), 0);
       return await fn();
     } finally {
       this.lockDepth -= 1;
-      await rm(lockPath, { force: true }).catch(() => undefined);
+      // Capture the inode we actually hold before closing: a replacement lock
+      // placed at the same path must survive this release.
+      const held = await fh.stat().catch(() => null);
+      await fh.write("released", 0).catch(() => undefined);
+      await fh.close().catch(() => undefined);
+      if (held !== null) {
+        const current = await stat(lockPath).catch(() => null);
+        if (current !== null && current.dev === held.dev && current.ino === held.ino) {
+          await rm(lockPath, { force: true }).catch(() => undefined);
+        }
+      }
     }
   }
 

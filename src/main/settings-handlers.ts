@@ -7,6 +7,8 @@ import {
 import { importLicenseFile, verifyLicenseFile, type LicenseImportOutcome, type LicenseState } from "./license";
 import type { BuildInfo } from "./build-info";
 import { checkUpdate, type UpdateCheckResult } from "./updater";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { SettingsStore, isPersistableProvider, type AppSettings, type ProviderKind, type SettingsLoadIssue } from "./settings";
 import { effectiveModelTable, findSpecByNameOrId } from "../providers/registry";
 import { ENV_KEYED_PROVIDERS, customEnvKeyedProviders, envKeyOf } from "../providers/env-keys";
@@ -45,6 +47,7 @@ export function setSettingsHostDeps(deps: SettingsHostDeps): void {
 }
 
 let settingsStore: SettingsStore | null = null;
+let fallbackSettingsPath: string | null = null;
 
 /** shell 启动时初始化 settings 存储（文件路径）。
  *
@@ -54,13 +57,16 @@ let settingsStore: SettingsStore | null = null;
  *  「<appData>/license.json」那一格。此前只有 initLicenseStore 这个死锚点，没有任何真实初始化路径
  *  调它，agent:state 应答里的 license 因此永远是 {state:"inactive"}。
  */
-export function initSettingsStore(filePath: string, opts: { licensePublicKey?: string } = {}): void {
-  settingsStore = new SettingsStore(filePath);
+export function initSettingsStore(filePath: string, opts: { licensePublicKey?: string; source?: "host" | "workspace" } = {}): void {
+  settingsStore = new SettingsStore(filePath, opts.source);
   initLicenseStore(join(dirname(filePath), "license.json"), { publicKey: opts.licensePublicKey });
 }
 
 export function store(): SettingsStore {
-  if (!settingsStore) settingsStore = new SettingsStore("/tmp/m1e-default-settings.json");
+  if (!settingsStore) {
+    fallbackSettingsPath ??= join(mkdtempSync(join(tmpdir(), "cairn-settings-")), "settings.json");
+    settingsStore = new SettingsStore(fallbackSettingsPath);
+  }
   return settingsStore;
 }
 

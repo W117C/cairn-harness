@@ -1,6 +1,8 @@
 // agent-runtime 域的变异配置条目（2026-10-17 从 scripts/mutate-verify.mjs 按域拆出，见 PROGRESS 第 501 页）。
 // 每条 = 一处语义突变 + 期望被它杀死的具体用例标题。追加条目时放进对应域的文件；
 // **组间顺序不影响任何判据**（每条独立），同一文件内保持原顺序以便 diff。
+import { regexSource } from "./regex-source.mjs";
+
 export const MUTATIONS = [
   // ---- 第 9 点·轮中插话（steering，2026-10-23）----
   {
@@ -100,7 +102,7 @@ export const MUTATIONS = [
     src: "src/agent/stuck.ts",
     test: "tests/tool-result-malformed.test.ts",
     desc: "观察摘要直接 .slice 信任 output 是字符串 ⇒ 工具返回 {ok:true}（缺 output）时 `undefined.slice` 抛 TypeError，**把整轮任务打死**——为一条诊断读数赔掉整轮是本末倒置",
-    apply: (s) => s.replace('  if (typeof output === "string") return output.slice(0, 200);', "  return (output as string).slice(0, 200);"),
+    apply: (s) => s.replace('  return toolOutputText(output).slice(0, 200);', "  return (output as string).slice(0, 200);"),
     expectFail: "★ 缺 output（`{ok:true}`）⇒ 不许炸整轮，且回执可读",
   },
   {
@@ -490,7 +492,10 @@ export const MUTATIONS = [
     src: "src/agent/verify.ts",
     test: "tests/verify-probe.test.ts",
     desc: "test: 判定丢掉行首锚 ⇒ Makefile 里一句注释「run test: pytest」就凭空造出验证面（跑不存在的目标）",
-    apply: (s) => s.replace("/^test[ \\t]*:/m", "/test[ \\t]*:/m"),
+    apply: (s) => s.replace(
+      regexSource("^test[ \\t]*:", "m"),
+      regexSource("test[ \\t]*:", "m"),
+    ),
     expectFail: "注释里写着「test:」不算目标（判定锚在行首，否则一句说明就凭空造出验证面）",
   },
   {
@@ -498,7 +503,7 @@ export const MUTATIONS = [
     src: "src/agent/verify.ts",
     test: "tests/verify-probe.test.ts",
     desc: "把探到的测试命令同时当 lint 用 ⇒ action-fusion 会拿「风格未整理」把干净改动报成失败",
-    apply: (s) => s.replace("if (lang.length > 0) return { config: { test: lang, timeoutMs: PROBED_LANG_TIMEOUT_MS }, source: \"probed\" };", "if (lang.length > 0) return { config: { test: lang, lint: lang, timeoutMs: PROBED_LANG_TIMEOUT_MS }, source: \"probed\" };"),
+    apply: (s) => s.replace("config.test = lang;", "config.test = lang; config.lint = lang;"),
     expectFail: "只补 test 不凭空造 lint（action-fusion 读 config.lint，造出来会把干净改动报成失败）",
   },
   {
@@ -506,7 +511,7 @@ export const MUTATIONS = [
     src: "src/agent/verify.ts",
     test: "tests/verify-probe.test.ts",
     desc: "package.json 的 scripts 不再优先 ⇒ 仓库明明配了 `vitest run` 却去跑别的 runner，验证结果与项目自己的口径脱节",
-    apply: (s) => s.replace("if (Object.keys(config).length > 0) return { config, source: \"probed\" };", "if (Object.keys(config).length > 99) return { config, source: \"probed\" };"),
+    apply: (s) => s.replace("if (Object.keys(config).length > 0) {", "if (Object.keys(config).length > 99) {"),
     expectFail: "package.json 有 test 脚本时优先，语言探测不参与（零回归）",
   },
   {
@@ -546,7 +551,7 @@ export const MUTATIONS = [
     src: "src/agent/verify.ts",
     test: "tests/verify-probe.test.ts",
     desc: "探测档沿用 npm 的 60s ⇒ 探出验证面却让它必然超时（比探不出来更坏：给出「已经验过」的错觉）",
-    apply: (s) => s.replace("if (lang.length > 0) return { config: { test: lang, timeoutMs: PROBED_LANG_TIMEOUT_MS }, source: \"probed\" };", "if (lang.length > 0) return { config: { test: lang, timeoutMs: DEFAULT_VERIFY_TIMEOUT_MS }, source: \"probed\" };"),
+    apply: (s) => s.replace("config.timeoutMs = PROBED_LANG_TIMEOUT_MS;", "config.timeoutMs = DEFAULT_VERIFY_TIMEOUT_MS;"),
     expectFail: "Cargo.toml → cargo test",
   },
   {

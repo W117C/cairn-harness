@@ -7,14 +7,19 @@
 // #100（2026-10-05 业主拍板 C2）把它加进了 .gitignore：按字节抄的原件可能带着被覆盖文件里的凭据，
 // 而外泄通道是 commit 不是 copy。**仍在的代价**说清楚：明文第二副本留在本地盘上，没有帽也没有 TTL
 // （那一半留给 #56 与帽/TTL，别把「已忽略」读成「已管住」）。判卷 tests/snapshot-dir-not-distributed.test.ts。
-import { copyFile, mkdir, stat } from "node:fs/promises";
+import { constants } from "node:fs";
+import { mkdir, open, rename, unlink, type FileHandle } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
+import { tmpPathFor } from "../atomic-write";
 import { invocations } from "../permissions/command-shape";
 import { splitCommandChain } from "../permissions/rules";
 import {
   assertNotAgentArea,
   assertNotAgentAreaReal,
   assertRealContainment,
+  assertContainedPathIdentity,
+  captureContainedPath,
+  openContainedFile,
   resolveInWorkspace,
 } from "./base.js";
 
@@ -42,18 +47,73 @@ export async function snapshotBeforeOverwrite(
   rel: string,
   callId?: string,
 ): Promise<string | null> {
+  let source: FileHandle | null = null;
+  let dest: FileHandle | null = null;
+  let tmp: string | null = null;
   try {
-    const st = await stat(abs).catch(() => null);
-    if (st === null || !st.isFile() || st.size === 0) return null;
+    const opened = await openContainedFile(workspace, abs, "snapshot-before-overwrite");
+    source = opened.fh;
+    if (!opened.stat.isFile() || opened.stat.size === 0) return null;
+    const size = opened.stat.size;
     const id = snapshotIdOf(rel, callId);
     const target = join(workspace, id);
     await mkdir(dirname(target), { recursive: true });
-    // copyFile 保留 mtime ⇒ 原件的时间信息也在，不用另存一份元数据。
-    await copyFile(abs, target);
+    const parentAbs = dirname(target);
+    const parentIdentity = await captureContainedPath(workspace, parentAbs, "snapshot-before-overwrite");
+    const guard = (): Promise<void> => assertContainedPathIdentity(
+      workspace,
+      parentAbs,
+      "snapshot-before-overwrite",
+      parentIdentity,
+    );
+    await guard();
+
+    tmp = tmpPathFor(target);
+    dest = await open(
+      tmp,
+      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0),
+      0o666,
+    );
+    const chunk = Buffer.allocUnsafe(Math.min(1024 * 1024, size));
+    let copied = 0;
+    while (copied < size) {
+      const want = Math.min(chunk.length, size - copied);
+      const read = await opened.fh.read(chunk, 0, want, copied);
+      if (read.bytesRead === 0) {
+        throw new Error(`source ended after ${String(copied)} of ${String(size)} bytes`);
+      }
+      let written = 0;
+      while (written < read.bytesRead) {
+        const write = await dest.write(chunk, written, read.bytesRead - written, copied + written);
+        if (write.bytesWritten === 0) throw new Error("snapshot destination accepted zero bytes");
+        written += write.bytesWritten;
+      }
+      copied += read.bytesRead;
+    }
+
+    const after = await opened.fh.stat();
+    if (
+      after.dev !== opened.stat.dev ||
+      after.ino !== opened.stat.ino ||
+      after.size !== opened.stat.size ||
+      after.mtimeMs !== opened.stat.mtimeMs ||
+      after.ctimeMs !== opened.stat.ctimeMs
+    ) {
+      throw new Error("source changed while the snapshot was being copied");
+    }
+    await dest.close();
+    dest = null;
+    await guard();
+    await rename(tmp, target);
+    tmp = null;
     return id;
   } catch (err) {
     console.warn("[snapshot] 覆盖前快照失败（写入照常进行）:", err instanceof Error ? err.message : String(err));
     return null;
+  } finally {
+    await dest?.close().catch(() => undefined);
+    await source?.close().catch(() => undefined);
+    if (tmp !== null) await unlink(tmp).catch(() => undefined);
   }
 }
 
@@ -94,7 +154,7 @@ const NOT_A_FILE_TARGET = /^&[-=\d]|^[>(=]/;
  *  原件 ⇒ 只能点名。方向要说清：文件名里**真带**这些字符（`v$2.txt`、`a{b}.txt`）会被一并判成
  *  认不出 ⇒ 代价是少拍一份快照 + 一行噪音，而不是静默丢掉回滚。圆括号不在表里：未加引号的 `(`
  *  在 bash 里是语法不是文件名，能活着进到 token 里的都是字面名（`(1)`）。 */
-const UNEXPANDED_TARGET = /[`${*?{}]/;
+const UNEXPANDED_TARGET = /[`${*?}]/;
 /** `/dev/**`：丢弃位与块设备，没有「文件原件」这个概念（风险层那条 `(?!&|/dev/null)` 同口径）。 */
 const DISCARD_TARGET = /^\/dev\//;
 
@@ -167,8 +227,9 @@ export async function snapshotShellRedirects(
     }
     // 区外那两条已经 continue 出去了；剩下的是「工作区内的软链落进 .agent/」——同一道地板，照旧拒。
     await assertNotAgentAreaReal(workspace, abs, "run_shell");
-    const st = await stat(abs).catch(() => null);
-    if (st === null) continue;        // 新建 ⇒ 与 write_file 同口径：没有原件可保，不拍也不出声
+    const inspected = await captureContainedPath(workspace, abs, "run_shell").catch(() => null);
+    if (inspected === null) continue; // 新建 ⇒ 与 write_file 同口径：没有原件可保，不拍也不出声
+    const st = inspected.stat;
     if (st.isDirectory()) continue;   // 目标是目录 ⇒ bash 自己会失败，不存在「覆写原件」这一格
     if (!st.isFile()) {               // 设备／FIFO／socket：写它不是「改一个可回滚的文件」，但得说清
       unsnapped.push(`"${raw}"：这条重定向没拍快照（目标不是普通文件，没有「覆盖前原件」这个概念）`);

@@ -17,7 +17,6 @@ import {
   deleteTopic,
   initMemoryHome,
   parseTopicDoc,
-  recentDecisionEntries,
   renderTopicDoc,
 } from "../src/agent/memory/store";
 import { buildMemoryInjection, extractExternalRefs, flushRecallHits } from "../src/agent/memory/inject";
@@ -25,7 +24,6 @@ import { consolidateMemoryDir, consolidationDigest } from "../src/agent/memory/c
 import { readStats, writeStats } from "../src/agent/memory/store";
 import { escapeControlTags } from "../src/agent/control-tags";
 import { runSessionEndDistill } from "../src/agent/memory/distill";
-import { createGatedRemember } from "../src/main/agent-runner";
 import { AskGate } from "../src/main/ask-gate";
 import { composeTurnMessages } from "../src/agent/session-provider";
 import { projectContext } from "../src/agent/context";

@@ -113,6 +113,8 @@ export function verifySurfaceFingerprint(config: VerifyConfig, provenance: Verif
     lint: config.lint ?? [],
     test: config.test ?? [],
     timeoutMs: config.timeoutMs ?? null,
+    packageScriptsDigest: config.packageScriptsDigest,
+    makefilesDigest: config.makefilesDigest,
   });
   return createHash("sha256").update(surface).digest("hex").slice(0, 32);
 }

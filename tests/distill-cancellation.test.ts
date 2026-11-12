@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -52,8 +52,9 @@ async function setup(failures = 1) {
   vi.resetModules();
   const dir = await mkdtemp(join(tmpdir(), "distill-cancellation-"));
   temporaryDirs.push(dir);
-  const workspace = join(dir, "workspace");
-  await mkdir(workspace);
+  const workspacePath = join(dir, "workspace");
+  await mkdir(workspacePath);
+  const workspace = await realpath(workspacePath);
   vi.stubEnv("M2D_MEMORY_HOME", join(dir, "memory-home"));
   vi.stubEnv("DSH_APPDATA", join(dir, "appdata"));
   vi.stubEnv("M2E_USER_PLUGINS", join(dir, "plugins"));

@@ -1,0 +1,10 @@
+✓ node：Node v24.19.0（engines >=20.11.0 <25）
+✓ keys：缺省将拨 glm（CAIRN_API_KEY 在位）；未设：OPENAI_API_KEY ANTHROPIC_API_KEY GEMINI_API_KEY DEEPSEEK_API_KEY
+✓ tiers：模型档位表 14 条（cheap 5 / standard 4 / strong 5）
+✓ sandbox：沙箱可用
+✓ workspace：工作区可写
+✓ settings：设置文件可读
+✓ sessions：还没有会话（会话目录未建）
+✓ search：search.endpoint 未配（web_search 不可用；这是可选项）
+✓ trust：插件数据根 /Users/ze/.config/cairn/plugin-data（取址来自用户级缺省落点，权限 0755），信任表 已信任 7 条／已拒绝 0 条
+总档：就绪

@@ -36,3 +36,10 @@ export const SENSITIVE_PATH_SEGMENTS: readonly string[] = [
 export const SENSITIVE_SCAN_ROOTS: readonly string[] = [
   ...new Set(SENSITIVE_PATH_SEGMENTS.filter((s) => s.includes("/")).map((s) => s.split("/")[0]!)),
 ];
+
+/** For actual file names, keep the whole path; it can contain whitespace. */
+export function isSensitivePath(path: string, scan = false): boolean {
+  const normalized = path.replace(/\\/g, "/").toLowerCase();
+  return SENSITIVE_PATH_SEGMENTS.some((segment) => normalized.includes(segment))
+    || (scan && normalized.split("/").some((segment) => SENSITIVE_SCAN_ROOTS.includes(segment)));
+}

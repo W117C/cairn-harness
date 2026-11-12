@@ -3,7 +3,7 @@
 // ② read_file 超大文件只读前缀且显式声明（不再整读进内存）
 // ③ prune 附件名清洗（模型可控 callId 不能越出附件目录）+ 预建索引与原判定路径等价
 // ④ verify 钩子抛错记为「一次验证失败」，不炸整轮任务
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -92,6 +92,19 @@ describe("prune：附件名清洗与索引等价", () => {
     expect(resolve(dir, names[0]!).startsWith(resolve(dir) + "/")).toBe(true);
     // 命名口径在 computePrune / writePruneAttachments / attachmentPathFor 三处一致
     expect(await readFile(attachmentPathFor(dir, "s1", evil), "utf8")).toBe("Z".repeat(120 * KB));
+  });
+
+  it("附件位置预置软链时拒绝跟随，链接目标保持原样", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "edge-prune-link-"));
+    const victim = join(dir, "victim.txt");
+    await writeFile(victim, "original", "utf8");
+    const evil = "../../../../tmp/evil";
+    const events = threeRounds(evil);
+    const outcome = computePrune({ events, attachmentsDir: dir, sessionId: "s1" });
+    await symlink(victim, attachmentPathFor(dir, "s1", evil));
+    await writePruneAttachments(events, outcome, dir, "s1");
+    expect(await readFile(victim, "utf8")).toBe("original");
+    await rm(dir, { recursive: true, force: true });
   });
 
   it("预建索引路径与原就地判定路径逐位等价（O(n) 优化不改变语义）", () => {

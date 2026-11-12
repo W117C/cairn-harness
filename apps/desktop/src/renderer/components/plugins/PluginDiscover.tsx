@@ -109,7 +109,24 @@ export function PluginDiscover(props: PluginDiscoverProps): React.JSX.Element {
   const catalog = props.state.catalog;
   const entries = catalog.catalog?.entries ?? [];
   const stale = catalog.origin === "cache" || catalog.stale;
+  // React #310 防回归（2026-11-13）：hooks 必须先于下面三个条件早退——loading→ready 翻转时
+  // hooks 数量曾变过，真实 app 插件屏整屏崩进错误边界（design-audit 23-plugins 起 15 miss/13 dup）。
+  // 判据：plugin-discover-index 的源序钉。
   const [uninstall, setUninstall] = useState<PluginRowView | null>(null);
+  const catalogData = catalog.catalog;
+  const rowById = useMemo(() => new Map(props.rows.map((row) => [row.id, row] as const)), [props.rows]);
+  const { shelfRows, remaining } = useMemo(() => {
+    const shelfRows = new Map<string, readonly PluginRowView[]>();
+    const consumed = new Set<string>();
+    for (const shelf of catalogData?.shelves ?? []) {
+      const rows = shelf.entryIds
+        .map((id) => rowById.get(id))
+        .filter((row): row is PluginRowView => row !== undefined);
+      for (const row of rows) consumed.add(row.id);
+      shelfRows.set(shelf.id, rows);
+    }
+    return { shelfRows, remaining: props.rows.filter((row) => !consumed.has(row.id)) };
+  }, [catalogData, rowById, props.rows]);
   const renderRow = (row: PluginRowView): React.JSX.Element => (
     <DiscoverRow
       key={row.id}
@@ -154,24 +171,7 @@ export function PluginDiscover(props: PluginDiscoverProps): React.JSX.Element {
     );
   }
 
-  // 第 1105 页：目录 shelf 的 entryIds 原先逐 id 扫 props.rows（O(entries×rows)）；
-  // 一次 Map 建索引，shelf 渲染 O(entries)。插件 id 唯一，Map 与 find 同语义。
-  // 第 1159 页：shelf 索引/已消费集合/剩余行按 rows 与 catalog 记忆；展开确认等局部状态不重建。
-  const catalogData = catalog.catalog;
-  const rowById = useMemo(() => new Map(props.rows.map((row) => [row.id, row] as const)), [props.rows]);
-  const { shelfRows, remaining } = useMemo(() => {
-    const shelfRows = new Map<string, readonly PluginRowView[]>();
-    const consumed = new Set<string>();
-    for (const shelf of catalogData.shelves) {
-      const rows = shelf.entryIds
-        .map((id) => rowById.get(id))
-        .filter((row): row is PluginRowView => row !== undefined);
-      for (const row of rows) consumed.add(row.id);
-      shelfRows.set(shelf.id, rows);
-    }
-    return { shelfRows, remaining: props.rows.filter((row) => !consumed.has(row.id)) };
-  }, [catalogData, rowById, props.rows]);
-
+  // 第 1105/1159 页的 shelf 索引逻辑已整体上移到 hooks 区（React #310 修复，见组件顶部注释）。
   return (
     <section className="plugin-discover" data-catalog-state={stale ? "stale" : "live"}>
       {stale && (

@@ -1,4 +1,4 @@
-import { appendFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -9,6 +9,24 @@ let dir: string;
 afterEach(async () => { if (dir) await rm(dir, { recursive: true, force: true }); });
 
 describe("事件流", () => {
+  it("增量重放只读：不创建缺失日志，也不修改现有日志", async () => {
+    dir = await mkdtemp(join(tmpdir(), "cairn-events-readonly-"));
+    const logPath = join(dir, "events.jsonl");
+    expect(await replayIncremental(logPath)).toEqual([]);
+    await expect(readFile(logPath)).rejects.toMatchObject({ code: "ENOENT" });
+    const bytes = JSON.stringify({ type: "user_message", content: "preserve", ts: 1 }) + "\n";
+    await writeFile(logPath, bytes);
+    expect(await replayIncremental(logPath)).toHaveLength(1);
+    expect(await readFile(logPath, "utf8")).toBe(bytes);
+  });
+  it("增量重放拒绝最终组件软链，不跟随到目标文件", async () => {
+    dir = await mkdtemp(join(tmpdir(), "cairn-events-symlink-"));
+    const target = join(dir, "target.jsonl");
+    const link = join(dir, "events.jsonl");
+    await writeFile(target, JSON.stringify({ type: "user_message", content: "target" }) + "\n");
+    await symlink(target, link);
+    await expect(replayIncremental(link)).rejects.toThrow(/软链/);
+  });
   it("写 3 条 → replay 回 3 条且顺序一致", async () => {
     dir = await mkdtemp(join(tmpdir(), "cairn-events-"));
     const logPath = join(dir, "events.jsonl");

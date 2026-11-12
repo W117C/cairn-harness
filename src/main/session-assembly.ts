@@ -13,7 +13,6 @@
 // 本模块**不反向依赖装配根**（同 state-handlers / scheduler-runtime 那一族）：四处模块级活状态
 // 按回调注入。
 import { existsSync } from "node:fs";
-import { projectAgentPath } from "../app-data";
 import { extractTaskPaths } from "../agent/evolve/task-context";
 import { affectedFilesOf, buildImpact } from "../agent/impact/index.js";
 import { scanStreamEvent } from "../agent/worker-projection";
@@ -21,8 +20,7 @@ import { Orchestrator, type OrchestratorOptions } from "../agent/orchestrator";
 import { recoveryParentMode } from "../agent/recovery";
 import type { VerifyTrustResolver } from "../agent/verify-trust";
 import { createEventLog, replay, type AgentEvent } from "../events";
-import { loadPermissionRules } from "../permissions";
-import { globalPermissionsPath } from "../permissions/rules";
+import { loadWorkspacePermissionRules } from "../permissions";
 import { resolveSafeMode } from "./compact-and-report";
 import { experienceSignalNudge } from "./evolve/experience-nudge";
 import { baselineEvolutionNote } from "./evolve/runtime";
@@ -55,7 +53,7 @@ export interface SessionAssemblyDeps {
   /** 「最近一次 run 的日志路径」（装配根的可变状态，活读）。 */
   lastLogPath: () => string | null;
   /** 事件推送（装配根 `hooks.onEvent` 的活读；装配根那份解包成同一个口）。 */
-  onEvent: (e: AgentEvent) => void;
+  onEvent: (e: AgentEvent, logPath?: string) => void;
   /** 沙箱自检结果（装配根的可变状态，活读）。 */
   sandboxState: () => SandboxStatus;
   orchestratorExtras: OrchestratorExtras;
@@ -105,7 +103,7 @@ export async function buildSessionOrchestrator(a: {
   parentMode: OrchestratorOptions["parentMode"];
   emit: OrchestratorOptions["emit"];
   sandbox: SandboxStatus | null;
-  rules: ReturnType<typeof loadPermissionRules>;
+  rules: ReturnType<typeof loadWorkspacePermissionRules>;
   modelFor?: OrchestratorOptions["modelFor"];
   /** 本 run 已解析的模型选择（逐请求指定的档位在这里）；缺省 = 按 env + 设置盘现算（同一把纯函数）。 */
   runModel?: MainModelSelection;
@@ -218,10 +216,10 @@ async function buildRecoveredOrchestrator(logPath: string): Promise<Orchestrator
     parentMode: recoveryParentMode(await replay(logPath).catch(() => []), (await store().get()).mode),
     emit: async (e: AgentEvent) => {
       await log.append(e);
-      D().onEvent(e);
+      D().onEvent(e, logPath);
     },
     sandbox: D().sandboxState(),
-    rules: loadPermissionRules(projectAgentPath(workspace, "permissions.json"), globalPermissionsPath()),
+    rules: loadWorkspacePermissionRules(workspace),
   
   });
   D().setActiveOrchestrator(orch);

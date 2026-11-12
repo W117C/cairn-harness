@@ -1,48 +1,42 @@
 # Cairn / DSH —— 现态
 
-rev: be41e26b
+rev: 21d47ec9
 
-核对日期 2026-11-13（Asia/Shanghai）。`rev` 是开发线现役基线：第 1041–1181 页多会话在飞工作已随
-`be41e26b` 入库。仓库与分支入口见[仓库状态与分支](docs/REPOSITORY-STATUS.md)；测量与历史证据在
-`outputs/`、`PROGRESS.md` 与 `archive/`，本页只写状态与下一步。
+核对日期 2026-11-12（Asia/Shanghai）。`rev` 指本地集成的代码基线。分支、GitHub CI
+与清理状态见[仓库状态与分支](docs/REPOSITORY-STATUS.md)，历史证据见 `PROGRESS.md` 与 `outputs/`。
 
 ## 当前工作
 
-- **入库**：主工作树 414 个脏路径（290 修改＋124 新增）随 `be41e26b` 一次性入库，工作树归零。
-  入库前本机现跑（`--maxWorkers=2`）：core 665 文件 / 8052 条全绿、desktop 384 文件 / 2481 条全绿，
-  均 exit 0；根 typecheck 0。台账页 1041–1181 维持各会话原文随页入库，不背书各页判卷结论。
-- **集成**：开发线已合入本地集成入口 `integration/security-closure-20261112`（`2f7aa8de`，5 处冲突
-  手工解完：prune 两侧互补取并、risk 取整段补丁 token、变异锚取新形状；`21d47ec9` 修自动合并复活的
-  profile 老写法）。集成 tip 现跑：desktop 385 文件 / 2489 条全绿、docs-check 全绿；core 见读数表。
-- **公开线**：AGPL 公开 `main` 已推 `6fb20860`（宿主联网免批贯通的公开移植，红绿独立取证；
-  verify/CodeQL Actions 以该提交为准）。内测历史不入公开远端，集成线只在本地。
-- **清理**：7 个工作树＋18 支分支删除，tip 均逐一验证已在集成线或公开 main 内保全；
-  2 支在飞工作先行 rescue 快照（`rescue/wip-zcode-resume-20261110`、`rescue/wip-stream-perf-styles-20261109`，
-  未经判卷）。
+- `integration/security-closure-20261112` 是本地集成入口。`a404c825` 汇入开发线已提交的桌面变更
+  与权限修复，`c0a227ad` 补入离线评估证据校验，`a7a1a03c` 贯通宿主联网免批（评审遗留 F4），
+  `2f7aa8de` 并入开发线第 1041–1181 页在飞工作（`be41e26b`），`21d47ec9` 修自动合并复活的老写法
+  （profile-cleanup 判卷逮住）。主工作树的未提交改动保留在各自工作树。
+- GitHub `main` 是 AGPL 公开主线，`6fb20860` 移植宿主联网免批贯通（F4 公开移植，红绿独立取证：
+  gate-audit 先红 1/42 后绿 43/43、core 646 文件 / 7346 条全绿、tsc 0）。内测开发历史保留在本地集成线。
+- 集成判据在 tip `21d47ec9` 现跑：desktop 385 文件 / 2489 条全绿（exit 0）、根 typecheck 0、
+  `docs-check` 全绿、desktop build 绿；core 全量见[读数表](docs/REPOSITORY-STATUS.md)（8104 条全绿）。
+  F4 修复本体另有红绿证明：gate-audit 两格先红后绿（43/43）＋相邻权限面 136/136。
+- 历史证据已按[归档记录](docs/history-evidence-migration.md)做过解包和哈希回读。原始材料继续保留。
 
 ## 代码入口
 
-- core 在 `src/`，应用服务在 electron-free 的 `src/main/`；desktop 在 `apps/desktop/`，依赖方向与 IPC 规则见 `AGENTS.md`。
-- 桌面视觉契约在 `apps/desktop/design/desktop-design-spec.md`；符号和稳定契约见 [CODE-WIKI](docs/CODE-WIKI.md)；功能使用见 `README.md`。
+- 核心在 `src/`，应用服务在 `src/main/`，桌面在 `apps/desktop/`。依赖方向与 IPC 规则见 `AGENTS.md`。
+- 桌面视觉契约见 `apps/desktop/design/desktop-design-spec.md`，稳定符号见 [CODE-WIKI](docs/CODE-WIKI.md)，
+  启动与使用说明见 `README.md`。
 
-## 未决（待业主裁，登记不动）
+## 未决
 
-- 权限规则链最长前缀：同一命令段内更长的本机 allow 盖过更短的项目 ask/deny，是否改为项目限制优先
-  （2026-11-12 评审遗留 F5，设计裁决）。
-- 显式配置的插件信任表文件（`M2E_TRUST_FILE`）可落项目控制目录：真边界、低危，fail-loud 修法需迁移
-  多个测试夹具，随下一批安全批次。
-- 助手行 fluid stop 的作用层级（第 862 页裁决是否反转）；设置页分段控件选中态强调色边界（第 910 页）。
-- 内测许可和第三方素材外部分发权限需在发版前单独确认。
+- 权限规则链按最长前缀匹配：同一命令段内，更长的本机授权 allow 会盖过更短的项目 ask/deny。是否改为
+  项目限制优先属设计裁决（2026-11-12 评审遗留 F5，源码注释记着现行约定），登记不动。
+- 显式配置的插件信任表文件（`M2E_TRUST_FILE`）可落在项目控制目录内：真边界、低危——生产路径由主机
+  装配面给出，缺口需主机误配置才成立；fail-loud 修法需迁移多个测试夹具，登记不动、修法随下一批安全批次。
+- 助手行目前对整行使用 fluid stop，代码块、表格与交付卡右缘内缩。是否调整第 862 页的四段同右缘裁决仍待确认。
+- 设置页分段控件选中态的强调色边界见第 910 页。
+- 内测许可和第三方素材外部分发权限仍需在发版前单独确认。
 
 ## 下一步
 
-- 冻结评测入口的 shell 写边界、真实模型验收、跨机器桌面预览（见 [ROADMAP](docs/ROADMAP.md) 待办表）。
-- 需审计的独有内容分支 5 支（`chore/deps-*20261109` ×3、`chore/remove-internal-python`、
-  `chore/public-repo-audit-20261108`、`fix/evolve-offline-evidence-20261109`）与 `rescue/*` 快照
-  逐支核对后裁去留。
-
-## 验证与交付边界
-
-- 本页读数覆盖开发线工作树与集成 tip 现跑；`pnpm gates` / `head-cert-check` / `mutate-verify`
-  量提交，按需另批。
-- 离屏假 API 截图与几何读数证明版式与状态属性；真机观感（字体渲染、拖拽、Radix 菜单手感）归业主目验。
+- `a7a1a03c` 的公开线移植（公开 main 的同一守卫缺口仍在 `750913ef` 上）按公开仓库门禁另批处理。
+- 按[路线图](docs/ROADMAP.md)继续处理冻结评测入口的 shell 写边界、真实模型验收和跨机器预览。
+  预览验证步骤见[桌面预览](docs/desktop-preview.md)。
+- 待确认本地清理清单后移除冗余引用与已经归档的工作树。测试与发布证据按对应提交复核，门禁读数见 `pnpm facts`。

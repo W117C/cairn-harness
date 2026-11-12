@@ -1,7 +1,22 @@
-import { mkdir, readFile, stat } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { writeFileAtomic } from "../atomic-write.js";
-import { appendImpact, assertNotAgentArea, assertNotAgentAreaReal, assertNotFrozenReal, assertNotSensitivePathReal, assertRealContainment, resolveInWorkspace, resolveWriteTarget, type Tool, type ToolResult } from "./base.js";
+import {
+  appendImpact,
+  assertContainedPathIdentity,
+  assertNotAgentArea,
+  assertNotAgentAreaReal,
+  assertNotFrozenReal,
+  assertNotSensitivePathReal,
+  assertRealContainment,
+  assertWritablePath,
+  captureContainedPath,
+  openContainedFile,
+  resolveInWorkspace,
+  resolveWriteTarget,
+  type Tool,
+  type ToolResult,
+} from "./base.js";
 import { snapshotBeforeOverwrite, snapshotNote } from "./snapshot.js";
 import { collectDiagnostics } from "./lsp.js";
 import { contentLines, isNearCopyRewrite, lineDelta } from "./line-delta.js";
@@ -53,22 +68,37 @@ export const write_file: Tool = {
     let oldText: string | null = null;
     let existed: boolean | null = null;
     let existingMode: number | undefined;
+    let deltaHandle;
     try {
-      const st = await stat(targetAbs);
+      const opened = await openContainedFile(ctx.workspace, targetAbs, "write_file");
+      const { fh, stat: st } = opened;
+      deltaHandle = fh;
+      if (!st.isFile()) throw Object.assign(new Error("write_file: target is not a regular file"), { code: "EINVAL" });
       existed = true;
       existingMode = st.mode & 0o777;
-      oldText = st.size <= DELTA_READ_LIMIT_BYTES ? await readFile(targetAbs, "utf8") : null;
+      oldText = st.size <= DELTA_READ_LIMIT_BYTES ? await fh.readFile("utf8") : null;
     } catch (error) {
       // ENOENT 是可证明的新建；其它 stat 失败只能标 unknown，不能把“看不见”说成“新建”。
       existed = (error as NodeJS.ErrnoException).code === "ENOENT" ? false : null;
       oldText = existed === false ? "" : null;
+    } finally {
+      await deltaHandle?.close().catch(() => undefined);
     }
     await mkdir(dirname(targetAbs), { recursive: true });
+    const parentAbs = dirname(targetAbs);
+    const parentIdentity = await captureContainedPath(ctx.workspace, parentAbs, "write_file");
+    const guard = async (): Promise<void> => {
+      await assertContainedPathIdentity(ctx.workspace, parentAbs, "write_file", parentIdentity);
+      await assertWritablePath(ctx.workspace, targetAbs, "write_file");
+    };
     // D7：覆盖已有文件前先把原件抄进 .agent/snapshots/（新建文件不占快照；失败不改写盘结果）。
     const snapshotId = ctx.snapshot === false ? null : await snapshotBeforeOverwrite(ctx.workspace, targetAbs, rel, ctx.callId);
     // 原子写：先写临时文件再 rename。直接 writeFile 是 O_TRUNC 后写，ENOSPC/EFBIG 或被硬杀
     // 会留下空文件/半截文件（原内容已截掉）；这里保留原模式（0755 不会被换成 0644）。
-    await writeFileAtomic(targetAbs, content, existingMode !== undefined ? { mode: existingMode } : {});
+    await writeFileAtomic(targetAbs, content, {
+      ...(existingMode !== undefined ? { mode: existingMode } : {}),
+      guard,
+    });
     let summary = `已写入 ${rel}（${bytes} 字节）`;
     if (oldText !== null) {
       const d = lineDelta(oldText, content);

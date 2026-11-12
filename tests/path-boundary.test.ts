@@ -2,7 +2,7 @@
 //   路径边界从「词法 resolve/relative」升级为「realpath 归属校验」——工作区内软链指向
 //   外部的读写必须被拒；.agent/ 系统区对内容工具整体拒写；插件 manifest 路径覆盖不得
 //   越出插件根。否定式验证锚点：摘除断言调用后本文件必须变红。
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,6 +16,7 @@ import { glob } from "../src/tools/glob";
 import { lsp } from "../src/tools/lsp";
 import { parsePluginManifest, PluginLoadError } from "../src/agent/plugins/manifest";
 import type { ToolContext } from "../src/tools";
+import { assertContainedPathIdentity, captureContainedPath } from "../src/tools/base";
 
 let ws = "";
 afterEach(async () => { if (ws) await rm(ws, { recursive: true, force: true }); });
@@ -26,6 +27,19 @@ async function newCtx(): Promise<ToolContext> {
 }
 
 describe("工具路径边界 · realpath 归属校验（C-2/C-3）", () => {
+  it("写前身份守卫能发现祖先目录被换成界外软链", async () => {
+    const ctx = await newCtx();
+    const outside = await mkdtemp(join(tmpdir(), "h2-outside-"));
+    const slot = join(ws, "slot");
+    await mkdir(slot);
+    const before = await captureContainedPath(ctx.workspace, slot, "test");
+    await rename(slot, join(ws, "slot-original"));
+    await symlink(outside, slot);
+    await expect(assertContainedPathIdentity(ctx.workspace, slot, "test", before))
+      .rejects.toThrow(/越出 workspace|路径在写入前发生变化/);
+    await rm(outside, { recursive: true, force: true });
+  });
+
   it("工作区内软链指向外部：write_file 拒绝（旧实现会穿透写入外部文件）", async () => {
     const ctx = await newCtx();
     const outside = await mkdtemp(join(tmpdir(), "h2-outside-"));

@@ -1,8 +1,9 @@
-import { lstat, readlink, realpath } from "node:fs/promises";
+import { constants } from "node:fs";
+import { lstat, open, readlink, realpath, stat, type FileHandle } from "node:fs/promises";
 import type { Stats } from "node:fs";
 import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { frozenJudgePathSet } from "../frozen";
-import { SENSITIVE_PATH_SEGMENTS } from "../sensitive-paths";
+import { isSensitivePath, SENSITIVE_PATH_SEGMENTS } from "../sensitive-paths";
 import type { AgentEvent, ClarifyAnswerMap, HarnessHoldReason, ImpactReportEvent } from "../events";
 
 /** 工具可预期失败的统一错误类型：loop 捕获后转成 ok:false 的 tool_result。 */
@@ -185,7 +186,7 @@ async function lstatOrNull(p: string): Promise<Stats | null> {
  * 父目录在界内，真实落点却在界外，门就这么放行了。lstat 对软链本身成功且不跟随，
  * 正好分得开「不存在」（退回接余段）与「是软链」（readlink 后从落点重走）。
  */
-async function resolveDeepest(abs: string, label: string): Promise<string> {
+export async function resolveDeepest(abs: string, label: string): Promise<string> {
   const root = parse(abs).root;
   const pending = abs.slice(root.length).split(sep).filter((s) => s.length > 0);
   let cur = root;
@@ -209,17 +210,157 @@ async function resolveDeepest(abs: string, label: string): Promise<string> {
   return cur;
 }
 
-export async function assertRealContainment(workspace: string, abs: string, label: string): Promise<void> {
+async function containedPath(workspace: string, abs: string, label: string) {
   let wsReal: string;
   try {
     wsReal = await realpath(workspace);
   } catch {
     throw new ToolError(`${label}: workspace 不可解析: ${workspace}`);
   }
-  const relBack = relative(wsReal, await resolveDeepest(abs, label));
+  const real = await resolveDeepest(abs, label);
+  const relBack = relative(wsReal, real);
   if (relBack !== "" && (relBack.startsWith("..") || isAbsolute(relBack))) {
     throw new ToolError(`${label}: 路径经软链解析后越出 workspace 边界: ${abs}`);
   }
+  return { workspace: wsReal, abs: real, rel: relBack };
+}
+
+export async function assertRealContainment(workspace: string, abs: string, label: string): Promise<string> {
+  return (await containedPath(workspace, abs, label)).abs;
+}
+
+/** 使用校验过的目标。敏感落点必须以真实路径提交，让权限层能按该路径审批。 */
+export async function resolveWorkspaceReadPath(workspace: string, abs: string, label: string, recursive = false) {
+  const landed = await containedPath(workspace, abs, label);
+  if (relative(resolve(workspace), abs) !== landed.rel && isSensitivePath(landed.rel, recursive)) {
+    throw new ToolError(`${label}: 敏感路径不能通过别名访问，请使用真实相对路径 ${landed.rel}`);
+  }
+  return landed;
+}
+
+export interface ContainedOpen {
+  fh: FileHandle;
+  path: string;
+  stat: Stats;
+}
+
+function sameFileIdentity(a: Stats, b: Stats): boolean {
+  return a.dev === b.dev && a.ino === b.ino;
+}
+
+function assertRealPathWithin(workspaceReal: string, candidateReal: string, abs: string, label: string): void {
+  const relBack = relative(workspaceReal, candidateReal);
+  if (relBack !== "" && (relBack.startsWith("..") || isAbsolute(relBack))) {
+    throw new ToolError(`${label}: 路径经软链解析后越出 workspace 边界: ${abs}`);
+  }
+}
+
+/**
+ * Open a workspace path and prove that the opened inode is still the inode
+ * currently named by the canonical path. O_NOFOLLOW protects the final
+ * component; the realpath + inode recheck narrows the ancestor-directory
+ * check-to-use window that Node cannot close without openat(2).
+ */
+export async function openContainedFile(
+  workspace: string,
+  abs: string,
+  label: string,
+  flags = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0),
+): Promise<ContainedOpen> {
+  const target = await assertRealContainment(workspace, abs, label);
+  let fh: FileHandle | undefined;
+  try {
+    fh = await open(target, flags | (constants.O_NOFOLLOW ?? 0));
+    const opened = await fh.stat();
+    const workspaceReal = await realpath(workspace);
+    const requestedReal = await realpath(abs);
+    const targetReal = await realpath(target);
+    assertRealPathWithin(workspaceReal, requestedReal, abs, label);
+    assertRealPathWithin(workspaceReal, targetReal, abs, label);
+    const requestedStat = await stat(requestedReal);
+    const targetStat = await stat(targetReal);
+    if (!sameFileIdentity(opened, requestedStat) || !sameFileIdentity(opened, targetStat)) {
+      throw new ToolError(`${label}: 路径在打开与复核之间发生变化，拒绝使用不可信句柄: ${abs}`);
+    }
+    return { fh, path: targetReal, stat: opened };
+  } catch (error) {
+    await fh?.close().catch(() => undefined);
+    if (error instanceof ToolError) throw error;
+    const wrapped = new ToolError(`${label}: 路径无法安全打开: ${abs}`);
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== undefined) Object.assign(wrapped, { code });
+    throw wrapped;
+  }
+}
+
+/** Open an already-approved path outside the workspace and bind the handle to
+ * the named inode. The grant decision belongs to resolveReadTarget; this only
+ * makes sure the bytes come from the file that was approved. */
+export async function openVerifiedFile(abs: string, label: string): Promise<ContainedOpen> {
+  let fh: FileHandle | undefined;
+  let target: string;
+  try {
+    target = await realpath(abs);
+  } catch {
+    throw new ToolError(`${label}: 路径不存在或不可解析: ${abs}`);
+  }
+  try {
+    fh = await open(target, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
+    const opened = await fh.stat();
+    const named = await stat(target);
+    if (!sameFileIdentity(opened, named)) {
+      throw new ToolError(`${label}: 路径在打开与复核之间发生变化，拒绝使用不可信句柄: ${abs}`);
+    }
+    return { fh, path: target, stat: opened };
+  } catch (error) {
+    await fh?.close().catch(() => undefined);
+    if (error instanceof ToolError) throw error;
+    const wrapped = new ToolError(`${label}: 路径无法安全打开: ${abs}`);
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== undefined) Object.assign(wrapped, { code });
+    throw wrapped;
+  }
+}
+
+export interface ContainedPathIdentity {
+  path: string;
+  stat: Stats;
+}
+
+/** Capture an existing contained path's inode, then recheck it around a
+ * write. This catches an ancestor directory being swapped between checks
+ * and the atomic rename. */
+export async function captureContainedPath(
+  workspace: string,
+  abs: string,
+  label: string,
+): Promise<ContainedPathIdentity> {
+  const target = await assertRealContainment(workspace, abs, label);
+  const targetStat = await stat(target);
+  const workspaceReal = await realpath(workspace);
+  assertRealPathWithin(workspaceReal, target, abs, label);
+  return { path: target, stat: targetStat };
+}
+
+export async function assertContainedPathIdentity(
+  workspace: string,
+  abs: string,
+  label: string,
+  expected: ContainedPathIdentity,
+): Promise<void> {
+  const current = await captureContainedPath(workspace, abs, label);
+  if (!sameFileIdentity(expected.stat, current.stat)) {
+    throw new ToolError(`${label}: 路径在写入前发生变化，拒绝继续: ${abs}`);
+  }
+}
+
+/** Recheck every write policy at the use boundary, after any directory creation
+ * or snapshot IO that could have allowed a path to change. */
+export async function assertWritablePath(workspace: string, abs: string, label: string): Promise<void> {
+  await assertRealContainment(workspace, abs, label);
+  await assertNotAgentAreaReal(workspace, abs, label);
+  await assertNotFrozenReal(workspace, abs, label);
+  await assertNotSensitivePathReal(workspace, abs, label);
 }
 
 /** 读取目标解析：工作区内路径走原有 containment 闸；绝对路径只有在**本轮用户已批准**的
@@ -250,8 +391,7 @@ export async function resolveReadTarget(
     }
     throw new ToolError(`${label}: 路径不在本轮已批准的项目外附件清单内: ${input}`);
   }
-  const abs = resolveInWorkspace(workspace, input, label);
-  await assertRealContainment(workspace, abs, label);
+  const { abs } = await resolveWorkspaceReadPath(workspace, resolveInWorkspace(workspace, input, label), label);
   return { abs, display: input, external: false };
 }
 

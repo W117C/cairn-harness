@@ -7,6 +7,7 @@
 // 零私有状态：规则库与放行集是仅有的两个输入源；断路器计数在 session 入参里，evaluate 只读不写
 // （调用方经 note* helper 更新）——同一输入两次调用结果一致。
 import { posix } from "node:path";
+import { tokenize } from "./command-shape";
 import { FROZEN_TABLE_REL } from "../frozen";
 import { TOOL_NAMES, type ToolName } from "../tools/base";
 // 判卷闸的补丁取料：与 `apply_patch` 工具层共用同一个解析器（同一个决策点，不在闸里再解析一遍 diff）。
@@ -15,7 +16,7 @@ import type { PermissionMode } from "./index";
 import { isKnownToolName, isMcpScopedName } from "./tool-registry";
 // 方案门的活判据。直接从 plan-state 拿（不能拿 ./index——index 正 re-export 本文件的符号）。
 import { planGateLive } from "./plan-state";
-import { judgeChain, normalizeCommand, type ChainVerdict, type PermissionRule } from "./rules";
+import { judgeChain, type ChainVerdict, type PermissionRule } from "./rules";
 import {
   isNetworkCommand,
   isShellFamily,
@@ -245,11 +246,11 @@ export function isSideEffectTool(tool: string): boolean {
   return SIDE_EFFECT_TOOLS.has(tool);
 }
 
-/** scope 记忆键：shell 类按归一化命令全串（出网审计粒度），其余按工具级（「此类」语义）。
+/** scope 记忆键：shell 类保留批准的原始命令，引号内的空白可能属于参数。其余按工具级。
  *  键里保留字面工具名——主会话 run_shell 与 worker shell_rw/shell_ro 的放行集不互相串门。 */
-export function scopeKey(tool: ToolName, args: Record<string, unknown>): string {
+export function scopeKey(tool: string, args: Record<string, unknown>): string {
   if (isShellFamily(tool) && typeof args.command === "string") {
-    return tool + "\u241F" + normalizeCommand(args.command);
+    return tool + "\u241F" + args.command;
   }
   return tool + "\u241F*";
 }
@@ -410,7 +411,55 @@ function judgeTargetsOf(tool: string, args: Record<string, unknown>): JudgeTarge
       ...(parsed.why !== undefined ? { why: parsed.why } : {}),
     };
   }
+  // ⑥号边界关闭（2026-11-13）：shell 写/毁原语的目标也进冻结闸的取料面。
+  if (tool === "run_shell" && typeof args.command === "string") {
+    return {
+      targets: shellWriteTargetsOf(args.command).map((t) => relTargetKeyOf(t)).filter((t): t is string => t !== null),
+      unreadable: false,
+    };
+  }
   return { targets, unreadable: false };
+}
+
+const REDIRECT_RE = /^[0-9*&]?>{1,2}\|?$/;
+
+/** shell 写/毁原语的目标提取（覆盖集与边界见 judgeTargetsOf 的注释）。
+ *  伪目标无害：非冻结键（如 `&&`、`git`）归一后不落冻结集，照旧放行。 */
+function shellWriteTargetsOf(command: string): string[] {
+  const toks = tokenize(command);
+  const out: string[] = [];
+  const push = (t: string | undefined): void => {
+    if (t === undefined) return;
+    out.push(t);
+  };
+  for (let i = 0; i < toks.length; i++) {
+    const t = toks[i] as string;
+    if (REDIRECT_RE.test(t)) {
+      push(toks[i + 1]);
+      continue;
+    }
+    switch (t) {
+      case "tee":
+      case "rm":
+      case "mv":
+        for (const f of toks.slice(i + 1)) if (!f.startsWith("-")) push(f);
+        break;
+      case "cp": {
+        const rest = toks.slice(i + 1).filter((f) => !f.startsWith("-"));
+        push(rest.at(-1));
+        break;
+      }
+      case "sed": {
+        const rest = toks.slice(i + 1);
+        if (rest.some((f) => f === "-i" || f.startsWith("-i."))) {
+          const positional = rest.filter((f) => !f.startsWith("-"));
+          for (const f of positional.slice(1)) push(f);
+        }
+        break;
+      }
+    }
+  }
+  return out;
 }
 
 function collectRisk(
@@ -467,7 +516,9 @@ export function evaluate(
   // ⇒ 判卷面的完整性不能靠提示词自觉。
   // 取料走 `judgeTargetsOf`（一次调用的**全部**目标）：闸原先只读 `args.path`，而 `apply_patch`
   // 的路径在 `args.patch` 正文里 ⇒ 同一张表下 write_file 写不动、apply_patch 写得动（2026-10-08 修）。
-  if (s.frozenJudgePaths.size > 0 && isWriteCall(tool, grade)) {
+  // run_shell 一并进闸（⑥号边界关闭的一半）：它不在写向静态表里，旧条件把它整族漏掉——
+  // 闸进了 shell 也不扰民：提取不出目标的常规命令 targets 为空、原路放行。
+  if (s.frozenJudgePaths.size > 0 && (isWriteCall(tool, grade) || tool === "run_shell")) {
     const targets = judgeTargetsOf(tool, args);
     if (targets.unreadable) {
       // 取不出目标 ⇒ 这条闸**没法判**。没法判不许折成判通过：把「读不到目标」读成「目标安全」，
@@ -557,7 +608,17 @@ export function evaluate(
     }
     // 「总是允许」在 UI 上落成**裸工具名** allow（无 pattern）：一次普通 write_file 批准
     // 不能把 `.env` / `.git/hooks` 这类 high 风险路径一起免掉（非 shell 的 scopeKey 也是工具级）。
-    if (risk === "high" && chain.pattern === undefined && !isShellFamily(tool) && staticRisk(tool, args).level === "high") {
+    // 例外（2026-11-12）：宿主设置种下的联网免批规则（id 前缀 `web-auto-approve:`，agent-runner 只在
+    // host settings 总闸开时种内存 allow，workspace 层永远拿不到）不是 UI「总是允许」——不豁免它，
+    // 「联网免批」这条 2026-11-05 业主裁决就永远被这条守卫打不通（实测：设置开 ⇒ 仍每次问）。
+    // 豁免面按 id 前缀收口，不按工具名：用户手写的裸 allow（UI 批准落库／permissions.json，加载器
+    // 会重生成 id，伪造不了前缀）照旧被拦。critical 守卫与 shell 侧网络红线（L4-network／sandbox 出口）
+    // 原样不动——豁免的是「问不问」，不是风险判据本身。
+    if (risk === "high"
+        && chain.pattern === undefined
+        && !isShellFamily(tool)
+        && staticRisk(tool, args).level === "high"
+        && !chain.ruleId?.startsWith("web-auto-approve:")) {
       return {
         verdict: "ask",
         layer: "L4-risk",

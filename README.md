@@ -1,15 +1,31 @@
 # Cairn — 可重放的 agent harness
 
-一个事件溯源（event-sourced）的 agent 内核：每一步都落成 JSONL 事件，因此**同一份日志可以被重放、分叉、审计**。
-内核侧没有构建步骤——克隆下来 `npm install` 完就有一条 `cairn` 命令；
-桌面壳是另一条路，`apps/desktop/` 下走 Electron + Vite，需要单独构建（见「这个仓库是什么」）。
+> 一个事件溯源（event-sourced）的 agent 内核：每一步都落成 JSONL 事件，因此**同一份日志可以被重放、分叉、审计**。
+
+[![verify](https://github.com/W117C/cairn-harness/actions/workflows/verify.yml/badge.svg?branch=main)](https://github.com/W117C/cairn-harness/actions/workflows/verify.yml)
+[![release](https://img.shields.io/github/v/release/W117C/cairn-harness?label=release&color=blue)](https://github.com/W117C/cairn-harness/releases)
+[![license](https://img.shields.io/badge/license-%E4%B8%93%E6%9C%89-proprietary-blue)](./LICENSE)
+[![node](https://img.shields.io/badge/node-%3E%3D20.11%20%3C25-5FA04E?logo=node.js)](https://nodejs.org)
+[![pnpm](https://img.shields.io/badge/pnpm-11.21.0-F69220?logo=pnpm)](https://pnpm.io)
+
+Cairn 是一个面向软件项目的 AI 编码助手，提供命令行和桌面开发入口。它在本地工作区运行任务，记录可重放的事件，供使用者查看工具操作、分叉会话和审计过程。权限控制管理工具操作，无人应答的审批请求会被拒绝。
+
+> **当前阶段：受邀内测。** 当前公开版本的交付入口是 CLI，桌面应用位于 `apps/desktop/`，需要从源码单独构建。复制、运行和修改须遵守[内测许可证](LICENSE)。版本记录见 [Releases](https://github.com/W117C/cairn-harness/releases)。
+
+内核侧**没有构建步骤**：克隆下来装完依赖就有一条 `cairn` 命令。
+桌面壳是另一条路，`apps/desktop/` 下走 Electron + Vite，需要单独构建（见「桌面应用（macOS）」）。
+当前分支职责、未完成事项与优化项见 [项目路线与仓库状态](docs/ROADMAP.md)，
+仓库与分支的现役入口见 [仓库状态与分支](docs/REPOSITORY-STATUS.md)。
 
 ```sh
-git clone <this-repo> && cd cairn-harness
-npm install                       # CLI 走 tsx 通道（运行依赖）
+git clone https://github.com/W117C/cairn-harness.git
+cd cairn-harness
+pnpm install --frozen-lockfile
 export OPENAI_API_KEY=<你的 key>
 ./bin/cairn.mjs "把 tests 里失败的那个用例修好"
 ```
+
+[CLI 快速开始](#30-秒上手) · [零凭据演示](#零凭据试一下--provider-demo读之前先看这段) · [桌面构建](#仓库结构) · [开发与验证](#开发与验证) · [问题反馈](SUPPORT.md) · [安全问题](SECURITY.md)
 
 > 本包是 `"private": true`，**不经 npm 分发**：没有 `npm install -g cairn` 这条路。上面是克隆仓库后的用法——
 > tsx 是运行依赖，源码经 tsx 通道直接跑；桌面包也使用同一条 loader 路径。
@@ -18,10 +34,11 @@ export OPENAI_API_KEY=<你的 key>
 
 ## 安装
 
-本包不发布 npm（`private: true`），装法是克隆仓库后跑安装脚本：
+项目声明的 Node 运行范围为 `>=20.11 <25`。以下安装步骤使用仓库锁定的 pnpm 11.21.0，运行 pnpm 需要 Node `>=22.13 <25`。开发和运行测试建议使用 Node 24。
 
 ```sh
-git clone <this-repo> && cd cairn-harness
+git clone https://github.com/W117C/cairn-harness.git
+cd cairn-harness
 ./scripts/install.sh        # 按 package.json 的 engines 判 Node 版本；pnpm 在则 pnpm install，否则 npm install
 ./bin/cairn.mjs --doctor    # 环境自检：Node / 凭据在位 / 沙箱 / 工作区可写 / 设置与会话数据面（坏档点名文件；不回显密钥值）
 ./bin/cairn.mjs --version   # 打印版本（cairn <version>）
@@ -47,17 +64,18 @@ git clone <this-repo> && cd cairn-harness
 ![关于与更新：版本、构建来源、许可证与偏好备份](assets/readme/cairn-settings-about.png)
 
 ```sh
-pnpm install
+pnpm install --frozen-lockfile
 pnpm --filter cairn-desktop build     # preload + renderer + typecheck
 pnpm --filter cairn-desktop smoke     # 真窗口启动冒烟（不跑模型）
+pnpm --filter cairn-desktop package   # 生成 apps/desktop/release/（含 release.json 与 SHA256SUMS）
+# 等价旧入口（仍支持；release-* 目录在 .gitignore 内）：
 node apps/desktop/scripts/package.mjs --out apps/desktop/release-$(date +%Y%m%d)
-node apps/desktop/scripts/install-smoke.mjs apps/desktop/release-$(date +%Y%m%d)/Cairn.dmg
 ```
 
 打包脚本会先 `build`，再用打包后的 `Cairn.app` 跑一次真窗口冒烟；**只有冒烟通过才产出目录**。`install-smoke.mjs` 再把 DMG 挂起来、把 app 复制到临时目录（模拟拖进 Applications）跑同一套冒烟，证明离开 release 目录也能启动。
 产物含 `Cairn.app`、`Cairn.dmg`（`hdiutil` 不可用时回退 `Cairn-macOS.zip`）、`build-info.json`
 （版本、lock 哈希、`packagedSmoke: passed`、签名方式、构建时间）。DMG 内是 `Cairn.app` +
-`Applications` 快捷方式与安装说明，打开后直接拖进去即可。当前保留 ad-hoc 封装，暂不做 Developer ID 签名或 Apple 公证；换机器的单应用隔离处置、架构要求、密钥配置与手工升级见 [macOS 内测安装说明](docs/macos-trial.md)。`build-info.json` 另记录 `sourceCommit` / `sourceDirty`，含未提交修改的包不会冒充干净提交。
+`Applications` 快捷方式与安装说明，打开后直接拖进去即可。当前保留 ad-hoc 封装，暂不做 Developer ID 签名或 Apple 公证；换机器的单应用隔离处置、架构要求、密钥配置与手工升级见 [macOS 内测安装说明](docs/desktop-preview.md)。`build-info.json` 另记录 `sourceCommit` / `sourceDirty`，含未提交修改的包不会冒充干净提交。
 
 发布更新清单：
 
@@ -127,8 +145,8 @@ pnpm bench -- --only B1-bugfix-crossfile
 # 接着上一次那条会话跑（不抹掉之前的转录）
 ./bin/cairn.mjs --session cli-1756289123456 "接着刚才那个往下做"
 
-# 装成命令（npm link；本包未发布，见上）
-npx cairn --help
+# 查看命令帮助
+./bin/cairn.mjs --help
 ```
 
 ### 零凭据试一下：`--provider demo`（**读之前先看这段**）
@@ -213,7 +231,7 @@ key 从环境变量读，**缺 key 会明确报错退出，不会静默换一家
 ```sh
 export OPENAI_BASE_URL=https://api.deepseek.com/v1
 export OPENAI_API_KEY=<deepseek key>
-npx cairn "..."
+./bin/cairn.mjs "..."
 ```
 
 `OPENAI_BASE_URL` 给到 `/v1` 这一层就行，缺 `/chat/completions` 会自动补；已经带全的写法也照样认。
@@ -224,7 +242,7 @@ npx cairn "..."
 ```sh
 export OPENAI_BASE_URL=https://openrouter.ai/api/v1
 export OPENAI_API_KEY=<key>
-npx cairn --provider openai --model stealth/space-bunny-alpha "..."
+./bin/cairn.mjs --provider openai --model stealth/space-bunny-alpha "..."
 ```
 
 `--model` 是显式 opt-in：它不进档位表，因此**不参与 bandit 路由**；预算闸查不到它的价时按既有口径惰掉并明写，
@@ -232,7 +250,7 @@ npx cairn --provider openai --model stealth/space-bunny-alpha "..."
 高估会撞远端 400。指向小窗或网关模型时用 `--ctx-window <n>` 申报真实窗口（只配 `--model` 用）：
 
 ```sh
-npx cairn --provider openai --model some/small-model --ctx-window 32768 "..."
+./bin/cairn.mjs --provider openai --model some/small-model --ctx-window 32768 "..."
 ```
 
 没给 `--provider` 时按上表顺序找第一个配了 key 的；一个都没配 ⇒ exit 2 并告诉你要设哪个变量。
@@ -249,6 +267,8 @@ npx cairn --provider openai --model some/small-model --ctx-window 32768 "..."
 | `auto` | 自动放行——**必须显式 `--mode auto`**，不是缺省 |
 
 审批门在没人能答的时候（管道 / CI）**当场按拒绝收束**，不等超时——一次没人应答的审批不会伪装成工具失败。
+
+项目里的 `.agent/permissions.json` 可以要求审批或拒绝操作。本机的「总是允许」记录按工作区保存在用户应用数据目录。旧项目里的 `permissions.always.json` 不会自动迁移；原来放行的操作需要重新批准。除完全允许档外，写入全局记忆需要逐次批准。
 
 模型主动开的两扇门也在终端里问你，没人能答时各自**当场结算**（都不是挂起等超时）：
 

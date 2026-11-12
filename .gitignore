@@ -97,6 +97,9 @@ docs/facts/
 .worktrees/
 .superpowers/
 
+# Chromium user profiles produced by the desktop permission smoke contain runtime state.
+/outputs/desktop-permission-2026-11-03/profile*/
+
 # vitest JSON reporter 产物（本仓零消费者；2026-10-03 实测 .vitest/json/output.json 无人读）
 .vitest/
 
@@ -136,6 +139,8 @@ GEMINI.md
 # **只掐掉「随仓库分发」这一条通路**，文件仍在本地盘。
 apps/desktop/release/
 apps/desktop/release-*/
+# Temporary staging contains the same generated bundles as release/.
+/apps/desktop/.cairn-package-*/
 apps/desktop/preview/dist/
 
 # python venv（解释器＋site-packages），`python -m venv .venv` 可重建。

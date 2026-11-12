@@ -91,6 +91,11 @@ const LAYER_CASES: readonly {
   // ★ 第二种 L4-risk 因（原来没有用例）：裸 allow 规则（「总是允许该工具」）不带走高风险路径。
   // 少了它，一次普通的 write_file 批准会把 .env / .git/hooks 一起免批。
   { name: "裸 allow 规则不带走高风险路径（非 shell）", expected: "L4-risk", cause: { verdict: "ask", risk: "high" }, reasonEquals: "高风险路径不随「总是允许该工具」一起放行：仍需逐次确认", run: () => evaluate("write_file", { path: ".env" }, session({ mode: "auto", rules: [rule({ behavior: "allow", tool: "write_file" })] })) },
+  // ★ 第四种 L4-risk 因（2026-11-12 修「宿主联网免批被 L4-risk 拦回」评审遗留时补）：宿主设置种下的
+  // 联网免批（id 前缀 web-auto-approve:）不是 UI「总是允许」，不豁免它设置开关永远打不通（2026-11-05
+  // 业主裁「联网免批」）。对照两条缺一不可：同形状但 id 无前缀 ⇒ 仍拦（防「加个前缀 id 就绕过」）。
+  { name: "宿主联网免批规则贯通 L4-risk 守卫", expected: "L3-rule", cause: { verdict: "approve", risk: "high", auto: { source: "rule", ruleId: "web-auto-approve:web_search" } }, run: () => evaluate("web_search" as never, {}, session({ mode: "auto", rules: [rule({ behavior: "allow", tool: "web_search", id: "web-auto-approve:web_search" })] })) },
+  { name: "同形状裸 allow 无宿主前缀仍拦（web_search）", expected: "L4-risk", cause: { verdict: "ask", risk: "high" }, reasonEquals: "高风险路径不随「总是允许该工具」一起放行：仍需逐次确认", run: () => evaluate("web_search" as never, {}, session({ mode: "auto", rules: [rule({ behavior: "allow", tool: "web_search" })] })) },
   { name: "MCP 无注解按写 fail-closed", expected: "L4-mcp-unannotated", cause: { verdict: "ask", risk: "none" }, reasonEquals: "MCP 无注解：按写处理，自主档亦逐次（§11.7.2 fail-closed）", run: () => evaluate("mcp__srv__do" as never, {}, session({ mode: "auto" })) },
   // M7：未登记工具名与上面那条**同层同裁决**——都属「工具面没为自己作证」，所以复用该层而不是新增一层
   // （新增会在 layer×verdict 矩阵里多出一列，而它在任何真实语料里都恒为 0）。

@@ -1,8 +1,8 @@
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, sep } from "node:path";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ALWAYS_RULES_FILE, alwaysRulesPath, loadPermissionRules, savePermissionRules } from "../src/permissions/rules";
+import { alwaysRulesPath, loadPermissionRules, loadWorkspacePermissionRules, readPermissionFile, savePermissionRules } from "../src/permissions/rules";
 
 const renameGate = vi.hoisted(() => ({ path: "", claimed: false, signal: () => {}, wait: Promise.resolve() }));
 vi.mock("node:fs/promises", async (importOriginal) => {
@@ -77,28 +77,32 @@ describe("权限库写入与残留清理", () => {
 });
 
 describe("授权文件不重复加载", () => {
-  it.each([false, true])("直接加载授权文件时只返回一份规则（路径含点号=%s）", async (dotPath) => {
+  it("对工作区路径的等价拼法只加载一份授权", async () => {
     const dir = await workspace();
-    await mkdir(join(dir, ".agent"));
-    const path = alwaysRulesPath(dir);
+    const project = join(dir, "workspace");
+    const appData = join(dir, "appdata");
+    await mkdir(project);
+    const path = alwaysRulesPath(project, appData);
     await savePermissionRules(path, [{ behavior: "allow", tool: "write_file", scope: "always" }]);
-    const input = dotPath ? join(dir, ".agent") + sep + "." + sep + ALWAYS_RULES_FILE : path;
-
-    expect(loadPermissionRules(input).map((rule) => ({ tool: rule.tool, layer: rule.layer })))
-      .toEqual([{ tool: "write_file", layer: "project" }]);
+    for (const input of [project, project + "/."]) {
+      expect(loadWorkspacePermissionRules(input, appData).map(({ tool, layer }) => ({ tool, layer })))
+        .toEqual([{ tool: "write_file", layer: "local" }]);
+    }
   });
 
   it("连续三次授权只保存三条记录，并继续支持从项目策略入口合并读取", async () => {
     const dir = await workspace();
-    await mkdir(join(dir, ".agent"));
-    const path = alwaysRulesPath(dir);
+    const project = join(dir, "workspace");
+    const appData = join(dir, "appdata");
+    await mkdir(project);
+    const path = alwaysRulesPath(project, appData);
     for (const tool of ["write_file", "edit_file", "apply_patch"]) {
-      await savePermissionRules(path, [...loadPermissionRules(path), { behavior: "allow", tool, scope: "always" }]);
+      await savePermissionRules(path, [...readPermissionFile(path), { behavior: "allow", tool, scope: "always" }]);
     }
 
     expect(JSON.parse(await readFile(path, "utf8")).rules.map((rule: { tool: string }) => rule.tool))
       .toEqual(["write_file", "edit_file", "apply_patch"]);
-    expect(loadPermissionRules(join(dir, ".agent", "permissions.json")).map((rule) => rule.tool))
+    expect(loadWorkspacePermissionRules(project, appData).map((rule) => rule.tool))
       .toEqual(["write_file", "edit_file", "apply_patch"]);
   });
 });

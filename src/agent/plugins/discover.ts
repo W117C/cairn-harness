@@ -9,7 +9,7 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { readUserMcpConfig, virtualUserMcpPlugin, USER_MCP_PLUGIN_NAME, USER_HOOKS_PLUGIN_NAME } from "./user-mcp";
-import { pluginFingerprintEx } from "./trust";
+import { pluginSnapshot, snapshotReadText, type PluginSnapshot } from "./snapshot";
 import {
   dirExists, loadSkillEntry, readAgentEntries, readCommandEntries, readSkillEntries,
 } from "./content";
@@ -50,9 +50,10 @@ async function scanScopeRoot(
         // 塌成 pending——那会让 decide 写下的无界条目永不命中，「批准了还弹卡」死循环。
         // bounded 位随查询一起传给信任库，编进条目键（abs@fp+b）：批准一次即对该形态生效，
         // 内容有界/无界形态互换或指纹变化都自然不命中 = 重新出卡。
-        const { fp, bounded } = await pluginFingerprintEx(abs);
+        const snapshot = await pluginSnapshot(abs);
+        const { fp, bounded } = snapshot;
         if (bounded) warnings.push({ plugin: name, message: "内容指纹不完整（含软链 / 超出上限 / 有文件读不出）⇒ 不可批准（fail-closed）；请改成普通文件布局" });
-        const plugin = await loadContainer(abs, scope, trustOf(abs, fp, bounded));
+        const plugin = await loadContainer(abs, scope, trustOf(abs, fp, bounded), snapshot);
         plugin.fingerprint = { fp, bounded };
         plugins.push(plugin);
       } catch (err) {
@@ -64,9 +65,10 @@ async function scanScopeRoot(
       // E3（审查 P1-13）：项目作用域 loose skill 同走信任门——frontmatter description 随路由
       // 清单直进 system prompt = 注入面，克隆仓库放一个 SKILL.md 不许免审批；免信任只保留给
       // 显式 looseRoots 与用户级安装（两处的 trustOf 恒 trusted）。
-      const { fp, bounded } = await pluginFingerprintEx(abs);
+      const snapshot = await pluginSnapshot(abs);
+      const { fp, bounded } = snapshot;
       if (bounded) warnings.push({ plugin: name, message: "内容指纹不完整（含软链 / 超出上限 / 有文件读不出）⇒ 不可批准（fail-closed）" });
-      const entry = await loadSkillEntry(null, name, abs);
+      const entry = await loadSkillEntry(null, abs, name, abs, snapshot);
       if (entry) loose.push({ name, root: abs, entry, trust: trustOf(abs, fp, bounded), scope, fingerprint: { fp, bounded } });
     }
   }
@@ -78,21 +80,22 @@ async function loadContainer(
   root: string,
   scope: PluginScope,
   trust: "trusted" | "pending" | "declined",
+  snapshot?: PluginSnapshot,
 ): Promise<DiscoveredPlugin> {
   const errors: string[] = [];
   const warnings: string[] = [];
-  const jsEntry = await detectJsEntry(root);
+  const jsEntry = await detectJsEntry(root, snapshot);
   if (jsEntry) {
     // 代码插件拒载 + 警告（能力边界：插件零进程内第三方代码）
     throw new PluginLoadError("代码插件拒载（能力边界：插件零进程内第三方代码）：检测到 JS 入口 " + jsEntry);
   }
-  const m = await parsePluginManifest(root);
+  const m = await parsePluginManifest(root, snapshot);
   warnings.push(...m.warnings);
   const pluginName = m.name;
 
-  const skills = await readSkillEntries(root, m.skillsDir, pluginName);
-  const commands = await readCommandEntries(root, m.commandsDir, pluginName);
-  const agents = await readAgentEntries(root, m.agentsDir, pluginName);
+  const skills = await readSkillEntries(root, m.skillsDir, pluginName, snapshot);
+  const commands = await readCommandEntries(root, m.commandsDir, pluginName, snapshot);
+  const agents = await readAgentEntries(root, m.agentsDir, pluginName, snapshot);
 
   // hooks
   const hooks: LoadedHookDef[] = [];
@@ -108,7 +111,8 @@ async function loadContainer(
   };
   if (m.hooksRef.kind === "path") {
     try {
-      const raw = await readFile(m.hooksRef.path, "utf8");
+      const raw = snapshot ? snapshotReadText(root, m.hooksRef.path, snapshot) : await readFile(m.hooksRef.path, "utf8");
+      if (raw === null) throw new Error("hooks 文件不在快照内（装载面拒绝按路径重读）");
       collectHooks(parseHooksFile(raw, m.hooksRef.path));
     } catch (err) {
       // 坏 hook JSON 只影响自身（隔离），不炸整插件
@@ -122,7 +126,8 @@ async function loadContainer(
   const lsp: Record<string, LspServerConfig> = {};
   const lspPath = join(root, ".lsp.json");
   try {
-    const raw = await readFile(lspPath, "utf8");
+    const raw = snapshot ? snapshotReadText(root, lspPath, snapshot) : await readFile(lspPath, "utf8");
+    if (raw === null) throw new Error("lsp 文件不在快照内");
     const parsed = JSON.parse(raw) as LspConfigFile;
     for (const [id, cfg] of Object.entries(parsed.servers ?? {})) {
       if (cfg && typeof cfg === "object" && cfg.transport === "socket") {
@@ -162,9 +167,20 @@ async function loadContainer(
   };
 }
 
+/** Load a container using only bytes already bound by pluginSnapshot. Exported
+ * so the snapshot-to-loader boundary has a direct regression test. */
+export async function loadPluginFromSnapshot(
+  root: string,
+  scope: PluginScope,
+  trust: "trusted" | "pending" | "declined",
+  snapshot: PluginSnapshot,
+): Promise<DiscoveredPlugin> {
+  return await loadContainer(root, scope, trust, snapshot);
+}
+
 /** Inspect one extracted plugin directory without activating it. */
 export async function inspectPluginDirectory(root: string): Promise<DiscoveredPlugin> {
-  return await loadContainer(root, "user", "pending");
+  return await loadContainer(root, "user", "pending", await pluginSnapshot(root));
 }
 
 /** 事件表 → 扁平 hook 定义列表。两类装载期即拒（loaded=false + 原因，调用方产警告）：

@@ -42,7 +42,7 @@ async function setup(project: PermissionRule[] = [], global: PermissionRule[] = 
     },
   });
   const autonomy = permissions.newAutonomySession("default", {
-    rules: permissions.loadPermissionRules(projectPath, globalPath),
+    rules: permissions.loadWorkspacePermissionRules(workspace),
     planBlocked: () => false,
   });
   setToolGateDeps({ currentSession: () => ({ askGate: gate, autonomy, sandbox: null }) });
@@ -97,7 +97,7 @@ describe("总是允许在本轮立即生效", () => {
     await s.shell.run({ command: "pnpm test > result.txt" }, ctx);
     await s.shell.run({ command: "pnpm test-other" }, ctx);
     expect(s.requests).toEqual(["run_shell", "run_shell", "run_shell"]);
-    expect(s.autonomy.rules).toEqual(s.permissions.loadPermissionRules(s.projectPath, s.globalPath));
+    expect(s.autonomy.rules).toEqual(s.permissions.loadWorkspacePermissionRules(s.workspace));
   });
 
   // 命令链的「总是允许」必须**每段各落一条** allow：`judgeChain` 先 `splitCommandChain` 拆段，
@@ -140,7 +140,7 @@ describe("总是允许在本轮立即生效", () => {
     await s.shell.run({ command: "echo hi" }, ctx);
     expect(s.requests).toEqual(["write_file", "run_shell", "run_shell"]);
     expect(s.autonomy.rules).toHaveLength(4);
-    expect(s.autonomy.rules.find((rule) => rule.tool === "write_file")?.layer).toBe("project");
+    expect(s.autonomy.rules.find((rule) => rule.tool === "write_file")?.layer).toBe("local");
     expect(s.autonomy.rules.find((rule) => rule.pattern === "rm")?.layer).toBe("global");
     expect(s.execute).toHaveBeenCalledTimes(3);
   });
@@ -187,8 +187,7 @@ describe("总是允许在本轮立即生效", () => {
 
   it("落库失败不新增内存规则，本次已批准工具可执行，后次仍须审批并报告错误", async () => {
     const s = await setup();
-    await rm(join(s.workspace, ".agent"), { recursive: true });
-    await writeFile(join(s.workspace, ".agent"), "not a directory");
+    await mkdir(alwaysRulesPath(s.workspace), { recursive: true });
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     for (let i = 0; i < 2; i++) {
       expect((await s.writer.run({ path: "one.txt", content: "one" }, { workspace: s.workspace })).ok).toBe(true);
@@ -211,7 +210,7 @@ describe("总是允许在本轮立即生效", () => {
     expect(s.requests).toEqual(["write_file", "run_shell"]);
     const saved = JSON.parse(await readFile(alwaysRulesPath(s.workspace), "utf8"));
     expect(saved.rules.map((rule: PermissionRule) => rule.tool).sort()).toEqual(["run_shell", "write_file"]);
-    expect(s.autonomy.rules).toEqual(s.permissions.loadPermissionRules(s.projectPath, s.globalPath));
+    expect(s.autonomy.rules).toEqual(s.permissions.loadWorkspacePermissionRules(s.workspace));
     s.once();
     await s.writer.run({ path: "two.txt", content: "two" }, { workspace: s.workspace });
     await s.shell.run({ command: "pnpm test --runInBand" }, { workspace: s.workspace });
@@ -220,8 +219,7 @@ describe("总是允许在本轮立即生效", () => {
 
   it("一笔保存失败不会阻断同时排队的其他工作区授权，也不会混入失败的规则", async () => {
     const s = await setup();
-    await rm(join(s.workspace, ".agent"), { recursive: true });
-    await writeFile(join(s.workspace, ".agent"), "not a directory");
+    await mkdir(alwaysRulesPath(s.workspace), { recursive: true });
     const otherWorkspace = join(s.dir, "other-workspace");
     await mkdir(otherWorkspace);
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});

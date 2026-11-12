@@ -1,103 +1,80 @@
-// #57 的判卷：always-allow 的**授权记录**不许落进随仓库分发的那份权限库（2026-10-05 第 380 页）。
-//
-// 缺陷形状（评审 S4/#57 的放大条件）：`<workspace>/.agent/permissions.json` 在本仓是**有意跟踪**
-// 的，而「用户在审批卡上点一次总是允许」→ `persistAlwaysRule` 把一条 allow 写进**同一个文件**
-// ⇒ 授权记录随仓库分发：**谁 clone，谁就继承那一次授权**。
-// 它与 S4 是同族两半：S4 修的是「谁放宽了谁」不可判；这一条修的是「授权跟着仓库跑」。
-//
-// 修法是**分文件**而不是改名整体迁移：`permissions.json` 里可能有人写的项目策略（该继续被跟踪），
-// 只有**程序写**的那部分搬去 `permissions.always.json`。
-//
-// 本页判两件，都在能当场跑的面（读侧与落点决策都在干净文件里）：
-//   ① 落点决策纯函数：路径落在 `.agent/permissions.always.json`，且它真被 `.gitignore` 排除；
-//   ② 读侧**透明并入**：同目录有那一份就必须读进来（否则搬走写入端＝批准过的规则静默失效）。
-import { it, expect, describe } from "vitest";
-import { mkdtemp, mkdir, writeFile, rm, readFile } from "node:fs/promises";
+import { afterEach, describe, expect, it } from "vitest";
+import { mkdtemp, mkdir, writeFile, rm, readFile, rename } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { ALWAYS_RULES_FILE, alwaysRulesPath, loadPermissionRules } from "../src/permissions/rules";
+import { dirname, join } from "node:path";
+import { ALWAYS_RULES_FILE, alwaysRulesPath, loadWorkspacePermissionRules, savePermissionRules } from "../src/permissions/rules";
+import { judgeChain, type PermissionRule } from "../src/permissions";
 
-async function workspaceWith(files: Record<string, string>): Promise<string> {
-  const ws = await mkdtemp(join(tmpdir(), "perm-always-"));
-  await mkdir(join(ws, ".agent"), { recursive: true });
-  for (const [name, body] of Object.entries(files)) await writeFile(join(ws, ".agent", name), body, "utf8");
-  return ws;
+const dirs: string[] = [];
+afterEach(async () => {
+  await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+});
+const grant: PermissionRule = { behavior: "allow", tool: "write_file", scope: "always" };
+const restrict: PermissionRule = { behavior: "deny", tool: "edit_file", scope: "always" };
+
+async function setup() {
+  const dir = await mkdtemp(join(tmpdir(), "perm-always-"));
+  dirs.push(dir);
+  const workspace = join(dir, "workspace");
+  const appData = join(dir, "appdata");
+  const project = join(workspace, ".agent", "permissions.json");
+  await mkdir(dirname(project), { recursive: true });
+  return { dir, workspace, appData, project };
 }
 
-const tracked = JSON.stringify({ rules: [{ behavior: "deny", tool: "run_shell", pattern: "git push", scope: "always", id: "p1" }] });
-const always = JSON.stringify({ rules: [{ behavior: "allow", tool: "write_file", scope: "always", id: "a1" }] });
-
-describe("① 落点：授权记录去独立文件，且被 git 排除", () => {
-  it("路径是 .agent/permissions.always.json（与被跟踪那份**不同名**）", () => {
-    expect(alwaysRulesPath("/ws")).toBe("/ws/.agent/" + ALWAYS_RULES_FILE);
-    expect(alwaysRulesPath("/ws")).not.toContain('"permissions.json"');
-    expect(ALWAYS_RULES_FILE).not.toBe("permissions.json");
+describe("用户的持久授权", () => {
+  it("旧的项目授权文件仍由 .gitignore 排除", async () => {
+    expect(await readFile(join(process.cwd(), ".gitignore"), "utf8")).toContain(".agent/" + ALWAYS_RULES_FILE);
   });
 
-  it("该文件名真在 .gitignore 里（否则搬了地方也照样随仓库分发——那等于没修）", async () => {
-    const ignore = await readFile(join(process.cwd(), ".gitignore"), "utf8");
-    expect(ignore, ".gitignore 里没有这条 ⇒ #57 只搬了位置没解决分发").toContain(".agent/" + ALWAYS_RULES_FILE);
-  });
-});
-
-describe("② 读侧透明并入（漏了这一半就是静默失效）", () => {
-  it("两份都在 ⇒ 都被读到，且**都算 project 层**（授权不升级成全局地板）", async () => {
-    const ws = await workspaceWith({ "permissions.json": tracked, [ALWAYS_RULES_FILE]: always });
-    try {
-      const rules = loadPermissionRules(join(ws, ".agent", "permissions.json"));
-      // 钉「行为＋工具」：`parsePermissionsFile` 会**重新派生** id（`行为:工具[:模式]#序号`），
-      // 文件里写的 id 不保留——初版这里钉 id，红了才知道是判据错而不是实现错。
-      expect(rules.map((r) => r.behavior + ":" + r.tool).sort()).toEqual(["allow:write_file", "deny:run_shell"]);
-      expect(rules.every((r) => r.layer === "project")).toBe(true);
-    } finally { await rm(ws, { recursive: true, force: true }); }
+  it("项目策略保留限制；本机授权才会放行，且不同工作区不会共享", async () => {
+    const { dir, workspace, appData, project } = await setup();
+    await savePermissionRules(project, [restrict]);
+    await savePermissionRules(alwaysRulesPath(workspace, appData), [grant]);
+    const rules = loadWorkspacePermissionRules(workspace, appData);
+    expect(rules.map(({ behavior, tool, layer }) => [behavior, tool, layer])).toEqual([
+      ["deny", "edit_file", "project"],
+      ["allow", "write_file", "local"],
+    ]);
+    expect(judgeChain(rules, "write_file").verdict).toBe("allow");
+    const another = join(dir, "another");
+    await mkdir(another);
+    expect(loadWorkspacePermissionRules(another, appData)).toEqual([]);
   });
 
-  it("只被跟踪那份 ⇒ 行为与从前逐字同形（没有 always 文件时零行为）", async () => {
-    const ws = await workspaceWith({ "permissions.json": tracked });
-    try {
-      const rules = loadPermissionRules(join(ws, ".agent", "permissions.json"));
-      expect(rules.map((r) => r.behavior + ":" + r.tool)).toEqual(["deny:run_shell"]);
-      expect(rules.every((r) => r.layer === "project")).toBe(true);
-    } finally { await rm(ws, { recursive: true, force: true }); }
+  it("同一路径被新目录替换时不会继承旧授权", async () => {
+    const { dir, workspace, appData } = await setup();
+    await savePermissionRules(alwaysRulesPath(workspace, appData), [grant]);
+    await rename(workspace, join(dir, "retired-workspace"));
+    await mkdir(workspace);
+    expect(loadWorkspacePermissionRules(workspace, appData)).toEqual([]);
   });
 
-  it("只 always 那份（用户还没写过项目策略）⇒ 也读得到", async () => {
-    const ws = await workspaceWith({ [ALWAYS_RULES_FILE]: always });
-    try {
-      expect(loadPermissionRules(join(ws, ".agent", "permissions.json")).map((r) => r.behavior + ":" + r.tool)).toEqual(["allow:write_file"]);
-    } finally { await rm(ws, { recursive: true, force: true }); }
+  it("旧授权文件不导入，项目规则的 allow 也不给审批豁免", async () => {
+    const { workspace, appData, project } = await setup();
+    await savePermissionRules(project, [restrict, grant]);
+    await savePermissionRules(join(dirname(project), ALWAYS_RULES_FILE), [grant]);
+    const rules = loadWorkspacePermissionRules(workspace, appData);
+    expect(judgeChain(rules, "write_file").verdict).toBe("miss");
+    expect(judgeChain(rules, "edit_file").verdict).toBe("deny");
+    expect(rules.every((r) => r.layer === "project")).toBe(true);
   });
 
-  it("always 那份坏了 ⇒ fail-closed 抛错（不许静默当成空库，那会把授权读成没授权）", async () => {
-    const ws = await workspaceWith({ "permissions.json": tracked, [ALWAYS_RULES_FILE]: "{ 不是 JSON" });
-    try {
-      expect(() => loadPermissionRules(join(ws, ".agent", "permissions.json"))).toThrow();
-    } finally { await rm(ws, { recursive: true, force: true }); }
+  it("本机授权库损坏时明确拒载", async () => {
+    const { workspace, appData } = await setup();
+    const path = alwaysRulesPath(workspace, appData);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, "{ invalid JSON");
+    expect(() => loadWorkspacePermissionRules(workspace, appData)).toThrow(/权限库解析失败/);
   });
-});
 
-// 2026-10-19：读侧只按「文件存在」并入 always ⇒ 克隆来的仓库提交一份 allow-all 即免掉全部审批。
-// 机器本地授权不能随仓库分发：被 git 跟踪的那份不并入。
-describe("③ 仓库分发的 always 文件不得被当成用户授权", () => {
-  it("git 跟踪 ⇒ 忽略；未跟踪 ⇒ 照常并入", async () => {
-    const { execFileSync } = await import("node:child_process");
-    const ws = await mkdtemp(join(tmpdir(), "perm-always-git-"));
-    try {
-      execFileSync("git", ["init", "-q"], { cwd: ws });
-      await mkdir(join(ws, ".agent"), { recursive: true });
-      const alwaysPath = join(ws, ".agent", ALWAYS_RULES_FILE);
-      await writeFile(alwaysPath, always, "utf8");
-      await writeFile(join(ws, ".agent", "permissions.json"), tracked, "utf8");
-      execFileSync("git", ["add", "-f", ".agent/permissions.always.json"], { cwd: ws });
-      const before = loadPermissionRules(join(ws, ".agent", "permissions.json"));
-      expect(before.map((r) => r.behavior + ":" + r.tool)).toEqual(["deny:run_shell"]);
-
-      // 未跟踪（机器本地）⇒ 并入仍然生效（不许把功能一起修没）。
-      execFileSync("git", ["rm", "--cached", "-q", ".agent/permissions.always.json"], { cwd: ws });
-      const after = loadPermissionRules(join(ws, ".agent", "permissions.json"));
-      expect(after.map((r) => r.behavior + ":" + r.tool).sort()).toEqual(["allow:write_file", "deny:run_shell"]);
-    } finally {
-      await rm(ws, { recursive: true, force: true }).catch(() => undefined);
-    }
+  it("工作区内的应用数据不能授予权限，已有的拒绝仍生效", async () => {
+    const { workspace } = await setup();
+    const appData = join(workspace, "appdata");
+    await savePermissionRules(join(appData, "permissions.json"), [grant, restrict]);
+    const rules = loadWorkspacePermissionRules(workspace, appData);
+    expect(judgeChain(rules, "write_file").verdict).toBe("miss");
+    expect(judgeChain(rules, "edit_file").verdict).toBe("deny");
+    expect(() => alwaysRulesPath(workspace, appData)).toThrow(/工作区之外/);
   });
 });

@@ -1733,6 +1733,7 @@ describe("树闸接线：真跑本脚本——主检出拒跑且一个字节都�
     for (const rel of [
       "scripts/mutate-verify.mjs",
       "scripts/lib/mutate-gates.ts",
+      "scripts/lib/mutations/regex-source.mjs",
       "scripts/lib/tool-lock.ts",
       ...MUTATION_TABLE_FILES.map((f) => `scripts/lib/mutations/${f}.mjs`),
     ]) {

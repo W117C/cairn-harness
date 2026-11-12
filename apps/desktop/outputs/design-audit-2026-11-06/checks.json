@@ -3,208 +3,208 @@
   "protocolShots": [
     {
       "name": "01-home",
-      "bytes": 57932,
-      "sha256": "c1c6f64d0d4322bd"
+      "bytes": 70172,
+      "sha256": "9843a892862368de"
     },
     {
       "name": "02-session",
-      "bytes": 105924,
-      "sha256": "19de509de5928a7b"
+      "bytes": 106270,
+      "sha256": "af0bbf26f7b7c13d"
     },
     {
       "name": "03-inspector-changes",
-      "bytes": 112577,
-      "sha256": "ba1f359ba226aeda"
+      "bytes": 112883,
+      "sha256": "05003d7f0c792d9a"
     },
     {
       "name": "04-inspector-plan",
-      "bytes": 125954,
-      "sha256": "411ba311ce65f7c0"
+      "bytes": 126300,
+      "sha256": "2d965ac217f4f034"
     },
     {
       "name": "05-inspector-timeline",
-      "bytes": 146440,
-      "sha256": "efe7a3a3c526964b"
+      "bytes": 146817,
+      "sha256": "279877848eb1184c"
     },
     {
       "name": "06-settings",
-      "bytes": 68620,
-      "sha256": "c08811a6275667b2"
+      "bytes": 68699,
+      "sha256": "a51e5963d53d848f"
     },
     {
       "name": "07-settings-general",
-      "bytes": 49916,
-      "sha256": "e1013009d0248c47"
+      "bytes": 49966,
+      "sha256": "083db011253142f3"
     },
     {
       "name": "08-settings-provider",
-      "bytes": 79970,
-      "sha256": "188d467dd8db0dd8"
+      "bytes": 80018,
+      "sha256": "8c21fe1876c18811"
     },
     {
       "name": "09-settings-personalization",
-      "bytes": 58215,
-      "sha256": "534aab4712d9e44a"
+      "bytes": 58268,
+      "sha256": "8cc9ebc9302623f5"
     },
     {
       "name": "10-settings-subagents",
-      "bytes": 81822,
-      "sha256": "6fd64eb56f44bf28"
+      "bytes": 81880,
+      "sha256": "bb6ea52999f91d85"
     },
     {
       "name": "11-settings-integrations",
-      "bytes": 63264,
-      "sha256": "1a3228b9fb7161db"
+      "bytes": 58021,
+      "sha256": "e19aa88728ceb7c2"
     },
     {
       "name": "12-settings-hooks",
-      "bytes": 62179,
-      "sha256": "06d8172b798e0993"
+      "bytes": 56190,
+      "sha256": "a6ec3771eea029d0"
     },
     {
       "name": "13-settings-network",
-      "bytes": 61965,
-      "sha256": "3c5bd0fb1cff1dc5"
+      "bytes": 62008,
+      "sha256": "075bb3470c7d2b52"
     },
     {
       "name": "14-settings-usage",
-      "bytes": 89834,
-      "sha256": "51bee3fc1596b0ac"
+      "bytes": 90006,
+      "sha256": "ca3d2042035dc20d"
     },
     {
       "name": "15-settings-evolve",
-      "bytes": 86805,
-      "sha256": "f57fe0f407a13cd9"
+      "bytes": 86768,
+      "sha256": "5bea8506b5b5d965"
     },
     {
       "name": "16-settings-permissions",
-      "bytes": 81058,
-      "sha256": "6078b14675bcdd15"
+      "bytes": 80937,
+      "sha256": "ecd9aab29afeae08"
     },
     {
       "name": "17-settings-advanced",
-      "bytes": 107737,
-      "sha256": "1065cb060f5fc7a6"
+      "bytes": 107711,
+      "sha256": "80985370062a0075"
     },
     {
       "name": "18-settings-shortcuts",
-      "bytes": 148321,
-      "sha256": "b3218f26114e054f"
+      "bytes": 148245,
+      "sha256": "7230302e983afe33"
     },
     {
       "name": "19-settings-migration",
-      "bytes": 73883,
-      "sha256": "93c7650915af561b"
+      "bytes": 73918,
+      "sha256": "28d1acaf67815b93"
     },
     {
       "name": "20-settings-about",
-      "bytes": 101767,
-      "sha256": "37e38807b5a38669"
+      "bytes": 101192,
+      "sha256": "6962f8f037aa1ac5"
     },
     {
       "name": "21-settings-skills",
-      "bytes": 50175,
-      "sha256": "0e60ed71e73da7af"
+      "bytes": 47422,
+      "sha256": "6c6a99a5df942b64"
     },
     {
       "name": "22-settings-worktrees",
-      "bytes": 47267,
-      "sha256": "05881cbdde26d08d"
+      "bytes": 43767,
+      "sha256": "1171a17f40c090e3"
     },
     {
       "name": "23-plugins",
-      "bytes": 55934,
-      "sha256": "e8c6194b68d645a7"
+      "bytes": 47981,
+      "sha256": "cc1a736225a7a884"
     },
     {
       "name": "24-plugins-installed",
-      "bytes": 60911,
-      "sha256": "8ab28fd8b909c4de"
+      "bytes": 53443,
+      "sha256": "d3bfaf037de2681a"
     },
     {
       "name": "25-plugins-updates",
-      "bytes": 37736,
-      "sha256": "b4bcd66db3fa4fd5"
+      "bytes": 30677,
+      "sha256": "99c681381e3c850f"
     },
     {
       "name": "27-plugins-detail",
-      "bytes": 80901,
-      "sha256": "1579db5869b65793"
+      "bytes": 71523,
+      "sha256": "5168ac85dc099605"
     },
     {
       "name": "28-memory",
-      "bytes": 129883,
-      "sha256": "bd7ac0211ae0c8ce"
+      "bytes": 127314,
+      "sha256": "6f3a12cff1a4e345"
     },
     {
       "name": "29-memory-detail",
-      "bytes": 122662,
-      "sha256": "5d7b15f98d09b3e8"
+      "bytes": 120033,
+      "sha256": "56d363d343260bf3"
     },
     {
       "name": "30-automation",
-      "bytes": 111424,
-      "sha256": "5d967f0aa8f0f167"
+      "bytes": 107651,
+      "sha256": "85fd782cb267fb49"
     },
     {
       "name": "31-automation-idle",
-      "bytes": 47935,
-      "sha256": "f519881d117d292a"
+      "bytes": 45300,
+      "sha256": "7a7bdf95825eec67"
     },
     {
       "name": "32-clarify-card",
-      "bytes": 77221,
-      "sha256": "89ab088d181f85fd"
+      "bytes": 77249,
+      "sha256": "62975e4568e868b4"
     },
     {
       "name": "33-approval-card",
-      "bytes": 69252,
-      "sha256": "cea55b3ece37cc09"
+      "bytes": 69307,
+      "sha256": "04af7284cfc66341"
     },
     {
       "name": "34-plan-card",
-      "bytes": 78850,
-      "sha256": "23b5148d9a1f73bc"
+      "bytes": 78877,
+      "sha256": "19ce21fd37d0c2b8"
     },
     {
       "name": "35-dark-home",
-      "bytes": 58352,
-      "sha256": "9bd82d0f3d9deacc"
+      "bytes": 71081,
+      "sha256": "3f06b9c75ccc1086"
     },
     {
       "name": "36-dark-session",
-      "bytes": 107487,
-      "sha256": "6cb025a090258f59"
+      "bytes": 107747,
+      "sha256": "6117e17936d03818"
     },
     {
       "name": "37-dark-plugins",
-      "bytes": 57703,
-      "sha256": "306a50cd51df0902"
+      "bytes": 49257,
+      "sha256": "85016ddcdcc97cc6"
     },
     {
       "name": "38-dark-settings",
-      "bytes": 69884,
-      "sha256": "af12a70c83886229"
+      "bytes": 69913,
+      "sha256": "bbaae3ebfec6a3bc"
     },
     {
       "name": "39-narrow-880-plugins",
-      "bytes": 45789,
-      "sha256": "2877cd54cf28aa11"
+      "bytes": 40301,
+      "sha256": "a018bb450f4949fa"
     },
     {
       "name": "40-narrow-880-chat",
-      "bytes": 97871,
-      "sha256": "0b3bacab1b20ea57"
+      "bytes": 98372,
+      "sha256": "eaa944ac601e5f8d"
     },
     {
       "name": "41-1120-chat",
-      "bytes": 102023,
-      "sha256": "483153d3fbc4cd14"
+      "bytes": 102457,
+      "sha256": "d7f6bab414a0909d"
     },
     {
       "name": "42-session-1440",
-      "bytes": 105859,
-      "sha256": "19bec8960996b6c5"
+      "bytes": 106014,
+      "sha256": "f04bad995fb131df"
     }
   ],
   "duplicates": [],

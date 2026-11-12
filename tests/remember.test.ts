@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { remember, REMEMBER_DESCRIPTION } from "../src/tools/remember";
-import { MemoryError, initMemoryHome, projectMemoryDir, globalMemoryDir, rootFilePath, ROOT_FILES } from "../src/agent/memory/store";
+import { MemoryError, initMemoryHome, projectMemoryDir, projectMemoryWriteDir, globalMemoryDir, rootFilePath, ROOT_FILES } from "../src/agent/memory/store";
 import { createGatedRemember } from "../src/main/agent-runner";
 import type { PermissionMode } from "../src/permissions";
 import type { ToolContext } from "../src/tools";
@@ -57,6 +57,12 @@ describe("remember：scope 只认顶层参数（任务2，mem0 三次越权同�
   });
 });
 
+it("project memory never resolves a write through a directory alias", async () => {
+  mkdirSync(join(ws, ".agent"));
+  symlinkSync(home, projectMemoryDir(ws), "dir");
+  await expect(projectMemoryWriteDir(ws, "note")).rejects.toThrow(/符号链接/);
+});
+
 describe("remember：权限门（任务2 无权限不落盘）", () => {
   // 项目层自 2026-10-15 第十一遍裁决起免批（见下方「default 档项目层免批直写」那一格）⇒
   // 「审批拒绝 ⇒ 不落盘」这一格改在**全局层**上断言：全局层仍逐次问人，那里才是它还成立的地方。
@@ -64,7 +70,7 @@ describe("remember：权限门（任务2 无权限不落盘）", () => {
     const gated = createGatedRemember({ getMode: () => "default", isPlanBlocked: () => false, getAsk: () => async () => false });
     const r = await gated.run({ scope: "global", kind: "memory", type: "user", topic: "denied", content: "x" }, ctx());
     expect(r.ok).toBe(false);
-    expect(existsSync(join(ws, ".agent", "memory", "denied.md"))).toBe(false);
+    expect(existsSync(join(globalMemoryDir(), "denied.md"))).toBe(false);
   });
   it("read-only 档一律拒；auto 档放行", async () => {
     const ro = createGatedRemember({ getMode: () => "read-only", isPlanBlocked: () => false, getAsk: () => undefined });
@@ -101,7 +107,7 @@ describe("remember：权限门（任务2 无权限不落盘）", () => {
     expect(r.ok).toBe(false);
     expect(ask).toHaveBeenCalledTimes(1);
     // 全局层落在 M2D_MEMORY_HOME 下（测试里是临时 home），不在工作区
-    expect(existsSync(join(ws, ".agent", "memory", "glob.md"))).toBe(false);
+    expect(existsSync(join(globalMemoryDir(), "glob.md"))).toBe(false);
   });
 
   // 回归（2026-10-21 独立评审）：remember 的审批口此前不带 ctx.signal ⇒ run 取消后

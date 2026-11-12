@@ -1,6 +1,7 @@
 // H3-P5 回归（审查 E-10）：信任记录绑定内容指纹——同路径内容被替换后必须重新出信任卡；
 // 旧版裸路径记录按兼容口径继续命中（显式备案的兼容边界）。
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -49,6 +50,15 @@ describe("TrustStore 内容绑定（E-10）", () => {
     expect(await store.t.status(p, fp)).toBe("pending");
     await store.t.decide(p, true, fp); // 重新批准后按指纹条目工作
     expect(await store.t.status(p, fp)).toBe("trusted");
+  });
+
+  it("旧 SHA-1 条目不静默升级为 SHA-256 可信：必须重新批准", async () => {
+    const p = await newPluginRoot('{"name":"legacy-sha1"}');
+    const fp = await pluginFingerprint(p);
+    const legacy = p + "@" + createHash("sha1").update("legacy").digest("hex");
+    await writeFile(join(root, "plugin-trust.json"), JSON.stringify({ trusted: [legacy], declined: [] }), "utf8");
+    const store = new TrustStore(join(root, "plugin-trust.json"));
+    expect(await store.status(p, fp)).toBe("pending");
   });
 });
 

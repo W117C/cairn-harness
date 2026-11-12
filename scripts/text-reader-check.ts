@@ -21,9 +21,10 @@
  *   - 第二栏「改动面级判卷」＝遍历被改到的那个面的判卷（登记的语料助手／`readdirSync(源面)`／`git ls-files` 那几类）。
  *  并成一行就再也分不清"少了一条"还是"少了一类"——第 328 页补踩的正是后者：那一族在清单里整类缺失。 */
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { corpusJudgesFor, corpusSummary, readerSummary, readersOf, scanJudgeForCorpusReaders, scanJudgeForReaders, type ReaderHit, type ReaderScan } from "./lib/text-readers";
+import { readTextFileSnapshotSync } from "./lib/file-snapshot";
 
 const ROOT = resolve(import.meta.dirname, "..");
 
@@ -45,12 +46,11 @@ const git = (args: readonly string[]): string | null => {
 function judgeCorpus(): { path: string; text: string }[] {
   const acc: { path: string; text: string }[] = [];
   const walk = (dir: string): void => {
-    for (const name of readdirSync(dir)) {
-      const p = join(dir, name);
-      const st = statSync(p);
-      if (st.isDirectory()) { if (!name.startsWith(".")) walk(p); continue; }
-      if (!/\.(ts|mts)$/.test(name)) continue;
-      acc.push({ path: p.slice(ROOT.length + 1).replaceAll("\\", "/"), text: readFileSync(p, "utf8") });
+    for (const ent of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, ent.name);
+      if (ent.isDirectory()) { if (!ent.name.startsWith(".")) walk(p); continue; }
+      if (!ent.isFile() || !/\.(ts|mts)$/.test(ent.name)) continue;
+      acc.push({ path: p.slice(ROOT.length + 1).replaceAll("\\", "/"), text: readTextFileSnapshotSync(p).text });
     }
   };
   walk(join(ROOT, "tests"));

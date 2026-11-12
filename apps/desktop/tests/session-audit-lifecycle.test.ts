@@ -124,7 +124,7 @@ describe("SessionMetadata audit through the real KernelHost", () => {
     expect(host.runningCount()).toBe(1);
     const duplicate = await run(id);
     expect(duplicate).toMatchObject({ ok: false });
-    expect(duplicate.error).toMatch(/already running|正在运行/);
+    expect(duplicate.error).toMatch(/already running|正在运行|另一个进程运行/);
     expect((await readMetadata().get(id)).idleSince).toBeUndefined();
     expect(host.runningCount()).toBe(1);
     await host.cancel(id);

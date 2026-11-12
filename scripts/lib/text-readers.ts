@@ -186,6 +186,20 @@ function stringLiterals(raw: string): string[] {
   return out;
 }
 
+function oneStringLiteral(raw: string): string | null {
+  const trimmed = raw.trim();
+  const values = stringLiterals(trimmed);
+  if (values.length !== 1) return null;
+  const quote = trimmed[0];
+  if ((quote !== "\"" && quote !== "'" && quote !== "`") || trimmed.at(-1) !== quote) return null;
+  const value = values[0]!;
+  return trimmed.slice(1, -1) === value ? value : null;
+}
+
+const JOIN_BASES: ReadonlySet<string> = new Set([
+  "REPO", "ROOT", "root", "MAIN_ROOT", "repoRoot", "__dirname", "__filename",
+]);
+
 /** 一个参数表达式落在哪一格：字面量能定路径？还是形状认得出但运行期才知道？还是切不出来？ */
 function classifyArg(argRaw: string, ok: boolean, judge: string): { shape: ReaderShape; kind: ReaderHit["kind"]; rel: string | null } {
   const trimmed = argRaw.trim();
@@ -199,14 +213,16 @@ function classifyArg(argRaw: string, ok: boolean, judge: string): { shape: Reade
       : { shape: "url-relative", kind: "literal", rel };
   }
   // join(REPO|ROOT, "a", "b")／join(__dirname, "..", "a")：全字面量分段 ⇒ 仓内 rel
-  const absJoin = /^\s*join\(\s*(REPO|ROOT|root|MAIN_ROOT|repoRoot|__dirname|__filename)\s*((?:\s*,\s*[^,()]+)*)\)/u.exec(trimmed);
+  const absJoin = /^\s*join\(([^()]*)\)/u.exec(trimmed);
   if (absJoin !== null) {
-    const segs = stringLiterals(absJoin[2] ?? "");
-    if (segs.length > 0 && segs.every((s) => !s.includes("$"))) {
+    const args = absJoin[1]!.split(",").map((arg) => arg.trim());
+    const base = args.shift() ?? "";
+    const segs = args.map(oneStringLiteral);
+    if (JOIN_BASES.has(base) && segs.length > 0 && segs.every((s): s is string => s !== null && !s.includes("$"))) {
       const rawRel = segs.join("/");
       // `__dirname` 的基准是**判卷自己所在目录**：`join(__dirname, "..", "scripts", "gates.ts")`＝仓内那份文件。
       // 少兜这一层就会把真读取者读成「运行期路径」⇒ 第一栏点不出它的名字（`tests/gate-failure-log.test.ts:101` 现读命中）。
-      const rel = (absJoin[1] === "__dirname" || absJoin[1] === "__filename")
+      const rel = (base === "__dirname" || base === "__filename")
         ? relFromJudge(judge, rawRel) : normalizeRel(rawRel);
       return { shape: "literal-join", kind: "literal", rel };
     }
@@ -428,7 +444,8 @@ export function scanJudgeForCorpusReaders(judge: string, text: string, lookAhead
     }
   }
   for (const helper of CORPUS_HELPERS) {
-    for (const at of callSitesNotDefs(text, [helper.name])) {
+    const sites = callSitesNotDefs(text, [helper.name]);
+    for (let i = 0; i < sites.length; i += 1) {
       tally("corpus", "helper:" + helper.name, helper.faces);
     }
   }

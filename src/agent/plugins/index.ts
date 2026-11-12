@@ -1,7 +1,7 @@
 // M2e：插件运行时组合根。发现（三级作用域）→ 信任过滤（未信任只列出）→ 激活面：
 // hook 引擎 / MCP 连接 / skill 注册表。skill 激活不设私有状态——从事件流投影
 // （tool_call(name=skill) → 同 callId 的 tool_result 事件 id），与「上下文是投影」同构。
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { PermissionMode } from "../../permissions/modes";
 import {
   discoverPlugins, activeHooks, pendingPlugins,
@@ -125,6 +125,23 @@ export interface PluginRuntimeOptions {
 export const PLUGIN_TRUST_FILE_NAME = "plugin-trust.json";
 export function trustFilePathOf(opts: { pluginDataRoot: string; trustFile?: string }): string {
   return opts.trustFile ?? join(opts.pluginDataRoot, PLUGIN_TRUST_FILE_NAME);
+}
+
+/** F2 余项（2026-11-12 评审「显式配置的信任文件可落项目控制目录内」；方向 2026-11-13 业主批修）：
+ *  显式 trustFile 解析后落在 workspace 里 ⇒ fail loud 拒载。缺省路径在 app data（主机控制）无此面；
+ *  项目可改写自己的信任表 = 项目给自己签发信任（钩子/MCP/verify 三门共用这一份表）。
+ *  为什么不做静默回退：静默忽略配置正是本仓「视图说成功、事实没发生」那一族病灶。 */
+export function assertTrustFileOutsideWorkspace(opts: { workspace: string; trustFile?: string }): void {
+  if (!opts.trustFile) return;
+  const tf = resolve(opts.trustFile);
+  const ws = resolve(opts.workspace);
+  const rel = relative(ws, tf);
+  if (!isAbsolute(rel) && rel !== ".." && !rel.startsWith(".." + sep)) {
+    throw new Error(
+      "信任表文件不能位于项目控制目录内（fail loud 拒载）：" + tf
+      + " —— 项目可改写它就等于项目给自己签发信任；把 M2E_TRUST_FILE 移出工作区或改回缺省路径",
+    );
+  }
 }
 
 /** 插件数据根的缺省目录名（与信任表同顶的那个子目录）。 */
@@ -293,6 +310,7 @@ export class PluginRuntime {
   private constructor(manifest: PluginsManifest, opts: PluginRuntimeOptions) {
     this.opts = opts;
     this.manifest = manifest;
+    assertTrustFileOutsideWorkspace(opts);
     this.trust = new TrustStore(trustFilePathOf(opts));
     this.hooks = new HookEngine({
       hooks: activeHooks(manifest),
@@ -341,6 +359,7 @@ export class PluginRuntime {
 
   /** 静态扫描 + 信任过滤（不连 MCP 不跑 hook——纯装载）。 */
   static async load(opts: PluginRuntimeOptions): Promise<PluginRuntime> {
+    assertTrustFileOutsideWorkspace(opts);
     const trust = new TrustStore(trustFilePathOf(opts));
     await trust.warm();
     const manifest = await discoverPlugins({

@@ -1,6 +1,6 @@
 // M2e 任务 3/4 单测：frontmatter 全量字段解析 / 渐进披露 1536 截断 / 触发全文 /
 // $ARGUMENTS·$1 替换（含缺省行为）/ 压缩后重挂预算（单 5000 / 合 25000）/ 激活的事件流投影。
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { cp, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,6 +11,18 @@ import {
   PluginRuntime,
 } from "../src/agent/plugins";
 import type { AgentEvent } from "../src/events";
+
+// F2 余项迁移（2026-11-13）：信任表不得落工作区（PluginRuntime 装载 fail loud 拒载）。
+// 共享一个工作区外的信任目录：本测试文件内复用，文件级 afterEach 清尾。
+let trustHome = "";
+afterEach(async () => {
+  if (trustHome) await rm(trustHome, { recursive: true, force: true }).catch(() => {});
+  trustHome = "";
+});
+const trustRoot = async (): Promise<string> => {
+  if (!trustHome) trustHome = await mkdtemp(join(tmpdir(), "dsh-trust-out-"));
+  return trustHome;
+};
 
 function fx(...parts: string[]): string {
   return join(process.cwd(), "fixtures", "plugins", ...parts);
@@ -164,7 +176,7 @@ describe("M2e skill：L2 资源索引（只列路径，不读内容）", () => {
       projectSkillsDir: join(ws, ".agent", "skills"),
       workspace: ws,
       pluginDataRoot: join(ws, "data"),
-      trustFile: join(ws, "trust.json"),
+      trustFile: join(await trustRoot(), "trust.json"),
     });
     await rt.trustDecide("resourceful", true);
     const out = rt.triggerSkill("/resourceful");
@@ -312,11 +324,11 @@ describe("项目作用域散装 skill 的信任出口（S2-12 回归）", () => 
       ["---", "name: solo", "description: 只用于回归的散装 skill。", "---", "", "正文"].join("\n"),
       "utf8",
     );
-    const load = (): Promise<PluginRuntime> => PluginRuntime.load({
+    const load = async (): Promise<PluginRuntime> => await PluginRuntime.load({
       projectPluginsDir: pluginsDir,
       workspace: ws,
       pluginDataRoot: join(ws, "data"),
-      trustFile: join(ws, "trust.json"),
+      trustFile: join(await trustRoot(), "trust.json"),
     });
     const rt = await load();
     const solo = rt.snapshot().looseSkills.find((l) => l.name === "solo-skill");

@@ -1,10 +1,11 @@
 // M1c 规则库（§11.7.3）：allow/ask/deny 三行为条目、两层存储（项目 + 全局）、
 // 命令链式拆分逐段判定（任一段 deny 全链 deny，同段最长前缀）、原子写、坏配置拒载。
-import { readFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { readFileSync, realpathSync, statSync } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
-import { basename, dirname, join, relative, resolve } from "node:path";
-import { projectAgentPath } from "../app-data";
+import { homedir } from "node:os";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { isBlankWorkspace, projectAgentPath, WorkspaceRequiredError } from "../app-data";
 import { writeFileAtomic } from "../atomic-write";
 import { processLiveness } from "../process-liveness";
 import { commandForms, invocations, normalizeCommandForMatch, tokenize, tokenSubsequenceStart } from "./command-shape";
@@ -27,8 +28,8 @@ export interface PermissionRule {
   layer?: RuleLayer;
 }
 
-/** 规则来源层。`global` ＝ 用户自己机器上那份；`project` ＝ 随仓库分发的那份。 */
-export type RuleLayer = "global" | "project";
+/** 全局策略、本机工作区授权、仓库限制；来源只由加载器确定。 */
+export type RuleLayer = "global" | "local" | "project";
 
 export interface PermissionsFile {
   rules: PermissionRule[];
@@ -77,53 +78,68 @@ export function parsePermissionsFile(raw: string, origin: string): PermissionRul
   });
 }
 
-/** 两层加载：全局层在前、项目层在后，**合并成并集并给每条盖上层归属**。任一层解析失败 → 整体抛错拒载。
- *
- *  合并面为什么必须带层：段内的赢家是「最长前缀那条」，行为优先序只在等长时生效——所以
- *  「谁放宽了谁」光看合并后的数组是**答不出来**的（S4 的实测形状：deny「git push」＋allow
- *  「git push --force」⇒ allow，且与两条的先后顺序无关）。有了层归属，`matchSegment` 才谈得上
- *  地板：全局层的 deny 命中即压过任何 allow（业主 2026-10-04 裁决）。
- *  旧注释写的「优先序 deny>ask>allow 与最长前缀使项目层只能收紧」是错的，且错了很多轮没人抓到
- *  ——因为此前没有任何一格判「这条 allow 来自哪一层」。 */
+/** 项目和全局文件都须完整通过校验；来源标签不能由文件内容指定。 */
 export function loadPermissionRules(projectPath?: string, globalPath?: string): PermissionRule[] {
-  const rules: PermissionRule[] = [];
-  if (globalPath) {
-    const raw = readIfExists(globalPath);
-    if (raw !== null) rules.push(...parsePermissionsFile(raw, globalPath).map((r) => ({ ...r, layer: "global" as const })));
-  }
-  if (projectPath) {
-    const raw = readIfExists(projectPath);
-    if (raw !== null) rules.push(...parsePermissionsFile(raw, projectPath).map((r) => ({ ...r, layer: "project" as const })));
-    // #57：同目录的 always-allow 那份**透明并入**（同为 project 层，排在被跟踪那份之后）。
-    // 为什么放读侧而不是让每个调用方自己多传一个参数：写入端搬走文件之后，若读侧漏一处，
-    // 症状是"批准过的总是允许下次不生效"——那是**静默失效**，比记错更坏。
-    // 收在一处，任何调用方（含将来新增的）都不可能忘。文件不存在＝零行为（现读全仓都没有这个文件）。
-    const alwaysPath = join(dirname(projectPath), ALWAYS_RULES_FILE);
-    const alwaysRaw = resolve(alwaysPath) === resolve(projectPath) ? null : readIfExists(alwaysPath);
-    // 机器本地授权不许随仓库分发：被 git 跟踪的 always 文件是仓库作者写的，不是本机用户点出来的。
-    // 旧实现只按「文件存在」并入 ⇒ 恶意仓库提交一份 allow-all 即免掉全部审批。
-    if (alwaysRaw !== null && !isGitTracked(alwaysPath)) {
-      rules.push(...parsePermissionsFile(alwaysRaw, alwaysPath).map((r) => ({ ...r, layer: "project" as const })));
-    }
-  }
-  return rules;
+  return [
+    ...(globalPath ? readPermissionFile(globalPath).map((r) => ({ ...r, layer: "global" as const })) : []),
+    ...(projectPath ? readPermissionFile(projectPath).map((r) => ({ ...r, layer: "project" as const })) : []),
+  ];
 }
 
-/** 该文件是否随仓库分发（被 git 跟踪）。只看「文件在不在」会把 clone 来的授权当成本机用户的点击。
- *  git 不可用 / 非仓库 ⇒ false（保留非 git 工作区的旧行为）；git 明确说 tracked ⇒ true。 */
-function isGitTracked(file: string): boolean {
+export function readPermissionFile(path: string): PermissionRule[] {
+  const raw = readIfExists(path);
+  return raw === null ? [] : parsePermissionsFile(raw, path);
+}
+
+function physicalPath(path: string): string {
   try {
-    const dir = dirname(file);
-    const rel = relative(dir, file);
-    const r = spawnSync("git", ["-C", dir, "ls-files", "--error-unmatch", "--", rel], {
-      encoding: "utf8",
-      stdio: ["ignore", "ignore", "ignore"],
-      timeout: 2_000,
-    });
-    return r.status === 0;
-  } catch {
-    return false;
+    return realpathSync(path);
+  } catch (error) {
+    const parent = dirname(path);
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT" || parent === path) throw error;
+    return join(physicalPath(parent), basename(path));
   }
+}
+
+function within(root: string, path: string): boolean {
+  const rel = relative(root, path);
+  return !isAbsolute(rel) && rel !== ".." && !rel.startsWith(".." + sep);
+}
+
+function workspaceControls(root: string, path: string): boolean {
+  return within(root, physicalPath(dirname(path))) || within(root, physicalPath(path));
+}
+
+function workspaceIdentity(workspace: string) {
+  if (isBlankWorkspace(workspace)) throw new WorkspaceRequiredError("权限规则");
+  const root = physicalPath(resolve(workspace));
+  try {
+    const stat = statSync(root, { bigint: true });
+    if (!stat.isDirectory()) throw new Error("权限规则的工作区必须是目录");
+    const key = createHash("sha256").update(`${root}\0${stat.dev}:${stat.ino}:${stat.birthtimeNs}`).digest("hex");
+    return { root, key };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    return { root, key: null };
+  }
+}
+
+function grantFile(key: string, globalPath: string): string {
+  return join(dirname(globalPath), "workspace-permissions", key, ALWAYS_RULES_FILE);
+}
+
+export function loadWorkspacePermissionRules(workspace: string, appDataDir?: string): PermissionRule[] {
+  const { root, key } = workspaceIdentity(workspace);
+  const globalPath = globalPermissionsPath(appDataDir);
+  const rules = loadPermissionRules(projectAgentPath(workspace, "permissions.json"), globalPath);
+  // 如果用户把应用数据放在工作区里，该目录不能授予额外权限。
+  const base = workspaceControls(root, globalPath)
+    ? rules.filter((r) => r.layer !== "global" || r.behavior !== "allow")
+    : rules;
+  if (key === null) return base;
+  const alwaysPath = grantFile(key, globalPath);
+  const remembered = workspaceControls(root, alwaysPath) ? [] : readPermissionFile(alwaysPath);
+  return [...base, ...remembered.map((r) => ({ ...r, layer: "local" as const }))];
 }
 
 function readIfExists(path: string): string | null {
@@ -136,26 +152,21 @@ function readIfExists(path: string): string | null {
   }
 }
 
-/** always-allow 的落点文件名（#57，2026-10-05）——与受版本控制的 `permissions.json` **分开**。
- *
- *  为什么必须分开：`<workspace>/.agent/permissions.json` 在本仓是**有意跟踪**的（它是策展过的
- *  项目策略，该随仓库走）。但「某人在这台机器上点过一次总是允许」是**授权记录**，属于机器、
- *  不属于仓库——写在同一个文件里就等于随仓库分发：谁 clone，谁就继承那一次授权。
- *  这条与 S4 是同一族的两半：S4 修的是「谁放宽了谁」不可判，这一条修的是「授权跟着仓库跑」。
- *
- *  单独一个文件而不是改名整体迁移：`permissions.json` 里可能有**人写**的项目策略，
- *  那些该继续被跟踪；只有**程序写**的那部分搬走。判卷钉的是"程序写的一律不落进被跟踪那份"。 */
+/** 只在用户的应用数据目录中加载持久批准；不采信项目内的同名旧文件。 */
 export const ALWAYS_RULES_FILE = "permissions.always.json";
 
-/** always-allow 的落点：`<workspace>/.agent/permissions.always.json`（**必须**在 `.gitignore` 里）。 */
-export function alwaysRulesPath(workspace: string): string {
-  return projectAgentPath(workspace, ALWAYS_RULES_FILE);
+export function alwaysRulesPath(workspace: string, appDataDir?: string): string {
+  const { root, key } = workspaceIdentity(workspace);
+  if (key === null) throw new Error("工作区不存在，无法保存持久授权");
+  const path = grantFile(key, globalPermissionsPath(appDataDir));
+  if (workspaceControls(root, path)) throw new Error("持久权限必须存放在工作区之外");
+  return path;
 }
 
-/** 全局层占位路径：<appData>/permissions.json（M1d 接设置页）。 */
+/** 全局权限文件；无 HOME 时也不得退回项目内相对路径。 */
 export function globalPermissionsPath(appDataDir?: string): string {
-  const base = appDataDir ?? process.env.DSH_APPDATA ?? join(process.env.HOME ?? ".", ".local", "share");
-  return join(base, "permissions.json");
+  const base = appDataDir ?? process.env.DSH_APPDATA ?? join(homedir(), ".local", "share");
+  return resolve(base, "permissions.json");
 }
 
 // ---- 持久 allow 规则的管理读端（roadmap「持久 allow 规则」，2026-11-10）----
@@ -321,13 +332,29 @@ function matchSegment(rules: PermissionRule[], segment: string): RuleHit | null 
     // （实测：顺序对调也是 allow ⇒ 放宽不来自顺序，来自长度）。
     // 方向只此一条：项目层的 deny **不**获得同等优先权——它既不能替全局层放行，也不能替全局层强加；
     // 其余一切仍是「段内最长前缀者胜，等长时 deny>ask>allow」。
+    // F5（2026-11-12 评审遗留；方向 2026-11-13 业主裁「项目限制优先于本机记忆授权」）：项目层的
+    // ask/deny **压过本机层**（permissions.always.json 记忆授权，loader 盖 layer:"local"）的 allow，
+    // **不比前缀长度**——修前探针：项目 ask/deny「git push」＋本机 allow「git push --force」⇒ 判 allow，
+    // 仓内限制被静默击穿。范围只此一对（项目限制 × 本机 allow）：全局层地板（S4）原样；两条项目限制
+    // 之间、两条本机授权之间、无 layer 的老形状，仍按最长前缀＋deny>ask>allow。
+    // 后果（接受）：项目 ask 命中的命令，即使用户点过「总是允许」，下次仍问——「ask」的本义就是每次都问；
+    // 用户想免问改仓内规则或删本机记忆条目。
     const floor = effective.behavior === "deny" && effective.layer === "global";
     const bestFloor = best !== null && best.rule.behavior === "deny" && best.rule.layer === "global";
+    const candProjectRestrictive = effective.behavior !== "allow" && effective.layer === "project";
+    const bestProjectRestrictive = best !== null && best.rule.behavior !== "allow" && best.rule.layer === "project";
+    const candLocalAllow = effective.behavior === "allow" && effective.layer === "local";
+    const bestLocalAllow = best !== null && best.rule.behavior === "allow" && best.rule.layer === "local";
     const longerOrTiedBetter =
       best === null ||
       len > best.prefixLen ||
       (len === best.prefixLen && BEHAVIOR_RANK[effective.behavior] < BEHAVIOR_RANK[best.rule.behavior]);
-    if (best === null || (floor && !bestFloor) || (floor === bestFloor && longerOrTiedBetter)) {
+    const projectOverLocal =
+      (candProjectRestrictive && bestLocalAllow) || (bestProjectRestrictive && candLocalAllow);
+    if (best === null
+        || (floor && !bestFloor)
+        || (candProjectRestrictive && bestLocalAllow && !bestFloor)
+        || (floor === bestFloor && !projectOverLocal && longerOrTiedBetter)) {
       best = {
         rule: effective,
         prefixLen: len,
@@ -362,12 +389,10 @@ function ruleApplies(ruleTool: string, tool: string): boolean {
   return isShellFamily(ruleTool) && isShellFamily(tool);
 }
 
-/** 链式判定：任一段命中 deny → 全链 deny（deny 短路优先，不受其他段未命中影响）；
- *  全段命中时取最坏行为（deny > ask > allow）；任一段无规则命中 → miss（落回档位层）。
- *  deny 短路必须先于 miss 判定：否则 `echo x && git push --force` 里那个无规则命中的
- *  无害前缀会把整链打回档位层，用户显式 deny 被击穿（P0-2）。 */
+/** deny 压过 ask；只有整条链都匹配时，allow 才能放行。 */
 export function judgeChain(rules: PermissionRule[], tool: string, command?: string): ChainVerdict {
-  const applicable = rules.filter((r) => ruleApplies(r.tool, tool));
+  // 项目策略可以收紧权限，不能代替本机用户授权。
+  const applicable = rules.filter((r) => ruleApplies(r.tool, tool) && (r.layer !== "project" || r.behavior !== "allow"));
   if (applicable.length === 0) return { verdict: "miss" };
   const segments = command === undefined ? [""] : splitCommandChain(command);
   if (segments.length === 0) return { verdict: "miss" };
@@ -376,7 +401,7 @@ export function judgeChain(rules: PermissionRule[], tool: string, command?: stri
   for (const seg of segments) {
     const hit = matchSegment(applicable, seg);
     if (!hit) {
-      allHit = false; // 本段无规则：不再立即 miss——后面的段仍可能命中 deny 并短路整链
+      allHit = false; // 本段无规则：仍要检查其他段的 deny / ask
       continue;
     }
     if (hit.rule.behavior === "deny") {
@@ -392,7 +417,7 @@ export function judgeChain(rules: PermissionRule[], tool: string, command?: stri
       worst = hit;
     }
   }
-  if (!allHit || worst === null) return { verdict: "miss" };
+  if (worst === null || (!allHit && worst.rule.behavior === "allow")) return { verdict: "miss" };
   return {
     verdict: worst.rule.behavior,
     ruleId: worst.rule.id ?? "",

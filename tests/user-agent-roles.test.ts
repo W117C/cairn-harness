@@ -12,6 +12,18 @@ import { loadUserAgentRoles, USER_AGENT_SOURCES } from "../src/agent/roles/user-
 import { PluginRuntime } from "../src/agent/plugins";
 import { gateToolSpecs } from "../src/agent/session-provider";
 
+// F2 余项迁移（2026-11-13）：信任表不得落工作区（PluginRuntime 装载 fail loud 拒载）。
+// 共享一个工作区外的信任目录：本测试文件内复用，文件级 afterEach 清尾。
+let trustHome = "";
+afterEach(async () => {
+  if (trustHome) await rm(trustHome, { recursive: true, force: true }).catch(() => {});
+  trustHome = "";
+});
+const trustRoot = async (): Promise<string> => {
+  if (!trustHome) trustHome = await mkdtemp(join(tmpdir(), "dsh-trust-out-"));
+  return trustHome;
+};
+
 let root = "";
 afterEach(async () => { if (root) await rm(root, { recursive: true, force: true }).catch(() => {}); root = ""; });
 
@@ -94,7 +106,7 @@ describe("PluginRuntime：用户级角色与插件角色同一条查找面、同
       projectPluginsDir: join(root, "plugins"),
       workspace: root,
       pluginDataRoot: join(root, "plugin-data"),
-      trustFile: join(root, "trust.json"),
+      trustFile: join(await trustRoot(), "trust.json"),
       home: root,
     });
     await rt.trustDecide("crew", true);
@@ -134,7 +146,7 @@ describe("PluginRuntime：用户级角色与插件角色同一条查找面、同
     await writeFile(join(root, ".dsh", "agents", "empty.md"), "", "utf8");
     const again = await PluginRuntime.load({
       projectPluginsDir: join(root, "plugins"), workspace: root,
-      pluginDataRoot: join(root, "plugin-data"), trustFile: join(root, "trust.json"), home: root,
+      pluginDataRoot: join(root, "plugin-data"), trustFile: join(await trustRoot(), "trust.json"), home: root,
     });
     expect(again.snapshot().warnings.filter((w) => w.message.includes("empty.md")).map((w) => w.plugin))
       .toEqual(["user-agents"]);

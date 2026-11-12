@@ -42,7 +42,7 @@ export async function createProductAgentClientV1(opts: ProductInteropOptions): P
   const sessionsDir = join(workspace, ".agent", "sessions");
   await mkdir(join(workspace, ".agent"), { recursive: true });
   await mkdir(sessionsDir, { recursive: true });
-  initSettingsStore(join(workspace, ".agent", "settings.json"));
+  initSettingsStore(join(workspace, ".agent", "settings.json"), { source: "workspace" });
   initSessionsDir(sessionsDir);
   initMemoryHome(join(workspace, ".agent", "memory-home"));
   await initSandbox();

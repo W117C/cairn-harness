@@ -3,7 +3,8 @@ import { open, realpath } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { setImmediate } from "node:timers/promises";
 import { relative } from "node:path";
-import { loadVerifyConfig } from "./verify";
+import { createVerifyHook, loadVerifyConfig, verifyConfigFingerprint } from "./verify";
+import type { VerifyTrustResolver } from "./verify-trust";
 import { assertNotAgentArea, assertRealContainment, resolveInWorkspace, type ToolContext, type ToolResult } from "../tools/base";
 
 /** Internal callback only: the runner MUST recheck immediately after shell approval. */
@@ -36,7 +37,10 @@ async function snapshot(workspace: string, path: string): Promise<string> {
 }
 
 /** One instance per main run, never installed in workers; independent from verify.maxAttempts. */
-export function createActionFusion(runShell: FusionShell) {
+export function createActionFusion(
+  runShell: FusionShell,
+  trust: { trustedRepo?: boolean; trustResolver?: VerifyTrustResolver } = {},
+) {
   let attempts = 0;
   return async (write: ToolResult, path: unknown, ctx: ToolContext): Promise<ToolResult> => {
     if (!write.ok) return write; // No config reads, hashing or commands after a failed write.
@@ -59,18 +63,28 @@ export function createActionFusion(runShell: FusionShell) {
     } catch {
       return skipped("content guard unavailable or unsafe path");
     }
-    const beforeExecute = async (): Promise<ToolResult | null> => {
-      if (ctx.signal?.aborted) return { ok: false, output: "cancelled before lint" };
-      try {
-        if (initial === await snapshot(ctx.workspace, path as string)) return null;
-      } catch { /* Fail closed if deleted/replaced/redirected during approval. */ }
-      return { ok: false, output: "content changed or unsafe path before lint" };
-    };
     try {
-      // Only project configuration/probed scripts; never model params or plan.verify.
-      const { config } = await loadVerifyConfig(ctx.workspace);
-      const commands = config.lint ?? [];
+      const resolved = await loadVerifyConfig(ctx.workspace);
+      const commands = resolved.config.lint ?? [];
       if (commands.length === 0) return skipped("no configured lint commands");
+      const verify = createVerifyHook(ctx.workspace, { ...trust, resolved });
+      if (!await verify.surface?.(ctx.signal)) return skipped("repository verification commands require approval");
+
+      const fingerprint = verifyConfigFingerprint(resolved);
+      const beforeExecute = async (): Promise<ToolResult | null> => {
+        if (ctx.signal?.aborted) return { ok: false, output: "cancelled before lint" };
+        try {
+          if (initial !== await snapshot(ctx.workspace, path as string)) {
+            return { ok: false, output: "content changed or unsafe path before lint" };
+          }
+          if (fingerprint !== verifyConfigFingerprint(await loadVerifyConfig(ctx.workspace))) {
+            return { ok: false, output: "repository lint configuration changed before execution" };
+          }
+          return null;
+        } catch {
+          return { ok: false, output: "content changed or unsafe path before lint" };
+        }
+      };
       const stale = await beforeExecute();
       if (stale) return ctx.signal?.aborted ? finish("failed", stale.output) : skipped(stale.output);
       attempts++;

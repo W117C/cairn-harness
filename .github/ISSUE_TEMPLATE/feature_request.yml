@@ -1,0 +1,74 @@
+name: 能力请求
+description: 提一个本仓还没有的能力
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        本仓当前处于 **B1 内测**阶段，交付面只有 CLI（桌面端不在 v1 交付面内）。
+        受众与范围的裁决见 `docs/adr/0002-v1-audience-b1-internal-beta.md`，
+        扩大受众的清单留门 `docs/b2-checklist.md`。**提之前先读这两份。**
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 你遇到的实际问题
+      description: 先说问题，不要先说方案。方案可以是你的猜测，问题才是真的。
+      placeholder: |
+        我想让 harness 在一条会话跑完后，把这次改动的影响面直接回注给模型，
+        现在得手动再问一次。
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 你设想的做法
+      description: 不用完整；能说清触发条件与期望输出就够。
+    validations:
+      required: true
+
+  - type: dropdown
+    id: layer
+    attributes:
+      label: 这条能力落在哪一层
+      options:
+        - 事件内核（`src/agent/`、`src/events/`）
+        - 工具面（`src/tools/`）
+        - 权限与沙箱（`src/permissions/`）
+        - provider / 路由（`src/providers/`、`src/routing/`）
+        - CLI 装配（`src/cli.ts`、`bin/`）
+        - 桌面端（`apps/desktop/`）
+        - 门禁 / 工具链（`scripts/`）
+        - 文档层
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 你试过的替代做法
+      description: 现有的能力拼一拼能不能达到？本仓有现成的组合手段时请指出来。
+    validations:
+      required: false
+
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: 对既有行为的影响
+      description: |
+        这条能力会不会改变现有的退出码、事件流形状、权限档语义或门禁读数？
+        本仓的 fail-closed 与事件可重放是设计前提，不是可选项。
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: 范围确认
+      options:
+        - label: 我确认这条请求不要求扩大 B1 的受众与交付面
+          required: true
+        - label: 我读过 `docs/b2-checklist.md`，并认为这条请求落在 B2 的清单里
+          required: false

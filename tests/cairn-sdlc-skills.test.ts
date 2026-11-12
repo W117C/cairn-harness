@@ -8,6 +8,8 @@ const names = ["cairn-gates", "cairn-verify"] as const;
 
 async function fixture(selected: readonly string[] = names) {
   const workspace = await mkdtemp(join(tmpdir(), "cairn-sdlc-skills-"));
+  // F2 余项：信任表不得落工作区 ⇒ 夹具配一个工作区外的信任目录，dispose 一并清尾。
+  const trustDir = await mkdtemp(join(tmpdir(), "cairn-sdlc-trust-"));
   const plugins = join(workspace, ".agent", "plugins");
   const runtimes: PluginRuntime[] = [];
   try {
@@ -22,7 +24,7 @@ async function fixture(selected: readonly string[] = names) {
   return {
     workspace,
     plugins,
-    async load(trustFile = join(workspace, "trust.json")) {
+    async load(trustFile = join(trustDir, "trust.json")) {
       const runtime = await PluginRuntime.load({
         workspace,
         projectPluginsDir: plugins,
@@ -37,6 +39,7 @@ async function fixture(selected: readonly string[] = names) {
     },
     async dispose() {
       for (const runtime of runtimes) await runtime.shutdown();
+      await rm(trustDir, { recursive: true, force: true });
       await rm(workspace, { recursive: true, force: true });
     },
   };

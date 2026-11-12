@@ -4,7 +4,7 @@
 // 不会有任何一条测试红（本仓点名的「两头断」形状）。故这里补一条走 runAgent 真入口、真 stub server 的。
 import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runAgent } from "../src/main/agent-runner";
 import { TrustStore, pluginFingerprint } from "../src/agent/plugins";
@@ -47,7 +47,8 @@ describe("MCP 注解抵达权限门（runAgent 真入口 + 真 stub server）", 
     // 符号链接指回仓库内 fixtures：server.mjs 的裸导入 @modelcontextprotocol/sdk 经 ESM realpath 解析
     const pluginRoot = join(pluginsDir, "echo-suite");
     await symlink(join(FX, "project", "echo-suite"), pluginRoot, "dir");
-    trust = join(dir, "trust.json");
+    // F2 余项：信任表不得落项目控制目录（workspace=dir ⇒ 目录得在工作区外），afterAll 清尾。
+    trust = join(await mkdtemp(join(tmpdir(), "dsh-mcp-grade-trust-")), "trust.json");
     await new TrustStore(trust).decide(pluginRoot, true, await pluginFingerprint(pluginRoot));
   }, 60_000);
 
@@ -59,6 +60,7 @@ describe("MCP 注解抵达权限门（runAgent 真入口 + 真 stub server）", 
     if (saved.data === undefined) delete process.env.M2E_PLUGIN_DATA;
     else process.env.M2E_PLUGIN_DATA = saved.data;
     await rm(dir, { recursive: true, force: true }).catch(() => {});
+    if (trust) await rm(dirname(trust), { recursive: true, force: true }).catch(() => {});
   });
 
   // 这一条是 `evaluate(name, args, s, info.grade)` 那个实参的唯一测试侧判据：

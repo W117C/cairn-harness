@@ -1,13 +1,26 @@
 // skill 正文在**主路径**（触发）上的预算。此前只有压缩后重挂那头收窄（clampSkillBody），
 // 触发那头原样吐全文，而 skill 的 tool_result 又在 prune exemptTools 里 ⇒ 一份 200KB 的
 // SKILL.md 会作为常驻上下文付满整个会话。见 src/agent/plugins/index.ts::triggerSkill。
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+
   PluginRuntime, SKILL_REMOUNT_TOKENS_PER_SKILL, clampSkillBody, estimateTokens,
 } from "../src/agent/plugins";
+
+// F2 余项迁移（2026-11-13）：信任表不得落工作区（PluginRuntime 装载 fail loud 拒载）。
+// 共享一个工作区外的信任目录：本测试文件内复用，文件级 afterEach 清尾。
+let trustHome = "";
+afterEach(async () => {
+  if (trustHome) await rm(trustHome, { recursive: true, force: true }).catch(() => {});
+  trustHome = "";
+});
+const trustRoot = async (): Promise<string> => {
+  if (!trustHome) trustHome = await mkdtemp(join(tmpdir(), "dsh-trust-out-"));
+  return trustHome;
+};
 
 async function runtimeWithBody(body: string): Promise<{ rt: PluginRuntime; root: string }> {
   const root = await mkdtemp(join(tmpdir(), "skill-cap-"));
@@ -24,7 +37,7 @@ async function runtimeWithBody(body: string): Promise<{ rt: PluginRuntime; root:
     looseRoots: [],
     workspace: root,
     pluginDataRoot: dataDir,
-    trustFile: join(dataDir, "trust.json"),
+    trustFile: join(await trustRoot(), "trust.json"),
   });
   await rt.trustDecide("echo-suite", true);
   return { rt, root };

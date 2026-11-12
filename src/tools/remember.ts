@@ -15,13 +15,10 @@ import {
   appendDecisionEntry,
   appendRootFile,
   globalMemoryDir,
-  projectMemoryDir,
-  readTextOrNull,
+  projectMemoryWriteDir,
   appendTopic,
   replaceRootFileIfMatches,
   replaceTopicIfMatches,
-  rootFilePath,
-  writeTopic,
   type MemoryType,
 } from "../agent/memory/store.js";
 import { redactSecrets } from "../agent/security/scan.js";
@@ -122,7 +119,7 @@ export const remember: Tool = {
       if (typeof topic !== "string" || topic.length === 0) {
         throw new MemoryError("call_failed", "remember: kind=memory 必带 topic（1-64 位字母/数字/连字符/下划线）");
       }
-      const dir = scope === "project" ? projectMemoryDir(ctx.workspace) : globalMemoryDir();
+      const dir = scope === "project" ? await projectMemoryWriteDir(ctx.workspace, topic) : globalMemoryDir();
       if (op === "replace") {
         const oldContent = rawArgs.old_content;
         if (typeof oldContent !== "string") {
@@ -150,7 +147,6 @@ export const remember: Tool = {
       return { ok: true, output: "已写入 " + (scope === "project" ? ".agent/" : "全局层 ") + "memory/" + topic + ".md（append，type=" + type + "，" + res.bytes + " 字节，modified 已落账）" + note };
     }
     // ---- 根三文件（仅项目层）----
-    const path = rootFilePath(ctx.workspace, k);
     if (op === "append") {
       if (k === "decision") await appendDecisionEntry(ctx.workspace, safe.text, nowISO);
       else await appendRootFile(ctx.workspace, k, safe.text);

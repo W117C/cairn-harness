@@ -26,6 +26,18 @@ import { PluginRuntime } from "../src/agent/plugins";
 import type { ModelOutput } from "../src/providers";
 import type { GlmMessage, GlmToolSpec } from "../src/providers/glm";
 
+// F2 余项迁移（2026-11-13）：信任表不得落工作区（PluginRuntime 装载 fail loud 拒载）。
+// 共享一个工作区外的信任目录：本测试文件内复用，文件级 afterEach 清尾。
+let trustHome = "";
+afterEach(async () => {
+  if (trustHome) await rm(trustHome, { recursive: true, force: true }).catch(() => {});
+  trustHome = "";
+});
+const trustRoot = async (): Promise<string> => {
+  if (!trustHome) trustHome = await mkdtemp(join(tmpdir(), "dsh-trust-out-"));
+  return trustHome;
+};
+
 const REPORT = "## 结论\n- 读完了。\n\n## 证据路径\n- a.ts:1\n\n## 风险\n- 低。\n\n## 未决问题\n- 无。\n\nverdict: pass";
 
 let root = "";
@@ -53,7 +65,7 @@ async function runtimeWithAgentFile(name: string, frontmatterBlock: string): Pro
     projectPluginsDir: join(home, "no-plugins"),
     workspace: root,
     pluginDataRoot: join(home, "plugin-data"),
-    trustFile: join(home, "trust.json"),
+    trustFile: join(await trustRoot(), "trust.json"),
     home,
   });
 }
