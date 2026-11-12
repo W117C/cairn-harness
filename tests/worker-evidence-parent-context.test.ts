@@ -1,3 +1,4 @@
+import { alwaysRulesPath, savePermissionRules } from "../src/permissions/rules";
 // 能力 5 的**并行那一半**：worker 的机器证据要落到「主模型看得见的那一条正文」上，
 // 而且这条落点必须**由设置位驱动**。
 //
@@ -19,7 +20,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 
 import { handleAgentRun, initSettingsStore } from "../src/main/agent-runner";
 import { projectContext } from "../src/agent/context";
@@ -29,6 +30,7 @@ const exec = promisify(execFile);
 const dirs: string[] = [];
 
 afterAll(async () => {
+  vi.unstubAllEnvs();
   delete process.env.M3A_MAIN_SCRIPT;
   delete process.env.M3A_AGENTS_DEMO;
   for (const d of dirs) await rm(d, { recursive: true, force: true }).catch(() => {});
@@ -64,16 +66,11 @@ async function spawnWriteWorker(test: string): Promise<{ events: AgentEvent[]; r
   // 两条批条都是**前提**而不是装饰：`write-demo.jsonl` 先 write_file 再 `shell_rw git status`，
   // 缺任一条批条 ⇒ worker 卡在 waiting_approval（实测现场：statuses 末位就是它），
   // 终态回执永远不来，下面所有断言都会红在错误的因上。
-  await writeFile(
-    join(repo, ".agent", "permissions.json"),
-    JSON.stringify({
-      rules: [
-        { behavior: "allow", tool: "write_file", scope: "always" },
-        { behavior: "allow", tool: "shell_rw", scope: "always" },
-      ],
-    }),
-    "utf8",
-  );
+  vi.stubEnv("DSH_APPDATA", join(home, "appdata"));
+  await savePermissionRules(alwaysRulesPath(repo), [
+    { behavior: "allow", tool: "write_file", scope: "always" },
+    { behavior: "allow", tool: "shell_rw", scope: "always" },
+  ]);
   await writeFile(join(repo, ".agent", "config.json"), JSON.stringify({ verify: { test: [test] } }), "utf8");
   // **必须提交**：write worker 的 verify 钩子挂在 worktree 上（`orchestrator.ts` 的
   // `workerVerify?.(loopWorkspace)`，验的是「即将被合并的那份代码」），而 `surface()` 从那个目录读

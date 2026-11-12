@@ -1,0 +1,28 @@
+{
+  "asar": "/Applications/Claude.app/Contents/Resources/app.asar",
+  "tokens": {
+    "member": "/.vite/build/index.chunk-SLtcb4nU.js",
+    "bytes": 38913,
+    "sha256": "953a209173f38e70f421d8c5285b66b252fe3f60f1aa9121bb89825816a6d2f5"
+  },
+  "rendererCss": {
+    "member": "/.vite/renderer/main_window/assets/MainWindowPage-CinbABxl.css",
+    "bytes": 246160,
+    "sha256": "1be41faf06028ae594f077095575181d3d34008183e1492caedd27a28d9e9fbf"
+  },
+  "expected": {
+    "tokens.css": {
+      "sha256": "953a209173f38e70f421d8c5285b66b252fe3f60f1aa9121bb89825816a6d2f5",
+      "bytes": 38913
+    },
+    "rendererCss": {
+      "sha256": "1be41faf06028ae594f077095575181d3d34008183e1492caedd27a28d9e9fbf",
+      "bytes": 246160
+    }
+  },
+  "match": {
+    "tokens.css": true,
+    "rendererCss": true
+  },
+  "verdict": "PASS"
+}

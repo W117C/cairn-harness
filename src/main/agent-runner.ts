@@ -73,11 +73,10 @@ import { activeContentPackNote } from "./evolution/activation-host";
 import { enterPlanRunScope, getPlanState, planGateBlocks, rememberDecision, seedPendingPlanFromEvents, type PermissionMode } from "../permissions";
 import {
   evaluate,
-  loadPermissionRules,
+  loadWorkspacePermissionRules,
   type PermissionRule,
   newAutonomySession,
 } from "../permissions";
-import { globalPermissionsPath } from "../permissions/rules";
 import { type ProviderKind } from "./settings";
 import { getLastWorkspace, setRunWorkspace } from "./runner-workspace";
 import { pathOf, sessionExists } from "./sessions";
@@ -1195,7 +1194,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
   // 种**内存** allow 规则（只活在本场 run，不落 permissions.json——总闸在设置里，规则文件保持
   // 用户手写纯净）。放行走既有 L3-rule 层（只豁免 critical，web 是 high）；命令侧的网络红线
   // （isNetworkCommand / sandbox 出口）原样不动——放行的是「问不问」，不是风险判据本身。
-  const webAuto = (await store().get()).webAutoApprove === true;
+  const webAuto = await store().webAutoApproveForRun();
   const webAutoRules: PermissionRule[] = webAuto
     ? [
         { behavior: "allow", tool: "web_search", scope: "always", id: "web-auto-approve:web_search" },
@@ -1203,10 +1202,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       ]
     : [];
   const rules = [
-    ...loadPermissionRules(
-      join(opts.workspace, ".agent", "permissions.json"),
-      globalPermissionsPath(),
-    ),
+    ...loadWorkspacePermissionRules(opts.workspace),
     ...webAutoRules,
   ];
   // 先拒绝占用，再改写交互态；到 liveRunPaths.add 之间必须保持同步（无 await 缝隙，消除 TOCTOU）。
@@ -1222,10 +1218,6 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     emit: null,
     sessionId: opts.sessionId,
     logPath: opts.logPath,
-    ...(opts.actionFusion === true ? {
-      actionFusion: createActionFusion((command, ctx, guard) =>
-        gatedTool("run_shell", run_shell, guard).run({ command }, ctx)),
-    } : {}),
     autonomy: newAutonomySession(opts.mode, {
       rules,
       sandboxAvailable: opts.sandbox ? opts.sandbox.available : null,
@@ -1334,6 +1326,12 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
       askGate: sessionObj.askGate,
       ...(opts.unattended ? { unattended: true } : {}),
     });
+    if (opts.actionFusion === true) {
+      sessionObj.actionFusion = createActionFusion(
+        (command, ctx, guard) => gatedTool("run_shell", run_shell, guard).run({ command }, ctx),
+        { trustedRepo: opts.trustedRepo ?? false, trustResolver: verifyTrust },
+      );
+    }
     // M3a：会话级编排器（worker 子流落主流 JSONL；父 turn 收束后编排器存活，审批/取消路由不断）
     let demoModelFor: ((args: SpawnArgs) => WorkerModel | undefined) | undefined;
     if (process.env.M3A_AGENTS_DEMO === "1") demoModelFor = await loadDemoWorkerModels();

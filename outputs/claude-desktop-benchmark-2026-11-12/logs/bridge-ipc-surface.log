@@ -1,0 +1,149 @@
+=== exposeInMainWorld names ===
+  x  6  process
+  x  5  desktopEssentialTelemetryDisabled
+  x  2  claudeDesktopArtifactPane
+  x  1  buddy
+  x  1  cowork
+  x  1  omeletteDesktopPdf
+  x  1  buddyBle
+  x  1  desktopNoFlushBytecode
+  x  1  claudeAppBindings
+  x  1  claudeAppSettings
+  x  1  desktopBootFeatures
+  x  1  desktopManagedConfig
+  x  1  desktopEnterpriseConfig
+  x  1  desktopTelemetryConfig
+  x  1  desktopDeviceClass
+  x  1  desktopPreferredLanguages
+  x  1  desktopHomePath
+  x  1  desktopUpdateRelaunchAt
+  x  1  electronWindowControl
+  x  1  electronIntl
+  x  1  desktopBootPlaceholder
+  x  1  mcpAppBridge
+
+=== bridge namespace object literals (claude.*) ===
+  x 189  claude.web
+  x  63  claude.settings
+  x  42  claude.ai
+  x  36  claude.internal.ui
+  x  30  claude.internal.computerUse
+  x  30  claude.com
+  x  23  claude.hybrid
+  x  14  claude.zst
+  x   8  claude.buddy
+  x   6  claude.app
+  x   6  claude.md
+  x   5  claude.internal.findInPage
+  x   5  claude.local.md
+  x   5  claude.exe.zst
+  x   4  claude.internal.localExecConsent
+  x   3  claude.internal.sableOtter
+  x   3  claude.new
+  x   3  claude.design
+  x   3  claude.simulator
+  x   3  claude.skills
+  x   3  claude.officeAddin
+  x   3  claude.engineSurface
+  x   3  claude.windowVibrancy
+  x   3  claude.paneExtensions
+  x   3  claude.fizzyFrost
+  x   3  claude.hot
+  x   2  claude.resetAppData.stopMarkRetry
+  x   2  claude.desktop.offBoxMessage
+  x   2  claude.exe
+  x   1  claude.site
+  x   1  claude.handoff
+  x   1  claude.sensitiveField
+  x   1  claude.session.
+  x   1  claude.deployment_mode
+  x   1  claude.fedstart.com
+  x   1  claude.palantirfedstart.com
+  x   1  claude.hot.restart
+
+=== IPC channel prefixes ($_ns_$_) ===
+  x   69  0eda0ee6-09cc-4682-83a2-dbcc11f11fb0
+  x   21  fcb91d11-972d-4fd6-b90b-72739699bff5
+  x   21  WindowManager
+  x    4  density
+  x    4  bootstrapState
+  x    4  hybridTransition
+  x    4  supportBundleState
+  x    4  attachment
+  x    4  debugAttaching
+  x    4  connectedFilesState
+  x    4  state
+  x    4  loginRequests
+  x    4  connectPrompts
+  x    4  hostPower
+  x    4  deviceLink
+  x    4  compositing
+  x    4  updaterState
+  x    4  navigationState
+  x    4  managedRendererConfig
+  x    4  cliImport
+  x    4  computerUsePreview
+  x    4  browserPreview
+  x    4  sessionsBridgeStatus
+  x    4  interactiveAuth
+  x    4  grandPrixStatus
+  x    4  activeServers
+  x    4  remoteControlServeStatus
+  x    4  violinFretStatus
+  x    4  apiReachability
+  x    4  hostIPv6Notice
+  x    4  guestDiskFull
+  x    4  edrExtensionNotice
+  x    1  DesignPdf
+  x    1  LocalExecConsent
+  x    1  Skills
+
+=== IPC method names (Namespace_$_method) ===
+  x    1  PSVersionTable
+  distinct method-ish literals: 1
+
+=== custom protocols / URL schemes ===
+  x  57  https://
+  x  44  https://claude.ai
+  x  38  file://
+  x  35  https://preview.claude.ai
+  x  24  app://localhost
+  x  24  http://
+  x  23  https://claude.com
+  x  23  https://preview.claude.com
+  x  10  https://api.box.com
+  x   8  https://accounts.google.com
+  x   7  https://api.anthropic.com
+  x   7  https://chromewebstore.google.com
+  x   7  chrome-extension://
+  x   6  https://session-host.invalid
+  x   5  wss://
+  x   5  http://example.com
+  x   5  https://api-staging.anthropic.com
+  x   5  ui://
+  x   4  cowork-artifact://shell
+  x   4  ws://
+  x   4  https://login.microsoftonline.com
+  x   4  https://cds-relative-href.invalid
+  x   4  http://cds-relative-href.invalid
+  x   4  https://login.microsoftonline.us
+  x   3  app://
+  x   3  https://github.com
+  x   3  https://auth.example.com
+  x   3  http://custom-3p-unused.invalid
+  x   3  msauth.com.msauth.unsignedapp://auth
+  x   3  chrome-error://
+
+=== security-ish literals ===
+  setWindowOpenHandler         26
+  will-navigate                21
+  session\.defaultSession      59
+  webSecurity                  0
+  nodeIntegration              32
+  contextIsolation             34
+  sandbox                      1163
+  shell\.openExternal          9
+  permissionRequest            0
+  frameToken                   120
+  routingId                    69
+  webContents\.on\(            49

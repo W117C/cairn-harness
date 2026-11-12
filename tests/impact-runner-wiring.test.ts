@@ -16,8 +16,9 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { runAgent, handleAgentRun, initSettingsStore } from "../src/main/agent-runner";
+import { alwaysRulesPath, savePermissionRules } from "../src/permissions/rules";
 import type { AgentEvent } from "../src/events";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -29,6 +30,7 @@ let dirs: string[] = [];
 const impactTagsBase: string | undefined = process.env.M7_IMPACT_TAGS_DIR;
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   // 还原而不是删掉：vitest.config.ts 把它兜到临时目录（`impactAnalysis` 缺省开之后，
   // 十来个只跑 agent 的用例也会走建图），`delete` 会把那个兜底一并摘掉，
   // 于是同进程里排在后面的文件又落回 `~/.cairn-harness/impact-tags`。
@@ -132,11 +134,8 @@ async function runOnceViaProduction(ws: string, settingsRaw: Record<string, unkn
   await mkdir(join(ws, ".agent"), { recursive: true });
   // 批条必须在场：auto + 无人值守 + 无批条 ⇒ 权限门先拒写，那一环**正确地**不发生，
   // 于是"零事件"可以被没写盘满足（同 auto-verify-wiring ② 的教训）。
-  await writeFile(
-    join(ws, ".agent/permissions.json"),
-    JSON.stringify({ rules: [{ behavior: "allow", tool: "write_file", scope: "always" }] }),
-    "utf8",
-  );
+  vi.stubEnv("DSH_APPDATA", join(home, "appdata"));
+  await savePermissionRules(alwaysRulesPath(ws), [{ behavior: "allow", tool: "write_file", scope: "always" }]);
   const seen: AgentEvent[] = [];
   const res = await handleAgentRun(
     { message: "给待办应用加个开关", mode: "auto" },

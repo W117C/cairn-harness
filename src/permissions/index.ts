@@ -24,6 +24,7 @@ const SIDE_EFFECT_DECISION: Record<PermissionMode, Decision> = {
 // ---- M1c 自治等级：规则库 / 风险三通道 / 评估管线 / scope / 断路器（§11.7）----
 export {
   loadPermissionRules,
+  loadWorkspacePermissionRules,
   savePermissionRules,
   parsePermissionsFile,
   globalPermissionsPath,
@@ -170,7 +171,7 @@ export function rememberDecision(opts: {
   if (opts.isPlanBlocked()) return "deny";
   const decision = SIDE_EFFECT_DECISION[opts.mode] ?? "ask";
   if (decision === "deny") return "deny";
-  if (decision === "ask" && opts.scope === "global") return "ask";
+  if (opts.scope === "global") return "ask";
   return "allow";
 }
 

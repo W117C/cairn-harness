@@ -129,8 +129,22 @@ def main():
         if "tokens.vanilla" not in chunk:
             continue
         start = chunk.find(TOKENS_START)
-        end = chunk.find(TOKENS_END, start) if start >= 0 else -1
-        if start >= 0 and end >= 0:
+        # 止点必须是**这个 JS 字符串自己的**闭合反引号，不是后面的 </style>。
+        # 5.1231.2 把样式薄改成多段模板串拼接（`,b=`</style>...）：照旧用 </style>
+        # 当止点会把 5 字节的压缩 JS 混进 CSS，PostCSS 当场报 Unknown word（构建全红）。
+        # 反斜杠转义过的反引号是内容，跳过；闭合串之后才允许出现 </style>。
+        end = -1
+        if start >= 0:
+            i = start
+            while i < len(chunk):
+                if chunk[i] == "\\":
+                    i += 2
+                    continue
+                if chunk[i] == "`":
+                    end = i
+                    break
+                i += 1
+        if start >= 0 and end >= 0 and chunk.find(TOKENS_END, end) >= 0:
             tokens_text, tokens_member = js_unescape(chunk[start:end]), path
             break
     if tokens_text is None:

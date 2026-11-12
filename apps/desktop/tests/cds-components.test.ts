@@ -1,12 +1,15 @@
-// CDS 组件层判卷（2026-10-28 · 第 734 页）。
+// CDS 组件层判卷（2026-10-28 · 第 734 页；2026-11-12 随上游 5.1231.2 重抽）。
 //
 // 这批判的不是「颜色对不对」（那是 cds-parity.test.ts），而是：
-//   ① 官方 45 个 `data-cds=*` 组件是否**逐条有账**（抽取结果 + Cairn 侧状态表，一条不落）；
+//   ① 官方 `data-cds=*` 组件是否**逐条有账**（抽取结果 + Cairn 侧状态表，一条不落）；
 //   ② 抽出来的规则是否真的被 Cairn 接线（adapter import / main import / DOM 标记）；
 //   ③ 官方契约变量在真实 renderer 里是否解析成官方几何（getComputedStyle，不是读 CSS 文本）。
 //
 // 纪律：`components.css` 是生成物，不手改；`component-map.json` 是逐组件裁决，
 // 任何组件从「无对应」改成「已移植」都必须同时给出 cairn 选择器与原因，否则这组判卷红。
+// 三档含义（component-map.json 的 note 里同义）：ported＝Cairn 消费该组件的官方契约；
+// no-cairn-counterpart＝官方有规则但 Cairn 无对应形态、规则无处落；
+// no-component-css＝官方产物里**没有**该组件的规则体（只在 Tailwind 工具类里被引用）。
 import { existsSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
@@ -35,22 +38,22 @@ const entry = readRenderer("main.tsx");
 
 const statuses = new Set(["ported", "no-cairn-counterpart", "no-component-css"]);
 
-describe("官方组件规则抽取：45 个组件逐条有账", () => {
+describe("官方组件规则抽取：48 个组件逐条有账", () => {
   it("components.css 头部记的源摘要 = components.json 的源摘要 = UPSTREAM 引用的渲染层 CSS", () => {
-    expect(manifest.source.sha256).toBe("948bac16bdceb510a49a832778b3c0bb7de6bc1fac86ebc10672a0c3cbd97960");
-    expect(manifest.source.bytes).toBe(237153);
+    expect(manifest.source.sha256).toBe("1be41faf06028ae594f077095575181d3d34008183e1492caedd27a28d9e9fbf");
+    expect(manifest.source.bytes).toBe(246160);
     expect(componentsCss).toContain(`sha256: ${manifest.source.sha256}`);
   });
 
-  it("组件数 45、规则 115、声明 465（与抽取脚本现跑一致，改动须重跑脚本）", () => {
-    expect(manifest.totals).toEqual({ components: 45, rules: 115, declarations: 465 });
-    expect(manifest.components).toHaveLength(45);
-    expect(new Set(manifest.components.map((c) => c.name)).size).toBe(45);
+  it("组件数 48、规则 112、声明 468（与抽取脚本现跑一致，改动须重跑脚本）", () => {
+    expect(manifest.totals).toEqual({ components: 48, rules: 112, declarations: 468 });
+    expect(manifest.components).toHaveLength(48);
+    expect(new Set(manifest.components.map((c) => c.name)).size).toBe(48);
   });
 
-  it("规则条数非零的组件都真有规则体（Pulse 只有工具类引用，0 条是事实不是漏抽）", () => {
+  it("规则条数非零的组件都真有规则体（Pulse 与 Spinner 只有工具类引用，0 条是事实不是漏抽）", () => {
     const zero = manifest.components.filter((c) => c.rules === 0).map((c) => c.name);
-    expect(zero).toEqual(["Pulse"]);
+    expect(zero).toEqual(["Pulse", "Spinner"]);
     for (const component of manifest.components.filter((c) => c.rules > 0)) {
       expect(component.declarations, component.name).toBeGreaterThan(0);
     }
@@ -92,9 +95,9 @@ describe("Cairn 侧组件状态表：45 条一条不落，ported 必须给选择
     expect(map.sourceSha256).toBe(manifest.source.sha256);
   });
 
-  it("三档状态都在，且总数 45（ported 11 / 无对应 28 / 无组件 CSS 6）", () => {
+  it("三档状态都在，且总数 48（ported 10 / 无对应 36 / 无组件 CSS 2）", () => {
     for (const component of map.components) expect(statuses.has(component.status)).toBe(true);
-    expect(map.totals).toEqual({ ported: 10, "no-cairn-counterpart": 29, "no-component-css": 6 });
+    expect(map.totals).toEqual({ ported: 10, "no-cairn-counterpart": 36, "no-component-css": 2 });
   });
 
   it("每条都写了原因（不是空话：至少 20 字）", () => {
@@ -190,6 +193,79 @@ describe("消费规则的关键声明（文本层：防止有人删掉变量改�
   it("正文标题阶按官方 em 规则（h1/h2 = 1em+2px，h3–h6 = 1em）", () => {
     expect(layer).toContain("font-size: calc(1em + 0.125rem)");
     expect(layer).toMatch(/\.md-h3[^{]*{[^}]*font-size:\s*1em/s);
+  });
+});
+
+describe("应用内「减弱动效」要盖住官方组件层（2026-11-12 对标 ADR 0010 的实测缺口）", () => {
+  /**
+   * 顶层规则（跳过 @media/@supports 的外壳，递归进去取里面的规则）。
+   * 为什么不用正则一把抓：正则会把媒体查询的**外壳**当成选择器
+   * （`@media (prefers-reduced-motion:reduce){ … }` 的 prelude 里没有 `}`），
+   * 抓出来的「选择器」根本不是选择器 ⇒ 那条判据会假红。
+   */
+  function topLevelRules(css: string): { selector: string; body: string }[] {
+    const out: { selector: string; body: string }[] = [];
+    const walk = (start: number, end: number): void => {
+      let pos = start;
+      while (pos < end) {
+        const open = css.indexOf("{", pos);
+        if (open < 0 || open >= end) return;
+        const prelude = css.slice(pos, open).trim();
+        let depth = 0;
+        let close = open;
+        for (; close < end; close += 1) {
+          if (css[close] === "{") depth += 1;
+          else if (css[close] === "}") {
+            depth -= 1;
+            if (depth === 0) break;
+          }
+        }
+        const body = css.slice(open + 1, close);
+        if (prelude.startsWith("@")) walk(open + 1, close);
+        else out.push({ selector: prelude, body });
+        pos = close + 1;
+      }
+    };
+    walk(0, css.length);
+    return out;
+  }
+
+  /** 官方层里带 animation 的规则（顶层规则，不含媒体查询外壳）。 */
+  const animatedRules = topLevelRules(componentsCss).filter((rule) => rule.body.includes("animation"));
+
+  it("官方组件层确实有动画（这一格若为 0 条 ⇒ 下面的规则是空转）", () => {
+    expect(animatedRules.length).toBeGreaterThan(0);
+    expect(componentsCss).toContain("cds-skeleton-breathe");
+  });
+
+  it("官方层每一条带动画的规则都挂在 [data-cds=…] 上（⇒ 一条整层规则就盖得住）", () => {
+    for (const rule of animatedRules) {
+      expect(rule.selector, rule.selector).toContain("[data-cds=");
+    }
+  });
+
+  it("本仓层有一条覆盖整层的减弱规则，值与本仓全局媒体查询那条一致", () => {
+    const blanket = layer.match(
+      /html\[data-reduce-motion="true"\][^{]*\[data-cds\][^{]*\{([^}]*)\}/,
+    );
+    expect(blanket, "cds-components.css 里缺应用内减弱动效的整层规则").not.toBeNull();
+    expect(blanket?.[1]).toContain("animation-duration: .01ms");
+    expect(blanket?.[1]).toContain("animation-iteration-count: 1");
+    expect(blanket?.[1]).toContain("transition-duration: .01ms");
+    // !important 是必须的：官方规则的选择器特异性更高，靠顺序压不住。
+    expect(blanket?.[1]).toContain("!important");
+  });
+
+  it("不得改成 animation:none（那会让动画停在首帧，骨架永远停在暗的一帧）", () => {
+    const blanket = layer.match(
+      /html\[data-reduce-motion="true"\][^{]*\[data-cds\][^{]*\{([^}]*)\}/,
+    );
+    expect(blanket?.[1]).not.toContain("animation: none");
+    expect(blanket?.[1]).not.toContain("animation:none");
+  });
+
+  it("系统偏好那条（全局媒体查询）仍然在——两条入口都要在", () => {
+    expect(readRenderer("styles.css")).toContain("@media (prefers-reduced-motion: reduce)");
   });
 });
 

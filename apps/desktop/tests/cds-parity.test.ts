@@ -81,6 +81,16 @@ describe("官方 CDS 令牌薄未被改写", () => {
     expect(Buffer.byteLength(official)).toBe(declared?.bytes);
   });
 
+  it("薄是纯 CSS：止点落在闭合花括号，不许混进压缩 JS（第 1175 页事故）", () => {
+    // 5.1231.2 把样式薄改成多段模板串拼接（`,b=`</style>...）；旧抽取器用 </style> 当止点，
+    // 把 5 字节 JS 混进 tokens.css ⇒ sha 对得上、判卷全绿，但 PostCSS/Vite 构建当场红。
+    // sha/条数都查不出这一类：必须直接钉「文件是一张 CSS 表」这件事。
+    const trimmed = official.trimEnd();
+    expect(trimmed.endsWith("}"), `官方薄末尾不是闭合花括号：${JSON.stringify(trimmed.slice(-24))}`).toBe(true);
+    expect(official).not.toContain("`,b=`");
+    expect(official).not.toContain("</style>");
+    expect(official).not.toMatch(/^\s*[A-Za-z_$][\w$]*\s*=\s*[`'"{]/m);
+  });
   it("声明条数与唯一令牌名数与抽取记录一致（只准随重新抽取变化，不准手改）", () => {
     const all = [...official.matchAll(/^\s*(--[A-Za-z][\w-]*)\s*:/gm)].map((m) => m[1] as string);
     expect(all.length).toBe(upstream.tokenDeclarationCount);

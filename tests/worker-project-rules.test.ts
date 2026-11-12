@@ -9,7 +9,7 @@
 // ⇒ 这条用例走真产品入口：`handleAgentRun` → `runAgent` → `buildSessionOrchestrator` → spawn_agent
 //   → write worker 的 `write_file`。worker 模型用仓里既有的演示通道（`M3A_AGENTS_DEMO=1` +
 //   `fixtures/agents/*.jsonl`），**不花真钱**。
-// 两格各钉一半：deny ⇒ 拒且拒因点名规则 id（`deny:write_file`）；allow ⇒ 真写成功。
+// 两格各钉一半：项目 deny ⇒ 拒且拒因点名规则 id；用户的本机 allow ⇒ 真写成功。
 // 反向那格不是装饰：无规则库时 worker 的写会走审批协议，无人值守下超时也是 ok:false ⇒
 // 只钉"被拒"那一格，`rules: []` 的突变照样"红得对"。
 import { execFile } from "node:child_process";
@@ -17,15 +17,17 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 
 import { handleAgentRun, initSettingsStore } from "../src/main/agent-runner";
+import { alwaysRulesPath, savePermissionRules } from "../src/permissions/rules";
 import type { AgentEvent } from "../src/events";
 
 const execGit = promisify(execFile);
 const dirs: string[] = [];
 
 afterAll(async () => {
+  vi.unstubAllEnvs();
   delete process.env.M3A_MAIN_SCRIPT;
   delete process.env.M3A_AGENTS_DEMO;
   for (const d of dirs) await rm(d, { recursive: true, force: true }).catch(() => {});
@@ -50,19 +52,22 @@ async function makeRepo(): Promise<string> {
 type WriteOutcome = { ok: boolean; verdict?: string; output: string };
 
 /** 跑一场：主会话派一个 write worker，worker 的剧本（write-demo.jsonl）第一笔就是 write_file。
- *  `behavior` = 项目规则库里对 write_file 的那一条（deny / allow）——两格只差这一个字。 */
+ *  分别从项目政策加载 deny、从本机授权库加载 allow。 */
 async function spawnAndWrite(behavior: "deny" | "allow"): Promise<WriteOutcome> {
   const home = await mkdtemp(join(tmpdir(), "wrk-home-"));
   dirs.push(home);
   const repo = await makeRepo();
   initSettingsStore(join(home, "settings.json"));
   await writeFile(join(home, "settings.json"), JSON.stringify({ autoVerify: false }), "utf8");
-  await mkdir(join(repo, ".agent"), { recursive: true });
-  await writeFile(
-    join(repo, ".agent", "permissions.json"),
-    JSON.stringify({ rules: [{ behavior, tool: "write_file", scope: "always" }] }),
-    "utf8",
-  );
+  const appData = join(home, "appdata");
+  vi.stubEnv("DSH_APPDATA", appData);
+  const rules = [{ behavior, tool: "write_file", scope: "always" as const }];
+  if (behavior === "allow") {
+    await savePermissionRules(alwaysRulesPath(repo, appData), rules);
+  } else {
+    await mkdir(join(repo, ".agent"), { recursive: true });
+    await writeFile(join(repo, ".agent", "permissions.json"), JSON.stringify({ rules }), "utf8");
+  }
   // 主会话剧本：只派一个 write worker（模型名 = worker 剧本文件名，走演示通道），然后收口。
   const mainScript = join(home, "main.jsonl");
   await writeFile(
@@ -113,7 +118,7 @@ describe("项目规则库管到 worker（经产品入口的构造口）", () => 
   );
 
   it(
-    "换成 allow 规则 ⇒ 同一份剧本真写成功（反向哨兵：上一条的红不能是任何别的原因）",
+    "本机用户授权库有 allow ⇒ 同一份剧本真写成功（反向哨兵：上一条的红不能是任何别的原因）",
     { timeout: 300_000 },
     async () => {
       // 反向格不能省：项目里没有规则库时 worker 的写会走审批协议，无人值守下 60s 超时 →

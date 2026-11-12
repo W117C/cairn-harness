@@ -1,4 +1,6 @@
-import { assertRealContainment, resolveInWorkspace, type Tool, type ToolResult } from "./base.js";
+import { relative } from "node:path";
+import { isSensitivePath } from "../sensitive-paths";
+import { resolveInWorkspace, resolveWorkspaceReadPath, type Tool, type ToolResult } from "./base.js";
 import { countCapNotice, clipLine } from "./cap-notice.js";
 import { rgNegativeNote, runRgJson, type RawMatch } from "./ripgrep.js";
 
@@ -79,10 +81,9 @@ export const grep: Tool = {
     if (!pattern) throw new Error("grep: pattern 参数必须是非空字符串");
     const rel = typeof args.path === "string" && args.path.trim() ? args.path : ".";
     // path 入参走统一信任边界校验（越界拒绝），"." 表示整个 workspace。
-    const abs = rel === "." ? ctx.workspace : resolveInWorkspace(ctx.workspace, rel, "grep");
-    // 词法闸之外还要判软链归属：rg 收到显式路径参数时会跟进软链（--follow 只管目录遍历），
-    // 而 grep 回的是 `Line N: <原文>`——指向界外的软链会直接把界外文件内容读出来。
-    if (rel !== ".") await assertRealContainment(ctx.workspace, abs, "grep");
+    const { workspace, abs } = rel === "."
+      ? { workspace: ctx.workspace, abs: ctx.workspace }
+      : await resolveWorkspaceReadPath(ctx.workspace, resolveInWorkspace(ctx.workspace, rel, "grep"), "grep", true);
     // context：一次调用拿到「命中 + 现场」。缺它时定位完还得 read_file 同一段重读一遍，
     // 每一处待改点都多花一轮往返（查/改代码的主路径上，这是按次计的钱）。
     const contextRaw = args.context;
@@ -92,12 +93,15 @@ export const grep: Tool = {
     // fixed_strings：按字面串匹配。缺它时搜 `foo(` / `a.b` / `$.val` 这类含元字符的串
     // 要么被正则语义曲解（`.` 命中任意字符 = 假阳性成堆），要么 rg 直接退出码 2 报错。
     const fixed = args.fixed_strings === true;
-    const entries = await runRgJson(ctx.workspace, [
+    const results = await runRgJson(workspace, [
       "--json",
       ...(fixed ? ["-F"] : []),
       ...(context > 0 ? ["-C", String(context)] : []),
       "-e", pattern, abs,
     ]);
+    const entries = isSensitivePath(relative(workspace, abs), true)
+      ? results
+      : results.filter((entry) => !isSensitivePath(entry.path, true));
     // 零命中不许只回三个字：那句会被读成「仓库里没有」，而这条查询面根本没扫 .gitignore 里的东西。
     if (entries.length === 0) {
       return { ok: true, output: `无命中（搜索面 ${rel.slice(0, 120)}）\n` + rgNegativeNote("跳过了 .gitignore 里的条目与隐藏文件") };

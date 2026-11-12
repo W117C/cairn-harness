@@ -1,0 +1,81 @@
+asar: /Applications/Claude.app/Contents/Resources/ion-dist.asar
+base offset: 1413008
+total entries: 5322
+
+=== top-level ===
+  assets                         files= 5190 bytes=157,015,690
+  i18n                           files=   22 bytes=46,404,107
+  images                         files=   88 bytes=1,746,565
+  audio                          files=   10 bytes=879,835
+  index.html                     files=    1 bytes=52,760
+  frame-shell.html               files=    1 bytes=31,962
+  third-party-notices.txt        files=    1 bytes=12,754
+  favicon-internal.ico           files=    1 bytes=4,554
+  favicon-staging.ico            files=    1 bytes=4,415
+  client-shell-v1.html           files=    1 bytes=2,529
+  favicon.ico                    files=    1 bytes=2,445
+  frame-connect.html             files=    1 bytes=1,635
+  frame-manage.html              files=    1 bytes=1,632
+  custom-3p-gated-imports.json   files=    1 bytes=367
+  robots.txt                     files=    1 bytes=281
+  scc.json                       files=    1 bytes=151
+
+=== extensions ===
+  .js              4717
+  .svg             379
+  .png             54
+  .woff2           42
+  .json            30
+  .css             27
+  .ttf             21
+  .woff            20
+  .mp3             9
+  .webp            7
+  .html            5
+  .wasm            3
+  .ico             3
+  .txt             2
+  .gif             1
+  .mov             1
+  .webm            1
+
+=== source maps ===
+  total .map: 0
+
+=== css files ===
+       2,074  assets/v1/c05b96c7f-B2fCCOZ2.css
+         289  assets/v1/c06b83fb1-B8XBMJv5.css
+       2,363  assets/v1/c0ab037d8-CwG_XIxe.css
+       9,677  assets/v1/c19e90103-CHrE4_DT.css
+      22,708  assets/v1/c3fde7009-DNpK1wma.css
+       8,411  assets/v1/c403c4b83-yqAXiELG.css
+       1,092  assets/v1/c427176b2-BQn2Bm7I.css
+       6,539  assets/v1/c49d37e5f-BoLaj3Gr.css
+       8,295  assets/v1/c4a9ee384-Br-fzuOs.css
+         226  assets/v1/c4b7ce3b5-BMzG8Bd0.css
+      68,519  assets/v1/c5aee9dbd-B55U_qvj.css
+      63,966  assets/v1/c5aee9dbd-cvLUb2-y.css
+      12,840  assets/v1/c6059c89c-mOe_E_rK.css
+      53,958  assets/v1/c673fe961-BukMK5rd.css
+       8,058  assets/v1/c6a73f447-LaXKuzWp.css
+   1,865,803  assets/v1/c6a992d55-aw-bvVUz.css
+         369  assets/v1/c71860c77-BpQBAViZ.css
+      21,262  assets/v1/c7bcb7751-CRp4I0CH.css
+       1,081  assets/v1/c8688ed97-DO1cQWAl.css
+       9,693  assets/v1/c8d0615c8-Cpm35TEQ.css
+       1,466  assets/v1/c8d25b7c4-B4eLIhHR.css
+       1,067  assets/v1/c8e31bf58-C7gq8dUF.css
+       5,330  assets/v1/cbd6c85c8-DrFf115z.css
+      23,552  assets/v1/cf1a02a1a-Bzv8x2Cs.css
+         502  assets/v1/frame-window-BEI3vR8Q.css
+         156  assets/v1/shared-frame-Dq4za4r9.css
+     127,784  assets/v1/shared-styles-HB_ROSgF.css
+
+=== html files ===
+       2,529  client-shell-v1.html
+       1,635  frame-connect.html
+       1,632  frame-manage.html
+      31,962  frame-shell.html
+      52,760  index.html
+
+entries cached -> /tmp/asar_entries.json

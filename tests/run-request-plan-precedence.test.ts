@@ -1,8 +1,9 @@
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { handleAgentRun, initSettingsStore } from "../src/main/agent-runner";
+import { alwaysRulesPath, savePermissionRules } from "../src/permissions/rules";
 import type { AgentEvent } from "../src/events";
 
 let root: string;
@@ -12,6 +13,7 @@ beforeEach(async () => {
   savedScript = process.env.M3A_MAIN_SCRIPT;
 });
 afterEach(async () => {
+  vi.unstubAllEnvs();
   if (savedScript === undefined) delete process.env.M3A_MAIN_SCRIPT;
   else process.env.M3A_MAIN_SCRIPT = savedScript;
   await rm(root, { recursive: true, force: true });
@@ -28,9 +30,8 @@ describe("shared application entry respects the plan request", () => {
   ])("setting=$setting request=$request override=$override => write=$canWrite", async row => {
     const workspace = join(root, "workspace");
     await mkdir(join(workspace, ".agent"), { recursive: true });
-    await writeFile(join(workspace, ".agent", "permissions.json"), JSON.stringify({
-      rules: [{ behavior: "allow", tool: "write_file", scope: "always" }],
-    }));
+    vi.stubEnv("DSH_APPDATA", join(root, "appdata"));
+    await savePermissionRules(alwaysRulesPath(workspace), [{ behavior: "allow", tool: "write_file", scope: "always" }]);
     const settings = join(root, "settings.json");
     await writeFile(settings, JSON.stringify({
       provider: "demo", planRequiredByDefault: row.setting, autoVerify: false, impactAnalysis: false,

@@ -16,13 +16,15 @@
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { handleAgentRun, initSettingsStore } from "../src/main/agent-runner";
+import { alwaysRulesPath, savePermissionRules } from "../src/permissions/rules";
 import type { AgentEvent } from "../src/events";
 import { scoreStream } from "../scripts/replay/run-scorecard";
 
 const dirs: string[] = [];
 afterAll(async () => {
+  vi.unstubAllEnvs();
   delete process.env.M3A_MAIN_SCRIPT;
   for (const d of dirs) await rm(d, { recursive: true, force: true }).catch(() => {});
 });
@@ -44,11 +46,8 @@ async function run(opts: { repair: boolean; test: string; secondWrite: string })
   );
   await mkdir(join(ws, ".agent"), { recursive: true });
   // 批条在场：auto + 无人值守 + 无批条 ⇒ 权限门先拒写，红拍根本不发生（那条假绿的形状）。
-  await writeFile(
-    join(ws, ".agent", "permissions.json"),
-    JSON.stringify({ rules: [{ behavior: "allow", tool: "write_file", scope: "always" }] }),
-    "utf8",
-  );
+  vi.stubEnv("DSH_APPDATA", join(home, "appdata"));
+  await savePermissionRules(alwaysRulesPath(ws), [{ behavior: "allow", tool: "write_file", scope: "always" }]);
   await writeFile(join(ws, ".agent", "config.json"), JSON.stringify({ verify: { test: [opts.test] } }), "utf8");
   // 四轮（`round_end` = 装配期哨兵，见 src/providers/mock.ts）：
   //   ① 写**错**的一版 → ② 空轮（无工具）⇒ 收束闸第一拍，真红 → ③ 写对的一版 → ④ 空轮 ⇒ 第二拍

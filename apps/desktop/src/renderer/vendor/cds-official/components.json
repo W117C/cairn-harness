@@ -1,17 +1,17 @@
 {
   "source": {
-    "file": "MainWindowPage-BjVtjJFx.css",
-    "sha256": "948bac16bdceb510a49a832778b3c0bb7de6bc1fac86ebc10672a0c3cbd97960",
-    "bytes": 237153
+    "file": "MainWindowPage-CinbABxl.css",
+    "sha256": "1be41faf06028ae594f077095575181d3d34008183e1492caedd27a28d9e9fbf",
+    "bytes": 246160
   },
   "transform": {
     "root": ".cds-root -> body[data-dsh-claude-style]",
     "tokens": "var(--cds-x) -> var(--x) only when --x exists in vendor/cds-official/tokens.css"
   },
   "totals": {
-    "components": 45,
-    "rules": 115,
-    "declarations": 465
+    "components": 48,
+    "rules": 112,
+    "declarations": 468
   },
   "components": [
     {
@@ -60,18 +60,14 @@
       ]
     },
     {
-      "name": "Prose",
+      "name": "MessageAttachmentsVideo",
       "rules": 13,
-      "declarations": 33,
-      "conditions": [
-        "@media (forced-colors:none)",
-        "@media print",
-        "@media screen and (forced-colors:none)"
-      ],
+      "declarations": 22,
+      "conditions": [],
       "sampleSelectors": [
-        ".cds-root [data-cds-reply-type] [data-cds=Prose]:not([data-cds-reply-type] :where([data-cds]:not([data-cds-reply-type])) *)",
-        ".cds-root [data-cds-reply-type] [data-cds=Prose]:not([data-cds-reply-type] :where([data-cds]:not([data-cds-reply-type])) *) .prose-scroll table:not([data-cds]):not(:where(.not-prose,[data-not-prose],.not-prose *,[data-not-prose] *,[data-cds",
-        ".cds-root [data-cds-reply-type] [data-cds=Prose]:not([data-cds-reply-type] :where([data-cds]:not([data-cds-reply-type])) *) .prose-scroll :is(th,td):not(:where(.not-prose,[data-not-prose],.not-prose *,[data-not-prose] *,[data-cds=Prose] [da"
+        ".cds-root :is([data-cds=MessageAttachmentsImage],[data-cds=MessageAttachmentsVideo])[data-fit=natural]",
+        ".cds-root :is([data-cds=MessageAttachmentsImage],[data-cds=MessageAttachmentsVideo])[data-fit=natural] [data-cds-tile-media]",
+        ".cds-root :is([data-cds=MessageAttachmentsImage],[data-cds=MessageAttachmentsVideo])[data-fit=natural] [data-cds-tile-picture]"
       ]
     },
     {
@@ -99,14 +95,18 @@
       ]
     },
     {
-      "name": "MessageAttachmentsVideo",
-      "rules": 12,
-      "declarations": 21,
-      "conditions": [],
+      "name": "Icon",
+      "rules": 10,
+      "declarations": 30,
+      "conditions": [
+        "@supports (color:color-mix(in lab, red, red))",
+        "@media (forced-colors:active)",
+        "@supports (forced-color-adjust:preserve-parent-color)"
+      ],
       "sampleSelectors": [
-        ".cds-root :is([data-cds=MessageAttachmentsImage],[data-cds=MessageAttachmentsVideo])[data-fit=natural]",
-        ".cds-root :is([data-cds=MessageAttachmentsImage],[data-cds=MessageAttachmentsVideo])[data-fit=natural] [data-cds-tile-media]",
-        ".cds-root :is([data-cds=MessageAttachmentsImage],[data-cds=MessageAttachmentsVideo])[data-fit=natural] [data-cds-tile-picture]"
+        "[data-cds=Icon]:not(svg)",
+        "[data-cds=Icon]:not(svg):not(#_)",
+        ":root[dir=rtl] :is([data-cds=Icon],svg)[data-cds-mirror]:is(:lang(ae),:lang(ar),:lang(arc),:lang(bcc),:lang(bqi),:lang(ckb),:lang(dv),:lang(fa),:lang(glk),:lang(he),:lang(ku),:lang(mzn),:lang(nqo),:lang(pnb),:lang(ps),:lang(sd),:lang(ug),:l"
       ]
     },
     {
@@ -120,21 +120,6 @@
         ".cds-root [data-cds=SkeletonGroup][data-hold]",
         ".cds-root [data-cds=SkeletonGroup][data-hold=none]",
         ".cds-root [data-cds=SkeletonGroup][data-hold=delayed]"
-      ]
-    },
-    {
-      "name": "Icon",
-      "rules": 9,
-      "declarations": 28,
-      "conditions": [
-        "@supports (color:color-mix(in lab, red, red))",
-        "@media (forced-colors:active)",
-        "@supports (forced-color-adjust:preserve-parent-color)"
-      ],
-      "sampleSelectors": [
-        "[data-cds=Icon]:not(svg)",
-        "[data-cds=Icon]:not(svg):not([data-cds-anim])",
-        ":root[dir=rtl] :is([data-cds=Icon],svg)[data-cds-mirror]:is(:lang(ae),:lang(ar),:lang(arc),:lang(bcc),:lang(bqi),:lang(ckb),:lang(dv),:lang(fa),:lang(glk),:lang(he),:lang(ku),:lang(mzn),:lang(nqo),:lang(pnb),:lang(ps),:lang(sd),:lang(ug),:l"
       ]
     },
     {
@@ -223,6 +208,19 @@
       ]
     },
     {
+      "name": "ShimmerText",
+      "rules": 4,
+      "declarations": 4,
+      "conditions": [
+        "@supports (color:color-mix(in lab, red, red))"
+      ],
+      "sampleSelectors": [
+        "[data-cds=ShimmerText]",
+        "[data-cds=ShimmerText]",
+        "[data-cds=ShimmerText]"
+      ]
+    },
+    {
       "name": "Skeleton",
       "rules": 4,
       "declarations": 6,
@@ -251,21 +249,63 @@
     },
     {
       "name": "Button",
-      "rules": 2,
-      "declarations": 3,
+      "rules": 3,
+      "declarations": 7,
       "conditions": [
         "@media (pointer:coarse),(hover:none)",
         "@media screen"
       ],
       "sampleSelectors": [
         ".cds-root [data-cds=ChatComposerChin] [data-touch-size] :is([data-cds=ButtonGroup],[data-cds=SplitDropdownButton]):not([data-size]),.cds-root [data-cds=ChatComposerChin] [data-touch-size] :is([data-cds=Button],[data-cds=ModelSelector],[data",
-        "[data-window-active=false] [data-cds=Button]"
+        "[data-window-active=false] [data-cds=Button],[data-window-active=false] [data-cds=ButtonGroup],[data-window-active=false] [data-cds=SplitDropdownButton]",
+        "[data-window-active=false] [data-cds=CoachMark][data-variant=accent] :is([data-cds=Button],[data-cds=ButtonGroup],[data-cds=SplitDropdownButton])"
+      ]
+    },
+    {
+      "name": "ButtonGroup",
+      "rules": 3,
+      "declarations": 7,
+      "conditions": [
+        "@media (pointer:coarse),(hover:none)",
+        "@media screen"
+      ],
+      "sampleSelectors": [
+        ".cds-root [data-cds=ChatComposerChin] [data-touch-size] :is([data-cds=ButtonGroup],[data-cds=SplitDropdownButton]):not([data-size]),.cds-root [data-cds=ChatComposerChin] [data-touch-size] :is([data-cds=Button],[data-cds=ModelSelector],[data",
+        "[data-window-active=false] [data-cds=Button],[data-window-active=false] [data-cds=ButtonGroup],[data-window-active=false] [data-cds=SplitDropdownButton]",
+        "[data-window-active=false] [data-cds=CoachMark][data-variant=accent] :is([data-cds=Button],[data-cds=ButtonGroup],[data-cds=SplitDropdownButton])"
+      ]
+    },
+    {
+      "name": "Prose",
+      "rules": 3,
+      "declarations": 10,
+      "conditions": [
+        "@media print"
+      ],
+      "sampleSelectors": [
+        ".cds-root [data-cds=AssistantMessage][data-variant=bubble] [data-cds=Prose]:not([data-cds=AssistantMessage][data-variant=bubble] :where([data-cds]:not([data-cds=AssistantMessage][data-variant=bubble])) *)",
+        ".cds-root [data-cds=AssistantMessage][data-variant=bubble]>div>.prose[data-cds=Prose]+.prose[data-cds=Prose]",
+        ".cds-root [data-cds=AssistantMessage][data-variant=bubble]>div>.prose[data-cds=Prose]+.prose[data-cds=Prose]"
+      ]
+    },
+    {
+      "name": "SplitDropdownButton",
+      "rules": 3,
+      "declarations": 7,
+      "conditions": [
+        "@media (pointer:coarse),(hover:none)",
+        "@media screen"
+      ],
+      "sampleSelectors": [
+        ".cds-root [data-cds=ChatComposerChin] [data-touch-size] :is([data-cds=ButtonGroup],[data-cds=SplitDropdownButton]):not([data-size]),.cds-root [data-cds=ChatComposerChin] [data-touch-size] :is([data-cds=Button],[data-cds=ModelSelector],[data",
+        "[data-window-active=false] [data-cds=Button],[data-window-active=false] [data-cds=ButtonGroup],[data-window-active=false] [data-cds=SplitDropdownButton]",
+        "[data-window-active=false] [data-cds=CoachMark][data-variant=accent] :is([data-cds=Button],[data-cds=ButtonGroup],[data-cds=SplitDropdownButton])"
       ]
     },
     {
       "name": "ChatComposerChin",
       "rules": 2,
-      "declarations": 16,
+      "declarations": 17,
       "conditions": [
         "@media (pointer:coarse),(hover:none)"
       ],
@@ -331,14 +371,12 @@
       ]
     },
     {
-      "name": "ButtonGroup",
+      "name": "CellChartContainer",
       "rules": 1,
-      "declarations": 1,
-      "conditions": [
-        "@media (pointer:coarse),(hover:none)"
-      ],
+      "declarations": 2,
+      "conditions": [],
       "sampleSelectors": [
-        ".cds-root [data-cds=ChatComposerChin] [data-touch-size] :is([data-cds=ButtonGroup],[data-cds=SplitDropdownButton]):not([data-size]),.cds-root [data-cds=ChatComposerChin] [data-touch-size] :is([data-cds=Button],[data-cds=ModelSelector],[data"
+        ".cds-root [data-cds=AssistantMessage] :is([data-cds=Card],[data-cds=Surface],[data-cds=Panel],[data-cds=Banner],[data-cds=Aside],[data-cds=Accordion],[data-cds=PreviewCard],[data-cds=Table],[data-cds=DataTable],[data-cds=AskUserQuestion],[d"
       ]
     },
     {
@@ -357,6 +395,17 @@
       "conditions": [],
       "sampleSelectors": [
         ".cds-root [data-cds=ChatComposerDock]>:not([data-cds-dock-item],[data-cds=ChatComposerNotices],[data-cds=ChatComposerQueuedMessages],[data-cds-dock-group],[data-cds-dock-static],[hidden],:last-child)"
+      ]
+    },
+    {
+      "name": "CoachMark",
+      "rules": 1,
+      "declarations": 2,
+      "conditions": [
+        "@media screen"
+      ],
+      "sampleSelectors": [
+        "[data-window-active=false] [data-cds=CoachMark][data-variant=accent] :is([data-cds=Button],[data-cds=ButtonGroup],[data-cds=SplitDropdownButton])"
       ]
     },
     {
@@ -379,15 +428,6 @@
     },
     {
       "name": "FileDiff",
-      "rules": 1,
-      "declarations": 2,
-      "conditions": [],
-      "sampleSelectors": [
-        ".cds-root [data-cds=AssistantMessage] :is([data-cds=Card],[data-cds=Surface],[data-cds=Panel],[data-cds=Banner],[data-cds=Aside],[data-cds=Accordion],[data-cds=PreviewCard],[data-cds=Table],[data-cds=DataTable],[data-cds=AskUserQuestion],[d"
-      ]
-    },
-    {
-      "name": "Heatmap",
       "rules": 1,
       "declarations": 2,
       "conditions": [],
@@ -463,17 +503,6 @@
       ]
     },
     {
-      "name": "SplitDropdownButton",
-      "rules": 1,
-      "declarations": 1,
-      "conditions": [
-        "@media (pointer:coarse),(hover:none)"
-      ],
-      "sampleSelectors": [
-        ".cds-root [data-cds=ChatComposerChin] [data-touch-size] :is([data-cds=ButtonGroup],[data-cds=SplitDropdownButton]):not([data-size]),.cds-root [data-cds=ChatComposerChin] [data-touch-size] :is([data-cds=Button],[data-cds=ModelSelector],[data"
-      ]
-    },
-    {
       "name": "Surface",
       "rules": 1,
       "declarations": 2,
@@ -502,6 +531,15 @@
     },
     {
       "name": "Pulse",
+      "rules": 0,
+      "declarations": 0,
+      "conditions": [
+        "(only referenced by Tailwind utility selectors; no component rule emitted)"
+      ],
+      "sampleSelectors": []
+    },
+    {
+      "name": "Spinner",
       "rules": 0,
       "declarations": 0,
       "conditions": [

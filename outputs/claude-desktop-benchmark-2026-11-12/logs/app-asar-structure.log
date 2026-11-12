@@ -1,0 +1,67 @@
+asar: /Applications/Claude.app/Contents/Resources/app.asar
+base offset: 290992
+total entries: 1080
+
+=== top-level ===
+  resources                      files=  329 bytes=74,404,990
+  .vite                          files=  698 bytes=41,652,588
+  node_modules                   files=   49 bytes=17,260,986
+  compile-cache                  files=    3 bytes=7,872,344
+  package.json                   files=    1 bytes=1,123
+
+=== extensions ===
+  .js              747
+  .json            202
+  .woff2           46
+  .md              27
+  .css             19
+  .html            10
+  .skill           6
+  .node            5
+  (none)           4
+  .mjs             4
+  .jsc             3
+  .ts              2
+  .wasm            1
+  .png             1
+  .dylib           1
+  .plist           1
+  .wflow           1
+
+=== source maps ===
+  total .map: 0
+
+=== css files ===
+       3,167  .vite/renderer/about_window/assets/main-yrSHwj46.css
+       6,289  .vite/renderer/about_window/window-legacy-pins.css
+       8,078  .vite/renderer/about_window/window-shared.css
+       5,126  .vite/renderer/buddy_window/assets/main-exCT1O-b.css
+       6,289  .vite/renderer/buddy_window/window-legacy-pins.css
+       8,078  .vite/renderer/buddy_window/window-shared.css
+       2,468  .vite/renderer/file_viewer/assets/main-1OAtvhCc.css
+         159  .vite/renderer/find_in_page/assets/FindInPage-BRVbtq-Q.css
+       3,167  .vite/renderer/find_in_page/assets/main-yrSHwj46.css
+       6,289  .vite/renderer/find_in_page/window-legacy-pins.css
+       8,078  .vite/renderer/find_in_page/window-shared.css
+     246,160  .vite/renderer/main_window/assets/MainWindowPage-CinbABxl.css
+      10,425  .vite/renderer/main_window/assets/clawdQuestEngine-C2Z1JudX.css
+       3,167  .vite/renderer/quick_window/assets/main-yrSHwj46.css
+       6,289  .vite/renderer/quick_window/window-legacy-pins.css
+       8,078  .vite/renderer/quick_window/window-shared.css
+       7,762  resources/artifact-libs/npm_gridjs@5.0.2_dist_theme_mermaid.min.css
+     534,733  resources/frame/types/design/artifact-type/app.css
+     664,159  resources/frame/types/slides/artifact-type/app.css
+
+=== html files ===
+     243,759  .vite/renderer/about_window/about.html
+     243,759  .vite/renderer/buddy_window/buddy.html
+         341  .vite/renderer/file_viewer/fileViewer.html
+     243,128  .vite/renderer/find_in_page/find-in-page.html
+       5,808  .vite/renderer/local_exec_consent/localExecConsent.html
+      11,683  .vite/renderer/main_window/index.html
+     248,376  .vite/renderer/quick_window/quick-window.html
+      82,212  resources/frame/shell/frame-shell.html
+      36,471  resources/frame/types/design/index.html
+      41,693  resources/frame/types/slides/index.html
+
+entries cached -> /tmp/asar_entries.json
