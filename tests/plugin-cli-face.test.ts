@@ -7,7 +7,7 @@
 // M2E_LOOSE_SKILLS，那是为了可用把信任门拆了。这一文件按那两半各自钉：
 //   · 纯函数面（文字有没有出声、三态有没有分开）用合成输入；
 //   · 装配面与 CLI 面用真盘 + 真 spawn，因为「算出来没接线」这一族只有真跑分得出来。
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -277,12 +277,20 @@ function runCli(args: string[], env: Record<string, string> = {}): { status: num
 }
 
 describe("CLI 交付面：列得出、批得了、批不动就说没批（真 spawn）", () => {
+  // F2 余项：信任表不得落项目控制目录 ⇒ 夹具把 trustFile 挪到工作区外的独立临时目录
+  //（afterEach 统一清尾，五个调用点不动）。
+  let trustHome = "";
+  afterEach(async () => {
+    if (trustHome) await rm(trustHome, { recursive: true, force: true }).catch(() => {});
+    trustHome = "";
+  });
   const fixture = async (): Promise<{ ws: string; trustFile: string }> => {
     const ws = await mkdtemp(join(tmpdir(), "dsh-p437-cli-"));
+    trustHome = await mkdtemp(join(tmpdir(), "dsh-p437-cli-trust-"));
     const dir = join(ws, ".agent", "skills", "demo");
     await mkdir(dir, { recursive: true });
     await writeFile(join(dir, "SKILL.md"), "---\nname: demo\ndescription: 判卷用\n---\n正文\n", "utf8");
-    return { ws, trustFile: join(ws, "data", "trust.json") };
+    return { ws, trustFile: join(trustHome, "trust.json") };
   };
 
   it("⑲ --plugins 列出项目 skill 与其作用域/状态，并给出决议入口", async () => {

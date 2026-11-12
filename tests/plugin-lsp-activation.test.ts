@@ -18,10 +18,12 @@ const SERVER_PATH = join(FX, "project", "echo-suite", "lsp-server", "stub.mjs");
 
 let ws = "";
 let rt: PluginRuntime | null = null;
+let trustHome = "";
 
 /** 建一次装载：`trust` = 是否过信任门；`switchOn` = 宿主 .agent/lsp.json 有没有把 LSP 打开。 */
 async function load(over: { trust?: boolean; switchOn?: boolean } = {}): Promise<PluginRuntime> {
   ws = await mkdtemp(join(tmpdir(), "dsh-plugin-lsp-"));
+  trustHome = await mkdtemp(join(tmpdir(), "dsh-plugin-lsp-trust-"));
   await writeFile(join(ws, "a.ts"), "function alpha() {}\n", "utf8");
   if (over.switchOn !== false) {
     await mkdir(join(ws, ".agent"), { recursive: true });
@@ -31,7 +33,7 @@ async function load(over: { trust?: boolean; switchOn?: boolean } = {}): Promise
     projectPluginsDir: join(FX, "project"),
     workspace: ws,
     pluginDataRoot: join(ws, "plugin-data"),
-    trustFile: join(ws, "trust.json"),
+    trustFile: join(trustHome, "trust.json"),
   });
   if (over.trust !== false) await rt.trustDecide("echo-suite", true);
   rt.activateLsp();
@@ -43,6 +45,8 @@ afterEach(async () => {
   rt = null;
   await closeAllLspClients();
   if (ws) await rm(ws, { recursive: true, force: true }).catch(() => {});
+  if (trustHome) await rm(trustHome, { recursive: true, force: true }).catch(() => {});
+  trustHome = "";
 });
 
 describe("插件 .lsp.json 进 LSP 运行时（§9.8 第三激活面）", () => {
@@ -113,6 +117,7 @@ describe("插件 .lsp.json 进 LSP 运行时（§9.8 第三激活面）", () => 
   /** 现造一个用户级插件（带指定 diagnostics 开关），其 .lsp.json 直接指仓库那份 stub。 */
   async function loadWithDiagnostics(enabled: boolean): Promise<string> {
     ws = await mkdtemp(join(tmpdir(), "dsh-plugin-lsp-diag-"));
+    trustHome = await mkdtemp(join(tmpdir(), "dsh-plugin-lsp-trust-"));
     const file = join(ws, "a.ts");
     await writeFile(file, "function alpha() {}\n", "utf8");
     await mkdir(join(ws, ".agent"), { recursive: true });
@@ -128,7 +133,7 @@ describe("插件 .lsp.json 进 LSP 运行时（§9.8 第三激活面）", () => 
       userPluginsDir: join(ws, "user-plugins"),
       workspace: ws,
       pluginDataRoot: join(ws, "plugin-data"),
-      trustFile: join(ws, "trust.json"),
+      trustFile: join(trustHome, "trust.json"),
     });
     rt.activateLsp();
     return file;
