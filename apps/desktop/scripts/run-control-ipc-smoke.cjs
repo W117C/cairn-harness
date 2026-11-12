@@ -1,14 +1,15 @@
 // 真实 Electron preload/IPC + 真实 host/脚本模型；审批保持未决，用来观察工作区控制归属。
 // 不加载整应用，不代表应用启动通过。profile/workspaces 均隔离；不拨真实 Provider。
 const { app, BrowserWindow, ipcMain } = require("electron");
-const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = require("node:fs");
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
+const { mkdtempSync, mkdirSync, writeFileSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 const repo = resolve(__dirname, "../../..");
 const profile = mkdtempSync(join(tmpdir(), "cairn-control-ipc-"));
 const out = resolve(process.argv[2]); mkdirSync(out, { recursive: true });
 app.setPath("userData", join(profile, "profile"));
-app.on("quit", () => rmSync(profile, { recursive: true, force: true }));
+app.on("quit", () => scheduleProfileCleanup(profile));
 for (const key of ["M3A_AGENTS_DEMO", "M1B_GATE_FLOW", "M1C_AUTONOMY_SCRIPT", "M2A_LSP_DEMO", "M0A_PROVIDER", "CAIRN_MODEL", "M0B_WORKSPACE"]) delete process.env[key];
 process.env.M3A_MAIN_SCRIPT = join(repo, "fixtures/agents/main-approval-demo.jsonl");
 require(require.resolve("tsx/cjs", { paths: [repo] }));

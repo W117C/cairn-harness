@@ -1,0 +1,340 @@
+[
+  {
+    "name": "侧栏默认只保留会话搜索入口，不常驻搜索框",
+    "ok": true,
+    "detail": {
+      "row": 0,
+      "toggle": true,
+      "title": "搜索会话",
+      "ariaLabel": "搜索会话"
+    }
+  },
+  {
+    "name": "点击搜索入口后展开并自动聚焦输入框",
+    "ok": true,
+    "detail": {
+      "row": 1,
+      "focused": true
+    }
+  },
+  {
+    "name": "空搜索再按 Esc 收起，并把焦点还给搜索入口",
+    "ok": true,
+    "detail": {
+      "row": 0,
+      "focused": true
+    }
+  },
+  {
+    "name": "空态建议保持无编号行",
+    "ok": true,
+    "detail": {
+      "rows": 3,
+      "numbers": 0
+    }
+  },
+  {
+    "name": "首页标题、项目与输入区共用阅读起点",
+    "ok": true,
+    "detail": {
+      "greetPx": 22,
+      "taPx": 14,
+      "loudest": {
+        "t": "SPAN",
+        "px": 22
+      },
+      "headingLeft": 543.5,
+      "composerLeft": 543.5,
+      "footer": "",
+      "railAccount": "设置、外观与用量",
+      "sideSettings": 0,
+      "emptyLeft": 502.5,
+      "emptyRight": 1238.5,
+      "belowLeft": 502.5,
+      "zoneLeft": 502.5,
+      "zoneRight": 1238.5,
+      "brandInBar": 0,
+      "brandInSide": 1,
+      "canvas": "rgb(252, 252, 251)",
+      "radius": "12px",
+      "upstream": true
+    }
+  },
+  {
+    "name": "首页 hero / 起手行 / 输入区同列宽（左右缘都齐）",
+    "ok": true,
+    "detail": {
+      "greetPx": 22,
+      "taPx": 14,
+      "loudest": {
+        "t": "SPAN",
+        "px": 22
+      },
+      "headingLeft": 543.5,
+      "composerLeft": 543.5,
+      "footer": "",
+      "railAccount": "设置、外观与用量",
+      "sideSettings": 0,
+      "emptyLeft": 502.5,
+      "emptyRight": 1238.5,
+      "belowLeft": 502.5,
+      "zoneLeft": 502.5,
+      "zoneRight": 1238.5,
+      "brandInBar": 0,
+      "brandInSide": 1,
+      "canvas": "rgb(252, 252, 251)",
+      "radius": "12px",
+      "upstream": true
+    }
+  },
+  {
+    "name": "品牌标同屏一处：侧栏展开时顶栏中栏留空",
+    "ok": true,
+    "detail": {
+      "greetPx": 22,
+      "taPx": 14,
+      "loudest": {
+        "t": "SPAN",
+        "px": 22
+      },
+      "headingLeft": 543.5,
+      "composerLeft": 543.5,
+      "footer": "",
+      "railAccount": "设置、外观与用量",
+      "sideSettings": 0,
+      "emptyLeft": 502.5,
+      "emptyRight": 1238.5,
+      "belowLeft": 502.5,
+      "zoneLeft": 502.5,
+      "zoneRight": 1238.5,
+      "brandInBar": 0,
+      "brandInSide": 1,
+      "canvas": "rgb(252, 252, 251)",
+      "radius": "12px",
+      "upstream": true
+    }
+  },
+  {
+    "name": "侧栏收起后品牌标补位到顶栏中栏（仍只一处）",
+    "ok": true,
+    "detail": {
+      "bar": 1,
+      "side": 0
+    }
+  },
+  {
+    "name": "窄窗 880：首页 hero / 起手行 / 输入区同一条列与同一条内容左缘",
+    "ok": true,
+    "detail": {
+      "empty": {
+        "left": 304,
+        "right": 880
+      },
+      "below": {
+        "left": 304,
+        "right": 880
+      },
+      "zone": {
+        "left": 304,
+        "right": 880
+      },
+      "greet": {
+        "left": 320,
+        "right": 626.6
+      },
+      "card": {
+        "left": 320,
+        "right": 864
+      },
+      "pads": {
+        "empty": "16px",
+        "below": "16px",
+        "zone": "16px"
+      }
+    }
+  },
+  {
+    "name": "设置入口只在能力轨账户菜单，侧栏不再复制一枚",
+    "ok": true,
+    "detail": {
+      "greetPx": 22,
+      "taPx": 14,
+      "loudest": {
+        "t": "SPAN",
+        "px": 22
+      },
+      "headingLeft": 543.5,
+      "composerLeft": 543.5,
+      "footer": "",
+      "railAccount": "设置、外观与用量",
+      "sideSettings": 0,
+      "emptyLeft": 502.5,
+      "emptyRight": 1238.5,
+      "belowLeft": 502.5,
+      "zoneLeft": 502.5,
+      "zoneRight": 1238.5,
+      "brandInBar": 0,
+      "brandInSide": 1,
+      "canvas": "rgb(252, 252, 251)",
+      "radius": "12px",
+      "upstream": true
+    }
+  },
+  {
+    "name": "首页问候不再以装饰大字压过输入区（≤ 24px 且 ≤ 输入正文 1.8 倍）",
+    "ok": true,
+    "detail": {
+      "greetPx": 22,
+      "taPx": 14,
+      "loudest": {
+        "t": "SPAN",
+        "px": 22
+      },
+      "headingLeft": 543.5,
+      "composerLeft": 543.5,
+      "footer": "",
+      "railAccount": "设置、外观与用量",
+      "sideSettings": 0,
+      "emptyLeft": 502.5,
+      "emptyRight": 1238.5,
+      "belowLeft": 502.5,
+      "zoneLeft": 502.5,
+      "zoneRight": 1238.5,
+      "brandInBar": 0,
+      "brandInSide": 1,
+      "canvas": "rgb(252, 252, 251)",
+      "radius": "12px",
+      "upstream": true
+    }
+  },
+  {
+    "name": "已加载上游 Claude 主题与输入卡样式",
+    "ok": true,
+    "detail": {
+      "greetPx": 22,
+      "taPx": 14,
+      "loudest": {
+        "t": "SPAN",
+        "px": 22
+      },
+      "headingLeft": 543.5,
+      "composerLeft": 543.5,
+      "footer": "",
+      "railAccount": "设置、外观与用量",
+      "sideSettings": 0,
+      "emptyLeft": 502.5,
+      "emptyRight": 1238.5,
+      "belowLeft": 502.5,
+      "zoneLeft": 502.5,
+      "zoneRight": 1238.5,
+      "brandInBar": 0,
+      "brandInSide": 1,
+      "canvas": "rgb(252, 252, 251)",
+      "radius": "12px",
+      "upstream": true
+    }
+  },
+  {
+    "name": "1440 首次进会话保持专注两栏，插件命令不常驻",
+    "ok": true,
+    "detail": {
+      "inspectorWidth": 0,
+      "inspectorInert": true,
+      "pluginStrip": 0,
+      "composerWidth": 654
+    }
+  },
+  {
+    "name": "检查器头不重复顶栏会话名（只留 Tab 与窗格入口，概览面不回潮）",
+    "ok": true,
+    "detail": {
+      "open": true,
+      "toolbarTitles": 1,
+      "toolbarTitle": "接 routing 开关并跑全量验证",
+      "headText": "改动时间线",
+      "deadOverview": 0
+    }
+  },
+  {
+    "name": "已下架的概览运行 chip 不回潮（run-ink 对比度归 contrast-gate 具名对表）",
+    "ok": true,
+    "detail": {
+      "present": 0
+    }
+  },
+  {
+    "name": "检查器方向键切 Tab，焦点与面板语义同步，只保留一个 Tab 停点",
+    "ok": true,
+    "detail": {
+      "selected": "时间线",
+      "focused": "时间线",
+      "panel": ":rm:-tab-timeline",
+      "rovingStops": 1,
+      "tabsBefore": [
+        "改动",
+        "时间线"
+      ]
+    }
+  },
+  {
+    "name": "侧栏任务名获得至少六成行宽",
+    "ok": true,
+    "detail": {
+      "rowWidth": 242.5,
+      "titleWidth": 183.5
+    }
+  },
+  {
+    "name": "一轮 = 一条列：助手行/正文/过程带/交付卡/署名条共用同一右缘，用户行仍贴列右",
+    "ok": true,
+    "detail": {
+      "assistant": 970,
+      "prose": 970,
+      "think": 0,
+      "tools": 0,
+      "card": 970,
+      "footer": 970,
+      "user": 1018,
+      "reading": 1059,
+      "bands": [
+        970,
+        970,
+        970,
+        970
+      ]
+    }
+  },
+  {
+    "name": "窄窗输入框完整可见，页面无横向溢出",
+    "ok": true,
+    "detail": {
+      "left": 320,
+      "right": 864,
+      "viewport": 880,
+      "overflow": false
+    }
+  },
+  {
+    "name": "暗色主题与 Markdown 链接使用上游配色",
+    "ok": true,
+    "detail": {
+      "canvas": "rgb(21, 21, 21)",
+      "link": "rgb(138, 180, 248)"
+    }
+  },
+  {
+    "name": "设置页顶栏显示当前页面并收起任务操作",
+    "ok": true,
+    "detail": {
+      "open": true,
+      "title": "设置",
+      "tools": "",
+      "taskButton": false
+    }
+  },
+  {
+    "name": "渲染过程无控制台错误",
+    "ok": true,
+    "detail": []
+  }
+]

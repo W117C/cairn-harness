@@ -25,7 +25,12 @@ import {
 } from "../../agent/evolve/playbook";
 import { previousRunSignals } from "../../agent/evolve/shadow";
 import type { EpisodeRecord } from "../../agent/evolve/episode";
-import { assignArm, type ExperimentRecord } from "../../agent/evolve/experiment";
+import {
+  aggregateExperimentSamplesBySession,
+  assignArm,
+  checkExperimentBudget,
+  type ExperimentRecord,
+} from "../../agent/evolve/experiment";
 import {
   clearAssignment,
   POLICY_VERSION,
@@ -216,12 +221,29 @@ export async function prepareEvolutionInjection(input: PrepareEvolutionInput): P
   });
   const baselineNote = renderPlaybookNote(baseline.selected);
   const running: ExperimentRecord[] = [];
+  let skippedByBudget = false;
+  let budgetEpisodes: EpisodeRecord[] | null = episodes;
   for (const experiment of await listExperiments(input.workspace)) {
     if (experiment.status !== "running" || experiment.workspace !== input.workspace) continue;
     if (experiment.taskFilter.class !== undefined && !experiment.taskFilter.class.includes(taskClass)) continue;
     // 已裁决（passed/failed/unmeasurable）的实验不再继续分配：分析结果文件是终止标记。
     const decision = await loadExperimentAnalysis(input.workspace, experiment.id);
     if (decision !== null && decision.status !== "running") continue;
+    // 预算硬闸门：maxRuns / maxUsd（含不可定价 fail-closed）/ maxWallMs 任一耗尽即停止新分配。
+    if (budgetEpisodes === null) {
+      budgetEpisodes = await loadInjectionEpisodes(input.workspace);
+    }
+    const agg = aggregateExperimentSamplesBySession(experiment, budgetEpisodes ?? []);
+    const budgetCheck = checkExperimentBudget(experiment, {
+      totalRuns: agg.totalRuns,
+      totalUsd: agg.totalUsd,
+      hasUnpricedRuns: agg.hasUnpricedRuns,
+      now,
+    });
+    if (budgetCheck.exhausted) {
+      skippedByBudget = true;
+      continue;
+    }
     running.push(experiment);
   }
   const experiments = running.sort(
@@ -238,7 +260,7 @@ export async function prepareEvolutionInjection(input: PrepareEvolutionInput): P
       experimentId: null,
       arm: "none",
       injectedExperienceIds: baseline.selected.map((entry) => entry.id),
-      reason: baseline.selected.length > 0 ? "active" : "none",
+      reason: skippedByBudget ? "experiment-budget-exhausted" : (baseline.selected.length > 0 ? "active" : "none"),
     };
   }
 

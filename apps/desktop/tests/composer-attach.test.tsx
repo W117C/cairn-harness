@@ -39,6 +39,13 @@ describe("＋附件菜单四入口（P2-2：零路径手输）", () => {
     expect(html).toContain(`>${STR.composer.attachFolder}<`);
     expect(html).toContain(`>${STR.composer.attachPaste}<`);
     expect(html).toContain(`>${STR.composer.attachRecent}<`);
+    // 第 1094 页：菜单标题不再复述触发钮的 tooltip/aria「添加引用」——标题行只留动作项。
+    expect(html).not.toContain('class="pop-label"');
+    expect((html.match(new RegExp(STR.composer.attachTitle, "g")) ?? []).length).toBe(2);
+    // 第 1095 页：两条复述型副标题（系统选择器可多选 / 从剪贴板取图）不再上屏；目录语义保留。
+    expect(html).not.toContain("系统选择器 · 可多选");
+    expect(html).not.toContain("从系统剪贴板取图片");
+    expect(html).toContain(STR.composer.attachFolderSub);
     const at = (s: string): number => html.indexOf(`>${s}<`);
     expect(at(STR.composer.attachUpload)).toBeLessThan(at(STR.composer.attachFolder));
     expect(at(STR.composer.attachFolder)).toBeLessThan(at(STR.composer.attachPaste));

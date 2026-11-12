@@ -37,8 +37,15 @@ it("renderer 不再有用户武装面：Composer 开关、设置默认值、按�
   expect(queue).not.toContain("planRequired");
   const settings = readRendererFile("components/settings-sections.tsx");
   expect(settings).not.toContain("planRequiredByDefault");
+  // 第 1069 页：权限段已拆到 settings/，负断言随正文扩扫新文件（保覆盖不放宽）。
+  const permissions = readRendererFile("components/settings/PermissionsSection.tsx");
+  expect(permissions).not.toContain("planRequiredByDefault");
   // patch 白名单同步出列（UI 不再写这个键）
-  expect(settings).toContain('export const PANEL_PATCH_KEYS = ["provider", "model", "mode", "theme", "locale"] as const;');
+  // 第 1072 页：白名单随纯函数资产解耦到叶子 settings/provider-assets.ts——正断言读新落位（值逐字不变），
+  // 负断言（不许重新混入 planRequiredByDefault）随白名单扩扫该叶子（保覆盖不放宽）。
+  const providerAssets = readRendererFile("components/settings/provider-assets.ts");
+  expect(providerAssets).not.toContain("planRequiredByDefault");
+  expect(providerAssets).toContain('export const PANEL_PATCH_KEYS = ["provider", "model", "mode", "theme", "locale"] as const;');
   const strings = readRendererFile("strings.ts");
   for (const gone of ["planLabel", "planAria", "planOnTip", "planOffTip", "planOnNotice", "planOffNotice"]) {
     expect(strings).not.toContain(gone);

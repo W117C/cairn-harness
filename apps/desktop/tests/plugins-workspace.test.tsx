@@ -210,6 +210,9 @@ describe("PluginsWorkspace", () => {
     const workbench = readFileSync(
       fileURLToPath(new URL("../src/renderer/panes/WorkbenchView.tsx", import.meta.url)),
       "utf8",
+    ) + "\n" + readFileSync(
+      fileURLToPath(new URL("../src/renderer/panes/WorkbenchSidebarHost.tsx", import.meta.url)),
+      "utf8",
     );
     const appPage = readFileSync(
       fileURLToPath(new URL("../src/renderer/components/AppPage.tsx", import.meta.url)),

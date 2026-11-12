@@ -1,12 +1,17 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { edit_file } from "../tools/edit_file";
+import { fs_ops } from "../tools/fs_ops";
 import { glob } from "../tools/glob";
 import { grep } from "../tools/grep";
+import { calc } from "../tools/calc";
 import { createImpactQueryTool } from "../tools/impact-query";
 import { git_read } from "../tools/git_read";
+import { list_dir } from "../tools/list_dir";
 import { lsp } from "../tools/lsp";
 import { read_file } from "../tools/read_file";
+import { read_doc } from "../tools/read_doc";
+import { read_image } from "../tools/read_image";
 import { remember } from "../tools/remember";
 import { write_file } from "../tools/write_file";
 import type { Tool } from "../tools/base";
@@ -31,6 +36,14 @@ export function buildWorkerToolTable(
     // 只读 git 三合一：固定 argv、零写权、不经 shell；worker 在 worktree 里核对改动面
     // 与「上游改了什么」复用主会话同一份实现，权限门也走同一个 gatedWorkerTool 出口。
     git_read: gatedWorkerTool("git_read", git_read, w, orch),
+    // 2026-11-10 纯文本只读三件：目录 stat / zip 文档解析 / 纯算术解析器——与 read_file 同档
+    // （零写权零出网），复用主会话同一份实现与同一道 gatedWorkerTool 门。
+    list_dir: gatedWorkerTool("list_dir", list_dir, w, orch),
+    read_doc: gatedWorkerTool("read_doc", read_doc, w, orch),
+    calc: gatedWorkerTool("calc", calc, w, orch),
+    // 识图（2026-11-10 业主「全部做完」）：worker 核对截图/设计稿/可视化产物不再回主会话。
+    // 单图 ≤5MB 硬帽在工具内，与主会话同一份实现、同一道门。
+    read_image: gatedWorkerTool("read_image", read_image, w, orch),
     // shell 是 worker 唯一的命令出口，而主会话那道沙箱门只认 `run_shell` 这个名字
     // （agent-runner 的 `name === "run_shell"` 分支）——`shell_ro`/`shell_rw` 走的是本文件
     // 另一扇门，不注入就等于 worker 整支都在 Seatbelt 之外。宿主有沙箱就注入沙箱版。
@@ -94,6 +107,15 @@ export function buildWorkerToolTable(
     };
     table.write_file = gatedWorkerTool("write_file", clearAnchorsWrite, w, orch, { autonomy: w.toolAutonomy });
     table.edit_file = gatedWorkerTool("edit_file", snapshotEdit, w, orch, { autonomy: w.toolAutonomy });
+    // fs_ops（2026-11-10）：结构化文件生命周期（mkdir/move/rename/delete）。worker 侧与 write_file
+    // 同一笔账：worktree 天然可回滚（§10.10），不落 D7 快照（ctx.snapshot:false），再抄一份原件只会
+    // 把合并那一刻的脏文件面撑大。权限门同 write_file：toolAutonomy=auto + critical/ask 规则全生效。
+    table.fs_ops = gatedWorkerTool("fs_ops", {
+      name: "fs_ops",
+      async run(args, ctx) {
+        return await fs_ops.run(args, { ...ctx, snapshot: false });
+      },
+    }, w, orch, { autonomy: w.toolAutonomy });
     table.shell_rw = gatedWorkerTool("shell_rw", makeShellRw(opts.shell), w, orch, { autonomy: w.toolAutonomy });
     // remember 走**共用那份范围裁决**（`permissions/rememberDecision`），不是通用 evaluate：
     // 旧形状 worker 的 remember 只过 evaluate，而 `remember` 不在 SIDE_EFFECT_TOOLS 里

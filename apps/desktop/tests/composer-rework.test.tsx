@@ -13,7 +13,7 @@ import { STR } from "../src/renderer/strings";
 import { readAppSurface } from "./helpers/app-surface";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
-const composerSrc = read("../src/renderer/components/Composer.tsx");
+const composerSrc = read("../src/renderer/components/Composer.tsx") + "\n" + read("../src/renderer/components/ComposerAttachments.tsx") + "\n" + read("../src/renderer/components/ComposerAttachMenu.tsx") + "\n" + read("../src/renderer/components/ComposerPermissionMenu.tsx");
 const appSrc = readAppSurface();
 const css = read("../src/renderer/styles.css");
 

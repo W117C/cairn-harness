@@ -142,6 +142,12 @@ const GOLDEN: Readonly<Record<string, Golden>> = {
   browser_navigate: ["ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "approve/L3-mode"],
   browser_snapshot: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
   browser_pick: ["approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
+  // 2026-11-10 web_doc：出网家族第四个名字，与 web_fetch 逐字同形（risk.ts high + 四档送审）。
+  web_doc: ["ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "ask/L4-risk", "approve/L3-mode"],
+  // 2026-11-10 fs_ops：写向工具（SIDE_EFFECT_TOOLS）⇒ 只读档 L0 摘除、默认档逐次审批。
+  // 基线风险刻意为零（同 write_file：两档每次写都卡会把常规 mkdir/move 卡死），空参走
+  // write_file 那一行；delete 的 medium 抬升在下方 D-fsops 单测里按参数点名（B1 的 {} 进不去）。
+  fs_ops: ["deny/L0-hard", "ask/L3-mode", "approve/L4-pass", "approve/L4-pass", "approve/L3-mode"],
 };
 
 describe("M7 · 工具名登记册", () => {
@@ -167,6 +173,20 @@ describe("M7 · 工具名登记册", () => {
     }
   });
 
+  // fs_ops 的 delete（2026-11-10）：B1 的空参进不了 action 分支，medium 抬升按**参数**点名。
+  // 风险线取 medium 与 edit_file 同档（risk.ts delete 支）——引导/自主两档出卡，默认档不问。
+  it("B-fsops · fs_ops.delete 走风险线（medium），mkdir/move 维持基线零抬升", () => {
+    const del = evaluate(asTool("fs_ops"), { action: "delete", path: "tmp/x.txt" }, session("guided"));
+    expect(`${del.verdict}/${del.layer}`).toBe("ask/L4-risk");
+    const mk = evaluate(asTool("fs_ops"), { action: "mkdir", path: "src/new-dir" }, session("guided"));
+    expect(`${mk.verdict}/${mk.layer}`).toBe("approve/L4-pass");
+    const mv = evaluate(asTool("fs_ops"), { action: "move", path: "a.txt", target: "b.txt" }, session("guided"));
+    expect(`${mv.verdict}/${mv.layer}`).toBe("approve/L4-pass");
+    // 敏感面落点照旧被路径通道抬到 high：把文件**移进** .git/hooks/ 与写进去同判。
+    const mvHook = evaluate(asTool("fs_ops"), { action: "move", path: "a.sh", target: ".git/hooks/pre-commit" }, session("auto"));
+    expect(`${mvHook.verdict}/${mvHook.layer}`).toBe("ask/L4-risk");
+  });
+
   it("B2 · 零回归：gate() 对既有工具名的裁决逐格不变（含只读 worker 的工具面）", () => {
     const EXPECT: Readonly<Record<string, Partial<Record<PermissionMode, Decision>>>> = {
       write_file: { "read-only": "deny", default: "deny", guided: "allow", auto: "allow" },
@@ -177,6 +197,8 @@ describe("M7 · 工具名登记册", () => {
       // 同 B1：合并期点名的 zcode M2 工具，缺了这一格会被 `?? "allow"` 兜成放行。
       apply_patch: { "read-only": "deny", default: "deny", guided: "allow", auto: "allow" },
       diagnose: { "read-only": "deny", default: "deny", guided: "allow", auto: "allow" },
+      // fs_ops（2026-11-10）：写向工具，与上面四个写向逐字同形。
+      fs_ops: { "read-only": "deny", default: "deny", guided: "allow", auto: "allow" },
     };
     for (const name of ALL_NAMES) {
       for (const mode of PERMISSION_MODES) {

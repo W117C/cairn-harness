@@ -26,6 +26,7 @@ export type EpisodeArm = "none" | "control" | "treatment" | "shadow";
 export type EpisodeAssignmentSource = "meta" | "sidecar" | "absent" | "invalid";
 export type EpisodeJudge = "pass" | "fail" | "unknown";
 export type EpisodeUser = "accepted" | "rejected" | "unknown";
+export type EpisodeOutcomeSource = "judge" | "verify" | "user_feedback" | "unmeasured";
 
 export interface EpisodeAssignment {
   source: EpisodeAssignmentSource;
@@ -292,6 +293,17 @@ export function finalOutcomeOf(
   if (user === "accepted") return "success";
   if (user === "rejected") return "failure";
   return "unknown";
+}
+
+/** 结局归因来源：与 `finalOutcomeOf` 严格同一条优先级（judge > verify > user_feedback > unmeasured）。
+ *  用于汇总与报告面把「这批结局到底是谁判的、有多少是未测的」显式拆开，不把不同证据强度的信号混成一团。 */
+export function outcomeSourceOf(
+  outcome: Pick<EpisodeOutcomeRecord, "judge" | "verify" | "user">,
+): EpisodeOutcomeSource {
+  if (outcome.judge === "pass" || outcome.judge === "fail") return "judge";
+  if (outcome.verify === "green" || outcome.verify === "red") return "verify";
+  if (outcome.user === "accepted" || outcome.user === "rejected") return "user_feedback";
+  return "unmeasured";
 }
 
 export function projectEpisode(input: ProjectEpisodeInput): EpisodeRecord {

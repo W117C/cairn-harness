@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { readAppSurface } from "./helpers/app-surface";
+import { STR } from "../src/renderer/strings";
 
 const app = readAppSurface();
 const shortcuts = readFileSync(fileURLToPath(new URL("../src/renderer/shortcuts.ts", import.meta.url)), "utf8");
@@ -21,6 +22,8 @@ describe("F2 重命名", () => {
 
   it("hotkeysRef 两处都接 startRename；速查表有 F2 行", () => {
     expect(app.match(/startRename: startBarRename/g)?.length).toBe(2);
-    expect(shortcuts).toContain('{ keys: "F2", what: "重命名当前会话（点工具栏会话名亦可）" }');
+    // 收编后（第 1065 页）：F2 行文案走 STR 单源——源里钉接线，值在 STR 锚定（口径不变）。
+    expect(shortcuts).toContain('{ keys: "F2", what: STR.shortcutTable.rename }');
+    expect(STR.shortcutTable.rename).toBe("重命名当前会话（点工具栏会话名亦可）");
   });
 });

@@ -15,7 +15,10 @@ import { llmReviewDiff } from "./security/llm-review";
 import { mergeGateMessage, mergeGateVerdict } from "./security/merge-gate";
 import { changeSetRefs, collectChangeSet, mapFindingsToAbsolute, redactSecrets, scanChangeSet } from "./security/scan";
 import type { WorkerHandle } from "./orchestrator-types";
-import { commitAndMerge, removeWorktree, worktreePathFor } from "./worktree";
+import { commitAndMerge, removeWorktree, worktreeDiff, worktreePathFor } from "./worktree";
+// 第 1074 页：合并时点的符号级语义冲突雷达（纯内核；生产与判卷共用同一份，见该文件头三条口径）。
+import { parseHunks, radarConflicts, radarGateVerdict, radarNote, type SymbolConflict, type WorkerTouch } from "./conflict-radar";
+import type { ImpactGraph } from "./impact/index";
 
 export interface WorkerMergeReviewDeps {
   /** 本缝只用到这两个开关/工具（结构性窄面，OrchestratorOptions 直接可赋）。 */
@@ -36,6 +39,9 @@ export interface WorkerMergeReviewDeps {
   registerMergeOwner: (agentId: string) => void;
   /** worker 所有者路由（模块级 agentOwners 表的登记；评审重启要唤醒它）。 */
   markAgentOwner: (agentId: string) => void;
+  /** 第 1074 页：语义冲突雷达的建图口（装配点注入；缺省 = 零行为）。
+   *  抛错/返回 null ⇒ fail-open（warn 出声，不挡合并）。 */
+  conflictRadar?: { buildGraph: () => Promise<ImpactGraph | null> };
   /** 评审重启（实现在 orchestrator.ts：重跑 runWorker 循环）。 */
   runWorker: (w: WorkerHandle) => Promise<void>;
   /** 终态资源回收（实现在 orchestrator.ts：root abort 摘除 + 事件流裁剪 + 版本计数同门槛回收）。 */
@@ -157,6 +163,44 @@ export class WorkerMergeReview {
     } as AgentEvent);
   }
 
+  /** 第 1074 页：语义冲突雷达的取料与判定（纯内核在 conflict-radar.ts，这里只做 IO 与事件面）。
+   *  失败一律 fail-open：图建不出来 / diff 读不到 ⇒ warn 出声 + 返回空，绝不挡合并。 */
+  private async radarCheck(w: WorkerHandle, opts: { force?: boolean }): Promise<{ conflicts: SymbolConflict[]; blocked: SymbolConflict[] }> {
+    const port = this.deps.conflictRadar;
+    if (port === undefined || w.worktree === undefined || w.baseCommit === undefined) return { conflicts: [], blocked: [] };
+    let graph: ImpactGraph | null = null;
+    try {
+      graph = await port.buildGraph();
+    } catch (err) {
+      console.warn("[radar] 影响面图不可用，本次跳过语义冲突预检:", err instanceof Error ? err.message : String(err));
+      return { conflicts: [], blocked: [] };
+    }
+    if (graph === null) {
+      console.warn("[radar] 影响面图不可用（null），本次跳过语义冲突预检");
+      return { conflicts: [], blocked: [] };
+    }
+    let patch = "";
+    try {
+      patch = (await worktreeDiff(worktreePathFor(this.deps.opts.workspace, w.agentId), w.baseCommit)).patch;
+    } catch (err) {
+      console.warn("[radar] 读取 worker diff 失败，本次跳过语义冲突预检:", err instanceof Error ? err.message : String(err));
+      return { conflicts: [], blocked: [] };
+    }
+    const hunks = parseHunks(patch);
+    const mine: WorkerTouch = { agentId: w.agentId, files: [...new Set([...hunks.keys(), ...w.touchedFiles])], hunks };
+    const others: WorkerTouch[] = [];
+    for (const other of this.deps.workers.values()) {
+      if (other.agentId === w.agentId || other.mode !== "write" || other.touchedFiles.size === 0) continue;
+      // 合并决策已收尾的树不再算「并行面」：控制塔路由还在 = worktree 未合并/未拒绝。
+      if (!this.deps.hasMergeOwner(other.agentId)) continue;
+      others.push({ agentId: other.agentId, files: [...other.touchedFiles] });
+    }
+    if (others.length === 0) return { conflicts: [], blocked: [] };
+    const conflicts = radarConflicts(graph, mine, others);
+    const verdict = radarGateVerdict(conflicts, opts);
+    return { conflicts, blocked: this.deps.safeMode === "gate" && !verdict.allow ? verdict.blocking : [] };
+  }
+
   // ---- M3b 合并控制塔（§4.3/§4.4.5：合并唯一出口 = git 面板；本组方法只被 card_action 协议路由调用）----
 
   /** 批准合并：gate 二次确认（critical|high 且未 force → 拒绝并红标注记）→ 系统代为 commit → merge --no-ff
@@ -181,6 +225,22 @@ export class WorkerMergeReview {
         await this.deps.opts.emit({ type: "tool_result", callId: this.receiptCallId(w, "merge"), agent_id: agentId, ok: false, output: "[gate] " + msg } as AgentEvent);
         return { ok: false, error: msg };
       }
+    }
+    // 第 1074 页：符号级语义冲突雷达——git 只隔离文本冲突，各改各的文件却动同一批符号它看不见。
+    // report 档只告警（agent_message）；gate 档 same-symbol 未 force ⇒ 拦（登记未摘，force 后可重试）。
+    const radar = await this.radarCheck(w, opts);
+    if (radar.conflicts.length > 0) {
+      await this.deps.opts.emit({
+        type: "agent_message",
+        agent_id: agentId,
+        kind: "progress",
+        text: "[radar] " + radarNote(radar.conflicts),
+      } as AgentEvent);
+    }
+    if (radar.blocked.length > 0) {
+      const msg = "[radar] 合并被拦：与并行 worker 改到同一批符号（gate 档，未 force）\n" + radarNote(radar.blocked) + "\n确认无碍可 force 合并。";
+      await this.deps.opts.emit({ type: "tool_result", callId: this.receiptCallId(w, "merge"), agent_id: agentId, ok: false, output: msg } as AgentEvent);
+      return { ok: false, error: msg };
     }
     // B10：入口同步摘除登记——并发二次 merge 可在 commitAndMerge 的 await 窗口内同时过校验；
     // 失败路径回滚登记（合并可重试），成功路径保持摘除。

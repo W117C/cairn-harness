@@ -2,13 +2,14 @@
 // 证的是「失败原因上屏」——路径与出路都在，重试按钮也在；不是只有一句空话。
 // 用法：pnpm --filter cairn-desktop build && ELECTRON_RUN_AS_NODE= pnpm --filter cairn-desktop exec electron scripts/sidebar-load-error-smoke.cjs [输出目录]
 const { app, BrowserWindow } = require("electron");
-const { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
+const { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
 const { join, resolve } = require("node:path");
 const { tmpdir } = require("node:os");
 
 const profile = mkdtempSync(join(tmpdir(), "cairn-list-error-profile-"));
 app.setPath("userData", profile);
-app.on("quit", () => { rmSync(profile, { recursive: true, force: true }); });
+app.on("quit", () => scheduleProfileCleanup(profile));
 const out = process.argv[2] ? resolve(process.argv[2]) : mkdtempSync(join(tmpdir(), "cairn-list-error-"));
 mkdirSync(out, { recursive: true });
 

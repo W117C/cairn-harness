@@ -3,14 +3,15 @@
 //   → 解冻 → 横幅消失、按钮复原；evolveSetFrozen 调用记录 [true,false]；0 控制台错误。
 // 真实 core 的 STOP 写/删由 tests/evolve-governance.test.ts 钉住；本脚本验桌面入口与状态往返。
 const { app, BrowserWindow, nativeTheme } = require("electron");
-const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
+const { mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
 const { join, resolve } = require("node:path");
 const { tmpdir } = require("node:os");
 
 const profile = mkdtempSync(join(tmpdir(), "cairn-evolve-profile-"));
 app.setPath("userData", profile);
 nativeTheme.themeSource = "light";
-app.on("quit", () => { rmSync(profile, { recursive: true, force: true }); });
+app.on("quit", () => scheduleProfileCleanup(profile));
 const OUT = process.argv[2] ? resolve(process.argv[2]) : mkdtempSync(join(tmpdir(), "cairn-evolve-"));
 mkdirSync(OUT, { recursive: true });
 

@@ -14,6 +14,7 @@
 //   onUserInput 不再无条件置 false（碰一下 ≠ 离开底部；内容不足一屏时根本滚不动），
 //   跟底观察器在不跟底的那条路上也重判（下面一多内容，浮钮就出现）。图钉（pinned）仍按位置判。
 import { useCallback, useEffect, useRef, useState } from "react";
+import { appMotionReduced } from "./state/motion-pref";
 
 const NEAR_BOTTOM_PX = 40;
 /** 用户刚滚过/按过键的 150ms 内不跟底（open-claude-ui `useClaudeScrollPinning` 的冷却窗）。 */
@@ -47,7 +48,7 @@ export interface StickyScroll {
 export function scrollBehavior(wanted: ScrollBehavior): ScrollBehavior {
   if (wanted !== "smooth") return wanted;
   try {
-    return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+    return appMotionReduced() || window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
   } catch {
     return wanted;
   }

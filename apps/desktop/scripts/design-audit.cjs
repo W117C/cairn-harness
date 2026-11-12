@@ -5,11 +5,12 @@
 // 用法：cd apps/desktop && env -u ELECTRON_RUN_AS_NODE npx electron scripts/design-audit.cjs
 // 产物：outputs/design-audit-2026-11-06/*.png + checks.json（可用 CAIRN_DESIGN_AUDIT_OUT 覆盖）
 const { app, BrowserWindow, nativeTheme } = require("electron");
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
 if (!app || typeof app.whenReady !== "function") {
   console.error("[design-audit] 需要 Electron app；请用 env -u ELECTRON_RUN_AS_NODE npx electron scripts/design-audit.cjs");
   process.exit(2);
 }
-const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+const { mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { createHash } = require("node:crypto");
 const { join, resolve } = require("node:path");
@@ -22,7 +23,7 @@ mkdirSync(OUT, { recursive: true });
 const profile = mkdtempSync(join(tmpdir(), "cairn-design-audit-"));
 app.setPath("userData", profile);
 nativeTheme.themeSource = "light";
-app.on("quit", () => rmSync(profile, { recursive: true, force: true }));
+app.on("quit", () => scheduleProfileCleanup(profile));
 
 async function main() {
   await app.whenReady();

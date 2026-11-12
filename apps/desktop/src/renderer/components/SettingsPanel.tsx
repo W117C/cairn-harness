@@ -30,6 +30,7 @@ import { ModalSurface } from "./ModalSurface";
 import { menuNavIndex } from "./popover-keys";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { isCompositionEnter } from "../ime";
+import { readOrError } from "../read-result";
 import { RenderErrorBoundary } from "./RenderErrorBoundary";
 import { UsageSection } from "./settings/UsageSection";
 import { EvolveSection } from "./settings/EvolveSection";
@@ -37,7 +38,7 @@ import { NetworkSection } from "./settings/NetworkSection";
 import { MigrationSection } from "./settings/MigrationSection";
 import { PersonalizationSection } from "./settings/PersonalizationSection";
 import { SubagentsSection } from "./settings/SubagentsSection";
-import { SETTINGS_PAGE_ORDER, SECTIONS, filterSections, sectionLabel, type SectionId } from "./settings-nav";
+import { SETTINGS_PAGE_ORDER, SECTIONS, filterSections, sectionById, sectionLabel, type SectionId } from "./settings-nav";
 import { destinationForSection } from "../navigation";
 import { STR } from "../strings";
 import "./settings-refinement.css";
@@ -180,6 +181,7 @@ export function SettingsPanel(props: {
   // 能力在场性读数（搜索端点配没配）。null = 还没问到 / 问失败——那一格显示「读不到」，
   // 不显示「已配」：把读不到当成配好，正是这个面板要修的那类假象。
   const [cap, setCap] = useState<CapabilityReadout | null>(null);
+  const [capError, setCapError] = useState<string | null>(null);
   // 供应商清单（内置 + 已装自定义）与全量模型——供应商管理列表的数据面（参照 Codex 供应商页）。
   const [pvInfo, setPvInfo] = useState<ProviderInfo | null>(null);
   const [update, setUpdate] = useState<UpdateState>({ kind: "idle" });
@@ -203,6 +205,14 @@ export function SettingsPanel(props: {
   const navSectionsRef = useRef<HTMLDivElement | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const visibleSections = useMemo(() => filterSections(navQuery), [navQuery]);
+  // 第 1167 页：三组导航分区一次分好；设置页局部状态变化不重跑 3 次 filter。
+  const navGroups = useMemo(() => (["settings", "workspace", "system"] as const).map((group) => ({
+    group,
+    ids: visibleSections.filter((id) => {
+      const inWorkspace = (SETTINGS_PAGE_ORDER as readonly string[]).includes(id);
+      return group === "workspace" ? inWorkspace : group === "system" ? id === "about" || id === "migration" : !inWorkspace && id !== "about" && id !== "migration";
+    }),
+  })), [visibleSections]);
 
   useLayoutEffect(() => {
     if (bodyRef.current !== null) bodyRef.current.scrollTop = 0;
@@ -230,23 +240,44 @@ export function SettingsPanel(props: {
     void window.agent.getSettings().then((s) => { setS(s); setTextSize(s.textSize); setUiSize(s.uiSize); }).catch((err: unknown) => {
       setError(err instanceof Error ? err.message : String(err));
     });
-    void window.agent.providerKeyStatus().then((s) => setStatus({ available: s.available, stored: s.stored, envActive: s.envActive })).catch(() => undefined);
-    void window.agent.getProviderInfo().then(setPvInfo).catch(() => setPvInfo(null));
+    void readOrError(() => window.agent.providerKeyStatus()).then((r) => {
+      if (r.ok) setStatus({ available: r.value.available, stored: r.value.stored, envActive: r.value.envActive });
+      else setError(STR.settingsPanel.keyStatusReadFailedPrefix + r.error);
+    });
+    void readOrError(() => window.agent.getProviderInfo()).then((r) => {
+      if (r.ok) setPvInfo(r.value);
+      else setError(STR.settingsPanel.providerInfoReadFailedPrefix + r.error);
+    });
   };
 
   /** getState 面（关于/许可证/设置首读问题）——横幅上的「重新检查」也走这一条。 */
   const loadState = () => {
-    void window.agent.getState().then((s) => {
+    void readOrError(() => window.agent.getState()).then((r) => {
+      if (!r.ok) {
+        setError(STR.settingsPanel.stateReadFailedPrefix + r.error);
+        return;
+      }
+      const s = r.value;
       setAbout(s.about ?? null);
       setLicense(s.license ?? null);
       setSettingsIssue(s.settingsIssue ?? null);
-    }).catch(() => { setAbout(null); setSettingsIssue(null); });
+    });
+  };
+  const refreshCapabilities = () => {
+    void readOrError(() => window.agent.capabilities()).then((r) => {
+      if (r.ok) { setCap(r.value); setCapError(null); }
+      else {
+        setCap(null);
+        setCapError(r.error);
+        setError(STR.settingsPanel.capabilitiesReadFailedPrefix + r.error);
+      }
+    });
   };
 
   useEffect(() => {
     refresh();
     loadState();
-    void window.agent.capabilities().then(setCap).catch(() => setCap(null));
+    refreshCapabilities();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -465,17 +496,13 @@ export function SettingsPanel(props: {
             event.preventDefault();
             items[next]?.focus();
           }}>
-          {(["settings", "workspace", "system"] as const).map((group) => {
-            const groupIds = visibleSections.filter((id) => {
-              const inWorkspace = (SETTINGS_PAGE_ORDER as readonly string[]).includes(id);
-              return group === "workspace" ? inWorkspace : group === "system" ? id === "about" || id === "migration" : !inWorkspace && id !== "about" && id !== "migration";
-            });
+          {navGroups.map(({ group, ids: groupIds }) => {
             return (
               <div className="sp-nav-group" data-group={group} key={group}>
                 {/* 分组标签：工作台分区与「设置」本分区在导航上分开（纯标记，不可点）。 */}
                 {group === "workspace" && groupIds.length > 0 && <div className="sp-nav-label" aria-hidden="true">工作台</div>}
                 {groupIds.map((id) => {
-                  const s = SECTIONS.find((x) => x.id === id);
+                  const s = sectionById(id);
                   if (s === undefined) return null;
                   return (
                     <button
@@ -564,6 +591,7 @@ export function SettingsPanel(props: {
                 providers={pvInfo?.providers ?? []}
                 models={pvInfo?.models ?? []}
                 cap={cap}
+                capError={capError}
                 keyProvider={keyProvider}
                 onKeyProviderChange={setKeyProvider}
                 keyInputRef={keyInput}
@@ -591,7 +619,7 @@ export function SettingsPanel(props: {
           )}
 
           {section === "network" && <NetworkSection onSaved={() => {
-            void window.agent.capabilities().then(setCap).catch(() => setCap(null));
+            refreshCapabilities();
             props.onSettingsSaved?.();
           }} />}
 

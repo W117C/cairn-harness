@@ -42,12 +42,7 @@ export interface OpenAiOptions {
   fetchImpl?: typeof fetch;
   /** 停滞守卫静默窗口 ms（根因 4）；缺省 60s，<=0 关闭守卫。 */
   stallTimeoutMs?: number;
-  /** 思考档位（"low"|"medium"|"high"|"max"|"off"）：非空则写 body.reasoning_effort（max 只有上游声明时才会到达）。
-   *  传的是**档位名**而不是数值——OpenAI 兼容族收的就是这个名字（DeepSeek 的 /models 自述里
-   *  `effort.supported_levels` 写明的也是这些名字）。undefined = 逐字旧行为（不出现这个字段）。
-   *  **例外（native DeepSeek）**：见 `deepseekNative`——那一家「不发字段」被服务端读成默认开思考，
-   *  所以它的 undefined/"" 与 "off" 同样显式写 `thinking:{type:"disabled"}`，effort 放进
-   *  `thinking.reasoning_effort`（官方形状）而不是顶层。 */
+  /** 思考档位写入顶层 reasoning_effort。原生 DeepSeek 另发显式 thinking.type 开关。 */
   reasoningEffort?: string;
   /** 预设身份自述（deepseek.ts 传 true）：按 DeepSeek 官方 wire 形状发（thinking 对象、
    *  显式开关），不靠 hostname 猜——端点被镜像/中转覆盖时形状也不能变。 */
@@ -137,10 +132,17 @@ function toWireImageMessage(m: OpenAiMessage, parts: readonly ProviderContentIma
 }
 
 /** 一条消息的 wire 形状（识图那一支在这里分叉）。 */
-function toWireMessage(m: OpenAiMessage, reasoningSource?: string): unknown {
+function toWireMessage(m: OpenAiMessage, reasoningSource?: string, requireToolReasoning = false): unknown {
   const parts = (m as ProviderMessageWithImage).contentParts;
-  const native = m.role === "assistant" && reasoningSource !== undefined && m.reasoning?.source === reasoningSource
-    ? { reasoning_content: m.reasoning.content } : {};
+  const native: { reasoning_content?: string } = {};
+  if (m.role === "assistant") {
+    if (reasoningSource !== undefined && m.reasoning?.source === reasoningSource) {
+      native.reasoning_content = m.reasoning.content;
+    } else if (requireToolReasoning && m.tool_calls?.length) {
+      // Historical non-thinking calls still need a field when resumed in thinking mode.
+      native.reasoning_content = "";
+    }
+  }
   if (parts !== undefined && parts.length > 0) return { ...(toWireImageMessage(m, parts) as object), ...native };
   return {
     role: m.role,
@@ -152,8 +154,8 @@ function toWireMessage(m: OpenAiMessage, reasoningSource?: string): unknown {
 }
 
 /** 识图消息表（纯函数，供判卷直接钉 wire 形状）。 */
-export function toOpenAiWireMessages(messages: OpenAiMessage[], reasoningSource?: string): unknown[] {
-  return messages.map(message => toWireMessage(message, reasoningSource));
+export function toOpenAiWireMessages(messages: OpenAiMessage[], reasoningSource?: string, requireToolReasoning = false): unknown[] {
+  return messages.map(message => toWireMessage(message, reasoningSource, requireToolReasoning));
 }
 
 function toWireTools(tools: OpenAiToolSpec[]): unknown[] {
@@ -196,33 +198,25 @@ export async function* streamOpenAI(
   const reasoningSource = createHash("sha256").update(endpoint + "\0" + String(effectiveModel)).digest("hex");
   const endpointUrl = new URL(endpoint);
   const nativeDeepSeek = opts.deepseekNative === true || endpointUrl.hostname === "api.deepseek.com";
-  // reasoning_content 作为**输入**回放：官方文档（2026-10-25 实读）写明这是 beta 通道的
-  // Chat Prefix Completion 能力（base 必须是 …/beta）；reasoner 时代的标准端点对输入里的
-  // reasoning_content 是 400。所以回放的来源分域判据不变（同端点+同模型才回放），但发给
-  // **标准端点**的 wire 一律不带这个字段——回放只在 beta 路径上发生。事件层的思考记录
-  // （thinking_delta 的 source 域）不受影响：状态留档，只是不回传。
-  const deepSeekBetaInput = nativeDeepSeek && endpointUrl.pathname.startsWith("/beta");
-  const wireReasoningSource = nativeDeepSeek && !deepSeekBetaInput ? undefined : reasoningSource;
-  const body: Record<string, unknown> = { model, messages: toOpenAiWireMessages(messages, wireReasoningSource), stream };
+  const wireTools = tools?.length ? toWireTools(tools) : undefined;
+  const suppliedTools = wireTools ?? opts.extraBody?.tools;
+  const hasTools = Array.isArray(suppliedTools) && suppliedTools.length > 0;
+  const effort = opts.reasoningEffort;
+  const thinking = Boolean(effort && effort !== "off" && (!nativeDeepSeek || effort !== "none"));
+  const modeOverride = opts.extraBody?.thinking as { type?: string } | undefined;
+  const requiresToolReasoning = nativeDeepSeek && hasTools && (modeOverride?.type === undefined ? thinking : modeOverride.type === "enabled");
+  // DeepSeek's tool protocol requires same-source reasoning from all previous turns.
+  // Tool-free requests only carry it on the beta prefix-completion route.
+  const replayReasoning = !nativeDeepSeek || endpointUrl.pathname.startsWith("/beta/") || hasTools;
+  const wireReasoningSource = replayReasoning ? reasoningSource : undefined;
+  const body: Record<string, unknown> = { model, messages: toOpenAiWireMessages(messages, wireReasoningSource, requiresToolReasoning), stream };
   // C8（审查 P2）：流式计量——OpenAI 兼容端点默认不回 usage，须显式开启 stream_options.include_usage，
   // 否则流式会话 token 恒 0（成本闸/用量面板全失真）。extraBody 仍可覆盖（自建网关不兼容时）。
   if (stream) body.stream_options = { include_usage: true };
-  if (nativeDeepSeek) {
-    // DeepSeek V4.1 官方文档（2026-10-25 实读）：`thinking.type` 缺省 **enabled**（effort 缺省 high）
-    // ——「一个字不加」在别家是逐字旧行为，在这家被服务端读成「要思考」：更慢、更贵、输出上限
-    // 也按思考档（64K）给。所以 native DeepSeek **永远写显式开关**；effort 同按官方形状放进
-    // `thinking.reasoning_effort`，顶层 reasoning_effort 是 OpenAI 家的形状，这家不发
-    // （档位按 reasoning.ts 的直发表：xhigh 自 2026-11-05 起自成一档，不再折叠成 high）。
-    if (opts.reasoningEffort === undefined || opts.reasoningEffort === "" || opts.reasoningEffort === "off") {
-      body.thinking = { type: "disabled" };
-    } else {
-      body.thinking = { type: "enabled", reasoning_effort: opts.reasoningEffort };
-    }
-  } else if (opts.reasoningEffort !== undefined && opts.reasoningEffort !== "" && opts.reasoningEffort !== "off") {
-    body.reasoning_effort = opts.reasoningEffort;
-  }
+  if (nativeDeepSeek) body.thinking = { type: thinking ? "enabled" : "disabled" };
+  if (thinking) body.reasoning_effort = effort;
   if (opts.extraBody) Object.assign(body, opts.extraBody);
-  if (tools && tools.length > 0) body.tools = toWireTools(tools);
+  if (wireTools) body.tools = wireTools;
 
   // 根因 4：停滞守卫改由 establishStream 逐次新建（静默窗口，不是总时长）；
   // 成功建连后交回本函数继续管流体（bump / dispose）。

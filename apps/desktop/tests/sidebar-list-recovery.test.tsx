@@ -7,7 +7,7 @@ const noop = () => undefined;
 function html(overrides: Partial<ComponentProps<typeof Sidebar>>) {
   return renderToStaticMarkup(<Sidebar
     projects={[]} sessions={[]} activeId={null} activeWorkspace={null}
-    running={new Set()} waitingIds={new Set()} outcomes={new Map()} providerOk={null}
+    running={new Set()} waitingIds={new Set()} outcomes={new Map()}
     onOpen={noop} onNewTask={noop} onOpenPalette={noop}
     onSwitchWorkspace={noop} onAddProject={async () => undefined} onCloneProject={async () => undefined}
     onOpenNewProjectDialog={noop} onUpdateProject={async () => undefined} onRelocateProject={async () => undefined}

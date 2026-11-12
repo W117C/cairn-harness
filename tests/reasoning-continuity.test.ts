@@ -5,11 +5,7 @@ import { runLoop } from '../src/agent/loop';
 import { RequestMeter } from '../src/agent/metering';
 import type { AgentEvent } from '../src/events';
 
-// 回放正例走 beta 通道：官方文档（2026-10-25 实读）写明 reasoning_content 输入是
-// …/beta 的 Chat Prefix Completion 能力；标准 /v1 端点对它按 reasoner 时代契约是 400，
-// 适配器在标准端点上剥掉这个字段（判据见下「standard endpoint」用例）。
-const nativeURL = 'https://api.deepseek.com/beta';
-const standardURL = 'https://api.deepseek.com/v1';
+const nativeURL = 'https://api.deepseek.com/v1';
 const tools = [{ name: 'read_probe', parameters: { type: 'object', properties: {} } }];
 const thought = 'Check the external observation before deciding.';
 function reply(stream: boolean, tool: boolean): Response {
@@ -30,7 +26,7 @@ async function roundTrip(stream: boolean, second: { model?: string; baseURL?: st
     const body = JSON.parse(String(init?.body)); requests.push(body);
     return reply(body.stream !== false, requests.length === 1);
   }) as typeof fetch;
-  const opts = { apiKey: 'fixture', model: 'deepseek-v4-flash', baseURL: nativeURL, stream, fetchImpl };
+  const opts = { apiKey: 'fixture', model: 'deepseek-v4-flash', baseURL: nativeURL, reasoningEffort: 'high', stream, fetchImpl };
   const outputs: AgentEvent[] = [];
   for await (const event of streamOpenAI([{ role: 'user', content: 'Read the probe and answer.' }], opts, tools)) outputs.push(event);
   const history: AgentEvent[] = [{ type: 'user_message', content: 'Read the probe and answer.' }, ...outputs, { type: 'tool_result', callId: 'probe-1', ok: true, output: '7' }];
@@ -54,12 +50,6 @@ describe('provider-native reasoning survives real tool continuation', () => {
   it('does not send another endpoint its native reasoning state', async () => {
     const { requests } = await roundTrip(true, { baseURL: 'https://other.example/v1' });
     expect(JSON.stringify(requests[1]!.messages)).not.toContain(thought);
-  });
-  it('standard (non-beta) DeepSeek endpoint: 回放被剥掉（防 400），但状态在留档里仍在', async () => {
-    const { requests, projected } = await roundTrip(true, { baseURL: standardURL });
-    expect(JSON.stringify(requests[1]!.messages)).not.toContain('reasoning_content');
-    // 剥的只是 wire：投影上下文仍带着 reasoning（换回 beta/别家同源端点时还能回放）
-    expect(projected.filter(m => m.role === 'assistant').some(m => m.reasoning?.content === thought)).toBe(true);
   });
   it('does not attach worker state to parent messages', async () => {
     const { history } = await roundTrip(true);
@@ -124,7 +114,7 @@ describe('native reasoning response boundaries', () => {
   it('uses the actual extraBody model as the reasoning provenance', async () => {
     const requests:any[]=[];
     const fetchImpl=(async (_url,init)=>{requests.push(JSON.parse(String(init?.body)));return reply(false,requests.length===1);}) as typeof fetch;
-    const opts={apiKey:'fixture',model:'model-A',extraBody:{model:'model-B'},baseURL:nativeURL,stream:false,fetchImpl};
+    const opts={apiKey:'fixture',model:'model-A',extraBody:{model:'model-B'},baseURL:nativeURL,reasoningEffort:'high',stream:false,fetchImpl};
     const events:AgentEvent[]=[];
     for await(const e of streamOpenAI([{role:'user',content:'task'}],opts,tools))events.push(e);
     for await(const _ of streamOpenAI(projectContext([...events,{type:'tool_result',callId:'probe-1',ok:true,output:'7'}]),{...opts,extraBody:{model:'model-A'}},tools)){}

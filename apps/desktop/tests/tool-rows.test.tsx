@@ -114,10 +114,12 @@ describe("回底钮挂载竞态（阶段 2 真机复检抓到并修复）", () =
 describe("回到底部 = 右缘气沟浮钮（2026-11-01 真机订正：居中锚压在助手正文那一行上）", () => {
   const css = read("../src/renderer/styles.css");
   const app = readAppSurface();
-  it("圆形图标钮：锚在阅读列右缘之外的气沟 + 淡入动画", () => {
+  it("圆形图标钮：锚在阅读列右缘的气沟 + 淡入动画", () => {
     expect(css).toMatch(/\.jump-latest\s*{[^}]*border-radius:\s*var\(--radius-pill\)/s);
     // 锚点 = 50% − 阅读列半宽 + 间隙（阅读列窄于视口时退化为贴右缘）；仍贴着对话区，但不压字。
-    expect(css).toMatch(/\.jump-latest\s*{[^}]*right:\s*calc\(50% - min\(var\(--reading\), 100%\) \/ 2 \+ var\(--space-sm\)\)/s);
+    // 2026-11-07 第 1041 页：锚点同读 --col-max（按 --reading 会算成 52rem，比正文右缘外飘 40px）。
+    expect(css).toMatch(/\.jump-latest\s*{[^}]*right:\s*calc\(50% - var\(--col-max\) \/ 2 \+ var\(--space-sm\)\)/s);
+    expect(css).not.toMatch(/\.jump-latest\s*{[^}]*min\(var\(--reading\)/s);
     expect(css).toMatch(/\.jump-latest\s*{[^}]*bottom:\s*var\(--space-md\)/s);
     expect(css).toMatch(/\.jump-latest\s*{[^}]*z-index:\s*4/s);
     // 旧居中锚（left:50% + translateX(-50%)）已废：它与阅读列同一条中轴，正文必然被盖。

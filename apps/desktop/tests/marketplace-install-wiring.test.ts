@@ -5,6 +5,12 @@ import { IPC_PROTOCOL_VERSION } from "../../../src/main/ipc-protocol";
 import { INVOKE_CHANNELS } from "../src/main/channels";
 
 function repo(rel: string): string {
+  if (rel === "../src/main/index.ts") {
+    return [
+      readFileSync(fileURLToPath(new URL("../src/main/index.ts", import.meta.url)), "utf8"),
+      readFileSync(fileURLToPath(new URL("../src/main/plugin-ipc.ts", import.meta.url)), "utf8"),
+    ].join("\n");
+  }
   return readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 }
 

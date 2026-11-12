@@ -5,7 +5,7 @@
 import { Command } from "cmdk";
 import { useNow } from "../useNow";
 import { Archive, Brain, Clock3, Copy, Download, FileText, Folder, FolderOpen, FolderPlus, MessageSquare, PanelLeft, PanelRight, Pencil, Plus, Puzzle, Search, Shield, Sun, Trash2, Wand2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { RenderErrorBoundary } from "./RenderErrorBoundary";
 import { SessionSearchResults, type SessionSearchState } from "./SessionSearchResults";
 import { relativeTime } from "../projections";
@@ -54,6 +54,7 @@ const OPS: readonly {
 export const PALETTE_RECENT_LIMIT = 4;
 const PALETTE_RECENT_KEY = "cairn.palette.recent.v1";
 const ACTION_IDS: ReadonlySet<string> = new Set(OPS.map((op) => op.id));
+const OPS_BY_ID = new Map(OPS.map((op) => [op.id, op] as const));
 const SESSION_ONLY: ReadonlySet<PaletteAction> = new Set(OPS.filter((op) => op.sessionOnly === true).map((op) => op.id));
 
 function isPaletteAction(v: unknown): v is PaletteAction {
@@ -131,10 +132,11 @@ export interface PaletteContentProps {
 
 /** 内容面（判卷/嵌用）：Command root 由外层给——CommandPalette 用 CommandDialog 包，判卷用裸 Command。 */
 export function PaletteContent(props: PaletteContentProps): React.JSX.Element {
-  const visible = props.sessions.filter((s) => s.archived !== true); // 归档不列（侧栏同口径）；搜索即过滤
+  // 第 1179 页：查询键击/60s 时钟重渲染时不重扫会话表与技能表；数据引用变了才重算。
+  const visible = useMemo(() => props.sessions.filter((s) => s.archived !== true), [props.sessions]); // 归档不列（侧栏同口径）；搜索即过滤
   const now = useNow();
   const sessionOpen = props.activeSessionId !== undefined && props.activeSessionId !== null;
-  const skillItems = uniqueSkills(props.skills ?? []);
+  const skillItems = useMemo(() => uniqueSkills(props.skills ?? []), [props.skills]);
   const [query, setQuery] = useState("");
   const [recent, setRecent] = useState<PaletteAction[]>(loadRecentActions);
   const searchQuery = query.trim();
@@ -187,7 +189,8 @@ export function PaletteContent(props: PaletteContentProps): React.JSX.Element {
   const searchState: SessionSearchState = bodySearch?.query === searchQuery && bodySearch.workspace === searchWorkspace
     ? bodySearch.state : { status: "loading" };
 
-  const actions = OPS.filter((op) => op.sessionOnly !== true || sessionOpen);
+  // 第 1136 页：动作筛选与最近项查找都不必每次渲染重扫 OPS。
+  const actions = useMemo(() => OPS.filter((op) => op.sessionOnly !== true || sessionOpen), [sessionOpen]);
   const recents = query.trim() === "" ? visibleRecentActions(recent, sessionOpen) : [];
   // 单会话动作的键位也走表（文件头第 3 行写的就是「单一事实源，防漂移」）。
   const renameKeys = keysOf("rename");
@@ -216,7 +219,7 @@ export function PaletteContent(props: PaletteContentProps): React.JSX.Element {
         {recents.length > 0 && (
           <Command.Group heading="最近" className="cp-group cp-recent">
             {recents.map((id) => {
-              const op = OPS.find((o) => o.id === id);
+              const op = OPS_BY_ID.get(id);
               if (op === undefined) return null;
               const k = op.shortcutId !== undefined ? keysOf(op.shortcutId) : null;
               return (

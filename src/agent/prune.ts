@@ -7,7 +7,7 @@
 // 而 `read_file` 只收工作区相对路径 ⇒ 那种情形必须改口"模型侧读不到"，不许递一个走不通的地址。
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
-import { mkdir, open } from "node:fs/promises";
+import { mkdir, open, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { workspaceUsablePath } from "./recall-path";
 import type { AgentEvent } from "../events";
@@ -260,18 +260,86 @@ export function computePrune(input: PruneInput): PruneOutcome {
   return out;
 }
 
-/** 被裁原文写附件目录（computePrune 之后调用；写失败不抛——回取是尽力而为）。 */
+/**
+ * 枚举会话附件目录里**已经落过盘**的那批事件 id（1-based 行号）。
+ *
+ * 为何需要它：`decidePruneBatch` 的不变式是「一旦提交过某条事件的打桩，后续每轮继续用那条打桩
+ * （带附件路径）以维持前缀缓存稳定」。但进程重启后内存里的 `lastPruneState` 清空，重新攒批时
+ * 若先前的附件其实已经在盘上，不用等新攒够 20k 也该立刻恢复打桩；反过来，若先前 `writePruneAttachments`
+ * 写盘失败（磁盘满/权限错），绝不能把某条 id 记进 `committedIds`——否则打桩文本里指着一个**根本不存在**
+ * 的附件路径告诉模型 `read_file` 去读。
+ */
+export async function persistedPruneIds(
+  events: AgentEvent[],
+  attachmentsDir: string,
+  sessionId: string,
+): Promise<Set<number>>;
+export async function persistedPruneIds(
+  events: AgentEvent[],
+  outcome: PruneOutcome,
+  attachmentsDir: string,
+  sessionId: string,
+): Promise<Set<number>>;
+export async function persistedPruneIds(
+  events: AgentEvent[],
+  outcomeOrDir: PruneOutcome | string,
+  dirOrSession: string,
+  maybeSessionId?: string,
+): Promise<Set<number>> {
+  const outcome = typeof outcomeOrDir === "string" ? undefined : outcomeOrDir;
+  const attachmentsDir = typeof outcomeOrDir === "string" ? outcomeOrDir : dirOrSession;
+  const sessionId = typeof outcomeOrDir === "string" ? dirOrSession : (maybeSessionId ?? "s");
+  const present = new Set<number>();
+  let files: Set<string>;
+  try {
+    files = new Set(await readdir(attachmentsDir));
+  } catch {
+    return present;
+  }
+  if (files.size === 0) return present;
+  if (outcome !== undefined) {
+    for (const id of outcome.replacements.keys()) {
+      const e = events[id - 1];
+      if (e?.type === "tool_result" && files.has(attachmentName(sessionId, e.callId))) {
+        present.add(id);
+      }
+    }
+    return present;
+  }
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i];
+    if (e.type !== "tool_result") continue;
+    if (files.has(attachmentName(sessionId, e.callId))) {
+      present.add(i + 1);
+    }
+  }
+  return present;
+}
+
+/**
+ * 被裁原文写附件目录（computePrune 之后调用；写失败不抛——回取是尽力而为）。
+ *
+ * 返回本次调用后**确认在盘上**的事件 id 集合（含 `alreadyStored` 里跳过重写的）：
+ * 调用方拿它过滤 `replacements`，没落盘成功的事件退回原文——不发指向空文件的假路径，
+ * 也不把未落盘的 id 锁进 `committedIds`。
+ */
 export async function writePruneAttachments(
   events: AgentEvent[],
   outcome: PruneOutcome,
   attachmentsDir: string,
   sessionId: string,
-): Promise<void> {
+  alreadyStored?: ReadonlySet<number>,
+): Promise<Set<number>> {
+  const stored = new Set<number>();
   try {
     await mkdir(attachmentsDir, { recursive: true });
     for (const id of outcome.replacements.keys()) {
+      if (alreadyStored?.has(id)) {
+        stored.add(id);
+        continue;
+      }
       const e = events[id - 1];
-      if (e.type !== "tool_result") continue;
+      if (e?.type !== "tool_result") continue;
       const file = join(attachmentsDir, attachmentName(sessionId, e.callId));
       // 独占创建把「不存在」与「写入」合成一步：并发 assemble 不会互相覆盖，也不会
       // 跟随预先放在附件位置上的软链。EEXIST 是正常的幂等命中。
@@ -283,11 +351,15 @@ export async function writePruneAttachments(
           0o600,
         );
       } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === "EEXIST") continue;
+        if ((err as NodeJS.ErrnoException).code === "EEXIST") {
+          stored.add(id);
+          continue;
+        }
         throw err;
       }
       try {
         await fh.writeFile(e.output, "utf8");
+        stored.add(id);
       } finally {
         await fh.close();
       }
@@ -295,6 +367,7 @@ export async function writePruneAttachments(
   } catch (err) {
     console.debug("[prune] 附件写失败（回取不可用，不阻断）:", err instanceof Error ? err.message : String(err));
   }
+  return stored;
 }
 
 /** 附件回取路径（prune-check ④「读回且逐字一致」用）。 */

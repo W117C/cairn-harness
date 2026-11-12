@@ -16,6 +16,10 @@ import { Drawer, Notice } from "./app-page-chrome";
 // 自动化任务表单的版式（只含 .ap-form 前缀的规则，够不着插件页那份共用表单）。
 import "./automation-form.css";
 
+// 第 1108 页：标题「自动化 工作流」已说明域，副标题不再复述「按时间自动执行工作流」；
+// 只留布局说不出的两件事：触发方式与运行结果。两处 PageFrame 共用一句，避免副本漂移。
+const AUTOMATION_SUBTITLE = "按时间触发，保留每次运行结果。";
+
 /** AutomationSchedule 判别联合 → 一行人话（七 kind 全覆盖；不编造 cron 字段）。 */
 export function scheduleLabel(s: AutomationSchedule): string {
   switch (s.kind) {
@@ -221,11 +225,12 @@ export function AutomationPane(props: {
   const filter = props.filter ?? localFilter;
   const setFilter = props.onFilter ?? setLocalFilter;
   const q = query.trim().toLowerCase();
-  const rows = schedule.tasks
+  // 第 1138 页：rows 先记忆，list 的排序 memo 才有依赖稳定性；选中项同理。
+  const rows = useMemo(() => schedule.tasks
     .filter((t) => (filter === "all" ? true : filter === "on" ? t.enabled : !t.enabled))
-    .filter((t) => (t.name + t.prompt).toLowerCase().includes(q));
+    .filter((t) => (t.name + t.prompt).toLowerCase().includes(q)), [schedule.tasks, filter, q]);
   const list = useMemo(() => (sortByName ? [...rows].sort((a, b) => a.name.localeCompare(b.name, "zh")) : rows), [rows, sortByName]);
-  const selected = sel === null ? null : schedule.tasks.find((x) => x.id === sel) ?? null;
+  const selected = useMemo(() => sel === null ? null : schedule.tasks.find((x) => x.id === sel) ?? null, [schedule.tasks, sel]);
 
   const submitCreate = () => {
     setNotice(null);
@@ -344,7 +349,7 @@ export function AutomationPane(props: {
       <PageFrame
         title="自动化"
         titleAccent="工作流"
-        subtitle="按时间自动执行工作流，查看每次运行结果。"
+        subtitle={AUTOMATION_SUBTITLE}
         actions={tabs}
         search={{ label: "搜索任务", value: query, onChange: setQuery }}
         onRefresh={props.refresh}
@@ -395,7 +400,7 @@ export function AutomationPane(props: {
     <PageFrame
       title="自动化"
       titleAccent="工作流"
-      subtitle="按时间自动执行工作流，查看每次运行结果。"
+      subtitle={AUTOMATION_SUBTITLE}
       actions={tabs}
       search={{ label: "搜索任务", value: query, onChange: setQuery }}
       onRefresh={props.refresh}

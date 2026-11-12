@@ -4,6 +4,7 @@ import type { SearchProvider, SearchSettingsInput, SearchSettingsSnapshot, Searc
 import { Field, SettingsPage, SettingsRow, SettingsSection } from "../settings-ui";
 import { Switch } from "../Switch";
 import { STR } from "../../strings";
+import { readOrError } from "../../read-result";
 import "./network-settings.css";
 
 type Draft = Omit<SearchSettingsInput, "apiKey" | "clearApiKey">;
@@ -35,7 +36,11 @@ export function NetworkSection(props: { onSaved?: () => void }): React.JSX.Eleme
     try {
       const snapshot = await window.agent.searchSettingsGet();
       if (!alive.current) return;
-      void window.agent.getSettings().then((s) => { if (alive.current) setWebAuto(s.webAutoApprove === true); }).catch(() => undefined);
+      void readOrError(() => window.agent.getSettings()).then((r) => {
+        if (!alive.current) return;
+        if (r.ok) setWebAuto(r.value.webAutoApprove === true);
+        else setError(STR.network.webAutoLoadFailedPrefix + r.error);
+      });
       setSaved(snapshot); setDraft(draftOf(snapshot));
       if (snapshot.error) setError(snapshot.error);
     } catch (err) {

@@ -1,12 +1,8 @@
 // M2e：MCP 适配器（§9.7）。唯一外部协议；官方 TS SDK（@modelcontextprotocol/sdk）；
 // stdio + http/sse 两种传输；工具以 mcp__plugin_<plugin>_<server>__<tool> 进统一注册表、
 // 走同一权限门、无特权。server 状态 = 事件流投影消费面（statuses() 供面板，无隐藏状态）。
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import { withTimeout } from "../../net";
 import { processLiveness } from "../../process-liveness";
 import type { McpGrade } from "../../permissions/autonomy";
@@ -190,28 +186,31 @@ export type McpClientFactory = (
   server: string,
 ) => Promise<{ client: Client; transport: Transport }>;
 
-function defaultClientFactory(cfg: McpServerConfig): Promise<{ client: Transport extends never ? never : Client; transport: Transport }> {
-  const clientInfo = { name: "dsh-agent", version: "0.1.0" };
-  const client = new Client(clientInfo);
+async function defaultClientFactory(cfg: McpServerConfig): Promise<{ client: Client; transport: Transport }> {
+  // 只有实际连接时才载入 SDK 和选中的传输，空闲启动不解析这条依赖链。
   let transport: Transport;
   const type = cfg.type ?? (cfg.command ? "stdio" : cfg.url ? "http" : "stdio");
   if (type === "stdio") {
     if (typeof cfg.command !== "string" || cfg.command === "") {
-      return Promise.reject(new Error("stdio server 缺少 command"));
+      throw new Error("stdio server 缺少 command");
     }
+    const { StdioClientTransport } = await import("@modelcontextprotocol/sdk/client/stdio.js");
     transport = new StdioClientTransport({
       command: cfg.command,
       ...(cfg.args ? { args: cfg.args } : {}),
       ...(cfg.env ? { env: cfg.env } : {}),
     });
   } else if (type === "sse") {
-    if (typeof cfg.url !== "string") return Promise.reject(new Error("sse server 缺少 url"));
+    if (typeof cfg.url !== "string") throw new Error("sse server 缺少 url");
+    const { SSEClientTransport } = await import("@modelcontextprotocol/sdk/client/sse.js");
     transport = new SSEClientTransport(new URL(cfg.url), cfg.headers ? { requestInit: { headers: cfg.headers } } : undefined);
   } else {
-    if (typeof cfg.url !== "string") return Promise.reject(new Error("http server 缺少 url"));
+    if (typeof cfg.url !== "string") throw new Error("http server 缺少 url");
+    const { StreamableHTTPClientTransport } = await import("@modelcontextprotocol/sdk/client/streamableHttp.js");
     transport = new StreamableHTTPClientTransport(new URL(cfg.url), cfg.headers ? { requestInit: { headers: cfg.headers } } : undefined);
   }
-  return Promise.resolve({ client, transport } as { client: Client; transport: Transport });
+  const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
+  return { client: new Client({ name: "dsh-agent", version: "0.1.0" }), transport };
 }
 
 /** ${PLUGIN_ROOT} / ${PROJECT_DIR} / ${user_config.*} 展开（CC .mcp.json 同款；stdio 无 shell，展开在本层做）。
@@ -274,7 +273,7 @@ export class McpManager {
   private readonly callTimeoutMs: number;
 
   constructor(factory?: McpClientFactory, connectTimeoutMs: number = DEFAULT_MCP_CONNECT_MS, callTimeoutMs: number = DEFAULT_MCP_CALL_MS) {
-    this.factory = factory ?? (async (cfg) => defaultClientFactory(cfg));
+    this.factory = factory ?? defaultClientFactory;
     this.connectTimeoutMs = connectTimeoutMs;
     this.callTimeoutMs = callTimeoutMs;
   }
@@ -492,8 +491,11 @@ export class McpManager {
         const reason = signal.reason instanceof Error ? signal.reason.message : String(signal.reason);
         return { ok: false, output: "[cancelled] MCP tools/call 已取消: " + reason };
       }
-      if (timeout !== undefined && err instanceof McpError && err.code === ErrorCode.RequestTimeout) {
-        return { ok: false, output: `MCP tools/call 失败: ${label} 超时：${String(timeout)}ms 内未完成` };
+      if (timeout !== undefined && err instanceof Error && "code" in err) {
+        const { ErrorCode, McpError } = await import("@modelcontextprotocol/sdk/types.js");
+        if (err instanceof McpError && err.code === ErrorCode.RequestTimeout) {
+          return { ok: false, output: `MCP tools/call 失败: ${label} 超时：${String(timeout)}ms 内未完成` };
+        }
       }
       return { ok: false, output: "MCP tools/call 失败: " + (err instanceof Error ? err.message : String(err)) };
     } finally {

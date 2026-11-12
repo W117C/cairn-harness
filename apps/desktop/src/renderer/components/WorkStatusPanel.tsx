@@ -96,7 +96,7 @@ export function WorkStatusPill(props: WorkStatusProps): React.JSX.Element | null
           )}
         </div>
         {props.todos !== null && props.todos.items.length > 0 && (
-          <ul className="ws-items" ref={itemsRef} tabIndex={0} aria-label="任务清单">
+          <ul className="ws-items" ref={itemsRef} tabIndex={0} aria-label={STR.work.todoListAria}>
             {props.todos.items.map((item, i) => (
               <li key={`${String(i)}:${item.text}`} className={"ws-item" + (item.state === "done" ? " done" : "")}>
                 {item.state === "done"
@@ -108,7 +108,9 @@ export function WorkStatusPill(props: WorkStatusProps): React.JSX.Element | null
           </ul>
         )}
         {props.todos === null && (
-          <div className="ws-empty">{props.running ? "这轮还没有任务清单。" : "最近一轮没有留任务清单。"}</div>
+          // todos=null 时必 running（visible 门：运行中 或 有清单才摆）⇒ 只有运行中空态；
+          // 非运行且无清单整 pill 不摆，旧「最近一轮…」分支不可达，第 1063 页删。
+          <div className="ws-empty">{STR.work.todoEmptyRunning}</div>
         )}
         {footer !== null && (
           <div className="ws-foot num">{footer}</div>

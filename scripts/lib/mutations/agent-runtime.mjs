@@ -772,11 +772,8 @@ export const MUTATIONS = [
     id: "prune-attachment-rewrite-every-turn",
     src: "src/agent/prune.ts",
     test: "tests/prune.test.ts",
-    desc: "去掉「已存在即跳过」⇒ 每次模型调用都把全部附件重写一遍（白 IO，且 mtime 失去「何时被裁」的含义）",
-    apply: (s) => s.replace(
-      '        if ((err as NodeJS.ErrnoException).code === "EEXIST") continue;',
-      '        if ((err as NodeJS.ErrnoException).code === "EEXIST") { fh = await open(file, constants.O_WRONLY | constants.O_TRUNC); } else throw err;',
-    ),
+    desc: "独占创建改可截断 ⇒ 重复装配把已落盘附件整个重写一遍（白 IO，且 mtime 失去「何时被裁」的含义）。幂等性自 2f2fa3e2 起住在 O_EXCL 的 EEXIST 分支（access/continue 早退支已删），killer 用例盯 mtime 不变",
+    apply: (s) => s.replace("          constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0),", "          constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | (constants.O_NOFOLLOW ?? 0),"),
     expectFail: "④同一附件重复装配不重写（幂等；每轮组装都跑，重写 = 白 IO 且打断 mtime 语义）",
   },
   {
@@ -839,15 +836,15 @@ export const MUTATIONS = [
     src: "src/agent/compaction.ts",
     test: "tests/hook-precompact-producer.test.ts",
     desc: "trigger 不区分压缩来源、一律报 manual ⇒ 按 auto 写 matcher 的钩子永不命中、按 manual 写的在自动压缩时误命中（§9.5 表把这一列定为 manual/auto 就是为了分流）",
-    apply: (s) => s.replace('      await args.onPreCompact(args.trigger === "manual" ? "manual" : "auto");', '      await args.onPreCompact("manual");'),
+    apply: (s) => s.replace('    await runPreCompactHook(args.onPreCompact, args.trigger === "manual" ? "manual" : "auto");', '    await runPreCompactHook(args.onPreCompact, "manual");'),
     expectFail: "manual / auto / overflow 三条都发，且 trigger 按 §9.5 表映射（overflow 归 auto）",
   },
   {
     id: "precompact-coordinator-forward-dropped",
     src: "src/agent/compaction.ts",
     test: "tests/hook-precompact-producer.test.ts",
-    desc: "协调器收了 onPreCompact 却不往 runCompaction 递 ⇒ 会话内自动/溢出压缩永不发钩子（构造面收下即丢，只有手动档看起来是好的）",
-    apply: (s) => s.replace("      ...(this.onPreCompact ? { onPreCompact: this.onPreCompact } : {}),", "      ...(false ? { onPreCompact: this.onPreCompact } : {}),"),
+    desc: "协调器收了 onPreCompact 却不往 runCompaction 递 ⇒ 会话内自动/溢出压缩永不发钩子（构造面收下即丢，只有手动档看起来是好的）。replaceAll 三处调用位全断（micro/接管/全量三路同一个 forward 形状），killer 驱动 micro 回退路仍必红",
+    apply: (s) => s.replaceAll("...(this.onPreCompact ? { onPreCompact: this.onPreCompact } : {}),", "...(false ? { onPreCompact: this.onPreCompact } : {}),"),
     expectFail: "压缩没开始就不发：decision=null 不发；摘要停用后 auto 由微压缩接管（真开始 ⇒ 发），overflow 截断照发",
   },
   {
@@ -1186,8 +1183,11 @@ export const MUTATIONS = [
     id: "cc-coordinator-ignores-config-override",
     src: "src/agent/compaction.ts",
     test: "tests/compaction-cost.test.ts",
-    desc: "逐次 config 覆盖被忽略 ⇒ 上游算了摊销也用不上（本仓点名的「两头断」形状）",
-    apply: (s) => s.replace("      config: options.config ? { ...this.config, ...options.config } : this.config,", "      config: this.config,"),
+    desc: "逐次 config 覆盖被忽略 ⇒ 上游算了摊销也用不上（本仓点名的「两头断」形状）。**双载体不变量**（2026-11-11 实弹钉死）：摊销覆盖经 micro 与全量两条合并位同流，摘任一条另一条仍承载 ON/OFF 差 ⇒ 单点变异各自存活（真变异门 36 分钟全表跑实抓）；replaceAll 两处同断 killer 恰红。predict 位与 overflow 位（8 空格）不承载此判据，不在锚内",
+    apply: (s) => s.replaceAll(
+      "      config: options.config ? { ...this.config, ...options.config } : this.config,",
+      "      config: this.config,",
+    ),
     expectFail: "开着 ⇒ 同一会话里压缩次数严格更少、累计重写字符严格更少",
   },
   {
@@ -1227,7 +1227,7 @@ export const MUTATIONS = [
     src: "src/agent/session-provider.ts",
     test: "tests/prune-batching.test.ts",
     desc: "装配链把累计值递给策略（而不是增量）⇒ 策略算对了、判据照样无效果：本仓点名的「两头断」形状",
-    apply: (s) => s.replace("              savedTokens: freshSavings(outcome.savedByIdTokens, prunedIdsSent),", "              savedTokens: outcome.savedTokens,"),
+    apply: (s) => s.replace("        const savedTokens = stored === undefined ? 0 : freshSavings(outcome.savedByIdTokens, stored);", "        const savedTokens = stored === undefined ? 0 : outcome.savedTokens;"),
     expectFail: "PC8 那条 A/B 判据真能跑通（= pruneBatching 这个选项确实接到了装配链上）",
   },
   {
@@ -1259,7 +1259,7 @@ export const MUTATIONS = [
     src: "src/agent/session-provider.ts",
     test: "tests/prune-batching.test.ts",
     desc: "只认 `pruneBatching: true`、把对象形式丢掉 ⇒ 门的对照臂（门槛=1）实际跑的是生产 40k 门槛，于是「只有压缩轮落盘」可能只是别的轮没活——主判据的对照变空",
-    apply: (s) => s.replace('          typeof opts.pruneBatching === "object" && opts.pruneBatching !== null ? opts.pruneBatching : {};', "          false ? opts.pruneBatching : {};"),
+    apply: (s) => s.replace('        const batchOptions = typeof opts.pruneBatching === "object" ? opts.pruneBatching : undefined;', '        const batchOptions = false ? opts.pruneBatching : undefined;'),
     expectFail: "PC9 那条集合相等判据真能跑通",
   },
   {

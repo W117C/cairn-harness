@@ -48,6 +48,7 @@ import { createAgentLifecycleTools } from "../tools/agent-lifecycle";
 import { createRefineGoalTool } from "../tools/refine_goal";
 import { createCurrentSessionSearchHistoryTool, searchHistorySpec } from "../tools/search-history";
 import { makeWebFetch, webFetch, type WebFetchDeps } from "../tools/web_fetch";
+import { web_doc } from "../tools/web_doc";
 import { loadSearchConfig, makeWebSearch, webSearchSpec, type SearchConfig } from "../tools/web-search";
 import { run_shell } from "../tools/run_shell";
 import type { AgentEvent, EventLog, GoalTurnOrigin } from "../events";
@@ -739,6 +740,14 @@ export function installAppTools(opts: { automation?: boolean; omitTools?: readon
   // 钉成 `once`（`wantsNetwork` 那一条，见 `isNetworkCommandCall` 的注释：没有它，
   // 一次"总是允许"就会把出网永久写成免批）。worker 面不给（worker 出网是无条件 deny）。
   (TOOLS as unknown as Record<string, Tool>).web_fetch = gatedTool("web_fetch", webFetch);
+  // web_doc（2026-11-10）：出网取文档，与 web_fetch 同族同门——SSRF 判据在工具内，
+  // 「要不要问人」在这里；scope 钉 once（isNetworkCommandCall 的 web_doc 支）。
+  // worker 面不给（worker 出网无条件 deny）。它已进 TOOL_NAMES ⇒ 直接属性挂载
+  // （不走 `as unknown as` 注入形——那一形会被 G-B 当运行时注入对账，多一条要养的假红）。
+  TOOLS.web_doc = gatedTool("web_doc", web_doc);
+  // fs_ops（2026-11-10）：文件生命周期写向工具——不包装 = 直连 TOOLS 的写工具 ⇒ 权限门整条
+  // 缺席（apply_patch 那条注释的同族缺口）。delete 的 medium 风险与路径通道都在门里。
+  TOOLS.fs_ops = gatedTool("fs_ops", TOOLS.fs_ops);
   if (opts.automation !== false) {
     // M4a：agent 工具五件（§12.2.5）——automation_create/update/delete/run_now/list。
     // 一切变更走审批卡（§10.4）；prompt 是持久化攻击面：4k 上限（校验拒）+ 审批卡全文展示（args 原样进审批卡）；
@@ -1199,6 +1208,7 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     ? [
         { behavior: "allow", tool: "web_search", scope: "always", id: "web-auto-approve:web_search" },
         { behavior: "allow", tool: "web_fetch", scope: "always", id: "web-auto-approve:web_fetch" },
+        { behavior: "allow", tool: "web_doc", scope: "always", id: "web-auto-approve:web_doc" },
       ]
     : [];
   const rules = [

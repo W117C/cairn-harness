@@ -109,7 +109,7 @@ export async function saveAutomationsFile(file: string, tasks: AutomationDefinit
 export type ScheduleDecision = "triggered" | "skipped" | "catchup";
 /** skipped 原因（中文标签唯一实现见 renderer/projections 的 skipReasonLabel：main 只落机器可读 token，
  *  措辞是表现层的事——两份措辞必然漂移，历史上已经漂过一次）。 */
-export type SkipReason = "too-old" | "overlap" | "concurrency-cap" | "catch-up-skip";
+export type SkipReason = "too-old" | "overlap" | "concurrency-cap" | "catch-up-skip" | "buffered";
 /** 重复触发（occurrenceKey 已在 journal）= 静默去重，不写新账（崩溃/重启双触发免疫）。 */
 export type Decision = ScheduleDecision;
 
@@ -497,6 +497,8 @@ export interface SchedulerDeps {
   settlesWithinMs?: number;
   /** 启动抖动（缺省随机 1-3min；验收注入 () => 0）。 */
   jitterMs?: () => number;
+  /** 触发抖动的随机源（缺省 Math.random；验收注入固定值得确定性延迟）。 */
+  jitterRand?: () => number;
   /** 主时间线落流出口（当前会话 append + UI 推送；缺省 = 只进 journal）。 */
   emitTimeline?: (e: AgentEvent) => Promise<void>;
   /** 触发执行器（真实代码路径注入）；缺省 fail-closed 拒绝触发。 */
@@ -621,6 +623,12 @@ export class Scheduler {
   private readonly runTimeoutMs: number;
   private readonly settlesWithinMs: number;
   private readonly jitterMs: () => number;
+  private readonly jitterRand: () => number;
+  /** 抖动等待中的 occurrence 键（防同一拍被后续 tick 双进管线；补发路径不受它管）。 */
+  private jitterPending = new Set<string>();
+  /** BufferOne 缓存（任务 id → 最新一拍）：帽满时记账 skipped(buffered)，本任务收束后补发。
+   *  内存态——重启丢缓存（拍已被 skip 账推进水位，重启后不会双跑，与 skip 同价）。 */
+  private buffered = new Map<string, { key: string; dueAt: Date; kind: "triggered" | "catchup" }>();
   readonly definitionsPath: string;
   readonly journalPath: string;
   private readonly idleTasksPath: string;
@@ -636,6 +644,7 @@ export class Scheduler {
     this.runTimeoutMs = deps.runTimeoutMs ?? DEFAULT_RUN_TIMEOUT_MS;
     this.settlesWithinMs = deps.settlesWithinMs ?? DEFAULT_SETTLES_WITHIN_MS;
     this.jitterMs = deps.jitterMs ?? defaultJitterMs;
+    this.jitterRand = deps.jitterRand ?? Math.random;
     this.definitionsPath = join(deps.dataDir, "automations.json");
     this.journalPath = join(deps.dataDir, "automations-journal.jsonl");
     this.idleTasksPath = join(deps.dataDir, "idle-tasks.json");
@@ -813,7 +822,7 @@ export class Scheduler {
             await this.decideSkip(def, occ, "too-old", report);
           }
           const due = dueList[dueList.length - 1];
-          if (due) await this.pipeline(def, due, "triggered", report);
+          if (due) await this.pipeline(def, due, "triggered", report, { jitter: true });
         }
       }
       await this.dispatchIdleTask().catch((err: unknown) => this.warn("[scheduler] " + String(err)));
@@ -859,16 +868,42 @@ export class Scheduler {
     }
   }
 
-  /** 准入管线（顺序短路；dedup → 并发闸 → 重叠闸 → journal + spawn）。 */
+  /** 准入管线（顺序短路；dedup → 并发闸 → 重叠闸 → journal + spawn）。
+   *  opts.jitter：调度触发路径传 true——任务声明了 jitterSec 时，拍在 dueAt 后随机延迟
+   *  0..jitter 再进准入（防整点共振）；run_now 手动触发不传 = 永不抖（用户点了就该跑）。 */
   private async pipeline(
     def: AutomationDefinition,
     dueAt: Date,
     kind: "triggered" | "catchup",
     report: TickReport,
+    opts: { jitter?: boolean } = {},
   ): Promise<void> {
+    if (opts.jitter === true) {
+      const jitterMs = (def.jitterSec ?? 0) * 1000;
+      if (jitterMs > 0) {
+        const key = occurrenceKeyOf(def.id, dueAt);
+        if (this.jitterPending.has(key)) return; // 抖动等待中：后续 tick 不再重复排队
+        this.jitterPending.add(key);
+        const delay = Math.floor(this.jitterRand() * jitterMs);
+        const timer = setTimeout(() => {
+          this.jitterPending.delete(key);
+          void this.admitAfterJitter(def, dueAt, kind).catch((err: unknown) =>
+            this.warn("[scheduler] 抖动后补准失败: " + (err instanceof Error ? err.message : String(err))));
+        }, delay);
+        (timer as { unref?: () => void }).unref?.();
+        return;
+      }
+    }
     // 刷新不足以关掉两个进程同时决定同一拍的窗口，准入共用同一个磁盘锁。
     const locked = await this.withAdmission(() => this.admitOccurrence(def, dueAt, kind, report));
     if (locked === false) report.duplicates += 1;
+  }
+
+  /** 抖动到点后的补准入：抖动期已过 tick 的报告窗口，判定只走持久面（journal + 时间线）。 */
+  private async admitAfterJitter(def: AutomationDefinition, dueAt: Date, kind: "triggered" | "catchup"): Promise<void> {
+    const report: TickReport = { at: "", startup: false, considered: 0, triggered: 0, catchup: 0, skipped: {}, duplicates: 0, decisions: [] };
+    const locked = await this.withAdmission(() => this.admitOccurrence(def, dueAt, kind, report));
+    if (locked === false) this.warn(`[scheduler] 抖动后准入口发现重复拍（已被别处触发）: ${def.name}`);
   }
 
   private withAdmission<T>(fn: () => Promise<T>): Promise<T | false> {
@@ -903,17 +938,20 @@ export class Scheduler {
     }
   }
 
-  /** 仅在准入锁内调用；执行队列不持锁，queued + running 仍共同占用 cap。 */
+  /** 仅在准入锁内调用；执行队列不持锁，queued + running 仍共同占用 cap。
+   *  keyOverride：BufferOne 补发路径用（原键已被 skipped(buffered) 账占用，去重表里有它——
+   *  补发换新键 `<原键>#b`，既过得了去重，又能在历史里看出它是哪一拍的补发）。 */
   private async admitOccurrence(
     def: AutomationDefinition,
     dueAt: Date,
     kind: "triggered" | "catchup",
     report: TickReport,
+    keyOverride?: string,
   ): Promise<void> {
     // 跨进程去重：内存 journalKeys 只含本实例启动时装载的条目；桌面 app 与 `cairn --serve`
     // 同根时，对方刚写的 occurrence 本实例看不见 ⇒ 同一 occurrence 双触发。
     await this.refreshJournalFromDisk();
-    const key = occurrenceKeyOf(def.id, dueAt);
+    const key = keyOverride ?? occurrenceKeyOf(def.id, dueAt);
     if (this.journalKeys.has(key)) {
       report.duplicates++;
       return;
@@ -923,10 +961,20 @@ export class Scheduler {
       await this.decideSkip(def, dueAt, "concurrency-cap", report);
       return;
     }
-    // ③重叠闸：同任务已有 queued/running
-    for (const f of this.inflight.values()) {
-      if (f.taskId === def.id) {
-        await this.decideSkip(def, dueAt, "overlap", report);
+    // ③重叠/并发闸（per-automation 帽，2026-11-10）：同任务在飞数 < maxConcurrent（缺省 1
+    // = 旧重叠闸逐字同形）。帽满按 overlap 策略：skip 丢拍（现状）；bufferOne 缓存最新一拍，
+    // 本任务收束后补发（补发键 <key>#b，不与原键的去重账相撞）。
+    {
+      const perTaskCap = Math.max(1, Math.floor(def.maxConcurrent ?? 1));
+      let perTask = 0;
+      for (const f of this.inflight.values()) if (f.taskId === def.id) perTask++;
+      if (perTask >= perTaskCap) {
+        if (def.overlap === "bufferOne") {
+          this.buffered.set(def.id, { key, dueAt, kind });
+          await this.decideSkip(def, dueAt, "buffered", report);
+        } else {
+          await this.decideSkip(def, dueAt, "overlap", report);
+        }
         return;
       }
     }
@@ -1266,7 +1314,25 @@ export class Scheduler {
       if (oldest !== undefined) this.completions.delete(oldest);
     }
     this.completions.set(key, { status, ...(reason !== undefined ? { reason } : {}) });
-    this.inflight.delete(key);
+    // P1 空窗竞态修复（2026-11-11 复核判定书）：inflight.delete 原在准入互斥外——并发的
+    // runNow/tick 准入在 admitOccurrence 的 await refreshJournalFromDisk 窗口里看到空 inflight，
+    // 绕过 per-task 帽被准入（同任务双在飞破 maxConcurrent=1），补发也被再缓存。delete+补发
+    // 并入同一互斥段后，外部准入要么看到删除前（正常被闸）、要么看到补发后（正常被闸），
+    // 不存在可滑入的空窗。锁未获取（fn 未执行）时删除在锁外补做，不丢。
+    const pendingBuffered = this.buffered.get(def.id);
+    if (pendingBuffered !== undefined) this.buffered.delete(def.id);
+    const fullDef = pendingBuffered !== undefined ? this.tasks.find((t) => t.id === def.id) : undefined;
+    const retryKey = pendingBuffered !== undefined ? pendingBuffered.key + "#b" : "";
+    const locked = await this.withAdmission(async () => {
+      this.inflight.delete(key);
+      if (fullDef === undefined || pendingBuffered === undefined) return;
+      const retryReport: TickReport = { at: "", startup: false, considered: 0, triggered: 0, catchup: 0, skipped: {}, duplicates: 0, decisions: [] };
+      await this.admitOccurrence(fullDef, pendingBuffered.dueAt, pendingBuffered.kind, retryReport, retryKey);
+    });
+    if (locked === false) {
+      this.inflight.delete(key); // 互斥未获取（跨进程锁在别处手中，fn 未执行）：删除不丢
+      if (pendingBuffered !== undefined) this.warn(`[scheduler] BufferOne 补发被跨进程去重拦下（别处已触发同一补发键）: ${retryKey}`);
+    }
     if (timedOut) {
       this.warn(`[scheduler] 运行超时（runTimeoutMs=${String(this.runTimeoutMs)}ms${aborted ? "，已 abort" : "，settlesWithin 二道退出"}）: ${def.name} ${sessionId}`);
     }
@@ -1302,6 +1368,11 @@ export class Scheduler {
     const nextRun = nextOccurrence(value, new Date(this.clock()));
     value.nextRunAt = nextRun ? nextRun.toISOString() : undefined;
     this.tasks = existing ? this.tasks.map((t) => (t.id === value.id ? value : t)) : [...this.tasks, value];
+    // 策略翻回 skip / 任务停用 ⇒ 缓存的待补发拍作废（策略不再承诺补发，留着就是幽灵补跑）
+    const updatedDef = this.tasks.find((t) => t.id === value.id);
+    if (updatedDef !== undefined && (updatedDef.enabled !== true || updatedDef.overlap !== "bufferOne")) {
+      this.buffered.delete(value.id);
+    }
     await saveAutomationsFile(this.definitionsPath, this.tasks);
     // 写成功 = 盘上已是一份完整合法的任务表；装载期的坏档 / 坏条目警告随之失效。
     this.definitionsWarnings = [];
@@ -1321,6 +1392,7 @@ export class Scheduler {
     const before = this.tasks.length;
     this.tasks = this.tasks.filter((t) => t.id !== id);
     if (this.tasks.length === before) return { ok: false, error: "任务不存在: " + id };
+    this.buffered.delete(id); // 任务删了，缓存的待补发拍随之作废（没有定义就没有补发的执行体）
     await saveAutomationsFile(this.definitionsPath, this.tasks);
     this.definitionsWarnings = [];
     this.definitionsCorrupt = false;

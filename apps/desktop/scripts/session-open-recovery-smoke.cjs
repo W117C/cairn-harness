@@ -1,13 +1,14 @@
 // 会话正文/队列读回失败：真实 renderer + 可控 IPC，禁止未读完整时发消息或改队列。
 const { app, BrowserWindow } = require("electron");
-const { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } = require("node:fs");
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
+const { mkdtempSync, mkdirSync, readFileSync, writeFileSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 const profile = mkdtempSync(join(tmpdir(), "cairn-open-recovery-profile-"));
 const out = resolve(process.argv[2] || mkdtempSync(join(tmpdir(), "cairn-open-recovery-")));
 mkdirSync(out, { recursive: true });
 app.setPath("userData", profile);
-app.on("quit", () => rmSync(profile, { recursive: true, force: true }));
+app.on("quit", () => scheduleProfileCleanup(profile));
 const checks = [];
 const check = (name, ok) => { checks.push({ name, ok }); console.log(`${ok ? "PASS" : "FAIL"} ${name}`); };
 const pause = () => new Promise((r) => setTimeout(r, 90));

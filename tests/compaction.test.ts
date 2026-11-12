@@ -78,6 +78,15 @@ describe("token 估算与触发判定", () => {
     expect(calibrateFactor(events)).toBeCloseTo(5); // 400 chars / 80 tokens
   });
 
+  it("calibrates using native reasoning that is included in output usage", () => {
+    const events: AgentEvent[] = [
+      { type: "thinking_delta", callId: "response", text: "abcd".repeat(70), reasoning: { id: "native", source: "deepseek" } },
+      { type: "assistant_delta", callId: "response", text: "abcd".repeat(10) },
+      { type: "usage", inputTokens: 100, outputTokens: 80, reasoningOutputTokens: 70 },
+    ];
+    expect(calibrateFactor(events)).toBe(4);
+  });
+
   it("system 开销全量计入：同一对话去掉 system 后触发点明显后移", () => {
     const config: typeof DEFAULT_COMPACTION_CONFIG = {
       ...DEFAULT_COMPACTION_CONFIG,
@@ -542,13 +551,14 @@ describe("session-provider 压缩接线", () => {
     ];
     for (const e of events) await log.append(e);
     const factor = calibrateFactor(events);
-    const est = estimateContextTokens(projectContext(events), {}, factor);
+    const est = Math.ceil(JSON.stringify({ messages: projectContext(events), tools: [] }).length / factor);
     const calls: string[] = [];
     const provider = createSessionProvider(logPath, {
       // 卫生修复（2026-10-16）：workspace 显式钉到本用例的隔离临时目录——缺省走 process.cwd()，
       // 仓根一旦有现场数据（`.agent/memory/` 的记忆注入等）就会被吸进终装配估算，
       // 把本用例自设的针尖预算（est+5）撑爆 ⇒ 报 context_budget_exceeded 而非预期的 CAIRN_API_KEY。
       workspace: dir,
+      map: false,
       compaction: {
         // 自整定：可用 = est+4，ratio 0.5 → est ≥ ~4 即触发（本会话 est 远大于此，确定性触发比例条件）
         config: { inputLimit: est + 5, maxOutputReserve: 1, ratio: 0.5, tailMinTokens: 10, tailMaxTokens: 30, retryBackoffMs: 1 },

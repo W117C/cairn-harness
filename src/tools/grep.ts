@@ -9,8 +9,9 @@ const MAX_MATCHES = 100;
 /** 上下文档位帽。再宽不给：`context=5` 已经是 6 倍行数，而改点现场不需要 5 行以上——
  *  宽档位只会让 8KB 预算被第一条命中吃光，反而看不见后面的调用点。 */
 const CONTEXT_MAX = 5;
-/** 带上下文时的输出字符预算。context=0（缺省）不走这条 ⇒ 既有输出字节一字不变。 */
-const CONTEXT_BUDGET_CHARS = 8 * 1024;
+/** 正文预算包含路径和换行，按 UTF-8 字节计，避免长行或中文查询挤满上下文。 */
+const MATCH_BUDGET_BYTES = 16 * 1024;
+const CONTEXT_BUDGET_BYTES = 8 * 1024;
 
 /** 命中行 `Line N: text`（旧口径逐字不变）；邻行 `  N | text`。
  *  两种前缀不是美化：模型要拿这段文本拼 edit_file 的 old_string，
@@ -21,16 +22,16 @@ function renderLine(m: RawMatch): string {
     : "Line " + String(m.line) + ": " + clipLine(m.text);
 }
 
-interface Rendered { text: string; omittedHits: number; byBudget: boolean }
+interface Rendered { text: string; hits: number; omittedHits: number; byBudget: boolean }
 
 /** 按 rg 的原生顺序渲染（每个文件的 match/context 连续，故顺序分组与旧实现的 Map 分组同结果）。
  *  帽按「命中」计，邻行不占额——按行计帽等于在 context=5 时把可检索命中数砍到 1/6。 */
-function renderMatches(entries: RawMatch[], budget: number | null): Rendered {
+function renderMatches(entries: RawMatch[], budget: number): Rendered {
   const parts: string[] = [];
   let current = "";
   let hits = 0;
   let omittedHits = 0;
-  let chars = 0;
+  let used = 0;
   let stopped = false;
   let byBudget = false;
   for (const m of entries) {
@@ -38,40 +39,34 @@ function renderMatches(entries: RawMatch[], budget: number | null): Rendered {
       if (!m.ctx) omittedHits++;
       continue;
     }
-    if (!m.ctx) {
-      hits++;
-      if (hits > MAX_MATCHES) {
-        omittedHits++;
-        stopped = true;
-        continue;
-      }
-    }
-    const line = renderLine(m);
-    if (budget !== null && chars + line.length > budget) {
-      stopped = true;
-      byBudget = true;
-      if (m.ctx) continue;
-      hits--;
+    if (!m.ctx && hits >= MAX_MATCHES) {
       omittedHits++;
+      stopped = true;
       continue;
     }
-    if (m.path !== current) {
-      current = m.path;
-      parts.push(current + ":");
-      chars += current.length + 1;
+    const block = (m.path === current ? "" : m.path + ":\n") + renderLine(m);
+    const bytes = Buffer.byteLength(block, "utf8") + (parts.length > 0 ? 1 : 0);
+    if (used + bytes > budget) {
+      stopped = true;
+      byBudget = true;
+      if (!m.ctx) omittedHits++;
+      continue;
     }
-    parts.push(line);
-    chars += line.length + 1;
+    if (!m.ctx) hits++;
+    current = m.path;
+    parts.push(block);
+    used += bytes;
   }
-  return { text: parts.join("\n"), omittedHits, byBudget };
+  return { text: parts.join("\n"), hits, omittedHits, byBudget };
 }
 
 /** 两种截断说两种话：命中帽到了要照旧口径（agent-plan §工具规格钉了这句），
  *  预算到了必须报出**未列出的条数**——只说"被截断了"的模型会以为已经看全，或原样重跑同一条宽查询。 */
-function truncateNote(r: Rendered): string {
-  return r.byBudget
-    ? `[truncated: 上下文输出超 ${String(CONTEXT_BUDGET_CHARS / 1024)}KB 预算，还有 ${String(r.omittedHits)} 条命中未列出——把 context 调小或收窄 pattern/path]`
-    : countCapNotice("条命中", MAX_MATCHES, r.omittedHits);
+function truncateNote(r: Rendered, withContext: boolean, budget: number): string {
+  if (!r.byBudget) return countCapNotice("条命中", MAX_MATCHES, r.omittedHits);
+  const label = withContext ? "上下文输出" : "输出";
+  const hint = withContext ? "邻行可能省略，减小 context 或收窄 pattern/path" : "收窄 pattern/path，或用 read_file 按行读取已知命中";
+  return `[truncated: ${label}超 ${String(budget / 1024)}KB 预算，还有 ${String(r.omittedHits)} 条命中未列出，${hint}]`;
 }
 
 export const grep: Tool = {
@@ -106,7 +101,15 @@ export const grep: Tool = {
     if (entries.length === 0) {
       return { ok: true, output: `无命中（搜索面 ${rel.slice(0, 120)}）\n` + rgNegativeNote("跳过了 .gitignore 里的条目与隐藏文件") };
     }
-    const r = renderMatches(entries, context > 0 ? CONTEXT_BUDGET_CHARS : null);
-    return { ok: true, output: r.text + (r.omittedHits > 0 ? "\n" + truncateNote(r) : "") };
+    const budget = context > 0 ? CONTEXT_BUDGET_BYTES : MATCH_BUDGET_BYTES;
+    let r = renderMatches(entries, budget);
+    if (context > 0 && r.byBudget && r.hits === 0) {
+      // Leading context can fill the budget before the first actual hit. Keep the hit evidence.
+      r = { ...renderMatches(entries.filter((entry) => !entry.ctx), budget), byBudget: true };
+    }
+    const output = r.byBudget || r.omittedHits > 0
+      ? (r.text === "" ? "" : r.text + "\n") + truncateNote(r, context > 0, budget)
+      : r.text;
+    return { ok: true, output };
   },
 };

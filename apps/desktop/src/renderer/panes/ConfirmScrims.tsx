@@ -77,7 +77,7 @@ export function ConfirmScrims(props: ConfirmScrimsProps) {
         <ConfirmDialog
           title={STR.removeProject.title.replace("{name}", projectRemoveConfirm.name)}
           note={STR.removeProject.body}
-          confirmLabel="移除"
+          confirmLabel={STR.removeProject.confirm}
           danger
           onClose={() => setProjectRemoveConfirm(null)}
           onConfirm={() => { const p = projectRemoveConfirm; setProjectRemoveConfirm(null); void doRemoveProject(p); }}

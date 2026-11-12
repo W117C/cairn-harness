@@ -820,7 +820,7 @@ export const MUTATIONS = [
     src: "src/tools/grep.ts",
     test: "tests/grep-context.test.ts",
     desc: "命中帽按「行」而非按「命中」计 ⇒ context=5 时可检索命中数被砍到 1/6，模型以为仓库里只有这几处",
-    apply: (s) => s.replace("if (!m.ctx) {\n      hits++;", "if (true) {\n      hits++;"),
+    apply: (s) => s.replace("    if (!m.ctx) hits++;", "    if (true) hits++;"),
     expectFail: "邻行不占命中额：130 条命中 + context=1 仍列满 100 条，截断走旧口径而非预算",
   },
   {

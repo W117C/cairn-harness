@@ -1,0 +1,41 @@
+{
+  "note": "首页四种不同路线（不是力度递进），临时 CSS 覆盖、产品源码未改；最终由业主四选一。",
+  "theme": "dark",
+  "viewport": [
+    1440,
+    900
+  ],
+  "state": {
+    "starts": 3,
+    "context": 1,
+    "composer": true,
+    "empty": true
+  },
+  "errors": [],
+  "variants": [
+    {
+      "file": "M-1-now.png",
+      "label": "现在",
+      "effect": "保持现状：问候、项目选择、输入框、建议行、最近会话都在，下半屏留白较多。",
+      "css": ""
+    },
+    {
+      "file": "M-2-focus.png",
+      "label": "更聚焦",
+      "effect": "撤掉下半屏所有建议与最近会话，只留问候和输入框；输入区更大、整体居中。影响：最干净，但少了一键起手和回到旧会话的入口。",
+      "css": "\n.empty-below, .empty-context { display: none !important; }\n.empty { justify-content: center !important; gap: var(--space-lg) !important; }\n.composer-card textarea { min-height: 84px !important; }\n.composer-card { border-radius: 18px !important; }"
+    },
+    {
+      "file": "M-3-info.png",
+      "label": "更有内容",
+      "effect": "把下半屏留白收掉，建议行更紧凑成组、最近会话铺成一行。影响：一屏能看到更多可点的东西，但会显得忙一点。",
+      "css": "\n.empty-tail { flex: .35 1 0 !important; }\n.empty-below { gap: 2px !important; padding-top: var(--space-sm) !important; }\n.start { min-height: 30px !important; border-bottom: 1px solid hsl(0 0% 100% / 8%) !important; border-radius: 0 !important; }\n.empty-context { width: 100% !important; max-width: var(--col-max) !important; margin-top: var(--space-md) !important; padding-top: var(--space-sm) !important; border-top: 1px solid hsl(0 0% 100% / 14%) !important; }\n.empty-context-list { justify-content: flex-start !important; }"
+    },
+    {
+      "file": "M-4-layer.png",
+      "label": "更柔和分层",
+      "effect": "建议行做成一块浅表面，输入框浮得更明显、胶囊变实心。影响：层次最清楚、最'有设计感'，但表面块变多。",
+      "css": "\n.empty-below { background: hsl(60 2% 15% / .7) !important; border: 1px solid hsl(0 0% 100% / 10%) !important; border-radius: 16px !important; padding: var(--space-md) !important; }\n.composer-card { box-shadow: 0 14px 34px hsl(0 0% 0% / 38%) !important; border-radius: 18px !important; }\n.empty-chip, .empty-context-item { background: hsl(60 2% 19%) !important; border-color: transparent !important; }\n.empty-greet-mark { opacity: .9 !important; }"
+    }
+  ]
+}

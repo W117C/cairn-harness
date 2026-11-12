@@ -514,6 +514,37 @@ describe("apply_patch：把计划落到盘上", () => {
     expect(await readFile(join(dir, "src", "oob.ts"), "utf8")).toBe(["a", "b"].join("\n") + "\n");
   });
 
+  it("缩进漂移的 hunk 拒掉时指认「最像的位置」（失败回执可恢复：SWE-agent 级联结论）", async () => {
+    await writeFile(join(dir, "src", "drift.ts"), ["  alpha", "beta"].join("\n") + "\n", "utf8");
+    const msg = await err([
+      "diff --git a/src/drift.ts b/src/drift.ts",
+      "--- a/src/drift.ts",
+      "+++ b/src/drift.ts",
+      "@@ -1,2 +1,2 @@",
+      " alpha",
+      "-beta",
+      "+BETA",
+    ].join("\n"));
+    expect(msg).toContain("上下文对不上");
+    // 提示只定位不替换：指认去掉缩进后逐字相同（但逐字不等）的行号——真实缩进漂移才有提示，语义仍是逐字匹配。
+    expect(msg).toContain("去掉缩进后与补丁上下文首行逐字相同");
+    expect(msg).toContain("第 1 行");
+    // 首行逐字相等的普通失配不给这条提示（宁缺毋滥，同 edit_file 的 nearestHint 纪律）。
+    await writeFile(join(dir, "src", "plain.ts"), ["one", "two"].join("\n") + "\n", "utf8");
+    const plain = await err([
+      "diff --git a/src/plain.ts b/src/plain.ts",
+      "--- a/src/plain.ts",
+      "+++ b/src/plain.ts",
+      "@@ -1,2 +1,2 @@",
+      " one",
+      "-three",
+      "+UNO",
+    ].join("\n"));
+    expect(plain).toContain("上下文对不上");
+    expect(plain).not.toContain("去掉缩进后");
+    expect(await readFile(join(dir, "src", "drift.ts"), "utf8")).toBe(["  alpha", "beta"].join("\n") + "\n");
+  });
+
   it("`\\ No newline at end of file` 打到文件末时真的不留换行", async () => {
     const noNewline = [
       "diff --git a/src/b.ts b/src/b.ts",

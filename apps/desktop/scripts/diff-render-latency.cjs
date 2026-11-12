@@ -3,7 +3,8 @@
 // 跑法：pnpm --filter cairn-desktop build
 //       ELECTRON_RUN_AS_NODE= pnpm --filter cairn-desktop exec electron scripts/diff-render-latency.cjs [out.json]
 const { app, BrowserWindow, nativeTheme } = require("electron");
-const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
+const { mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
 const { dirname, join, resolve } = require("node:path");
 const { tmpdir } = require("node:os");
 
@@ -11,7 +12,7 @@ const profile = mkdtempSync(join(tmpdir(), "cairn-diff-latency-"));
 const output = resolve(process.argv[2] ?? "diff-render-latency.json");
 app.setPath("userData", profile);
 nativeTheme.themeSource = "light";
-app.on("quit", () => { rmSync(profile, { recursive: true, force: true }); });
+app.on("quit", () => scheduleProfileCleanup(profile));
 
 function apiSurface() {
   const protocol = readFileSync(join(__dirname, "../../../src/main/ipc-protocol.ts"), "utf8");

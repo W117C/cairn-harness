@@ -1,34 +1,27 @@
 // 工作区搜索表单：非敏感配置原子写回既有 config.json；密钥复用已装配的 safeStorage 后端。
 // 不缓存工作区、不开页出网；main 只传可信窗口上下文解析出的根。
-import { readFile } from "node:fs/promises";
-import { projectAgentPath } from "../app-data";
-import { writeFileAtomic } from "../atomic-write";
+// 2026-11-10：读-改-写收拢到 workspace-config（roadmap「工作区层统一」）——本文件不再自带
+// 一份读盘/写盘实现，损坏措辞与越界闸由那个唯一读写口出。
 import { getPluginSecret, pluginSecretBackend, putPluginSecret } from "../agent/plugins/secrets";
-import { assertRealContainment, resolveWriteTarget } from "../tools/base";
 import {
   makeWebSearch, parseSearchConfig, searchApiKey, searchKeyEnv, searchSecretId,
   type SearchConfig, type SearchProvider, type WebSearchDeps,
 } from "../tools/web-search";
+import { readWorkspaceConfig, writeWorkspaceConfig } from "../workspace-config";
 import type { SearchSettingsInput, SearchSettingsSaveResult, SearchSettingsSnapshot, SearchSettingsTestResult } from "./ipc-protocol";
 import { isRecord } from "../is-record";
 
 const SECRET_OWNER = "web-search";
+const CONFIG_LABEL = "搜索配置";
 const isProvider = (v: unknown): v is SearchProvider => ["searxng", "brave", "tavily", "custom"].includes(String(v));
 const message = (error: unknown): string => error instanceof SettingsError ? error.message : "搜索设置操作失败，请检查文件权限或系统安全存储后重试";
 class SettingsError extends Error {}
 
+/** 读工作区配置 root；损坏/越界抛 SettingsError（写端见错不动笔）。 */
 async function readDocument(workspace: string): Promise<Record<string, unknown>> {
-  const path = projectAgentPath(workspace, "config.json");
-  await assertRealContainment(workspace, path, "search settings");
-  let text: string;
-  try { text = await readFile(path, "utf8"); } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
-    throw error;
-  }
-  let value: unknown;
-  try { value = JSON.parse(text); } catch { throw new SettingsError("搜索配置 JSON 损坏，请先修复 .agent/config.json；原文件未覆盖"); }
-  if (!isRecord(value)) throw new SettingsError(".agent/config.json 须是 JSON 对象；原文件未覆盖");
-  return value;
+  const read = await readWorkspaceConfig(workspace, CONFIG_LABEL);
+  if (read.error !== null) throw new SettingsError(read.error);
+  return read.root;
 }
 
 /** 只校验结构和 URL，不解析 DNS、不请求端点。网络边界由实际检索的既有闸执行。 */
@@ -102,12 +95,12 @@ export async function saveSearchSettings(workspace: string, input: SearchSetting
       } catch { throw new SettingsError("API Key 安全保存失败，请解锁系统钥匙串后重试；配置未更改"); }
     }
     try {
-      // 密钥存取可能异步等待系统：重新读，保留这期间更新的其他配置字段。
-      const doc = await readDocument(workspace);
-      const existing = isRecord(doc.search) ? doc.search : {};
-      doc.search = { ...existing, ...cfg, enabled: input.enabled, allowLocalEndpoint: input.allowLocalEndpoint };
-      const path = await resolveWriteTarget(workspace, projectAgentPath(workspace, "config.json"), "search settings");
-      await writeFileAtomic(path, JSON.stringify(doc, null, 2) + "\n");
+      // 密钥存取可能异步等待系统：写端自带「写前重读」（workspace-config），保留这期间更新的其他字段。
+      const written = await writeWorkspaceConfig(workspace, (doc) => {
+        const existing = isRecord(doc.search) ? doc.search : {};
+        return { ...doc, search: { ...existing, ...cfg, enabled: input.enabled, allowLocalEndpoint: input.allowLocalEndpoint } };
+      }, CONFIG_LABEL);
+      if (!written.ok) throw new SettingsError(written.error);
     } catch (error) {
       if (changeKey) await putPluginSecret(SECRET_OWNER, id, previous ?? "").catch(() => undefined);
       throw error;

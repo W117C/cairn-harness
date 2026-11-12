@@ -10,6 +10,7 @@ import { readFileSync } from "node:fs";
 const shortcutsTable = readFileSync(new URL("../src/renderer/shortcuts.ts", import.meta.url), "utf8");
 import { fileURLToPath } from "node:url";
 import { readAppSurface } from "./helpers/app-surface";
+import { STR } from "../src/renderer/strings";
 import {
   AboutSection,
   AdvancedSection,
@@ -225,7 +226,8 @@ describe("批 6：模型与 Provider 三段", () => {
   });
 
   it("快捷键页渲染完整分组表（与 ⌘/ 弹层同源），不是 13 条精简版（2026-11-02）", () => {
-    const src = readFileSync(new URL("../src/renderer/components/settings-sections.tsx", import.meta.url), "utf8");
+    // 第 1067 页：ShortcutsSection 按区拆分至 settings/，源文钉随正文走（三断言全保留、不放宽）。
+    const src = readFileSync(new URL("../src/renderer/components/settings/ShortcutsSection.tsx", import.meta.url), "utf8");
     // 分组表由 SHORTCUT_GROUPS 驱动；核心键 SHORTCUTS 只承担 tooltip 取键。
     expect(src).toContain("SHORTCUT_GROUPS.map");
     expect(src).not.toContain("SHORTCUTS.map");
@@ -234,7 +236,8 @@ describe("批 6：模型与 Provider 三段", () => {
   });
 
   it("关于页版本行：构建信息单独一行且可折行；冒烟状态说人话（2026-11-02 真机）", () => {
-    const src = readFileSync(new URL("../src/renderer/components/settings-sections.tsx", import.meta.url), "utf8");
+    // 第 1071 页：AboutSection 按区拆分至 settings/，版本行源文断言随段走（读新文件，不放宽）。
+    const src = readFileSync(new URL("../src/renderer/components/settings/AboutSection.tsx", import.meta.url), "utf8");
     const css = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
     // 版本号与构建信息分两行（此前挤在一行，右侧被裁成「已过」）。
     expect(src).toContain('className="ss-inline ss-version"');
@@ -243,7 +246,10 @@ describe("批 6：模型与 Provider 三段", () => {
     expect(css).toMatch(/\.ss-version-meta\s*\{[^}]*overflow-wrap:\s*anywhere/s);
     // 非 passed 不许原文打印；统一读「未通过」。
     expect(src).not.toContain('? "已过" : props.build.packagedSmoke');
-    expect(src).toContain('? "已通过" : "未通过"');
+    // 第 1078 页：冒烟文案收编进 STR 后源文只剩键——钉键形＋两枚值锚（原意不放宽）。
+    expect(src).toContain("? STR.about.smokePassed : STR.about.smokeFailed");
+    expect(STR.about.smokePassed).toBe("已通过");
+    expect(STR.about.smokeFailed).toBe("未通过");
   });
 
   it("分区头的通道名走 providers 表的登记标签，不印机器 id（2026-11-02）", () => {
@@ -311,7 +317,9 @@ describe("批 6：模型与 Provider 三段", () => {
     // 选中自定义 → 详情内嵌编辑表单（预填 editing；key 分支隔离，预填不带进新增）；添加供应商 → 空白表单。
     expect(stream).toContain('<CustomProviderForm key={`edit-${activeCustom}`} editing={editingEntry}');
     expect(stream).toContain('<CustomProviderForm key="add"');
-    expect(stream).toContain('<span className="pv-detail-name">添加供应商</span>');
+    // 第 1077 页：该文案收编进 STR 后，源文只剩键——钉「键的源码形状 + 值锚」两半（原意不放宽）。
+    expect(stream).toContain('<span className="pv-detail-name">{STR.provider.addProvider}</span>');
+    expect(STR.provider.addProvider).toBe("添加供应商");
     // 编辑表单的回填源 = providerCustomList（新 IPC）。
     expect(stream).toContain("window.agent.providerCustomList()");
   });
@@ -401,12 +409,12 @@ describe("批 6：权限与安全段（OptionCard 四档 + danger 智能审批/�
     expect(h).toContain("网络");
     expect(h).toContain("默认断网");
     expect(h).toContain('<span class="ss-row-desc">默认断网；除「完全允许」档外出网都要一次性批准（不记忆）。沙箱在 macOS 走 Seatbelt。</span>');
-    expect(h).toContain('<span class="sp-tag">默认断网</span>');
-    // 网络行不给按钮/开关（只读说明）——该行的 ctl 里不出现 button
+    expect(h).not.toContain('<span class="sp-tag">默认断网</span>');
+    // 网络行不给按钮/开关，也不摆空控制列（布局自己解释，第 1092 页）
     const netRowAt = h.indexOf("网络");
-    const rowEnd = h.indexOf("ss-row-ctl", netRowAt);
-    const ctlClose = h.indexOf("</div>", rowEnd);
-    expect(h.slice(rowEnd, ctlClose)).not.toContain("<button");
+    const nextRowAt = h.indexOf('class="ss-row"', netRowAt + 1);
+    const rowHtml = h.slice(netRowAt, nextRowAt === -1 ? undefined : nextRowAt);
+    expect(rowHtml).not.toContain("ss-row-ctl");
   });
 });
 
@@ -448,6 +456,8 @@ describe("批 6：关于与更新段", () => {
     expect(h).toContain("0.1.0");
     expect(h).toContain("检查更新");
     expect(h).toContain("运行诊断");
+    expect((h.match(/运行诊断/g) ?? []).length).toBe(1);
+    expect(h).toContain(">运行</button>");
     expect(h).toContain("工程细节");
     expect(h).toContain("serveScheduler");
   });
@@ -497,7 +507,8 @@ describe("licenseExpiryHint（到期摘要）", () => {
 
 describe("关于页构建信息", () => {
   it("build-info 存在时版本行显示构建日期 / 签名 / 冒烟凭据", () => {
-    const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/settings-sections.tsx", import.meta.url)), "utf8");
+    // 第 1071 页：AboutSection 按区拆分至 settings/，build-info 源文断言随段走（读新文件，不放宽）。
+    const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/settings/AboutSection.tsx", import.meta.url)), "utf8");
     expect(src).toContain("props.build.createdAt.slice(0, 10)");
     expect(src).toContain("props.build.signature");
     expect(src).toContain("props.build.packagedSmoke");

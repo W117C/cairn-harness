@@ -20,14 +20,15 @@
 //      （本仓宿主会注入 ELECTRON_RUN_AS_NODE，不清掉会把 Electron 降级成纯 Node）
 
 const { app, BrowserWindow, nativeTheme } = require("electron");
-const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
+const { mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
 const { join, resolve } = require("node:path");
 const { tmpdir } = require("node:os");
 
 const profile = mkdtempSync(join(tmpdir(), "cairn-steer-profile-"));
 app.setPath("userData", profile);
 nativeTheme.themeSource = "light";
-app.on("quit", () => { rmSync(profile, { recursive: true, force: true }); });
+app.on("quit", () => scheduleProfileCleanup(profile));
 const OUT = process.argv[2] ? resolve(process.argv[2]) : mkdtempSync(join(tmpdir(), "cairn-steer-"));
 mkdirSync(OUT, { recursive: true });
 

@@ -4,10 +4,12 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/PaneDock.tsx", import.meta.url)), "utf8");
+const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/TerminalPane.tsx", import.meta.url)), "utf8");
 
 describe("终端退出重启", () => {
   it("退出记录原因并显示重启按钮；gen 变化重跑 effect", () => {
+    // 第 1098 页：TerminalPane 无 props，memo 后不随 PaneDock 的事件流父渲染白跑。
+    expect(src).toContain("export const TerminalPane = memo(function TerminalPane(): React.JSX.Element {");
     expect(src).toContain("const [exited, setExited] = useState<string | null>(null);");
     expect(src).toContain("setExited(why);");
     expect(src).toContain("}, [gen]);");

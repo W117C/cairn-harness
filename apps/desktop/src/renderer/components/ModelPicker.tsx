@@ -3,7 +3,7 @@
 // 旧两视图（思考面 × 换模型面）作废：一屏说全——上列表、下思考段，少一次翻面。
 // 触发条 = 单芯片形态：`deepseek-chat · 思考 关 ⌄`（档词 = 关/低/中/强/最高；未声明支持不带思考段）。
 // 数据面不变（唯一事实源仍是 `getProviderInfo()`，本层不造第二份）；文案全出处 STR。
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, Eye, Info, Search, Settings, SlidersHorizontal, X } from "lucide-react";
 import type { ProviderInfo } from "../../../../../src/main/ipc-protocol";
 import { formatTokens } from "../derived/format-tokens";
@@ -245,6 +245,8 @@ export const THINKING_LEVELS = [
   { id: "max", short: STR.modelPicker.thinkMax, hint: STR.modelPicker.thinkMaxHint },
 ] as const;
 
+const THINKING_BY_ID = new Map<string, (typeof THINKING_LEVELS)[number]>(THINKING_LEVELS.map((level) => [level.id, level] as const));
+
 /** 「信号开菜单」这一步的判据（纯函数）：seq 前进一次 = 开一次。
  *
  *  `prev === null` 是**首帧**（含重挂后的首帧）：那时只对齐基线、不开。
@@ -354,12 +356,13 @@ export function ModelPicker(props: {
     lastOpenSeq.current = step.baseline;
     if (step.open && props.disabled !== true) setOpen(true);
   }, [props.openSeq, props.disabled]);
-  const allOptions = flattenModels(props.infos);
-  const options = props.configuredProviders === undefined
+  // 第 1119 页：infos 不变时（搜索输入/高亮变化）不再重建模型表与标签表。
+  const allOptions = useMemo(() => flattenModels(props.infos), [props.infos]);
+  const options = useMemo(() => props.configuredProviders === undefined
     ? allOptions
-    : allOptions.filter((o) => o.provider !== null && props.configuredProviders!.has(o.provider));
+    : allOptions.filter((o) => o.provider !== null && props.configuredProviders!.has(o.provider)), [allOptions, props.configuredProviders]);
   // 组头显示人话标签（「DeepSeek」而不是「deepseek」）——标签表随 infos 一路带下来。
-  const providerLabels = providerLabelMap(props.infos);
+  const providerLabels = useMemo(() => providerLabelMap(props.infos), [props.infos]);
   const info = props.infos[0] ?? null;
   const notice = pickerKeyNotice(info);
   // 当前选中模型**自己声明**的思考档（缺席 = 该模型不支持思考）。
@@ -370,7 +373,7 @@ export function ModelPicker(props: {
   // 归位**不在显示层偷换**（芯片不许显示一档、请求发另一档），
   // 而是由下面的 effect 把它写回状态 ⇒ 显示与请求永远同一个。
   const reconciled = reconcileThinkingLevel(level, selected?.thinkingLevels, selected?.thinkingDefault);
-  const levelLabel = THINKING_LEVELS.find((l) => l.id === level)?.short ?? STR.modelPicker.thinkOff;
+  const levelLabel = THINKING_BY_ID.get(level)?.short ?? STR.modelPicker.thinkOff;
   // 首次挂载不弹（那是「进场」）；换过模型之后才弹（那是「值变了」）。
   const everPicked = useRef(false);
   // 换模型 ⇒ 思考档归位（对标 Codex）：两条路径都走这里——用户在菜单里点模型，
@@ -516,15 +519,19 @@ export function ModelMenu(props: {
   const effortCellRef = useRef<HTMLButtonElement | null>(null);
   // DeepSeek 规则：目录 >4 个模型才出搜索；更短的目录不需要搜。
   const showSearch = props.options.length > 4;
-  const filtered = filterModelOptions(props.options, showSearch ? query : "");
-  const groups = groupModels(filtered);
-  const flat: ModelOption[] = groups.flatMap((g) => g.models);
+  // 第 1124 页：搜索/高亮变化不重建目录——filter/group/flat/index 都按上一层引用记忆。
+  const filtered = useMemo(() => filterModelOptions(props.options, showSearch ? query : ""), [props.options, showSearch, query]);
+  const groups = useMemo(() => groupModels(filtered), [filtered]);
+  const flat: ModelOption[] = useMemo(() => groups.flatMap((g) => g.models), [groups]);
+  // 第 1102 页：组内每行原先 indexOfModel(m) 扫全表（菜单打开时 O(n²)）；一次 Map 建索引。
+  const flatIndex = useMemo(() => new Map(flat.map((m, i) => [m, i] as const)), [flat]);
+  const indexOfModel = (m: ModelOption): number => flatIndex.get(m) ?? 0;
   const warn = props.keyNotice !== undefined && props.keyNotice !== null;
   const modelsDisabled = props.running === true;
   const supported = props.thinkingSupported === true;
   const level = props.thinking ?? "off";
   // root 思考 cell 的当前值（档位短词；不支持时显示「不支持」注记）。
-  const levelLabel = THINKING_LEVELS.find((l) => l.id === level)?.short ?? STR.modelPicker.thinkOff;
+  const levelLabel = THINKING_BY_ID.get(level)?.short ?? STR.modelPicker.thinkOff;
   // 档位列表 = **当前模型声明的档**（对标 Codex：每个模型带自己的 supportedReasoningEfforts）。
   // 模型没声明 ⇒ 思考面出空态（fail-visible，见下）。
   const declared = props.thinkingLevels;
@@ -545,7 +552,7 @@ export function ModelMenu(props: {
     ? THINKING_LEVELS.map((l) => l.id)
     : declaredIds
   ).filter((id) => visibleIds.includes(id)).map((id) => THINKING_LEVELS.find((l) => l.id === id) ?? { id, short: id, hint: "" });
-  const levelLabelOf = (id: string): string => THINKING_LEVELS.find((l) => l.id === id)?.short ?? id;
+  const levelLabelOf = (id: string): string => THINKING_BY_ID.get(id)?.short ?? id;
   const modelDefaultLevel = props.options.find((o) => o.registryId === props.value)?.thinkingDefault;
   // 用户收起当前档 ⇒ 当场归位（显示与请求永远同一个；与换模型归位同一条契约）。
   useEffect(() => {
@@ -761,15 +768,15 @@ export function ModelMenu(props: {
                     key={m.registryId ?? "model"}
                     type="button"
                     role="option"
-                    id={optionId(flat.indexOf(m))}
+                    id={optionId(indexOfModel(m))}
                     aria-selected={m.registryId === props.value}
                     className="menu-item"
                     disabled={modelsDisabled}
                     tabIndex={showSearch ? -1 : 0}
-                    data-highlighted={flat.indexOf(m) === hl}
+                    data-highlighted={indexOfModel(m) === hl}
                     title={STR.modelPicker.tierMeta.replace("{tier}", tierBadge(m.tier)).replace("{ctx}", formatCtxWindow(m.ctxWindow))}
-                    onPointerMove={() => setHl(flat.indexOf(m))}
-                    onFocus={() => setHl(flat.indexOf(m))}
+                    onPointerMove={() => setHl(indexOfModel(m))}
+                    onFocus={() => setHl(indexOfModel(m))}
                     onClick={() => props.onPick(m.registryId)}
                   >
                     <span className="mi-name">{m.label}</span>

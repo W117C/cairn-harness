@@ -1,11 +1,12 @@
 const { app, BrowserWindow, nativeTheme } = require("electron");
-const { mkdtempSync, readFileSync, rmSync } = require("node:fs");
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
+const { mkdtempSync, readFileSync } = require("node:fs");
 const { join } = require("node:path");
 const { tmpdir } = require("node:os");
 const profile = mkdtempSync(join(tmpdir(), "cairn-diag13-"));
 app.setPath("userData", profile);
 nativeTheme.themeSource = "light";
-app.on("quit", () => { rmSync(profile, { recursive: true, force: true }); });
+app.on("quit", () => scheduleProfileCleanup(profile));
 async function main() {
   await app.whenReady();
   const protocol = readFileSync(join(__dirname, "../../../src/main/ipc-protocol.ts"), "utf8");

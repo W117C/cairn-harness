@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Composer } from "../src/renderer/components/Composer";
+import { STR } from "../src/renderer/strings";
 
 function repo(rel: string): string {
   return readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
@@ -70,7 +71,10 @@ describe("Composer 建议（Tab 想下一条 · 常驻芯片下架）", () => {
     expect(css).toContain(".suggest-kbd {");
     expect(css).not.toContain("\n.suggest-ghost"); // 规则位清零（行首锚——注释里的历史说明不算）
     const shortcuts = repo("../src/renderer/shortcuts.ts");
-    expect(shortcuts).toContain("空输入框想下一条");
-    expect(shortcuts).not.toContain("灰字建议");
+    // 收编后（第 1065 页）：Tab 行文案走 STR.shortcutTable.suggest——源里钉接线，
+    // 值在 STR 锚定（「空输入框想下一条」口径在、旧「灰字建议」口径不在）。
+    expect(shortcuts).toContain('what: STR.shortcutTable.suggest');
+    expect(STR.shortcutTable.suggest).toContain("空输入框想下一条");
+    expect(STR.shortcutTable.suggest).not.toContain("灰字建议");
   });
 });

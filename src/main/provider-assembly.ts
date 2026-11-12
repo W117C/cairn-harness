@@ -14,6 +14,7 @@ import type { SolpiRuntime } from "../agent/solpi-runtime";
 import type { AgentEvent } from "../events";
 import type { GlmToolSpec } from "../providers/glm";
 import { createMockProvider } from "../providers/mock";
+import { deepSeekOutputReserve } from "../providers/deepseek";
 import { toWorkerModel, type RegistryWorkerModel } from "../providers/worker-adapters";
 import type { ThinkingEffort } from "../providers/capabilities";
 import type { Provider, ProviderToolSpec } from "../providers";
@@ -150,7 +151,11 @@ export function createProvider(
   if (scripted !== null) return createMockProvider(scripted);
   if (selection.kind === "demo") return createMockProvider(MOCK_FIXTURE);
 
-  const { transport, label } = sessionModelTransport(selection, sessionOptions);
+  const deepSeek = selection.kind === "deepseek";
+  // Main requests pass their selected effort below. DeepSeek summaries use the transport's off default.
+  const { transport, label } = sessionModelTransport(selection, deepSeek && sessionOptions
+    ? { promptCache: sessionOptions.promptCache }
+    : sessionOptions);
 
   if (sessionOptions) {
     const attachmentContext = formatAttachmentContext(sessionOptions.attachments ?? [], sessionOptions.workspace);
@@ -164,6 +169,7 @@ export function createProvider(
         // COMPRESS_EARLY_RATIO（值唯一事实源在 evolution/advice.ts，调用方取来递进来）。
         ...(sessionOptions.compactionConfig ? { config: sessionOptions.compactionConfig } : {}),
         ...(sessionOptions.prediction ? { prediction: sessionOptions.prediction } : {}),
+        ...(deepSeek ? { outputReserve: deepSeekOutputReserve } : {}),
       },
       emit: sessionOptions.emit,
       plugins: sessionOptions.plugins,
@@ -174,6 +180,7 @@ export function createProvider(
       // 自由档位的名字查表恒为 undefined ⇒ 窗口必须由 spec 递进预算，否则 `--ctx-window` 只改到一半
       // （toWorkerModel 会丢掉 ctxWindow，只有这一条真的落到 inputLimit 上）。
       ...(selection.modelExplicit ? { ctxWindow: selection.spec.ctxWindow } : {}),
+      ...(deepSeek ? { thinking: sessionOptions.thinking, pruneBatching: { requireCacheHit: true } } : {}),
       ...(sessionOptions.thinkingPolicy !== undefined ? { thinkingPolicy: sessionOptions.thinkingPolicy } : {}),
       transport,
       transportLabel: label,

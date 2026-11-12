@@ -13,6 +13,7 @@ import {
   type PromptSurfaceFinding,
 } from "../src/agent/prompt-surface";
 import { BASE_SYSTEM, systemPromptFor } from "../src/main/agent-runner";
+import { currentDateLine } from "../src/agent/system-prompt";
 import { GATES } from "../scripts/gate-manifest";
 import {
   PROMPT_SURFACE_EXEMPT,
@@ -133,10 +134,15 @@ describe("按档拆文本（第 175 页，任务 #16）", () => {
   });
 
   it("可写那三档拿到的还是同一份 BASE_SYSTEM（等价性由判卷钉），而 read-only 确实不同", () => {
-    for (const m of ["default", "guided", "auto"] as const) expect(systemPromptFor(m), `${m} 档不该被改写`).toBe(BASE_SYSTEM);
+    // 2026-11-10 日期注入：装配层在共用文本前面加一行日期头（currentDateLine），
+    // 可写档正文仍逐字等于 BASE_SYSTEM——「等价性由判卷钉」钉的是正文，不是装配头。
+    for (const m of ["default", "guided", "auto"] as const) {
+      expect(systemPromptFor(m), `${m} 档不该被改写`).toBe(currentDateLine() + "\n\n" + BASE_SYSTEM);
+    }
     // 配对判据（规则 228）：只钉「三档相等」的话，「四档全等」这个退化也照样绿。
     expect(systemPromptFor("read-only")).not.toBe(BASE_SYSTEM);
-    expect(systemPromptFor(undefined), "缺省（没给档）必须退回共用文本，不能抛").toBe(BASE_SYSTEM);
+    expect(systemPromptFor("read-only")).not.toBe(currentDateLine() + "\n\n" + BASE_SYSTEM);
+    expect(systemPromptFor(undefined), "缺省（没给档）必须退回共用文本，不能抛").toBe(currentDateLine() + "\n\n" + BASE_SYSTEM);
   });
 
   it("read-only 的文本不再点名它拿不到的那三把，而共用文本里它们还在（尺看得见）", () => {
@@ -259,8 +265,8 @@ describe("工具描述也是模型可见文本（第 176 页）", () => {
     // 21→24 / 74→77 是 2026-11-04 的 todo_write（items/items.text/items.state 三份描述；全档可见）。
     // 这一格必须**精确**：只读到 183 的那一版（不递归）就是靠它露馅的；放宽成「≥ 某个数」之后
     // 「少走一族参数」仍然绿（规则 222）。改规格的人跟着改这一格。
-    expect(perMode.get("read-only"), "只读档参数描述面数（2026-11-06 现读 31＝30 + read_doc 一份 path）").toBe(31);
-    expect(perMode.get("default"), "缺省档参数描述面数（2026-11-06 现读 84＝83 + read_doc 一份 path）").toBe(84);
+    expect(perMode.get("read-only"), "只读档参数描述面数（2026-11-10 现读 32＝31 + web_doc 一份 url）").toBe(32);
+    expect(perMode.get("default"), "缺省档参数描述面数（2026-11-10 现读 89＝84 + web_doc.url + fs_ops 四参）").toBe(89);
     for (const m of ["guided", "auto", "full-access"]) {
       expect(perMode.get(m), `${m} 与 default 档的工具面同日同表，参数面数不该分叉`).toBe(perMode.get("default"));
     }
@@ -317,7 +323,7 @@ describe("工具描述也是模型可见文本（第 176 页）", () => {
 
   it("参数说明覆盖：分母只数「有声明参数的工具」，名单与计数是现读水位", () => {
     const cov = paramProseCoverage();
-    expect(cov.length, "有参数的工具数（2026-11-06 现读 32＝31 + read_doc；list_agents 与 verify／automation_list 无参数，不进分母）").toBe(32);
+    expect(cov.length, "有参数的工具数（2026-11-10 现读 34＝32 + web_doc + fs_ops；list_agents 与 verify／automation_list 无参数，不进分母）").toBe(34);
     expect(cov.every((c: { declared: number }) => c.declared >= 1), "分母里混进无参数的工具＝覆盖率替形状报错").toBe(true);
     for (const c of cov) {
       expect(c.explained + c.missing.length, `${c.tool} 的 explained＋missing 必须等于声明数，少一格就是计数坏了`).toBe(c.declared);

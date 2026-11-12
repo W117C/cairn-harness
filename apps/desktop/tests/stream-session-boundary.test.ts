@@ -4,16 +4,18 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { readAppSurface } from "./helpers/app-surface";
+import { readAppSurface, readRendererFile } from "./helpers/app-surface";
 
 const app = readAppSurface();
+const view = readRendererFile("panes/WorkbenchView.tsx");
 const stream = readFileSync(fileURLToPath(new URL("../src/renderer/components/Stream.tsx", import.meta.url)), "utf8");
 
 describe("Stream 的会话边界", () => {
   it("按 activeId 重挂（.stream 滚动容器不在 key 内）", () => {
-    expect(app).toContain("key={activeId ?? \"home\"}");
-    const at = app.indexOf("key={activeId ?? \"home\"}");
-    expect(app.slice(Math.max(0, at - 400), at)).toContain("<Stream");
+    // 位置敏感：Stream 的重挂在 WorkbenchView 单文件里（Inspector 也有同名 key，面拼接会先命中它）。
+    expect(view).toContain("key={activeId ?? \"home\"}");
+    const at = view.indexOf("key={activeId ?? \"home\"}");
+    expect(view.slice(Math.max(0, at - 400), at)).toContain("<Stream");
   });
 
   it("没有回退成“行 key 拼会话前缀”的方案（实测会留下旧行）", () => {

@@ -67,7 +67,7 @@ describe("ModalSurface（统一模态边界）", () => {
     for (const rel of [
       "../src/renderer/components/SettingsPanel.tsx",
       "../src/renderer/components/NewProjectDialog.tsx",
-      "../src/renderer/components/Sidebar.tsx",
+      "../src/renderer/components/SidebarProjects.tsx",
       "../src/renderer/components/CustomProviderForm.tsx",
     ]) {
       expect(read(rel), rel).toContain("<ModalSurface");

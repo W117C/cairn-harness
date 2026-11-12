@@ -16,7 +16,9 @@ export function resolveBootTheme(preference: ThemePreference, systemPrefersDark:
   return systemPrefersDark ? "dark" : "light";
 }
 
-/** Claude Desktop v3 的 surface-1：亮 #fcfcfb / 暗 #151515。 */
+/** 启动底色：亮 #fcfcfb（Claude v3 surface-1）/ 暗 #1b1b1b。
+ *  第 1053 页业主裁「A 轻度」把暗色画布从 #151515 提亮到 #1b1b1b；
+ *  BrowserWindow.backgroundColor 必须跟着 CSS 画布走，否则窗口出现时会先闪一帧旧底色。 */
 export function bootBackgroundFor(theme: BootTheme): string {
-  return theme === "dark" ? "#151515" : "#fcfcfb";
+  return theme === "dark" ? "#1b1b1b" : "#fcfcfb";
 }

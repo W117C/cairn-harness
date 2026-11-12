@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ArrowUpCircle,
   Puzzle,
@@ -107,8 +107,9 @@ export interface PluginInstalledProps {
 
 export function PluginInstalled(props: PluginInstalledProps): React.JSX.Element {
   const [uninstall, setUninstall] = useState<PluginRowView | null>(null);
-  const installed = props.rows.filter((row) => row.installed !== null);
-  const unmanaged = props.rows.filter((row) => row.installed === null && row.runtime !== null);
+  // 第 1160 页：已安装/未托管行按 rows 记忆；卸载确认等局部状态不重扫。
+  const installed = useMemo(() => props.rows.filter((row) => row.installed !== null), [props.rows]);
+  const unmanaged = useMemo(() => props.rows.filter((row) => row.installed === null && row.runtime !== null), [props.rows]);
   return (
     <section className="plugin-installed" data-marketplace-view="installed">
       {installed.length === 0 && unmanaged.length === 0 ? (

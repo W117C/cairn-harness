@@ -177,6 +177,34 @@
   color: hsl(var(--text-300));
   font-size: var(--fs-caption-sm);
 }
+/* 短纯文本结果（第 1042 页，zcode uQe 同规）：人话结果穿文本外衣，不穿代码块外衣；
+   底/圆角与 pre 同档，字体回到正文字体（终端转储观感来自整段 mono）。 */
+.toolcluster .tool-output-plain {
+  margin: 0;
+  padding: 8px 12px;
+  background: hsl(var(--bg-200));
+  border-radius: var(--radius-sm);
+  color: hsl(var(--text-200));
+  font-size: var(--fs-caption-sm);
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+/* 运行中工具的活动信号（第 1042 页）：与思考行同一套中性流光语言。
+   单行摘要吃 text-200 墨、组标题吃 text-300 墨（各自的 flat 色为 strong 档）。 */
+.row.tool[data-state="pending"] .tsum {
+  color: transparent;
+  background: linear-gradient(90deg, hsl(var(--text-200)) 0%, hsl(var(--text-200)) 34%, hsl(var(--text-200) / 45%) 50%, hsl(var(--text-200)) 66%, hsl(var(--text-200)) 100%);
+  background-size: 300% 100%;
+  -webkit-background-clip: text; background-clip: text;
+  animation: live-shimmer-flow var(--t-live-shimmer) infinite;
+}
+.tool-group-toggle[data-pending="true"] .tool-group-label {
+  color: transparent;
+  background: linear-gradient(90deg, hsl(var(--text-300)) 0%, hsl(var(--text-300)) 34%, hsl(var(--text-300) / 45%) 50%, hsl(var(--text-300)) 66%, hsl(var(--text-300)) 100%);
+  background-size: 300% 100%;
+  -webkit-background-clip: text; background-clip: text;
+  animation: live-shimmer-flow var(--t-live-shimmer) infinite;
+}
 .toolcluster .process-copy,
 .row.think .process-copy {
   display: inline-flex;
@@ -208,7 +236,10 @@
   width: 100%;
   max-width: 100%;
   min-height: 36px;
-  padding: 5px 34px 5px 0; /* 右侧给复制钮留位；同上：思考带也挂在轨上，图标不缩进 */
+  /* 右留位必须盖过绝对定位的复制钮（实测宽 53px + right:2px = 55px），否则摘要尾部压在钮下
+     （第 1042 页截图缺陷：旧值 34px ⇒ 重叠 21px）。64px = 55px + 9px 间隙；几何判卷钉死不重叠。
+     左内距归零：思考带挂在轨上，图标不缩进。 */
+  padding: 5px 64px 5px 0;
   gap: 8px;
   border-radius: var(--radius-sm);
   text-align: left;
@@ -222,7 +253,15 @@
 }
 .row.think .think-main { flex: none; }
 .row.think .think-label { flex: none; color: hsl(var(--text-000) / 72%); white-space: nowrap; }
-.row.think[data-running="true"] .think-label { color: hsl(var(--text-000) / 88%); }
+/* 运行中标题 = 中性墨色流光（2026-11-08 第 1042 页，zcode animated-gradient-text 的 neutral 档）：
+   88% 墨是 strong、38% 是 soft——同族墨扫过，无色相；静态档仍是上面的 72% flat。 */
+.row.think[data-running="true"] .think-label {
+  color: transparent;
+  background: linear-gradient(90deg, hsl(var(--text-000) / 88%) 0%, hsl(var(--text-000) / 88%) 34%, hsl(var(--text-000) / 38%) 50%, hsl(var(--text-000) / 88%) 66%, hsl(var(--text-000) / 88%) 100%);
+  background-size: 300% 100%;
+  -webkit-background-clip: text; background-clip: text;
+  animation: live-shimmer-flow var(--t-live-shimmer) infinite;
+}
 /* 收起态：标题之后接一段单行摘要（此前整段隐藏，只剩「思考记录」三个字，像没加载完）。 */
 .row.think .think-preview {
   display: block;
@@ -256,7 +295,34 @@
 }
 .row.think:hover .thinking-actions,
 .row.think:focus-within .thinking-actions { opacity: 1; }
-.row.think .think-text { white-space: normal; }
+/* 展开体限高（第 1042 页，zcode max-h-60 同档）：流式思考不再无限顶高阅读面；
+   内部滚动 + 组件里的自动跟尾（用户上滚即停、回底恢复）。 */
+.row.think .think-text { white-space: normal; max-height: 240px; overflow-y: auto; }
+/* 滚动边缘渐隐（第 1044 页，zcode ReasoningContent 同形）：只在该侧还有内容没读到时
+   淡出 16px，贴顶 / 贴底各自独立 ⇒ 首行与末行都不会被无端吃掉。
+   单张纵向 mask + 两个 0px/16px 变量，四态不必写四条规则；0px 时是硬切（全不透明）。
+   **挂在 `.think-body-inner`（不滚动的父盒）而不是 `.think-text`（滚动容器）**：mask 落在
+   滚动容器上会随内容坐标走，贴底时视口里只看得到遮罩中段——开/关 mask 的像素对照实测
+   顶部亮度差仅 0.3/255，等于没做。父盒固定在视口边缘，才真的把首行/末行融进画布。
+   复用折叠 ticker 同款 #000 alpha 遮罩；无新增动效、不新增减弱动效块。 */
+.row.think .think-body-inner {
+  --think-fade-top: 0px;
+  --think-fade-bottom: 0px;
+  mask-image: linear-gradient(to bottom,
+    transparent 0, #000 var(--think-fade-top),
+    #000 calc(100% - var(--think-fade-bottom)), transparent 100%);
+}
+.row.think .think-body-inner[data-fade-top="true"] { --think-fade-top: 16px; }
+.row.think .think-body-inner[data-fade-bottom="true"] { --think-fade-bottom: 16px; }
+/* 折叠态 ticker（第 1042 页）：运行中显示「正在想的最后一行」——单行、溢出跟到行尾、两端渐隐；
+   新行按 key 重挂滚入（只动 transform/opacity，合成器友好）。 */
+.row.think .think-ticker { text-overflow: clip; }
+.row.think .think-ticker[data-overflow="true"] {
+  mask-image: linear-gradient(to right, transparent 0, #000 16px, #000 calc(100% - 16px), transparent 100%);
+}
+.row.think .think-ticker-line { display: inline-block; min-width: max-content; animation: think-ticker-in var(--t-med); }
+@keyframes think-ticker-in { from { opacity: 0; transform: translateY(0.55em); } to { opacity: 1; transform: none; } }
+@keyframes live-shimmer-flow { 0% { background-position: 100% 0; } 50% { background-position: 0 0; } 100% { background-position: 0 0; } }
 .row.think .think-text .md-body { color: hsl(var(--text-000) / 86%); font-size: var(--fs-caption-md); line-height: 1.75; }
 .row.think .think-text .md-body > :first-child { margin-top: 0; }
 .row.think .think-text .md-body > :last-child { margin-bottom: 0; }
@@ -278,7 +344,17 @@
   .row .row-actions,
   .row.think .chev,
   .toolcluster .chev { transition: none; }
+  /* 第 1042 页：流光停动并还原 flat 墨色（背景清掉后不许留透明字）；ticker 滚入停格。 */
+  .row.think[data-running="true"] .think-label { animation: none; background: none; color: hsl(var(--text-000) / 88%); }
+  .row.tool[data-state="pending"] .tsum { animation: none; background: none; color: hsl(var(--text-200)); }
+  .tool-group-toggle[data-pending="true"] .tool-group-label { animation: none; background: none; color: hsl(var(--text-300)); }
+  .row.think .think-ticker-line { animation: none; }
 }
+/* app 内减弱动效（data-reduce-motion）同口径停动（第 1042 页）。 */
+[data-reduce-motion="true"] .row.think[data-running="true"] .think-label { animation: none; background: none; color: hsl(var(--text-000) / 88%); }
+[data-reduce-motion="true"] .row.tool[data-state="pending"] .tsum { animation: none; background: none; color: hsl(var(--text-200)); }
+[data-reduce-motion="true"] .tool-group-toggle[data-pending="true"] .tool-group-label { animation: none; background: none; color: hsl(var(--text-300)); }
+[data-reduce-motion="true"] .row.think .think-ticker-line { animation: none; }
 
 
 

@@ -93,7 +93,6 @@ describe("原橙只许留在品牌/装饰标上（令牌注释「只用于品牌
     ".mp-cube",
     ".ap-card-ico",
     ".plugin-mark",
-    "@keyframes md-word-arrive",
   ];
   const CSS_FILES = ["../src/renderer/styles.css", "../src/renderer/components/stream-process.css",
     "../src/renderer/components/composer-plan.css", "../src/renderer/components/session-preview.css",
@@ -117,8 +116,8 @@ describe("原橙只许留在品牌/装饰标上（令牌注释「只用于品牌
       }
     }
     expect(offenders, "以原橙作前景的非标记规则：\n" + offenders.join("\n")).toEqual([]);
-    // 动效里用原橙的只许是逐字入场（装饰，不承载状态）
-    expect(keyframeHues, "以原橙作前景的 @keyframes：" + keyframeHues.join(",")).toEqual(["md-word-arrive"]);
+    // 2026-11-09 逐字入场动效撤除：不再有任何 @keyframes 拿原橙当文字前景。
+    expect(keyframeHues, "以原橙作前景的 @keyframes：" + keyframeHues.join(",")).toEqual([]);
   });
 
   it("前景档被真实使用（不是加了个死令牌）", () => {

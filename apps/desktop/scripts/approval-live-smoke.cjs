@@ -3,14 +3,15 @@
 // 卡本体 Enter=允许一次。真实主进程的权限决策链由 core/desktop 判卷覆盖；这里只验 UI 面。
 // 运行：pnpm --filter cairn-desktop build && env -u ELECTRON_RUN_AS_NODE pnpm --filter cairn-desktop exec electron scripts/approval-live-smoke.cjs [out]
 const { app, BrowserWindow, nativeTheme } = require("electron");
-const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
+const { mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
 const { join, resolve } = require("node:path");
 const { tmpdir } = require("node:os");
 
 const profile = mkdtempSync(join(tmpdir(), "cairn-approval-live-profile-"));
 app.setPath("userData", profile);
 nativeTheme.themeSource = "light";
-app.on("quit", () => { rmSync(profile, { recursive: true, force: true }); });
+app.on("quit", () => scheduleProfileCleanup(profile));
 const out = process.argv[2] ? resolve(process.argv[2]) : mkdtempSync(join(tmpdir(), "cairn-approval-live-"));
 mkdirSync(out, { recursive: true });
 

@@ -15,7 +15,6 @@ const props: SidebarProps = {
   projects: [{ ...base, missing: true }],
   sessions: [{ id: "s1", title: "任务", workspace: "/tmp/moved", mtimeMs: 0, lines: 1 }],
   activeId: null, activeWorkspace: null, running: new Set(), waitingIds: new Set(), outcomes: new Map(),
-  providerOk: null,
   onOpen: noop, onNewTask: noop, onOpenPalette: noop, onSwitchWorkspace: noop,
   onAddProject: async () => undefined, onCloneProject: async () => undefined,
   onOpenNewProjectDialog: noop, onUpdateProject: async () => undefined,

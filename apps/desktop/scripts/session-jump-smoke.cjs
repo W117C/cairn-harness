@@ -13,14 +13,15 @@
 //   · localStorage['cairn.lastSession.v1'] —— 渲染层自己写的「上次会话」
 //   · window.__cairnScheme 账本 —— createSession / run 的真实会话 id
 const { app, BrowserWindow, nativeTheme } = require("electron");
-const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
+const { mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
 const { join, resolve } = require("node:path");
 const { tmpdir } = require("node:os");
 
 const profile = mkdtempSync(join(tmpdir(), "cairn-session-jump-profile-"));
 app.setPath("userData", profile);
 nativeTheme.themeSource = "light";
-app.on("quit", () => { rmSync(profile, { recursive: true, force: true }); });
+app.on("quit", () => scheduleProfileCleanup(profile));
 
 const out = process.argv[2]
   ? resolve(process.argv[2])

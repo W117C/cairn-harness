@@ -25,6 +25,12 @@ import { DEFAULT_SETTINGS } from "../../../src/main/settings";
 import { SECTIONS } from "../src/renderer/components/settings-nav";
 
 const sectionsSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/settings-sections.tsx", import.meta.url)), "utf8");
+// 第 1070 页：AdvancedSection 按区拆分至 settings/，钉其正文的源文断言随段走（读新文件，不放宽）。
+const advancedSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/settings/AdvancedSection.tsx", import.meta.url)), "utf8");
+// 第 1071 页：AboutSection 按区拆分至 settings/，更新源输入框随段走——钉其正文的源文断言读新文件（不放宽）。
+const aboutSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/settings/AboutSection.tsx", import.meta.url)), "utf8");
+// 第 1072 页：patch 白名单等纯函数资产解耦到叶子 settings/provider-assets.ts——钉白名单五键的源文断言随资产走（不放宽）。
+const providerAssetsSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/settings/provider-assets.ts", import.meta.url)), "utf8");
 const lspSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/settings/LspStatusRow.tsx", import.meta.url)), "utf8");
 const panelSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/SettingsPanel.tsx", import.meta.url)), "utf8");
 
@@ -67,11 +73,11 @@ describe("高级段的字段真的接上了", () => {
   });
   it("各字段都有控件（记忆/成本/隐私 + 验证与子代理 + 定时并发）", () => {
     for (const key of ["autoMemory", "impactAnalysis", "promptCache", "subagentTools", "autoVerify", "autoVerifyRepair"]) {
-      expect(sectionsSrc, `${key} 缺控件`).toContain(`props.onSaveKey("${key}", next)`);
+      expect(advancedSrc, `${key} 缺控件`).toContain(`props.onSaveKey("${key}", next)`);
     }
-    expect(sectionsSrc).toContain('props.onSaveKey("maxBudgetUsd", r.value)');
-    expect(sectionsSrc).toContain('props.onSaveKey("budgetPricePerMTok", r.value)');
-    expect(sectionsSrc).toContain('props.onSaveKey("scheduleConcurrencyCap", r.value)');
+    expect(advancedSrc).toContain('props.onSaveKey("maxBudgetUsd", r.value)');
+    expect(advancedSrc).toContain('props.onSaveKey("budgetPricePerMTok", r.value)');
+    expect(advancedSrc).toContain('props.onSaveKey("scheduleConcurrencyCap", r.value)');
   });
 
   it("高级段真的渲染出新增控件：三个开关 + 并发上限（默认值来自 settings，不另抄）", () => {
@@ -111,7 +117,8 @@ describe("高级段的字段真的接上了", () => {
     expect(panelSrc).toContain("const saveSettingKey = async");
     expect(panelSrc).toContain("window.agent.setSettings({ [key]: value })");
     // 反向：白名单没有被顺手扩掉（planRequiredByDefault 2026-11-03 出列：方案模式由 agent 自判）
-    expect(sectionsSrc).toContain('export const PANEL_PATCH_KEYS = ["provider", "model", "mode", "theme", "locale"] as const;');
+    // 第 1072 页：白名单随纯函数资产迁到叶子 provider-assets.ts，断言读新落位（值逐字不变）。
+    expect(providerAssetsSrc).toContain('export const PANEL_PATCH_KEYS = ["provider", "model", "mode", "theme", "locale"] as const;');
   });
 });
 
@@ -123,7 +130,7 @@ describe("语言服务器状态进桌面（协议 v52 的 lspStatus）", () => {
     expect(lspSrc).toContain("window.agent.lspStatus()");
     expect(lspSrc).toContain("<Badge>{lspSummary(lsp)}</Badge>");
     // 高级段真的把它挂上了（否则行做出来没人渲染 = 又一处不可达）。
-    expect(sectionsSrc).toContain("<LspStatusRow />");
+    expect(advancedSrc).toContain("<LspStatusRow />");
   });
 
   it("三种「没有可看的读数」分开说，不许糊成一个「无」", () => {
@@ -149,12 +156,12 @@ describe("语言服务器状态进桌面（协议 v52 的 lspStatus）", () => {
 
 describe("更新源不再死胡同", () => {
   it("关于段给更新源输入框（此前只能改 settings.json）", () => {
-    expect(sectionsSrc).toContain("props.onSaveManifest !== undefined &&");
-    expect(sectionsSrc).toContain("aria-label={STR.update.manifestLabel}");
+    expect(aboutSrc).toContain("props.onSaveManifest !== undefined &&");
+    expect(aboutSrc).toContain("aria-label={STR.update.manifestLabel}");
   });
 
   it("未配置时明说（不是留个空框让用户猜）", () => {
-    expect(sectionsSrc).toContain("STR.update.manifestEmpty");
+    expect(aboutSrc).toContain("STR.update.manifestEmpty");
   });
 
   it("面板把 settings.updateManifestUrl 传下去并接单键直写", () => {
@@ -163,7 +170,7 @@ describe("更新源不再死胡同", () => {
   });
 
   it("只在值真变了才写（避免每次失焦都写一笔 + 骗一次「已保存」）", () => {
-    expect(sectionsSrc).toContain("if (next !== (props.updateManifestUrl ?? \"\")) props.onSaveManifest?.(next);");
+    expect(aboutSrc).toContain("if (next !== (props.updateManifestUrl ?? \"\")) props.onSaveManifest?.(next);");
   });
 });
 
@@ -184,7 +191,8 @@ describe("parseCapField（并发上限界面侧先拦）", () => {
 describe("设置输入框：回车 = 提交（blur 触发既有校验/保存）", () => {
   it("花费上限 / 单价 / 并发上限三个数字框都接了 Enter → blur", () => {
     const enterBlur = 'onKeyDown={(e) => { if (e.key === "Enter" && !isCompositionEnter(e, null)) { e.preventDefault(); e.currentTarget.blur(); } }}';
-    const count = sectionsSrc.split(enterBlur).length - 1;
+    // 第 1070/1071 页：三个高级数字框随 AdvancedSection、更新源输入框随 AboutSection 迁出——三份合计保 ≥4 原意（不放宽）。
+    const count = advancedSrc.split(enterBlur).length - 1 + aboutSrc.split(enterBlur).length - 1 + (sectionsSrc.split(enterBlur).length - 1);
     expect(count, "三个高级数字框 + 更新源输入框各一处").toBeGreaterThanOrEqual(4);
   });
 });

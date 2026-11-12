@@ -1,14 +1,15 @@
 // 用真实 renderer + 合成 AgentApi 验证布局；不运行模型，不使用或清空产品用户数据。
 // 先 pnpm --filter cairn-desktop build，再 pnpm --filter cairn-desktop exec electron scripts/layout-smoke.cjs [输出目录]
 const { app, BrowserWindow, nativeTheme } = require("electron");
-const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
+const { mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
 const { join, resolve } = require("node:path");
 const { tmpdir } = require("node:os");
 
 const profile = mkdtempSync(join(tmpdir(), "cairn-layout-profile-"));
 app.setPath("userData", profile);
 nativeTheme.themeSource = "light";
-app.on("quit", () => { rmSync(profile, { recursive: true, force: true }); });
+app.on("quit", () => scheduleProfileCleanup(profile));
 const out = process.argv[2] ? resolve(process.argv[2]) : mkdtempSync(join(tmpdir(), "cairn-layout-"));
 mkdirSync(out, { recursive: true });
 
@@ -86,13 +87,53 @@ async function main() {
       const px = fs(el);
       if (px > loudest.px) loudest = { t: (el.className || el.tagName).toString().slice(0, 24), px };
     }
-    return { greetPx: fs(greet), taPx: fs(ta), loudest, headingLeft: h.left, composerLeft: c.left, footer: document.querySelector('.avatar').textContent, railSettings: document.querySelector('.app-rail-settings')?.getAttribute('aria-label') ?? null,
+    return { greetPx: fs(greet), taPx: fs(ta), loudest, headingLeft: h.left, composerLeft: c.left, footer: document.querySelector('.avatar').textContent,
+      railAccount: document.querySelector('.app-rail .avatar')?.getAttribute('aria-label') ?? null,
+      sideSettings: [...document.querySelectorAll('.side-wrap button')].filter((el) => (el.getAttribute('aria-label') ?? '') === '设置' || (el.textContent ?? '').trim() === '设置').length,
+      emptyLeft: document.querySelector('.empty').getBoundingClientRect().left,
+      emptyRight: document.querySelector('.empty').getBoundingClientRect().right,
+      belowLeft: document.querySelector('.empty-below').getBoundingClientRect().left,
+      zoneLeft: document.querySelector('.zone-composer').getBoundingClientRect().left,
+      zoneRight: document.querySelector('.zone-composer').getBoundingClientRect().right,
+      brandInBar: document.querySelectorAll('.tb-brand').length,
+      brandInSide: document.querySelectorAll('.side-brand').length,
       canvas: getComputedStyle(document.body).backgroundColor,
       radius: getComputedStyle(document.querySelector('.composer-card')).borderRadius,
       upstream: document.body.hasAttribute('data-dsh-claude-style') };
   })()`);
-  check("首页标题、项目与输入区共用阅读起点", Math.abs(home.headingLeft - home.composerLeft) <= 24, home);
-  check("设置入口只在能力轨，页脚账户位不再复制一枚", home.railSettings === "设置" && home.footer.trim() === "", home);
+  // 2026-11-07 第 1041 页：列宽收进 --col-max 单源后八处同宽，容差从 24 收紧到 1。
+  // 改前（第 1037 页容器断点只收三处）真机 1440：问候左 495.5 / 输入卡左 543.5 ⇒ 48px 锯齿，旧容差抓不住。
+  check("首页标题、项目与输入区共用阅读起点", Math.abs(home.headingLeft - home.composerLeft) <= 1, home);
+  check("首页 hero / 起手行 / 输入区同列宽（左右缘都齐）", Math.abs(home.emptyLeft - home.zoneLeft) <= 1 && Math.abs(home.emptyRight - home.zoneRight) <= 1 && Math.abs(home.belowLeft - home.zoneLeft) <= 1, home);
+  check("品牌标同屏一处：侧栏展开时顶栏中栏留空", home.brandInBar === 0 && home.brandInSide === 1, home);
+  await js(`document.querySelector('.titlebar button[aria-label="折叠侧栏"]')?.click()`);
+  await pause();
+  const collapsedBrand = await js(`(() => ({ bar: document.querySelectorAll('.tb-brand').length, side: document.querySelectorAll('.side-wrap').length }))()`);
+  check("侧栏收起后品牌标补位到顶栏中栏（仍只一处）", collapsedBrand.bar === 1 && collapsedBrand.side === 0, collapsedBrand);
+  await js(`document.querySelector('.titlebar button[aria-label="展开侧栏"]')?.click()`);
+  await pause();
+  // 第 1041 页：一屏一条列宽不能只在 1440 成立。气沟（--reading-pad-x）此前只落在
+  // .reading 上，880 窗实测空态 41px vs 输入区 16px ⇒ 问候左缘 345 vs 输入卡 320。
+  // 现在气沟也收在 .main 一个变量上，窄窗内容左缘必须一起对齐。
+  await win.setContentSize(880, 700);
+  await pause();
+  const narrowHome = await js(`(() => {
+    const rect = (sel) => { const el = document.querySelector(sel); if (!el) return null; const r = el.getBoundingClientRect(); return { left: +r.left.toFixed(1), right: +r.right.toFixed(1) }; };
+    const pad = (sel) => { const el = document.querySelector(sel); return el ? getComputedStyle(el).paddingLeft : null; };
+    return { empty: rect('.empty'), below: rect('.empty-below'), zone: rect('.zone-composer'), greet: rect('.empty-greet'), card: rect('.composer-card'), pads: { empty: pad('.empty'), below: pad('.empty-below'), zone: pad('.zone-composer') } };
+  })()`);
+  check(
+    "窄窗 880：首页 hero / 起手行 / 输入区同一条列与同一条内容左缘",
+    narrowHome.empty !== null && narrowHome.zone !== null && narrowHome.greet !== null && narrowHome.card !== null
+      && Math.abs(narrowHome.empty.left - narrowHome.zone.left) <= 1
+      && Math.abs(narrowHome.empty.right - narrowHome.zone.right) <= 1
+      && Math.abs(narrowHome.below.left - narrowHome.zone.left) <= 1
+      && Math.abs(narrowHome.greet.left - narrowHome.card.left) <= 1,
+    narrowHome,
+  );
+  await win.setContentSize(1440, 900);
+  await pause();
+  check("设置入口只在能力轨账户菜单，侧栏不再复制一枚", home.railAccount === "设置、外观与用量" && home.sideSettings === 0 && home.footer.trim() === "", home);
   // 第 870 页（业主「让布局说话」）：屏幕上最大的一档字不能再归给一句不能点、不能输入的
   // 装饰性问候。改前真机 1440 实测：问候 44.2px vs 输入正文 14px（3.2:1 倒挂）。
   check("首页问候不再以装饰大字压过输入区（≤ 24px 且 ≤ 输入正文 1.8 倍）", home.greetPx <= 24 && home.taPx > 0 && home.greetPx / home.taPx <= 1.8, home);
@@ -122,49 +163,28 @@ async function main() {
     open: !document.querySelector('.inspector-col')?.hasAttribute('inert'),
     toolbarTitles: document.querySelectorAll('.tb-title').length,
     toolbarTitle: document.querySelector('.tb-title')?.textContent?.trim() ?? '',
-    overviewNames: document.querySelectorAll('.isp-ov-name').length,
-    overviewContext: !!document.querySelector('.isp-ov-context'),
+    headText: document.querySelector('.isp-head')?.textContent ?? '',
+    deadOverview: document.querySelectorAll('.isp-ov-name, .isp-ov-context, .isp-ov-status').length,
   }))()`);
+  // 2026-11-07 第 1041 页归因：概览 Tab 已按「没有数据的 Tab 一律不出现」下架（Inspector.tsx），
+  // 旧判卷钉的 .isp-ov-* 三个选择器在现源码里 0 命中 ⇒ 恒红。新契约：检查器头只有 Tab 与窗格入口，
+  // 不重复顶栏会话名；旧选择器留作回潮反证。
   check(
-    "检查器概览不重复顶栏会话名，只保留上下文与运行事实",
-    inspectorOverview.open && inspectorOverview.toolbarTitles === 1 && inspectorOverview.toolbarTitle !== "" && inspectorOverview.overviewNames === 0 && inspectorOverview.overviewContext,
+    "检查器头不重复顶栏会话名（只留 Tab 与窗格入口，概览面不回潮）",
+    inspectorOverview.open && inspectorOverview.toolbarTitles === 1 && inspectorOverview.toolbarTitle !== "" && !inspectorOverview.headText.includes(inspectorOverview.toolbarTitle) && inspectorOverview.deadOverview === 0,
     inspectorOverview,
   );
   await shot("02b-inspector-overview");
-  // 运行态 chip 的**可读性**（第 903 页）：它是文字（--fs-caption-2xs），按文本 4.5:1 判。
-  // 不靠"看着还行"——页内取计算色与它自己那层淡染底，现算 WCAG 相对亮度比。
-  // 属性是这一档的唯一开关（真实运行时由状态机写），这里按同一形制临时置上再量，量完还原。
-  const runChip = await js(`(() => {
-    const el = document.querySelector('.isp-ov-status');
-    if (!el) return { present: false };
-    const was = el.getAttribute('data-running');
-    el.setAttribute('data-running', 'true');
-    const cs = getComputedStyle(el);
-    const rgba = (s) => { const m = s.match(/[\\d.]+/g); if (!m) return null; return { c: m.slice(0, 3).map(Number), a: m.length > 3 ? Number(m[3]) : 1 }; };
-    const lum = (rgb) => { const [r, g, b] = rgb.map((v) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
-    // getComputedStyle 返回的是**活对象**：还原属性后再读 cs.color 会拿到空闲态的灰，
-    // 于是读数看着"过了线"其实量错了对象 ⇒ 所有取值必须在还原之前落成字符串/数字。
-    const fgStr = cs.color;
-    const size = cs.fontSize;
-    const fg = rgba(fgStr);
-    const chip = rgba(cs.backgroundColor) || { c: [255, 255, 255], a: 0 };
-    // 底是 6% 淡染 ⇒ 必须先与宿主底色混成不透明色再算（拿带 alpha 的值直接当亮度会算错）。
-    let host = { c: [255, 255, 255], a: 1 };
-    for (let n = el.parentElement; n; n = n.parentElement) {
-      const h = rgba(getComputedStyle(n).backgroundColor);
-      if (h && h.a > 0.99) { host = h; break; }
-    }
-    const bg = chip.c.map((v, i) => v * chip.a + host.c[i] * (1 - chip.a));
-    const lf = lum(fg.c), lb = lum(bg);
-    const ratio = +(((Math.max(lf, lb) + 0.05) / (Math.min(lf, lb) + 0.05))).toFixed(2);
-    if (was === null) el.removeAttribute('data-running'); else el.setAttribute('data-running', was);
-    return { present: true, ratio, fg: fgStr, bg: bg.map((v) => Math.round(v)).join(','), size };
-  })()`);
+  // 运行态可读性：旧量的 .isp-ov-status 淡染 chip 随概览面一起下架；--color-run-ink 的
+  // AA 纪律现由 contrast-gate.test.ts 的具名墨色对表 + 回潮扫描守（桌面套件每跑必量）。
+  // 这里只留反证：死 chip 不许复活成又一个没人量对比度的面。
+  const runChip = await js(`(() => ({ present: document.querySelectorAll('.isp-ov-status').length }))()`);
   check(
-    "运行态 chip 的文字与它自己的淡染底过 AA 文本 4.5:1",
-    runChip.present === true && runChip.ratio >= 4.5 && runChip.fg === "rgb(162, 89, 5)",
+    "已下架的概览运行 chip 不回潮（run-ink 对比度归 contrast-gate 具名对表）",
+    runChip.present === 0,
     runChip,
   );
+  const tabsBefore = await js(`[...document.querySelectorAll('.isp-tab')].map((t) => t.textContent.trim())`);
   await js(`(() => {
     const current = document.querySelector('.isp-tab[aria-selected="true"]');
     current?.focus();
@@ -177,10 +197,12 @@ async function main() {
     panel: document.querySelector('[role="tabpanel"]')?.getAttribute('aria-labelledby') ?? '',
     rovingStops: document.querySelectorAll('.isp-tab[tabindex="0"]').length,
   }))()`);
+  // 旧判卷硬钉「ArrowRight 后＝改动」，前提是概览 Tab 排在改动之前；概览下架后首可用 Tab 即改动，
+  // 方向键应落到**第二个可用 Tab**。按现契约动态取期望，不硬钉档名。
   check(
     "检查器方向键切 Tab，焦点与面板语义同步，只保留一个 Tab 停点",
-    inspectorTabState.selected === "改动" && inspectorTabState.focused === "改动" && inspectorTabState.panel !== "" && inspectorTabState.rovingStops === 1,
-    inspectorTabState,
+    tabsBefore.length > 1 && inspectorTabState.selected === tabsBefore[1] && inspectorTabState.focused === tabsBefore[1] && inspectorTabState.panel !== "" && inspectorTabState.rovingStops === 1,
+    { ...inspectorTabState, tabsBefore },
   );
   await shot("02c-inspector-changes");
   const row = await js(`(() => {

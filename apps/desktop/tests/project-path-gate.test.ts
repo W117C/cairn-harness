@@ -171,7 +171,10 @@ describe("workspace 参数闸（技能/插件读取根）", () => {
 });
 
 describe("接线：createProject / 模板建项 / 技能三通道都走闸", () => {
-  const main = readFileSync(fileURLToPath(new URL("../src/main/index.ts", import.meta.url)), "utf8");
+  const main = [
+    readFileSync(fileURLToPath(new URL("../src/main/index.ts", import.meta.url)), "utf8"),
+    readFileSync(fileURLToPath(new URL("../src/main/plugin-ipc.ts", import.meta.url)), "utf8"),
+  ].join("\n");
   const call = "resolveCreateParent(r.parentDir, pickedDirs, await knownProjectRoots())";
 
   it("createProject 先判父目录再 mkdir", () => {

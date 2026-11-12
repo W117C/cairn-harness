@@ -6,10 +6,13 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { STR } from "../src/renderer/strings";
 
 const ROOT = join(import.meta.dirname, "..");
 const workbench = readFileSync(join(ROOT, "src/renderer/state/workbench.ts"), "utf8");
 const projects = readFileSync(join(ROOT, "src/renderer/state/projects.ts"), "utf8");
+// 第 1073 页：Composer 附件 chip 是第三处调用点（打开/显示），952 当时漏扫——补进同一口径。
+const composer = readFileSync(join(ROOT, "src/renderer/components/ComposerAttachments.tsx"), "utf8");
 
 describe("「在 Finder 中显示」的失败要说出来（第 952 页）", () => {
   it("产物行接了结果：失败 toast、抛错也 toast", () => {
@@ -22,5 +25,19 @@ describe("「在 Finder 中显示」的失败要说出来（第 952 页）", () 
 
   it("两处调用点同一口径（项目列表那处本来就是这样）", () => {
     expect(projects).toContain('if (!r.ok) toast.error(r.error ?? "无法在 Finder 中显示");');
+  });
+
+  it("Composer 附件 chip 同口径：打开/显示失败都 toast，不许丢结果（第 1073 页补扫）", () => {
+    expect(composer).toContain('workspacePathAction(rel, "open").then(');
+    expect(composer).toContain('revealInFinder(a.path).then(');
+    expect(composer).toContain("if (!r.ok) toast.error(r.error ?? STR.composer.attachOpenFail);");
+    expect(composer).toContain("if (!r.ok) toast.error(r.error ?? STR.composer.attachRevealFail);");
+    // 不许退回「丢掉结果」的写法（952 同族否定断言，扩到 Composer）
+    expect(composer).not.toContain('workspacePathAction(rel, "open").catch(() => undefined);');
+    expect(composer).not.toContain('revealInFinder(a.path).catch(() => undefined);');
+    // Composer 走 STR（重做面禁裸中文）：锁 STR 值与 workbench/projects 的裸中文口径一致，
+    // 免得改词把三处调用点的失败提示改岔（第 1073 页）。
+    expect(STR.composer.attachOpenFail).toBe("打开失败");
+    expect(STR.composer.attachRevealFail).toBe("无法在 Finder 中显示");
   });
 });

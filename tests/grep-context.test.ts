@@ -99,6 +99,39 @@ describe("grep context / fixed_strings（查改一体：一次调用拿到改点
     expect(shown + Number(m![1])).toBe(40);
   });
 
+  it("默认搜索也受 UTF-8 字节预算约束，保留行号与准确的遗漏数", async () => {
+    const ctx = await newCtx();
+    const path = "源码/宽查询.txt";
+    await write(path, Array.from({ length: 80 }, (_, i) => `needle ${i} ${"文".repeat(600)}`).join("\n") + "\n");
+    const result = await grep.run({ pattern: "needle" }, ctx);
+    expect(result.ok).toBe(true);
+    expect(result.output.startsWith(path + ":\nLine 1: needle 0 ")).toBe(true);
+    expect(Buffer.byteLength(result.output)).toBeLessThanOrEqual(16 * 1024 + 300);
+    const omitted = /还有 (\d+) 条命中未列出/u.exec(result.output);
+    expect(omitted).not.toBeNull();
+    expect(hitLines(result.output).length + Number(omitted![1])).toBe(80);
+
+    const narrowed = await grep.run({ path, pattern: "^needle 79 " }, ctx);
+    expect(hitLines(narrowed.output)[0]).toMatch(/^Line 80: needle 79 /u);
+  });
+
+  it("尾部邻行被预算裁掉时，即使所有命中都已列出也给提示", async () => {
+    const ctx = await newCtx();
+    await write("tail.txt", "needle\n" + ("a".repeat(1900) + "\n").repeat(5));
+    const result = await grep.run({ pattern: "needle", context: 5 }, ctx);
+    expect(hitLines(result.output)).toEqual(["Line 1: needle"]);
+    expect(result.output).toContain("上下文输出超 8KB 预算");
+    expect(result.output).toContain("邻行");
+  });
+
+  it("邻行塞满预算时仍返回实际命中的行号", async () => {
+    const ctx = await newCtx();
+    await write("lead.txt", ("文".repeat(1900) + "\n").repeat(5) + "needle\n");
+    const result = await grep.run({ pattern: "needle", context: 5 }, ctx);
+    expect(hitLines(result.output)).toEqual(["Line 6: needle"]);
+    expect(result.output).toContain("邻行");
+  });
+
   it("无命中首行仍是「无命中」（加了邻行收集也不把别文件的上下文当成命中）", async () => {
     const ctx = await newCtx();
     await write("src/a.ts", "one\ntwo\n");

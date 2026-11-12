@@ -90,7 +90,8 @@ async function maybeCompactWorkerEvents(
   system: GlmMessage[],
 ): Promise<boolean> {
   const systemChars = system.reduce((n, m) => n + (m.content?.length ?? 0), 0);
-  const estimate = estimateContextTokens(projected, { systemChars, toolSchemaChars: c.toolsSchemaChars }, factor);
+  const overhead = { systemChars, toolSchemaChars: c.toolsSchemaChars };
+  const estimate = estimateContextTokens(projected, overhead, factor);
   const decision = shouldCompact(estimate, c.config);
   if (!decision) return false;
   const outcome = await runCompaction({
@@ -99,6 +100,7 @@ async function maybeCompactWorkerEvents(
     reason: decision.reason,
     ...(decision.trigger !== "overflow" && c.summarizer ? { summarizer: c.summarizer } : {}),
     config: c.config,
+    overhead,
   });
   if (!outcome.ok) return false; // 压缩失败不阻断 worker（下一轮重判；overflow 兜底仍在）
   // worker 内存态推入**不带 agent_id** 的压缩事件（worker 投影生效，keep_first=task+context 由

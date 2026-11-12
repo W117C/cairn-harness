@@ -23,6 +23,9 @@ export const TOOL_VERBS: Readonly<Record<string, string>> = {
   calc: "计算",
   list_dir: "看目录",
   read_doc: "读文档",
+  // 2026-11-10 网络文档抓取 / 文件生命周期四动作。
+  web_doc: "取文档",
+  fs_ops: "整理文件",
   // 2026-11-06 浏览器驾驶三件：开页 / 读页 / 选元素（驾驶的是用户看得见的侧栏浏览器）。
   browser_navigate: "开网页",
   browser_snapshot: "读网页",

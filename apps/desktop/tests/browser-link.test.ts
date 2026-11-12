@@ -2,11 +2,13 @@
 //  ① isWebLink 只认 http(s)——mailto:/解析失败不拦，走既有默认（target=_blank → 主进程 openExternalSafe）；
 //  ② 有宿主注册 → 点击转处理器（进 browser 窗格）；无宿主（独立弹出窗）→ 回落 openExternal（旧行为），
 //     不产生死点击；注销后再点同回落。注册收口在常驻 WorkbenchView；弹出窗不注册——这个口径由本测钉住。
+//  ③ 第 1085 页：无宿主回落失败（resolve-{ok:false} 或 reject）必须交给失败处理器，不许吞。
 import { afterEach, describe, expect, it } from "vitest";
-import { isWebLink, registerBrowserLinkHandler, requestBrowserOpen } from "../src/renderer/browser-link";
+import { isWebLink, registerBrowserLinkFailureHandler, registerBrowserLinkHandler, requestBrowserOpen } from "../src/renderer/browser-link";
 
 afterEach(() => {
   registerBrowserLinkHandler(null);
+  registerBrowserLinkFailureHandler(null);
 });
 
 describe("browser-link", () => {
@@ -34,6 +36,31 @@ describe("browser-link", () => {
       // void 的 promise：微任务里落地
       await Promise.resolve();
       expect(calls).toEqual(["https://example.com/b"]);
+    } finally {
+      (globalThis as { window?: unknown }).window = undefined;
+    }
+  });
+
+  // 第 1085 页：无宿主（独立弹出窗）回落 openExternal 的失败不许吞——resolve-{ok:false} 与 reject
+  // 都要交给错误处理器；PopoutApp 注册的处理器把它落成 .fp-note.err「链接打开失败」。
+  it("无宿主回落失败要出声：resolve-{ok:false} 与 reject 都交给失败处理器", async () => {
+    const failures: { url: string; error: string }[] = [];
+    registerBrowserLinkFailureHandler((f) => failures.push(f));
+    const popoutWindow = {
+      agent: { openExternal: async (_url: string): Promise<{ ok: boolean; error?: string }> => ({ ok: false, error: "blocked by whitelist" }) },
+    };
+    (globalThis as { window?: unknown }).window = popoutWindow;
+    try {
+      requestBrowserOpen("https://example.com/blocked");
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(failures).toEqual([{ url: "https://example.com/blocked", error: "blocked by whitelist" }]);
+
+      popoutWindow.agent.openExternal = async () => { throw new Error("no shell"); };
+      requestBrowserOpen("https://example.com/throw");
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(failures[1]).toEqual({ url: "https://example.com/throw", error: "no shell" });
     } finally {
       (globalThis as { window?: unknown }).window = undefined;
     }

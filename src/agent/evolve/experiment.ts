@@ -5,7 +5,7 @@
 // 本层不自动安装任何东西：passed 只产出 suggest-promote，晋升仍走 SEMA 与人工/P4 自治档。
 
 import { createHash } from "node:crypto";
-import type { EpisodeTaskClass } from "./episode";
+import type { EpisodeRecord, EpisodeTaskClass } from "./episode";
 
 export type ExperimentStatus = "draft" | "running" | "passed" | "failed" | "unmeasurable" | "aborted";
 export type ExperimentDecision = "keep-running" | "suggest-promote" | "keep-old" | "stop";
@@ -41,8 +41,12 @@ export interface ExperimentRecord {
 
 export interface ExperimentSample {
   episodeId: string;
+  /** 分配单元（会话 id）。同一会话多轮 run 在聚合时折成 1 个独立会话样本，避免伪重复膨胀样本量。 */
+  sessionId?: string;
   arm: ExperimentArm;
   success: boolean;
+  /** 治疗臂是否实际把候选经验注入了上下文（ITT 主分析保留全部样本，但显式暴露实际注入计数）。 */
+  exposed?: boolean;
   tokens?: number;
   usd?: number | null;
   durationMs?: number | null;
@@ -58,6 +62,11 @@ export interface ExperimentAnalysis {
   nTreatment: number;
   successControl: number;
   successTreatment: number;
+  /** 治疗臂中实际注入了候选经验的样本数（Per-Protocol 暴露量；与 nTreatment 对照看稀释率）。 */
+  exposedTreatment?: number;
+  /** 各臂可判定结局覆盖率（n / (n + unknown)），防治疗/对照两臂可测率严重偏斜却浑然不觉。 */
+  coverageControl?: number | null;
+  coverageTreatment?: number | null;
   riskDiff: number | null;
   ci95: [number, number] | null;
   unknownEpisodes: number;
@@ -176,18 +185,191 @@ function sumOrNull(values: readonly (number | null | undefined)[]): number | nul
   return total;
 }
 
+export interface ExperimentBudgetStatus {
+  exhausted: boolean;
+  reason: string | null;
+}
+
+/** 实验预算守门：检查运行场次上限（maxRuns）、美元预算（maxUsd，含不可定价 fail-closed）与墙钟时长（maxWallMs）。 */
+export function checkExperimentBudget(
+  record: ExperimentRecord,
+  stats: {
+    totalRuns: number;
+    totalUsd: number | null;
+    hasUnpricedRuns?: boolean;
+    now?: number;
+  },
+): ExperimentBudgetStatus {
+  if (stats.totalRuns >= record.budget.maxRuns) {
+    return {
+      exhausted: true,
+      reason: "实验已达最大运行预算 " + String(record.budget.maxRuns) + " 场",
+    };
+  }
+  if (record.budget.maxUsd !== null) {
+    if (stats.hasUnpricedRuns === true || stats.totalUsd === null) {
+      return {
+        exhausted: true,
+        reason: "实验设了美元上限 $" + String(record.budget.maxUsd) + "，但出现不可定价 run（fail-closed 停止分配）",
+      };
+    }
+    if (stats.totalUsd >= record.budget.maxUsd) {
+      return {
+        exhausted: true,
+        reason: "实验已达美元预算 $" + stats.totalUsd.toFixed(4) + " / $" + String(record.budget.maxUsd),
+      };
+    }
+  }
+  if (record.budget.maxWallMs !== null && stats.now !== undefined && stats.now - record.createdAt >= record.budget.maxWallMs) {
+    return {
+      exhausted: true,
+      reason: "实验已达最大时长预算 " + String(record.budget.maxWallMs) + "ms",
+    };
+  }
+  return { exhausted: false, reason: null };
+}
+
+export interface AggregatedExperimentSamples {
+  samples: ExperimentSample[];
+  unknownEpisodes: number;
+  unknownControl: number;
+  unknownTreatment: number;
+  totalRuns: number;
+  totalUsd: number | null;
+  hasUnpricedRuns: boolean;
+}
+
+/** 按分配单元（sessionId）聚合 Episode：
+ *  · assignArm 以 sessionId 为随机化单元，同一会话的多轮 run 必须聚合成 1 个独立会话样本；
+ *  · 会话结局取该会话最后一条可判定（non-unknown）Episode 的结局；若整场会话全为 unknown，计入对应臂的 unknown；
+ *  · 成本（tokens/usd/durationMs）按会话内全部 Episode 累加（任一 Episode 不可定价 ⇒ 会话 usd 为 null）；
+ *  · 暴露标记（exposed）：治疗臂下会话内任一 Episode 实际注入了 candidateRef 即记为 exposed=true。 */
+export function aggregateExperimentSamplesBySession(
+  record: ExperimentRecord,
+  episodes: readonly EpisodeRecord[],
+): AggregatedExperimentSamples {
+  const assigned = episodes.filter((episode) =>
+    episode.assignment.experimentId === record.id
+    && (episode.assignment.arm === "control" || episode.assignment.arm === "treatment")
+  );
+  const byUnit = new Map<string, EpisodeRecord[]>();
+  let totalUsd = 0;
+  let hasUnpricedRuns = false;
+  for (const episode of assigned) {
+    const unitKey = episode.sessionId.trim().length > 0 ? episode.sessionId : episode.id;
+    const list = byUnit.get(unitKey) ?? [];
+    list.push(episode);
+    byUnit.set(unitKey, list);
+    if (episode.cost.usd === null || !Number.isFinite(episode.cost.usd)) {
+      hasUnpricedRuns = true;
+    } else {
+      totalUsd += episode.cost.usd;
+    }
+  }
+
+  const samples: ExperimentSample[] = [];
+  let unknownControl = 0;
+  let unknownTreatment = 0;
+
+  for (const [unitKey, group] of byUnit.entries()) {
+    const ordered = [...group].sort((a, b) => a.ts - b.ts || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    const last = ordered.at(-1)!;
+    const arm = last.assignment.arm as ExperimentArm;
+    const measured = ordered.filter((ep) => ep.outcome.final !== "unknown");
+    if (measured.length === 0) {
+      if (arm === "control") unknownControl += 1;
+      else unknownTreatment += 1;
+      continue;
+    }
+    const finalEp = measured.at(-1)!;
+    const tokens = ordered.reduce((sum, ep) => sum + ep.cost.mainTokens + ep.cost.workerTokens, 0);
+    const usd = sumOrNull(ordered.map((ep) => ep.cost.usd));
+    const durationMs = sumOrNull(ordered.map((ep) => ep.cost.durationMs));
+    const exposed = arm === "treatment"
+      ? ordered.some((ep) => ep.assignment.injectedExperienceIds.includes(record.candidateRef))
+      : true;
+    samples.push({
+      episodeId: finalEp.id,
+      sessionId: unitKey,
+      arm,
+      success: finalEp.outcome.final === "success",
+      exposed,
+      tokens,
+      usd,
+      durationMs,
+    });
+  }
+
+  return {
+    samples,
+    unknownEpisodes: unknownControl + unknownTreatment,
+    unknownControl,
+    unknownTreatment,
+    totalRuns: assigned.length,
+    totalUsd: hasUnpricedRuns ? null : totalUsd,
+    hasUnpricedRuns,
+  };
+}
+
+/** 若调用方传入的 samples 含重复 sessionId，按 sessionId 折叠成会话级独立样本（后写结局 + 累加成本）。 */
+function deduplicateSamplesBySession(samples: readonly ExperimentSample[]): ExperimentSample[] {
+  if (!samples.some((s) => typeof s.sessionId === "string" && s.sessionId.length > 0)) {
+    return [...samples];
+  }
+  const bySession = new Map<string, ExperimentSample>();
+  for (const sample of samples) {
+    const key = sample.sessionId && sample.sessionId.length > 0 ? `s:${sample.sessionId}` : `e:${sample.episodeId}`;
+    const prev = bySession.get(key);
+    if (!prev) {
+      bySession.set(key, { ...sample });
+      continue;
+    }
+    bySession.set(key, {
+      episodeId: sample.episodeId,
+      ...(sample.sessionId !== undefined ? { sessionId: sample.sessionId } : {}),
+      arm: sample.arm,
+      success: sample.success,
+      exposed: Boolean(prev.exposed) || Boolean(sample.exposed),
+      tokens: (prev.tokens ?? 0) + (sample.tokens ?? 0),
+      usd: prev.usd === null || sample.usd === null || prev.usd === undefined || sample.usd === undefined
+        ? null
+        : prev.usd + sample.usd,
+      durationMs: prev.durationMs === null || sample.durationMs === null || prev.durationMs === undefined || sample.durationMs === undefined
+        ? null
+        : prev.durationMs + sample.durationMs,
+    });
+  }
+  return [...bySession.values()];
+}
+
+export interface AnalyzeExperimentOptions {
+  unknownControl?: number;
+  unknownTreatment?: number;
+  totalRuns?: number;
+  now?: number;
+}
+
 /** 按预注册规则裁决；P2 只产出 suggest-promote，不自动安装。 */
 export function analyzeExperiment(
   record: ExperimentRecord,
-  samples: readonly ExperimentSample[],
+  rawSamples: readonly ExperimentSample[],
   unknownEpisodes = 0,
+  options?: AnalyzeExperimentOptions,
 ): ExperimentAnalysis {
+  const samples = deduplicateSamplesBySession(rawSamples);
   const control = samples.filter((sample) => sample.arm === "control");
   const treatment = samples.filter((sample) => sample.arm === "treatment");
   const nControl = control.length;
   const nTreatment = treatment.length;
   const successControl = control.filter((sample) => sample.success).length;
   const successTreatment = treatment.filter((sample) => sample.success).length;
+  const exposedTreatment = treatment.filter((sample) => sample.exposed !== false).length;
+  const coverageControl = options?.unknownControl !== undefined
+    ? (nControl + options.unknownControl > 0 ? nControl / (nControl + options.unknownControl) : null)
+    : null;
+  const coverageTreatment = options?.unknownTreatment !== undefined
+    ? (nTreatment + options.unknownTreatment > 0 ? nTreatment / (nTreatment + options.unknownTreatment) : null)
+    : null;
   const riskDiff = nControl > 0 && nTreatment > 0 ? successTreatment / nTreatment - successControl / nControl : null;
   const ci95 = newcombeInterval(successTreatment, nTreatment, successControl, nControl);
   const cost = {
@@ -196,13 +378,16 @@ export function analyzeExperiment(
     controlUsd: sumOrNull(control.map((sample) => sample.usd)),
     treatmentUsd: sumOrNull(treatment.map((sample) => sample.usd)),
   };
-  const base = {
+  const base: Omit<ExperimentAnalysis, "status" | "decision" | "reason"> = {
     v: 1 as const,
     experimentId: record.id,
     nControl,
     nTreatment,
     successControl,
     successTreatment,
+    exposedTreatment,
+    ...(coverageControl !== null ? { coverageControl } : {}),
+    ...(coverageTreatment !== null ? { coverageTreatment } : {}),
     riskDiff,
     ci95,
     unknownEpisodes,
@@ -218,7 +403,27 @@ export function analyzeExperiment(
     };
   }
 
+  const totalUsd = cost.controlUsd !== null && cost.treatmentUsd !== null
+    ? cost.controlUsd + cost.treatmentUsd
+    : null;
+  const hasUnpricedRuns = samples.some((sample) => sample.usd === null || sample.usd === undefined);
+  const budgetStatus = checkExperimentBudget(record, {
+    totalRuns: options?.totalRuns ?? (rawSamples.length + unknownEpisodes),
+    totalUsd,
+    hasUnpricedRuns,
+    ...(options?.now !== undefined ? { now: options.now } : {}),
+  });
+
   if (nControl < record.minSamplesPerArm || nTreatment < record.minSamplesPerArm) {
+    if (budgetStatus.exhausted) {
+      return {
+        ...base,
+        status: "unmeasurable",
+        decision: "keep-old",
+        reason: budgetStatus.reason + "（样本仍不足：control " + String(nControl) + "/" + String(record.minSamplesPerArm)
+          + "，treatment " + String(nTreatment) + "/" + String(record.minSamplesPerArm) + "）——保留旧版",
+      };
+    }
     return {
       ...base,
       status: "running",
@@ -253,6 +458,15 @@ export function analyzeExperiment(
       status: "unmeasurable",
       decision: "keep-old",
       reason: "两臂都到上限 " + String(record.maxSamplesPerArm) + "，CI 仍跨 0——无法区分，保留旧版",
+    };
+  }
+
+  if (budgetStatus.exhausted) {
+    return {
+      ...base,
+      status: "unmeasurable",
+      decision: "keep-old",
+      reason: budgetStatus.reason + "，CI 仍跨 0——预算耗尽，保留旧版",
     };
   }
 

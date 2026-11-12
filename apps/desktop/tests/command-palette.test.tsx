@@ -15,6 +15,7 @@ import { Command } from "cmdk";
 import { PaletteContent } from "../src/renderer/components/CommandPalette";
 import { ShortcutsSection } from "../src/renderer/components/settings-sections";
 import { SHORTCUT_GROUPS, SHORTCUTS, keysOf } from "../src/renderer/shortcuts";
+import { STR } from "../src/renderer/strings";
 import type { WorkspaceSession } from "../src/renderer/sessions-view";
 
 const appSrc = readAppSurface();
@@ -332,7 +333,9 @@ describe("⑥ 面板键位提示全部走表（第 910 页：文件头自己写�
   it("重命名动作的提示从表里取，且表里确有这一档", () => {
     expect(paletteSrc).toContain('const renameKeys = keysOf("rename")');
     const shortcuts = readFileSync(fileURLToPath(new URL("../src/renderer/shortcuts.ts", import.meta.url)), "utf8");
-    expect(shortcuts).toContain('{ id: "rename", keys: "F2", label: "重命名当前会话" }');
+    // 收编后（第 1065 页）：核心 label 走 STR.shortcut——源里钉接线，值在 STR 锚定。
+    expect(shortcuts).toContain('{ id: "rename", keys: "F2", label: STR.shortcut.rename }');
+    expect(STR.shortcut.rename).toBe("重命名当前会话");
     // 反向自证：不是把提示删掉了事——渲染分支仍在（值为 null 才不摆）。
     expect(paletteSrc).toContain('{renameKeys !== null && <span className="cp-keys">{renameKeys}</span>}');
   });

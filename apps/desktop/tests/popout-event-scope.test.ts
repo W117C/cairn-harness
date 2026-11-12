@@ -61,4 +61,23 @@ describe("弹出窗接线：归属判据走纯函数 + 读盘期间的增量要�
     expect(src).toContain("mergeSessionSnapshot(r.events, prev)");
     expect(src).not.toContain(".then((r) => { setEvents(r.events); })");
   });
+
+  // 第 1084 页：openSession 拒绝（会话读不出/IPC 异常）要出声——952/1073/1080/1082/1083 同族。
+  // 旧 .catch(() => undefined) 把失败吞了 ⇒ events 停在 []、窗格摆「本会话还没有文件改动」的空态，
+  // 用户以为「没改动」其实是「没载入」。复用终端错误笔记 .fp-note.err（role=alert）出声，不新造视觉。
+  it("openSession 拒绝走 setLoadError + .fp-note.err 出声，不再静默吞掉", () => {
+    expect(src).toContain(".catch((err: unknown) => { setLoadError(err instanceof Error ? err.message : String(err)); });");
+    expect(src).toContain('className="fp-note err" role="alert"');
+    expect(src).toContain("会话载入失败：{loadError}");
+    // 旧静默写法不许留（openSession 的 catch 紧邻 const off；getSettings 的静默是有安全默认的主题回落，不在此列）
+    expect(src).not.toContain(".catch(() => undefined);\n    const off = window.agent.onEvent");
+  });
+
+  // 第 1085 页：弹出窗没有 ToastHost（main.tsx 只给主窗口挂），browser-link 的回落失败
+  // 必须注册自己的错误处理器并落成同一块 .fp-note.err；未注册时那段代码只会进 console。
+  it("browser-link 无宿主回落失败接到弹出窗错误条（第 1085 页）", () => {
+    expect(src).toContain("registerBrowserLinkFailureHandler(({ error }) => { setLinkError(error); })");
+    expect(src).toContain("链接打开失败：{linkError}");
+    expect(src).toContain('className="popout-notices"');
+  });
 });

@@ -12,8 +12,14 @@ export const SPAWN_MODES: readonly string[] = ["read", "write", "pipeline", "sup
 
 /** worker 工具表（read mode，§4.4.6）：read/grep/glob/LSP + 只读 bash（shell_ro）+ 只读 git（git_read）。
  *  **构造时即不含 spawn_agent 与任何写工具**（深度恒 1 的机制化，非运行时报错）。
- *  2026-11-06 +git_read：worker 调查「上游改了什么」是高频地面化需求；零写权零 shell，与 shell_ro 同档。 */
-export const WORKER_TOOL_TABLE: readonly string[] = ["read_file", "grep", "glob", "lsp", "shell_ro", "git_read"];
+ *  2026-11-06 +git_read：worker 调查「上游改了什么」是高频地面化需求；零写权零 shell，与 shell_ro 同档。
+ *  2026-11-10 +list_dir/read_doc/calc：三件纯文本只读工具（目录 stat / zip 文档解析 / 纯算术解析器），
+ *  零写权零出网——worker 调查时「摸目录结构 / 读用户给的文档 / 算数」同为高频地面化需求。
+ *  同日 +read_image（业主裁决「全部做完」）：识图进子代理——调查面核对截图/设计稿不再需要
+ *  回主会话。单图 ≤5MB 硬帽 + data URL 整体进上下文，窗口代价说在规格里（"一次别读太多张"）。 */
+export const WORKER_TOOL_TABLE: readonly string[] = [
+  "read_file", "grep", "glob", "lsp", "shell_ro", "git_read", "list_dir", "read_doc", "calc", "read_image",
+];
 /** worker 工具表禁入名单（验收断言面：深度闸 + 写闸 + M4a automation_*——定时任务里再嵌套定时 = 配置面失控，§12.2.5）。 */
 export const WORKER_FORBIDDEN_TOOLS: readonly string[] = [
   "spawn_agent", "write_file", "edit_file", "run_shell", "clarify", "propose_plan", "verify", "remember",
@@ -24,18 +30,27 @@ export const WORKER_FORBIDDEN_TOOLS: readonly string[] = [
   // P0-1 同源补漏：read 面的实际排除靠 workerToolSpecs 的 allow 列表（本就不含 shell_rw），
   // 但本常量是「验收断言面」——漏了 shell_rw，J7c 就退化成「碰巧为真」而非名单驱动。
   "shell_rw",
+  // fs_ops（2026-11-10）：写向工具（mkdir/move/delete），read 面不许见。
+  "fs_ops",
+  // web_doc（2026-11-10）：worker 出网是无条件 deny（原则性，同 web_fetch/web_search 不给 worker 面）。
+  "web_doc",
   "automation_create", "automation_update", "automation_delete", "automation_run_now", "automation_list",
 ];
 
 /** M3b write mode worker 工具表（§4.4.5）：worktree 完全可写 + shell_rw（git 拦截层）+
  *  remember（记忆恒指主 checkout，任务书裁决 2）。**无 spawn_agent / 无 run_shell / 无任何 merge/commit
- *  能力**——合并唯一出口 = git 面板（§4.3），agent 无合并权。 */
+ *  能力**——合并唯一出口 = git 面板（§4.3），agent 无合并权。
+ *  2026-11-10 +list_dir/read_doc/calc（write worker 也要摸目录/读文档/算数）
+ *  +fs_ops（文件生命周期走结构化工具：snapshot + 禁区闸齐全，比 shell_rw 裸 rm/mv 安全）。 */
 export const WRITE_WORKER_TOOL_TABLE: readonly string[] = [
   "read_file", "grep", "glob", "lsp", "write_file", "edit_file", "shell_rw", "remember", "git_read",
+  "list_dir", "read_doc", "calc", "fs_ops", "read_image",
 ];
 /** write mode 禁入名单（验收断言面：深度闸 + 合并权闸 + M4a automation_*）。 */
 export const WRITE_WORKER_FORBIDDEN_TOOLS: readonly string[] = [
   "spawn_agent", "run_shell", "clarify", "propose_plan", "verify", "merge", "commit",
+  // web_doc（2026-11-10）：worker 出网是无条件 deny（同 web_fetch/web_search 不给 worker 面）。
+  "web_doc",
   "automation_create", "automation_update", "automation_delete", "automation_run_now", "automation_list",
 ];
 

@@ -1,13 +1,14 @@
 // Real Electron renderer. Local event fixtures, isolated profile, no provider calls.
 const { app, BrowserWindow, nativeTheme } = require("electron");
-const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
+const { mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
 const { join, resolve } = require("node:path");
 const { tmpdir } = require("node:os");
 const profile = mkdtempSync(join(tmpdir(), "cairn-work-status-profile-"));
 const out = resolve(process.argv[2] ?? mkdtempSync(join(tmpdir(), "cairn-work-status-")));
 mkdirSync(out, { recursive: true });
 app.setPath("userData", profile);
-app.on("quit", () => rmSync(profile, { recursive: true, force: true }));
+app.on("quit", () => scheduleProfileCleanup(profile));
 nativeTheme.themeSource = "light";
 const checks = [], errors = [];
 const pause = (ms = 270) => new Promise(done => setTimeout(done, ms));

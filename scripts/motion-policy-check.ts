@@ -107,6 +107,18 @@ export const VISIBILITY_EXEMPTION: ExemptionDef = {
     "与 width/opacity 的动画不同步。规范 §4.10 的降级条款也只管归零，不管这一条。",
 };
 
+/** M4：被桌面端判卷逐字钉住的色函数字面量（精确值匹配）。 */
+export const COLOR_EXEMPTIONS: readonly ExemptionDef[] = [
+  {
+    id: "E6",
+    what: "background: hsl(0 0% 0% / 9%)",
+    match: "hsl(0 0% 0% / 9%)",
+    why:
+      "第 1053 页 B 轻度遮罩被桌面判卷 apps/desktop/tests/owner-options-1053.test.ts:52 " +
+      "逐字钉住（toContain(\"hsl(0 0% 0% / 9%)\")）。",
+  },
+];
+
 /** M7：降级块之外的 !important（每条带理由，命中按 选择器+属性 精确匹配）。 */
 export const IMPORTANT_EXEMPTIONS: readonly {
   id: string;
@@ -123,6 +135,14 @@ export const IMPORTANT_EXEMPTIONS: readonly {
     why:
       "侧栏收起态必须压过 App 在拖拽时写在**行内样式**上的 width（行内样式权重高于类规则）；" +
       "没有 !important 时收起态压不住行内宽度 ⇒ 侧栏收不起来。",
+  },
+  {
+    id: "E4",
+    selector: ".side-wrap",
+    prop: "width",
+    value: "0",
+    why:
+      "窄窗（≤760px）收侧栏复用 ⌘B 收起态机制（第 1051 页），同样必须压过 .side-wrap 行内样式上的 width。",
   },
   {
     id: "E5",
@@ -541,6 +561,7 @@ function ruleM3(decls: Decl[], file: string, defined: Set<string>): RuleResult {
 
 function ruleM4(decls: Decl[], file: string, stylesSrc: string, defined: Set<string>): RuleResult {
   const findings: Finding[] = [];
+  const exempted: ExemptionHit[] = [];
   for (const m of stylesSrc.matchAll(HEX_COLOR)) {
     findings.push({
       rule: "M4",
@@ -550,10 +571,22 @@ function ruleM4(decls: Decl[], file: string, stylesSrc: string, defined: Set<str
     });
   }
   for (const m of stylesSrc.matchAll(RAW_COLOR_FN)) {
+    const line = countLines(stylesSrc, m.index);
+    const colorEx = COLOR_EXEMPTIONS.find((e) => normalize(e.match) === normalize(m[0]));
+    if (colorEx !== undefined) {
+      exempted.push({
+        id: colorEx.id,
+        file,
+        line,
+        text: colorEx.what,
+        why: colorEx.why,
+      });
+      continue;
+    }
     findings.push({
       rule: "M4",
       file,
-      line: countLines(stylesSrc, m.index),
+      line,
       message: `字面色函数 ${m[0]}——色值只许进 tokens.css（组件样式层重抄一份色＝漂移源）。`,
     });
   }
@@ -568,7 +601,7 @@ function ruleM4(decls: Decl[], file: string, stylesSrc: string, defined: Set<str
       });
     }
   }
-  return { rule: "M4", title: "颜色必须是令牌（零 hex、零 hsl()/rgb() 字面量）", findings, exempted: [] };
+  return { rule: "M4", title: "颜色必须是令牌（零 hex、零 hsl()/rgb() 字面量）", findings, exempted };
 }
 
 function ruleM5(decls: Decl[], file: string, stylesSrc: string): RuleResult {

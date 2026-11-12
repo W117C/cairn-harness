@@ -41,7 +41,6 @@ function sidebarHtml(sessions: readonly WorkspaceSession[], projects: readonly P
       running={new Set<string>()}
       waitingIds={new Set<string>()}
       outcomes={new Map<string, "ok" | "failed">()}
-      providerOk={null}
       onOpen={() => undefined}
       onNewTask={() => undefined}
       onOpenPalette={() => undefined}

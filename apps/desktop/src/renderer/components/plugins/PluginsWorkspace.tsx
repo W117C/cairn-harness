@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { AlertTriangle, CheckCircle2, LoaderCircle, RefreshCw } from "lucide-react";
 import {
   filterPluginRows,
@@ -77,12 +77,13 @@ export function PluginsWorkspace(props: PluginsWorkspaceProps): React.JSX.Elemen
     && state.activeJob.state !== "failed"
     && state.activeJob.state !== "cancelled";
   const mutationBlocked = props.mutationBlocked === true || busy;
-  const visibleRows = filterPluginRows(state.rows, state.query, effectiveCategory)
-    .filter((row) => !favoriteOnly || row.favorite);
-  const discoverRows = visibleRows.filter((row) => row.catalogEntry !== null);
-  const selected = state.selectedId === null
+  // 第 1140 页：插件市场行表/精选子集/选中项按输入记忆；评审、导入等局部状态不重扫。
+  const visibleRows = useMemo(() => filterPluginRows(state.rows, state.query, effectiveCategory)
+    .filter((row) => !favoriteOnly || row.favorite), [state.rows, state.query, effectiveCategory, favoriteOnly]);
+  const discoverRows = useMemo(() => visibleRows.filter((row) => row.catalogEntry !== null), [visibleRows]);
+  const selected = useMemo(() => state.selectedId === null
     ? null
-    : state.rows.find((row) => row.id === state.selectedId) ?? null;
+    : state.rows.find((row) => row.id === state.selectedId) ?? null, [state.rows, state.selectedId]);
 
   const selectFilter = (id: string): void => {
     props.onFilter?.(id);

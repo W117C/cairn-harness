@@ -5,7 +5,7 @@
 // 宽度与开合收口在 App 的右 Panel（320–420，默认收起，⌘⌥I 开合）——本组件只管内容。
 // 2026-11-03 业主：Token 用量/会话活动统计页与模型档位 chips 不是这个栏该装的东西——整页撤掉，
 // Tab 只剩有数据才出现的改动/计划/时间线；默认选中第一个可用的。
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ChevronRight, Plus, X } from "lucide-react";
 import type { AgentEvent } from "../../../../../src/events";
@@ -49,20 +49,20 @@ function ChangesTab(props: {
               {f.snapshotId !== undefined && props.onRestore !== undefined && (
                 <button
                   className="isp-undo"
-                  aria-label="撤销此文件改动"
-                  title={`把「${f.path}」还原到这次改动前的版本`}
+                  aria-label={STR.inspector.undoAria}
+                  title={STR.inspector.undoTitle.replace("{path}", f.path)}
                   onClick={() => {
                     const snap = f.snapshotId;
                     if (snap === undefined) return;
                     props.onRestore?.(f.path, snap);
                     close(); // 还原后旧 diff 已无效：收起，下次点开重新拉
                   }}
-                >撤销</button>
+                >{STR.inspector.undo}</button>
               )}
             </div>
             {open && (
               <div className="isp-diff-zone">
-                {diff.loading && <div className="isp-empty">正在读快照与当前文件…</div>}
+                {diff.loading && <div className="isp-empty">{STR.inspector.diffLoading}</div>}
                 {!diff.loading && diff.payload !== null && (
                   diff.payload.ok ? (
                     <>
@@ -99,14 +99,15 @@ export interface InspectorProps {
 
 export function Inspector(props: InspectorProps): React.JSX.Element {
   const tabsId = useId();
-  const changes = changedFilesOf(props.events);
-  const plans = projectPlans(props.events);
-  const items = timelineItems(props.events);
+  // 第 1117 页：三块投影按 events 引用记忆；App 因与流无关的状态重渲染时不再重扫整条事件流。
+  const changes = useMemo(() => changedFilesOf(props.events), [props.events]);
+  const plans = useMemo(() => projectPlans(props.events), [props.events]);
+  const items = useMemo(() => timelineItems(props.events), [props.events]);
   // 没有数据的 Tab 一律不出现（不放假占位）；全空会话给一句诚实的引导。默认选中 = 第一个可用的。
   const available = [
-    ...(changes.length > 0 ? [{ id: "changes" as const, label: "改动" }] : []),
-    ...(plans.length > 0 ? [{ id: "plan" as const, label: "计划" }] : []),
-    ...(items.length > 0 ? [{ id: "timeline" as const, label: "时间线" }] : []),
+    ...(changes.length > 0 ? [{ id: "changes" as const, label: STR.inspector.tabChanges }] : []),
+    ...(plans.length > 0 ? [{ id: "plan" as const, label: STR.inspector.tabPlan }] : []),
+    ...(items.length > 0 ? [{ id: "timeline" as const, label: STR.inspector.tabTimeline }] : []),
   ];
   const [tab, setTab] = useState<InspectorProps["initialTab"] | null>(
     props.initialTab !== undefined && available.some((t) => t.id === props.initialTab) ? props.initialTab : null,
@@ -116,7 +117,7 @@ export function Inspector(props: InspectorProps): React.JSX.Element {
   return (
     <div className="isp">
       <div className="isp-head">
-        <div className="isp-tabs" role="tablist" aria-label="检查器" aria-orientation="horizontal">
+        <div className="isp-tabs" role="tablist" aria-label={STR.inspector.aria} aria-orientation="horizontal">
           {available.map((t, index) => (
             <button
               key={t.id}
@@ -140,7 +141,7 @@ export function Inspector(props: InspectorProps): React.JSX.Element {
         </div>
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
-            <button className="isp-add" aria-label="打开窗格" title="打开窗格（文件 / 终端 / 浏览器 / 旁路…）"><Plus size={13} /></button>
+            <button className="isp-add" aria-label={STR.inspector.addPaneAria} title={STR.inspector.addPaneTitle}><Plus size={13} /></button>
           </DropdownMenu.Trigger>
           <DropdownMenu.Content className="pop-rd" side="bottom" align="end" sideOffset={4}>
             {PANE_OPENABLE.map((k) => (
@@ -153,7 +154,7 @@ export function Inspector(props: InspectorProps): React.JSX.Element {
         {/* 关闭钮（2026-10-20 真机：「右边侧栏打开就没有关闭」）：此前只有 ⌘⌥I 一条路，
             鼠标用户把面板打开了却找不到出口。复用 .isp-add 的图标钮样式——同排同形，不新造一套。 */}
         {props.onClose !== undefined && (
-          <button className="isp-add isp-close" aria-label="关闭检查器" title="关闭检查器（⌘⌥I）" onClick={() => { props.onClose?.(); }}>
+          <button className="isp-add isp-close" aria-label={STR.inspector.closeAria} title={STR.inspector.closeTitle} onClick={() => { props.onClose?.(); }}>
             <X size={13} />
           </button>
         )}
@@ -173,9 +174,9 @@ export function Inspector(props: InspectorProps): React.JSX.Element {
                 <div className="isp-plan-goal">{p.goal}</div>
                 <div className="isp-plan-meta">
                   <span className={"chip " + (p.state === "approved" ? "ok" : p.state === "rejected" ? "bad" : "warn")}>
-                    {p.state === "approved" ? "已批准" : p.state === "rejected" ? "已拒绝" : "待决"}
+                    {p.state === "approved" ? STR.inspector.planApproved : p.state === "rejected" ? STR.inspector.planRejected : STR.inspector.planPending}
                   </span>
-                  <span className="chip num">{String(p.files.length)} 个文件</span>
+                  <span className="chip num">{STR.inspector.planFiles.replace("{count}", String(p.files.length))}</span>
                 </div>
               </div>
             ))}

@@ -1,13 +1,14 @@
 // 记忆导出真 renderer 冒烟（2026-10-30 · 第 824 页）：
 // 记忆页 -> 点「导出记忆…」-> 主进程 stub 返回路径 -> 页面出回执；确保按钮不是死 chip。
 const { app, BrowserWindow, nativeTheme } = require("electron");
-const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
+const { mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
 const { join, resolve } = require("node:path");
 const { tmpdir } = require("node:os");
 const profile = mkdtempSync(join(tmpdir(), "cairn-memory-export-"));
 app.setPath("userData", profile);
 nativeTheme.themeSource = "light";
-app.on("quit", () => rmSync(profile, { recursive: true, force: true }));
+app.on("quit", () => scheduleProfileCleanup(profile));
 const out = process.argv[2] ? resolve(process.argv[2]) : mkdtempSync(join(tmpdir(), "cairn-memory-export-smoke-"));
 mkdirSync(out, { recursive: true });
 

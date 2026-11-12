@@ -35,6 +35,17 @@ export function motionPrefOf(pref: MotionPref, systemReduced: boolean): boolean 
 /** 根属性名（与主题的 `data-theme`/`data-mode` 同款：不加 class，只写属性）。 */
 export const MOTION_ATTR = "data-reduce-motion";
 
+/** 应用此刻是否要减弱动效（系统媒体查询 ∪ 应用内开关，汇到同一个根属性）。
+ *  根属性由 bootMotionPref/setMotionPref 落位；这里既读根属性也读系统事实，
+ *  让 JS 侧行为（显式滚动、el.animate、布局延时）与 CSS 认同一份真相。
+ *  非浏览器/无 matchMedia（判卷 node 环境）⇒ 只看根属性，读不到就 false。 */
+export function appMotionReduced(): boolean {
+  try {
+    if (document.documentElement.getAttribute(MOTION_ATTR) === "true") return true;
+  } catch { /* 没有 document 时只读系统面 */ }
+  return systemPrefersReducedMotion();
+}
+
 /** 系统是否要减弱动效（纯读，判卷可注入）。 */
 export function systemPrefersReducedMotion(): boolean {
   try {

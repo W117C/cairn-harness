@@ -1,0 +1,82 @@
+{
+  "dark": {
+    "bodyBg100": "0 0% 10.5%",
+    "surfaceCard": "60 2.4% 18.4%",
+    "hairlineStrong": "hsl(from #f0efec h s l / 20%)",
+    "mainBg": "rgb(27, 27, 27)",
+    "composerBg": "rgb(48, 48, 46)",
+    "composerSurfaceCard": "60 2.4% 18.4%",
+    "composerBgRaw": "rgb(48, 48, 46) none repeat scroll 0% 0% / auto padding-box border-box",
+    "composerCount": 1,
+    "composerRadius": "18px",
+    "composerShadow": "rgba(0, 0, 0, 0.3) 0px 4px 16px 0px, rgba(0, 0, 0, 0.14) 0px 1px 3px 0px",
+    "focusRingRadius": "18px",
+    "below": {
+      "bg": "rgba(48, 48, 46, 0.55)",
+      "border": "color(srgb 0.941176 0.937255 0.92549 / 0.1)",
+      "radius": "16px",
+      "padLeft": "41px",
+      "padBottom": "12px"
+    },
+    "chip": {
+      "bg": "rgb(48, 48, 46)",
+      "border": "rgba(0, 0, 0, 0)"
+    },
+    "greetOpacity": "0.9",
+    "scrim": "rgba(0, 0, 0, 0)"
+  },
+  "darkPop": {
+    "bodyBg100": "0 0% 10.5%",
+    "surfaceCard": "60 2.4% 18.4%",
+    "hairlineStrong": "hsl(from #f0efec h s l / 20%)",
+    "mainBg": "rgb(27, 27, 27)",
+    "composerBg": "rgb(48, 48, 46)",
+    "composerSurfaceCard": "60 2.4% 18.4%",
+    "composerBgRaw": "rgb(48, 48, 46) none repeat scroll 0% 0% / auto padding-box border-box",
+    "composerCount": 1,
+    "composerRadius": "18px",
+    "composerShadow": "rgba(0, 0, 0, 0.3) 0px 4px 16px 0px, rgba(0, 0, 0, 0.14) 0px 1px 3px 0px",
+    "focusRingRadius": "18px",
+    "below": {
+      "bg": "rgba(48, 48, 46, 0.55)",
+      "border": "color(srgb 0.941176 0.937255 0.92549 / 0.1)",
+      "radius": "16px",
+      "padLeft": "41px",
+      "padBottom": "12px"
+    },
+    "chip": {
+      "bg": "rgb(48, 48, 46)",
+      "border": "rgba(0, 0, 0, 0)"
+    },
+    "greetOpacity": "0.9",
+    "scrim": "rgba(0, 0, 0, 0.09)"
+  },
+  "light": {
+    "bodyBg100": "from #fcfcfb h s l",
+    "surfaceCard": "",
+    "hairlineStrong": "hsl(from #0b0b0b h s l / 20%)",
+    "mainBg": "rgb(252, 252, 251)",
+    "composerBg": "rgb(255, 255, 255)",
+    "composerSurfaceCard": "",
+    "composerBgRaw": "rgb(255, 255, 255) none repeat scroll 0% 0% / auto padding-box border-box",
+    "composerCount": 1,
+    "composerRadius": "12px",
+    "composerShadow": "rgba(20, 20, 19, 0.04) 0px 4px 12px 0px, rgba(20, 20, 19, 0.02) 0px 1px 3px 0px",
+    "focusRingRadius": "12px",
+    "below": {
+      "bg": "rgba(0, 0, 0, 0)",
+      "border": "rgb(11, 11, 11)",
+      "radius": "0px",
+      "padLeft": "41px",
+      "padBottom": "0px"
+    },
+    "chip": {
+      "bg": "color(srgb 1 1 1)",
+      "border": "color(srgb 0.0431373 0.0431373 0.0431373 / 0.1)"
+    },
+    "greetOpacity": "1",
+    "scrim": "rgba(0, 0, 0, 0)"
+  },
+  "opened": true,
+  "errors": []
+}

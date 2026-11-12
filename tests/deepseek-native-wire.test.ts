@@ -1,24 +1,22 @@
-// DeepSeek native wire 判卷（2026-10-30）：官方 V4.1 形状与别家「OpenAI 兼容」有三处硬差别——
-//   ① `thinking` 缺省 **enabled**：不发字段 = 服务端开思考 ⇒ 适配层必须**永远显式**写开关；
-//   ② effort 放进 `thinking.reasoning_effort`（顶层 reasoning_effort 是 OpenAI 家形状）；
-//   ③ 标准端点对输入里的 `reasoning_content` 是 400 ⇒ 回放只在 /beta 路径上发生。
-// 外加：缓存读数（prompt_cache_hit_tokens / prompt_tokens_details.cached_tokens）、图像 parts。
-// 这组此前没有专门判卷（reasoning-wire 只覆盖通用 OpenAI 形状），native 分支等于裸奔。
+// DeepSeek Chat Completions: explicit mode, top-level effort, and reasoning replay for tool conversations.
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { streamDeepSeek } from "../src/providers/deepseek";
+import { streamDeepSeek, type DeepSeekToolSpec } from "../src/providers/deepseek";
 import type { ProviderMessage } from "../src/providers";
 
 const KEY = "sk-test-deepseek";
 const STANDARD = "https://api.deepseek.com/chat/completions";
 const BETA = "https://api.deepseek.com/beta/chat/completions";
+const MIRROR = "https://deepseek.example/v1/chat/completions";
+const TOOLS: DeepSeekToolSpec[] = [{ type: "function", function: { name: "probe", parameters: { type: "object" } } }];
 
 type Captured = { body: Record<string, unknown>; events: { type: string; [k: string]: unknown }[] };
 
 async function run(opts: {
   endpoint?: string;
-  reasoningEffort?: "off" | "low" | "medium" | "high" | "max";
+  reasoningEffort?: "off" | "none" | "low" | "high" | "max";
   messages?: ProviderMessage[];
+  tools?: DeepSeekToolSpec[];
   sse?: string;
 }): Promise<Captured> {
   const bodies: Record<string, unknown>[] = [];
@@ -36,7 +34,7 @@ async function run(opts: {
     endpoint: opts.endpoint ?? STANDARD,
     fetchImpl,
     ...(opts.reasoningEffort !== undefined ? { reasoningEffort: opts.reasoningEffort } : {}),
-  })) {
+  }, opts.tools)) {
     events.push(e as unknown as { type: string; [k: string]: unknown });
   }
   return { body: bodies[0]!, events };
@@ -49,23 +47,23 @@ function reasoningSource(endpoint: string, model = "deepseek-flash"): string {
 
 describe("thinking 开关：DeepSeek 的「不表态」= 开，适配层必须显式写", () => {
   it("未给 effort / off ⇒ thinking:{type:'disabled'}，且不发顶层 reasoning_effort", async () => {
-    for (const effort of [undefined, "off"] as const) {
+    for (const effort of [undefined, "off", "none"] as const) {
       const { body } = await run(effort === undefined ? {} : { reasoningEffort: effort });
       expect(body.thinking).toEqual({ type: "disabled" });
       expect("reasoning_effort" in body).toBe(false);
     }
   });
 
-  it("给了档位 ⇒ thinking:{type:'enabled', reasoning_effort}（effort 在 thinking 里，不在顶层）", async () => {
+  it("标准和镜像端点都使用 thinking.type 和顶层 reasoning_effort", async () => {
     for (const effort of ["low", "high", "max"] as const) {
-      const { body } = await run({ reasoningEffort: effort });
-      expect(body.thinking).toEqual({ type: "enabled", reasoning_effort: effort });
-      expect("reasoning_effort" in body).toBe(false);
+      const { body } = await run({ reasoningEffort: effort, endpoint: effort === "max" ? MIRROR : STANDARD });
+      expect(body.thinking).toEqual({ type: "enabled" });
+      expect(body.reasoning_effort).toBe(effort);
     }
   });
 });
 
-describe("reasoning_content 回放分域：标准端点不带、/beta 带", () => {
+describe("reasoning_content 按工具面和来源回放", () => {
   const history = (source: string): ProviderMessage[] => [
     { role: "user", content: "上一问" },
     {
@@ -76,26 +74,38 @@ describe("reasoning_content 回放分域：标准端点不带、/beta 带", () =
     { role: "user", content: "接着来" },
   ];
 
-  it("标准端点：assistant 消息不带 reasoning_content（带了会 400）", async () => {
-    const { body } = await run({ messages: history(reasoningSource(STANDARD)) });
+  it("没有工具时省略标准端点不使用的推理内容", async () => {
+    const { body } = await run({ messages: history(reasoningSource(STANDARD)), reasoningEffort: "high", tools: [] });
     const msgs = body.messages as Record<string, unknown>[];
     const assistant = msgs.find((m) => m.role === "assistant");
     expect(assistant).toBeDefined();
     expect("reasoning_content" in assistant!).toBe(false);
   });
 
-  it("/beta 端点 + 同来源：reasoning_content 原样回放（前缀补全通道才有这条）", async () => {
-    const source = createHash("sha256").update(BETA + "\0deepseek-flash").digest("hex");
-    const { body } = await run({ endpoint: BETA, messages: history(source) });
+  it.each([STANDARD, MIRROR, BETA])("带工具时原样回放先前纯回答的推理内容 %s", async (endpoint) => {
+    const { body } = await run({ endpoint, messages: history(reasoningSource(endpoint)), reasoningEffort: "high", tools: TOOLS });
     const msgs = body.messages as Record<string, unknown>[];
     const assistant = msgs.find((m) => m.role === "assistant");
     expect(assistant?.reasoning_content).toBe("上一次的思考");
   });
 
   it("来源 hash 不匹配（别家/别端点留下的思考）⇒ 不回放（不拿错模型的思考喂输入）", async () => {
-    const { body } = await run({ endpoint: BETA, messages: history("not-this-source") });
+    const { body } = await run({ messages: history("not-this-source"), reasoningEffort: "high", tools: TOOLS });
     const msgs = body.messages as Record<string, unknown>[];
     expect("reasoning_content" in msgs.find((m) => m.role === "assistant")!).toBe(false);
+  });
+
+  it("keeps tool pairs usable when old history has no replayable reasoning", async () => {
+    const { body } = await run({ reasoningEffort: "max", tools: TOOLS, messages: [
+      { role: "user", content: "read the probe" },
+      { role: "assistant", content: null,
+        reasoning: { source: "other-model", content: "unrelated thought" },
+        tool_calls: [{ id: "old", type: "function", function: { name: "probe", arguments: "{}" } }] },
+      { role: "tool", tool_call_id: "old", content: "7" },
+    ] });
+    const messages = body.messages as Record<string, unknown>[];
+    expect(messages[1]).toMatchObject({ role: "assistant", reasoning_content: "", tool_calls: [{ id: "old" }] });
+    expect(messages[2]).toMatchObject({ role: "tool", tool_call_id: "old", content: "7" });
   });
 });
 

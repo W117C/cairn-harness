@@ -6,8 +6,7 @@
 //   · `thinking` 缺省 **enabled**（默认就在思考，effort 缺省 high）——这与别家「不发字段＝不思考」
 //     相反：本仓的思考档位缺省是 off，所以预设层必须把「未给」**归一成显式 off** 再递给适配器，
 //     否则每一次没点名思考的调用都在按思考档计费、按思考档等待。
-//   · effort 的官方形状是 `thinking.reasoning_effort`（none/low/high/max），不是 OpenAI 家的
-//     顶层 `reasoning_effort`——适配器侧的 DeepSeek 分支负责放对位置（见 openai.ts）。
+//   · 顶层 `reasoning_effort` 控制档位，`thinking.type` 显式控制开关（见 openai.ts）。
 //   · usage 的缓存命中量：`prompt_tokens_details.cached_tokens` 与旧字段
 //     `prompt_cache_hit_tokens` 同值，读法在 openai.ts 统一兜底。
 // key 只从环境变量 DEEPSEEK_API_KEY 读，模型从 DEEPSEEK_MODEL 读（缺省 deepseek-flash）；
@@ -20,6 +19,12 @@ export const DEEPSEEK_ENDPOINT = "https://api.deepseek.com/chat/completions";
 /** 未显式给 model 时的真实模型名（DeepSeek-V4.1-Flash-1017 的对外调用名）。
  *  单一事实源：`toOpenAiOptions` 的 defaultModel 与 `deepseekDefaultModelName()` 都从这里取。 */
 export const DEEPSEEK_DEFAULT_MODEL = "deepseek-flash";
+
+/** Default Chat Completions output limit, including reasoning tokens. */
+export function deepSeekOutputReserve(effort?: string): number {
+  if (effort === "max") return 128 * 1024;
+  return effort === undefined || effort === "off" ? 8 * 1024 : 64 * 1024;
+}
 
 /** `streamDeepSeek(messages, {})` 真实会用的模型名（价格标签/归因按它反查）。 */
 export function deepseekDefaultModelName(): string {
@@ -68,8 +73,7 @@ function toOpenAiOptions(opts: DeepSeekOptions): OpenAiOptions {
     baseURL: opts.endpoint,
     baseURLEnv: "DEEPSEEK_ENDPOINT",
     defaultBaseURL: DEEPSEEK_ENDPOINT,
-    // 预设身份自述：即使端点被覆盖（镜像/中转），wire 仍按 DeepSeek 官方形状发
-    // （thinking 对象 + reasoning_effort 在里面），不靠 hostname 猜。
+    // 镜像和中转端点沿用 DeepSeek 的请求协议。
     deepseekNative: true,
     reasoningEffort: resolveEffort(opts.reasoningEffort),
     ...(opts.extraBody !== undefined ? { extraBody: opts.extraBody } : {}),

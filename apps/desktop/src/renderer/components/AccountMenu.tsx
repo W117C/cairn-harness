@@ -19,6 +19,7 @@ const THEME_CHOICES: readonly { id: ThemePref; label: string }[] = [
   { id: "light", label: STR.footer.themeLight },
   { id: "dark", label: STR.footer.themeDark },
 ];
+const THEME_BY_ID = new Map(THEME_CHOICES.map((t) => [t.id, t] as const));
 
 /** tooltip 键位与 SHORTCUTS 表同源（P3-3）：表里改键，这里自动跟。 */
 function withKeys(base: string, id: string): string {
@@ -81,7 +82,7 @@ export function AccountMenu(props: AccountMenuProps): React.JSX.Element {
             <DropdownMenu.Sub>
               <DropdownMenu.SubTrigger className="menu-item">
                 <span>{STR.footer.appearance}</span>
-                <span className="sub">{THEME_CHOICES.find((t) => t.id === theme)?.label}</span>
+                <span className="sub">{THEME_BY_ID.get(theme)?.label}</span>
               </DropdownMenu.SubTrigger>
               <DropdownMenu.SubContent className="pop-rd" sideOffset={2}>
                 {THEME_CHOICES.map((t) => (

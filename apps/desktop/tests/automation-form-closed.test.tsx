@@ -13,6 +13,15 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AutomationPane } from "../src/renderer/components/AppPage";
 import type { AutomationDefinition } from "../../../src/main/automations";
+import { readAppSurface } from "./helpers/app-surface";
+
+describe("自动化页副标题", () => {
+  it("标题已说明「自动化工作流」，副标题只留触发与结果且两处共用", () => {
+    const src = readAppSurface();
+    expect(src).toContain('const AUTOMATION_SUBTITLE = "按时间触发，保留每次运行结果。";');
+    expect(src).not.toContain("按时间自动执行工作流，查看每次运行结果。");
+  });
+});
 
 const noop = (): void => undefined;
 const SCHED_EMPTY = {
@@ -71,7 +80,7 @@ describe("自动化工作流形制（2026-11-04 业主截图）", () => {
   it("头部双色调 + 副标题；四张模板卡带排程行；胶囊下拉内容包 Portal", () => {
     const h = renderToStaticMarkup(<AutomationPane snap={SCHED_EMPTY} onError={noop} refresh={noop} />);
     expect(h).toContain('class="page-frame-title">自动化<span class="page-frame-title-accent"> 工作流</span></h1>');
-    expect(h).toContain("按时间自动执行工作流，查看每次运行结果。");
+    expect(h).toContain("按时间触发，保留每次运行结果。");
     expect(h).toMatch(/aria-pressed="true">定时任务<\/button>/);
     expect(h).toMatch(/aria-pressed="false">闲时队列<\/button>/);
     for (const name of ["晨会动态", "风险扫描", "发布简报", "文档同步检查"]) expect(h).toContain(name);

@@ -8,14 +8,17 @@
 // 运行：env -u ELECTRON_RUN_AS_NODE pnpm --filter cairn-desktop exec electron
 //   scripts/settings-sweep-smoke.cjs [输出目录]   （前置：pnpm --filter cairn-desktop build）
 const { app, BrowserWindow, nativeTheme } = require("electron");
-const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+const { mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
 const { join, resolve } = require("node:path");
 const { tmpdir } = require("node:os");
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
 
 const profile = mkdtempSync(join(tmpdir(), "cairn-settings-sweep-profile-"));
 app.setPath("userData", profile);
 nativeTheme.themeSource = process.env.CAIRN_SETTINGS_THEME === "dark" ? "dark" : "light";
-app.on("quit", () => { rmSync(profile, { recursive: true, force: true }); });
+// 第 1068 页：rmSync-in-quit 会被 Chromium 原生退出阶段的残壳重建抵消（泄漏到 $TMPDIR）；
+// 改走比 Electron 活得久的 detached 延迟删（单一事实源见 lib/profile-cleanup.cjs）。
+app.on("quit", () => scheduleProfileCleanup(profile));
 const out = process.argv[2] ? resolve(process.argv[2]) : mkdtempSync(join(tmpdir(), "cairn-settings-sweep-"));
 mkdirSync(out, { recursive: true });
 

@@ -3,14 +3,15 @@
 // 不证真实 provider / 真实执行后端 / 真实会话数据。
 // 用法：pnpm --filter cairn-desktop build && pnpm --filter cairn-desktop exec electron scripts/orchestration-controls-smoke.cjs [输出目录]
 const { app, BrowserWindow, nativeTheme } = require("electron");
-const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
+const { mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
 const { join, resolve } = require("node:path");
 const { tmpdir } = require("node:os");
 
 const profile = mkdtempSync(join(tmpdir(), "cairn-orch-profile-"));
 app.setPath("userData", profile);
 nativeTheme.themeSource = "light";
-app.on("quit", () => { rmSync(profile, { recursive: true, force: true }); });
+app.on("quit", () => scheduleProfileCleanup(profile));
 const out = process.argv[2] ? resolve(process.argv[2]) : mkdtempSync(join(tmpdir(), "cairn-orch-smoke-"));
 mkdirSync(out, { recursive: true });
 /** 命令账本由 preload 夹具经 contextBridge 暴露（沙箱 preload 不能写文件）；窗口就绪后接上。 */

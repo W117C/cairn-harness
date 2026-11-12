@@ -6,6 +6,7 @@ import type { CompactionConfig, Summarizer } from "./compaction";
 import type { FrozenStage, PluginAgentRoleDef } from "./sequencer";
 import type { StuckConfig, StuckTurn } from "./stuck";
 import type { VerifyHook } from "./verify";
+import type { ImpactGraph } from "./impact/index";
 import type { HookEngine } from "./plugins/hooks";
 import type { WorkerModel } from "./worker-model";
 import type { WorkerPrice } from "./orchestrator-join";
@@ -104,6 +105,10 @@ export interface WorkerHandle {
   editAnchors: Map<string, number[]>;
   /** M3b：worker diff 静态快筛结果缓存（gate 二次确认判定用）。 */
   lastFindings: SecurityFinding[];
+  /** 第 1074 页：本 worker 落地写过的文件集（`tool_result.changedPaths` 的累积）。
+   *  合并时点的语义冲突雷达拿它当「对方改了哪些文件」的取料面；与 snapshots 同族，
+   *  内存态、随 handle 生命周期释放，不落第二事实源（事件流里的 changedPaths 才是原文）。 */
+  touchedFiles: Set<string>;
   /** worker 自身事件（内存态，上下文组装源；与主流 JSONL 解耦——重放主流后投影一致）。 */
   events: AgentEvent[];
   usage: { inputTokens: number; outputTokens: number };
@@ -211,6 +216,10 @@ export interface OrchestratorOptions {
    *  缺省 undefined = 零行为（只有既有 glob 租约求交，spawn 流程与事件字节完全不变）。
    *  抛错 = 记 warn 并降级为「仅 glob 判定」——语义闸是额外探测器，不得把 spawn 炸掉。 */
   semanticLease?: (resources: string[]) => Promise<string[]>;
+  /** 第 1074 页：合并时点的符号级冲突雷达（影响面图注入口，照 semanticLease 先例）。
+   *  缺省 undefined = 零行为：既有合并事件流逐字节不变。buildGraph 抛错/返回 null ⇒
+   *  fail-open（warn 出声，绝不挡合并——护栏不能把交付拦死）。 */
+  conflictRadar?: { buildGraph: () => Promise<ImpactGraph | null> };
   /** worker 模型解析（演示/验收通道注入脚本模型）；缺省 = defaultModelSpec 或 GLM 暗卷（需对应凭据）。 */
   modelFor?: (args: SpawnArgs) => WorkerModel | undefined;
   /** 父会话选定的真实模型档位（未开路由且无 modelFor 注入时 worker 沿用父会话同家同档，不偷切 GLM）。 */

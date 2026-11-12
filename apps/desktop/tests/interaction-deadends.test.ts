@@ -8,7 +8,9 @@ import { readAppSurface, readRendererFile } from "./helpers/app-surface";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 const app = readAppSurface();
-const workbenchView = readRendererFile("panes/WorkbenchView.tsx");
+const workbenchView = readRendererFile("panes/WorkbenchView.tsx")
+  + "\n"
+  + readRendererFile("panes/WorkbenchSidebarHost.tsx");
 const workbenchSidebar = readRendererFile("panes/WorkbenchSidebar.tsx");
 const composer = read("../src/renderer/components/Composer.tsx");
 const picker = read("../src/renderer/components/ModelPicker.tsx");
@@ -150,7 +152,7 @@ describe("窄窗检查器一键开（⌘⌥B）", () => {
   it("侧栏收起有 240ms 过渡：expand 排在过渡后，不再两个 rAF 抢跑", () => {
     // 2026-10-20 真机：880px 窗、侧栏 200、主组 680、inspector 0 时按 ⌘⌥B，storage 写成 "1"
     // 但宽度仍 0；再按一次才开。两个 rAF 时侧栏还在收起，expand 被布局夹回 0。
-    expect(app).toContain('const expandDelay = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 260;');
+    expect(app).toContain("const expandDelay = appMotionReduced() ? 0 : 260;");
     expect(app).toContain("window.setTimeout(() => { inspectorRef.current?.expand(); setInspectorCollapsed(false); }, expandDelay);");
     const revealBlock = app.slice(app.indexOf("const revealInspector = useCallback"), app.indexOf("revealInspectorRef.current = revealInspector"));
     expect(revealBlock).not.toContain("window.requestAnimationFrame");

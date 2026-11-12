@@ -73,7 +73,6 @@ export const EVOLVE_STR = {
   statusRow: "状态",
   kindRow: "类型",
   attentionLabel: "需要处理",
-  attentionDesc: "冲突、过期、负证据与过门可激活的条目。",
   chipConflict: "冲突",
   chipExpired: "过期",
   chipNegative: "负证据",

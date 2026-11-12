@@ -3,9 +3,9 @@
 // 事件流永不删改；调用方 append 进日志即完成一次压缩（压缩必出卡，不静默）。
 // 事件 id = 1-based 行号（M1a 定稿，append-only 永不漂移）。
 import type { AgentEvent, CompactionEvent, CompactionUsage, EventRef, SessionView } from "../events";
-import { isEnvVerifyCause, isNumericCompaction } from "../events";
-import { eventIdAt, excludedIds, hasWorkerAttribution, isWorkerCompaction, projectContext, type ContextMessage } from "./context";
-import { projectViewContext } from "./session-view-context";
+import { isEnvVerifyCause, isNumericCompaction, isReferencedCompaction } from "../events";
+import { eventIdAt, excludedIds, hasWorkerAttribution, isWorkerCompaction, type ContextMessage } from "./context";
+import { projectSessionContext } from "./session-view-context";
 import { classifyResult, shapeLog, shapeResult, summaryTruncate } from "./shape";
 import { setTimeout as delay } from "node:timers/promises";
 import { deriveBoundaries, snapToProgressBoundary, economicGate, type EconomicState } from "./economics";
@@ -98,6 +98,9 @@ export function calibrateFactor(events: AgentEvent[]): number {
       pending = 0;
     } else if (e.type === "assistant_delta") {
       pending += e.text.length;
+    } else if (e.type === "thinking_delta" && e.reasoning) {
+      // Native reasoning contributes to the reported output token count.
+      pending += e.text.length;
     } else if (e.type === "assistant_message") {
       pending += e.content.length;
     } else if (e.type === "tool_call") {
@@ -115,6 +118,8 @@ export interface AssemblyOverhead {
   memoryChars?: number;
   /** 符号地图注入字符数（M2b）；缺省 0 = 未注入。不计入会让首轮硬预算判定偏低。 */
   mapChars?: number;
+  /** Fixed visual input that stays in the request after compaction. */
+  imageTokens?: number;
 }
 
 export function assemblyChars(messages: ContextMessage[]): number {
@@ -133,7 +138,7 @@ export function estimateContextTokens(
     (overhead.toolSchemaChars ?? 0) +
     (overhead.memoryChars ?? 0) +
     (overhead.mapChars ?? 0);
-  return estimateTokens(chars, factor);
+  return estimateTokens(chars, factor) + (overhead.imageTokens ?? 0);
 }
 
 // ---- 触发判定：双条件（§7.3(a)，B 优先于 A）----
@@ -285,7 +290,7 @@ export function keepFirstSet(events: AgentEvent[]): Set<number> {
 function lastUserMessageId(events: AgentEvent[]): number {
   let last = 0;
   events.forEach((e, i) => {
-    if (e.type === "user_message") last = eventIdAt(i);
+    if (e.type === "user_message" && !hasWorkerAttribution(e)) last = eventIdAt(i);
   });
   return last;
 }
@@ -393,6 +398,71 @@ export function selectTruncation(events: AgentEvent[], ctx: CutContext): { compr
   if (dropped.size === 0) return null;
   const compressedIds = [...dropped].sort((a, b) => a - b);
   return { compressedIds, offset: compressedIds[compressedIds.length - 1] + 1 };
+}
+
+const OVERFLOW_FIT_CHECKS = 4;
+
+function overflowContentChars(event: AgentEvent, replacement?: string): number {
+  switch (event.type) {
+    case "assistant_message":
+    case "assistant_delta":
+    case "tool_call":
+    case "verify_result":
+    case "turn_truncated":
+      return eventChars(event);
+    case "tool_result":
+      return eventChars(replacement === undefined ? event : { ...event, output: replacement });
+    case "thinking_delta":
+      return event.reasoning ? eventChars(event) : 0;
+    default:
+      return 0;
+  }
+}
+
+/** Reclaim older tool exchanges before cutting conversation and active work.
+ *  Recheck projected savings, including the marker and message framing, at a few cut points. */
+function fitOverflow(
+  events: AgentEvent[],
+  ctx: CutContext,
+  tokensBefore: number,
+  replacements: ReadonlyMap<number, string> | undefined,
+  measure: (ids: number[]) => CompactionEvent,
+): CompactionEvent | undefined {
+  const olderTools: { ids: number[]; chars: number }[] = [];
+  const remaining: typeof olderTools = [];
+  for (const unit of iterateUnits(events, ctx.units)) {
+    const ids = unit.ids.filter((id) => !hasWorkerAttribution(events[id - 1]!));
+    if (ids.some((id) => ctx.keepFirst.has(id) || ctx.excluded.has(id) || events[id - 1]!.type === "compaction")) continue;
+    const chars = ids.reduce((sum, id) => sum + overflowContentChars(events[id - 1]!, replacements?.get(id)), 0);
+    if (chars === 0) continue;
+    const olderTool = unit.hi < ctx.lastUserMsgId &&
+      ids.some((id) => events[id - 1]!.type === "tool_result" && !replacements?.has(id));
+    (olderTool ? olderTools : remaining).push({ ids, chars });
+  }
+  const dropped: number[] = [];
+  let remainingChars = (tokensBefore - ctx.availableTokens) * ctx.factor;
+  let checks = 0;
+  let checkedIds = 0;
+  let best: CompactionEvent | undefined;
+  const check = () => {
+    const event = measure(dropped.slice().sort((a, b) => a - b));
+    checkedIds = dropped.length;
+    checks++;
+    if (event.tokens_after < (best?.tokens_after ?? tokensBefore)) best = event;
+    remainingChars = (event.tokens_after - ctx.availableTokens) * ctx.factor;
+    return event;
+  };
+  for (const { ids, chars } of [...olderTools, ...remaining]) {
+    for (const id of ids) dropped.push(id);
+    remainingChars -= chars;
+    // Reserve the last check for the full cut if earlier estimates fall short.
+    if (remainingChars <= 0 && checks < OVERFLOW_FIT_CHECKS - 1) {
+      const event = check();
+      if (event.tokens_after <= ctx.availableTokens) return event;
+    }
+  }
+  if (dropped.length > checkedIds) check();
+  return best;
 }
 
 // ---- V2 微压缩（2026-11-05，对标 Claude Code microcompact，自研口径）----
@@ -831,6 +901,8 @@ export interface RunCompactionArgs {
   /** 指针分叉的来源视图（可选）：给了它就产出**来源形式**压缩记录，且预算按完整模型历史估算。
    *  缺省 = 原来的单文件数字形式，逐字不变。 */
   view?: SessionView;
+  /** Tool results already shortened in the current model projection. */
+  replacements?: Map<number, string>;
   trigger: "auto" | "manual" | "overflow";
   reason: "threshold" | "hard_buffer" | "user_request" | "micro_prune";
   /** overflow 路径不需要。 */
@@ -859,6 +931,17 @@ export interface RunCompactionArgs {
   prediction?: boolean;
 }
 
+export async function runPreCompactHook(
+  hook: RunCompactionArgs["onPreCompact"],
+  trigger: "manual" | "auto",
+): Promise<void> {
+  try {
+    await hook?.(trigger);
+  } catch (err) {
+    console.warn("[hooks] PreCompact 失败:", err instanceof Error ? err.message : String(err));
+  }
+}
+
 /** 执行一次压缩：产出 compaction 事件（调用方 append）；不落流、不静默。 */
 export async function runCompaction(args: RunCompactionArgs): Promise<CompactionOutcome> {
   args.signal?.throwIfAborted();
@@ -868,11 +951,7 @@ export async function runCompaction(args: RunCompactionArgs): Promise<Compaction
   // 语义注记：摘要器失败降级微压缩时，同一次 maybeCompact 决策会各发一次（摘要档一次 +
   // 微压缩档一次）——§9.5 的「每一次真正开始的压缩」按此计数，消费方别把第二次当重复警情。
   if (args.onPreCompact && args.prediction !== true) {
-    try {
-      await args.onPreCompact(args.trigger === "manual" ? "manual" : "auto");
-    } catch (err) {
-      console.warn("[hooks] PreCompact 失败:", err instanceof Error ? err.message : String(err));
-    }
+    await runPreCompactHook(args.onPreCompact, args.trigger === "manual" ? "manual" : "auto");
   }
   const config: CompactionConfig = { ...DEFAULT_COMPACTION_CONFIG, ...args.config };
   const events = args.events;
@@ -883,18 +962,12 @@ export async function runCompaction(args: RunCompactionArgs): Promise<Compaction
   const lastUserMsgId = lastUserMessageId(events);
   const overhead = args.overhead ?? {};
   const view = args.view;
+  const projection = { view, replacements: args.replacements };
   const localRef = (eventId: number): EventRef => ({
     workspace: view!.session.workspace, sessionId: view!.session.sessionId, eventId,
   });
-  const estimateAfter = (event: CompactionEvent): number => {
-    if (view === undefined) return estimateContextTokens(projectContext([...events, event]), overhead, factor);
-    const after: SessionView = {
-      ...view,
-      entries: [...view.entries, { event, ref: localRef(events.length + 1), inherited: false }],
-      localEvents: [...view.localEvents, event],
-    };
-    return estimateContextTokens(projectViewContext(after), overhead, factor);
-  };
+  const estimateAfter = (event: CompactionEvent): number =>
+    estimateContextTokens(projectSessionContext(events, { ...projection, compaction: event }), overhead, factor);
   // 最新一份主摘要（滚动输入）与它的来源：来源形式要把它列进 superseded_summary_refs。
   let priorSummary: string | undefined;
   let priorRef: EventRef | undefined;
@@ -903,15 +976,18 @@ export async function runCompaction(args: RunCompactionArgs): Promise<Compaction
       if (entry.event.type === "compaction" && !isWorkerCompaction(entry.event)) {
         priorSummary = entry.event.summary;
         priorRef = entry.ref;
+        if (isReferencedCompaction(entry.event)) {
+          for (const ref of entry.event.compressed_event_refs) {
+            if (ref.workspace === view.session.workspace && ref.sessionId === view.session.sessionId) excluded.add(ref.eventId);
+          }
+        }
       }
     }
   } else {
     const prior = events.filter((e): e is CompactionEvent => e.type === "compaction" && !isWorkerCompaction(e));
     if (prior.length > 0) priorSummary = prior[prior.length - 1]!.summary;
   }
-  const tokensBefore = estimateContextTokens(
-    view !== undefined ? projectViewContext(view) : projectContext(events), overhead, factor,
-  );
+  const tokensBefore = estimateContextTokens(projectSessionContext(events, projection), overhead, factor);
   const ctx: CutContext = { availableTokens: config.inputLimit - config.maxOutputReserve, factor, keepFirst, excluded, lastUserMsgId, units };
 
   // V2 微压缩路径（2026-11-05）：确定性修剪，不调摘要器、不过 economics 闸（零 API 成本）。
@@ -962,41 +1038,38 @@ export async function runCompaction(args: RunCompactionArgs): Promise<Compaction
     return { ok: true, event };
   }
 
-  // overflow 紧急：半分截断兜底，不调摘要器
+  // 超窗恢复只走本地投影。显式请求 overflow 且估算未超窗时保留半分兜底。
   if (args.trigger === "overflow") {
-    const t = selectTruncation(events, ctx);
-    if (!t) return { ok: false, kind: "failed", why: "overflow 截断：无可安全摘除的事件" };
-    const droppedSet = new Set(t.compressedIds);
-    const overflowSummary =
-      // 投影只注入最新主摘要；紧急 marker 同样会取代旧摘要，必须原样带上已压缩的事实。
-      (priorSummary ? priorSummary + "\n\n" : "") +
-      "[overflow 紧急截断] 已按半分截断摘除 " + t.compressedIds.length + " 条最旧事件（原子单元整丢、最近 typed 用户消息未动）。" +
-      "本条为降级兜底标记，非模型摘要；原始事件仍在事件流中。" +
-      // 紧急截断恰恰发生在长任务快撑不住的时候：这一段在这里比在常规摘要里更贵。
-      triedRejectedNote(events.filter((_, i) => droppedSet.has(eventIdAt(i))));
-    const event: CompactionEvent = view === undefined ? {
-      type: "compaction",
-      trigger: "overflow",
-      reason: args.reason,
-      compressed_event_ids: t.compressedIds,
-      summary: overflowSummary,
-      summary_offset: t.offset,
-      tokens_before: tokensBefore,
-      tokens_after: 0,
-    } : {
-      type: "compaction",
-      trigger: "overflow",
-      reason: args.reason,
-      reference_version: 1,
-      compressed_event_refs: t.compressedIds.map(localRef),
-      summary_anchor: t.offset <= events.length ? { before: localRef(t.offset) } : { end: true },
-      superseded_summary_refs: priorRef === undefined ? [] : [priorRef],
-      summary: overflowSummary,
-      tokens_before: tokensBefore,
-      tokens_after: 0,
+    const overBudget = tokensBefore > ctx.availableTokens;
+    const build = (ids: number[]): CompactionEvent => {
+      let offset = ids[ids.length - 1]! + 1;
+      while (excluded.has(offset)) offset++;
+      const dropped = new Set(ids);
+      const action = overBudget ? "已按输入预算摘除" : "已按半分截断摘除";
+      const target = overBudget ? " 条历史事件" : " 条最旧事件";
+      const summary =
+        (priorSummary ? priorSummary + "\n\n" : "") +
+        "[overflow 紧急截断] " + action + " " + ids.length + target + "（原子单元整丢、最近 typed 用户消息未动）。" +
+        "本条为降级兜底标记，非模型摘要；原始事件仍在事件流中。" +
+        triedRejectedNote(events.filter((_, i) => dropped.has(eventIdAt(i))));
+      const base = { type: "compaction" as const, trigger: "overflow" as const, reason: args.reason,
+        summary, tokens_before: tokensBefore, tokens_after: 0 };
+      const event: CompactionEvent = view === undefined
+        ? { ...base, compressed_event_ids: ids, summary_offset: offset }
+        : { ...base, reference_version: 1, compressed_event_refs: ids.map(localRef),
+            summary_anchor: offset <= events.length ? { before: localRef(offset) } : { end: true },
+            superseded_summary_refs: priorRef === undefined ? [] : [priorRef] };
+      event.tokens_after = estimateAfter(event);
+      return event;
     };
-    event.tokens_after = estimateAfter(event);
-    return { ok: true, event };
+    if (overBudget) {
+      const fitted = fitOverflow(events, ctx, tokensBefore, args.replacements, build);
+      if (fitted) return { ok: true, event: fitted };
+    } else {
+      const legacy = selectTruncation(events, ctx);
+      if (legacy) return { ok: true, event: build(legacy.compressedIds) };
+    }
+    return { ok: false, kind: "failed", why: "overflow 截断：无可安全摘除的事件" };
   }
 
   const summarizer = args.summarizer;
@@ -1146,12 +1219,13 @@ export class CompactionCoordinator {
   async maybeCompact(
     events: AgentEvent[],
     decision: CompactDecision | null,
-    options: Pick<RunCompactionArgs, "overhead" | "signal" | "economics" | "view"> & { config?: Partial<CompactionConfig> } = {},
+    options: Pick<RunCompactionArgs, "overhead" | "signal" | "economics" | "view" | "replacements"> & { config?: Partial<CompactionConfig> } = {},
   ): Promise<CompactionOutcome | null> {
     if (!decision) return null;
     const microArgs = {
       events,
       ...(options.view !== undefined ? { view: options.view } : {}),
+      replacements: options.replacements,
       trigger: "auto" as const,
       reason: "micro_prune" as const,
       deterministic: true,
@@ -1167,6 +1241,7 @@ export class CompactionCoordinator {
       return await runCompaction({
         events,
         ...(options.view !== undefined ? { view: options.view } : {}),
+        replacements: options.replacements,
         trigger: decision.trigger,
         reason: decision.reason,
         summarizer: undefined,
@@ -1184,6 +1259,7 @@ export class CompactionCoordinator {
     const outcome = await runCompaction({
       events,
       ...(options.view !== undefined ? { view: options.view } : {}),
+      replacements: options.replacements,
       trigger: decision.trigger,
       reason: decision.reason,
       summarizer: this.summarizer,
@@ -1207,12 +1283,13 @@ export class CompactionCoordinator {
   /** Build a candidate without changing failure counters or firing PreCompact. */
   async predict(
     events: AgentEvent[],
-    opts: Pick<RunCompactionArgs, "overhead" | "signal" | "view"> & { config?: Partial<CompactionConfig> } = {},
+    opts: Pick<RunCompactionArgs, "overhead" | "signal" | "view" | "replacements"> & { config?: Partial<CompactionConfig> } = {},
   ): Promise<CompactionOutcome | null> {
     if (this.summarizerDisabled || !this.summarizer) return null;
     return await runCompaction({
       events,
       ...(opts.view !== undefined ? { view: opts.view } : {}),
+      replacements: opts.replacements,
       trigger: "auto",
       reason: "threshold",
       summarizer: this.summarizer,

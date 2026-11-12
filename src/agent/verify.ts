@@ -175,7 +175,7 @@ export const defaultExec: ExecFn = (command, cwd, timeoutMs = DEFAULT_VERIFY_TIM
     };
     // pipefail：管道里任一环节失败都要把非零码带出来。今天 `pnpm test | tail -50` 会把测试失败
     // 吞成 exit 0 ⇒ 判卷面给出 ok:true。预检已在本宿主跑过（bash 3.2.57 支持 -o pipefail）。
-    const handle = spawnTracked("bash", ["-o", "pipefail", "-c", command], {
+    const handle = spawnTracked("bash", ["--norc", "-o", "pipefail", "-c", command], {
       cwd,
       env: sanitizedEnv(),
       timeoutMs,

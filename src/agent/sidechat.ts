@@ -97,6 +97,7 @@ export async function compactSidechatHistory(opts: {
     reason: useOverflow && decision.trigger !== "overflow" ? "hard_buffer" : decision.reason,
     ...(useOverflow ? {} : { summarizer: opts.summarizer }),
     config,
+    overhead: { systemChars: SIDECHAT_SYSTEM.length + (opts.reserveChars ?? 0) },
   });
   if (!outcome.ok) return { kind: "failed", why: outcome.why };
   await createEventLog(opts.sidechatLogPath).append(outcome.event);

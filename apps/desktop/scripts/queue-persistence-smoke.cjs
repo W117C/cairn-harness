@@ -1,11 +1,12 @@
 // 真实 renderer + 可控 IPC：落盘失败/项目切换/显式重试/续发/接收拒绝，不调用真实 Provider。
 const { app, BrowserWindow } = require("electron");
-const { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } = require("node:fs");
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
+const { mkdtempSync, mkdirSync, readFileSync, writeFileSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 const profile = mkdtempSync(join(tmpdir(), "cairn-queue-save-"));
 const out = resolve(process.argv[2]); mkdirSync(out, { recursive: true });
-app.setPath("userData", profile); app.on("quit", () => rmSync(profile, { recursive: true, force: true }));
+app.setPath("userData", profile); app.on("quit", () => scheduleProfileCleanup(profile));
 const checks = [];
 const check = (name, ok) => { checks.push({ name, ok: Boolean(ok) }); console.log(`${ok ? "PASS" : "FAIL"} ${name}`); };
 const pause = (ms = 90) => new Promise((r) => setTimeout(r, ms));

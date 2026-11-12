@@ -79,6 +79,9 @@ describe("页体并入设置（v7.1 业主裁）：AppPageBody + 事实源", () 
     expect(html).toContain("wt-worker-3");
     expect(html).toContain("清理");
     expect(html).toContain("有未提交改动");
+    // 第 1106 页：整页只列孤儿，逐行再挂「孤儿 worktree」是重复副标签；说明只留布局说不出的后果。
+    expect(html).toContain("运行中、待合并的树不在此列");
+    expect(html).not.toContain("孤儿 worktree");
     expect(html).toContain('data-dirty="true"');
     // 清理目标必须带快照的工作区：切项目后 activeWorkspace 是旧值，clean 不能拿它去删。
     expect(html).toContain('data-workspace="/tmp/ws"');
@@ -170,12 +173,13 @@ describe("记忆页重做（2026-10-16 业主裁 · D/E/F · 源码哨兵）", (
     const sec = src.slice(secAt, secEnd);
     expect(sec).not.toContain("待接");                    // 占位下架（通道已接）
     expect(sec).not.toContain("快照不含正文");
-    expect(sec).toContain("bodyLines(selected.body)");    // 正文切行走同一纯函数纪律
+    expect(src).toContain("const selectedBody = selected === null ? [] : bodyLines(selected.body);"); // 正文切行走同一纯函数
+    expect(sec).toContain("selectedBody");
     expect(sec).toContain("renderInline(line)");
     expect(sec).toContain('className="ap-drawer-body"');
     expect(sec).toContain("此主题暂无正文");               // 空正文回落不摆空壳
     // 空态文案只在空数组分支（有正文时不渲染回落句）
-    expect(sec.indexOf("bodyLines(selected.body)") < sec.indexOf("此主题暂无正文")).toBe(true);
+    expect(sec.indexOf("selectedBody") < sec.indexOf("此主题暂无正文")).toBe(true);
   });
 });
 

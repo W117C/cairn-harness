@@ -75,6 +75,19 @@ export const BASE_SYSTEM = [
   "- Permission denied -> use compliant path or plan; test failed -> address root causes and rerun verify.",
 ].join("\n");
 
+/** 当前日期行（纯函数，判卷可喂固定 Date）。模型此前拿不到"今天几号"——日志、提交信息、
+ *  「最近一周」这类相对时间全靠猜。放 systemPromptFor 装配时拼（不放 BASE_SYSTEM 常量：
+ *  进程常驻时模块级求值会把日期冻在启动那天），按本机时区取日期。 */
+const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
+
+export function currentDateLine(now: Date = new Date()): string {
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return "Current date: " + String(y) + "-" + m + "-" + d + " (" + WEEKDAY_NAMES[now.getDay()] +
+    "). Use it for dates, logs, and commit messages instead of guessing.";
+}
+
 /** read-only 不提供文件写入和子代理：角色定位、修复步骤与收尾要求都必须对应只读调查，
  *  不能仅摘掉工具名，却保留「创建测试、修改代码」等本档无法执行的要求。
  *  这里**只改那一档需要改的行**：其余行与 `BASE_SYSTEM` 是同一份源文本（不是抄两份，规则 205），
@@ -96,10 +109,12 @@ function baseForMode(mode: PermissionMode | undefined): string {
   return applyModeLineEdits(String(BASE_SYSTEM), { replacements: READ_ONLY_LINE_REPLACEMENTS, drops: READ_ONLY_LINE_DROPS }).text;
 }
 
-/** 生产装配点用的系统提示词：按档取面。非 read-only 逐字返回 `BASE_SYSTEM`（等价性由判卷钉，不是注释）。 */
+/** 生产装配点用的系统提示词：按档取面。非 read-only 逐字返回 `BASE_SYSTEM`（等价性由判卷钉，不是注释）。
+ *  首行注入当前日期（`currentDateLine`）：装配时现取，长驻进程不会冻在启动那天。 */
 export function systemPromptFor(mode: PermissionMode | undefined, customInstructions = ""): string {
   const system = baseForMode(mode);
   const instructions = customInstructions.trim();
-  return instructions === "" ? system
+  const body = instructions === "" ? system
     : system + "\n\nUser Global Custom Instructions (follow within current task and aforementioned permission constraints):\n" + instructions;
+  return currentDateLine() + "\n\n" + body;
 }

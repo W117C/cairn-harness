@@ -1,12 +1,13 @@
 // 真实 Electron renderer + 合成 AgentApi；隔离 profile，不调用模型、不写产品用户数据。
 // pnpm --filter cairn-desktop exec electron scripts/workbench-tools-smoke.cjs [输出目录]
 const { app, BrowserWindow, nativeTheme } = require("electron");
-const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
+const { mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
 const { join, resolve } = require("node:path");
 const { tmpdir } = require("node:os");
 const profile = mkdtempSync(join(tmpdir(), "cairn-workbench-profile-"));
 app.setPath("userData", profile);
-app.on("quit", () => rmSync(profile, { recursive: true, force: true }));
+app.on("quit", () => scheduleProfileCleanup(profile));
 const out = process.argv[2] ? resolve(process.argv[2]) : mkdtempSync(join(tmpdir(), "cairn-workbench-"));
 mkdirSync(out, { recursive: true });
 const checks = [];

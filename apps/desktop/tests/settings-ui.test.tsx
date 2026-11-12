@@ -13,6 +13,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { readAppSurface } from "./helpers/app-surface";
+import { resolveValue, SRC_VALUE } from "./helpers/str-source";
 import { Badge, Banner, EmptyState, Field, OptionCard, SettingsPage, SettingsRow, SettingsSection, StatusDot } from "../src/renderer/components/settings-ui";
 import { ShortcutsSection } from "../src/renderer/components/settings-sections";
 
@@ -95,6 +96,9 @@ describe("批 6：设置页公共组件（SSR 结构）", () => {
     expect(h).toContain("locale");
     const bare = renderToStaticMarkup(<SettingsRow label="版本"><span /></SettingsRow>);
     expect(bare).not.toContain("ss-row-desc");
+    // 第 1092 页：只读行不摆空控制列——没有 children 就不渲染 ss-row-ctl。
+    const noControl = renderToStaticMarkup(<SettingsRow label="网络" desc="默认断网" />);
+    expect(noControl).not.toContain("ss-row-ctl");
   });
 
   it("EmptyState：图标+标题+说明+按钮；说明/按钮可缺省不占位", () => {
@@ -306,21 +310,39 @@ describe("分区标题与行标签不重复（第 892 页 · 让布局说话）"
  *  （变异自检：把行标签改成分区标题的 ≥3 字子串，本判卷会红）。 */
   const FILES = [
     "../src/renderer/components/settings-sections.tsx",
+    "../src/renderer/components/settings/GeneralSection.tsx",
+    "../src/renderer/components/settings/ShortcutsSection.tsx",
+    "../src/renderer/components/settings/PermissionsSection.tsx",
     "../src/renderer/components/settings/NetworkSection.tsx",
     "../src/renderer/components/settings/UsageSection.tsx",
+    "../src/renderer/components/settings/AboutSection.tsx",
+    "../src/renderer/components/settings/ProviderSection.tsx",
   ];
   it("没有「分区标题 ⊃ 行标签」的同屏重复", () => {
+    // 第 1075 页：标题与行标签都可能已收编成 {STR.x.y}——两种形状都解析回值再判；
+    // 并加一条逐文件覆盖哨兵：文件里明明有 SettingsSection、却一个都没解析到 ⇒ 判它（不许静默跳过整个文件）。
+    // 第三种形状：title={表达式}（NetworkSection 拿工作区目录名当标题）——值运行时才定，算「扫到」但不参与同词判定。
+    const sectionRe = new RegExp("<SettingsSection title=(?:\"([^\"]{1,})\"|\\{STR\\.([A-Za-z0-9_.]+)\\}|\\{([^}]*)\\})([\\s\\S]*?)<\\/SettingsSection>", "g");
+    const rowRe = new RegExp("<SettingsRow label=" + SRC_VALUE, "gu");
     const dups: string[] = [];
+    const unparsed: string[] = [];
     for (const rel of FILES) {
       const src = readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
-      for (const m of src.matchAll(/SettingsSection title="([^"]+)"([\s\S]*?)<\/SettingsSection>/g)) {
-        const [, title, body] = m;
-        for (const lm of body.matchAll(/SettingsRow label="([^"]+)"/g)) {
-          const lab = lm[1];
+      let seen = 0;
+      for (const m of src.matchAll(sectionRe)) {
+        seen += 1; // 解析到就算覆盖；动态标题（title={表达式}）没有静态值，不参与同词判定
+        const title = resolveValue(m[1], m[2]);
+        const body = m[4] ?? "";
+        if (title === undefined) continue;
+        for (const lm of body.matchAll(rowRe)) {
+          const lab = resolveValue(lm[1], lm[2]);
+          if (lab === undefined) continue;
           if (lab.length >= 3 && title.includes(lab)) dups.push(`${rel} :: ${title} ⊃ ${lab}`);
         }
       }
+      if (seen === 0 && src.includes("<SettingsSection")) unparsed.push(rel);
     }
     expect(dups, "同屏同词：\n" + dups.join("\n")).toEqual([]);
+    expect(unparsed, "这些文件有 SettingsSection 却一个都没解析到（判据被新形状绕过了）：" + unparsed.join(" | ")).toEqual([]);
   });
 });

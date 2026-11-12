@@ -467,7 +467,7 @@ body[data-resizing="sidebar"] .side-wrap { transition: none; }
 
 /* ══ 主区：流 / 门 / 输入三区（flex column——同侧栏教训：子元素数随条数变化，
    固定轨数 grid 会错位；flex 下流恒吃剩余、其余恒贴底）═══════════════ */
-.main { position: relative; display: flex; flex-direction: column; min-width: 0; height: 100%; overflow-x: clip; background: hsl(var(--bg-100)); }
+.main { position: relative; display: flex; flex-direction: column; min-width: 0; height: 100%; overflow-x: clip; background: hsl(var(--bg-100)); --col-max: min(var(--reading), 100%); }
 .zone-stream { position: relative; min-height: 0; flex: 1 1 auto; display: flex; flex-direction: column; }
 
 /* 会话条已并入统一工具栏（批 129）——原 .chat-bar 一行撤净；下面 .cb-* 一族改为
@@ -614,7 +614,7 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 }
 @keyframes genbar-sweep { from { background-position: -32% 0; } to { background-position: 132% 0; } }
 .reading {
-  max-width: min(var(--reading), 100%); margin: 0 auto;
+  max-width: var(--col-max); margin: 0 auto;
   padding: 24px var(--reading-pad-x) 48px; /* 气沟左右取令牌；末条消息下方固定 48px 留白 */
   display: flex; flex-direction: column;
   position: relative; /* 对话轨道的轴线落在这里（见 components/conversation-rail.css） */
@@ -728,11 +728,10 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 .row-action:hover { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-selected)); color: hsl(var(--text-000)); }
 .row-action.on { color: hsl(var(--text-000)); }
 
-/* 消息动作条的悬浮说明（2026-11-05 业主裁「悬浮要有文字说明」）：原生 title 在 Electron 里
-   慢且经常不弹，改自绘 ::after（data-hint），约 0.35s 延迟出现；aria-label 仍是读屏出口。
-   说明浮在按钮上方；触达路径 = 行悬浮已让动作条现形，这一层只管动作条自身的悬停。 */
+/* 只在悬停或键盘聚焦时生成提示框，避免长会话中不可见的提示框参与绘制。
+   提示延迟出现，读屏仍使用按钮的 aria-label。 */
 .row-action { position: relative; }
-.row-action::after {
+.row-action[data-hint]:is(:hover, :focus-visible)::after {
   content: attr(data-hint);
   position: absolute;
   bottom: calc(100% + 7px);
@@ -747,12 +746,10 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
   line-height: 1.4;
   white-space: nowrap;
   box-shadow: var(--shadow-pop);
-  opacity: 0;
   pointer-events: none;
-  transition: opacity var(--t-fast) var(--t-hint-delay);
+  animation: fade-in var(--t-fast) var(--t-hint-delay) backwards;
   z-index: 60;
 }
-.row-action:hover::after, .row-action:focus-visible::after { opacity: 1; transition-delay: var(--t-hint-delay); }
 
 /* 助手行 = 轨道的一节：标列放品牌标，正文挂在同一条左轨（--rail-gutter）上。
    顶距仍是 brief §二.1 的 24px（判卷钉住那个字面量）——这一轮把**所有**档统一到 24：
@@ -1028,7 +1025,7 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
    flex 比例 2.5:1 ⇒ 输入区落在视觉中心偏上（顶层空档 s、底带 2.5s）。 */
 .main[data-empty="true"] .empty {
   justify-content: flex-end; align-items: flex-start; gap: var(--space-md);
-  width: 100%; max-width: min(var(--reading), 100%); margin: 0 auto;
+  width: 100%; max-width: var(--col-max); margin: 0 auto;
   padding: var(--space-md) 41px var(--space-md);
 }
 /* hero（2026-10-18 对照 Claude 桌面端；2026-11-01 第 870 页按业主「让布局说话」重定字号）：
@@ -1090,21 +1087,50 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 .chip-foot { border-top: 1px solid var(--hairline); margin-top: 6px; padding-top: 6px; display: flex; flex-direction: column; gap: 4px; }
 .chip-foot .add-project-btn { width: 100%; justify-content: flex-start; }
 .empty-below {
-  flex: none; width: 100%; max-width: min(var(--reading), 100%);
+  flex: none; width: 100%; max-width: var(--col-max);
   margin: 0 auto; padding: var(--space-md) 41px 0;
   display: flex; flex-direction: column; align-items: center; gap: var(--space-sm);
 }
-.empty-tail { flex: 2.5 1 0; min-height: var(--space-md); }
+.empty-tail { flex: 2.5 1 0; min-height: var(--space-md); display: flex; flex-direction: column; align-items: center; }
+/* 空屏下半区承接（2026-11-08 第 1048 页）：最近会话。
+   issues.md #1 说「给下半屏一个轻量承接，保持 focus-first，不再堆卡片」——
+   这里只给一行 caption + 最多 3 条文本按钮，坐在 .empty-tail 弹性空带的顶端；
+   数据全来自真实 sessions（无会话时 EmptyContext 整块不渲染，不放假数据、不摆空壳）。
+   列宽与气沟沿用第 1041 页的 --col-max / --reading-pad-x，不另起一套；
+   入场复用 rise-in 家族，减弱动效由既有全局块压到 0.01ms。 */
+.empty-context {
+  width: 100%; max-width: var(--col-max); margin: 0 auto;
+  padding: var(--space-md) var(--reading-pad-x) 0;
+  display: flex; flex-direction: column; align-items: center; gap: var(--space-xs);
+  animation: rise-in var(--t-rise-in-long) var(--t-stagger-chip) both;
+}
+.empty-context-label { font-size: var(--fs-caption-xs); color: hsl(var(--text-400)); letter-spacing: .04em; }
+.empty-context-list { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-xs); }
+.empty-context-item {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 24px; padding: 2px var(--space-sm);
+  border: 1px solid var(--hairline); border-radius: var(--radius-pill);
+  background: transparent; color: hsl(var(--text-300, var(--text-200)));
+  font-size: var(--fs-caption-sm); font-family: inherit; cursor: pointer;
+  transition: color var(--t-instant), border-color var(--t-instant), background var(--t-instant);
+}
+.empty-context-item:hover {
+  color: hsl(var(--text-000)); border-color: var(--hairline-strong); background: hsl(var(--bg-100));
+}
+.empty-context-item:focus-visible { outline: 2px solid hsl(var(--accent-control)); outline-offset: 2px; }
 
 /* ── 回到底部（阶段 2 · brief §二.6）：右下角小圆形图标钮，未滚到底才出现（淡入）。 ── */
 .jump-latest {
   /* 2026-11-01 真机订正（业主截图）：原来锚在**对话列正中**、浮在正文上（2026-10-07 业主裁
      「放到正中间」）。真机看到的是它压在助手消息那一行上——居中锚与阅读列同一条中轴，正文
-     必然被盖。改锚到**阅读列右缘之外的气沟**：位置仍贴着对话区（不是窗缘孤悬），但不再压字。
+     必然被盖。改锚到**阅读列右缘那条气沟**（正文 fluid stop 之外）：按钮右缘比阅读列右缘
+     再内收一个间隙，仍贴着对话区，不压字。
      锚点 = 50% - 阅读列半宽 + 间隙（阅读列窄于视口时退化为贴右缘）。
      显隐另由 useStickyScroll 判「下面是否还有内容」——已在底部就不该出现（见 useStickyScroll）。 */
   position: absolute;
-  right: calc(50% - min(var(--reading), 100%) / 2 + var(--space-sm));
+  /* 锚点必须跟实际阅读列同宽：用 --reading 会在 1200 容器断点下算成 52rem，
+     按钮比正文右缘再外飘 40px（第 1041 页实测 1278.5 vs 1238.5）。 */
+  right: calc(50% - var(--col-max) / 2 + var(--space-sm));
   bottom: var(--space-md);
   z-index: 4; /* 高于流底渐隐（2/3），低于浮层面板（7） */
   display: inline-flex; align-items: center; justify-content: center;
@@ -1207,7 +1233,7 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 .session-load-notice pre { margin: var(--space-xs) 0 0; max-height: 120px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
 .error-strip {
   display: flex; align-items: center; gap: var(--space-xs);
-  max-width: min(var(--reading), 100%); margin: var(--space-sm) auto 0;
+  max-width: var(--col-max); margin: var(--space-sm) auto 0;
   padding: var(--space-xs) var(--space-sm);
   border: 1px solid hsl(var(--color-danger) / 45%);
   border-radius: var(--radius-sm); background: hsl(var(--color-danger) / 8%);
@@ -1234,7 +1260,7 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 .error-strip .reasons li { margin: 1px 0; overflow-wrap: anywhere; }
 .notice-strip {
   display: flex; align-items: center; gap: var(--space-xs);
-  max-width: min(var(--reading), 100%); margin: var(--space-sm) auto 0;
+  max-width: var(--col-max); margin: var(--space-sm) auto 0;
   padding: var(--space-xs) var(--space-sm);
   border: 1px solid var(--hairline-strong); border-radius: var(--radius-sm);
   background: hsl(var(--bg-300)); color: hsl(var(--text-200)); font-size: var(--fs-body-sm);
@@ -1248,7 +1274,7 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 /* ── v12 导入诊断卡（ADR 0004 §4：三态诊断；非阻断，只在导入/克隆后摆上屏） ── */
 .diagnosis-card {
   display: flex; flex-direction: column; gap: var(--space-xs);
-  max-width: min(var(--reading), 100%); margin: var(--space-sm) auto 0;
+  max-width: var(--col-max); margin: var(--space-sm) auto 0;
   padding: var(--space-sm) var(--space-md);
   border: 1px solid var(--hairline-strong);
   border-radius: var(--radius-sm); background: hsl(var(--bg-300));
@@ -1282,7 +1308,7 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
   position: relative;
   z-index: 12;
   width: 100%;
-  max-width: min(var(--reading), 100%);
+  max-width: var(--col-max);
   height: 0;
   margin: 0 auto;
   --gate-pad-x: var(--reading-pad-x);
@@ -1300,10 +1326,10 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
   pointer-events: auto;
   animation: gate-in var(--t-fast);
 }
-/* 门卡出现时给滚动内容预留同高的空白：scrollTop 不变 ⇒ 用户正在读的正文不跳位，
-   卡片覆盖的是新增空白而不是已有正文。最后一条消息仍可滚到卡片上方。 */
-.main:has(.zone-gate > *) .reading { padding-bottom: min(62vh, 520px); }
-.main:has(.zone-gate > *) .stream { scroll-padding-bottom: min(62vh, 520px); }
+/* 门卡出现时给滚动内容留出空白，最后一条消息仍可滚到卡片上方。
+   读取门卡状态，避免流式追加 DOM 时使整列历史的样式失效。 */
+.main[data-gate-open] .reading { padding-bottom: min(62vh, 520px); }
+.main[data-gate-open] .stream { scroll-padding-bottom: min(62vh, 520px); }
 .zone-composer { position: relative; z-index: 11; }
 .card {
   margin: 0;
@@ -1456,11 +1482,11 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 .vchip { display: inline-flex; padding: 1px 7px; border-radius: var(--radius-pill); background: hsl(var(--bg-300)); font-size: var(--fs-caption-xs); color: hsl(var(--text-200)); }
 
 /* ══ Composer ══════════════════════════════════════════════════════ */
-.zone-composer { max-width: min(var(--reading), 100%); margin: 0 auto; width: 100%; flex: none; padding: 0 41px var(--space-md); }
+.zone-composer { max-width: var(--col-max); margin: 0 auto; width: 100%; flex: none; padding: 0 41px var(--space-md); }
 .composer-card {
   position: relative;
   border: 1px solid var(--hairline-strong); border-radius: var(--radius-composer-card);
-  background: hsl(var(--bg-000)); box-shadow: var(--shadow-card);
+  background: hsl(var(--surface-card, var(--bg-000))); box-shadow: var(--shadow-card);
   transition: border-color var(--t-instant), box-shadow var(--t-instant);
   /* 2026-11-05 业主裁「输入框和 DeepSeek harness 一模一样」：顶距 8px、文本行高 36 起步、
      控制行贴文本 12px、+ 钮/芯片 28px 圆、发送 34px 圆（几何对齐官方 InputBar.module.css）。 */
@@ -1699,7 +1725,7 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
    批 5（细则 §五）：所有 popover 统一直径——surface + 描边 + 14 圆角 + 8 内距 + 轻阴影。 */
 .pop {
   position: absolute; z-index: 40; min-width: 220px;
-  background: hsl(var(--bg-000)); border: 1px solid var(--hairline-strong);
+  background: hsl(var(--surface-card, var(--bg-000))); border: 1px solid var(--hairline-strong);
   border-radius: var(--radius-pop-v3); box-shadow: var(--shadow-pop);
   padding: var(--space-sm); display: none;
 }
@@ -2626,17 +2652,20 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 
 /* ══ markdown（转录渲染）═══════════════════════════════════════════ */
 .md-body { font-size: inherit; line-height: inherit; }
-/* ── 逐词到达（2026-10-28 第 757 页 · 对标 Codex 的 `_reveal-response-word`）────
-   刚到的词自己淡入一次，并从强调色落回正文色 ⇒ 读起来是「字在到」，
-   而不是「一段字啪地出现」。只在**正在写的那一块**上开（markdown.tsx 的 caret 分支），
-   历史正文不多包一个节点。
-   关键帧取值照抄 Codex（0% 透明 + 强调色 → 20% 0.6 → 65% 不透明 → 落回正文色）。
+/* ── 逐词到达（2026-10-28 第 757 页建 · 2026-11-08 第 1043 页改）────────────
+   刚到的词自己落一次墨（浅墨 → 正文色）⇒ 读起来是「字在到」，而不是「一段字啪地出现」。
+   只在**正在写的那一块**上开（markdown.tsx 的 caret 分支），历史正文不多包一个节点。
+   2026-11-08 业主缺陷「大模型输出信息总是一闪一闪的需要修复」的病因与修法：
+   流式每来一个 delta 都按累计全文重解析，块结构一变（换行 / 列表 / 代码围栏边界），
+   「正在写的那一块」就易主 ⇒ 已输出的词在 `md-word` span 与纯文本之间来回重挂；
+   节点一重挂就把入场动画从头再播一遍。旧关键帧是「0% 透明 + 品牌橙 → 20% 0.6 → 65% 不透明」，
+   于是已写的字反复明灭 + 闪橙，快速流式时尾部还总压着一批半透明橙字 ⇒ 整段输出读成一闪一闪。
+   ⇒ 到达动效只留**中性墨色渐落**：opacity 恒 1、不携品牌橙。词仍在到（生命感保留），
+   但无论重挂多少次都没有明灭与色闪；中性墨也合第 1042 页的中性用色裁决。
    减弱动效：全局降级把 animation-duration 压到 0.01ms ⇒ 词直接以终态出现。 */
 .md-word { animation: md-word-arrive var(--t-word-arrive) var(--ease-out) both; }
 @keyframes md-word-arrive {
-  0% { opacity: 0; color: hsl(var(--accent-brand)); }
-  20% { opacity: 0.6; color: hsl(var(--accent-brand)); }
-  65% { opacity: 1; }
+  0% { opacity: 1; color: hsl(var(--text-000) / 62%); }
   100% { opacity: 1; color: inherit; }
 }
 .md-body strong { color: hsl(var(--text-000)); font-weight: var(--fw-bold); } /* 加粗只提色与字重，不变大（brief §二.3） */
@@ -2651,7 +2680,11 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 .md-code { position: relative; margin: 8px 0; border: 1px solid var(--gray-750); border-radius: var(--radius-composer-card); background: var(--gray-900); overflow: hidden; }
 .md-code-head { display: flex; justify-content: space-between; align-items: center; height: 36px; padding: 0 12px; border-bottom: 1px solid var(--gray-800); }
 .md-code-head .lang { font-size: 11px; color: var(--gray-300); text-transform: uppercase; letter-spacing: 0.06em; font-family: var(--mono); }
-.md-copy { color: var(--gray-300); display: inline-flex; align-items: center; gap: 4px; font-size: 11px; line-height: 1; transition: color var(--t-fast); }
+/* 2026-11-08 第 1045 页（响应式走查）：旧值只有 12px 高（font-size 11 + line-height 1），
+   是 14 档视口里唯一低于 24px 的交互靶面。按 Frontend Responsive Design Standards 的
+   「icon button 用 padding 扩命中区」补 min-height/padding；36px 头部不变、字号不变，
+   只把命中区翻倍（12→24），视觉不动。 */
+.md-copy { color: var(--gray-300); display: inline-flex; align-items: center; gap: 4px; font-size: 11px; line-height: 1; min-height: 24px; padding: 0 8px; border-radius: var(--radius-xs); transition: color var(--t-fast); }
 .md-copy:hover { color: var(--gray-50); }
 .md-copy[data-copied="true"] { color: hsl(var(--accent-brand-ink)); }
 .md-code pre { margin: 0; padding: 10px 12px; overflow-x: auto; font-family: var(--mono); font-size: var(--fs-code); line-height: 1.6; color: var(--gray-50); }
@@ -2772,7 +2805,10 @@ body[data-dsh-claude-style] .md-body .md-code pre { font-size: var(--fs-code); l
 .isp-tab { padding: 3px 8px; border-radius: var(--radius-xs); font-size: var(--fs-caption-sm); color: hsl(var(--text-200)); }
 .isp-tab:hover { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover)); color: hsl(var(--text-000)); }
 .isp-tab.active { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-selected)); color: hsl(var(--text-000)); }
-.isp-add { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: var(--radius-xs); color: hsl(var(--text-200)); flex: none; }
+/* 第 1049 页：检查器异步空态的「打开窗格 / 关闭检查器」两枚图标钮原先 22×22，
+   低于第 1045 页「可见按钮 ≥24×24」硬判据（responsive-audit 偶发抓到 small=2）。
+   只把盒提到 24×24，图标、圆角、配色不变。 */
+.isp-add { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: var(--radius-xs); color: hsl(var(--text-200)); flex: none; }
 .isp-add:hover { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover)); color: hsl(var(--text-000)); }
 .isp-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--space-sm); }
 .isp-empty { color: hsl(var(--text-400)); font-size: var(--fs-caption-md); padding: var(--space-md) var(--space-xs); line-height: 1.7; }
@@ -3064,6 +3100,11 @@ body[data-dsh-claude-style] .md-body .md-code pre { font-size: var(--fs-code); l
 
 /* 独立窗格窗口（弹出）：整窗一个网格容器 */
 .popout-app { height: 100vh; display: grid; grid-template-rows: minmax(0, 1fr); }
+/* 载入失败条（第 1084 页）：有它时让出自身高度，窗格仍占满剩余空间。 */
+.popout-app:has(> .fp-note.err) { grid-template-rows: auto minmax(0, 1fr); }
+/* 第 1085 页：错误条可能不止一条（载入失败／链接回落失败），收成一列仍只占一行。 */
+.popout-app:has(> .popout-notices) { grid-template-rows: auto minmax(0, 1fr); }
+.popout-notices { display: flex; flex-direction: column; }
 
 /* ══ 应用页内容（插件 / 自动化任务 / 技能中心 / 记忆系统）══════════
    宿主已并入设置面板「工作台」组（AppPageBody）；本组类名只描述页内内容。 */
@@ -3245,6 +3286,13 @@ body[data-dsh-claude-style] .md-body .md-code pre { font-size: var(--fs-code); l
 @keyframes row-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
 @keyframes gate-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 .row.user, .row.assistant, .row.error-row, .toolcluster { animation: row-in var(--t-fast); }
+/* 等待占位入场（2026-11-08 第 1046 页，对标 Claude 桌面 `cds-placeholder-reveal 150ms ease-out`）：
+   等待行原先只继承 row-in（140ms + 3px 抬升），与「模型还没开始说」的静默感不符；
+   单独一档 150ms + 2px 微抬，只动 opacity/transform（不推布局、不占滚动）。
+   specificity 高于 .row.assistant 的 row-in；减弱动效由既有全局 `*,*::before,*::after` 块压到
+   0.01ms，不新增第二块。首个 delta 到达后整行卸载，没有 fill 残留。 */
+@keyframes cairn-placeholder-reveal { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
+.row.assistant.assistant-waiting { animation: cairn-placeholder-reveal var(--t-placeholder-reveal) both; }
 /* 插件技能行 + 内联正文（2026-10-18）：按钮靠右，正文紧贴该行下方。 */
 .plugin-skill .ap-li { align-items: center; }
 .plugin-skill .mini-btn { margin-left: auto; flex: none; }
@@ -3277,7 +3325,8 @@ body[data-dsh-claude-style] .md-body .md-code pre { font-size: var(--fs-code); l
 .home-banner-text strong { font-size: var(--fs-body-sm); color: hsl(var(--text-000)); font-weight: var(--fw-bold); }
 .home-banner-text span { font-size: var(--fs-caption-xs); color: hsl(var(--text-300, var(--text-200))); }
 .home-banner .mini-btn { flex: none; }
-/* 演示模式：标题栏常驻胶囊（不占空屏弹性高度；页脚状态点另有「演示模式」文字）。 */
+/* 演示模式：标题栏常驻胶囊（不占空屏弹性高度）。零凭据缺省走 demo 通道时，这是唯一常驻的
+   「回复来自预录剧本」告知面——模型芯片上的「演示」只在芯片上，点开菜单才有那句完整说明。 */
 .tb-demo {
   display: inline-flex; align-items: center; gap: 5px; flex: none;
   height: 22px; padding: 0 8px; border-radius: var(--radius-pill);
@@ -3442,16 +3491,14 @@ body[data-dsh-claude-style] .md-body .md-code pre { font-size: var(--fs-code); l
 
 /* ══ 窄窗收口（文本列不越栏；产品 minWidth 880，更窄时进一步收）═════ */
 @media (max-width: 1024px) {
-  /* 气沟走令牌：轨道轴线按气沟内缩落位，气沟一改，轴线跟着走（否则窄窗轴线会跑偏）。 */
-  .reading { --reading-pad-x: 24px; }
-  .zone-gate, .zone-composer { padding-left: 24px; padding-right: 24px; }
+  /* 气沟走令牌：轨道轴线按气沟内缩落位，气沟一改，轴线跟着走（否则窄窗轴线会跑偏）。
+     2026-11-07 第 1041 页：令牌落在 .main 上，不落在 .reading 上——阅读列 / 空态 /
+     起手行 / 输入区 / 门卡一起收窄；只改 .reading 会让首页 hero 与输入卡差 25px
+     （880 窗实测：空态气沟 41 vs 输入区 16，问候左缘 345 vs 输入卡 320）。 */
+  .main { --reading-pad-x: 24px; }
 }
 @media (max-width: 920px) {
-  .reading { --reading-pad-x: 16px; }
-  .zone-gate, .zone-composer { padding-left: 16px; padding-right: 16px; }
-  /* 起手行与输入卡同宽：composer 在窄窗改 16px 气沟，建议行不能还留 41px。 */
-  .empty-below { padding-left: 16px; padding-right: 16px; }
-  .main[data-empty="true"] .empty { padding-left: 16px; padding-right: 16px; }
+  .main { --reading-pad-x: 16px; }
 }
 @media (max-width: 620px) {
   /* 字号不再在窄窗反向上调（原 clamp(1.75rem, 7vw, 2rem) 比基准 22px 还大一档）：
@@ -3463,7 +3510,15 @@ body[data-dsh-claude-style] .md-body .md-code pre { font-size: var(--fs-code); l
   .start { min-height: 46px; }
 }
 @media (max-width: 760px) {
-  .side-wrap { display: none; }
+  /* 第 1051 页：窄窗收侧栏不再 display:none 瞬切。断点对取证（responsive-audit.cjs）
+     761→760 实测 composer 左缘 −256px、正文宽 +255px：整块侧栏一帧内消失，主区猛地铺开。
+     复用第 174 行「⌘B 收起」的既有机制（width 0 + 宽度过渡 + visibility 延迟），
+     两种收侧栏同一套手感；过渡结束才 hidden，控件立刻退出 Tab 序又不在动画中途消失。
+     终点几何不变（窄窗仍全宽），变的只是「突然」→ --t-fast 平滑。 */
+  .side-wrap {
+    width: 0 !important; opacity: 0; visibility: hidden; pointer-events: none;
+    transition: width var(--t-fast), opacity var(--t-fast), visibility 0s var(--t-fast);
+  }
 }
 
 /* ── Side chat 窗格（§3.3 旁路对话 / §7.1.3 不回写主会话）──────────────────── */
@@ -4089,7 +4144,7 @@ body[data-dsh-claude-style] .md-body .md-code pre { color: hsl(var(--text-000));
 .ap-drawer { background: var(--gate-surface); box-shadow: var(--shadow-gate); }
 .ap-drawer-head { min-height: var(--h-control-xl); }
 
-/* 空态与门卡的阅读列：气沟由 --reading-pad-x 一处驱动，三处不各写 41/24/16。 */
+/* 空态与门卡的阅读列：气沟由 .main 上的 --reading-pad-x 一处驱动，消费者不各写 41/24/16。 */
 .main[data-empty="true"] .empty { padding-left: var(--reading-pad-x); padding-right: var(--reading-pad-x); }
 .empty-below { padding-left: var(--reading-pad-x); padding-right: var(--reading-pad-x); }
 .zone-composer { padding-left: var(--reading-pad-x); padding-right: var(--reading-pad-x); }
@@ -4097,18 +4152,21 @@ body[data-dsh-claude-style] .md-body .md-code pre { color: hsl(var(--text-000));
 /* 容器断点：以主工作区实际可用宽为准，而不是整窗宽；960 以下收左栏/右栏，
    960–1200 收正文列，≥1200 恢复完整列宽。动效仍只走 --t-*。 */
 .chat-workspace { container-type: inline-size; }
+/* 列宽单源（2026-11-07 第 1041 页）：阅读列 / 门卡 / 输入区 / 首页 hero / 起手行 /
+   错误条 / 提示条 / 导入诊断卡八处共用 .main 上的 --col-max；回到底部按钮的锚点按同一
+   变量算。断点只改这一个变量。此前断点只收前三处，首页 hero 与起手行仍留 52rem
+   ⇒ 1440 窗下输入卡比问候左缘内缩 48px，一屏两条列宽；三张横幅与回到底部也各算一条。 */
 @container (max-width: 1200px) {
-  .reading { max-width: min(46rem, 100%); }
-  .zone-gate, .zone-composer { max-width: min(46rem, 100%); }
+  .main { --col-max: min(46rem, 100%); }
 }
 @container (max-width: 960px) {
   .main-group > [data-panel].pane-panel { display: none; }
   .main-group > .pane-handle { display: none; }
   /* .side-wrap 不在这里：它是 .chat-workspace 的兄弟节点（.shell 直下），容器查询够不着；
      窄窗收左栏由既有窗口媒体查询（≤760px .side-wrap）承担。 */
-  .reading { --reading-pad-x: var(--space-16); }
-  .zone-gate { --gate-pad-x: var(--space-16); }
-  .zone-composer { padding-left: var(--space-16); padding-right: var(--space-16); }
+  /* 气沟同样只改 .main 一个变量：下面的消费者全都读它（880 窗实测主区 576，
+     空态 / 起手行 / 输入区一致 16px）。 */
+  .main { --reading-pad-x: var(--space-16); }
   .at-template-grid { grid-template-columns: minmax(0, 1fr); }
   .memory-grid { grid-template-columns: minmax(0, 1fr); }
   .card-head { grid-template-columns: auto minmax(0, 1fr) auto; }
@@ -4118,4 +4176,66 @@ body[data-dsh-claude-style] .md-body .md-code pre { color: hsl(var(--text-000));
 }
 @container (min-width: 1201px) {
   .page-frame { max-width: 960px; }
+}
+
+/* 第 1050 页 · 双轴缩放的最小命中区（scale-audit.cjs 取证）：
+   用户选最小尺寸档（html[data-ui-size="1"] → --size-scale 0.833）时，工具栏 / 侧栏 /
+   输入区的一批按钮按轴同比缩到 20×20、22、23px，低于第 1045 页「可见按钮 ≥24×24」硬判据。
+   视觉紧凑是用户主动选的，但**命中区不该跟着缩**（frontend-responsive-ui 的 icon button
+   padding 法，同 .md-copy 第 1045 页修法）。只在这一档给 min-* 兜底：默认档这些按钮
+   本就 ≥24px ⇒ min-* 不生效、视觉与几何都不动。
+   验伪：探针里 .tb-title / .s-title 的 ellipsis 单行省略是设计，不算裁切缺陷。 */
+html[data-ui-size="1"] .iconbtn.sm,
+html[data-ui-size="1"] .tb-btn,
+html[data-ui-size="1"] .tb-title,
+html[data-ui-size="1"] .group-toggle,
+html[data-ui-size="1"] .attach-btn,
+html[data-ui-size="1"] .ctl,
+html[data-ui-size="1"] .usage-ring { min-height: 24px; }
+html[data-ui-size="1"] .iconbtn.sm,
+html[data-ui-size="1"] .tb-btn,
+html[data-ui-size="1"] .attach-btn,
+html[data-ui-size="1"] .usage-ring { min-width: 24px; }
+
+/* 第 1053 页 · 业主裁「A 轻度 + B 轻度」，从可看样板落地（第 1052 页）。
+   落点必须是 body[data-dsh-claude-style]：两个 adapter 在那里用
+   `from var(--surface-N) h s l` 重定义 --bg-*，html 上的 [data-theme="dark"] 块
+   够不着（第 1052 页真机自证：html 的 --bg-100 改成 10.5%，.main 背景仍 8.2%）。
+   这里只重定义**语义表面**，组件仍各读自己的 token，不照搬样板的强制元素覆盖。 */
+[data-theme="dark"] body[data-dsh-claude-style] {
+  --bg-100: 0 0% 10.5%;                           /* 画布由 8.2% 提到 10.5% */
+  --surface-card: 60 2.4% 18.4%;                  /* 输入卡 / 浮层表面；亮色档不定义，回退 --bg-000 */
+  --hairline-strong: hsl(var(--text-000) / 20%);  /* 描边 13% → 20%，卡片边界更清楚 */
+}
+/* 输入框带 data-composer-card，vendor 用更高优先级的规则直接设 background；
+   暗色档用同等更高的作用域把它接回同一个语义 token，不另起一套色值。
+   亮色不写这条 ⇒ vendor 规则原样生效，视觉不回归。 */
+html[data-theme="dark"] body[data-dsh-claude-style] [data-composer-card] {
+  background: hsl(var(--surface-card));
+}
+
+/* 第 1053 页 · 业主裁「B 轻度」：项目菜单打开时给背景轻轻压暗 9%，不动布局与交互。
+   z-index 35 低于 .empty-chip-row:has(.chip-pop.show) 的 60 ⇒ 弹层仍清晰；
+   pointer-events:none 不吃点击。只覆盖样板验证过的项目菜单这一处：其它浮层
+   的祖先 stacking context 不同（如 .zone-composer 只有 11），贸然泛化会被遮罩压住，
+   需逐个验证后再铺开；且样板与视觉复核都在暗色，亮色 9% 黑会让白界面明显发灰 ⇒
+   只限暗色主题，亮色保持原样（未验证的路径不报绿）。 */
+[data-theme="dark"] body:has(.chip-pop.show)::after {
+  content: ""; position: fixed; inset: 0; z-index: 35; pointer-events: none;
+  background: hsl(0 0% 0% / 9%);
+}
+
+/* ── 2026-11-09 桌面端交互与排版收口（方案 C 顶栏承载层 · 方案 D 正文行高 · 代码/表格流式右缘）──
+   1. 方案 C：会话态顶栏补轻底色与底部分隔线，与滚动正文形成承载边界；空屏保持无边画布。
+   2. 方案 D：助手正文行高微调至 1.62，结构化代码块与表格向右对齐输入卡右缘，散文保持阅读流体止点。 */
+.app:has(.main:not([data-empty="true"])) .titlebar {
+  background: hsl(var(--bg-200) / 55%);
+  border-bottom: 1px solid var(--hairline);
+}
+.tb-center { gap: 8px; }
+.tb-cluster { gap: 4px; }
+.row.assistant .t { line-height: 1.62; }
+.row.assistant .md-code,
+.row.assistant .md-table-wrap {
+  margin-right: calc(-1 * var(--cds-assistant-message-text-stop));
 }

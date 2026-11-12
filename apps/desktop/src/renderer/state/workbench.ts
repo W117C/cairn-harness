@@ -18,7 +18,7 @@ import type { ThinkingEffort } from "../../../../../src/providers/capabilities";
 //   · 审批/澄清/计划三卡（GateSlot ≤1）、反馈/回滚/复制、主题、协议握手。
 // 本文件只换外壳与布局（蓝本 §3.1 应用外壳）；业务语义不动。
 import { useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState } from "react";
-import type { AgentEvent,AskPayload,PermissionMode,ProjectDiagnosis,ProjectRecord,ProviderInfo,SuggestNextResult } from "../../../../../src/main/ipc-protocol";
+import type { AgentEvent,AskPayload,PermissionMode,ProjectDiagnosis,ProjectRecord,SuggestNextResult } from "../../../../../src/main/ipc-protocol";
 import type { StreamActions } from "../stream-actions";
 // 预览状态是**类型**导入（值面留在主进程：project-preview 拖 node:http/child_process，
 // 渲染层只消费推送快照；文案在渲染层按 status 组合）。
@@ -32,7 +32,6 @@ import { nextPermissionMode } from "../permission-labels";
 import { usePermissionConfirm } from "./use-permission-confirm";
 import { deliveryTrail,formatRevertNotice,mergeSessionSnapshot,projectStream,turnDelivery,usageAggregate,usageSummary } from "../projections";
 import { type QuickStartInput } from "../quick-starts";
-import type { SurfaceError } from "../surface-error";
 import { composerLockReason,fromSessionQueueEntries,type QueuedSend } from "../send-queue";
 import type { DeleteConfirmTarget, SessionConfirmTarget, WorkspaceSession } from "../sessions-view";
 import { findSessionByRef } from "../sessions-view";
@@ -46,13 +45,16 @@ import { transcriptFileName,transcriptMarkdown } from "../transcript";
 import { useMessageAnnotations } from "../useMessageAnnotations";
 import { usePopoverDismiss } from "../usePopoverDismiss";
 import { useStickyScroll } from "../useStickyScroll";
-import { relInWorkspace } from "../workspace-rel";
 import { useChrome } from "./chrome";
 import { useWorkbenchDestination } from "./app-destination";
 import { useComposerDrafts } from "./drafts";
 import { useMessageActions, type RevertTurnTarget } from "./message-actions";
 import { useSessionOps } from "./sessions";
 import { useSessionList } from "./session-list";
+import { useProviderCatalog } from "./use-provider-catalog";
+import { useSessionNotices } from "./session-notices";
+import { useMessageClipboard } from "./message-clipboard";
+import { useWorkbenchBootstrap } from "./use-workbench-bootstrap";
 
 
 declare global { interface Window { agent: import("../../../../../src/main/ipc-protocol").AgentApi } }
@@ -114,9 +116,6 @@ export function useWorkbenchModel() {
   const [sessionLoadIssue, setSessionLoadIssue] = useState<{ seq: number; message: string } | null>(null);
   // M2-4 模型选择：per-session 内存态（Map<sessionId, registryId|null>），M4 才落 settings。
   const selections = useRef(new Map<string, string | null>());
-  const [providerInfo, setProviderInfo] = useState<ProviderInfo | null>(null);
-  // key 状态（stored ∪ env 在场）：ModelPicker 据此过滤内置模型（没配 key 的不显示，而非置灰）。
-  const [providerKeys, setProviderKeys] = useState<{ available: boolean; stored: string[]; envActive: boolean; envProviders: string[] } | null>(null);
   // M3-3 工作区面：注册清单＋新任务归属（null＝host 缺省，未显式切换）。
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
   const [registryNotice, setRegistryNotice] = useState<string | null>(null);
@@ -146,7 +145,6 @@ export function useWorkbenchModel() {
   const composerZoneRef = useRef<HTMLDivElement | null>(null);
   const prevEmptyRect = useRef<DOMRect | null>(null);
   // v6 项目预览：模板目录（下拉数据面）、当前工作区的预览快照（推送面）。
-  const [templates, setTemplates] = useState<{ id: string; name: string; description: string; runKind: "static" | "vite" }[]>([]);
   // 推送回调闭包只建一次 ⇒ 用 ref 存当前工作区，避免读到过期值（同 activeIdRef 的纪律）。
   const activeWorkspaceRef = useRef<string | null>(null);
   // P1-4「最近打开」：projects/sessions 的渲染镜像（callback 在事件时刻读最新值，不吃陈旧闭包）。
@@ -158,61 +156,15 @@ export function useWorkbenchModel() {
   const openSeq = useRef(0);
   /** 打开会话期间到达的 live 事件先落这里，读盘快照回来后再合并（见 mergeSessionSnapshot）。 */
   const openPending = useRef<{ id: string; events: AgentEvent[] } | null>(null);
-  // M3-4/M4-4 会话键控错误条。
-  // 载荷有两种（2026-11-02 真机订正）：一句话，或结构化的 SurfaceError（原因/依据/下一步）。
-  // 结构化那一种是为了别把三件不同的事拍成一行——渲染层据此分行排。
-  const [sessionErrors, setSessionErrors] = useState<ReadonlyMap<string, string | SurfaceError>>(new Map());
-  const setLastError = useCallback((message: string | SurfaceError, sessionId?: string) => {
-    setSessionErrors((prev) => new Map(prev).set(sessionId ?? activeIdRef.current ?? "", message));
-  }, []);
-  const clearLastError = useCallback(() => {
-    setSessionErrors((prev) => {
-      const key = activeIdRef.current ?? "";
-      if (!prev.has(key)) return prev;
-      const next = new Map(prev);
-      next.delete(key);
-      return next;
-    });
-  }, []);
+  // 第 1111 页：会话键控错误/提示条拆到 state/session-notices.ts（同一套按会话 key 的读写）。
+  const { sessionErrors, setLastError, clearLastError, sessionNotices, setLastNotice, clearLastNotice } = useSessionNotices(activeIdRef);
   const { feedback, feedbackBusy, onFeedback: handleFeedback, pinnedEventIds, pinBusy, annotationPending, onPin: handlePin } = useMessageAnnotations(activeId, setLastError);
   /** 打开用户消息附件（2026-10-18）：只接受当前工作区内的路径；外部引用一律明说打不开，
    *  不让 workspacePathAction 在 main 侧静默拒绝成一个没人看见的 no-op。 */
-  const openAttachment = useCallback((path: string): void => {
-    const rel = relInWorkspace(activeWorkspace, path);
-    if (rel === null) {
-      toast.error("该附件不在当前工作区内，无法从界面打开");
-      return;
-    }
-    void window.agent.workspacePathAction(rel, "open").then((r) => {
-      if (!r.ok) toast.error(r.error ?? "打开失败");
-    }, (err: unknown) => {
-      toast.error(`打开失败：${err instanceof Error ? err.message : String(err)}`);
-    });
-  }, [activeWorkspace, toast]);
-  const handleCopyText = useCallback((text: string): Promise<boolean> => {
-    // 复制给回执（2026-10-17）：此前静默写入剪贴板，按了没反应 → 看不出成功与否。
-    // 2026-10-18：回报 boolean，代码块的「已复制」按钮只在真的写进剪贴板后才亮，不再乐观撒谎。
-    return navigator.clipboard.writeText(text).then(() => {
-      toast.success(STR.toast.copied);
-      return true;
-    }, (err: unknown) => {
-      setLastError(`复制失败：${err instanceof Error ? err.message : String(err)}`);
-      return false;
-    });
-  }, [setLastError]);
-  const [sessionNotices, setSessionNotices] = useState<ReadonlyMap<string, string>>(new Map());
-  const setLastNotice = useCallback((message: string, sessionId?: string) => {
-    setSessionNotices((prev) => new Map(prev).set(sessionId ?? activeIdRef.current ?? "", message));
-  }, []);
-  const clearLastNotice = useCallback(() => {
-    setSessionNotices((prev) => {
-      const key = activeIdRef.current ?? "";
-      if (!prev.has(key)) return prev;
-      const next = new Map(prev);
-      next.delete(key);
-      return next;
-    });
-  }, []);
+  // 第 1115 页：附件打开/复制回执拆到 state/message-clipboard.ts（消息级动作，不占 workbench 主体）。
+  const { openAttachment, handleCopyText } = useMessageClipboard(activeWorkspace, setLastError);
+
+  const { providerInfo, providerKeys, refreshProviderInfo, refreshProviderKeys, configuredProviders } = useProviderCatalog(setLastNotice);
 
   // 输入与草稿簇（Phase 2 · 批 2.3）：填入信号 / 草稿搬家 / 附件注入 / 元素选择 / 菜单信号。
   const {
@@ -335,23 +287,8 @@ export function useWorkbenchModel() {
   const [skills, setSkills] = useState<readonly SlashSkill[]>([]);
   const findRef = useRef<FindBarHandle | null>(null);
   const stick = useStickyScroll(streamEl);
-  // 载入设置：打开即进主界面（不拿向导拦在门口）。
-  useEffect(() => {
-    void window.agent.getSettings().then((s) => {
-      setMode(s.mode);
-      setThemePref(s.theme);
-      setCtrlTabCycle(s.ctrlTabCycle);
-      setTextSize(s.textSize);
-      setUiSize(s.uiSize);
-    }).catch(() => undefined);
-  }, []);
-  // v6 模板目录：入口下拉的数据面（拉不到 = 空表，入口禁用而不是摆一个点不动的按钮）。
-  useEffect(() => {
-    void window.agent.projectTemplates().then(
-      (list) => { setTemplates(list.map((t) => ({ ...t, runKind: t.runKind as "static" | "vite" }))); },
-      () => { setTemplates([]); },
-    );
-  }, []);
+  // 第 1112 页：设置首读 + 模板目录从 workbench 拆到 useWorkbenchBootstrap（启动面）。
+  const { templates } = useWorkbenchBootstrap({ setMode, setThemePref, setCtrlTabCycle, setTextSize, setUiSize, setLastError });
   // 快捷键统一收口在下方 hotkeysRef 段（蓝本 §3.6 全表；此处不再各自挂监听）。
 
   // SEMA §3.5/§12：协议版本握手（失配/查询失败 fail-closed）。
@@ -411,29 +348,6 @@ export function useWorkbenchModel() {
   }, [sessions]);
 
   useEmptySurfaceEffects({ showEmpty, activeWorkspace, setEmptyData, emptyCache, sessionsLoaded, sessionsRef, composerZoneRef, prevEmptyRect });
-
-    const refreshProviderInfo = useCallback(() => {
-    // 「静默丢弃要出声」（对齐第十八波 CLI 门迟到决议的出声纪律）：provider-info 解析失败
-    // （如窗口工作区切走清空了自定义 provider 注册表，settings.provider 指的厂家不在场 ⇒ IPC
-    // 抛「未知主会话 provider」）此前被调用方 void 掉——模型 chip 挂着旧名、选择器列表空、
-    // 无任何解释，用户要等发送时才见错。现在：失败 = 诚实降级（info 落 null，选择器走空列表、
-    // 芯片回落原始 id）+ 一条可见通知；与 SettingsPanel 的 .catch(() => setPvInfo(null)) 降级
-    // 同式，但多出声这一步。
-    return window.agent.getProviderInfo().then(setProviderInfo).catch((err: unknown) => {
-      setProviderInfo(null);
-      setLastNotice(`主会话模型目录不可用：${err instanceof Error ? err.message : String(err)}`);
-    });
-  }, []);
-
-  const refreshProviderKeys = useCallback(() => {
-    return window.agent.providerKeyStatus().then(setProviderKeys).catch(() => setProviderKeys(null));
-  }, []);
-
-  // 已配 key 的 provider 集合（stored ∪ env 在场）：ModelPicker 据此过滤内置模型。
-  const configuredProviders = useMemo(
-    () => (providerKeys === null ? undefined : new Set<string>([...providerKeys.stored, ...providerKeys.envProviders])),
-    [providerKeys],
-  );
 
   const { retryProjects } = useSessionSubscription({ refreshSessions, refreshProviderInfo, refreshProviderKeys, setProjects, setRegistryNotice, knownSessionIds, refetching, openPending, activeIdRef, activeWorkspaceRef, lastDeltaAt, runningSet, outcomes, force, setEvents, sendQueue, setLastNotice, askById, setAskBySid, waitingByAsk, waitingCounts });
     const activate = useCallback((id: string | null) => {
@@ -549,7 +463,7 @@ export function useWorkbenchModel() {
       setSessionLoadIssue(failures.length === 0 ? null : { seq, message: failures.join("\n") });
       setQueueLoading(false);
     });
-  }, [activate, openDestination, setLastError, setQueueLocal, touchWorkspace]);
+  }, [activate, openDestination, setLastError, setQueueLocal, touchWorkspace, activeWorkspace]);
 
   const sessionLoadError = activeId !== null && sessionLoadIssue?.seq === openSeq.current
     ? sessionLoadIssue.message : null;

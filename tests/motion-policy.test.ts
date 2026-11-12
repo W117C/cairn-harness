@@ -129,9 +129,8 @@ describe("好标本仍绿（本仓现读面）", () => {
   it("豁免是**显式登记**的，而且条数与登记一致（不是悄悄放过）", () => {
     const m2 = ruleOf(outcome, "M2");
     const ids = (r: RuleResult): string[] => r.exempted.map((e) => e.id);
-    // visibility 0s 六处（含两处「0s + --t-fast 延迟」形态；2026-11-01 第 863 页补的两处
-    // grid 展开——宽度与思考体各一条，都是瞬时翻转，沿用 E1 的规范理由）。
-    expect(ids(m2).filter((i) => i === "E1")).toHaveLength(6);
+    // visibility 0s 七处（含窄窗第 1051 页与第 863 页补的展开——都是瞬时翻转，沿用 E1 的规范理由）。
+    expect(ids(m2).filter((i) => i === "E1")).toHaveLength(7);
     // breathe 家族：4 处 1.6s（被桌面判卷逐字钉住 ⇒ 豁免）。
     // 1.2s 那格随思考行三点呼吸一起退役（改逐格加载标）⇒ E3 豁免撤名，不再占名额。
     expect(ids(m2).filter((i) => i === "E2")).toHaveLength(4);
@@ -139,7 +138,7 @@ describe("好标本仍绿（本仓现读面）", () => {
     // 降级块内按位置豁免的两条时长声明
     expect(ids(m2).filter((i) => i === "E0")).toHaveLength(2);
     const m7 = ruleOf(outcome, "M7");
-    expect(ids(m7).filter((i) => i === "E4")).toHaveLength(1);
+    expect(ids(m7).filter((i) => i === "E4")).toHaveLength(2);
     expect(ids(m7).filter((i) => i === "E5")).toHaveLength(1);
     // 每条豁免都必须带理由（空理由＝无声放行）
     for (const r of outcome.results) {

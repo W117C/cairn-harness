@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Network, Plug, Plus, Terminal } from "lucide-react";
 import type { McpServerConfig } from "../../../../../../src/agent/plugins/types";
 import { ConfirmDialog } from "../ConfirmDialog";
@@ -11,6 +11,7 @@ import {
 import { STR } from "../../strings";
 
 type Server = { name: string; config: McpServerConfig };
+const EMPTY_SERVERS: Server[] = [];
 type Kind = "stdio" | "http" | "sse";
 
 export interface McpDraft {
@@ -203,8 +204,9 @@ export function McpSection(): React.JSX.Element {
   const [probe, setProbe] = useState<{ name: string; text: string; error: boolean } | null>(null);
   const listTitle = useRef<HTMLHeadingElement>(null);
   const config = store.config;
-  const servers = config?.servers ?? [];
-  const selected = servers.find((server) => server.name === selectedName);
+  const servers = config?.servers ?? EMPTY_SERVERS;
+  // 第 1141 页：MCP 选中项按 servers/selectedName 记忆，探测/编辑等局部状态不重扫。
+  const selected = useMemo(() => servers.find((server) => server.name === selectedName), [servers, selectedName]);
 
   const returnToList = (): void => {
     setSelectedName(null);
@@ -297,7 +299,7 @@ export function McpSection(): React.JSX.Element {
             confirmLabel={STR.mcp.probeStart} onClose={() => setConfirm(null)} onConfirm={() => void runProbe(selected)} />}
         </IntegrationSubview>
       ) : <>
-        <IntegrationToolbar headingRef={listTitle} title={STR.mcp.serverList} description={STR.mcp.listDesc}>
+        <IntegrationToolbar headingRef={listTitle} title={STR.mcp.serverList}>
           {servers.length > 0 && <button type="button" className="mini-btn primary" disabled={store.blocked} onClick={() => edit()}>
             <Plus size={15} aria-hidden="true" />{STR.mcp.addServer}
           </button>}

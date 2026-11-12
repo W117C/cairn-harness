@@ -25,6 +25,8 @@ const report: EvolveReport = {
     duplicates: 0,
     badLines: 0,
     byOutcome: { success: 1, failure: 0, unknown: 1 },
+    byOutcomeSource: { judge: 0, verify: 1, user_feedback: 0, unmeasured: 1 },
+    measuredRate: 0.5,
     byClass: { debug: 2 },
     byVerify: { green: 1, red: 0, none: 1 },
     unknownReasons: { judge: 2, verify: 1, user: 2 },
@@ -142,6 +144,25 @@ describe("EvolvePanel", () => {
     expect(h).not.toContain('aria-label="撤销全局经验');
     expect(h).not.toContain('aria-label="激活经验');
     expect(h).not.toContain('aria-label="转休眠');
+  });
+
+  it("需要处理行：计数小片自己说清类别，不挂复述它们的次级说明（第 1168 页）", () => {
+    const h = html({ status: "ready", report });
+    // 行标签仍在，六个计数类别仍逐枚上屏（布局已经把「哪些要看」说完了）。
+    expect(h).toContain("需要处理");
+    for (const chip of ["冲突", "过期", "负证据", "可激活", "坏行", "拒单"]) {
+      expect(h, chip).toContain(chip);
+    }
+    // 原先那句逐字列举这四类的 ss-desc 不许回来；本行再挂任何次级说明都不成立。
+    expect(h).not.toContain("冲突、过期、负证据与过门可激活的条目。");
+    // 精确取这一行（从它自己的 ss-row 起到下一行前），防空转：必须真的取到含六枚 chip 的行。
+    const at = h.indexOf('<span class="ss-row-label">需要处理</span>');
+    expect(at, "页面上必须仍有「需要处理」行").toBeGreaterThan(-1);
+    const rowStart = h.lastIndexOf('<div class="ss-row">', at);
+    const rowEnd = h.indexOf('<div class="ss-row">', at);
+    const row = h.slice(rowStart, rowEnd < 0 ? undefined : rowEnd);
+    expect((row.match(/class="sp-chip"/g) ?? []).length).toBe(6);
+    expect(row).not.toContain('class="ss-desc"');
   });
 
   it("证据/经验：计数改成人读的行与小片；原始串只在「技术详情」折叠里（默认收起）", () => {
@@ -342,6 +363,8 @@ describe("EvolvePanel", () => {
     expect(panelSrc).toContain("<EvolveSection />");
     const panelFile = readFileSync(fileURLToPath(new URL("../src/renderer/components/settings/EvolvePanel.tsx", import.meta.url)), "utf8");
     // 2026-11-07 strings 整批收编：确认对话框文案进 STR.evolve（源文引 STR；值面钉在这里，六个确认 + 横幅）。
+    expect(panelFile).toContain("const findingsById = useMemo(() => new Map(report.global.findings.map((f) => [f.id, f] as const)), [report.global.findings]);");
+    expect(panelFile).toContain("const finding = findingsById.get(entry.id);");
     expect(panelFile).toContain("STR.evolve.evolveFreezeTitle");
     expect(panelFile).toContain("STR.evolve.evolveUnfreezeTitle");
     expect(panelFile).toContain("STR.evolve.revokeConfirmTitle");

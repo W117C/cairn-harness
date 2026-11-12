@@ -1,0 +1,350 @@
+{
+  "theme": "light",
+  "checks": [
+    {
+      "name": "空态：hero 文案 / 起手行 / 输入卡同一阅读列（内容左缘）",
+      "ok": true,
+      "edges": [
+        543.5,
+        543.5,
+        543.5
+      ],
+      "edgeSpread": 0
+    },
+    {
+      "name": "空态：下半屏留白占比记录在案（不硬判，供本批决策）",
+      "ok": true,
+      "tailShare": 36.5,
+      "tailH": 328.1
+    },
+    {
+      "name": "下半屏承接：坐在起手行下方、不超出视口",
+      "ok": true,
+      "y": 571.9,
+      "bottom": 633,
+      "startsBottom": 571.9,
+      "vh": 900
+    },
+    {
+      "name": "下半屏承接：最多 3 条、每条命中区 ≥24px",
+      "ok": true,
+      "count": 1,
+      "heights": [
+        26.4
+      ],
+      "labels": [
+        "接 routing 开关并跑全量验证"
+      ]
+    },
+    {
+      "name": "下半屏承接：与输入卡同一阅读列（--col-max 单源）",
+      "ok": true,
+      "ctxX": 502.5,
+      "pad": 41,
+      "contentX": 543.5,
+      "composerX": 543.5
+    },
+    {
+      "name": "门卡 plan 三段骨架齐备",
+      "ok": true,
+      "h": 181.2,
+      "head": 48,
+      "evidence": 66.2,
+      "actions": 49,
+      "gate": "plan"
+    },
+    {
+      "name": "门卡 clarify 三段骨架齐备",
+      "ok": true,
+      "h": 215.6,
+      "head": 48,
+      "evidence": 100.6,
+      "actions": 49,
+      "gate": "clarify"
+    },
+    {
+      "name": "门卡 approval 三段骨架齐备",
+      "ok": true,
+      "h": 153.4,
+      "head": 48,
+      "evidence": 38.4,
+      "actions": 49,
+      "gate": "approval"
+    },
+    {
+      "name": "三卡共用骨架：head 高度一致",
+      "ok": true,
+      "headHeights": [
+        48,
+        48,
+        48
+      ],
+      "spread": 0
+    },
+    {
+      "name": "三卡共用骨架：actions 高度一致",
+      "ok": true,
+      "actionHeights": [
+        49,
+        49,
+        49
+      ],
+      "spread": 0
+    },
+    {
+      "name": "门卡出现不顶走正在读的正文（scrollTop 不变）",
+      "ok": true,
+      "beforeScroll": 0,
+      "afterPlanScroll": 0,
+      "afterAllScroll": 0
+    },
+    {
+      "name": "门卡高度封顶不撑满视口",
+      "ok": true,
+      "maxCardH": 215.6,
+      "limit": 630
+    },
+    {
+      "name": "console 无错误",
+      "ok": true,
+      "pageErrors": []
+    }
+  ],
+  "hardFailures": [],
+  "empty": {
+    "greet": {
+      "x": 543.5,
+      "y": 181.2,
+      "w": 328.3,
+      "h": 28.6,
+      "bottom": 209.8
+    },
+    "hero": {
+      "x": 502.5,
+      "y": 38,
+      "w": 736,
+      "h": 231.9,
+      "bottom": 269.9
+    },
+    "chipRow": {
+      "x": 543.5,
+      "y": 225.8,
+      "w": 106,
+      "h": 32.1,
+      "bottom": 257.9
+    },
+    "composer": {
+      "x": 543.5,
+      "y": 269.9,
+      "w": 654,
+      "h": 146,
+      "bottom": 415.9
+    },
+    "starts": {
+      "x": 543.5,
+      "y": 439.9,
+      "w": 654,
+      "h": 132,
+      "bottom": 571.9
+    },
+    "below": {
+      "x": 502.5,
+      "y": 427.9,
+      "w": 736,
+      "h": 144,
+      "bottom": 571.9
+    },
+    "tail": {
+      "x": 304,
+      "y": 571.9,
+      "w": 1133,
+      "h": 328.1,
+      "bottom": 900
+    },
+    "vh": 900
+  },
+  "emptyDetail": {
+    "main": {
+      "x": 304,
+      "w": 1133,
+      "ml": "0px",
+      "mr": "0px",
+      "pl": "0px",
+      "pr": "0px",
+      "maxW": "none",
+      "box": "border-box"
+    },
+    "empty": {
+      "x": 502.5,
+      "w": 736,
+      "ml": "198.5px",
+      "mr": "198.5px",
+      "pl": "41px",
+      "pr": "41px",
+      "maxW": "min(736px, 100%)",
+      "box": "border-box"
+    },
+    "below": {
+      "x": 502.5,
+      "w": 736,
+      "ml": "198.5px",
+      "mr": "198.5px",
+      "pl": "41px",
+      "pr": "41px",
+      "maxW": "min(736px, 100%)",
+      "box": "border-box"
+    },
+    "zone": {
+      "x": 502.5,
+      "w": 736,
+      "ml": "198.5px",
+      "mr": "198.5px",
+      "pl": "41px",
+      "pr": "41px",
+      "maxW": "min(736px, 100%)",
+      "box": "border-box"
+    },
+    "card": {
+      "x": 543.5,
+      "w": 654,
+      "ml": "0px",
+      "mr": "0px",
+      "pl": "0px",
+      "pr": "0px",
+      "maxW": "none",
+      "box": "border-box"
+    },
+    "starts": {
+      "x": 543.5,
+      "w": 654,
+      "ml": "0px",
+      "mr": "0px",
+      "pl": "0px",
+      "pr": "0px",
+      "maxW": "none",
+      "box": "border-box"
+    },
+    "colMax": "min(46rem, 100%)",
+    "readingPad": "calc(2.5625rem * 1)"
+  },
+  "cards": {
+    "plan": {
+      "card": {
+        "x": 543.5,
+        "y": 602.8,
+        "w": 654,
+        "h": 181.2,
+        "bottom": 784
+      },
+      "head": {
+        "x": 544.5,
+        "y": 603.8,
+        "w": 652,
+        "h": 48,
+        "bottom": 651.8
+      },
+      "evidence": {
+        "x": 556.5,
+        "y": 659.8,
+        "w": 628,
+        "h": 66.2,
+        "bottom": 726
+      },
+      "actions": {
+        "x": 544.5,
+        "y": 734,
+        "w": 652,
+        "h": 49,
+        "bottom": 783
+      },
+      "gate": {
+        "x": 502.5,
+        "y": 792,
+        "w": 736,
+        "h": 0,
+        "bottom": 792
+      },
+      "status": null,
+      "gateAttr": "plan"
+    },
+    "clarify": {
+      "card": {
+        "x": 543.5,
+        "y": 568.4,
+        "w": 654,
+        "h": 215.6,
+        "bottom": 784
+      },
+      "head": {
+        "x": 544.5,
+        "y": 569.4,
+        "w": 652,
+        "h": 48,
+        "bottom": 617.4
+      },
+      "evidence": {
+        "x": 556.5,
+        "y": 625.4,
+        "w": 628,
+        "h": 100.6,
+        "bottom": 726
+      },
+      "actions": {
+        "x": 544.5,
+        "y": 734,
+        "w": 652,
+        "h": 49,
+        "bottom": 783
+      },
+      "gate": {
+        "x": 502.5,
+        "y": 792,
+        "w": 736,
+        "h": 0,
+        "bottom": 792
+      },
+      "status": null,
+      "gateAttr": "clarify"
+    },
+    "approval": {
+      "card": {
+        "x": 543.5,
+        "y": 630.6,
+        "w": 654,
+        "h": 153.4,
+        "bottom": 784
+      },
+      "head": {
+        "x": 544.5,
+        "y": 631.6,
+        "w": 652,
+        "h": 48,
+        "bottom": 679.6
+      },
+      "evidence": {
+        "x": 556.5,
+        "y": 687.6,
+        "w": 628,
+        "h": 38.4,
+        "bottom": 726
+      },
+      "actions": {
+        "x": 544.5,
+        "y": 734,
+        "w": 652,
+        "h": 49,
+        "bottom": 783
+      },
+      "gate": {
+        "x": 502.5,
+        "y": 792,
+        "w": 736,
+        "h": 0,
+        "bottom": 792
+      },
+      "status": "pending_approval",
+      "gateAttr": "approval"
+    }
+  },
+  "pageErrors": []
+}

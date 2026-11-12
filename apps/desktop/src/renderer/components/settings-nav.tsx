@@ -45,10 +45,17 @@ export const SECTIONS: readonly { id: SectionId; label: string; icon: React.JSX.
   { id: "about", label: "关于与更新", icon: <Globe size={14} /> },
 ];
 
+// 第 1137 页：分区 id → 元数据一次建表；导航/标题/页头不再各自 find。
+const SECTION_BY_ID = new Map(SECTIONS.map((s) => [s.id, s] as const));
+
+export function sectionById(id: SectionId): (typeof SECTIONS)[number] | undefined {
+  return SECTION_BY_ID.get(id);
+}
+
 /** 分区标题的唯一出口（第 949 页）：导航、命令面板与设置页头都从这里取。
  *  此前设置页头把七个标题又抄了一遍字面量——导航改了名、页头还留旧话。 */
 export function sectionLabel(id: SectionId): string {
-  return SECTIONS.find((s) => s.id === id)?.label ?? id;
+  return sectionById(id)?.label ?? id;
 }
 
 /** 分区搜索词（2026-10-18 补设置页搜索）：只补**同义/口语**词，不进 SECTIONS 本体——

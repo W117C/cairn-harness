@@ -66,7 +66,8 @@ console.log("  注册工具:", names.join(", "));
 // M2 起 10 个；2026-10-15 加 read_image（识图）；2026-10-16 加 render_image（渲染 HTML/SVG 成 PNG）；2026-11-04 加 todo_write（工作状态面板清单）⇒ 13。
 // 2026-11-05 加 task_output / task_stop（后台任务三件套，run_shell 的 background 档）⇒ 15。
 // 2026-11-06 加 git_read（只读三合一）⇒ 16；+calc（确定性算术）+ list_dir（目录总览）⇒ 18；+read_doc（文档读取）⇒ 19。
-check("注册表含 19 个工具", names.length === 19, "实际 " + String(names.length));
+// 2026-11-10 加 web_doc（网络文档→文本）⇒ 20；+fs_ops（文件生命周期四动作）⇒ 21。
+check("注册表含 21 个工具", names.length === 21, "实际 " + String(names.length));
 
 console.log("\n== grep ==");
 {
@@ -400,6 +401,49 @@ console.log("\n== 新工具实测（git_read / read_doc / calc / list_dir） =="
   check("list_dir 单层 200 项帽 + 截断提示 + 相对路径",
     listing.ok && listing.output.includes("201 项，截断到 200") && listing.output.includes("[list_dir] 已截断") &&
     assertNoAbsPath(listing.output, ws), listing.output.split("\n")[0]);
+  await rm(ws, { recursive: true, force: true });
+}
+
+console.log("\n== fs_ops（文件生命周期四动作） ==");
+{
+  const { ws, ctx } = await makeWs();
+  // ① mkdir：递归建 + 幂等；已存在同名文件拒绝（静默成功会让模型以为建好了目录）。
+  await writeFile(join(ws, "afile"), "x", "utf8");
+  const mk1 = await TOOLS.fs_ops.run({ action: "mkdir", path: "deep/nested/dir" }, ctx);
+  const mk2 = await TOOLS.fs_ops.run({ action: "mkdir", path: "deep/nested/dir" }, ctx);
+  const mk3 = await TOOLS.fs_ops.run({ action: "mkdir", path: "afile" }, ctx).catch((e: unknown) => e);
+  check("① mkdir 递归建 + 幂等 + 同名文件拒绝",
+    mk1.ok && mk2.ok && mk1.output.includes("已创建目录") && mk3 instanceof ToolError);
+  // ② move：改名；目标已存在默认拒绝、显式 allow_overwrite 才放行且拍快照。
+  await writeFile(join(ws, "src.txt"), "move me", "utf8");
+  await writeFile(join(ws, "dst.txt"), "old content", "utf8");
+  const mvClash = await TOOLS.fs_ops.run({ action: "move", path: "src.txt", target: "dst.txt" }, ctx).catch((e: unknown) => e);
+  const mvOk = await TOOLS.fs_ops.run({ action: "move", path: "src.txt", target: "dst.txt", allow_overwrite: true }, ctx);
+  check("② move 改名 + 覆盖需显式 + 覆盖前快照",
+    mvClash instanceof ToolError && mvOk.ok && (mvOk as { snapshotId?: string }).snapshotId !== undefined,
+    String(mvClash instanceof ToolError ? mvClash.message : mvOk.output));
+  // ③ delete：删文件拍快照；非空目录拒绝并点名出口；.agent/ 禁区拒绝。
+  const del = await TOOLS.fs_ops.run({ action: "delete", path: "dst.txt" }, ctx);
+  const dirDel = await TOOLS.fs_ops.run({ action: "delete", path: "deep" }, ctx).catch((e: unknown) => e);
+  const agentDel = await TOOLS.fs_ops.run({ action: "delete", path: ".agent/config.json" }, ctx).catch((e: unknown) => e);
+  check("③ delete 快照 + 非空目录拒绝 + .agent 禁区",
+    del.ok && (del as { snapshotId?: string }).snapshotId !== undefined &&
+    dirDel instanceof ToolError && dirDel.message.includes("批量删除") &&
+    agentDel instanceof ToolError,
+    del.output.split("\n")[0] as string);
+  check("③ 输出全部相对路径", assertNoAbsPath(del.output, ws) && assertNoAbsPath(mvOk.output, ws));
+  await rm(ws, { recursive: true, force: true });
+}
+
+console.log("\n== web_doc（网络文档→文本） ==");
+{
+  const { ws, ctx } = await makeWs();
+  // 不出网的实测：SSRF 判据是纯函数面，loopback 地址在解析前就被拒——
+  // 这一支只证「判据在传输前开火」，抓真文档的网络路径由 web-fetch-check 与单元判卷覆盖。
+  const loopback = await TOOLS.web_doc.run({ url: "http://127.0.0.1:9/x.pdf" }, ctx).catch((e: unknown) => e);
+  check("① loopback 一律拒绝（SSRF 判据在传输前开火）", !((loopback as { ok?: boolean }).ok));
+  const bad = await TOOLS.web_doc.run({ url: "" }, ctx).catch((e: unknown) => e);
+  check("② 空 url fail-loud", bad instanceof ToolError);
   await rm(ws, { recursive: true, force: true });
 }
 

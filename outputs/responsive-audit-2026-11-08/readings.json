@@ -1,0 +1,831 @@
+{
+  "widths": [
+    1440,
+    1200,
+    1120,
+    1119,
+    1080,
+    1024,
+    960,
+    920,
+    880,
+    760,
+    720,
+    700,
+    640,
+    620
+  ],
+  "pairs": [
+    [
+      1201,
+      1200
+    ],
+    [
+      1121,
+      1120
+    ],
+    [
+      961,
+      960
+    ],
+    [
+      881,
+      880
+    ],
+    [
+      761,
+      760
+    ],
+    [
+      641,
+      640
+    ],
+    [
+      621,
+      620
+    ]
+  ],
+  "readings": [
+    {
+      "vw": 1440,
+      "scrollW": 1440,
+      "overflow": false,
+      "composer": {
+        "l": 544,
+        "r": 1198,
+        "w": 654,
+        "h": 96
+      },
+      "reading": {
+        "l": 503,
+        "r": 1239,
+        "w": 736,
+        "h": 836
+      },
+      "zone": {
+        "l": 304,
+        "r": 1437,
+        "w": 1133,
+        "h": 754
+      },
+      "inspector": {
+        "l": 1440,
+        "r": 1440,
+        "w": 0,
+        "h": 862
+      },
+      "session": {
+        "l": 54,
+        "r": 296,
+        "w": 242,
+        "h": 52
+      },
+      "toolbar": null,
+      "inspectorVisible": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clippedLabels": 0
+    },
+    {
+      "vw": 1200,
+      "scrollW": 1200,
+      "overflow": false,
+      "composer": {
+        "l": 400,
+        "r": 1104,
+        "w": 704,
+        "h": 96
+      },
+      "reading": {
+        "l": 384,
+        "r": 1120,
+        "w": 736,
+        "h": 836
+      },
+      "zone": {
+        "l": 304,
+        "r": 1200,
+        "w": 896,
+        "h": 754
+      },
+      "inspector": {
+        "l": 1200,
+        "r": 1200,
+        "w": 0,
+        "h": 862
+      },
+      "session": {
+        "l": 54,
+        "r": 296,
+        "w": 242,
+        "h": 52
+      },
+      "toolbar": null,
+      "inspectorVisible": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clippedLabels": 0
+    },
+    {
+      "vw": 1120,
+      "scrollW": 1120,
+      "overflow": false,
+      "composer": {
+        "l": 360,
+        "r": 1064,
+        "w": 704,
+        "h": 96
+      },
+      "reading": {
+        "l": 344,
+        "r": 1080,
+        "w": 736,
+        "h": 836
+      },
+      "zone": {
+        "l": 304,
+        "r": 1120,
+        "w": 816,
+        "h": 754
+      },
+      "inspector": {
+        "l": 1120,
+        "r": 1120,
+        "w": 0,
+        "h": 862
+      },
+      "session": {
+        "l": 54,
+        "r": 296,
+        "w": 242,
+        "h": 52
+      },
+      "toolbar": null,
+      "inspectorVisible": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clippedLabels": 0
+    },
+    {
+      "vw": 1119,
+      "scrollW": 1119,
+      "overflow": false,
+      "composer": {
+        "l": 360,
+        "r": 1064,
+        "w": 704,
+        "h": 96
+      },
+      "reading": {
+        "l": 344,
+        "r": 1080,
+        "w": 736,
+        "h": 836
+      },
+      "zone": {
+        "l": 304,
+        "r": 1119,
+        "w": 815,
+        "h": 754
+      },
+      "inspector": {
+        "l": 1119,
+        "r": 1119,
+        "w": 0,
+        "h": 862
+      },
+      "session": {
+        "l": 54,
+        "r": 296,
+        "w": 242,
+        "h": 52
+      },
+      "toolbar": null,
+      "inspectorVisible": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clippedLabels": 0
+    },
+    {
+      "vw": 1080,
+      "scrollW": 1080,
+      "overflow": false,
+      "composer": {
+        "l": 340,
+        "r": 1044,
+        "w": 704,
+        "h": 96
+      },
+      "reading": {
+        "l": 324,
+        "r": 1060,
+        "w": 736,
+        "h": 836
+      },
+      "zone": {
+        "l": 304,
+        "r": 1080,
+        "w": 776,
+        "h": 754
+      },
+      "inspector": {
+        "l": 1080,
+        "r": 1080,
+        "w": 0,
+        "h": 862
+      },
+      "session": {
+        "l": 54,
+        "r": 296,
+        "w": 242,
+        "h": 52
+      },
+      "toolbar": null,
+      "inspectorVisible": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clippedLabels": 0
+    },
+    {
+      "vw": 1024,
+      "scrollW": 1024,
+      "overflow": false,
+      "composer": {
+        "l": 320,
+        "r": 1008,
+        "w": 688,
+        "h": 96
+      },
+      "reading": {
+        "l": 304,
+        "r": 1024,
+        "w": 720,
+        "h": 836
+      },
+      "zone": {
+        "l": 304,
+        "r": 1024,
+        "w": 720,
+        "h": 754
+      },
+      "inspector": {
+        "l": 1024,
+        "r": 1024,
+        "w": 0,
+        "h": 862
+      },
+      "session": {
+        "l": 54,
+        "r": 296,
+        "w": 242,
+        "h": 52
+      },
+      "toolbar": null,
+      "inspectorVisible": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clippedLabels": 0
+    },
+    {
+      "vw": 960,
+      "scrollW": 960,
+      "overflow": false,
+      "composer": {
+        "l": 320,
+        "r": 944,
+        "w": 624,
+        "h": 96
+      },
+      "reading": {
+        "l": 304,
+        "r": 960,
+        "w": 656,
+        "h": 836
+      },
+      "zone": {
+        "l": 304,
+        "r": 960,
+        "w": 656,
+        "h": 754
+      },
+      "inspector": {
+        "l": 960,
+        "r": 960,
+        "w": 0,
+        "h": 862
+      },
+      "session": {
+        "l": 54,
+        "r": 296,
+        "w": 242,
+        "h": 52
+      },
+      "toolbar": null,
+      "inspectorVisible": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clippedLabels": 0
+    },
+    {
+      "vw": 920,
+      "scrollW": 920,
+      "overflow": false,
+      "composer": {
+        "l": 320,
+        "r": 904,
+        "w": 584,
+        "h": 96
+      },
+      "reading": {
+        "l": 304,
+        "r": 920,
+        "w": 616,
+        "h": 860
+      },
+      "zone": {
+        "l": 304,
+        "r": 920,
+        "w": 616,
+        "h": 754
+      },
+      "inspector": {
+        "l": 920,
+        "r": 920,
+        "w": 0,
+        "h": 862
+      },
+      "session": {
+        "l": 54,
+        "r": 296,
+        "w": 242,
+        "h": 52
+      },
+      "toolbar": null,
+      "inspectorVisible": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clippedLabels": 0
+    },
+    {
+      "vw": 880,
+      "scrollW": 880,
+      "overflow": false,
+      "composer": {
+        "l": 320,
+        "r": 864,
+        "w": 544,
+        "h": 96
+      },
+      "reading": {
+        "l": 304,
+        "r": 880,
+        "w": 576,
+        "h": 860
+      },
+      "zone": {
+        "l": 304,
+        "r": 880,
+        "w": 576,
+        "h": 754
+      },
+      "inspector": {
+        "l": 880,
+        "r": 880,
+        "w": 0,
+        "h": 862
+      },
+      "session": {
+        "l": 54,
+        "r": 296,
+        "w": 242,
+        "h": 52
+      },
+      "toolbar": null,
+      "inspectorVisible": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clippedLabels": 0
+    },
+    {
+      "vw": 760,
+      "scrollW": 760,
+      "overflow": false,
+      "composer": {
+        "l": 65,
+        "r": 744,
+        "w": 679,
+        "h": 96
+      },
+      "reading": {
+        "l": 49,
+        "r": 760,
+        "w": 711,
+        "h": 836
+      },
+      "zone": {
+        "l": 49,
+        "r": 760,
+        "w": 711,
+        "h": 754
+      },
+      "inspector": {
+        "l": 760,
+        "r": 760,
+        "w": 0,
+        "h": 862
+      },
+      "session": {
+        "l": 54,
+        "r": 65,
+        "w": 11,
+        "h": 52
+      },
+      "toolbar": null,
+      "inspectorVisible": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clippedLabels": 1
+    },
+    {
+      "vw": 720,
+      "scrollW": 720,
+      "overflow": false,
+      "composer": {
+        "l": 65,
+        "r": 704,
+        "w": 639,
+        "h": 96
+      },
+      "reading": {
+        "l": 49,
+        "r": 720,
+        "w": 671,
+        "h": 836
+      },
+      "zone": {
+        "l": 49,
+        "r": 720,
+        "w": 671,
+        "h": 754
+      },
+      "inspector": {
+        "l": 720,
+        "r": 720,
+        "w": 0,
+        "h": 862
+      },
+      "session": {
+        "l": 54,
+        "r": 65,
+        "w": 11,
+        "h": 52
+      },
+      "toolbar": null,
+      "inspectorVisible": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clippedLabels": 1
+    },
+    {
+      "vw": 700,
+      "scrollW": 700,
+      "overflow": false,
+      "composer": {
+        "l": 65,
+        "r": 684,
+        "w": 619,
+        "h": 96
+      },
+      "reading": {
+        "l": 49,
+        "r": 700,
+        "w": 651,
+        "h": 836
+      },
+      "zone": {
+        "l": 49,
+        "r": 700,
+        "w": 651,
+        "h": 754
+      },
+      "inspector": {
+        "l": 700,
+        "r": 700,
+        "w": 0,
+        "h": 862
+      },
+      "session": {
+        "l": 54,
+        "r": 65,
+        "w": 11,
+        "h": 52
+      },
+      "toolbar": null,
+      "inspectorVisible": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clippedLabels": 1
+    },
+    {
+      "vw": 640,
+      "scrollW": 640,
+      "overflow": false,
+      "composer": {
+        "l": 65,
+        "r": 624,
+        "w": 559,
+        "h": 96
+      },
+      "reading": {
+        "l": 49,
+        "r": 640,
+        "w": 591,
+        "h": 860
+      },
+      "zone": {
+        "l": 49,
+        "r": 640,
+        "w": 591,
+        "h": 754
+      },
+      "inspector": {
+        "l": 640,
+        "r": 640,
+        "w": 0,
+        "h": 862
+      },
+      "session": {
+        "l": 54,
+        "r": 65,
+        "w": 11,
+        "h": 52
+      },
+      "toolbar": null,
+      "inspectorVisible": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clippedLabels": 1
+    },
+    {
+      "vw": 620,
+      "scrollW": 620,
+      "overflow": false,
+      "composer": {
+        "l": 65,
+        "r": 604,
+        "w": 539,
+        "h": 96
+      },
+      "reading": {
+        "l": 49,
+        "r": 620,
+        "w": 571,
+        "h": 860
+      },
+      "zone": {
+        "l": 49,
+        "r": 620,
+        "w": 571,
+        "h": 754
+      },
+      "inspector": {
+        "l": 620,
+        "r": 620,
+        "w": 0,
+        "h": 862
+      },
+      "session": {
+        "l": 54,
+        "r": 65,
+        "w": 11,
+        "h": 52
+      },
+      "toolbar": null,
+      "inspectorVisible": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clippedLabels": 1
+    }
+  ],
+  "pairDeltas": [
+    {
+      "from": 1201,
+      "to": 1200,
+      "composerLeftDelta": -1,
+      "readingWidthDelta": 0,
+      "scrollWDelta": -1
+    },
+    {
+      "from": 1121,
+      "to": 1120,
+      "composerLeftDelta": -1,
+      "readingWidthDelta": 0,
+      "scrollWDelta": -1
+    },
+    {
+      "from": 961,
+      "to": 960,
+      "composerLeftDelta": 0,
+      "readingWidthDelta": -1,
+      "scrollWDelta": -1
+    },
+    {
+      "from": 881,
+      "to": 880,
+      "composerLeftDelta": 0,
+      "readingWidthDelta": -1,
+      "scrollWDelta": -1
+    },
+    {
+      "from": 761,
+      "to": 760,
+      "composerLeftDelta": -255,
+      "readingWidthDelta": 254,
+      "scrollWDelta": -1
+    },
+    {
+      "from": 641,
+      "to": 640,
+      "composerLeftDelta": 0,
+      "readingWidthDelta": -1,
+      "scrollWDelta": -1
+    },
+    {
+      "from": 621,
+      "to": 620,
+      "composerLeftDelta": 0,
+      "readingWidthDelta": -1,
+      "scrollWDelta": -1
+    }
+  ],
+  "sideCollapse": {
+    "wide": 256,
+    "mid": 256,
+    "end": 1,
+    "smooth": false
+  },
+  "inspectorOpen": [
+    {
+      "vw": 1440,
+      "scrollW": 1440,
+      "overflow": false,
+      "composer": {
+        "l": 364,
+        "r": 1018,
+        "w": 654,
+        "h": 96
+      },
+      "reading": {
+        "l": 323,
+        "r": 1059,
+        "w": 736,
+        "h": 836
+      },
+      "zone": {
+        "l": 304,
+        "r": 1077,
+        "w": 773,
+        "h": 754
+      },
+      "inspector": {
+        "l": 1080,
+        "r": 1440,
+        "w": 360,
+        "h": 862
+      },
+      "session": {
+        "l": 54,
+        "r": 296,
+        "w": 242,
+        "h": 52
+      },
+      "toolbar": null,
+      "inspectorVisible": true,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clippedLabels": 0
+    },
+    {
+      "vw": 880,
+      "scrollW": 880,
+      "overflow": false,
+      "composer": {
+        "l": 320,
+        "r": 864,
+        "w": 544,
+        "h": 96
+      },
+      "reading": {
+        "l": 304,
+        "r": 880,
+        "w": 576,
+        "h": 860
+      },
+      "zone": {
+        "l": 304,
+        "r": 880,
+        "w": 576,
+        "h": 754
+      },
+      "inspector": {
+        "l": 880,
+        "r": 880,
+        "w": 0,
+        "h": 862
+      },
+      "session": {
+        "l": 54,
+        "r": 296,
+        "w": 242,
+        "h": 52
+      },
+      "toolbar": null,
+      "inspectorVisible": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clippedLabels": 0
+    },
+    {
+      "vw": 640,
+      "scrollW": 640,
+      "overflow": false,
+      "composer": {
+        "l": 65,
+        "r": 624,
+        "w": 559,
+        "h": 96
+      },
+      "reading": {
+        "l": 49,
+        "r": 640,
+        "w": 591,
+        "h": 860
+      },
+      "zone": {
+        "l": 49,
+        "r": 640,
+        "w": 591,
+        "h": 754
+      },
+      "inspector": {
+        "l": 640,
+        "r": 640,
+        "w": 0,
+        "h": 862
+      },
+      "session": {
+        "l": 54,
+        "r": 65,
+        "w": 11,
+        "h": 52
+      },
+      "toolbar": null,
+      "inspectorVisible": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clippedLabels": 1
+    }
+  ],
+  "consoleErrors": [],
+  "hardFailures": [],
+  "jumps": [
+    {
+      "from": 1440,
+      "to": 1200,
+      "composerLeftDelta": -144,
+      "readingWidthDelta": 0,
+      "smallDelta": 0
+    },
+    {
+      "from": 1200,
+      "to": 1120,
+      "composerLeftDelta": -40,
+      "readingWidthDelta": 0,
+      "smallDelta": 0
+    },
+    {
+      "from": 880,
+      "to": 760,
+      "composerLeftDelta": -255,
+      "readingWidthDelta": 135,
+      "smallDelta": 0
+    }
+  ]
+}

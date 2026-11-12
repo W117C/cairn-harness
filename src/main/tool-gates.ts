@@ -10,7 +10,7 @@ import { createActionFusion } from "../agent/action-fusion";
 import { AUTOMATION_TOOL_NAMES } from "../agent/automation-surface";
 import { gateToolSpecs, sessionToolSpecs, type SessionPluginTool } from "../agent/session-provider";
 import { currentPluginRuntime, type PluginRuntime } from "../agent/plugins";
-import { MCP_ACTIVE_TOOL_LIMIT, mcpServerKey, type McpToolInfo } from "../agent/plugins/mcp";
+import { capMcpDescription, MCP_ACTIVE_TOOL_LIMIT, MCP_CATALOG_DESC_CHAR_LIMIT, mcpServerKey, type McpToolInfo } from "../agent/plugins/mcp";
 import {
   searchToolCatalog,
   TOOL_SEARCH_DEFAULT_RESULTS,
@@ -136,7 +136,8 @@ export function withSkillAllowNote(tool: string, reason: string): string {
  *  读侧三把（`read_file`/`grep`/`glob`）在 2026-10-20 接进来（此前主会话没包它们 ⇒
  *  路径通道的判据在主会话这条路上一次也没跑过）。它们在 `TOOL_NAMES` 里 ⇒ 直接列名即可。 */
 type GatedName = "write_file" | "edit_file" | "apply_patch" | "run_shell" | "web_fetch" | "web_search" | "diagnose" | "lsp" | "render_image" | "read_file" | "grep" | "glob"
-  | "browser_navigate" | "browser_snapshot" | "browser_pick";
+  | "browser_navigate" | "browser_snapshot" | "browser_pick"
+  | "web_doc" | "fs_ops";
 
 /** 审批卡上要**多显示**的字段（纯展示面；不改执行语义，也不改模型给的 args）。
  *
@@ -479,18 +480,31 @@ function mcpActivateTool(rt: PluginRuntime): Tool {
     name: "mcp_activate",
     async run(args) {
       const server = typeof args.server === "string" ? args.server.trim() : "";
-      if (server === "") return { ok: false, output: "mcp_activate: server 参数必填（plugin/server，从 mcp_list 取）" };
-      const one = typeof args.tool === "string" ? args.tool.trim() : "";
-      const many = Array.isArray(args.tools)
-        ? args.tools.filter((x): x is string => typeof x === "string").map((x) => x.trim()).filter((x) => x !== "")
-        : [];
-      if (one !== "" && many.length > 0) {
+      if (server === "") return { ok: false, output: "mcp_activate: server 参数必填（plugin/server，从 tool_search 或 mcp_list 取）" };
+      if (Object.keys(args).some((key) => !["server", "tool", "tools", "tool_name"].includes(key))) {
+        return { ok: false, output: "mcp_activate: 选择工具请用 tool 或 tools（兼容旧回执的 tool_name）" };
+      }
+      // Old search receipts used tool_name. Honor them as single-tool selectors.
+      if (args.tool !== undefined && args.tool_name !== undefined) {
+        return { ok: false, output: "mcp_activate: 只传 tool，或使用旧回执中的 tool_name，两者勿同时传入" };
+      }
+      const one = args.tool !== undefined ? args.tool : args.tool_name;
+      const many = args.tools;
+      if (one !== undefined && many !== undefined) {
         return { ok: false, output: "mcp_activate: tool 与 tools 二选一（只激活一把用 tool，多把用 tools）" };
       }
-      const selected = one !== "" ? [one] : many;
-      const r = selected.length > 0
-        ? rt.activateMcpTools(server, selected)
-        : rt.activateMcpServer(server);
+      let selected: string[] | undefined;
+      if (one !== undefined) {
+        if (typeof one !== "string" || one.trim() === "") return { ok: false, output: "mcp_activate: tool 必须是非空工具名" };
+        selected = [one.trim()];
+      }
+      if (many !== undefined) {
+        if (!Array.isArray(many) || many.length === 0 || !many.every((name): name is string => typeof name === "string" && name.trim() !== "")) {
+          return { ok: false, output: "mcp_activate: tools 必须是包含非空工具名的数组" };
+        }
+        selected = many.map((name) => name.trim());
+      }
+      const r = selected === undefined ? rt.activateMcpServer(server) : rt.activateMcpTools(server, selected);
       if (!r.ok) return { ok: false, output: r.error ?? "激活失败" };
       const activeTools = r.tools.filter((t) => t.active);
       const shown = activeTools.slice(0, 20).map((t) => "- " + t.scopedName);
@@ -499,7 +513,7 @@ function mcpActivateTool(rt: PluginRuntime): Tool {
         ok: true,
         output: "已激活 " + server + "（" + String(activeTools.length) + " 把工具；当前 active " +
           String(rt.activeMcpToolCount()) + "/" + String(MCP_ACTIVE_TOOL_LIMIT) +
-          " 把；schema 在下一轮请求进入模型面，本轮不要凭名字猜参数）：\n" + shown.join("\n") + more,
+          " 把，参数以下一轮工具表为准）：\n" + shown.join("\n") + more,
       };
     },
   };
@@ -548,24 +562,41 @@ function toolSearchCatalog(rt: PluginRuntime): ToolCatalogEntry[] {
       source: "mcp",
       server,
       active,
-      ...(active ? {} : { activation: { tool: "mcp_activate" as const, server, tool_name: scoped } }),
     });
   }
   return catalog;
 }
 
-/** 只读检索元工具：返回候选与精确 schema，**不激活、不执行**。
+/** 只读检索元工具：模型优先取简要候选，兼容需要精确 schema 的调用。
  *  真正的执行仍走 `gatedMcpTool`；read-only 档能搜到写工具，但调用时照样被门拒绝。 */
 function toolSearchTool(rt: PluginRuntime): Tool {
   return {
     name: "tool_search",
     async run(args) {
       const query = typeof args.query === "string" ? args.query : "";
+      const detail = args.detail;
+      if (detail !== undefined && detail !== "summary" && detail !== "schema") {
+        return { ok: false, output: 'tool_search: detail 只接受 "summary" 或 "schema"' };
+      }
       const requested = typeof args.max_results === "number" && Number.isFinite(args.max_results)
         ? Math.trunc(args.max_results)
         : TOOL_SEARCH_DEFAULT_RESULTS;
       const outcome = searchToolCatalog(toolSearchCatalog(rt), query, { maxResults: requested });
-      return { ok: outcome.ok, output: JSON.stringify(outcome) };
+      if (detail === undefined || !outcome.ok) return { ok: outcome.ok, output: JSON.stringify(outcome) };
+
+      const withSchema = detail === "schema";
+      const hits = outcome.hits.map(({ name, description, inputSchema, source, server, active, activation }) => ({
+        name,
+        description: withSchema ? description : capMcpDescription(description, MCP_CATALOG_DESC_CHAR_LIMIT),
+        source,
+        server,
+        active,
+        ...(withSchema ? { inputSchema } : {}),
+        ...(activation === undefined ? {} : {
+          next_call: { name: activation.tool, arguments: { server: activation.server, tool: activation.tool_name } },
+        }),
+      }));
+      return { ok: true, output: JSON.stringify({ ok: true, hits, truncated: outcome.truncated }) };
     },
   };
 }
@@ -712,14 +743,15 @@ export function pluginToolSpecsFromRuntime(rt: PluginToolSource | null): Session
     out.push(
       {
         name: "tool_search",
-        description: "检索工具目录（含尚未激活的 MCP 工具）：返回精确调用名、schema 与激活方式。只查找，不执行、不激活。",
+        description: "查找工具（含未激活的 MCP）。先用 summary 选候选，按 next_call 激活单个 MCP 工具，调用前核对下一轮工具表。",
         parameters: {
           type: "object",
           properties: {
             query: { type: "string", description: "要查的能力，一句话或工具名（≤200 字符）" },
+            detail: { type: "string", enum: ["summary", "schema"], description: "summary 返回简要候选。仅需核对完整参数时用 schema" },
             max_results: { type: "number", description: "可选：返回条数（缺省 5，上限 8）" },
           },
-          required: ["query"],
+          required: ["query", "detail"],
           additionalProperties: false,
         },
       },
@@ -734,7 +766,7 @@ export function pluginToolSpecsFromRuntime(rt: PluginToolSource | null): Session
       },
       {
         name: "mcp_activate",
-        description: "激活 MCP 工具；下一轮请求生效。默认整台 server；大 server 用 tool/tools 只激活子集。",
+        description: "激活 MCP 工具，下一轮请求生效。优先用 tool 或 tools 选择所需工具，省略两者才激活整台 server。",
         parameters: {
           type: "object",
           properties: {

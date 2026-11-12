@@ -16,6 +16,7 @@ import type { TextSizeSetting, UiSizeSetting } from "../../../../../src/main/set
 // 渲染层只消费推送快照；文案在渲染层按 status 组合）。
 import type { PreviewSnapshot } from "../../../../../src/main/project-preview";
 import { initialInspectorOpen } from "../inspector-pref";
+import { appMotionReduced } from "./motion-pref";
 import { previewFailureError } from "../preview-failure";
 import type { SurfaceError } from "../surface-error";
 import { lastOpenedPane, PANE_META, type PaneKind } from "../pane-registry";
@@ -265,7 +266,7 @@ export function useChrome(deps: ChromeDeps): ChromeState {
       // 2026-10-20 真机：窄窗（主组 < 744）且侧栏开着时，⌘⌥I 第一次只把 storage 写成 "1"、
       // 宽度仍是 0；再按一次才开。两个 rAF 时侧栏 240ms 收起动画还没走完，expand() 被布局
       // 夹回 0。等过渡落定再 expand（与专注模式退出恢复宽度的 240ms 同口径）。
-      const expandDelay = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 260;
+      const expandDelay = appMotionReduced() ? 0 : 260;
       window.setTimeout(() => { inspectorRef.current?.expand(); setInspectorCollapsed(false); }, expandDelay);
       return;
     }
@@ -371,7 +372,7 @@ export function useChrome(deps: ChromeDeps): ChromeState {
           setInspectorCollapsed(false);
           // 宽度也回到进入前（展开是百分比口径，侧栏同时回开时会重新分配）；等侧栏过渡落定再钉宽。
           if (width !== null) {
-            const restoreDelay = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 240;
+            const restoreDelay = appMotionReduced() ? 0 : 240;
             window.setTimeout(() => { ref?.resize(width); }, restoreDelay);
           }
         });

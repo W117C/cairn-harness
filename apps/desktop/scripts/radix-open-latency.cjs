@@ -6,8 +6,9 @@
 // 跑法：pnpm --filter cairn-desktop build
 //       ELECTRON_RUN_AS_NODE= pnpm --filter cairn-desktop exec electron scripts/radix-open-latency.cjs [out.json] [samples]
 const { app, BrowserWindow, nativeTheme } = require("electron");
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
 const { createHash } = require("node:crypto");
-const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+const { mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
 const { dirname, join, resolve } = require("node:path");
 const { tmpdir } = require("node:os");
 
@@ -16,7 +17,7 @@ const output = resolve(process.argv[2] ?? "radix-open-latency.json");
 const requestedSamples = Number(process.argv[3] ?? 20);
 app.setPath("userData", profile);
 nativeTheme.themeSource = "light";
-app.on("quit", () => { rmSync(profile, { recursive: true, force: true }); });
+app.on("quit", () => scheduleProfileCleanup(profile));
 
 function apiSurface() {
   const protocol = readFileSync(join(__dirname, "../../../src/main/ipc-protocol.ts"), "utf8");

@@ -40,7 +40,9 @@ describe("QuickStarts（空屏建议行 SSR）", () => {
     expect(css).toContain(".start:hover .start-go");
     expect(css).toContain("@media (max-width: 620px)");
     expect(css).toContain("@keyframes rise-in");
-    expect(css).toContain(".empty-below { padding-left: 16px; padding-right: 16px; }");
+    // 2026-11-07 第 1041 页：窄窗气沟改由 .main 的 --reading-pad-x 一处驱动（不在起手行单写 16px）。
+    expect(css).toContain(".empty-below { padding-left: var(--reading-pad-x); padding-right: var(--reading-pad-x); }");
+    expect(css).toContain(".main { --reading-pad-x: 16px; }");
     expect(css).toMatch(/\.empty h1\.empty-greet\s*{[^}]*animation:\s*rise-in/s);
     expect(css).not.toContain(".pill {");
   });
@@ -75,12 +77,17 @@ describe("空屏（App 源文哨兵 · P2-1）", () => {
   });
 
   it("会话名只出现在工具栏中栏一处（会话条已并入顶栏，不重复两处）", () => {
-    // 2026-10-20 批 129：会话条并入统一工具栏 ⇒ 会话名落在 .tb-title（工具栏中栏），
-    // 主页时同一位置显示品牌名 .tb-brand。旧不变量「顶栏只有 Cairn、会话名只在会话条」
-    // 已被合并取代；新不变量更强：**会话名只此一处**，且旧的第二条栏已经不存在。
+    // 2026-10-20 批 129：会话条并入统一工具栏 ⇒ 会话名落在 .tb-title（工具栏中栏）。
+    // 2026-11-07 第 1041 页：首页中栏的品牌标改为**侧栏缺席时的补位**——侧栏展开时
+    // brandline 已是同屏唯一品牌标，中栏再放一枚就是同屏同词（业主「让布局说话」）。
+    // 不变量仍是「会话名只此一处」＋「旧的第二条栏不存在」，另加品牌补位条件单源。
     expect(appSrc).toContain('className="tb-title"');
     expect((appSrc.match(/className="tb-title"/g) ?? []).length).toBe(1);
-    expect(appSrc).toContain('className="tb-brand"');
+    expect(appSrc).toContain('sidebarBrandVisible ? null : <span className="tb-brand">');
+    // 判据只在 WorkbenchView 里写一次：侧栏 side-wrap 与工具栏品牌补位同读 chatSidebarVisible。
+    expect(appSrc).toContain('const chatSidebarVisible = destination === "chat" && !sidebarCollapsed && !focusMode;');
+    expect(appSrc).toContain("sidebarBrandVisible: chatSidebarVisible");
+    expect(appSrc).toContain('className="side-brand"');
     expect(appSrc).not.toContain('className="chat-bar"');
     expect(appSrc).not.toContain('title={activeId !== null ? sessionTitle : "Cairn"}');
   });
@@ -113,7 +120,7 @@ describe("空屏（App 源文哨兵 · P2-1）", () => {
   it("下沉动画：FLIP（animate + 200ms + reduced-motion 直落）", () => {
     expect(appSrc).toContain("composerZoneRef");
     expect(appSrc).toContain("prevEmptyRect");
-    expect(appSrc).toContain("prefers-reduced-motion: reduce");
+    expect(appSrc).toContain("if (appMotionReduced()) return;");
     expect(appSrc).toContain("duration: 200");
     expect(appSrc).toContain("el.animate(");
   });

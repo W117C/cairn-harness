@@ -99,12 +99,21 @@ describe("list_dir", () => {
 });
 
 describe("worker 面同源", () => {
-  it("git_read 进 worker 两档规格；calc/list_dir 不进（worker 不需要）", () => {
+  it("git_read 进两档；2026-11-10 扩面后 calc/list_dir/read_doc 进 read 档；fs_ops 只进 write 档；web_doc 两档禁入", () => {
     for (const mode of ["read", "write"] as const) {
       const names = workerToolSpecs(mode).map((s) => s.function.name);
       expect(names).toContain("git_read");
-      expect(names).not.toContain("calc");
-      expect(names).not.toContain("list_dir");
+      if (mode === "read") {
+        // A 组扩面（业主「工具还是太少」四组全批）：read 面加 list_dir/read_doc/calc。
+        expect(names).toContain("calc");
+        expect(names).toContain("list_dir");
+        expect(names).toContain("read_doc");
+        expect(names).not.toContain("fs_ops"); // 写向工具不进 read 面（禁入名单）
+      }
+      if (mode === "write") {
+        expect(names).toContain("fs_ops"); // 文件生命周期走结构化工具（快照+禁区闸齐全）
+      }
+      expect(names).not.toContain("web_doc"); // worker 出网无条件 deny，两档同罪
     }
   });
 });

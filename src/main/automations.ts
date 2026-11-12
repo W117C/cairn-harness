@@ -27,6 +27,9 @@ export type AutomationSchedule =
 
 export type AutomationTier = "read-only" | "workspace-write" | "danger-full-access";
 export type AutomationCatchUp = "latest" | "skip";
+/** 重叠策略（对标 Temporal overlap policies 的 V1 裁剪）：skip = 丢拍（现状）；
+ *  bufferOne = 帽满时缓存**最新一拍**，本任务收束后补发（最多缓存 1 拍，更新的一拍顶掉旧的）。 */
+export type AutomationOverlap = "skip" | "bufferOne";
 
 export interface AutomationDefinition {
   /** ulid（任务书 §12.2.1；makeUlid 生成）。 */
@@ -41,6 +44,15 @@ export interface AutomationDefinition {
   /** 可绑定 provider/model；缺省用全局默认。 */
   model?: string;
   catchUp: AutomationCatchUp;
+  /** per-automation 并发帽（1-8，缺省 1 = 旧「同任务 queued/running 即 overlap 跳过」逐字同形）。
+   *  >1 时允许同任务并行占多个全局并发位——帽的是**这一个任务**最多占几个，防饿死靠它说清。 */
+  maxConcurrent?: number;
+  /** 触发抖动秒（0-600，缺省 0）：调度触发的拍在 dueAt 之后随机延迟 0..jitter 秒再进准入
+   *  （对标 cron/systemd RandomizedDelaySec；run_now 手动触发**不**抖）。防整点共振。 */
+  jitterSec?: number;
+  /** 重叠策略（缺省 skip）。bufferOne 只对调度触发生效；帽满期间的拍记 skipped(buffered) 账，
+   *  本任务收束后以 `<key>#b` 新键补发。重启丢缓存（拍已被 skip 账推进水位，不双跑）。 */
+  overlap?: AutomationOverlap;
   enabled: boolean;
   createdAt: string;
   updatedAt: string;
@@ -122,6 +134,7 @@ const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
  *  否则模型照规格写出来的定义会被 `${k} 是未知字段` 拒掉（规格与实现各写一份时的必然下场）。 */
 export const KNOWN_TOP_FIELDS = new Set([
   "id", "name", "prompt", "schedule", "timeZone", "permissionTier", "model", "catchUp", "enabled", "createdAt", "updatedAt", "nextRunAt",
+  "maxConcurrent", "jitterSec", "overlap",
 ]);
 
 function validateSchedule(raw: unknown, errors: string[], form: boolean): AutomationSchedule | null {
@@ -281,6 +294,22 @@ export function validateAutomation(raw: unknown, opts: ValidateOptions = {}): Va
   if (catchUp !== "latest" && catchUp !== "skip") {
     errors.push("catchUp 必须是 latest / skip");
   }
+  // per-automation 并发帽 / 触发抖动 / 重叠策略（2026-11-10 调度器 roadmap 三件）
+  if (raw.maxConcurrent !== undefined) {
+    const mc = raw.maxConcurrent;
+    if (typeof mc !== "number" || !Number.isInteger(mc) || mc < 1 || mc > 8) {
+      errors.push("maxConcurrent 必须是 1-8 的整数（本任务最多同时占几个并发位）");
+    }
+  }
+  if (raw.jitterSec !== undefined) {
+    const js = raw.jitterSec;
+    if (typeof js !== "number" || !Number.isInteger(js) || js < 0 || js > 600) {
+      errors.push("jitterSec 必须是 0-600 的整数（触发抖动上限秒；0 = 不抖）");
+    }
+  }
+  if (raw.overlap !== undefined && raw.overlap !== "skip" && raw.overlap !== "bufferOne") {
+    errors.push('overlap 必须是 "skip"（丢拍）或 "bufferOne"（缓存一拍待补发）');
+  }
   if (raw.model !== undefined && (typeof raw.model !== "string" || raw.model.trim() === "")) {
     errors.push("model 必须是非空字符串（缺省 = 全局默认）");
   }
@@ -304,6 +333,13 @@ export function validateAutomation(raw: unknown, opts: ValidateOptions = {}): Va
     createdAt: typeof raw.createdAt === "string" ? raw.createdAt : now.toISOString(),
     updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : now.toISOString(),
     ...(typeof raw.model === "string" ? { model: raw.model } : {}),
+    ...(typeof raw.maxConcurrent === "number" && Number.isInteger(raw.maxConcurrent) && raw.maxConcurrent >= 1 && raw.maxConcurrent <= 8
+      ? { maxConcurrent: raw.maxConcurrent }
+      : {}),
+    ...(typeof raw.jitterSec === "number" && Number.isInteger(raw.jitterSec) && raw.jitterSec >= 0 && raw.jitterSec <= 600
+      ? { jitterSec: raw.jitterSec }
+      : {}),
+    ...(raw.overlap === "bufferOne" ? { overlap: "bufferOne" as const } : {}),
     ...(typeof raw.nextRunAt === "string" ? { nextRunAt: raw.nextRunAt } : {}),
   };
   return { ok: true, value };

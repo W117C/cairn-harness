@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Plus, Webhook } from "lucide-react";
 import type { HookEventName } from "../../../../../../src/agent/plugins/types";
 import { ConfirmDialog } from "../ConfirmDialog";
@@ -184,8 +184,9 @@ export function HooksSection(): React.JSX.Element {
   const [confirm, setConfirm] = useState(false);
   const listTitle = useRef<HTMLHeadingElement>(null);
   const config = store.config;
-  const rows = config ? rowsOf(config.hooks) : [];
-  const selected = rows.find((row) => row.event === target?.event && row.index === target?.index);
+  // 第 1141 页：Hook 行表与选中项按配置/目标记忆；草稿输入不重扫。
+  const rows = useMemo(() => config ? rowsOf(config.hooks) : [], [config]);
+  const selected = useMemo(() => rows.find((row) => row.event === target?.event && row.index === target?.index), [rows, target?.event, target?.index]);
   const returnToList = (): void => {
     setTarget(null);
     setDraft(null);
@@ -252,7 +253,7 @@ export function HooksSection(): React.JSX.Element {
             danger confirmLabel={STR.hooks.deleteHook} onClose={() => setConfirm(false)} onConfirm={() => void remove(selected)} />}
         </IntegrationSubview>
       ) : <>
-        <IntegrationToolbar headingRef={listTitle} title={STR.hooks.hookList} description={STR.hooks.listDesc}>
+        <IntegrationToolbar headingRef={listTitle} title={STR.hooks.hookList}>
           {rows.length > 0 && <button type="button" className="mini-btn primary" disabled={store.blocked} onClick={() => edit(null)}>
             <Plus size={15} aria-hidden="true" />{STR.hooks.addHook}
           </button>}

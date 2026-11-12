@@ -21,14 +21,21 @@ describe("scrollBehavior", () => {
     if (had) g.window = prev;
   });
 
-  it("reduce 时 smooth 降级为 auto；未开启时不降级", () => {
+  it("reduce 时 smooth 降级为 auto；未开启时不降级（含应用内开关）", () => {
     const g = globalThis as unknown as { window?: { matchMedia: (q: string) => { matches: boolean } } };
     const had = "window" in g;
     const prev = g.window;
     g.window = { matchMedia: () => ({ matches: true }) };
     expect(scrollBehavior("smooth")).toBe("auto");
     g.window = { matchMedia: () => ({ matches: false }) };
+    const dg = globalThis as unknown as { document?: { documentElement: { getAttribute: (k: string) => string | null } } };
+    const hadDoc = "document" in dg;
+    const prevDoc = dg.document;
+    dg.document = { documentElement: { getAttribute: () => "true" } };
+    expect(scrollBehavior("smooth"), "应用内强制减弱也要让 JS 滚动降级").toBe("auto");
+    dg.document = { documentElement: { getAttribute: () => null } };
     expect(scrollBehavior("smooth")).toBe("smooth");
+    if (hadDoc) dg.document = prevDoc; else delete dg.document;
     if (had) g.window = prev; else delete g.window;
   });
 
@@ -37,5 +44,6 @@ describe("scrollBehavior", () => {
     expect(app.match(/scrollBehavior\("smooth"\)/g)?.length).toBe(2);
     const find = readFileSync(fileURLToPath(new URL("../src/renderer/components/FindBar.tsx", import.meta.url)), "utf8");
     expect(find).toContain('behavior: scrollBehavior("smooth")');
+    expect(hook).toContain("appMotionReduced() || window.matchMedia");
   });
 });

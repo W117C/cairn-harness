@@ -47,7 +47,8 @@ describe("接线：命令面板 + ConfirmScrims", () => {
   });
 
   it("设置页选择危险档也先确认（同一文案来源）", () => {
-    const src = read("../src/renderer/components/settings-sections.tsx");
+    // 第 1069 页：PermissionsSection 按区拆分至 settings/，源文钉随正文走（三断言全保留、不放宽）。
+    const src = read("../src/renderer/components/settings/PermissionsSection.tsx");
     expect(src).toContain("permissionConfirmCopy(confirmMode)");
     expect(src).toContain("setConfirmMode(id)");
     expect(src).toContain("props.onSave({ mode: m })");

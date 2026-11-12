@@ -1,5 +1,6 @@
 // Real renderer, synthetic AgentApi, disposable profile. No provider or user-setting writes.
 const { app, BrowserWindow, nativeTheme } = require('electron');
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
 const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { tmpdir } = require('node:os');
@@ -7,7 +8,7 @@ const profile = mkdtempSync(join(tmpdir(), 'cairn-settings-nav-'));
 const out = resolve(process.argv[2] || mkdtempSync(join(tmpdir(), 'cairn-settings-nav-evidence-')));
 mkdirSync(out, { recursive: true });
 app.setPath('userData', profile);
-app.on('quit', () => rmSync(profile, { recursive: true, force: true }));
+app.on('quit', () => scheduleProfileCleanup(profile));
 nativeTheme.themeSource = 'light';
 const checks = [], errors = [];
 const check = (name, ok, detail) => { checks.push({ name, ok: ok === true, detail }); console.log(`${ok === true ? 'PASS' : 'FAIL'} ${name} ${JSON.stringify(detail ?? null)}`); };

@@ -169,6 +169,44 @@ export function globalPermissionsPath(appDataDir?: string): string {
   return resolve(base, "permissions.json");
 }
 
+// ---- 持久 allow 规则的管理读端（roadmap「持久 allow 规则」，2026-11-10）----
+// 「总是允许」早已持久化（#57 的 always 文件），但持久化之后**看不见也撤不掉**——规则管理
+// 只能手工开 JSON。这里给管理面一个唯一落点：列出（带层与来源）与按指纹撤销。
+// 只管 **always 文件**（程序写的那半）：受跟踪的 permissions.json 是人策展的项目策略，
+// 程序替用户改它会跟编辑器打架；全局层同理留给用户自己。这条边界写死在这里。
+
+/** 撤销匹配用的指纹（不按 id：id 带序号，删一条后余下 id 全漂）。 */
+export interface AlwaysRuleFingerprint {
+  behavior: RuleBehavior;
+  tool: string;
+  pattern?: string;
+}
+
+function sameFingerprint(r: PermissionRule, t: AlwaysRuleFingerprint): boolean {
+  return r.behavior === t.behavior && r.tool === t.tool && r.pattern === t.pattern;
+}
+
+/** 列出本工作区已持久化的 always 规则（程序写的那半）。文件不存在 = 空清单（不是错误）。 */
+export function listAlwaysRules(workspace: string): PermissionRule[] {
+  const path = alwaysRulesPath(workspace);
+  const raw = readIfExists(path);
+  return raw === null ? [] : parsePermissionsFile(raw, path);
+}
+
+/** 撤销命中的 always 规则（按指纹精确匹配），返回实际删除条数。文件不存在 = 0；
+ *  0 条匹配时**不写盘**——「删了 0 条」与「删了 N 条」在调用方要分得开，
+ *  空操作写盘会把不存在的变化伪装成发生过。 */
+export async function removeAlwaysRules(workspace: string, targets: readonly AlwaysRuleFingerprint[]): Promise<number> {
+  const path = alwaysRulesPath(workspace);
+  const raw = readIfExists(path);
+  if (raw === null) return 0;
+  const rules = parsePermissionsFile(raw, path);
+  const kept = rules.filter((r) => !targets.some((t) => sameFingerprint(r, t)));
+  const removed = rules.length - kept.length;
+  if (removed > 0) await savePermissionRules(path, kept);
+  return removed;
+}
+
 /** 现用临时名带 PID；只有 ESRCH 能确认写入进程已退出，无 PID 的旧格式沿用历史清理。 */
 function tempWriterMayBeRunning(suffix: string): boolean {
   const owner = /^(\d+)-/.exec(suffix);

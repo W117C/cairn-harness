@@ -186,6 +186,7 @@ describe("session provider predictive compaction", () => {
       await log.close?.();
 
       let summaryCalls = 0;
+      const compactTriggers: string[] = [];
       const summarizer = async () => {
         summaryCalls += 1;
         return {
@@ -205,6 +206,7 @@ describe("session provider predictive compaction", () => {
           summarizer,
           config,
           prediction: { enabled: true, startRatio: 0.8, maxAgeMs: 60_000 },
+          onPreCompact: async (trigger) => { compactTriggers.push(trigger); },
         },
       });
 
@@ -212,6 +214,7 @@ describe("session provider predictive compaction", () => {
       await waitFor(() => summaryCalls === 1);
       const predictionUsage = await waitForPredictionUsage(logPath);
       expect(predictionUsage).toMatchObject({ inputTokens: 40, outputTokens: 9 });
+      expect(compactTriggers).toEqual([]);
 
       const grow = createEventLog(logPath);
       await grow.append({ type: "assistant_message", content: "d".repeat(600) });
@@ -223,7 +226,46 @@ describe("session provider predictive compaction", () => {
       expect(summaryCalls).toBe(1);
       expect(compactions).toHaveLength(1);
       expect(compactions[0]?.usage).toBeUndefined();
+      expect(compactTriggers).toEqual(["auto"]);
     } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("replaces a prediction when a large new tail would immediately trigger another compaction", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "compaction-prediction-tail-"));
+    const logPath = join(dir, "session.jsonl");
+    const log = createEventLog(logPath);
+    try {
+      const config = smallConfig();
+      await log.append(event("keep this goal " + "x".repeat(1_470)));
+      await log.append({ type: "assistant_message", content: "a".repeat(630) });
+      let summaryCalls = 0;
+      const provider = createSessionProvider(logPath, {
+        workspace: dir, map: false,
+        transport: async function* () { yield { type: "assistant_delta", callId: "main", text: "ok" }; },
+        compaction: {
+          config, prediction: { enabled: true },
+          summarizer: async () => ({
+            text: ++summaryCalls === 1 ? SUMMARY : SUMMARY + "\n- re-evaluated the new tail",
+            usage: { inputTokens: 40, outputTokens: 9 },
+          }),
+        },
+      });
+      await drain(provider);
+      await waitForPredictionUsage(logPath);
+      const newTail = "b".repeat(1_200);
+      await log.append({ type: "assistant_message", content: newTail });
+      await drain(provider);
+
+      const records = (await replay(logPath)).filter((entry) => entry.type === "compaction");
+      expect(summaryCalls).toBe(2);
+      expect(records).toHaveLength(1);
+      expect(records[0]?.summary).toContain("re-evaluated the new tail");
+      expect(records[0]?.tokens_after).toBeLessThan(630);
+      expect(JSON.stringify(projectContext(await replay(logPath)))).not.toContain(newTail);
+    } finally {
+      await log.close?.();
       await rm(dir, { recursive: true, force: true });
     }
   });

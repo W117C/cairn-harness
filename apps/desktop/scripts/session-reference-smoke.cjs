@@ -2,6 +2,7 @@
 // 不调模型、不出网。验证：父前缀在视图里、产品分叉只写血缘、来源搜索、带来源的反馈/置顶、
 // 祖先轮的文件回滚、父依赖拒绝改名/删除。
 const { app, BrowserWindow } = require('electron');
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
 const { createHash } = require('node:crypto');
 const { existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
@@ -24,7 +25,7 @@ const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const cleanup = () => {
   for (const win of BrowserWindow.getAllWindows()) win.destroy();
-  rmSync(root, { recursive: true, force: true });
+  scheduleProfileCleanup(root);
 };
 async function waitFor(fn, label) {
   const until = Date.now() + 20000;
