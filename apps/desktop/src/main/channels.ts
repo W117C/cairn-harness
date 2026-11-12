@@ -208,3 +208,238 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   revealInFinder: "agent:reveal-in-finder",
   attachmentThumb: "agent:attachment-thumb",
 };
+
+// 桥面域归属表（2026-11-12 · 对标 ADR 0010 的待办第 3 条）。
+//
+// 为什么有这张表：Claude Desktop 5.1231.2 的桥面是**按域命名空间**的
+// （claude.web / claude.settings / claude.internal.ui … 约 24 个命名空间对象），
+// 于是「这块能力属于哪个域」在那边是**可枚举的**。本仓的桥是单一扁平面，
+// 165 条通道（156 invoke + 9 push）没有归属结构——通道名表本身已经长到
+// 需要一张 156 条的手写名单来证明「每条都接真」（apps/desktop/tests/channels.test.ts）。
+// ⇒ 这张表把「归属」变成**通道声明的一部分**，而不是测试里的一份平行名单。
+//
+// 完整性红线与 INVOKE_CHANNELS 同款：**映射类型** { [K in InvokeChannel]: ChannelDomain }
+// ⇒ AgentApi 新增方法而这里不加行 ⇒ typecheck 红；删键同理。
+// 通道**条数不变**（表长断言与 README 的 156 都不受影响）。
+//
+// 域的切法按「谁拥有这条能力」分，不按功能细分：域太多则名存实亡，太少则查不了。
+export type ChannelDomain =
+  | "run"
+  | "session"
+  | "project"
+  | "provider"
+  | "settings"
+  | "plugin"
+  | "skills"
+  | "memory"
+  | "automation"
+  | "pane"
+  | "app"
+  | "integration"
+  | "evolve"
+  | "orchestration"
+  | "usage"
+  | "lsp"
+  | "sidechat"
+  | "feedback";
+
+export const CHANNEL_DOMAIN_DESC: { [K in ChannelDomain]: string } = {
+  run: "跑一轮与助手动作（发起、决策、澄清、计划、目标、取消、插话、压缩、建议下一条、卡片动作）",
+  session: "会话生命周期与队列（建/开/改名/删/分叉/回滚、偏好、worktree、检索、日志、置顶、发送队列、导出）",
+  project: "项目与工作区（项目增删改、模板与诊断、工作区上下文与文件浏览、路径动作、项目内检索、变更与 git 两闸）",
+  provider: "供应商与密钥（读供应商信息、连接自检、自定义接口发现与存盘、密钥增删与状态）",
+  settings: "设置与子代理设置（读写与重读、搜索设置、迁移预览与执行、子代理设置、偏好导入导出与复位）",
+  plugin: "插件与市场（授权决策、用户配置、目录读数、来源选择、导入/更新/检查、安装 job、启停与卸载、已装清单）",
+  skills: "技能（技能清单与技能正文）",
+  memory: "记忆（删记忆、导出记忆）",
+  automation: "自动化（定时任务快照与增删改与立即跑、闲时任务、后台命令）",
+  pane: "窗格宿主（terminal、browser、preview 的起停与导航、浏览器授权与元素拾取、窗格弹出独立窗口）",
+  app: "应用外壳与系统动作（状态、新手引导、能力在场性、协议版本、检查更新、外链、选目录/选文件、朗读、临时文件、快照还原、Finder 显示、附件缩略图、license 导入、诊断包导出）",
+  integration: "外部集成（用户级 MCP 服务器管理、用户级 hooks 管理）",
+  evolve: "进化账（只读报告、冻结、激活、沉睡、全局撤销/冻结/激活）",
+  orchestration: "编排平台（只读视图、提交、控制）",
+  usage: "用量账（跨会话用量统计）",
+  lsp: "LSP（只读运行态）",
+  sidechat: "侧聊（建、问、升为主会话、状态）",
+  feedback: "反馈（用户提交反馈与反馈列表回读）",
+};
+
+/** invoke 通道的归属域（键集与 INVOKE_CHANNELS 完全一致：映射类型钉死，缺行 typecheck 红）。 */
+export const CHANNEL_DOMAINS: { [K in InvokeChannel]: ChannelDomain } = {
+  run: "run",
+  decide: "run",
+  submitClarify: "run",
+  decidePlan: "run",
+  setGoal: "run",
+  runCancel: "run",
+  runSteer: "run",
+  compact: "run",
+  suggestNext: "run",
+  cardAction: "run",
+  listSessions: "session",
+  createSession: "session",
+  openSession: "session",
+  renameSession: "session",
+  deleteSession: "session",
+  forkSession: "session",
+  revertTurn: "session",
+  sessionPrefsSet: "session",
+  sessionWorktree: "session",
+  worktreeClean: "session",
+  worktreeDiff: "session",
+  assignSessionProject: "session",
+  sessionLog: "session",
+  sessionSearch: "session",
+  setSessionPinned: "session",
+  setSessionArchived: "session",
+  queueGet: "session",
+  queueSet: "session",
+  setMessagePinned: "session",
+  listMessagePins: "session",
+  exportTranscript: "session",
+  listProjects: "project",
+  addProject: "project",
+  relocateProject: "project",
+  removeProject: "project",
+  createProject: "project",
+  touchProject: "project",
+  projectTemplates: "project",
+  projectCreateFromTemplate: "project",
+  projectDiagnose: "project",
+  projectExport: "project",
+  setWorkspaceContext: "project",
+  workspaceListDir: "project",
+  workspaceReadText: "project",
+  workspacePathAction: "project",
+  workspaceSearch: "project",
+  changeDiff: "project",
+  gitStatus: "project",
+  gitClone: "project",
+  getProviderInfo: "provider",
+  providerCheck: "provider",
+  providerDiscover: "provider",
+  providerSave: "provider",
+  providerCustomList: "provider",
+  providerKeySet: "provider",
+  providerKeyDelete: "provider",
+  providerKeyStatus: "provider",
+  getSettings: "settings",
+  setSettings: "settings",
+  reloadSettings: "settings",
+  searchSettingsGet: "settings",
+  searchSettingsSave: "settings",
+  searchSettingsTest: "settings",
+  settingsPreviewMigration: "settings",
+  settingsApplyMigration: "settings",
+  subagentSettingsList: "settings",
+  subagentSettingsRead: "settings",
+  subagentSettingsSave: "settings",
+  subagentSettingsRemove: "settings",
+  exportPreferences: "settings",
+  importPreferences: "settings",
+  resetPreferences: "settings",
+  pluginDecide: "plugin",
+  pluginUserConfigSet: "plugin",
+  marketplaceCatalog: "plugin",
+  pluginPickLocalSource: "plugin",
+  marketplacePluginImport: "plugin",
+  marketplacePluginUpdate: "plugin",
+  marketplacePluginCheckUpdate: "plugin",
+  pluginConfigureInstalled: "plugin",
+  marketplacePluginInstall: "plugin",
+  marketplacePluginInstallStatus: "plugin",
+  marketplacePluginInstallCommit: "plugin",
+  marketplacePluginInstallCancel: "plugin",
+  pluginSetEnabled: "plugin",
+  pluginUninstall: "plugin",
+  pluginsInstalled: "plugin",
+  listSkills: "skills",
+  skillBody: "skills",
+  deleteMemory: "memory",
+  exportMemory: "memory",
+  scheduleSnapshot: "automation",
+  scheduleUpsert: "automation",
+  scheduleDelete: "automation",
+  scheduleRunNow: "automation",
+  idleTaskList: "automation",
+  idleTaskEnqueue: "automation",
+  idleTaskUpdate: "automation",
+  backgroundTaskList: "automation",
+  backgroundTaskStop: "automation",
+  terminalStart: "pane",
+  terminalWrite: "pane",
+  terminalResize: "pane",
+  terminalKill: "pane",
+  browserOpen: "pane",
+  browserBounds: "pane",
+  browserNav: "pane",
+  browserClose: "pane",
+  browserClearData: "pane",
+  browserSetAllowedHosts: "pane",
+  browserPickElement: "pane",
+  panePopout: "pane",
+  previewStart: "pane",
+  previewStop: "pane",
+  previewStatus: "pane",
+  getState: "app",
+  getOnboarding: "app",
+  capabilities: "app",
+  protocolVersion: "app",
+  checkUpdate: "app",
+  openExternal: "app",
+  pickDirectory: "app",
+  pickFiles: "app",
+  speakText: "app",
+  stopSpeaking: "app",
+  saveTempFile: "app",
+  snapshotRestore: "app",
+  revealInFinder: "app",
+  attachmentThumb: "app",
+  importLicense: "app",
+  exportDiagnostics: "app",
+  reportViewing: "app",
+  doctor: "app",
+  mcpUserConfig: "integration",
+  mcpUserSave: "integration",
+  mcpUserProbe: "integration",
+  hooksUserConfig: "integration",
+  hooksUserSave: "integration",
+  evolveReport: "evolve",
+  evolveSetFrozen: "evolve",
+  evolveActivate: "evolve",
+  evolveDormant: "evolve",
+  evolveGlobalRevoke: "evolve",
+  evolveGlobalSetFrozen: "evolve",
+  evolveGlobalActivate: "evolve",
+  orchestrationView: "orchestration",
+  orchestrationSubmit: "orchestration",
+  orchestrationControl: "orchestration",
+  usageLedger: "usage",
+  lspStatus: "lsp",
+  sidechatCreate: "sidechat",
+  sidechatAsk: "sidechat",
+  sidechatPromote: "sidechat",
+  sidechatState: "sidechat",
+  submitFeedback: "feedback",
+  listFeedback: "feedback",
+};
+
+/** push 通道的归属域。 */
+export const PUSH_CHANNEL_DOMAINS: { [K in PushChannel]: ChannelDomain } = {
+  onEvent: "run",
+  onAsk: "run",
+  onAskDone: "run",
+  onTerminalData: "pane",
+  onTerminalExit: "pane",
+  onBrowserState: "pane",
+  onPreviewState: "pane",
+  onMenu: "app",
+  onNotificationOpen: "app",
+};
+
+/** push 通道用到的域的说明（只有 push 真正用到的那几个域有词条 ⇒ Partial）。 */
+export const PUSH_DOMAIN_DESC: Partial<{ [K in ChannelDomain]: string }> = {
+  run: "运行事件流与提问往返（onEvent / onAsk / onAskDone）",
+  pane: "窗格状态推送（terminal 数据与退出、browser 与 preview 状态）",
+  app: "应用外壳推送（原生菜单命令、完成通知点击）",
+};
