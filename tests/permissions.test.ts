@@ -464,3 +464,37 @@ describe("$IFS 展开绕过（规则 / 静态风险 / 网络审计）", () => {
     expect(isNetworkCommandCall("run_shell", { command: "cu${IFS}rl nothing" })).toBe(false);
   });
 });
+
+// F5（2026-11-12 评审遗留；方向 2026-11-13 业主裁「项目限制优先于本机记忆授权」）：
+// 本机层 = permissions.always.json 的记忆授权（loader 盖 layer:"local"）。
+// 病灶实测（修前探针，2026-11-13）：项目 ask/deny「git push」＋本机 allow「git push --force」
+// ⇒ 判 allow——赢的是「段内最长前缀」，仓内限制被更长的本机记忆授权静默击穿。
+describe("项目层限制优先于本机记忆授权（F5）", () => {
+  const mk = (behavior: PermissionRule["behavior"], pattern: string, layer: "global" | "project" | "local"): PermissionRule => ({
+    behavior, tool: "run_shell", pattern, scope: "always", layer, id: `${behavior}:${pattern}@${layer}`,
+  });
+
+  it("项目 ask「git push」压过本机更长的 allow「git push --force」", () => {
+    const v = judgeChain([mk("allow", "git push --force", "local"), mk("ask", "git push", "project")], "run_shell", "git push --force origin main");
+    expect(v.verdict).toBe("ask");
+    expect("ruleId" in v ? v.ruleId : "").toBe("ask:git push@project");
+    expect("pattern" in v ? v.pattern : undefined).toBe("git push");
+  });
+
+  it("项目 deny 同优先（本机 allow 击穿不了仓库红线）", () => {
+    expect(judgeChain([mk("allow", "git push --force", "local"), mk("deny", "git push", "project")], "run_shell", "git push --force origin main").verdict).toBe("deny");
+  });
+
+  it("顺序无关：本机 allow 先进规则库结果一致", () => {
+    expect(judgeChain([mk("ask", "git push", "project"), mk("allow", "git push --force", "local")], "run_shell", "git push --force origin main").verdict).toBe("ask");
+  });
+
+  it("对照：全局 allow 仍可盖过项目 deny（S4 语义原样：项目限制不替全局层强加）", () => {
+    expect(judgeChain([mk("deny", "git push", "project"), mk("allow", "git push --force", "global")], "run_shell", "git push --force origin main").verdict).toBe("allow");
+  });
+
+  it("对照：无 layer 的老形状不受 F5 影响（修法只认显式盖过章的本机 allow）", () => {
+    const plain = (behavior: PermissionRule["behavior"], pattern: string): PermissionRule => ({ behavior, tool: "run_shell", pattern, scope: "always", id: behavior + ":" + pattern });
+    expect(judgeChain([plain("deny", "git push"), plain("allow", "git push --force")], "run_shell", "git push --force origin main").verdict).toBe("allow");
+  });
+});
