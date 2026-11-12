@@ -294,13 +294,29 @@ function matchSegment(rules: PermissionRule[], segment: string): RuleHit | null 
     // （实测：顺序对调也是 allow ⇒ 放宽不来自顺序，来自长度）。
     // 方向只此一条：项目层的 deny **不**获得同等优先权——它既不能替全局层放行，也不能替全局层强加；
     // 其余一切仍是「段内最长前缀者胜，等长时 deny>ask>allow」。
+    // F5（2026-11-12 评审遗留；方向 2026-11-13 业主裁「项目限制优先于本机记忆授权」）：项目层的
+    // ask/deny **压过本机层**（permissions.always.json 记忆授权，loader 盖 layer:"local"）的 allow，
+    // **不比前缀长度**——修前探针：项目 ask/deny「git push」＋本机 allow「git push --force」⇒ 判 allow，
+    // 仓内限制被静默击穿。范围只此一对（项目限制 × 本机 allow）：全局层地板（S4）原样；两条项目限制
+    // 之间、两条本机授权之间、无 layer 的老形状，仍按最长前缀＋deny>ask>allow。
+    // 后果（接受）：项目 ask 命中的命令，即使用户点过「总是允许」，下次仍问——「ask」的本义就是每次都问；
+    // 用户想免问改仓内规则或删本机记忆条目。
     const floor = effective.behavior === "deny" && effective.layer === "global";
     const bestFloor = best !== null && best.rule.behavior === "deny" && best.rule.layer === "global";
+    const candProjectRestrictive = effective.behavior !== "allow" && effective.layer === "project";
+    const bestProjectRestrictive = best !== null && best.rule.behavior !== "allow" && best.rule.layer === "project";
+    const candLocalAllow = effective.behavior === "allow" && effective.layer === "local";
+    const bestLocalAllow = best !== null && best.rule.behavior === "allow" && best.rule.layer === "local";
     const longerOrTiedBetter =
       best === null ||
       len > best.prefixLen ||
       (len === best.prefixLen && BEHAVIOR_RANK[effective.behavior] < BEHAVIOR_RANK[best.rule.behavior]);
-    if (best === null || (floor && !bestFloor) || (floor === bestFloor && longerOrTiedBetter)) {
+    const projectOverLocal =
+      (candProjectRestrictive && bestLocalAllow) || (bestProjectRestrictive && candLocalAllow);
+    if (best === null
+        || (floor && !bestFloor)
+        || (candProjectRestrictive && bestLocalAllow && !bestFloor)
+        || (floor === bestFloor && !projectOverLocal && longerOrTiedBetter)) {
       best = {
         rule: effective,
         prefixLen: len,
