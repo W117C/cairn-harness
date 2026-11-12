@@ -1,0 +1,46 @@
+vendored : bytes=41,505  declarations=1,021  uniqueNames=704
+current  : bytes=38,918  declarations=957  uniqueNames=674
+delta    : bytes=-2,587  declarations=-64  names=-30
+
+=== ADDED upstream (0) ===
+
+=== REMOVED upstream (30) ===
+  - --bg-git-opened
+  - --bg-git-queued
+  - --border-git-opened
+  - --border-git-queued
+  - --fill-git-added-hover
+  - --fill-git-closed
+  - --fill-git-closed-hover
+  - --fill-git-conflicting
+  - --fill-git-conflicting-hover
+  - --fill-git-draft
+  - --fill-git-draft-hover
+  - --fill-git-merged
+  - --fill-git-merged-hover
+  - --fill-git-modified-hover
+  - --fill-git-opened
+  - --fill-git-opened-hover
+  - --fill-git-queued
+  - --fill-git-queued-hover
+  - --fill-git-removed-hover
+  - --on-git-added
+  - --on-git-closed
+  - --on-git-conflicting
+  - --on-git-draft
+  - --on-git-merged
+  - --on-git-modified
+  - --on-git-opened
+  - --on-git-queued
+  - --on-git-removed
+  - --text-git-opened
+  - --text-git-queued
+
+=== COMMON names with CHANGED values (1 / 674) ===
+  ~ --opacity-icon-secondary
+      vendored: ['0.4']
+      current : ['0.3']
+
+=== added by family ===
+=== removed by family ===
+                           30

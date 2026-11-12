@@ -1,0 +1,177 @@
+css bytes: 246,152
+
+=== @keyframes: 56 unique of 56 ===
+   cds-dot-pulse
+   cds-working-dot-halo
+   cds-working-dot-lands
+   cds-working-dot-veil
+   cds-flipbook
+   cds-progress-sweep
+   cds-shimmer
+   cds-placeholder-reveal
+   cds-skeleton-breathe
+   cds-skeleton-sweep
+   cds-shimmer-text-shine
+   cds-shimmer-text-shine-rtl
+   cds-shimmer-text-shine-strong
+   cds-shimmer-text-shine-strong-rtl
+   cds-shimmer-text-band
+   cds-shimmer-text-band-rtl
+   cds-shimmer-text-band-strong
+   cds-shimmer-text-band-strong-rtl
+   cds-reveal-in
+   cds-reveal-out
+   cds-fade-in
+   cds-slide-in-end
+   cds-slide-in-start
+   cds-page-title-leaves
+   cds-page-tabs-arrive
+   cds-morph-in
+   cds-drop-ring-in
+   cds-drop-icon-rise
+   cds-grid-rows-in
+   cds-chip-in
+   cds-attachment-out
+   cds-resolve-square
+   cds-resolve-glyph
+   cds-pill-in
+   cds-pill-pop-up
+   cds-pill-pop-down
+   cds-pill-dip-down
+   cds-pill-dip-up
+   cds-pill-roll-in-up
+   cds-pill-roll-in-down
+   cds-pill-roll-out
+   cds-pill-out
+   cds-scroll-fade-top
+   cds-scroll-fade-bottom
+   cds-scroll-fade-left
+   cds-scroll-fade-right
+   cds-scroll-fade-y-active
+   cds-scroll-fade-x-active
+   cds-scroll-fade-strip-in
+   cds-scroll-fade-strip-out
+   cds-scroll-fade-strip-active
+   cds-sticky-edge-start
+   cds-sticky-edge-end
+   cds-sticky-edge-active
+   cds-editor-comment-working
+   spin
+
+=== animation durations (top 30) ===
+        .15s x3
+          0s x3
+       .01ms x2
+        .18s x2
+         .1s x1
+         .3s x1
+         .2s x1
+
+=== transition durations ===
+  x 16  none
+  x 10  var(--tw-duration,var(--default-transition-duration))
+  x  4  transform var(--cds-dur-fast) ease-out
+  x  4  var(--cds-message-actions-reveal-in-duration)
+  x  3  .15s
+  x  3  var(--cds-dur-fast,60ms)
+  x  2  0s
+  x  2  transform var(--cds-dur-slow) var(--cds-btn-spring)
+  x  1  .1s
+  x  1  .3s
+  x  1  var(--cds-dur-fast)
+  x  1  var(--cds-dur-snap)
+  x  1  after
+  x  1  .2s
+  x  1  clip-path var(--cds-dur-slow) var(--cds-btn-spring)
+
+=== cubic-bezier ===
+  x   6  cubic-bezier(.215,.61,.355,1)
+  x   5  cubic-bezier(.45,0,.55,1)
+  x   4  cubic-bezier(.714,.121,.211,.888)
+  x   2  cubic-bezier(.4, 0, .2, 1)
+  x   2  cubic-bezier(.165,.85,.45,1)
+  x   2  cubic-bezier(.165,.84,.44,1)
+  x   1  cubic-bezier(.4, 0, 1, 1)
+  x   1  cubic-bezier(.65,0,.35,1)
+  x   1  cubic-bezier(.55,.055,.675,.19)
+  x   1  cubic-bezier(0, 0, .2, 1)
+  x   1  cubic-bezier(.165, .84, .44, 1)
+  x   1  cubic-bezier(.32, .72, 0, 1)
+  x   1  cubic-bezier(.34, 1.3, .64, 1)
+
+=== cds token namespaces ===
+  distinct --cds-* names: 933
+  cds                      2071
+
+=== data-attributes (state hooks) ===
+   318  [data-cds]
+   212  [data-mode]
+    88  [data-reduce-motion]
+    43  [data-reveal]
+    33  [data-fit]
+    31  [data-cds-part]
+    24  [data-cds-composer-attachments]
+    22  [data-step]
+    21  [data-text-size]
+    20  [data-size]
+    18  [data-cds-actions-scope]
+    14  [data-initial-focus]
+    14  [data-cds-fizzy-lake]
+    14  [data-cds-windows]
+    13  [data-cds-reply-type]
+    12  [data-cds-dock-item]
+    12  [data-cds-row-panel]
+    11  [data-cds-row]
+    11  [data-cds-dock-card]
+    11  [data-hold]
+    10  [data-cds-row-toggle]
+    10  [data-disabled]
+    10  [data-cds-attachment]
+     9  [data-font]
+     9  [data-variant]
+     9  [data-motion]
+     8  [data-invalid]
+     8  [data-hovered]
+     8  [data-cds-tile-picture]
+     7  [data-cds-dock-masked]
+     7  [data-cds-shimmer-clone]
+     7  [data-thumbnail-height]
+     7  [data-window-active]
+     6  [data-cds-dock-group]
+     6  [data-landing]
+     6  [data-loaded]
+     5  [data-cds-icon-layer]
+     5  [data-density]
+     4  [data-cds-row-cut]
+     4  [data-cds-tabs-arrive]
+
+=== animation names used ===
+     3  cds-placeholder-reveal
+     3  cds-skeleton-breathe
+     3  cds-shimmer
+     3  cds-shimmer-text-band
+     2  spin
+     2  cds-fade-in
+     2  cds-pill-in
+     1  cds-dot-pulse
+     1  cds-working-dot-halo
+     1  cds-working-dot-lands
+     1  cds-working-dot-veil
+     1  cds-flipbook
+     1  cds-progress-sweep
+     1  cds-skeleton-sweep
+     1  cds-shimmer-text-band-rtl
+     1  cds-page-title-leaves
+     1  cds-page-tabs-arrive
+     1  cds-chip-in
+     1  cds-attachment-out
+     1  cds-resolve-square
+     1  cds-resolve-glyph
+     1  cds-pill-pop-up
+     1  cds-pill-pop-down
+     1  cds-pill-dip-down
+     1  cds-pill-dip-up
+     1  cds-pill-roll-in-up
+     1  cds-pill-roll-in-down
+     1  cds-pill-roll-out
+     1  cds-pill-out

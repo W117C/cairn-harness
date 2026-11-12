@@ -1,0 +1,4 @@
+  File "/Users/ze/Downloads/Cairn/cairn/scripts/docs-check.ts", line 1
+    // 文档分层预算门（spec §6 的 D-1/D-3/D-5；spec 在
+              ^
+SyntaxError: invalid character '（' (U+FF08)

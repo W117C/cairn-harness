@@ -1,0 +1,112 @@
+[
+  {
+    "artifact": "app.asar",
+    "evidence_id": "ev_fffcf8decadaf31643908a722a3c5b757ee540ecc5d0ce175518d7231ef93234",
+    "subject": {
+      "name": "app.asar",
+      "digest": {
+        "sha256": "cfe170ed5c2a0db693ca7f13f1b859c45bd707c924e93f1eece3a92545d9bd96"
+      },
+      "format": "asar",
+      "architecture": null,
+      "local_path": "/Applications/Claude.app/Contents/Resources/app.asar"
+    },
+    "provider": "REA analysis view projection",
+    "confidence": "derived",
+    "authority": "shipped-artifact",
+    "statistics": {
+      "relevant_files": 970,
+      "nested_asar_containers": 0,
+      "text_bytes_read": 73909539,
+      "invalid_utf8_files": 0,
+      "parsed_javascript_files": 753,
+      "visited_ast_nodes": 16362585,
+      "findings": 10337,
+      "modules": 0,
+      "parse_failures": 0
+    },
+    "electron": {
+      "browser_windows": 17,
+      "explicit_web_preferences": 48,
+      "preload_entrypoints": 0,
+      "context_bridge_apis": 60,
+      "exposed_api_members": 19,
+      "ipc": {
+        "operations": 1776,
+        "literal_channels": 10,
+        "dynamic_channel_operations": 1765,
+        "renderer_transmissions": 1505,
+        "renderer_listeners": 266,
+        "main_handlers": 5,
+        "paired_renderer_transmissions": 1,
+        "ambiguous_renderer_transmissions": 0,
+        "unpaired_literal_renderer_transmissions": 8
+      },
+      "sender_validation_observations": 139,
+      "utility_processes": 4,
+      "resolved_utility_entrypoints": 0,
+      "native_addon_bindings": 0,
+      "resolved_native_addon_bindings": 0
+    },
+    "coverage_status": "partial",
+    "semantic_status": "partial",
+    "parent_evidence_id": "ev_aacd3955699086c06ebb4ed16da9bb92fa0ada7e4088396151f9825498c77dab",
+    "limitation_count": 1510,
+    "unknown_count": 1514
+  },
+  {
+    "artifact": "ion-dist.asar",
+    "evidence_id": "ev_3e7b6af9c6218717afd7c33e1002c9f73e632c21af386ccc64480ed43f4f6079",
+    "subject": {
+      "name": "ion-dist.asar",
+      "digest": {
+        "sha256": "d7957c54e70073b6a143e09421d456e268a4fc7cb600bf9bfec791c99c7cdaf4"
+      },
+      "format": "asar",
+      "architecture": null,
+      "local_path": "/Applications/Claude.app/Contents/Resources/ion-dist.asar"
+    },
+    "provider": "REA analysis view projection",
+    "confidence": "derived",
+    "authority": "shipped-artifact",
+    "statistics": {
+      "relevant_files": 4752,
+      "nested_asar_containers": 0,
+      "text_bytes_read": 187284193,
+      "invalid_utf8_files": 0,
+      "parsed_javascript_files": 2788,
+      "visited_ast_nodes": 10646689,
+      "findings": 40223,
+      "modules": 0,
+      "parse_failures": 1
+    },
+    "electron": {
+      "browser_windows": 0,
+      "explicit_web_preferences": 0,
+      "preload_entrypoints": 0,
+      "context_bridge_apis": 0,
+      "exposed_api_members": 0,
+      "ipc": {
+        "operations": 0,
+        "literal_channels": 0,
+        "dynamic_channel_operations": 0,
+        "renderer_transmissions": 0,
+        "renderer_listeners": 0,
+        "main_handlers": 0,
+        "paired_renderer_transmissions": 0,
+        "ambiguous_renderer_transmissions": 0,
+        "unpaired_literal_renderer_transmissions": 0
+      },
+      "sender_validation_observations": 0,
+      "utility_processes": 0,
+      "resolved_utility_entrypoints": 0,
+      "native_addon_bindings": 0,
+      "resolved_native_addon_bindings": 0
+    },
+    "coverage_status": "partial",
+    "semantic_status": "partial",
+    "parent_evidence_id": "ev_0a80171e2f1218f0fbcb738680a90a39ae927a9691c58f573fd2bccf53823d4c",
+    "limitation_count": 5535,
+    "unknown_count": 5539
+  }
+]
