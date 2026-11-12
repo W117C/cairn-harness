@@ -72,10 +72,13 @@ describe("压缩后续跑保留事实", () => {
   });
 
   it("连续 overflow 不复制或丢失已有事实", async () => {
-    let events: AgentEvent[] = [{ type: "user_message", content: "继续" }, say("已压掉的正文"), prior(SUMMARY), ...Array.from({ length: 12 }, () => say("调查 ".repeat(1000)))];
+    let events: AgentEvent[] = [{ type: "user_message", content: "继续" }, say("已压掉的正文"), prior(SUMMARY)];
     for (let n = 0; n < 2; n++) {
+      events.push(...Array.from({ length: 12 }, () => say("调查 ".repeat(1000))));
       const overflow = await runCompaction({ events, trigger: "overflow", reason: "hard_buffer", config: CONFIG });
       if (!overflow.ok) throw new Error(overflow.why);
+      expect(overflow.event.tokens_before).toBeGreaterThan(900);
+      expect(overflow.event.tokens_after).toBeLessThanOrEqual(900);
       events = [...events, overflow.event];
       const projected = JSON.stringify(projectContext(events));
       expect(projected.split("已决定保留兼容接口")).toHaveLength(2);

@@ -4,7 +4,7 @@
 // 收藏保留（ZCode 没有此物，Cairn 既有功能不丢），同样悬停露出。
 // 判卷锚不动：data-catalog-state / data-plugin-row="discover" / data-plugin-id。
 import { AlertTriangle, Download, Loader2, Puzzle, Star, Trash2, WifiOff } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { PluginRowView } from "../../derived/plugins";
 import type { PluginsMarketplaceState } from "../../state/plugins-marketplace";
 import { ConfirmDialog } from "../ConfirmDialog";
@@ -154,16 +154,23 @@ export function PluginDiscover(props: PluginDiscoverProps): React.JSX.Element {
     );
   }
 
-  const shelfRows = new Map<string, readonly PluginRowView[]>();
-  const consumed = new Set<string>();
-  for (const shelf of catalog.catalog.shelves) {
-    const rows = shelf.entryIds
-      .map((id) => props.rows.find((row) => row.id === id))
-      .filter((row): row is PluginRowView => row !== undefined);
-    for (const row of rows) consumed.add(row.id);
-    shelfRows.set(shelf.id, rows);
-  }
-  const remaining = props.rows.filter((row) => !consumed.has(row.id));
+  // 第 1105 页：目录 shelf 的 entryIds 原先逐 id 扫 props.rows（O(entries×rows)）；
+  // 一次 Map 建索引，shelf 渲染 O(entries)。插件 id 唯一，Map 与 find 同语义。
+  // 第 1159 页：shelf 索引/已消费集合/剩余行按 rows 与 catalog 记忆；展开确认等局部状态不重建。
+  const catalogData = catalog.catalog;
+  const rowById = useMemo(() => new Map(props.rows.map((row) => [row.id, row] as const)), [props.rows]);
+  const { shelfRows, remaining } = useMemo(() => {
+    const shelfRows = new Map<string, readonly PluginRowView[]>();
+    const consumed = new Set<string>();
+    for (const shelf of catalogData.shelves) {
+      const rows = shelf.entryIds
+        .map((id) => rowById.get(id))
+        .filter((row): row is PluginRowView => row !== undefined);
+      for (const row of rows) consumed.add(row.id);
+      shelfRows.set(shelf.id, rows);
+    }
+    return { shelfRows, remaining: props.rows.filter((row) => !consumed.has(row.id)) };
+  }, [catalogData, rowById, props.rows]);
 
   return (
     <section className="plugin-discover" data-catalog-state={stale ? "stale" : "live"}>

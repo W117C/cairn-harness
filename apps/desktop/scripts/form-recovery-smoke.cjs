@@ -1,13 +1,14 @@
 // Real renderer, synthetic AgentApi, disposable profile; no writes to user configuration.
 // env -u ELECTRON_RUN_AS_NODE CAIRN_RENDERER_ENTRY=/path/index.html pnpm --filter cairn-desktop exec electron scripts/form-recovery-smoke.cjs [output]
 const { app, BrowserWindow, nativeTheme } = require('electron');
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
 const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { tmpdir } = require('node:os');
 const profile = mkdtempSync(join(tmpdir(), 'cairn-form-recovery-profile-'));
 const out = resolve(process.argv[2] || mkdtempSync(join(tmpdir(), 'cairn-form-recovery-')));
 app.setPath('userData', profile);
-app.on('quit', () => rmSync(profile, { recursive: true, force: true }));
+app.on('quit', () => scheduleProfileCleanup(profile));
 mkdirSync(out, { recursive: true });
 const checks = [], errors = [];
 const check = (name, ok, detail) => { checks.push({ name, ok: ok === true, detail }); console.log(`${ok === true ? 'PASS' : 'FAIL'} ${name}${ok ? '' : ' ' + JSON.stringify(detail)}`); };

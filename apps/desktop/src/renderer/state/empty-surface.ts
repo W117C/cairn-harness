@@ -2,6 +2,7 @@ import type { Dispatch,MutableRefObject,SetStateAction } from 'react';
 // useEmptySurfaceEffects: extracted without changing event or callback behavior.
 import { useEffect,useLayoutEffect } from "react";
 import { buildQuickStarts,type QuickStartInput } from "../quick-starts";
+import { appMotionReduced } from "./motion-pref";
 import type { WorkspaceSession } from "../sessions-view";
 interface EmptySurface {
   quickStarts: string[];
@@ -94,7 +95,7 @@ export function useEmptySurfaceEffects(deps: EmptySurfaceEffectsDeps) {
     const next = el.getBoundingClientRect();
     const dy = prev.top - next.top;
     if (Math.abs(dy) < 8) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (appMotionReduced()) return;
     el.animate(
       [
         { transform: `translateY(${String(dy)}px)`, opacity: 0.6 },

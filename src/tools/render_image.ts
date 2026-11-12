@@ -208,8 +208,6 @@ export function makeRenderImage(deps: RenderImageDeps = {}): Tool {
           images: [{ type: "image", dataUrl }],
           // 产物引用指向**被渲染的那个源文件**，不是这张 PNG（PNG 落在 OS 临时目录、用完即删）。
           // 用户面据此给「打开预览」入口——同一条链路的另一半在桌面端 projections/Stream。
-          // 产物引用指向**被渲染的那个源文件**，不是这张 PNG（PNG 落在 OS 临时目录、用完即删）。
-          // 用户面据此给「打开预览」入口——同一条链路的另一半在桌面端 projections/Stream。
           // kind 走 write_file 那个共用分类器（按后缀名）：写死 "html" 会把 .svg 也报成 html，
           // 而桌面端两个 kind 都进 openPreview ⇒ 观感一样、数据是错的，判卷也就跟着错。
           artifact: { kind: artifactKindOf(rel), path: rel.trim(), note: "刚渲染过的产物" },

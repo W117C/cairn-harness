@@ -24,4 +24,18 @@ describe("演示模式标识", () => {
     expect(sidebar).not.toContain("side-foot");
     expect(read("../src/renderer/components/AccountMenu.tsx")).toContain("STR.footer.accountTip");
   });
+
+  it("服务状态词族与侧栏死 prop 不许复活（第 1060 页）", () => {
+    // 页脚服务状态行 2026-11-03 已删；Sidebar 却仍必填一个自己从不读的 providerOk，
+    // STR.footer 还留着整族服务状态词（零消费）。清掉之后用这条钉住「不许复活」。
+    const sidebar = read("../src/renderer/components/Sidebar.tsx");
+    expect(sidebar).not.toContain("providerOk");
+    const strings = read("../src/renderer/strings.ts");
+    const at = strings.indexOf("footer: {");
+    const footer = strings.slice(at, strings.indexOf("},", at));
+    expect(footer).not.toMatch(/providerOk|providerBad|providerUnknown|providerShort|providerDemo/);
+    // 正对照：绿不是把整块 footer 或演示文案删空换来的。
+    expect(footer).toContain("accountTip");
+    expect(strings).toContain('chip: "演示模式"');
+  });
 });

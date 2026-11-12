@@ -5,6 +5,7 @@
 // 的记账（含调用栈）。做法：复制 dist → 给 App chunk 的 `activate` 与 `setEvents` 接线处插
 // 记账 → 生成指向副本的 index.html → 真 renderer 跑副本。原产物零改动。
 const { app, BrowserWindow, nativeTheme } = require("electron");
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
 const { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } = require("node:fs");
 const { join, resolve } = require("node:path");
 const { tmpdir } = require("node:os");
@@ -174,7 +175,7 @@ function finish(code) {
     }
   } catch (e) { console.error("复原失败：", e); }
   for (const w of BrowserWindow.getAllWindows()) w.destroy();
-  rmSync(root, { recursive: true, force: true });
+  scheduleProfileCleanup(root);
   app.exit(code);
 }
 const watchdog = setTimeout(() => { console.error("插桩冒烟超时"); finish(2); }, 150000);

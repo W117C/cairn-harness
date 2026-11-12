@@ -23,6 +23,14 @@ describe("相对时间活时钟", () => {
       expect(src).toMatch(/relativeTime\([^)]*now[^)]*\)/); // 两种参数序都在：projections(now,ts) / memory-view(iso,now)
       expect(src).not.toContain("relativeTime(Date.now(),");
     }
+    // 第 1116 页：会话行不再各自 useNow——整个 Sidebar 只订阅一次，now 逐行下发。
+    const sidebar = read("../src/renderer/components/Sidebar.tsx");
+    expect((sidebar.match(/useNow\(\)/g) ?? []).length).toBe(1);
+    expect(sidebar).toContain("const now = props.now;");
+    // 第 1130 页：无 ts 的流行不挂 LiveRowTime。
+    const stream = read("../src/renderer/components/Stream.tsx");
+    expect(stream).toContain("if (props.ts === undefined) return null;");
+    expect(stream).toContain("return <LiveRowTime ts={props.ts} />;");
   });
 
   it("共享一条 interval：订阅集合 + 最后一个退订时清理 + 回前台补一次", () => {

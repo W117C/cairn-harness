@@ -65,7 +65,7 @@ export class BackgroundTaskRegistry {
     };
     entry.finish = finish;
     const collect = (chunk: Buffer): void => { entry.ring.push(chunk); };
-    const handle = spawnTracked(launch?.executable ?? "bash", launch?.args ?? ["-c", command], {
+    const handle = spawnTracked(launch?.executable ?? "bash", launch?.args ?? ["--norc", "-c", command], {
       cwd: workspace,
       env: launch?.env ?? sanitizedEnv(),
       timeoutMs: BG_TIMEOUT_MS,

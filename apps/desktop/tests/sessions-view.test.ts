@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import {
   classifyDrop,
+  countSessionsByFilter,
   groupByTime,
   projectSections,
   sessionStatus,
@@ -10,6 +11,8 @@ import {
   timeBucket,
   type WorkspaceSession,
 } from "../src/renderer/sessions-view";
+
+import { runKey } from "../src/renderer/state/session-identity";
 
 const at = (iso: string): number => Date.parse(iso);
 const now = at("2026-10-16T12:00:00");
@@ -104,5 +107,18 @@ describe("classifyDrop（拖拽分流）", () => {
     const r = classifyDrop([{ path: "/repo/a", isDirectory: false }], ["/repo/a"]);
     expect(r.inProject).toEqual(["/repo/a"]);
     expect(classifyDrop([], [])).toEqual({ projects: [], inProject: [], outside: [] });
+  });
+});
+
+describe("countSessionsByFilter（侧栏筛选计数）", () => {
+  it("一次遍历与 matchSession 空搜索同口径", () => {
+    const running = new Set([runKey("/repo/a", "r")]);
+    const counts = countSessionsByFilter([
+      sess("a", "2026-10-16T11:00:00", { pinned: true }),
+      sess("r", "2026-10-16T11:00:00"),
+      sess("arch", "2026-10-16T11:00:00", { archived: true }),
+      sess("sched", "2026-10-16T11:00:00", { origin: "scheduled" }),
+    ], running);
+    expect(counts).toEqual({ all: 4, running: 1, pinned: 1, archived: 1, scheduled: 1 });
   });
 });

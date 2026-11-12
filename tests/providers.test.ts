@@ -299,7 +299,7 @@ describe("M5b/M6 provider 档位表", () => {
 
 /* DeepSeek 预设（2026-10-25 升一等家）：钉的是「这家与别家不一样」的三件事——
    ① 永远显式 thinking 开关（V4.1 服务端默认开，不表态＝开）；
-   ② effort 按官方形状放 thinking.reasoning_effort，顶层 reasoning_effort 不发；
+   ② effort 使用顶层 reasoning_effort；
    ③ usage 缓存命中读数认 prompt_cache_hit_tokens 旧字段兜底（官方文档：与 cached_tokens 同值）。 */
 describe("DeepSeek 预设 wire 形状", () => {
   const capture = async (opts: {
@@ -352,7 +352,7 @@ describe("DeepSeek 预设 wire 形状", () => {
     const r = await capture({});
     expect(r.url).toBe("https://api.deepseek.com/chat/completions");
     expect(r.bodies[0]!.thinking).toEqual({ type: "disabled" });
-    expect("reasoning_effort" in r.bodies[0]!).toBe(false); // 顶层是 OpenAI 家的形状，这家不发
+    expect("reasoning_effort" in r.bodies[0]!).toBe(false);
     expect(r.bodies[0]!.stream_options).toEqual({ include_usage: true }); // 流式计量不丢
     expect(r.bodies[0]!.model).toBe("deepseek-flash");
     // 官方文档点名的雷区字段一个都不发：tool_choice 的 required/具名在 thinking 模式 400；
@@ -362,10 +362,10 @@ describe("DeepSeek 预设 wire 形状", () => {
     expect("presence_penalty" in r.bodies[0]!).toBe(false);
   });
 
-  it("② 档位在场 ⇒ thinking enabled 且 effort 在 thinking 对象里（官方形状），无顶层字段", async () => {
+  it("② 档位在场 ⇒ thinking enabled 且顶层 reasoning_effort 生效", async () => {
     const r = await capture({ reasoningEffort: "low" });
-    expect(r.bodies[0]!.thinking).toEqual({ type: "enabled", reasoning_effort: "low" });
-    expect("reasoning_effort" in r.bodies[0]!).toBe(false);
+    expect(r.bodies[0]!.thinking).toEqual({ type: "enabled" });
+    expect(r.bodies[0]!.reasoning_effort).toBe("low");
   });
 
   it("③ usage 缓存命中：prompt_cache_hit_tokens（旧字段）与 cached_tokens 同样被读到", async () => {

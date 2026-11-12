@@ -13,7 +13,10 @@ import { Stream } from "../src/renderer/components/Stream";
 import { readAppSurface } from "./helpers/app-surface";
 
 const appSrc = readAppSurface();
-const streamSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/Stream.tsx", import.meta.url)), "utf8");
+const streamSrc = [
+  readFileSync(fileURLToPath(new URL("../src/renderer/components/Stream.tsx", import.meta.url)), "utf8"),
+  readFileSync(fileURLToPath(new URL("../src/renderer/components/ThinkingLive.tsx", import.meta.url)), "utf8"),
+].join("\n");
 
 describe("流本体的 memo 边界", () => {
   it("① Stream 的导出是 memo 化的（运行时看导出值，不看源码文本）", () => {

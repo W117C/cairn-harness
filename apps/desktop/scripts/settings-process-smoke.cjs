@@ -1,6 +1,7 @@
 // Real renderer + main IPC + isolated fixture logs + a local search server. No paid API calls.
 // ELECTRON_RUN_AS_NODE= pnpm --filter cairn-desktop exec electron scripts/settings-process-smoke.cjs [output-directory]
 const { app, BrowserWindow, clipboard } = require('electron');
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
 const { createServer } = require('node:http');
 const { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
@@ -60,7 +61,7 @@ function finish(code) {
   writeFileSync(join(out, 'checks.json'), JSON.stringify({ fixtureData: true, checks, errors, requests: requests.map((r) => ({ url: r.url, authenticated: r.authorization === 'Bearer ' + secret })) }, null, 2));
   for (const win of BrowserWindow.getAllWindows()) win.destroy();
   server.close();
-  rmSync(root, { recursive: true, force: true });
+  scheduleProfileCleanup(root);
   console.log('Evidence: ' + out);
   app.exit(code);
 }

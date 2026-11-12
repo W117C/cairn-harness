@@ -17,7 +17,7 @@ describe("附件缩略图", () => {
   });
 
   it("chip 用缩略图，非图片/失败退回图标", () => {
-    const composer = read("../src/renderer/components/Composer.tsx");
+    const composer = read("../src/renderer/components/ComposerAttachments.tsx");
     expect(composer).toContain("window.agent.attachmentThumb(props.path)");
     expect(composer).toContain('className="ac-thumb"');
     expect(composer).toContain('<AttachIcon path={a.path} kind={a.kind} />');

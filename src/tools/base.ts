@@ -113,11 +113,12 @@ export interface ToolResult {
 /** 本仓静态工具名的唯一事实源：联合类型与名字表同源（加一个工具只改这一行）。
  *  2026-11-05 后台任务三件套：run_shell(background:true) 起后台、task_output 读、task_stop 停
  *  （对标 ZCode 的 bash-background / task-output / task-stop 家族）。
- *  2026-11-06 +git_read：只读三合一（status/diff/log），零写权零 shell。 */
+ *  2026-11-06 +git_read：只读三合一（status/diff/log），零写权零 shell。
+ *  2026-11-10 +web_doc（网络文档→文本，web_fetch 同族）+fs_ops（文件生命周期四动作，写向）。 */
 export const TOOL_NAMES = [
   "read_file", "write_file", "edit_file", "apply_patch", "run_shell", "grep", "glob", "lsp",
   "clarify", "propose_plan", "verify", "read_image", "render_image", "todo_write",
-  "task_output", "task_stop", "git_read", "calc", "list_dir", "read_doc",
+  "task_output", "task_stop", "git_read", "calc", "list_dir", "read_doc", "web_doc", "fs_ops",
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];

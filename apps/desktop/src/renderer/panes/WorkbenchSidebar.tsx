@@ -12,6 +12,8 @@ export interface WorkbenchSidebarProps {
   destination: AppDestination;
   sidebarCollapsed: boolean;
   focusMode: boolean;
+  /** chat 上下文列（品牌 brandline 所在）此刻是否可见：与工具栏补位共用 WorkbenchView 的单一判据。 */
+  showChatSidebar: boolean;
   sidebarWidth: number;
   chatSidebar: ComponentProps<typeof Sidebar>;
   badges?: Partial<Record<AppDestination, number>>;
@@ -55,7 +57,7 @@ export function WorkbenchSidebar(props: WorkbenchSidebarProps): React.JSX.Elemen
             }
           : {})}
       />
-      {!props.focusMode && props.destination === "chat" && !props.sidebarCollapsed && (
+      {props.showChatSidebar && (
         <div
           className="side-wrap"
           data-dsh-claude-part="sidebar-column"

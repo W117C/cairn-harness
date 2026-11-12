@@ -10,7 +10,11 @@ import { readRendererFile } from "./helpers/app-surface";
 const palette = readRendererFile("components/CommandPalette.tsx");
 const filePane = readRendererFile("components/FilePane.tsx");
 const paneDock = readRendererFile("components/PaneDock.tsx");
-const workbench = readRendererFile("panes/WorkbenchView.tsx");
+const workbench = [
+  readRendererFile("panes/WorkbenchView.tsx"),
+  readRendererFile("panes/WorkbenchInspector.tsx"),
+  readRendererFile("panes/WorkbenchOverlays.tsx"),
+].join("\n");
 
 it("ancestorDirsOf：只给父目录，顺序由浅到深；根目录文件返回空", () => {
   expect(ancestorDirsOf("README.md")).toEqual([]);

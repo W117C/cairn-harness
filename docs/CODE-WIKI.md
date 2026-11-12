@@ -102,6 +102,26 @@ worker 卡在审批上时，父 turn 已经结束，审批应答与取消必须�
 折成一列就再也不能单独读出「因钱不起 worker」与「因人手不起 worker」。
 `ok:false` 同样与 `hold` 不同款：worker 跑挂的回执也是 `ok:false`，而那一格没有 hold。
 
+## ③b 并行 worker 的语义冲突在合并时点判定（2026-11-12，第 1074 页）
+
+真身：`src/agent/conflict-radar.ts`（纯内核）＋ `src/agent/worker-merge.ts#WorkerMergeReview.radarCheck`（IO 与事件面）。
+
+git 只隔离**文本**冲突：两个 worker 各改各的文件、却动同一批符号时，`merge --no-ff` 会顺利合进去，
+语义断裂留到运行时。接入点是合并控制塔（人类点合并那一刻），不是 spawn——spawn 时点已有文件级
+`semanticConflictsVia` 波及求交（只报「波及哪几个文件」，无符号归因）。
+
+- **取料**：一边是 worker 落地时 `tool_result.changedPaths` 累积的 `WorkerHandle.touchedFiles`；
+  另一边是合并时的 `worktreeDiff` patch。`parseHunks` 把 unified diff 的新文件侧 hunk 头解析成
+  1-based 闭区间（纯删除的 `+c,0` 记成 `[c,c]`），再与 `ImpactGraph.defs` 的站点行号求交。
+- **两档语义**：`same-symbol`（两侧都改到同一个符号的 def）＝高置信，v1 唯一参与拦截；
+  `cross-consumer`（我方改的 def 被对方改动面里的文件通过 `upward` 消费）＝提示级，只告警。
+  没有 hunk 信息的一侧按整文件全量 def 算（宁多勿漏，照 `fileImpact` 的保守口径）。
+- **零新事件类型**（ADR 0005）：告警走 `agent_message{kind:"progress"}` 的 `[radar]` 前缀；
+  拦截走合并回执 `tool_result` 的 `[radar]` 前缀。只有在 `safeMode === "gate"` 且未 `force` 时才拦，
+  被拦时合并登记**不摘**（force 后可重试）。
+- **fail-open 出声**：建图失败 / 图返回 null / diff 读不到 ⇒ `console.warn` 一句并放行——
+  额外探测器不得把交付拦死，但静默降级等于藏故障。
+
 ## ④ 门禁纪律（改任何判据前先读这一节）
 
 - **清单即事实源**：门表在 `scripts/gate-manifest.ts` 的 `GATES`。
@@ -281,7 +301,7 @@ AgentApi，不跑真模型、不触发系统录屏权限）。
 
 ## Verification
 
-Use the root `typecheck` and Vitest commands. The gate manifest contains only core checks in this checkout.
+Use the root `typecheck` and Vitest commands. The root gate manifest also runs the desktop suite: `desktop-test` is in both `GATES` and `CERT_GATES` (`scripts/gate-manifest.ts`), including `desktop-boundary-check`.
 
 ```sh
 node --import tsx scripts/typecheck.ts                                    # tsc --noEmit

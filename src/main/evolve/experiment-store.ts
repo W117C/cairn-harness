@@ -6,6 +6,7 @@
 import { mkdir, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  aggregateExperimentSamplesBySession,
   analyzeExperiment,
   validateExperiment,
   type ExperimentAnalysis,
@@ -101,27 +102,22 @@ export interface ExperimentRunResult {
   unknownEpisodes: number;
 }
 
-/** 从 Episode 账与 assignment 聚合样本，按预注册规则裁决并落结果；不晋升、不改 status。 */
+/** 从 Episode 账与 assignment 按会话单元聚合样本，按预注册规则裁决并落结果；不晋升、不改 status。 */
 export async function analyzeExperimentById(workspace: string, id: string): Promise<ExperimentRunResult> {
   const record = await loadExperiment(workspace, id);
   if (record === null) throw new Error("实验不存在或坏档：" + id);
   const loaded = await loadEpisodesWithUserFeedback(workspace);
-  const assigned = loaded.episodes.filter((episode) =>
-    episode.assignment.experimentId === id
-    && (episode.assignment.arm === "control" || episode.assignment.arm === "treatment")
-  );
-  const samples: ExperimentSample[] = assigned
-    .filter((episode) => episode.outcome.final !== "unknown")
-    .map((episode) => ({
-      episodeId: episode.id,
-      arm: episode.assignment.arm as "control" | "treatment",
-      success: episode.outcome.final === "success",
-      tokens: episode.cost.mainTokens + episode.cost.workerTokens,
-      usd: episode.cost.usd,
-      durationMs: episode.cost.durationMs,
-    }));
-  const unknownEpisodes = assigned.length - samples.length;
-  const analysis = analyzeExperiment(record, samples, unknownEpisodes);
+  const aggregated = aggregateExperimentSamplesBySession(record, loaded.episodes);
+  const analysis = analyzeExperiment(record, aggregated.samples, aggregated.unknownEpisodes, {
+    unknownControl: aggregated.unknownControl,
+    unknownTreatment: aggregated.unknownTreatment,
+    totalRuns: aggregated.totalRuns,
+  });
   await writeExperimentAnalysis(workspace, analysis);
-  return { record, analysis, samples, unknownEpisodes };
+  return {
+    record,
+    analysis,
+    samples: aggregated.samples,
+    unknownEpisodes: aggregated.unknownEpisodes,
+  };
 }

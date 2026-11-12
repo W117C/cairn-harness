@@ -13,6 +13,8 @@
 // 唯一不许攒的情形：**头寸已经紧**。宁可多断一次前缀，也不能因为攒着不剪去撞最终硬闸——
 // 那是把「省缓存」做成「会话直接失败」。
 
+import type { AgentEvent } from "../events";
+
 /** 攒够多少节省 token 才值得断一次前缀。取 `PRUNE_MINIMUM_TOKENS`（20,000）的 2 倍：
  *  单次最小裁剪量刚好过闸就剪，等于把重写次数做到上限。 */
 export const PRUNE_BATCH_MIN_SAVED_TOKENS = 40_000;
@@ -151,4 +153,17 @@ export function freshSavings(savedByIdTokens: ReadonlyMap<number, number>, alrea
   let n = 0;
   for (const [id, v] of savedByIdTokens) if (!alreadySent.has(id)) n += v;
   return n;
+}
+
+/** Require the last main request's cache read to cover at least half the input and exceed the pending cut. */
+export function hasWarmMainPrefix(events: readonly AgentEvent[], model: string | undefined, savings: number): boolean {
+  if (model === undefined) return false;
+  for (let index = events.length - 1; index >= 0; index--) {
+    const event = events[index]!;
+    if (event.type !== "usage" || event.agent_id !== undefined || (event.source !== undefined && event.source !== "main")) continue;
+    const hit = event.cacheReadInputTokens;
+    return event.model === model && hit !== undefined && hit <= event.inputTokens &&
+      hit > Math.max(0, savings) && hit >= event.inputTokens / 2;
+  }
+  return false;
 }

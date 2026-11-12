@@ -1,13 +1,14 @@
 // 用量 CSV 真 renderer 冒烟（2026-10-30 · 第 825 页）：
 // 设置 -> 用量统计 -> 点「复制 CSV」-> 主进程剪贴板读回表头与合计行。
 const { app, BrowserWindow, clipboard, nativeTheme } = require("electron");
-const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
+const { mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
 const { join, resolve } = require("node:path");
 const { tmpdir } = require("node:os");
 const profile = mkdtempSync(join(tmpdir(), "cairn-usage-export-"));
 app.setPath("userData", profile);
 nativeTheme.themeSource = "light";
-app.on("quit", () => rmSync(profile, { recursive: true, force: true }));
+app.on("quit", () => scheduleProfileCleanup(profile));
 const out = process.argv[2] ? resolve(process.argv[2]) : mkdtempSync(join(tmpdir(), "cairn-usage-export-smoke-"));
 mkdirSync(out, { recursive: true });
 

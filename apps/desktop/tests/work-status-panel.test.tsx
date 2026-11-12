@@ -66,7 +66,7 @@ describe("WorkStatusPill（截图右上角）", () => {
     expect(h).toContain("tb-workpill");
     expect(h).toContain("执行工具 · 12s");
     expect(h).toContain(STR.work.process);
-    expect(h).toContain("这轮还没有任务清单。");
+    expect(h).toContain(STR.work.todoEmptyRunning);
     expect(h).toContain(`运行 12s · 3 ${STR.work.stepsUnit}`);
   });
 
@@ -86,5 +86,19 @@ describe("WorkStatusPill（截图右上角）", () => {
       <WorkStatusPill running={false} phaseLabel="" elapsedSec={0} steps={0} todos={null} />,
     );
     expect(h).toBe("");
+  });
+
+  it("空态与清单 aria 走 STR 单源（第 1063 页收编）", () => {
+    // 值锚：收编只搬位置，不改用户可见文案。
+    expect(STR.work.todoEmptyRunning).toBe("这轮还没有任务清单。");
+    expect(STR.work.todoListAria).toBe("任务清单");
+    const empty = renderToStaticMarkup(
+      <WorkStatusPill running phaseLabel="执行工具" elapsedSec={1} steps={1} todos={null} />,
+    );
+    expect(empty).toContain(STR.work.todoEmptyRunning);
+    const withList = renderToStaticMarkup(
+      <WorkStatusPill running={false} phaseLabel="" elapsedSec={0} steps={0} todos={todos} />,
+    );
+    expect(withList).toContain(`aria-label="${STR.work.todoListAria}"`);
   });
 });

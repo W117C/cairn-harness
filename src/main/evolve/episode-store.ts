@@ -12,11 +12,14 @@ import { appendFile, mkdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentEvent } from "../../events";
 import {
+  finalOutcomeOf,
+  outcomeSourceOf,
   projectEpisode,
   type EpisodeArm,
   type EpisodeAssignmentSource,
   type EpisodeFinal,
   type EpisodeJudge,
+  type EpisodeOutcomeSource,
   type EpisodeRecord,
   type EpisodeTaskClass,
   type EpisodeUser,
@@ -26,7 +29,6 @@ import { writeFileAtomic } from "../../atomic-write";
 import { EVOLVE_DIR, evolveDirFor } from "./paths";
 import { readAssignment } from "./assignment-store";
 import { FeedbackStore, type FeedbackRecord } from "../feedback";
-import { finalOutcomeOf } from "../../agent/evolve/episode";
 import { isRecord } from "../../is-record";
 
 export { EVOLVE_DIR, evolveDirFor } from "./paths";
@@ -313,6 +315,10 @@ export interface EpisodeSummary {
   duplicates: number;
   badLines: number;
   byOutcome: { success: number; failure: number; unknown: number };
+  /** 最终结局的判定来源拆解（互斥、加总 === total）：judge > verify > user_feedback > unmeasured。 */
+  byOutcomeSource: Record<EpisodeOutcomeSource, number>;
+  /** 可判定结局覆盖率（(total - unmeasured) / total）；total === 0 时为 null。 */
+  measuredRate: number | null;
   byClass: Record<string, number>;
   byVerify: { green: number; red: number; none: number };
   /** 三个未知面各报各的（可重叠）；不合成一个「unknown」总数。 */
@@ -324,6 +330,12 @@ export interface EpisodeSummary {
 /** 纯汇总：只读 Episode；不猜、不补。 */
 export function summarizeEpisodes(loaded: LoadedEpisodes): EpisodeSummary {
   const byOutcome = { success: 0, failure: 0, unknown: 0 };
+  const byOutcomeSource: Record<EpisodeOutcomeSource, number> = {
+    judge: 0,
+    verify: 0,
+    user_feedback: 0,
+    unmeasured: 0,
+  };
   const byClass: Record<string, number> = {};
   const byVerify = { green: 0, red: 0, none: 0 };
   const unknownReasons = { judge: 0, verify: 0, user: 0 };
@@ -336,6 +348,7 @@ export function summarizeEpisodes(loaded: LoadedEpisodes): EpisodeSummary {
 
   for (const episode of loaded.episodes) {
     byOutcome[episode.outcome.final] += 1;
+    byOutcomeSource[outcomeSourceOf(episode.outcome)] += 1;
     byClass[episode.task.class] = (byClass[episode.task.class] ?? 0) + 1;
     byVerify[episode.outcome.verify] += 1;
     if (episode.outcome.judge === "unknown") unknownReasons.judge += 1;
@@ -349,12 +362,17 @@ export function summarizeEpisodes(loaded: LoadedEpisodes): EpisodeSummary {
     if (lastTs === null || episode.ts > lastTs) lastTs = episode.ts;
   }
 
+  const total = loaded.episodes.length;
+  const measuredRate = total === 0 ? null : (total - byOutcomeSource.unmeasured) / total;
+
   return {
     v: 1,
-    total: loaded.episodes.length,
+    total,
     duplicates: loaded.duplicateIds,
     badLines: loaded.badLines,
     byOutcome,
+    byOutcomeSource,
+    measuredRate,
     byClass,
     byVerify,
     unknownReasons,
@@ -403,7 +421,11 @@ export function formatEpisodeSummary(summary: EpisodeSummary): string {
       + "｜坏行 " + String(summary.badLines),
     "  结局 success " + String(summary.byOutcome.success)
       + " / failure " + String(summary.byOutcome.failure)
-      + " / unknown " + String(summary.byOutcome.unknown),
+      + " / unknown " + String(summary.byOutcome.unknown)
+      + "｜归因 judge " + String(summary.byOutcomeSource.judge)
+      + " / verify " + String(summary.byOutcomeSource.verify)
+      + " / user " + String(summary.byOutcomeSource.user_feedback)
+      + " / unmeasured " + String(summary.byOutcomeSource.unmeasured),
     "  任务类 " + classes,
     "  verify green " + String(summary.byVerify.green)
       + " / red " + String(summary.byVerify.red)

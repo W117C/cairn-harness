@@ -95,4 +95,12 @@ describe("tool catalog search", () => {
     expect(result.truncated).toBe(true);
     expect(result.hits.every((h) => h.name.match(/^hidden_tool_[0-3]$/))).toBe(true);
   });
+
+  it("resolves a fully qualified tool name beyond the semantic scan limit", () => {
+    const target = entry({ name: "mcp__plugin_docs_docs__read_section", server: "docs/docs" });
+    const result = searchToolCatalog([...CATALOG, target], target.name.toUpperCase(), { scanLimit: 2, maxResults: 1 });
+    expect(result.scanned).toBe(2);
+    expect(result.truncated).toBe(true);
+    expect(result.hits[0]?.name).toBe(target.name);
+  });
 });

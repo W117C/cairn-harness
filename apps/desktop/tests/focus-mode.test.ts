@@ -20,7 +20,7 @@ describe("专注模式", () => {
     expect(app).toContain("const focusRestoreRef = useRef<{ sidebar: boolean; inspector: boolean; inspectorWidth: number | null } | null>(null);");
     expect(app).toMatch(/focusRestoreRef\.current = \{\n\s+sidebar: sidebarCollapsed,\n\s+inspector: !inspectorOpen,\n\s+inspectorWidth: inspectorOpen \? Math\.round\(inspector\.getSize\(\)\.inPixels\) : null,/);
     expect(app).toContain("setSidebarCollapsed(prev?.sidebar ?? false);");
-    expect(app).toContain('const restoreDelay = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 240;');
+    expect(app).toContain("const restoreDelay = appMotionReduced() ? 0 : 240;");
     expect(app).toContain("window.setTimeout(() => { ref?.resize(width); }, restoreDelay);");
   });
 

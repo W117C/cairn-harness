@@ -27,11 +27,10 @@ describe("工具状态机：one source, five states", () => {
     expect(src).toContain("const state = toolStatusOf(r);");
     expect(src).toContain("data-tool-status={state}");
     expect(src).toContain("aria-busy={r.pending === true}");
-    // 簇的四个计数必须走同一个状态机，不许再各写一套布尔组合。
-    expect(src).toContain('props.rows.filter((r) => toolStatusOf(r) === "pending")');
-    expect(src).toContain('props.rows.filter((r) => toolStatusOf(r) === "failed")');
-    expect(src).toContain('props.rows.filter((r) => toolStatusOf(r) === "interrupted")');
-    expect(src).toContain('props.rows.filter((r) => toolStatusOf(r) === "unknown")');
+    // 簇的四个计数必须走同一个状态机，不许再各写一套布尔组合（第 1170 页收成派生层一次遍历）。
+    expect(src).toContain("collectToolClusterStats(props.rows, toolStatusOf)");
+    expect(src).not.toContain('props.rows.filter((r) => toolStatusOf(r) === "pending")');
+    expect(src).not.toContain("props.rows.reduce((sum, r) =>");
   });
 
   it("用户行渲染态带 data-state=done / data-author=self（流内消息均已落盘）", () => {

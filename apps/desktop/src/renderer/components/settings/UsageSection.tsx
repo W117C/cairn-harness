@@ -20,7 +20,7 @@ function DailyTrend({ days }: { days: UsageDay[] }) {
   const maximum = Math.max(1, ...days.map(tokenTotal));
   const chartWidth = 660;
   const step = 600 / days.length;
-  const ticks = [0, Math.round((days.length - 1) / 2), days.length - 1];
+  const ticks = useMemo(() => [0, Math.round((days.length - 1) / 2), days.length - 1], [days.length]);
   return <>
     <svg className="ud-trend" viewBox={`0 0 ${chartWidth} 194`} role="img" aria-label={STR.usage.trendAria.replace("{n}", String(days.length))}>
       <title>{STR.usage.trendTitle}</title>
@@ -49,10 +49,11 @@ function DailyTrend({ days }: { days: UsageDay[] }) {
 
 function ActivityHeatmap({ days }: { days: UsageDay[] }) {
   const [selected, setSelected] = useState<string | null>(null);
-  const selectedDay = days.find((day) => day.day === selected) ?? days[days.length - 1]!;
-  const maximum = Math.max(1, ...days.map((day) => day.usageCount + day.rounds));
+  // 第 1142 页：热力图选中日与最大值按 days/selected 记忆；点击/window 变化不重扫全月。
+  const selectedDay = useMemo(() => days.find((day) => day.day === selected) ?? days[days.length - 1]!, [days, selected]);
+  const maximum = useMemo(() => Math.max(1, ...days.map((day) => day.usageCount + day.rounds)), [days]);
   // 周一在首行；起始空格使日期在日历中的星期位置真实。
-  const offset = (new Date(`${days[0]!.day}T12:00:00`).getDay() + 6) % 7;
+  const offset = useMemo(() => (new Date(`${days[0]!.day}T12:00:00`).getDay() + 6) % 7, [days]);
   return <>
     <div className="ud-heatmap-layout">
       <div className="ud-weekdays" aria-hidden="true"><span>{STR.usage.weekdayMon}</span><span>{STR.usage.weekdayWed}</span><span>{STR.usage.weekdayFri}</span><span>{STR.usage.weekdaySun}</span></div>
@@ -88,11 +89,12 @@ export function UsageDashboard({ data, refreshing, error, onRefresh }: { data: L
   const [sort, setSort] = useState<"tokens" | "records">("tokens");
   const analytics = data.analytics;
   const period = useMemo(() => analytics ? usagePeriod(analytics, range) : null, [analytics, range]);
-  const lifetime = analytics ? sumUsageMetrics(analytics.buckets) : null;
-  const undated = analytics ? sumUsageMetrics(analytics.buckets.filter((row) => row.day === null)) : null;
-  const unknownModel = analytics?.buckets.filter((row) => row.model === null).reduce((total, row) => total + row.usageCount, 0) ?? 0;
+  // 第 1125 页：analytics/period 不变时，汇总、无日期桶、未知模型与模型排序不随复制提示等局部状态重跑。
+  const lifetime = useMemo(() => analytics ? sumUsageMetrics(analytics.buckets) : null, [analytics]);
+  const undated = useMemo(() => analytics ? sumUsageMetrics(analytics.buckets.filter((row) => row.day === null)) : null, [analytics]);
+  const unknownModel = useMemo(() => analytics?.buckets.filter((row) => row.model === null).reduce((total, row) => total + row.usageCount, 0) ?? 0, [analytics]);
   const missingTokens = lifetime ? lifetime.usageCount * 2 - lifetime.inputMeasured - lifetime.outputMeasured : 0;
-  const models = period ? [...period.models].sort((left, right) => sort === "tokens" ? tokenTotal(right) - tokenTotal(left) : right.usageCount - left.usageCount) : [];
+  const models = useMemo(() => period ? [...period.models].sort((left, right) => sort === "tokens" ? tokenTotal(right) - tokenTotal(left) : right.usageCount - left.usageCount) : [], [period, sort]);
   const periodTokens = period ? tokenTotal(period.totals) : 0;
   const inputPercent = periodTokens > 0 && period ? period.totals.inputTokens / periodTokens * 100 : 0;
   const hasWarnings = data.skipped > 0 || data.badLines > 0 || (analytics?.sessionsWithoutUsage ?? 0) > 0 || (undated?.usageCount ?? 0) > 0 || unknownModel > 0 || missingTokens > 0;

@@ -89,6 +89,7 @@ export function describeAsk(ask: { tool?: string; args?: Record<string, unknown>
     return { title: "应用补丁", ...(head !== undefined ? { subject: head } : {}), body: patch ?? JSON.stringify(args) };
   }
   if (tool === "web_fetch") return { title: "访问网络", subject: s(args.url) };
+  if (tool === "web_doc") return { title: "取文档", subject: s(args.url) };
   if (tool === "browser_navigate") return { title: "打开浏览器页面", subject: s(args.url) };
   if (tool === "browser_snapshot") return { title: "读取浏览器页面" };
   if (tool === "browser_pick") return { title: "查找网页元素", body: s(args.selector) };
@@ -147,6 +148,14 @@ export function describeAsk(ask: { tool?: string; args?: Record<string, unknown>
     return { title: "查符号", ...(what !== undefined ? { subject: what } : {}), ...(s(args.path) !== undefined && s(args.symbol) !== undefined ? { body: s(args.path) } : {}) };
   }
   if (tool === "render_image") return { title: "渲染图", body: s(args.path) ?? JSON.stringify(args) };
+  if (tool === "fs_ops") {
+    // 批的是「对哪个名字做什么」：动词随 action 走，破坏向的 delete 不能混在「整理」里说不出。
+    const action = s(args.action) ?? "";
+    const what = action === "mkdir" ? "建目录" : action === "delete" ? "删除" : action === "move" || action === "rename" ? "移动" : action;
+    const p = s(args.path) ?? "";
+    const t = s(args.target);
+    return { title: "整理文件", subject: `${what} ${p}${t !== undefined ? ` → ${t}` : ""}` };
+  }
   if (tool === "diagnose") {
     const face = s(args.face);
     return { title: "跑诊断", body: face === undefined ? "全部检查" : face === "lint" ? "只跑 lint" : "只跑 test" };

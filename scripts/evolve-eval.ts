@@ -13,10 +13,8 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { OfflineEvalInput } from "../src/agent/evolve/offline-eval";
 import { loadCandidate } from "../src/main/evolve/candidate-store";
 import { recordOfflineEvaluation } from "../src/main/evolve/offline-eval-store";
-import { isRecord } from "../src/is-record";
 
 interface ParsedArgs {
   command: string;
@@ -51,20 +49,6 @@ function workspaceOf(flags: Map<string, string | true>): string {
   return resolve(typeof value === "string" ? value : process.cwd());
 }
 
-function readInput(path: string): OfflineEvalInput {
-  const raw: unknown = JSON.parse(readFileSync(path, "utf8"));
-  if (!isRecord(raw)
-    || !Array.isArray(raw.tasks) || !Array.isArray(raw.baseline) || !Array.isArray(raw.candidate)) {
-    throw new Error("输入 JSON 必须是 {tasks, baseline, candidate} 三个数组");
-  }
-  return {
-    tasks: raw.tasks as OfflineEvalInput["tasks"],
-    baseline: raw.baseline as OfflineEvalInput["baseline"],
-    candidate: raw.candidate as OfflineEvalInput["candidate"],
-    ...(typeof raw.minCostImprovement === "number" ? { minCostImprovement: raw.minCostImprovement } : {}),
-  };
-}
-
 export interface EvolveEvalOutput {
   command: string;
   text: string;
@@ -79,7 +63,8 @@ export async function runEvolveEval(args: readonly string[]): Promise<EvolveEval
   if (parsed.command === "record") {
     const file = parsed.flags.get("file");
     if (typeof file !== "string") throw new Error("record 需要 --file <input.json>");
-    const recorded = await recordOfflineEvaluation(workspace, id, readInput(resolve(file)));
+    const input: unknown = JSON.parse(readFileSync(resolve(file), "utf8"));
+    const recorded = await recordOfflineEvaluation(workspace, id, input);
     const result = recorded.result;
     return {
       command: "record",

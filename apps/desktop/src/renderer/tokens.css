@@ -512,6 +512,7 @@
   --t-genbar-sweep: 1.1s var(--ease-in-out);  /* 生成中细条跑马灯（genbar-sweep） */
   --t-think-expand: 200ms;                    /* 思考体展开（纯时长：还要给 visibility 延迟位） */
   --t-think-glow: 2.8s var(--ease-in-out);    /* 推理氛围光呼吸（open-claude-ui ReasoningAmbientGlow） */
+  --t-live-shimmer: 4s var(--ease-linear);   /* 活动信号流光（zcode gradient-flow 同档：扫一半、歇一半） */
   --t-spin: 1s var(--ease-linear);             /* 转圈（spin） */
   --t-spin-slow: 1.1s var(--ease-linear);      /* 转圈·慢档（会话行状态图标 s-spin） */
   --t-rise-in: 420ms var(--ease-rise);         /* 入场抬升·短档（新会话行 .start） */
@@ -519,6 +520,9 @@
   --t-find-hit: 900ms var(--ease-out);         /* 查找命中闪烁（find-hit） */
   --t-turn-flash: 1.3s var(--ease-out);        /* 目录跳转落点一闪（turn-flash） */
   --t-sp-flash: 160ms var(--ease-out);         /* 提示浮层闪现（sp-flash-in） */
+  /* 等待占位入场（2026-11-08 第 1046 页，Claude 桌面 CSS `cds-placeholder-reveal_150ms_ease-out`）：
+     模型还没吐第一个字时，加载标要「浮进来」而不是啪地出现；只动 opacity + 2px 微抬。 */
+  --t-placeholder-reveal: 150ms var(--ease-out);
   /* 错峰（纯时长：延迟位只收时长，不接受缓动） */
   --t-stagger-chip: 50ms;                      /* 空态 chip 入场错峰 */
   --t-stagger-composer: 90ms;                  /* 空态 composer 入场错峰 */

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { IdleTask, IdleTaskAction, IdleTaskInput, IdleTaskSnapshot, IdleTaskStatus } from "../../../../../src/main/idle-tasks";
 import { fullTime } from "../memory-view";
 import { PAGE_CONTEXT_ITEMS } from "../navigation";
@@ -78,17 +78,18 @@ export function IdleTaskPane({ tabs, filter, onFilter }: { tabs: React.ReactNode
     }
   };
 
-  const tasks = snapshot?.tasks ?? [];
-  const active = tasks.filter((task) => task.status === "queued" || task.status === "paused" || task.status === "running")
-    .filter((task) => filter === "off" ? task.status === "paused" : filter === "on" ? task.status !== "paused" : true);
-  const history = tasks.filter((task) => task.status === "succeeded" || task.status === "failed" || task.status === "cancelled")
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  // 第 1123 页：轮询快照/筛选项不变时，列表筛选与历史排序不随表单输入重跑。
+  const tasks = useMemo(() => snapshot?.tasks ?? [], [snapshot]);
+  const active = useMemo(() => tasks.filter((task) => task.status === "queued" || task.status === "paused" || task.status === "running")
+    .filter((task) => filter === "off" ? task.status === "paused" : filter === "on" ? task.status !== "paused" : true), [tasks, filter]);
+  const history = useMemo(() => tasks.filter((task) => task.status === "succeeded" || task.status === "failed" || task.status === "cancelled")
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), [tasks]);
   const update = (id: string, action: IdleTaskAction) => { void submit(() => window.agent.idleTaskUpdate(id, action)); };
 
   return (
     <PageFrame title="自动化" titleAccent="工作流" actions={tabs} onRefresh={refresh}
       filters={PAGE_CONTEXT_ITEMS.automation} activeFilter={filter} onFilter={onFilter}
-      subtitle="电脑保持唤醒、Cairn 保持运行且对话和定时任务均空闲时执行。模型调用按当前服务商规则计费。">
+      subtitle="电脑保持唤醒、Cairn 空闲时执行；模型调用按服务商规则计费。">
       <section className="idle-task-section" aria-label="本地闲时队列">
         <div className="idle-task-heading">
           <div>

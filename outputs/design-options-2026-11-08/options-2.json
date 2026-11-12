@@ -1,0 +1,29 @@
+{
+  "note": "第二批方向样板：会话页纯几何提案，临时 CSS 覆盖，产品源码未改；左=现在，中=轻度，右=明显。",
+  "theme": "dark",
+  "viewport": [
+    1440,
+    900
+  ],
+  "inSession": true,
+  "state": {
+    "rows": 2,
+    "toolbar": true,
+    "stream": true
+  },
+  "errors": [],
+  "options": {
+    "C": {
+      "title": "顶栏松紧与对齐",
+      "now": "",
+      "light": "\n.titlebar { background: hsl(60 2% 14% / .6) !important; border-bottom: 1px solid hsl(0 0% 100% / 12%) !important; }\n.tb-center { gap: 8px !important; }\n.tb-cluster { gap: 4px !important; }",
+      "strong": "\n.titlebar { background: hsl(60 2% 14% / .6) !important; border-bottom: 1px solid hsl(0 0% 100% / 12%) !important; }\n.tb-center { gap: 8px !important; }\n.tb-cluster { gap: 4px !important; }\n.titlebar { background: hsl(60 2% 17%) !important; border-bottom: 1px solid hsl(0 0% 100% / 24%) !important; }\n.tb-title { background: hsl(0 0% 11%) !important; border: 1px solid hsl(0 0% 100% / 22%) !important; border-radius: 999px !important; padding: 2px 12px !important; }\n.tb-workspace-name { opacity: .68 !important; }"
+    },
+    "D": {
+      "title": "消息之间的疏与密",
+      "now": "",
+      "light": "\n.row.user, .row.assistant { margin-top: 16px !important; }\n.toolcluster { margin-top: 16px !important; }\n.row.assistant .t { line-height: 1.6 !important; }",
+      "strong": "\n.row.user, .row.assistant { margin-top: 16px !important; }\n.toolcluster { margin-top: 16px !important; }\n.row.assistant .t { line-height: 1.6 !important; }\n.row.user, .row.assistant { margin-top: 10px !important; }\n.toolcluster { margin-top: 10px !important; }\n.row.assistant .t { line-height: 1.5 !important; }"
+    }
+  }
+}

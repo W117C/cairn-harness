@@ -1,5 +1,5 @@
 // 插件侧栏/面板视图（供 PluginSurface 按需加载；整页目的地由 PluginsWorkspace 承担）。
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Puzzle } from "lucide-react";
 import type { PluginPanelSnapshot } from "../../../../../src/agent/plugins";
 import { STR } from "../strings";
@@ -48,18 +48,31 @@ export function PluginsPane(props: {
     });
   };
   const plugins = props.snap;
-  const mcpSummaries = plugins.mcpServerSummaries ?? [];
-  const activeMcpTools = plugins.activeMcpTools ?? [];
+  // 第 1145 页：MCP 汇总结论按快照记忆；抽屉/信任开关等局部状态不重建两张表。
+  const mcpSummaries = useMemo(() => plugins.mcpServerSummaries ?? [], [plugins.mcpServerSummaries]);
+  const { activeMcpByPlugin, mcpSummaryByKey } = useMemo(() => {
+    // 第 1120 页：MCP 激活计数/汇总按一次遍历建表，行与详情不再各自 filter/find。
+    const activeMcpByPlugin = new Map<string, number>();
+    const mcpSummaryByKey = new Map<string, (typeof mcpSummaries)[number]>();
+    for (const s of mcpSummaries) {
+      if (s.active) activeMcpByPlugin.set(s.plugin, (activeMcpByPlugin.get(s.plugin) ?? 0) + 1);
+      mcpSummaryByKey.set(s.key, s);
+    }
+    return { activeMcpByPlugin, mcpSummaryByKey };
+  }, [mcpSummaries]);
+  const activeMcpTools = useMemo(() => plugins.activeMcpTools ?? [], [plugins.activeMcpTools]);
   // 旧快照/手写夹具没有这三格时显示「未记录」，不把缺席读成「没有激活」。
   const hasMcpActiveData = plugins.mcpServerSummaries !== undefined
     || plugins.activeMcpServers !== undefined || plugins.activeMcpTools !== undefined;
   const filter = props.filter ?? localFilter;
   const setFilter = props.onFilter ?? setLocalFilter;
   const q = query.trim().toLowerCase();
-  const rows = plugins.plugins
+  // 第 1139 页：插件行、选中项与所选插件的 MCP 行按输入记忆；抽屉/表单等局部状态不重扫。
+  const rows = useMemo(() => plugins.plugins
     .filter((p) => (filter === "all" ? true : filter === "trusted" ? p.trust === "trusted" : p.trust !== "trusted"))
-    .filter((p) => (p.name + p.scope).toLowerCase().includes(q));
-  const selected = sel === null ? null : plugins.plugins.find((x) => x.name === sel) ?? null;
+    .filter((p) => (p.name + p.scope).toLowerCase().includes(q)), [plugins.plugins, filter, q]);
+  const selected = useMemo(() => sel === null ? null : plugins.plugins.find((x) => x.name === sel) ?? null, [plugins.plugins, sel]);
+  const selectedMcp = useMemo(() => selected === null ? [] : plugins.mcpServers.filter((m) => m.plugin === selected.name), [plugins.mcpServers, selected]);
   useEffect(() => { setBodyFor(null); }, [sel]);
   // 批 6（总纲阶段 3-3）：数据为 0 时只显示 EmptyState，不摆统计卡与筛选。
   if (plugins.plugins.length === 0) {
@@ -97,7 +110,7 @@ export function PluginsPane(props: {
           {rows.length === 0 && <div className="ap-empty">没有匹配的插件</div>}
           <div className="ap-grid">
             {shown.map((p) => {
-              const activeForPlugin = mcpSummaries.filter((s) => s.plugin === p.name && s.active).length;
+              const activeForPlugin = activeMcpByPlugin.get(p.name) ?? 0;
               return (
                 <PaneCard
                   key={p.name}
@@ -123,7 +136,7 @@ export function PluginsPane(props: {
             <section className="ap-sec">
               <h3>组成</h3>
               <div className="ap-kv">
-                <span>{categoryLabel("skills")} {String(selected.counts.skills)} · {categoryLabel("commands")} {String(selected.counts.commands)} · {categoryLabel("agents")} {String(selected.counts.agents)} · {categoryLabel("hooks")} {String(selected.counts.hooks)} · {categoryLabel("mcp")} {String(selected.counts.mcp)}（激活 {hasMcpActiveData ? String(mcpSummaries.filter((s) => s.plugin === selected.name && s.active).length) : "—"}） · {categoryLabel("lsp")} {String(selected.counts.lspActive)}/{String(selected.counts.lsp)}</span>
+                <span>{categoryLabel("skills")} {String(selected.counts.skills)} · {categoryLabel("commands")} {String(selected.counts.commands)} · {categoryLabel("agents")} {String(selected.counts.agents)} · {categoryLabel("hooks")} {String(selected.counts.hooks)} · {categoryLabel("mcp")} {String(selected.counts.mcp)}（激活 {hasMcpActiveData ? String(activeMcpByPlugin.get(selected.name) ?? 0) : "—"}） · {categoryLabel("lsp")} {String(selected.counts.lspActive)}/{String(selected.counts.lsp)}</span>
               </div>
             </section>
             <section className="ap-sec">
@@ -228,8 +241,8 @@ export function PluginsPane(props: {
             )}
             <section className="ap-sec">
               <h3>该插件 MCP</h3>
-              {plugins.mcpServers.filter((m) => m.plugin === selected.name).length === 0 && <div className="ap-empty">无 MCP 服务</div>}
-              {plugins.mcpServers.filter((m) => m.plugin === selected.name).map((m) => {
+              {selectedMcp.length === 0 && <div className="ap-empty">无 MCP 服务</div>}
+              {selectedMcp.map((m) => {
                 const key = selected.name + "/" + m.server;
                 const toolPrefix = "mcp__plugin_" + selected.name + "_" + m.server + "__";
                 const activeNames = activeMcpTools
@@ -237,7 +250,7 @@ export function PluginsPane(props: {
                   .map((s) => s.slice(toolPrefix.length));
                 // 旧快照可能只有 activeMcpServers / activeMcpTools 没有 summaries：按原始集回退，
                 // 不把「有 active 记录但缺汇总」显示成未激活。
-                const summary = mcpSummaries.find((s) => s.key === key)
+                const summary = mcpSummaryByKey.get(key)
                   ?? ((plugins.activeMcpServers ?? []).includes(key)
                     ? { key, plugin: selected.name, server: m.server, toolCount: m.tools.length, active: true, activeMode: "server" as const, activeToolCount: m.tools.length }
                     : activeNames.length > 0

@@ -131,6 +131,8 @@ describe("mayHaveWrittenDisk：写向判据的唯一事实源", () => {
         "list_dir",
         // 2026-11-06 第二批大件：文档读取（zip/zlib 原生解析 + pdf 文本层，只读）。
         "read_doc",
+        // 2026-11-10 出网取文档：与 web_fetch 同族（抓取+解析，零落盘）⇒ 只读面登记。
+        "web_doc",
       ] as const;
       const names = Object.keys(TOOLS);
       const unclassified = names.filter(

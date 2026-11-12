@@ -7,7 +7,7 @@
 import { useRef, useState } from "react";
 import { Check, Filter } from "lucide-react";
 import { STR } from "../strings";
-import { SESSION_FILTERS, SESSION_FILTER_NOTE, type SessionFilterId } from "../sessions-view";
+import { sessionFilterInfo, SESSION_FILTER_NOTE, type SessionFilterId } from "../sessions-view";
 import { Popover, useMenuKeyboard, usePopoverDismiss } from "./Popover";
 import "./sidebar-filter.css";
 
@@ -18,7 +18,7 @@ export function SessionFilterMenu(props: {
   onChangeFilter: (next: SessionFilterId) => void;
   onChangeDensity: (next: "comfortable" | "compact") => void;
 }): React.JSX.Element {
-  const info = SESSION_FILTERS.find((f) => f.id === props.filter) ?? SESSION_FILTERS[0];
+  const info = sessionFilterInfo(props.filter);
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);

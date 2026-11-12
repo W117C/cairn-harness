@@ -3,6 +3,7 @@
 // supplied by the explicit --cairn-plugin-marketplace-fixture preload flag.
 // Build first: pnpm --filter cairn-desktop build
 const { app, BrowserWindow, nativeTheme } = require("electron");
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
 const {
   mkdirSync,
   mkdtempSync,
@@ -431,7 +432,7 @@ async function main() {
 }
 
 function cleanup() {
-  try { rmSync(profile, { recursive: true, force: true }); } catch { /* best-effort */ }
+  scheduleProfileCleanup(profile);
 }
 
 main().catch((error) => {

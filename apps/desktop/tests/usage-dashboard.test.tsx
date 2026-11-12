@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { UsageLedgerPayload } from "../../../src/main/ipc-protocol";
 import { STR } from "../src/renderer/strings";
 import { UsageDashboard, usagePeriod, usageTokenLabel } from "../src/renderer/components/settings/UsageSection";
+import { readAppSurface } from "./helpers/app-surface";
 
 const data: Extract<UsageLedgerPayload, { ok: true }> = {
   ok: true, sessions: 3, workspaces: 2, skipped: 1, badLines: 2,
@@ -19,6 +20,18 @@ const data: Extract<UsageLedgerPayload, { ok: true }> = {
     activity: [{ day: "2026-10-01", sessions: 1, rounds: 1, toolSteps: 1 }, { day: "2026-10-24", sessions: 1, rounds: 1, toolSteps: 3 }],
   },
 };
+
+describe("usage dashboard 派生记忆", () => {
+  it("analytics/period 不变时不重跑汇总与模型排序", () => {
+    const src = readAppSurface();
+    expect(src).toContain("useMemo(() => analytics ? sumUsageMetrics(analytics.buckets) : null, [analytics])");
+    expect(src).toContain("useMemo(() => period ? [...period.models].sort(");
+    expect(src).toContain("const selectedDay = useMemo(() => days.find((day) => day.day === selected)");
+    expect(src).toContain("const maximum = useMemo(() => Math.max(1, ...days.map((day) => day.usageCount + day.rounds)), [days]);");
+    expect(src).toContain("const ticks = useMemo(() => [0, Math.round((days.length - 1) / 2), days.length - 1], [days.length]);");
+    expect(src).toContain("const offset = useMemo(() => (new Date(");
+  });
+});
 
 describe("usage dashboard", () => {
   it("filters 7/30/90 day windows without moving unknown dates into today or counting cache twice", () => {

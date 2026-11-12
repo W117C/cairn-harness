@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEventLog, type AgentEvent } from "../src/events";
 import { createSessionProvider } from "../src/agent/session-provider";
 import { PRUNED_PLACEHOLDER } from "../src/agent/prune";
+import { prefixChurn, serializeLayer } from "../src/agent/prefix-churn";
 import type { GlmMessage } from "../src/providers/glm";
 
 vi.mock("../src/agent/memory/inject", async () =>
@@ -19,26 +20,36 @@ const KB = 1024;
 let dir = "";
 let logPath = "";
 
-async function seed(): Promise<void> {
-  dir = await mkdtemp(join(tmpdir(), "prune-prod-"));
-  logPath = join(dir, "events.jsonl");
-  const log = createEventLog(logPath);
-  // 4 个轮次 × 120KB 结果：保护区 40k 吞掉最新两条、最近 2 轮免剪 ⇒ 候选是 F 与 G
-  const round = (n: number, ch: string): AgentEvent[] => [
+function round(n: number, ch: string): AgentEvent[] {
+  return [
     { type: "user_message", content: "r" + String(n) },
     { type: "tool_call", id: ch, name: "read_file", args: { path: ch + ".ts" } },
     { type: "tool_result", callId: ch, ok: true, output: ch.repeat(120 * KB) },
   ];
-  const events: AgentEvent[] = [...round(1, "F"), ...round(2, "G"), ...round(3, "H"), ...round(4, "I")];
-  for (const e of events) await log.append(e);
-  await log.close?.();
 }
 
-async function oneRequest(): Promise<GlmMessage[]> {
+async function append(events: AgentEvent[]): Promise<void> {
+  const log = createEventLog(logPath);
+  try {
+    for (const event of events) await log.append(event);
+  } finally {
+    await log.close?.();
+  }
+}
+
+async function seed(): Promise<void> {
+  dir = await mkdtemp(join(tmpdir(), "prune-prod-"));
+  logPath = join(dir, "events.jsonl");
+  // 4 个轮次 × 120KB 结果：保护区 40k 吞掉最新两条、最近 2 轮免剪 ⇒ 候选是 F 与 G
+  await append([...round(1, "F"), ...round(2, "G"), ...round(3, "H"), ...round(4, "I")]);
+}
+
+async function oneRequest(pruneBatching: boolean | { requireCacheHit: boolean } = false): Promise<GlmMessage[]> {
   const captured: GlmMessage[][] = [];
   const provider = createSessionProvider(logPath, {
     map: false,
     workspace: dir,
+    ...(pruneBatching ? { pruneBatching, ctxWindow: 1_000_000, model: "deepseek-v4-pro" } : {}),
     transport: async function* (messages) {
       captured.push(messages);
       yield { type: "assistant_message", content: "收到" };
@@ -94,5 +105,44 @@ describe("prune 存盘回取的生产入口", () => {
     await oneRequest();
     const after = await readdir(join(dir, "prune-attachments"));
     expect(after.sort()).toEqual(first.sort());
+  });
+
+  it("reuses earlier pruning across provider instances while new results wait for a batch", async () => {
+    await seed();
+    const first = await oneRequest(true);
+    const atDir = join(dir, "prune-attachments");
+    expect(await readdir(atDir)).toHaveLength(2);
+
+    await append(round(5, "J"));
+    const deferred = await oneRequest(true);
+    const previous = serializeLayer(first);
+    expect(prefixChurn(previous, serializeLayer(deferred))).toMatchObject({
+      pureAppend: true, stableChars: previous.length, rewroteChars: 0,
+    });
+    expect(deferred.find((message) => message.tool_call_id === "H")?.content).toBe("H".repeat(120 * KB));
+    expect(await readdir(atDir)).toHaveLength(2);
+
+    await append(round(6, "K"));
+    const batched = await oneRequest(true);
+    expect(batched.find((message) => message.tool_call_id === "H")?.content).toContain(PRUNED_PLACEHOLDER);
+    expect(batched.find((message) => message.tool_call_id === "I")?.content).toContain(PRUNED_PLACEHOLDER);
+    expect(await readdir(atDir)).toHaveLength(4);
+  });
+
+  it("defers a new cut on a measured warm prefix and applies it after a cache miss", async () => {
+    await seed();
+    const policy = { requireCacheHit: true };
+    await oneRequest(policy);
+    await append([...round(5, "J"), {
+      type: "usage", model: "deepseek-v4-pro", inputTokens: 92_000, outputTokens: 0, cacheReadInputTokens: 65_000,
+    }]);
+    const warm = await oneRequest(policy);
+    expect(warm.find((message) => message.tool_call_id === "H")?.content).toBe("H".repeat(120 * KB));
+
+    await append([{
+      type: "usage", model: "deepseek-v4-pro", inputTokens: 92_000, outputTokens: 0, cacheReadInputTokens: 0,
+    }]);
+    const cold = await oneRequest(policy);
+    expect(cold.find((message) => message.tool_call_id === "H")?.content?.startsWith(PRUNED_PLACEHOLDER)).toBe(true);
   });
 });

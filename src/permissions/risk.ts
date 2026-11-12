@@ -137,9 +137,11 @@ export function hasThreatTableSurface(tool: string): boolean {
  */
 
 
-/** 文件面工具族：走 `path` 键判定路径风险。`apply_patch` 批量形态单列（见 pathSurface）。 */
+/** 文件面工具族：走 `path` 键判定路径风险。`apply_patch` 批量形态单列（见 pathSurface）；
+ *  fs_ops 的 `target` 键单列（move/rename 的落点与 path 同判——把文件移到 `.git/hooks/` 的
+ *  别名形状必须和写进去同判）。 */
 const PATH_TOOL_NAMES: ReadonlySet<string> = new Set([
-  "read_file", "write_file", "edit_file", "grep", "glob",
+  "read_file", "write_file", "edit_file", "grep", "glob", "fs_ops",
 ]);
 
 /** **递归扫描面**的工具（grep/glob）：它们的 path 参数是**目录**，实际覆盖面是整棵子树。
@@ -179,6 +181,8 @@ function pathSurface(tool: string, args: Record<string, unknown>): string[] {
   }
   // apply_patch：patch 正文**总是**进这一面（哪怕同时带了 path/paths）。
   if (tool === "apply_patch" && typeof args.patch === "string" && args.patch !== "") parts.push(args.patch);
+  // fs_ops：move/rename 的**落点**与 path 同判（宁可多判一次审批，不可漏判落点进敏感面）。
+  if (tool === "fs_ops" && typeof args.target === "string" && args.target !== "") parts.push(args.target);
   return parts;
 }
 
@@ -275,6 +279,18 @@ export function staticRisk(tool: ToolName, args: Record<string, unknown>): RiskF
   if ((tool as string) === "web_fetch" || (tool as string) === "web_search"
       || (tool as string) === "browser_navigate") {
     return { level: "high", reason: "出网取内容（外部不可信输入，SSRF 面）" };
+  }
+  // web_doc 是出网家族的第四个名字（2026-11-10）：抓的是**文档二进制**并整份解析进上下文，
+  // 与 web_fetch 同一面（SSRF 闸在工具内，「要不要问人」在这里）——不给 high ⇒ auto 档免批。
+  if ((tool as string) === "web_doc") {
+    return { level: "high", reason: "出网取文档（外部不可信输入，SSRF 面）" };
+  }
+  // fs_ops 的 delete（2026-11-10）：删文件/空目录 = 破坏向操作。快照让它可回滚，但"可回滚"
+  // 说不掉「该不该问人」：与 edit_file 同档 medium ⇒ 引导/自主两档出卡（默认档的线是 high 不问）。
+  // mkdir/move/rename 不在此抬：路径敏感面由上面的 pathRisk 管，基线风险刻意为零
+  // （同 write_file 不抬基线的口径——两档每次写都要卡会把常规操作卡死）。
+  if ((tool as string) === "fs_ops" && args.action === "delete") {
+    return { level: "medium", reason: "删除文件（覆盖前快照可回滚，但仍是破坏向操作）" };
   }
   // lsp（#58，2026-10-05）：这个工具会 **spawn 工作区配置里写的命令**（`.agent/lsp.json` 的
   // `command`），与 verify 的 S3 是同一条形状——**仓库自带的外部输入**。

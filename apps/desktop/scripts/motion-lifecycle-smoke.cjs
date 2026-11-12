@@ -1,12 +1,13 @@
 // Synthetic AgentApi, isolated Electron profile; no provider, credentials or user sessions.
 const { app, BrowserWindow, nativeTheme } = require('electron');
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
 const { mkdtempSync, readFileSync, mkdirSync, writeFileSync, rmSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join, resolve } = require('node:path');
 const profile = mkdtempSync(join(tmpdir(), 'cairn-motion-profile-'));
 app.setPath('userData', profile);
 nativeTheme.themeSource = 'light';
-app.on('quit', () => rmSync(profile, { recursive: true, force: true }));
+app.on('quit', () => scheduleProfileCleanup(profile));
 const out = resolve(process.argv[2] ?? mkdtempSync(join(tmpdir(), 'cairn-motion-')));
 mkdirSync(out, { recursive: true });
 const pause = (ms) => new Promise((done) => setTimeout(done, ms));
@@ -107,7 +108,7 @@ async function main() {
   const failed = checks.some(c => !c.ok) || errors.length > 0;
   console.log('Report: ' + join(out, 'report.json'));
   win.destroy();
-  rmSync(profile, { recursive: true, force: true });
+  scheduleProfileCleanup(profile);
   app.exit(failed ? 1 : 0);
 }
-main().catch((err) => { console.error(err); rmSync(profile, { recursive: true, force: true }); app.exit(1); });
+main().catch((err) => { console.error(err); scheduleProfileCleanup(profile); app.exit(1); });

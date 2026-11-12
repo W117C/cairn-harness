@@ -1,0 +1,136 @@
+{
+  "theme": "dark",
+  "checks": [
+    {
+      "name": "运行中折叠态：ticker 在场、无锁、显示最后一行",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "expanded": "false",
+        "disabled": false,
+        "tickerText": "ticker 的宽度撑溢出。这一行要足够长，才能把 ticker 的宽度撑溢出。"
+      }
+    },
+    {
+      "name": "ticker 溢出：跟到行尾 + 两端渐隐 mask",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "overflow": "true",
+        "scrollLeft": 989,
+        "scrollWidth": 1367,
+        "client": 378,
+        "mask": "linear-gradient(to right, rgba(0, 0, 0, 0) 0px, rgb(0, 0, 0)"
+      }
+    },
+    {
+      "name": "「思考中」标题流光真的在跑（computed animationName）",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "animation": "live-shimmer-flow",
+        "duration": "4s",
+        "bg": "linear-gradient(90deg, color(srgb 0.941176 0.93725"
+      }
+    },
+    {
+      "name": "展开体限高 240px 且内容超出（内部滚动，不再顶高阅读面）",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "client": 240,
+        "scroll": 713
+      }
+    },
+    {
+      "name": "展开即跟尾（贴底）",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "gap": 0,
+        "scrollTop": 473
+      }
+    },
+    {
+      "name": "流式追加仍贴底（自动跟尾）",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "gap": 0
+      }
+    },
+    {
+      "name": "用户上滚后追加不拽回（停跟）",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "scrollTop": 0
+      }
+    },
+    {
+      "name": "回底后恢复跟尾",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "gap": 0
+      }
+    },
+    {
+      "name": "运行中可折叠：ticker 带最新一行回来",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "text": "回底之后追加：恢复跟尾。"
+      }
+    },
+    {
+      "name": "app 内减弱：思考标题停动并还原 flat 墨色",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "animation": "none",
+        "color": "color(srgb 0.941176 0.937255 0.92549 / 0.88)"
+      }
+    },
+    {
+      "name": "运行中工具摘要流光 + 组标题 data-pending",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "tsum": "live-shimmer-flow",
+        "label": "live-shimmer-flow"
+      }
+    },
+    {
+      "name": "短单行结果穿轻卡片（p.tool-output-plain），多行仍 pre",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "plain": "Documentation loaded.",
+        "pres": [
+          "src\ntests\nscripts"
+        ]
+      }
+    },
+    {
+      "name": "收束后：无运行中思考行、无 ticker（过程带折叠接手）",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "processFold": true
+      }
+    },
+    {
+      "name": "折叠态摘要右缘不压复制钮（几何不重叠）",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "previewRight": 1054.625,
+        "actionsLeft": 1063.625,
+        "gap": 9
+      }
+    }
+  ],
+  "consoleErrors": [],
+  "pageErrors": []
+}

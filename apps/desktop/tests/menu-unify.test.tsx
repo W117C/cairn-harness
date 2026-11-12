@@ -115,8 +115,9 @@ describe("批 5：权限菜单（图标 + 两行 + 危险标签 + 自动二次�
 
   it("重开菜单不残留确认态（真机实证 bug）：Composer 关菜单即卸载 PermissionMenu；确认路径显式清 confirming", () => {
     // ① Composer 以条件渲染挂载（menu !== "perm" 即卸载，confirming 随卸载清零）
-    const composerSrc = readFileSync(new URL("../src/renderer/components/Composer.tsx", import.meta.url), "utf8");
-    expect(composerSrc).toContain('{menu === "perm" && (');
+    const composerSrc = readFileSync(new URL("../src/renderer/components/Composer.tsx", import.meta.url), "utf8")
+      + "\n" + readFileSync(new URL("../src/renderer/components/ComposerPermissionMenu.tsx", import.meta.url), "utf8");
+    expect(composerSrc).toContain("{props.open && (");
     expect(composerSrc).toContain("<PermissionMenu");
     // ② 确认路径也显式清（防御：将来若改回常驻挂载，state 也不残留）
     expect(permSrc).toMatch(/onConfirm=\{\(\) => \{[\s\S]{0,240}setConfirming\(null\);/);
@@ -157,14 +158,15 @@ describe("批 5：模型弹层（DeepSeek 两级面板：选中=尾随✓不铺�
 // Popover 基座、漏了 usePopoverDismiss；模型菜单有）。这条钉住两个菜单都接 dismiss 且权限菜单
 // 与 chip 同容器（锚点从 composer 卡左缘回到 chip）。
 describe("附件 / 权限菜单可关闭（外点 + Esc）", () => {
-  const src = readFileSync(new URL("../src/renderer/components/Composer.tsx", import.meta.url), "utf8");
+  const src = readFileSync(new URL("../src/renderer/components/Composer.tsx", import.meta.url), "utf8")
+    + "\n" + readFileSync(new URL("../src/renderer/components/ComposerPermissionMenu.tsx", import.meta.url), "utf8");
   it("两个菜单都接 usePopoverDismiss", () => {
     expect(src).toContain('usePopoverDismiss(menu === "attach", closeMenu, attachWrapRef)');
     expect(src).toContain('usePopoverDismiss(menu === "perm", closeMenu, permWrapRef)');
     expect(src).toContain("ref={attachWrapRef}");
   });
   it("权限 chip 与菜单同容器（ref 落点 + 锚定）", () => {
-    expect(src).toContain("ref={permWrapRef}");
+    expect(src).toContain("ref={props.wrapRef}");
     expect(src).toContain('style={{ position: "relative", display: "inline-flex" }}');
   });
 });

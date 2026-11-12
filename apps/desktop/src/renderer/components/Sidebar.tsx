@@ -9,14 +9,14 @@
 //   2026-11-03：页脚用户菜单整体下架——设置/外观/用量/关于搬到全局左轨底部的头像入口
 //     （components/AccountMenu.tsx），侧栏只保留会话上下文。
 // 文案一律走 STR（strings.ts——源文扫描判卷钉死）；图标 = lucide（ADR 0003）；会话行菜单 = Radix。
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { readMotionPref, setMotionPref, type MotionPref } from "../state/motion-pref";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Archive, Check, ChevronRight, Filter, Folder, GitBranch, Loader2, MoreHorizontal, Pencil, Pin, Plus, Search, X } from "lucide-react";
 import type { ProjectRecord } from "../../../../../src/main/ipc-protocol";
 import { relativeTime } from "../projections";
 import { keysOf } from "../shortcuts";
-import { filterSessions, groupByWorkspace, projectLabelFor, projectMenuItems, projectSections, sessionStatus, sessionTime, splitArchived, workspaceLabel, OTHER_WORKSPACE, SESSION_FILTERS, SESSION_FILTER_NOTE, type SessionFilterId, type TimeBucket, type WorkspaceSession } from "../sessions-view";
+import { countSessionsByFilter, filterSessions, groupByWorkspace, projectMenuItems, projectSections, sessionFilterInfo, sessionStatus, sessionTime, splitArchived, workspaceLabel, OTHER_WORKSPACE, SESSION_FILTERS, SESSION_FILTER_NOTE, type SessionFilterId, type TimeBucket, type WorkspaceSession } from "../sessions-view";
 import { draftKeyFor } from "../drafts";
 import { sessionKeyOf } from "../state/session-identity";
 import { parseSidebarDensity, SIDEBAR_DENSITY_KEY, type SidebarDensity } from "../state/sidebar-density";
@@ -27,6 +27,8 @@ import { isCompositionEnter } from "../ime";
 import { CairnMark } from "./CairnMark";
 import { useNow } from "../useNow";
 import { ModalSurface } from "./ModalSurface";
+import { ProjectContextMenu, ProjectSettingsDialog } from "./SidebarProjects";
+export { ProjectSettingsDialog } from "./SidebarProjects";
 import { AddProjectMenu } from "./AddProjectMenu";
 import { SessionFilterMenu } from "./SessionFilterMenu";
 import { menuNavIndex } from "./popover-keys";
@@ -91,6 +93,8 @@ function SessionRow(props: {
   projectName: string | null;
   /** 可归属的项目（子菜单用；空 = 没有可选项 ⇒ 子菜单不摆）。 */
   projectOptions: readonly { id: string; name: string }[];
+  /** 由 Sidebar 单点订阅的活时钟；每行不再各开一个 useNow（第 1116 页）。 */
+  now: number;
   /** 置顶段拖排（2026-10-31）：属性 + pointer 处理器 + Alt+↑/↓ 键盘排序。 */
   dragAttrs?: PinnedRowAttrs;
   dragProps?: PinnedDragProps;
@@ -110,11 +114,9 @@ function SessionRow(props: {
 }): React.JSX.Element {
   const s = props.session;
   const title = s.title ?? s.id;
-  // 子菜单条目（纯函数算：菜单是关着的 Radix 弹层，静态渲染里看不见 ⇒ 逻辑必须可判）。
-  const menuItems = projectMenuItems(s, props.projectOptions);
   const t = sessionTime(s);
   const a = props.actions;
-  const now = useNow();
+  const now = props.now;
   // 2026-10-18：行从 role=button 升为 role=option（父级 .sidenav 是 listbox）。
   // option 的激活键仍是 Enter/Space（WAI-ARIA listbox 模式），所以 activates() 的口径不变；
   // 变的是读屏语义：aria-selected 说「这是当前打开的那个」，aria-posinset/setsize 说「第几项/共几项」。
@@ -122,6 +124,9 @@ function SessionRow(props: {
       // 是肌肉记忆——在会话行上右键什么也不发生，会被读成「这个应用坏了」。
       // 走 Radix 的受控 open（不另写一套自绘菜单）：菜单内容与「…」完全同一个，行为也不会分叉。
       const [ctxOpen, setCtxOpen] = useState(false);
+  // 第 1104 页：菜单关闭时不再为每行预生成项目子菜单条目（400 行×项目表纯浪费）；
+  // 打开才按需算（Radix 关闭时不挂 Content，条目此时无人消费）。
+  const menuItems = ctxOpen ? projectMenuItems(s, props.projectOptions) : [];
   // 键盘开菜单时，关闭后把焦点还给这一行（Radix 默认还给 ⋯ 触发器；从 ⋯ 按 ↑/↓ 不会进列表移动）。
   const rowRef = useRef<HTMLDivElement | null>(null);
   const ctxByKeyboard = useRef(false);
@@ -334,186 +339,6 @@ function SessionRow(props: {
   );
 }
 
-/** 项目行菜单（右键或 hover ⋯ 打开）：自绘 fixed 定位菜单——Radix DropdownMenu 的 Trigger 点击语义
- *  与「整行点击=折叠」冲突，这里要的是纯右键面；自绘同时保住键盘/焦点语义（Esc 关、外点关）。 */
-function ProjectContextMenu(props: {
-  at: { x: number; y: number };
-  onClose: () => void;
-  onReveal: () => void;
-  onRename: () => void;
-  onSettings: () => void;
-  onRelocate: () => void;
-  onRemove: () => void;
-}): React.JSX.Element {
-  const ref = useRef<HTMLDivElement | null>(null);
-  const closeRef = useRef(props.onClose);
-  closeRef.current = props.onClose;
-  const [position, setPosition] = useState(props.at);
-  useLayoutEffect(() => {
-    const surface = ref.current;
-    if (surface === null) return;
-    // 原生顶层避免通知卡盖住操作；开关状态仍由当前组件管理。
-    surface.setAttribute("popover", "manual");
-    surface.showPopover();
-    const place = (): void => {
-      const menu = ref.current;
-      if (menu === null) return;
-      setPosition({
-        x: Math.max(8, Math.min(props.at.x, window.innerWidth - menu.offsetWidth - 8)),
-        y: Math.max(8, Math.min(props.at.y, window.innerHeight - menu.offsetHeight - 8)),
-      });
-    };
-    place();
-    window.addEventListener("resize", place);
-    return () => {
-      window.removeEventListener("resize", place);
-      if (surface.isConnected && surface.matches(":popover-open")) surface.hidePopover();
-    };
-  }, [props.at.x, props.at.y]);
-  useEffect(() => {
-    const menu = ref.current;
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    menu?.querySelector<HTMLButtonElement>("button")?.focus();
-    const onDown = (e: MouseEvent): void => {
-      if (menu !== null && !menu.contains(e.target as Node)) closeRef.current();
-    };
-    const onKey = (e: KeyboardEvent): void => { if (e.key === "Escape") closeRef.current(); };
-    window.addEventListener("mousedown", onDown);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("mousedown", onDown);
-      window.removeEventListener("keydown", onKey);
-      if (previous?.isConnected && (document.activeElement === document.body || menu?.contains(document.activeElement))) previous.focus();
-    };
-  }, []);
-  const item = (label: string, tip: string, run: () => void, danger = false): React.JSX.Element => (
-    <button
-      className={"menu-item" + (danger ? " danger-text" : "")}
-      role="menuitem"
-      tabIndex={-1}
-      title={tip}
-      onClick={() => { props.onClose(); run(); }}
-    >
-      {label}
-    </button>
-  );
-  return (
-    <div
-      ref={ref}
-      className="pop show ctx-menu"
-      role="menu"
-      style={{ left: position.x, top: position.y }}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); props.onClose(); return; }
-        if (e.key === "Tab") { props.onClose(); return; }
-        const items = [...e.currentTarget.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]')];
-        const next = menuNavIndex(e.key, items.indexOf(document.activeElement as HTMLButtonElement), items.length);
-        if (next === null) return;
-        e.preventDefault();
-        e.stopPropagation();
-        items[next]?.focus();
-      }}
-    >
-      {item(STR.projectMenu.reveal, STR.projectMenu.revealTip, props.onReveal)}
-      {item(STR.projectMenu.rename, STR.projectMenu.renameTip, props.onRename)}
-      {item(STR.projectMenu.settings, STR.projectMenu.settingsTip, props.onSettings)}
-      {item(STR.projectMenu.relocate, STR.projectMenu.relocateTip, props.onRelocate)}
-      <div className="menu-sep" role="separator" />
-      {item(STR.projectMenu.remove, STR.projectMenu.removeTip, props.onRemove, true)}
-    </div>
-  );
-}
-
-/** 项目设置 Dialog（brief 第二节「项目设置…」）：显示名 + 默认运行位置（系统选择器）。
- *  保存 = addProject 同路径 upsert（零新通道）；位置只展示不可手输（原则 1：用户不碰绝对路径）。 */
-export function ProjectSettingsDialog(props: {
-  project: ProjectRecord;
-  onClose: () => void;
-  onSave: (patch: { name: string; defaultLocation: string }) => Promise<void>;
-  onPickDirectory: () => Promise<string | null>;
-}): React.JSX.Element {
-  const [name, setName] = useState(props.project.name);
-  const [location, setLocation] = useState(props.project.defaultLocation);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const nameInput = useRef<HTMLInputElement | null>(null);
-  const close = () => { if (!busy) props.onClose(); };
-  /** 回车 = 保存（按钮同一条路）；空名给错误、不关面板。 */
-  const submit = () => {
-    if (busy) return;
-    const trimmed = name.trim();
-    if (trimmed === "") { setError(STR.projectRename.empty); return; }
-    setBusy(true);
-    setError(null);
-    void props.onSave({ name: trimmed, defaultLocation: location }).then(
-      () => { props.onClose(); },
-      (err: unknown) => { setError(STR.projectSettings.failed.replace("{reason}", err instanceof Error ? err.message : String(err))); setBusy(false); },
-    );
-  };
-  return (
-    <div className="modal-backdrop" role="presentation" onClick={close}>
-      <ModalSurface
-        className="modal-card"
-        label={STR.projectSettings.title}
-        onClose={close}
-        aria-busy={busy}
-        initialFocusRef={nameInput}
-        onClick={(e) => { e.stopPropagation(); }}
-      >
-        <div className="modal-head">
-          <span>{STR.projectSettings.title}</span>
-          <button className="iconbtn sm" aria-label={STR.projectSettings.close} title={STR.projectSettings.close} disabled={busy} onClick={close}>
-            <X size={13} />
-          </button>
-        </div>
-        <label className="modal-field">
-          <span>{STR.projectSettings.nameLabel}</span>
-          <input
-            ref={nameInput}
-            value={name}
-            disabled={busy}
-            onChange={(e) => { setName(e.target.value); }}
-            aria-label={STR.projectSettings.nameLabel}
-            onKeyDown={(e) => { if (e.key === "Enter" && !isCompositionEnter(e, null)) { e.preventDefault(); submit(); } }}
-          />
-        </label>
-        <div className="modal-field">
-          <span>{STR.projectSettings.locationLabel}</span>
-          <div className="modal-row">
-            <code className="modal-path" title={location}>{location}</code>
-            <button
-              className="mini-btn"
-              title={STR.projectSettings.locationHint}
-              disabled={busy}
-              onClick={() => {
-                setError(null);
-                void props.onPickDirectory().then((picked) => { if (picked !== null) setLocation(picked); }).catch((err: unknown) => {
-                  setError(STR.newProject.locationFailed.replace("{reason}", err instanceof Error ? err.message : String(err)));
-                });
-              }}
-            >
-              {STR.projectSettings.change}
-            </button>
-          </div>
-          <span className="sp-dim">{STR.projectSettings.locationHint}</span>
-        </div>
-        {error !== null && <div className="form-error" role="alert">{error}</div>}
-        <div className="modal-foot">
-          <button className="mini-btn" title={STR.common.cancel} disabled={busy} onClick={close}>{STR.common.cancel}</button>
-          <button
-            className="mini-btn primary"
-            title={STR.projectRename.save}
-            disabled={busy}
-            onClick={submit}
-          >
-            {busy ? STR.projectSettings.saving : STR.projectRename.save}
-          </button>
-        </div>
-      </ModalSurface>
-    </div>
-  );
-}
-
 export interface SidebarProps {
   /** listProjects 的派生行：missing = 盘点时目录不在场（不写回 registry）。 */
   projects: (ProjectRecord & { missing?: boolean })[];
@@ -542,10 +367,6 @@ export interface SidebarProps {
   /** 失败原句（含损坏文件的路径与出路）：有就上屏，重试解决不了时用户才知道要修什么。 */
   loadErrorDetail?: string | null;
   onRetryLoad?: () => void;
-  /** 模型服务状态点：true=可用绿 / false=不可用红 / null=未检测灰。 */
-  providerOk: boolean | null;
-  /** 演示 provider：状态点写「演示模式」，不许冒充真实服务「服务正常」。 */
-  providerDemo?: boolean;
   onOpen: (id: string, workspace?: string) => void;
   /** ⌘/Ctrl+点击会话行：右侧只读预览（不切主体会话）。 */
   onPreviewSession?: (s: WorkspaceSession) => void;
@@ -579,6 +400,8 @@ export interface SidebarProps {
 export function Sidebar(props: SidebarProps): React.JSX.Element {
   // 置顶段拖排（2026-10-31）：顺序是视图偏好，落 localStorage，不改会话 metadata。
   const pinnedOrder = usePinnedOrder();
+  // 第 1116 页：400 行共用一个活时钟，不再每行各订阅一次 useNow。
+  const nowMs = useNow();
   // 减弱动效偏好（窗口级，落 localStorage；见 state/motion-pref.ts）。
   const [motionPref, setMotionPrefState] = useState<MotionPref>(readMotionPref);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => {
@@ -635,11 +458,14 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
       return isSessionFilter(saved) ? saved : "all";
     } catch { return "all"; }
   });
-  const filterInfo = SESSION_FILTERS.find((f) => f.id === filter) ?? SESSION_FILTERS[0];
-  const filterCounts = SESSION_FILTERS.map((f) => ({
-    ...f,
-    count: filterSessions(props.sessions, { search: "", filter: f.id, running: props.running }).length,
-  }));
+  const filterInfo = sessionFilterInfo(filter);
+  // 第 1147 页：筛选计数原先每次渲染都做 4 遍 filterSessions；会话/运行集不变时复用。
+  const runningKey = [...props.running].sort().join("\u0000");
+  const filterCounts = useMemo(() => {
+    // 一次遍历算五个筛选计数；纯函数见 sessions-view.countSessionsByFilter。
+    const counts = countSessionsByFilter(props.sessions, props.running);
+    return SESSION_FILTERS.map((f) => ({ ...f, count: counts[f.id] }));
+  }, [props.sessions, runningKey]);
   const changeFilter = (next: SessionFilterId): void => {
     setFilter(next);
     // 筛选下组一律先展开：命中项藏在折叠组里等于没筛。搜索路径同一原则。
@@ -666,22 +492,24 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
   };
 
   // 归档会话单列（2026-10-17）：常规项目组只吃 active；已归档进底部「已归档」分组找回。
-  const { active: activeSessions, archived: archivedSessions } = splitArchived(props.sessions);
+  // 第 1128 页：会话清单/搜索/筛选/运行集不变时，不重跑 split/filter/group（侧栏随每次流式事件父渲染）。
+  const { active: activeSessions, archived: archivedSessions } = useMemo(() => splitArchived(props.sessions), [props.sessions]);
   // 搜索/筛选收窄（2026-10-18 / 2026-10-25）：先过 filterSessions 再分组。空查询 + all 时
   // filterSessions 原样返回（判卷钉过），所以常态零成本、无行为变化。
   // 搜索/筛选时归档分组也参与——已归档的旧会话也要能被搜到/筛到。
   const searchTerm = sessionQuery.trim();
-  const visibleActive = filterSessions(activeSessions, { search: searchTerm, filter, running: props.running });
-  const visibleArchived = filterSessions(archivedSessions, { search: searchTerm, filter, running: props.running });
+  // running 是可变 Set：内容签名已在顶部算好，集合变了才重算过滤（Set 引用本身不变）。
+  const visibleActive = useMemo(() => filterSessions(activeSessions, { search: searchTerm, filter, running: props.running }), [activeSessions, searchTerm, filter, runningKey]);
+  const visibleArchived = useMemo(() => filterSessions(archivedSessions, { search: searchTerm, filter, running: props.running }), [archivedSessions, searchTerm, filter, runningKey]);
   // 空态判「有没有会话」，不是判「有没有项目组」：groupByWorkspace 会为已登记项目保留空组，
   // 只看 groups.length 会把「筛掉/搜掉全部会话」错读成「列表有内容」（2026-10-25 真机冒烟抓到的）。
   const visibleCount = visibleActive.length + visibleArchived.length;
   // 收窄态（搜索/筛选）没有 active 命中时，不再摆空项目组：空态文案与空组头会互相打架。
-  const groups = (searchOpen || filter !== "all") && visibleActive.length === 0
+  const groups = useMemo(() => (searchOpen || filter !== "all") && visibleActive.length === 0
     ? []
-    : groupByWorkspace(visibleActive, props.projects.map((p) => p.path));
-  const byPath = new Map(props.projects.map((p) => [p.path, p]));
-  const now = Date.now();
+    : groupByWorkspace(visibleActive, props.projects.map((p) => p.path)), [searchOpen, filter, visibleActive, props.projects]);
+  const byPath = useMemo(() => new Map(props.projects.map((p) => [p.path, p])), [props.projects]);
+  const now = nowMs;
   const sectionsFor = (list: readonly WorkspaceSession[]): ReturnType<typeof projectSections> => projectSections(pinnedOrder.ordered(list), now);
   const hasRowActions =
     props.onRenameSession !== undefined || props.onPinSession !== undefined ||
@@ -690,27 +518,50 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
     props.onAssignSessionProject !== undefined;
   // 归属项目的两条数据面：可选项（子菜单用） ＋ 行上标签（把 projectId 翻成项目名）。
   // 项目被移除而归属还在时，标签退回**原始 id**（如实地显示它还指着什么），不编一个名字。
-  const projectOptions = props.projects.map((p) => ({ id: p.id, name: p.name }));
-  const projectNameOf = (s: WorkspaceSession): string | null => projectLabelFor(s, projectOptions);
+  // 第 1103 页：项目名原先每行线性扫项目表；
+  // options 与 name Map 都只在 props.projects 变化时重建，行渲染 O(1) 查表。
+  const projectOptions = useMemo(() => props.projects.map((p) => ({ id: p.id, name: p.name })), [props.projects]);
+  const projectNameById = useMemo(() => new Map(projectOptions.map((p) => [p.id, p.name] as const)), [projectOptions]);
+  const projectNameOf = (s: WorkspaceSession): string | null => {
+    const id = s.projectId;
+    if (id === undefined || id === "") return null;
+    return projectNameById.get(id) ?? id;
+  };
   // 扁平可见序（2026-10-18）：给 role=option 的 aria-posinset/setsize 用，也是 ↑↓ 键的依据。
   // 与渲染顺序同源：常规组（按项目 → 组内置顶/时间桶）在前，「已归档」组在末尾。
   // 注意这是**渲染序**，不是「打开顺序」——被折叠的组其行仍在 DOM 里（高度过渡），
   // 键盘移动靠 `.session:not([inert])` 或可见性另行过滤（见 SessionRow 的 ↑↓ 处理）。
-  const flatOrder: readonly WorkspaceSession[] = [
-    ...groups.flatMap((g) => sectionsFor(g.sessions).flatMap((sec) => sec.sessions)),
-    ...visibleArchived,
-  ];
-
+  // 第 1131 页：每组 section 只算一次，位置表与渲染树共用（此前 flatOrder 和行渲染各算一遍）。
+  const sectionsByGroup = useMemo(() => new Map(groups.map((g) => [g.workspace, sectionsFor(g.sessions)])), [groups, now, pinnedOrder.order]);
+  // 第 1153 页：flatOrder 与位置表同一次遍历建好；不再先 flatMap 两份数组、再 map 一遍。
+  const { flatOrder, positionOf } = useMemo(() => {
+    const flatOrder: WorkspaceSession[] = [];
+    const positionOf = new Map<WorkspaceSession, number>();
+    for (const g of groups) {
+      for (const sec of sectionsByGroup.get(g.workspace) ?? []) {
+        for (const s of sec.sessions) {
+          flatOrder.push(s);
+          positionOf.set(s, flatOrder.length);
+        }
+      }
+    }
+    for (const s of visibleArchived) {
+      flatOrder.push(s);
+      positionOf.set(s, flatOrder.length);
+    }
+    return { flatOrder, positionOf };
+  }, [groups, sectionsByGroup, visibleArchived]);
   /** 会话行（常规组与「已归档」分组共用同一渲染面：状态图标/标题/相对时间/五种行操作）。 */
   const rowFor = (s: WorkspaceSession): React.JSX.Element => (
                     <SessionRow
                       key={s.id}
                       session={s}
+                      now={nowMs}
                       activeId={s.workspace === props.activeWorkspace ? props.activeId : null}
                       status={statusOf(s.id, s.workspace)}
                       onOpen={props.onOpen}
                       {...(props.onPreviewSession !== undefined ? { onPreview: props.onPreviewSession } : {})}
-                      posInSet={flatOrder.indexOf(s) + 1}
+                      posInSet={positionOf.get(s) ?? 1}
                       setSize={flatOrder.length}
                       renaming={renaming !== null && renaming.id === s.id}
                       renameValue={renaming !== null && renaming.id === s.id ? renaming.value : (s.title ?? s.id)}
@@ -895,7 +746,7 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
           const isCollapsed = !searchOpen && collapsed.has(key);
           const activeGroup = !isTemp && g.workspace === props.activeWorkspace;
           const busyDot = g.sessions.some((s) => props.running.has(s.id) || props.waitingIds.has(s.id));
-          const sections = sectionsFor(g.sessions);
+          const sections = sectionsByGroup.get(g.workspace) ?? [];
           const isRenaming = renamingProject !== null && project !== null && renamingProject.id === project.id;
           return (
             <div key={key} className="group" data-active={activeGroup} data-collapsed={isCollapsed} data-sentinel={isTemp}>

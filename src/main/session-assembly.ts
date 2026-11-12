@@ -15,7 +15,7 @@
 import { existsSync } from "node:fs";
 import { projectAgentPath } from "../app-data";
 import { extractTaskPaths } from "../agent/evolve/task-context";
-import { affectedFilesOf } from "../agent/impact/index.js";
+import { affectedFilesOf, buildImpact } from "../agent/impact/index.js";
 import { scanStreamEvent } from "../agent/worker-projection";
 import { Orchestrator, type OrchestratorOptions } from "../agent/orchestrator";
 import { recoveryParentMode } from "../agent/recovery";
@@ -136,6 +136,22 @@ export async function buildSessionOrchestrator(a: {
     // B1 语义合并闸：影响面开启时，spawn 的写租约判定多问一层「波及集相交」——
     // 两个 worker 各改各的文件（glob 不相交）但改动波及同一批调用点，合并时同样会打架。
     ...(s.impactAnalysis ? { semanticLease: (globs: string[]) => affectedFilesOf(a.workspace, globs) } : {}),
+    // 第 1074 页：合并时点的符号级冲突雷达与语义闸共用同一张影响面图（persistIndex ⇒ 重复建图走热载）。
+    // 建图失败（ImpactUnavailableError 等）一律 null + warn：雷达是额外探测器，绝不挡合并。
+    ...(s.impactAnalysis
+      ? {
+          conflictRadar: {
+            buildGraph: async (): Promise<Awaited<ReturnType<typeof buildImpact>> | null> => {
+              try {
+                return await buildImpact({ workspace: a.workspace, persistIndex: true });
+              } catch (err) {
+                console.warn("[radar] 影响面建图失败，本次合并跳过语义冲突预检:", err instanceof Error ? err.message : String(err));
+                return null;
+              }
+            },
+          },
+        }
+      : {}),
     ...(await D().orchestratorExtras(a.sandbox, a.runModel, { trustedRepo: a.trustedRepo ?? false, verifyTrust: a.verifyTrust ?? null }, a.routing ?? {})), // M3c：插件角色 / worker 压缩摘要器 / 成本闸 / W4a worker 收束闸
     // worker 起点经验：同一工作区的 active 经验按任务面筛一遍，排在记忆之后、任务书之前。
     // 只读、无 assignment；没有 active/读不动 ⇒ 空串（worker 提示词逐字不变）。

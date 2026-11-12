@@ -15,22 +15,24 @@
 //    项目外目录=提示（不自动加为项目，避免误触）；
 //  · 发送钮 title「发送（⏎）」、停止钮 title「停止（⌘.）」；⌘. 在本组件 keydown 通道挂通（统一表在 P3-3）。
 // 文案全出处 STR（本文件零裸中文）；副作用全在 App（send/cancel/setSettings/compact）。
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "../toast";
 import { relInWorkspace } from "../workspace-rel";
 import type { PermissionMode, ProviderInfo, RunAttachmentReference, SuggestNextResult } from "../../../../../src/main/ipc-protocol";
 import type { AgentEvent } from "../../../../../src/events";
 import type { RunPhase } from "../projections";
-import { ArrowUp, ChevronDown, ChevronRight, Clock, FileText, Folder, Image as ImageIcon, Plus, Shield, Square, X } from "lucide-react";
+import { ArrowUp, Clock, FileText, Folder, Plus, Square } from "lucide-react";
 import { classifyDrop } from "../sessions-view";
 import { ModelPicker, THINKING_LEVELS } from "./ModelPicker";
 import { UsageMeter } from "./UsageMeter";
-import { MODE_LABEL, ModeDot, PermissionMenu } from "./PermissionMenu";
 import { Popover, usePopoverDismiss, useMenuKeyboard } from "./Popover";
 import { mentionBreadcrumb, parseMentionQuery, replaceMentionToken } from "../mention";
 import { isCompositionEnter } from "../ime";
 import { useComposerOverlaySlot } from "../composer-overlays";
-import { baseNameOf, fileIconKind, filePathOf, formatSize, showQueueButton } from "./composer-helpers";
+import { filePathOf, showQueueButton } from "./composer-helpers";
+import { ComposerAttachmentChip, stripRenderFields, type AttachmentItem } from "./ComposerAttachments";
+import { ComposerAttachMenu } from "./ComposerAttachMenu";
+import { ComposerPermissionMenu } from "./ComposerPermissionMenu";
 export { fileIconKind, formatSize, showQueueButton } from "./composer-helpers";
 import { STR } from "../strings";
 import { slashItems, slashMatches, type SlashSkill } from "../slash";
@@ -42,18 +44,6 @@ import type { ComposerLockReason } from "../send-queue";
 
 /** @ 模糊搜索的 debounce（P2-4：输入停顿 120ms 才发通道查询）。 */
 const MENTION_DEBOUNCE_MS = 120;
-
-/** 渲染层附件条目：RunAttachmentReference + 展示字段（size 拿不到不显；outside = 项目外挂盾牌）。
- *  发送前经 stripRenderFields 剥回 RunAttachmentReference 形状——主进程协议面不动。 */
-interface AttachmentItem extends RunAttachmentReference {
-  size?: number;
-  outside?: boolean;
-}
-
-/** 发送前剥离渲染字段（判卷锚：onSend 仍收 RunAttachmentReference 形状）。 */
-export function stripRenderFields(list: readonly AttachmentItem[]): RunAttachmentReference[] {
-  return list.map((a) => ({ path: a.path, kind: a.kind, explicit: a.explicit }));
-}
 
 // 草稿持久化（2026-10-18）：localStorage 在渲染层已有先例（侧栏宽度/浏览器白名单）。
 // 只存文本草稿；附件不落盘（路径可能失效，不能让下次启动带着一堆已删除的文件）。
@@ -73,24 +63,6 @@ function storedDrafts(): Map<string, string> {
     }
   } catch { /* 坏数据当没有 */ }
   return storedDraftsCache;
-}
-
-/** 附件 chip 的图标位（2026-10-18）：图片附件走主进程取 40px 缩略图（data URL）；
- *  失败/非图片退回原图标——缩略图是识别加速，不是必需面，静默降级。 */
-function AttachIcon(props: { path: string; kind: "file" | "directory" }): React.JSX.Element {
-  const isImage = props.kind === "file" && fileIconKind(props.path) === "image";
-  const [thumb, setThumb] = useState<string | null>(null);
-  useEffect(() => {
-    if (!isImage) return;
-    let alive = true;
-    void window.agent.attachmentThumb(props.path).then((r) => {
-      if (alive && r.ok && r.dataUrl !== undefined) setThumb(r.dataUrl);
-    }, () => undefined);
-    return () => { alive = false; };
-  }, [props.path, isImage]);
-  if (props.kind === "directory") return <Folder size={11} />;
-  if (thumb !== null) return <img className="ac-thumb" src={thumb} alt="" />;
-  return fileIconKind(props.path) === "image" ? <ImageIcon size={11} /> : <FileText size={11} />;
 }
 
 export function Composer(props: {
@@ -235,6 +207,8 @@ export function Composer(props: {
   // 最近文件菜单都属于「上一段对话的现场」，切走即关；悬着的 mention 防抖也作废，免得回填到新会话。
   // 「想下一条」也是模型调用：切走即作废在飞结果，否则 A 的建议会填进 B 的输入框。
   const suggestSeq = useRef(0);
+  // 第 1049 页：「想下一条」失败后放行一次 Tab，避免键盘用户被永久困在输入框里。
+  const suggestBlockedRef = useRef(false);
   useEffect(() => {
     setMention(null);
     setMenu("none");
@@ -242,6 +216,7 @@ export function Composer(props: {
     setMenuDismissed(null);
     setSuggestNote(null);
     setSuggesting(false);
+    suggestBlockedRef.current = false;
     suggestSeq.current += 1;
     histIndexRef.current = -1;
     if (mentionTimer.current !== null) { window.clearTimeout(mentionTimer.current); mentionTimer.current = null; }
@@ -664,12 +639,13 @@ export function Composer(props: {
       }
     }).catch(() => { toast(STR.composer.pasteEmpty); }); // 无内容 / 拒授权同口径（fail-visible）
   };
-  const modeInfo = MODE_LABEL[props.mode];
   const thinkingSupported = (() => {
     const spec = props.providerInfo?.models.find((m) => m.id === props.pickerValue);
     return spec?.capability.thinking.supported === true;
   })();
   const recentRefs = props.recentRefs ?? [];
+  // 第 1126 页：ModelPicker 的 infos 必须稳定，否则其 flatten/标签表 useMemo 永远不命中。
+  const modelInfos = useMemo(() => props.providerInfo ? [props.providerInfo] : [], [props.providerInfo]);
   return (
     <>
       <div
@@ -800,37 +776,12 @@ export function Composer(props: {
               <ElementPill key={`${e.selector}:${String(i)}`} element={e} onRemove={() => { setPickedElements((prev) => prev.filter((_, j) => j !== i)); }} />
             ))}
             {attachments.map((a, i) => (
-              <span key={`${a.path}:${String(i)}`} className="attach-chip">
-                <button
-                  type="button"
-                  className="ac-main"
-                  title={a.outside === true ? STR.composer.attachOutsideTip : STR.composer.attachOpenTip.replace("{path}", a.path)}
-                  onClick={() => {
-                    const rel = relInWorkspace(wsPath, a.path);
-                    if (rel !== null) {
-                      void window.agent.workspacePathAction(rel, "open").catch(() => undefined);
-                    } else {
-                      // 项目外：打开可能危险，只显示位置（revealInFinder）。
-                      void window.agent.revealInFinder(a.path).catch(() => undefined);
-                    }
-                  }}
-                >
-                  <span className="ac-ico" aria-hidden="true">
-                    <AttachIcon path={a.path} kind={a.kind} />
-                  </span>
-                  <span className="ac-name">{baseNameOf(a.path)}</span>
-                  {a.size !== undefined && <span className="ac-size num">{STR.composer.fileSize.replace("{n}", formatSize(a.size))}</span>}
-                  {!inWorkspace(a.path) && (
-                    <span className="ac-shield" title={STR.composer.attachOutsideTip}><Shield size={10} /></span>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  className="x"
-                  aria-label={STR.composer.attachRemove.replace("{path}", a.path)}
-                  onClick={() => { setAttachments((prev) => prev.filter((_, j) => j !== i)); }}
-                ><X size={10} /></button>
-              </span>
+              <ComposerAttachmentChip
+                key={`${a.path}:${String(i)}`}
+                item={a}
+                wsPath={wsPath}
+                onRemove={() => { setAttachments((prev) => prev.filter((_, j) => j !== i)); }}
+              />
             ))}
           </div>
         )}
@@ -867,6 +818,7 @@ export function Composer(props: {
               setText(v);
               histIndexRef.current = -1; // 一动笔就退出历史浏览
               if (suggestNote !== null) setSuggestNote(null); // 一动笔，旧提示即撤（不留过期文案）
+              suggestBlockedRef.current = false; // 第 1049 页：一动笔，Tab 逃生口复位
               autoResize();
               refreshMention(v, e.target.selectionStart ?? v.length);
             }}
@@ -959,7 +911,12 @@ export function Composer(props: {
               }
               // 想下一条（第二十四遍·业主 22.02 裁）：空输入框 + 空闲 + 有接线 ⇒ Tab 单发一次
               // 上下文建议（只填不发；Shift+Tab 不劫持——反向焦点照走；加载中再按 Tab 是静默等待）。
+              // 第 1049 页（离屏真机 30 步 Tab 取证）：上游没接 suggestNext / 模型不可用 / 无上下文时
+              // 建议会失败，若每次 Tab 都 preventDefault，键盘用户就被永久困在输入框里
+              // （连第 1048 页新增的最近会话按钮都 Tab 不到）。失败后给第二次 Tab 放行焦点；
+              // 有建议时 text 已填上 ⇒ 这段不再命中，裁决行为不变。
               if (props.onSuggestNext !== undefined && e.key === "Tab" && !e.shiftKey && !disabled && !props.running && text === "") {
+                if (suggestBlockedRef.current) { suggestBlockedRef.current = false; return; } // 放行：不 preventDefault
                 e.preventDefault();
                 if (suggesting) return;
                 const onSuggest = props.onSuggestNext;
@@ -971,14 +928,17 @@ export function Composer(props: {
                   setSuggesting(false);
                   if (r.ok) {
                     setText((cur) => (cur === "" ? r.text : cur)); // 拉回时用户已敲字 ⇒ 不覆盖
+                    suggestBlockedRef.current = false;
                     requestAnimationFrame(autoResize);
                     taRef.current?.focus();
                   } else {
                     setSuggestNote(r.hint); // 失败 fail-visible（分类文案来自 main）
+                    suggestBlockedRef.current = true; // 下一次 Tab 放行焦点
                   }
                 }).catch((err: unknown) => {
                   if (suggestSeq.current !== my) return;
                   setSuggesting(false);
+                  suggestBlockedRef.current = true; // 接口缺失 / 网络失败同样放行
                   const brief = err instanceof Error ? err.message : String(err);
                   setSuggestNote(STR.composer.suggestionFail.replace("{brief}", brief.slice(0, 60)));
                 });
@@ -1011,97 +971,30 @@ export function Composer(props: {
               disabled={disabled}
               onClick={() => setAttachOpen(menu !== "attach")}
             ><Plus size={13} /></button>
-            <Popover open={menu === "attach"} up role="menu" style={{ minWidth: 270 }}>
-              <div className="pop-label">{STR.composer.attachLabel}</div>
-              {props.onPickFiles !== undefined && (
-                <button
-                  className="menu-item"
-                  role="menuitem"
-                  onClick={() => {
-                    setMenu("none");
-                    void props.onPickFiles?.().then((files) => {
-                      if (files === null || files.length === 0) return;
-                      for (const p of files) addAttachment({ path: p, kind: "file", explicit: true, outside: !inWorkspace(p) });
-                    }, () => undefined);
-                  }}
-                >
-                  <span>{STR.composer.attachUpload}</span><span className="sub">{STR.composer.attachUploadSub}</span>
-                </button>
-              )}
-              {props.onPickDirectory !== undefined && (
-                <button
-                  className="menu-item"
-                  role="menuitem"
-                  onClick={() => {
-                    setMenu("none");
-                    void props.onPickDirectory?.().then((dir) => {
-                      if (dir !== null && dir !== "") {
-                        addAttachment({ path: dir, kind: "directory", explicit: true });
-                      }
-                    }, () => undefined);
-                  }}
-                >
-                  <span>{STR.composer.attachFolder}</span><span className="sub">{STR.composer.attachFolderSub}</span>
-                </button>
-              )}
-              <button
-                className="menu-item"
-                role="menuitem"
-                onClick={() => { setMenu("none"); pasteFromClipboard(); }}
-              >
-                <span>{STR.composer.attachPaste}</span><span className="sub">{STR.composer.attachPasteSub}</span>
-              </button>
-              {/* 引用最近文件：本会话已引用历史（空 = disabled + tooltip 说明，不摆空壳）。 */}
-              <button
-                className="menu-item"
-                role="menuitem"
-                disabled={recentRefs.length === 0}
-                title={recentRefs.length === 0 ? STR.composer.attachRecentEmpty : undefined}
-                onClick={() => setRecentOpen((v) => !v)}
-              >
-                <span>{STR.composer.attachRecent}</span>
-                <span className="sub">{String(recentRefs.length)}</span>
-                <span className="ac-chev" aria-hidden="true"><ChevronRight size={11} /></span>
-              </button>
-              {recentOpen && recentRefs.map((p) => (
-                <button
-                  key={p}
-                  className="menu-item ac-recent"
-                  role="menuitem"
-                  title={p}
-                  onClick={() => { addAttachment({ path: p, kind: "file", explicit: true, outside: !inWorkspace(p) }); }}
-                >
-                  <span className="mi-ico" aria-hidden="true">{fileIconKind(p) === "image" ? <ImageIcon size={12} /> : <FileText size={12} />}</span>
-                  <span>{baseNameOf(p)}</span>
-                </button>
-              ))}
-            </Popover>
+            <ComposerAttachMenu
+              open={menu === "attach"}
+              onClose={closeMenu}
+              {...(props.onPickFiles !== undefined ? { onPickFiles: props.onPickFiles } : {})}
+              {...(props.onPickDirectory !== undefined ? { onPickDirectory: props.onPickDirectory } : {})}
+              onPaste={pasteFromClipboard}
+              recentRefs={recentRefs}
+              recentOpen={recentOpen}
+              onToggleRecent={() => setRecentOpen((v) => !v)}
+              onAddFile={(p) => addAttachment({ path: p, kind: "file", explicit: true, outside: !inWorkspace(p) })}
+              onAddDirectory={(p) => addAttachment({ path: p, kind: "directory", explicit: true })}
+            />
           </div>
-          {/* 权限 chip + 菜单同一相对容器（2026-10-17）：菜单原先是 chip 的兄弟节点，锚到 composer
-              卡左缘、外点/Esc 也无归属；包一层后锚到 chip、dismiss 有落点。 */}
-          <div style={{ position: "relative", display: "inline-flex" }} ref={permWrapRef} onKeyDown={permKeys}>
-            <button
-              className="ctl"
-              aria-haspopup="menu"
-              aria-expanded={menu === "perm"}
-              onClick={() => setPermOpen(menu !== "perm")}
-              disabled={disabled || props.running}
-            >
-              {/* 触发器只留「色点 + 档名 + 箭头」两件事：色点给一眼的严重度，档名给准确词。
-                  原先还叠一枚盾形图标，而它只有两个形（warn 与否），既不比档名更准，
-                  也不比色点更醒目 ⇒ 同一个状态三种标记（第 872 页业主「让布局说话」）。 */}
-              <ModeDot mode={props.mode} />
-              <span>{modeInfo.label}</span>
-              <span className="ctl-caret" aria-hidden="true"><ChevronDown size={10} /></span>
-            </button>
-            <Popover open={menu === "perm"} up role="menu" style={{ minWidth: 280 }}>
-              {/* 权限档菜单（批 5 提取为组件）：色点 + 图标 + 两行副标题 +「自动」二次确认（见 PermissionMenu.tsx）。
-                  条件渲染（关即卸载）——confirming 态不跨开合残留（真机实证过常驻挂载的残留 bug）。 */}
-              {menu === "perm" && (
-                <PermissionMenu mode={props.mode} onModeChange={props.onModeChange} onClose={closeMenu} />
-              )}
-            </Popover>
-          </div>
+          <ComposerPermissionMenu
+            wrapRef={permWrapRef}
+            onKeyDown={permKeys}
+            open={menu === "perm"}
+            onToggle={() => setPermOpen(menu !== "perm")}
+            onClose={closeMenu}
+            mode={props.mode}
+            onModeChange={props.onModeChange}
+            disabled={disabled}
+            running={props.running}
+          />
           {/* 是否先出方案由 agent 自判（2026-11-03 业主）：提示词自判面 + propose_plan + 方案门写禁，
               用户不再手动开「方案」。方案批准卡与方案窗格不受影响——agent 提交方案后仍走那一套。 */}
           <span className="spacer" />
@@ -1109,7 +1002,7 @@ export function Composer(props: {
             // 切会话重挂（2026-10-18）：模型菜单是 Composer 之外的局部开合状态，不重挂的话
             // 会悬在新会话上（真机：@/附件/权限菜单已收，模型搜索框还开着）。
             key={draftKey}
-            infos={props.providerInfo ? [props.providerInfo] : []}
+            infos={modelInfos}
             value={props.pickerValue}
             disabled={disabled}
             running={props.running}

@@ -5,15 +5,23 @@ import { useEffect, useState } from "react";
 import type { AgentEvent } from "../../../../../src/events";
 import { applyTheme, browserThemeEnv, type ThemePref } from "../theme";
 import { mergeSessionSnapshot, popoutEventBelongsTo } from "../projections";
+import { registerBrowserLinkFailureHandler } from "../browser-link";
 import { PaneDock, type PaneKind } from "./PaneDock";
 import { PANE_META } from "./panes";
 
 export function PopoutApp(props: { kind: PaneKind; sessionId: string | null; workspace?: string | null }): React.JSX.Element {
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [themePref, setThemePref] = useState<ThemePref>("system");
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [linkError, setLinkError] = useState<string | null>(null);
   const ws = props.workspace ?? undefined;
   useEffect(() => {
     void window.agent.getSettings().then((s) => { setThemePref(s.theme); }).catch(() => undefined);
+  }, []);
+  // 无宿主的链接回落（requestBrowserOpen → openExternal）失败要在这个窗里出声：popout 没有 ToastHost。
+  useEffect(() => {
+    registerBrowserLinkFailureHandler(({ error }) => { setLinkError(error); });
+    return () => { registerBrowserLinkFailureHandler(null); };
   }, []);
   useEffect(() => applyTheme(themePref, browserThemeEnv()), [themePref]);
   // 独立窗口的标题（2026-10-18）：此前和主窗口一样叫「Cairn」，多开时在窗口列表里分不清谁是谁；
@@ -30,6 +38,7 @@ export function PopoutApp(props: { kind: PaneKind; sessionId: string | null; wor
     return () => { void window.agent.reportViewing(null, ""); };
   }, [props.sessionId, ws]);
   useEffect(() => {
+    setLoadError(null);
     // 没有 sessionId 的弹出窗**不收任何事件**：旧实现 `props.sessionId === null || …` 让第一个
     // 析取项把后面两项都变成废话 ⇒ 弹出窗会把**所有会话**的事件都吸进来（⌘N 回首页时 paneTabs
     // 不清、⧉ 传的是 undefined）。用户在这个只有「变更」两个字、空态还写着"本会话还没有文件改动"
@@ -40,7 +49,7 @@ export function PopoutApp(props: { kind: PaneKind; sessionId: string | null; wor
       // 这窗口注册 onEvent 之后收到的那些事件盖掉（主窗口同款缺陷，那边用 openPending +
       // mergeSessionSnapshot 修过，见 App.tsx 与 projections.ts；弹出窗漏了这一手）。
       setEvents((prev) => mergeSessionSnapshot(r.events, prev));
-    }).catch(() => undefined);
+    }).catch((err: unknown) => { setLoadError(err instanceof Error ? err.message : String(err)); });
     const off = window.agent.onEvent((e) => {
       if (popoutEventBelongsTo(e, props.sessionId) && popoutEventBelongsTo(e, props.sessionId, ws)) {
         setEvents((prev) => [...prev, e]);
@@ -50,6 +59,12 @@ export function PopoutApp(props: { kind: PaneKind; sessionId: string | null; wor
   }, [props.sessionId, ws]);
   return (
     <div className="popout-app">
+      {(loadError !== null || linkError !== null) && (
+        <div className="popout-notices">
+          {loadError !== null && <div className="fp-note err" role="alert">会话载入失败：{loadError}</div>}
+          {linkError !== null && <div className="fp-note err" role="alert">链接打开失败：{linkError}</div>}
+        </div>
+      )}
       <PaneDock
         tabs={[props.kind]}
         events={events}

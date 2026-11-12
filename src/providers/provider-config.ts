@@ -13,6 +13,7 @@
 // 本文件是纯逻辑：读文件、发请求、注入环境变量都不在这里（那是接线层的事）。判卷直接喂 JSON。
 
 import { isIP } from "node:net";
+import { expandEnvRefs } from "../env-refs";
 import { MODEL_ID_RE, PROVIDER_ID_RE, RESERVED_PROVIDER_IDS } from "./provider-identifiers";
 export { isValidModelId, RESERVED_PROVIDER_IDS } from "./provider-identifiers";
 import { DEFAULT_MODEL_TABLE, type ModelSpec, type ModelTier } from "./registry";
@@ -308,7 +309,7 @@ function parseModel(raw: unknown, where: string, problems: CustomProviderProblem
   };
 }
 
-function parseProvider(raw: unknown, where: string, problems: CustomProviderProblem[]): CustomProviderConfig | undefined {
+function parseProvider(raw: unknown, where: string, problems: CustomProviderProblem[], env: Readonly<Record<string, string | undefined>>): CustomProviderConfig | undefined {
   if (!isRecord(raw)) {
     problems.push({ kind: "shape", where, message: "providers 的每一项必须是对象" });
     return undefined;
@@ -332,10 +333,25 @@ function parseProvider(raw: unknown, where: string, problems: CustomProviderProb
     });
   }
 
-  const baseURL = nonEmpty(raw.baseURL);
+  const baseURLRaw = nonEmpty(raw.baseURL);
   const allowLocal = raw.allowLocalEndpoint === true;
   if (raw.allowLocalEndpoint !== undefined && typeof raw.allowLocalEndpoint !== "boolean") {
     problems.push({ kind: "shape", where: `${where}.allowLocalEndpoint`, message: "allowLocalEndpoint 必须是 true / false" });
+  }
+  // $VAR 间接引用（roadmap 2026-11-10）：baseURL 支持 `${VAR_NAME}` 段（providers.json 与
+  // apiKeyEnv 是同一作者面——用户私有配置；内网网关地址随机器不同是真实用法）。
+  // 缺变量 = 配置问题，进 problems（fail-loud），不把字面 `${VAR}` 交给拨号面。
+  let baseURL: string | undefined = baseURLRaw;
+  if (baseURLRaw !== undefined) {
+    const expanded = expandEnvRefs(baseURLRaw, env);
+    if (expanded.missing.length > 0) {
+      problems.push({
+        kind: "base-url",
+        where: `${where}.baseURL`,
+        message: `baseURL 引用的环境变量不存在：${expanded.missing.join("、")}——先在环境里设置，或直接写完整地址`,
+      });
+    }
+    baseURL = expanded.value;
   }
   if (baseURL === undefined) {
     problems.push({ kind: "base-url", where: `${where}.baseURL`, message: "baseURL 必填（如 https://api.deepseek.com/v1）" });
@@ -411,7 +427,7 @@ function parseProvider(raw: unknown, where: string, problems: CustomProviderProb
  * 解析并校验 `.agent/providers.json` 的内容。
  * **一次收齐所有问题**（不是遇到第一个就返回）：用户改一次配置想看到全部错，不想改一处跑一次。
  */
-export function parseCustomProviders(raw: unknown): ParseResult {
+export function parseCustomProviders(raw: unknown, env: Readonly<Record<string, string | undefined>> = process.env): ParseResult {
   const problems: CustomProviderProblem[] = [];
   if (!isRecord(raw)) {
     return { ok: false, problems: [{ kind: "shape", where: "", message: "配置顶层必须是对象" }] };
@@ -427,7 +443,7 @@ export function parseCustomProviders(raw: unknown): ParseResult {
   } else {
     const seen = new Set<string>();
     providersRaw.forEach((p, i) => {
-      const parsed = parseProvider(p, `providers[${i}]`, problems);
+      const parsed = parseProvider(p, `providers[${i}]`, problems, env);
       if (parsed === undefined) return;
       if (seen.has(parsed.id)) {
         problems.push({ kind: "duplicate", where: `providers[${i}].id`, message: `provider id 重复：${parsed.id}` });

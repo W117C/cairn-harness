@@ -6,6 +6,7 @@ import type { AgentEvent } from "../src/events";
 import {
   assignmentFromEvents,
   classifyTask,
+  outcomeSourceOf,
   projectEpisode,
   type ProjectEpisodeInput,
 } from "../src/agent/evolve";
@@ -193,6 +194,12 @@ describe("Episode 存储", () => {
     const summary = summarizeEpisodes(await loadEpisodes(workspace));
     expect(summary.total).toBe(2);
     expect(summary.byOutcome).toEqual({ success: 1, failure: 0, unknown: 1 });
+    expect(summary.byOutcomeSource).toEqual({ judge: 0, verify: 1, user_feedback: 0, unmeasured: 1 });
+    expect(summary.measuredRate).toBe(0.5);
+    expect(outcomeSourceOf({ judge: "pass", verify: "red", user: "rejected" })).toBe("judge");
+    expect(outcomeSourceOf({ judge: "unknown", verify: "green", user: "rejected" })).toBe("verify");
+    expect(outcomeSourceOf({ judge: "unknown", verify: "none", user: "accepted" })).toBe("user_feedback");
+    expect(outcomeSourceOf({ judge: "unknown", verify: "none", user: "unknown" })).toBe("unmeasured");
     expect(summary.unknownReasons.judge).toBe(2);
     expect(summary.unknownReasons.verify).toBe(1);
     expect(summary.cost.unpricedRuns).toBe(2);

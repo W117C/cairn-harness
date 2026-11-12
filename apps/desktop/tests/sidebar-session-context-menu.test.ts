@@ -9,7 +9,9 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const sidebar = readFileSync(fileURLToPath(new URL("../src/renderer/components/Sidebar.tsx", import.meta.url)), "utf8");
+const sidebar = readFileSync(fileURLToPath(new URL("../src/renderer/components/Sidebar.tsx", import.meta.url)), "utf8")
+  + "\n"
+  + readFileSync(fileURLToPath(new URL("../src/renderer/components/SidebarProjects.tsx", import.meta.url)), "utf8");
 
 describe("会话行右键菜单", () => {
   it("会话行挂了 onContextMenu", () => {

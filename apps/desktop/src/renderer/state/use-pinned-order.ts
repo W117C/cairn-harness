@@ -42,8 +42,11 @@ interface DropState {
 }
 
 const DRAG_DEAD_ZONE = 4;
+const EMPTY_ROW_ATTRS: PinnedRowAttrs = {};
 
 export interface PinnedOrderApi {
+  /** 当前持久化顺序（数组身份随拖拽/键盘排序变化，供调用方做 memo 依赖）。 */
+  order: readonly string[];
   ordered<T extends OrderableSession>(list: readonly T[]): T[];
   dragProps(s: OrderableSession): PinnedDragProps;
   rowAttrs(s: OrderableSession): PinnedRowAttrs;
@@ -156,7 +159,8 @@ export function usePinnedOrder(): PinnedOrderApi {
   });
 
   const rowAttrs = (s: OrderableSession): PinnedRowAttrs => {
-    if (s.pinned !== true) return {};
+    // 第 1168 页：非置顶行共用一个空属性对象，别为每行每次渲染新造 {}。
+    if (s.pinned !== true) return EMPTY_ROW_ATTRS;
     const key = orderKeyOf(s);
     const attrs: PinnedRowAttrs = { "data-pinned": "true", "data-session-key": key };
     if (dragging === key) attrs["data-dragging"] = "true";
@@ -179,5 +183,5 @@ export function usePinnedOrder(): PinnedOrderApi {
     persist(moveInOrder([...new Set([...orderRef.current, ...keys])], key, target, delta < 0 ? "before" : "after"));
   };
 
-  return { ordered, dragProps, rowAttrs, moveByKeyboard };
+  return { order, ordered, dragProps, rowAttrs, moveByKeyboard };
 }

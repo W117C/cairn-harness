@@ -1,0 +1,498 @@
+{
+  "combos": [
+    {
+      "text": "md",
+      "ui": "2",
+      "rem": 1,
+      "size": 1,
+      "label": "baseline"
+    },
+    {
+      "text": "lg",
+      "ui": "5",
+      "rem": 1.08,
+      "size": 1.667,
+      "label": "max"
+    },
+    {
+      "text": "sm",
+      "ui": "1",
+      "rem": 0.92,
+      "size": 0.833,
+      "label": "min"
+    },
+    {
+      "text": "lg",
+      "ui": "2",
+      "rem": 1.08,
+      "size": 1,
+      "label": "large-text"
+    },
+    {
+      "text": "md",
+      "ui": "5",
+      "rem": 1,
+      "size": 1.667,
+      "label": "large-controls"
+    }
+  ],
+  "widths": [
+    1440,
+    1200,
+    1080,
+    960,
+    880,
+    760,
+    640,
+    620
+  ],
+  "checks": [
+    {
+      "name": "档位自证 baseline: --rem-scale=1 / --size-scale=1",
+      "ok": true,
+      "gotRem": 1,
+      "gotSize": 1
+    },
+    {
+      "name": "硬判 baseline@1440",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 baseline@1200",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 baseline@1080",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 baseline@960",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 baseline@880",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 baseline@760",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 baseline@640",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 baseline@620",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "baseline 档无小靶面（命中区 ≥24px 不随尺寸轴缩水）",
+      "ok": true,
+      "worst": 0
+    },
+    {
+      "name": "档位自证 max: --rem-scale=1.08 / --size-scale=1.667",
+      "ok": true,
+      "gotRem": 1.08,
+      "gotSize": 1.667
+    },
+    {
+      "name": "硬判 max@1440",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 max@1200",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 max@1080",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 max@960",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 max@880",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 max@760",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 max@640",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 max@620",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "档位自证 min: --rem-scale=0.92 / --size-scale=0.833",
+      "ok": true,
+      "gotRem": 0.92,
+      "gotSize": 0.833
+    },
+    {
+      "name": "硬判 min@1440",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 min@1200",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 min@1080",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 min@960",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 min@880",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 min@760",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 min@640",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 min@620",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "min 档无小靶面（命中区 ≥24px 不随尺寸轴缩水）",
+      "ok": true,
+      "worst": 0
+    },
+    {
+      "name": "档位自证 large-text: --rem-scale=1.08 / --size-scale=1",
+      "ok": true,
+      "gotRem": 1.08,
+      "gotSize": 1
+    },
+    {
+      "name": "硬判 large-text@1440",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 large-text@1200",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 large-text@1080",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 large-text@960",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 large-text@880",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 large-text@760",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 large-text@640",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 large-text@620",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "档位自证 large-controls: --rem-scale=1 / --size-scale=1.667",
+      "ok": true,
+      "gotRem": 1,
+      "gotSize": 1.667
+    },
+    {
+      "name": "硬判 large-controls@1440",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 large-controls@1200",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 large-controls@1080",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 large-controls@960",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 large-controls@880",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 large-controls@760",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 large-controls@640",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "硬判 large-controls@620",
+      "ok": true,
+      "overflow": false,
+      "composerInView": true,
+      "smallCount": 0,
+      "smallTargets": [],
+      "clipped": 0,
+      "clippedLabels": []
+    },
+    {
+      "name": "console 无错误",
+      "ok": true,
+      "errors": []
+    }
+  ],
+  "failures": [],
+  "consoleErrors": []
+}

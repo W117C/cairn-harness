@@ -201,6 +201,10 @@ export const LOCALES = ["zh-CN", "en-US"] as const;
 export const TEXT_SIZES = ["sm", "md", "lg"] as const;
 /** 尺寸五档（与 tokens.css 的 html[data-ui-size="…"] 选择器逐字对应——改一处必须改另一处）。 */
 export const UI_SIZES = ["1", "2", "3", "4", "5"] as const;
+/** 设置 schema 版本（roadmap「schema 版本字段」，2026-11-10）：写盘时带上；读到**更高**版本
+ *  = 文件出自更新的应用 ⇒ 不猜字段含义，按 fail-loud 出问题结论（loadIssue 通道），
+ *  字段校验照旧宽容回退（老版本读新文件不该炸，该说得清）。 */
+export const SETTINGS_SCHEMA_VERSION = 1;
 /** 设置面可持久化的主会话 provider 的**内置**子集：demo + 四个真实 adapter。
  *  自定义 provider 不在这个字面量里（它们是运行时才知道的），由 `isPersistableProvider` 一并放行。 */
 export const PROVIDER_KINDS = ["demo", ...ENV_KEYED_PROVIDERS] as const;
@@ -217,7 +221,11 @@ function isPanelId(v: unknown): v is PanelId {
   return typeof v === "string" && (PANEL_IDS as readonly string[]).includes(v);
 }
 
-/** 逐字段校验：合法取原值，非法/缺失取默认（验收②：非法布局值回退默认）。 */
+/** 逐字段校验：合法取原值，非法/缺失取默认（验收②：非法布局值回退默认）。
+ *  已知键集合 = 缺省值的键集（唯一事实源）；未知键不进内存形状，但盘上**原样保留**
+ *  （见 applyPatch 的「警告不丢」那一半），并由 loadWarnings() 出声。 */
+export const KNOWN_SETTING_KEYS: ReadonlySet<string> = new Set(Object.keys(DEFAULT_SETTINGS));
+
 export function validateSettings(raw: unknown): AppSettings {
   const d = DEFAULT_SETTINGS;
   if (typeof raw !== "object" || raw === null) return structuredClone(d);
@@ -315,20 +323,38 @@ export function validateSettings(raw: unknown): AppSettings {
 /** settings 存储：内存缓存 + 每次写盘（原子写），多实例（重新加载 = 新实例）读到磁盘真相。 */
 /** 首次读盘发现的问题。`missing` 不算：新档案没有文件是正常的。 */
 export interface SettingsLoadIssue {
-  kind: "invalid-json" | "unreadable";
+  kind: "invalid-json" | "unreadable" | "future-version";
   message: string;
   /** 出问题的那个文件（界面横幅/CLI 警告要能指向盘上位置）。 */
   path: string;
 }
 
+/** 首次读盘的**软**警告（不拦加载、拦不住加载）：roadmap「未知键统一警告不丢」（2026-11-10）。
+ *  未知键在盘上原样保留（applyPatch 的合并基是盘上原文），但必须出声——「警告不丢」的警告那一半。 */
+export interface SettingsLoadWarnings {
+  /** 校验器不认识、但已原样保留在盘上的顶层键。 */
+  unknownKeys: string[];
+  /** 文件的 schema 版本比当前应用新 ⇒ 字段含义未知，不猜（fail-visible，不静默当 v1 读）。 */
+  futureVersion: number | null;
+}
+
+const EMPTY_WARNINGS: SettingsLoadWarnings = { unknownKeys: [], futureVersion: null };
+
 export class SettingsStore {
   private cache: AppSettings | null = null;
   /** 只记第一次读盘的结论；写盘成功后清空（文件已被修好）。字段级回退（宽度越界之类）不在此列。 */
   private issue: SettingsLoadIssue | null = null;
+  /** 同 issue 的纪律：只记第一次读盘的软警告；写盘后清空（盘上已是全认识形状）。 */
+  private warnings: SettingsLoadWarnings = EMPTY_WARNINGS;
 
   /** 调用方（CLI 提示 / 设置页横幅）据此把「你的设置没有生效」说出来，而不是静默用缺省。 */
   loadIssue(): SettingsLoadIssue | null {
     return this.issue;
+  }
+
+  /** 软警告读端（roadmap「未知键统一警告不丢」的「警告」一半；「不丢」在 applyPatch）。 */
+  loadWarnings(): SettingsLoadWarnings {
+    return this.warnings;
   }
   /* 写队列。此前「取合并基 → 写盘 → 更新缓存」三步之间没有串行化，同窗口两笔 set 会撞两台：
      ① 临时文件名只用 pid + 毫秒（那次硬化治的是**跨进程**固定名覆写，同进程同毫秒仍是同一个名）
@@ -347,6 +373,7 @@ export class SettingsStore {
     if (this.cache === null) {
       this.cache = read.settings;
       if (read.issue !== null) this.issue = read.issue;
+      this.warnings = read.warnings;
     }
     return this.cache;
   }
@@ -368,13 +395,14 @@ export class SettingsStore {
       const read = await this.readDisk();
       this.cache = read.settings;
       this.issue = read.issue; // 修好 ⇒ 清空；仍坏 ⇒ 换成这一次的结论
+      this.warnings = read.warnings;
       return this.cache;
     });
     this.writes = next.catch(() => undefined);
     return next;
   }
 
-  private async readDisk(): Promise<{ settings: AppSettings; issue: SettingsLoadIssue | null }> {
+  private async readDisk(): Promise<{ settings: AppSettings; issue: SettingsLoadIssue | null; warnings: SettingsLoadWarnings }> {
     let raw: unknown = null;
     let issue: SettingsLoadIssue | null = null;
     try {
@@ -390,7 +418,20 @@ export class SettingsStore {
         issue = { kind: "unreadable", message: `读取失败：${error instanceof Error ? error.message : String(error)}`, path: this.filePath };
       }
     }
-    return { settings: validateSettings(raw), issue };
+    // 软警告（不拦加载）：schema 版本超前与未知键都只在**文件真读到**时才有意义。
+    let warnings: SettingsLoadWarnings = EMPTY_WARNINGS;
+    if (issue === null && raw !== null && typeof raw === "object" && !Array.isArray(raw)) {
+      const r = raw as Record<string, unknown>;
+      const version = r.version;
+      const future = typeof version === "number" && Number.isInteger(version) && version > SETTINGS_SCHEMA_VERSION ? version : null;
+      // 版本超前 = 文件出自更新的应用：不猜字段含义，走 issue 通道 fail-visible（比静默当 v1 读诚实）。
+      if (future !== null) issue = { kind: "future-version", message: `设置文件出自新版本的应用（schema v${String(future)} > v${String(SETTINGS_SCHEMA_VERSION)}）：未知字段按默认回退，保存会把它们覆盖成已知形状`, path: this.filePath };
+      const unknownKeys = Object.keys(r)
+        .filter((k) => k !== "version" && !KNOWN_SETTING_KEYS.has(k))
+        .sort();
+      warnings = { unknownKeys, futureVersion: future };
+    }
+    return { settings: validateSettings(raw), issue, warnings };
   }
 
   /** 部分更新：深合并 layout，其余浅合并；原子写盘后返回新值。写入按发起顺序串行。 */
@@ -438,11 +479,16 @@ export class SettingsStore {
         : cur.layout,
     };
     const validated = validateSettings(next);
-    // 把「调用方这次没改、但校验器不认识」的 provider/model 原样写回磁盘：
+    // 「不丢」的那一半（roadmap 未知键，2026-11-10）：合并基从「校验后的已知键」扩成
+    // 「盘上原文」——校验器不认识的顶层键原样写回，任何一笔无关 set() 都不再把它们洗掉。
+    // 已知键用校验后的值覆盖（回退默认也要落盘，坏值不该留在盘上）。
+    const raw = await this.readRaw();
+    const persisted: Record<string, unknown> = { ...(raw ?? {}) };
+    for (const [k, v] of Object.entries(validated as unknown as Record<string, unknown>)) persisted[k] = v;
+    persisted.version = SETTINGS_SCHEMA_VERSION;
+    // 把「调用方这次没改、但校验器不认识」的 provider/model 原样写回磁盘（既有特例保持）：
     // 自定义 provider 在注册表未装载时会回退 demo，而随后任何一笔 layout 写都会把 demo
     // 持久化 ⇒ 配置修好后用户偏好也回不来（静默走 demo）。内存仍用校验后的值。
-    const raw = await this.readRaw();
-    const persisted: Record<string, unknown> = { ...(validated as unknown as Record<string, unknown>) };
     for (const key of ["provider", "model"] as const) {
       if ((scalars as Record<string, unknown>)[key] === undefined && typeof raw?.[key] === "string") {
         persisted[key] = raw[key];
@@ -451,6 +497,7 @@ export class SettingsStore {
     await this.persist(persisted);
     this.cache = validated;
     this.issue = null;
+    this.warnings = EMPTY_WARNINGS; // 盘上已是全认识形状（未知键已保留并出过声）
     return validated;
   }
 

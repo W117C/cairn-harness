@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
+  aggregateExperimentSamplesBySession,
   analyzeExperiment,
   assignArm,
+  checkExperimentBudget,
   formatExperimentAnalysis,
   validateExperiment,
   type ExperimentRecord,
   type ExperimentSample,
 } from "../src/agent/evolve/experiment";
+import { projectEpisode } from "../src/agent/evolve/episode";
+import type { AgentEvent } from "../src/events";
 
 function record(overrides: Partial<ExperimentRecord> = {}): ExperimentRecord {
   return {
@@ -101,5 +105,94 @@ describe("实验分析", () => {
     expect(result.status).toBe("unmeasurable");
     expect(result.decision).toBe("keep-old");
     expect(result.unknownEpisodes).toBe(100);
+  });
+
+  it("按分配单元（sessionId）聚合多轮 Episode，防同一会话重复膨胀样本量并追踪实际暴露", () => {
+    const exp = record({ minSamplesPerArm: 2, maxSamplesPerArm: 10 });
+    const makeEp = (
+      sessionId: string,
+      ts: number,
+      arm: "control" | "treatment",
+      ok: boolean,
+      injected: string[],
+      usd: number | null = 0.05,
+    ) => {
+      const ep = projectEpisode({
+        events: [
+          { type: "user_message", content: `修 bug ${sessionId}-${ts}` } as AgentEvent,
+          {
+            type: "verify_result",
+            callId: "v1",
+            ok,
+            attempt: 1,
+            maxAttempts: 1,
+            results: [{ command: "pnpm test", ok, output: ok ? "ok" : "fail" }],
+          } as AgentEvent,
+          { type: "usage", inputTokens: 100, outputTokens: 20 } as AgentEvent,
+        ],
+        workspace: "/w",
+        sessionId,
+        logPath: `/w/${sessionId}-${ts}.jsonl`,
+        observedAt: ts,
+        assignment: {
+          source: "sidecar",
+          experimentId: exp.id,
+          arm,
+          propensity: 0.5,
+          policyVersion: "evolve-v1",
+          injectedExperienceIds: injected,
+          injectedChars: injected.length * 40,
+        },
+      });
+      return { ...ep, cost: { ...ep.cost, usd } };
+    };
+
+    // 同一治疗会话 s-treat 跑了 3 轮（先红后绿）：应聚合成 1 个独立会话样本、结局取最后可判定轮（success=true）、成本累加
+    const episodes = [
+      makeEp("s-treat-1", 1_000, "treatment", false, [exp.candidateRef], 0.02),
+      makeEp("s-treat-1", 2_000, "treatment", false, [exp.candidateRef], 0.03),
+      makeEp("s-treat-1", 3_000, "treatment", true, [exp.candidateRef], 0.05),
+      makeEp("s-treat-2", 4_000, "treatment", true, [], 0.04), // 未实际注入候选（exposed=false）
+      makeEp("s-ctrl-1", 5_000, "control", false, [], 0.03),
+      makeEp("s-ctrl-2", 6_000, "control", false, [], 0.03),
+    ];
+
+    const agg = aggregateExperimentSamplesBySession(exp, episodes);
+    expect(agg.totalRuns).toBe(6);
+    expect(agg.samples).toHaveLength(4); // 4 个独立会话，不是 6 条 Episode
+    expect(agg.totalUsd).toBeCloseTo(0.2, 5);
+    const analysis = analyzeExperiment(exp, agg.samples, agg.unknownEpisodes, {
+      unknownControl: agg.unknownControl,
+      unknownTreatment: agg.unknownTreatment,
+      totalRuns: agg.totalRuns,
+    });
+    expect(analysis.nControl).toBe(2);
+    expect(analysis.nTreatment).toBe(2);
+    expect(analysis.exposedTreatment).toBe(1);
+    expect(analysis.coverageControl).toBe(1);
+    expect(analysis.coverageTreatment).toBe(1);
+  });
+
+  it("实验预算守门：maxRuns / maxUsd（含不可定价 fail-closed）/ maxWallMs 耗尽时收束为 unmeasurable", () => {
+    const expUsd = record({
+      minSamplesPerArm: 5,
+      budget: { maxRuns: 20, maxUsd: 0.5, maxWallMs: 10_000 },
+    });
+    // 不可定价 run 在设了 maxUsd 时必须 fail-closed
+    expect(checkExperimentBudget(expUsd, { totalRuns: 2, totalUsd: null, hasUnpricedRuns: true }).exhausted).toBe(true);
+    // 美元超限
+    expect(checkExperimentBudget(expUsd, { totalRuns: 2, totalUsd: 0.5, hasUnpricedRuns: false }).exhausted).toBe(true);
+    // 时长超限
+    expect(checkExperimentBudget(expUsd, { totalRuns: 2, totalUsd: 0.1, hasUnpricedRuns: false, now: 12_000 }).exhausted).toBe(true);
+
+    // 样本未达标但 maxRuns 已耗尽 ⇒ unmeasurable / keep-old（不再无限 keep-running）
+    const exhaustedAnalysis = analyzeExperiment(
+      record({ minSamplesPerArm: 10, budget: { maxRuns: 6, maxUsd: null, maxWallMs: null } }),
+      samples(2, 2, 3),
+      0,
+    );
+    expect(exhaustedAnalysis.status).toBe("unmeasurable");
+    expect(exhaustedAnalysis.decision).toBe("keep-old");
+    expect(exhaustedAnalysis.reason).toContain("最大运行预算");
   });
 });

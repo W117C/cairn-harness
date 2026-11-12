@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type {
   SettingsMigrationItem,
   SettingsMigrationPreview,
@@ -82,8 +82,9 @@ export function MigrationSection(props: { onImported?: () => void }): React.JSX.
     setSelected((current) => checked ? [...current, id] : current.filter((selectedId) => selectedId !== id));
   }
 
-  const imported = new Set(result?.imported);
-  const skipped = new Map(result?.skipped.map(({ id, detail }) => [id, detail]));
+  // 第 1150 页：结果索引按 result 记忆；来源/忙碌/选择变化不重建。
+  const imported = useMemo(() => new Set(result?.imported), [result]);
+  const skipped = useMemo(() => new Map(result?.skipped.map(({ id, detail }) => [id, detail])), [result]);
   return (
     <>
       <SettingsSection title={STR.migration.title}>

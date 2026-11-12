@@ -309,7 +309,11 @@ export function formatEvolveReport(report: EvolveReport): string {
       + String(report.budget.budget.maxInjectedChars) + " 字符；playbook " + String(report.budget.budget.maxPlaybookEntries)
       + "；实验 " + String(report.budget.budget.maxExperiments) + "；候选 " + String(report.budget.budget.maxCandidates),
     "  Episode：总数 " + String(report.episodes.total) + "｜success " + String(report.episodes.byOutcome.success)
-      + " / failure " + String(report.episodes.byOutcome.failure) + " / unknown " + String(report.episodes.byOutcome.unknown),
+      + " / failure " + String(report.episodes.byOutcome.failure) + " / unknown " + String(report.episodes.byOutcome.unknown)
+      + "｜归因 judge " + String(report.episodes.byOutcomeSource.judge)
+      + " / verify " + String(report.episodes.byOutcomeSource.verify)
+      + " / user " + String(report.episodes.byOutcomeSource.user_feedback)
+      + " / unmeasured " + String(report.episodes.byOutcomeSource.unmeasured),
     "  快环提醒：场次 " + String(report.nudges.episodes) + "｜经验 " + String(report.nudges.ids)
       + (report.nudges.ids === 0
         ? ""

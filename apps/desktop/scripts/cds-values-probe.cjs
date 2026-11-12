@@ -3,13 +3,14 @@
 // 跑法（先 pnpm --filter cairn-desktop build）：
 //   electron scripts/cds-values-probe.cjs <输出 JSON>
 const { app, BrowserWindow, nativeTheme } = require("electron");
-const { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } = require("node:fs");
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
+const { mkdtempSync, readFileSync, writeFileSync, mkdirSync } = require("node:fs");
 const { join, resolve, dirname } = require("node:path");
 const { tmpdir } = require("node:os");
 
 const profile = mkdtempSync(join(tmpdir(), "cairn-cds-probe-"));
 app.setPath("userData", profile);
-app.on("quit", () => { rmSync(profile, { recursive: true, force: true }); });
+app.on("quit", () => scheduleProfileCleanup(profile));
 const out = process.argv[2] ? resolve(process.argv[2]) : join(tmpdir(), "cds-values.json");
 
 async function main() {

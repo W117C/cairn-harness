@@ -11,7 +11,9 @@ import { posix } from "node:path";
 import { inflateRawSync, inflateSync } from "node:zlib";
 import { resolveReadTarget, ToolError, type Tool, type ToolResult } from "./base.js";
 
-const DOC_MAX_FILE_BYTES = 20 * 1024 * 1024; // 20MB：文档读取不是挖矿
+/** 文件读帽。**导出**：web_doc 的响应体帽取同一数值——「文档该有多大」的口径两把工具必须同源，
+ *  门里另抄一份数字就会在帽改了的那一刻与代码分家。 */
+export const DOC_MAX_FILE_BYTES = 20 * 1024 * 1024; // 20MB：文档读取不是挖矿
 const DOC_MAX_MEMBER_BYTES = 8 * 1024 * 1024;
 const DOC_MAX_EXPANDED_BYTES = 16 * 1024 * 1024;
 const DOC_MAX_CHARS = 20_000; // 输出帽（字符），超帽截断 + 出声
@@ -297,6 +299,22 @@ export function extractPdfText(buf: Buffer): string {
   return lines.join("\n").trim();
 }
 
+/** 按 Buffer 判型并抽取正文（读侧唯一入口）：read_doc 与 web_doc 共用这一份（规则 205，
+ *  两处各写一份判型迟早漂）。kind 按文件内容判，不看扩展名。pdf 文本层为空时**不在此抛**——
+ *  「扫描件」的措辞带各自的来源语境（本地路径 / 网络 URL），由调用方自己出声。 */
+export function parseDocumentBuffer(buf: Buffer, label = "read_doc"): { kind: "pdf" | "docx" | "xlsx"; text: string } {
+  const isZip = buf.length > 4 && buf[0] === 0x50 && buf[1] === 0x4b;
+  const isPdf = buf.length > 4 && buf.toString("latin1", 0, 5) === "%PDF-";
+  if (isZip) {
+    const archive = readZipEntries(buf);
+    if (archive.entries.has("word/document.xml")) return { kind: "docx", text: extractDocx(archive) };
+    if (archive.entries.has("xl/workbook.xml")) return { kind: "xlsx", text: extractXlsx(archive) };
+    throw new ToolError(`${label}: 是 zip 容器但不是 docx/xlsx（本解析器只读这两类 Office 文档与 pdf）`);
+  }
+  if (isPdf) return { kind: "pdf", text: extractPdfText(buf) };
+  throw new ToolError(`${label}: 只支持 pdf / docx / xlsx（按文件内容判型，不是按扩展名）`);
+}
+
 export const read_doc: Tool = {
   name: "read_doc",
   async run(args, ctx): Promise<ToolResult> {
@@ -304,25 +322,9 @@ export const read_doc: Tool = {
     if (rel === "") throw new ToolError("read_doc: path 参数必须是非空字符串（pdf/docx/xlsx 文件）");
     const target = await resolveReadTarget(ctx.workspace, rel, "read_doc", ctx.externalReadGrants);
     const buf = await readDocumentFile(target.abs, rel);
-    const isZip = buf.length > 4 && buf[0] === 0x50 && buf[1] === 0x4b;
-    const isPdf = buf.length > 4 && buf.toString("latin1", 0, 5) === "%PDF-";
-    let kind = "";
-    let text = "";
-    if (isZip) {
-      const archive = readZipEntries(buf);
-      if (archive.entries.has("word/document.xml")) { kind = "docx"; text = extractDocx(archive); }
-      else if (archive.entries.has("xl/workbook.xml")) { kind = "xlsx"; text = extractXlsx(archive); }
-      else {
-        throw new ToolError("read_doc: 是 zip 容器但不是 docx/xlsx（本工具只读这两类 Office 文档与 pdf）");
-      }
-    } else if (isPdf) {
-      kind = "pdf";
-      text = extractPdfText(buf);
-      if (text === "") {
-        return { ok: false, output: `read_doc: pdf 没有可提取的文本层（可能是扫描件或纯图文档）：${rel}——要内容需要 OCR，超出本工具能力` };
-      }
-    } else {
-      throw new ToolError("read_doc: 只支持 pdf / docx / xlsx（按文件内容判型，不是按扩展名）");
+    const { kind, text } = parseDocumentBuffer(buf);
+    if (kind === "pdf" && text === "") {
+      return { ok: false, output: `read_doc: pdf 没有可提取的文本层（可能是扫描件或纯图文档）：${rel}——要内容需要 OCR，超出本工具能力` };
     }
     let out = `[read_doc] ${kind} · ${rel}（提取为纯文本；格式细节如表格线/图片不含）\n` + text;
     if (out.length > DOC_MAX_CHARS) {

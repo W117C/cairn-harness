@@ -1,12 +1,13 @@
 // Electron 实测首屏、长会话打开与逐帧流式延迟。AgentApi 为合成夹具，非真实模型吞吐。
 const { app, BrowserWindow, nativeTheme } = require('electron');
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
 const { mkdtempSync, readFileSync, mkdirSync, writeFileSync, rmSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join, resolve } = require('node:path');
 const profile = mkdtempSync(join(tmpdir(), 'cairn-perf-profile-'));
 app.setPath('userData', profile);
 nativeTheme.themeSource = 'light';
-app.on('quit', () => rmSync(profile, { recursive: true, force: true }));
+app.on('quit', () => scheduleProfileCleanup(profile));
 // 预算面（帽 = 现状上取整；实测基线 p50 25–47ms / p95 37–91ms / max 39–108ms / 启动 266–553ms，
 // 取料 outputs/desktop-performance-2026-10-20/runtime-*.json）。可用环境变量调
 // （CI 机慢时把帽抬上去，而不是把闸删掉）。

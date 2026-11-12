@@ -246,7 +246,6 @@ function sidebarHtml(over: Partial<Parameters<typeof Sidebar>[0]> = {}): string 
     running: new Set<string>(),
     waitingIds: new Set<string>(),
     outcomes: new Map<string, "ok" | "failed">(),
-    providerOk: null,
     onOpen: () => undefined,
     onNewTask: () => undefined,
     onOpenPalette: () => undefined,
@@ -300,7 +299,7 @@ describe("⑤ 左栏视觉层级：品牌、会话状态与服务入口", () => 
   });
 
   it("侧栏不再有页脚；用户入口收在全局轨底部的头像菜单里", () => {
-    const html = sidebarHtml({ providerOk: null });
+    const html = sidebarHtml();
     expect(html).not.toContain('class="side-foot"');
     expect(html).not.toContain('class="avatar-label"');
     expect(html).not.toContain('class="provider-dot"');
@@ -444,10 +443,16 @@ describe("④ 设置页：不摆裸复选框，开关走 Switch（说人话的�
   it("设置页里不再有裸复选框；开关走 Switch（方案开关 2026-11-03 撤下：agent 自判是否先出方案）", () => {
     // 源码级断言而不是 SSR 渲染：设置页各段要等 IPC 回来的 settings（非空）才渲染。
     // 批 6 换壳：正文四段迁至 settings-sections.tsx（壳只留导航+状态）——锚随正文走、断言不放宽。
+    // 第 1070 页：AdvancedSection（六枚 Switch 的唯一所在）再拆到 settings/——Switch 正断言随段走，负断言扩扫新文件。
+    // 第 1071 页：AboutSection 再拆到 settings/——负断言续扩扫，防「关于与更新」段回潮裸复选框。
+    // 第 1072 页：ProviderSection 再拆到 settings/——负断言续扩扫，防「当前通道与密钥」段回潮裸复选框。
     const shell = src("../src/renderer/components/SettingsPanel.tsx");
     const sections = src("../src/renderer/components/settings-sections.tsx");
-    expect(shell + sections).not.toContain('type="checkbox"');
-    expect(sections).toContain("<Switch");
+    const advanced = src("../src/renderer/components/settings/AdvancedSection.tsx");
+    const about = src("../src/renderer/components/settings/AboutSection.tsx");
+    const provider = src("../src/renderer/components/settings/ProviderSection.tsx");
+    expect(shell + sections + advanced + about + provider).not.toContain('type="checkbox"');
+    expect(advanced).toContain("<Switch");
   });
 });
 
@@ -802,14 +807,14 @@ describe("侧栏「项目注册表不可用」的就地重试", () => {
     expect(readRendererFile("state/session-subscription.ts")).toContain("return { retryProjects };");
     expect(readRendererFile("state/workbench.ts")).toContain("const { retryProjects } = useSessionSubscription(");
     expect(readRendererFile("state/workbench.ts")).toContain("    retryProjects,\n");
-    expect(readRendererFile("panes/WorkbenchView.tsx")).toContain("onRetryNotice: retryProjects");
+    expect(readRendererFile("panes/WorkbenchSidebarHost.tsx")).toContain("onRetryNotice: retryProjects");
   });
 });
 
 // 2026-10-30：项目设置 Dialog 的回车提交（与新建项目同口径）。
 describe("项目设置：显示名输入框回车 = 保存", () => {
   it("输入框 Enter 走同一个 submit；空名给错误、不关面板", () => {
-    const src = readRendererFile("components/Sidebar.tsx");
+    const src = readRendererFile("components/SidebarProjects.tsx");
     expect(src).toContain('onKeyDown={(e) => { if (e.key === "Enter" && !isCompositionEnter(e, null)) { e.preventDefault(); submit(); } }}');
     expect(src).toContain("onClick={submit}");
     expect(src).toContain("const submit = () => {");

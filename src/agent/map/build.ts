@@ -4,7 +4,6 @@
 // 任何一步异常 → 静默降级：返回空地图、记 debug 日志，绝不阻断 loop（§6.4 失败降级）。
 import { createHash } from "node:crypto";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join, relative, resolve, sep } from "node:path";
 import { spawn } from "node:child_process";
 import { rgBinary } from "../../tools/ripgrep.js";
@@ -14,6 +13,7 @@ import { buildGraph, personalizedPageRank, type FileTagsInput } from "./rank.js"
 import { clampBudget, mapTokensOf, renderMapBudget } from "./render.js";
 import { renderRetrievalLine, retrieveByQuery, type RetrievalEntry } from "./retrieve.js";
 import { MAX_FILES_DEFAULT } from "./cap.js";
+import { scheduleTagsCachePrune, tagsCacheDir, tagsCacheFile } from "./tags-cache.js";
 import { coverageNote } from "../impact/coverage.js";
 
 const NOISE_GLOBS = ["**/.git/**", "**/node_modules/**", "**/dist/**", "**/out/**"];
@@ -133,17 +133,12 @@ export async function scanSourceFiles(workspace: string, maxFiles = MAX_FILES_DE
 
 // ---- tags 磁盘缓存（应用数据目录）----
 export function defaultTagsCacheDir(): string {
-  return process.env.M2B_TAGS_DIR ?? join(homedir(), ".cairn-harness", "symbol-map-tags");
-}
-
-function cacheFileFor(dir: string, abs: string): string {
-  const key = createHash("sha1").update(abs).digest("hex");
-  return join(dir, key + ".json");
+  return process.env.M2B_TAGS_DIR ?? tagsCacheDir("symbol-map-tags");
 }
 
 async function readTagsCache(dir: string, f: ScannedFile): Promise<{ tags: SymbolTag[]; imports: ImportRef[]; summary: string } | null> {
   try {
-    const raw = await readFile(cacheFileFor(dir, f.abs), "utf8");
+    const raw = await readFile(tagsCacheFile(dir, f.abs), "utf8");
     const e = JSON.parse(raw) as TagsCacheEntry;
     if (e.v !== TAGS_EXTRACT_VERSION) return null; // 抽取判据换过 → 旧 tags 一律作废（缺 v 字段同此支）
     // 三个出口缺任何一个都算 miss：只回 tags 的条目会让热缓存那支建出「没有 import 边、也没有摘要」的图。
@@ -160,7 +155,7 @@ async function writeTagsCache(dir: string, f: ScannedFile, tags: SymbolTag[], im
   try {
     await mkdir(dir, { recursive: true });
     const entry: TagsCacheEntry = { v: TAGS_EXTRACT_VERSION, mtimeMs: f.mtimeMs, size: f.size, tags, imports, summary };
-    await writeFile(cacheFileFor(dir, f.abs), JSON.stringify(entry), "utf8");
+    await writeFile(tagsCacheFile(dir, f.abs), JSON.stringify(entry), "utf8");
   } catch (err) {
     console.debug("[map] tags 缓存写失败（忽略）:", err instanceof Error ? err.message : String(err));
   }
@@ -364,6 +359,7 @@ export function createMapBuilder(defaults: Partial<BuildMapOptions> = {}): MapBu
         }
 
         await Promise.allSettled(cacheWrites); // 竞态修复：确保落盘再返回，否则下一轮 readTagsCache 必然 miss
+        if (inputs.length > 0) scheduleTagsCachePrune(dir, "symbol-map-tags");
         const graph = buildGraph(inputs, {
           mentionedIdents: merged.mentionedIdents,
           contextFiles: merged.contextFiles,

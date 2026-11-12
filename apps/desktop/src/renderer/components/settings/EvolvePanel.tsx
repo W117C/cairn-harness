@@ -7,7 +7,7 @@
 // 现在是「人能读的表」：一行一个短标签 + 一句白话 + 若干计数小片；
 // 原始计数串原样收进分区末尾的「技术详情」折叠（默认收起，不占默认版面）。
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { EvolveReport } from "../../../../../../src/main/ipc-protocol";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { Badge, Banner, SettingsRow, SettingsSection } from "../settings-ui";
@@ -168,6 +168,9 @@ function EvolveReportBody(props: {
   actionError?: string;
 }): React.JSX.Element {
   const report = props.report;
+  // 第 1134 页：全局经验逐行原先 findings.find（O(entries×findings)）；一次 Map 建索引。
+  // 第 1149 页：索引按 findings 记忆，报告不变时局部状态不重建。
+  const findingsById = useMemo(() => new Map(report.global.findings.map((f) => [f.id, f] as const)), [report.global.findings]);
   const [confirmFreeze, setConfirmFreeze] = useState(false);
   const [activateTarget, setActivateTarget] = useState<string | null>(null);
   const [dormantTarget, setDormantTarget] = useState<string | null>(null);
@@ -263,7 +266,7 @@ function EvolveReportBody(props: {
         <SettingsRow label={STR.evolve.kindRow}>
           <CountChips items={countEntries(playbook.byKind).map(([key, value]) => ({ key: KIND_LABEL[key] ?? key, value }))} />
         </SettingsRow>
-        <SettingsRow label={STR.evolve.attentionLabel} desc={STR.evolve.attentionDesc}>
+        <SettingsRow label={STR.evolve.attentionLabel}>
           <CountChips items={[
             { key: STR.evolve.chipConflict, value: playbook.conflicts },
             { key: STR.evolve.chipExpired, value: playbook.expired },
@@ -335,7 +338,7 @@ function EvolveReportBody(props: {
         {report.global.total === 0
           ? <p className="sp-note">{STR.evolve.noGlobal}</p>
           : report.global.entries.map((entry) => {
-            const finding = report.global.findings.find((item) => item.id === entry.id);
+            const finding = findingsById.get(entry.id);
             const observation = STR.evolve.observation.replace("{s}", String(entry.successes)).replace("{t}", String(entry.trials))
               .replace("{es}", String(entry.evidenceSuccesses)).replace("{et}", String(entry.evidenceTrials));
             return (

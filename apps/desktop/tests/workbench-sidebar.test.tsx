@@ -13,7 +13,6 @@ const CHAT_SIDEBAR = {
   running: new Set<string>(),
   waitingIds: new Set<string>(),
   outcomes: new Map(),
-  providerOk: true,
 } as unknown as ComponentProps<typeof Sidebar>;
 
 function renderSidebar(destination: "chat" | "plugins", collapsed = false, focus = false): string {
@@ -22,6 +21,7 @@ function renderSidebar(destination: "chat" | "plugins", collapsed = false, focus
       destination={destination}
       sidebarCollapsed={collapsed}
       focusMode={focus}
+      showChatSidebar={destination === "chat" && !collapsed && !focus}
       sidebarWidth={200}
       chatSidebar={CHAT_SIDEBAR}
       pageItems={[{ id: "all", label: "全部" }]}
@@ -47,6 +47,12 @@ describe("WorkbenchSidebar", () => {
     expect(html).toContain('aria-label="全局功能"');
     expect(html).toContain('aria-label="插件上下文"');
     expect(html).not.toContain('aria-label="demo-ws"');
+  });
+
+  it("chat 上下文列按 showChatSidebar 单一判据挂载（收起/专注不渲染）", () => {
+    expect(renderSidebar("chat")).toContain('class="side-wrap"');
+    expect(renderSidebar("chat", true)).not.toContain('class="side-wrap"');
+    expect(renderSidebar("chat", false, true)).not.toContain('class="side-wrap"');
   });
 });
 

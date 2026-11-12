@@ -6,7 +6,7 @@
 //   空态诚实：无数据即说明（不摆空壳）；价格不可知显式写"价格不可知"（不当 0）。
 // 数据面全部来自 panes.ts 纯投影 + turnDelivery（既有）+ changeDiff（v4 通道，懒加载）。
 import { isCompositionEnter } from "../ime";
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import "@xterm/xterm/css/xterm.css";
 import "./pane-tabs.css";
 import { AlertTriangle, ArrowLeft, ArrowRight, Check, ChevronRight, Crosshair, ExternalLink, Loader2, Maximize2, Minimize2, MoreHorizontal, Plus, RotateCw, X } from "lucide-react";
@@ -18,6 +18,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { clipDiff, parseUnifiedPatch } from "../diff-patch";
 import { ModalSurface } from "./ModalSurface";
 import { RenderErrorBoundary } from "./RenderErrorBoundary";
+import { appMotionReduced } from "../state/motion-pref";
 import { toast } from "../toast";
 import { DiffView } from "./DiffView";
 import { FilePane } from "./FilePane";
@@ -31,7 +32,9 @@ import { SidechatPane } from "./SidechatPane";
 import { OrchestrationPane } from "./OrchestrationPane";
 import { PathMenu } from "./PathMenu";
 import { ChangesPane, type ChangesFocus } from "./ChangesPane";
+import { TerminalPane } from "./TerminalPane";
 import { changedFileCount, PANE_META, PANE_OPENABLE, paneTabTargetForKey, projectPlans, projectWorkers, reorderTarget, sitePermissionFor, workerCardAction, type PaneKind, type WorkerPaneItem } from "./panes";
+import { pushAllowedHosts } from "../allowed-hosts";
 // PaneKind / PANE_META 的唯一事实源在 panes.ts（独立窗口路由同用）；此处 re-export 保接口。
 export { PANE_META, PANE_OPENABLE, type PaneKind } from "./panes";
 
@@ -58,7 +61,7 @@ type BpPickResult = { ok: boolean; selector?: string; snippet?: string; url?: st
  *  卸载即关全部视图（不留孤儿 WebContents）。站点授权在渲染层先问：本地（localhost/.local）免问；
  *  外站 first-visit 询问。⌘⇧S / 工具钮 = 元素选择（页内按键由主进程捕获、经 browserState.pick 回程；
  *  结果经 onPickResult 回 App 填入输入框）。清除数据只及本独立 profile（persist:cairn-browser）。 */
-function BrowserPane(props: {
+const BrowserPane = memo(function BrowserPane(props: {
   /** 窗格标签是否在前台。非前台时原生视图必须收成零矩形（隐藏父容器管不到 WebContentsView）。 */
   active: boolean;
   initialUrl?: string;
@@ -120,8 +123,33 @@ function BrowserPane(props: {
     allowedRef.current = hosts;
     setAllowedHosts([...hosts]);
     // 主进程的页内跳转闸读它自己那份集合：启动时先同步一次，避免「界面已忘/从未授权、主进程还在放行」。
-    void window.agent.browserSetAllowedHosts([...hosts]).catch(() => undefined);
+    // 第 1080 页：失败不再吞——主进程还按旧清单放行是要说出来的。
+    void pushAllowedHosts([...hosts], (list) => window.agent.browserSetAllowedHosts(list)).then((r) => {
+      if (!r.ok) setNotice(`已授权站点同步失败：${r.error ?? "未知原因"}（主进程仍按旧清单放行）`);
+    });
   }, []);
+
+  /** 第 1080 页：授权清单的唯一提交口——先乐观更新，IPC 失败就回滚并出声（不留下「界面已改、主进程没改」）。
+   *  成功才落 localStorage：失败时盘上保持旧清单，下次启动不会把没生效的授权当成既成事实。 */
+  const commitHosts = (next: ReadonlySet<string>, failPrefix: string, okText?: string): Promise<boolean> => {
+    const prev = allowedRef.current;
+    allowedRef.current = next;
+    setAllowedHosts([...next]);
+    return pushAllowedHosts([...next], (list) => window.agent.browserSetAllowedHosts(list)).then((r) => {
+      if (!r.ok) {
+        allowedRef.current = prev;
+        setAllowedHosts([...prev]);
+        setNotice(`${failPrefix}：${r.error ?? "未知原因"}（授权未生效）`);
+        return false;
+      }
+      try {
+        if (next.size === 0) window.localStorage.removeItem(BROWSER_ALLOW_KEY);
+        else window.localStorage.setItem(BROWSER_ALLOW_KEY, JSON.stringify([...next]));
+      } catch { /* localStorage 存不下：本窗格内存态仍已生效 */ }
+      if (okText !== undefined) setNotice(okText);
+      return true;
+    });
+  };
 
   const hideAllViews = (): void => {
     for (const tab of tabsRef.current) void window.agent.browserBounds(tab.viewId, { x: 0, y: 0, width: 0, height: 0 });
@@ -304,19 +332,21 @@ function BrowserPane(props: {
   };
   const allowAndGo = (remember: boolean): void => {
     if (pending === null) return;
+    const go = (): void => {
+      const tab = tabsRef.current.find((x) => x.key === pending.tabKey);
+      if (tab !== undefined) openIn(tab.viewId, pending.url);
+      setPending(null);
+    };
     if (remember) {
       try {
         const host = new URL(pending.url).hostname.toLowerCase();
         const next = new Set([...allowedRef.current, host]);
-        allowedRef.current = next;
-        setAllowedHosts([...next]);
-        void window.agent.browserSetAllowedHosts([...next]).catch(() => undefined);
-        window.localStorage.setItem(BROWSER_ALLOW_KEY, JSON.stringify([...next]));
-      } catch { /* 解析不可能失败（进入 pending 前已过 URL 判定）；失败则不记 */ }
+        // 第 1080 页 fail-closed：授权没落到主进程就不打开——否则页面会被逐跳闸拦下，用户看到两条相反的话。
+        void commitHosts(next, "保存站点授权失败").then((ok) => { if (ok) go(); });
+      } catch { go(); /* 解析不可能失败（进入 pending 前已过 URL 判定） */ }
+      return;
     }
-    const tab = tabsRef.current.find((x) => x.key === pending.tabKey);
-    if (tab !== undefined) openIn(tab.viewId, pending.url);
-    setPending(null);
+    go();
   };
 
   const switchTab = (key: number): void => {
@@ -452,14 +482,7 @@ function BrowserPane(props: {
                 onSelect={() => {
                   const next = new Set(allowedRef.current);
                   next.delete(host);
-                  allowedRef.current = next;
-                  setAllowedHosts([...next]);
-                  void window.agent.browserSetAllowedHosts([...next]).catch(() => undefined);
-                  try {
-                    if (next.size === 0) window.localStorage.removeItem(BROWSER_ALLOW_KEY);
-                    else window.localStorage.setItem(BROWSER_ALLOW_KEY, JSON.stringify([...next]));
-                  } catch { /* 存不下则仅本窗格生效 */ }
-                  setNotice(`已移除 ${host} 的授权（下次访问会重新询问）`);
+                  commitHosts(next, "移除站点授权失败", `已移除 ${host} 的授权（下次访问会重新询问）`);
                 }}
               >移除 {host}</DropdownMenu.Item>
             ))}
@@ -467,11 +490,7 @@ function BrowserPane(props: {
               className="menu-item"
               disabled={allowedHosts.length === 0}
               onSelect={() => {
-                try { window.localStorage.removeItem(BROWSER_ALLOW_KEY); } catch { /* 同上 */ }
-                allowedRef.current = new Set();
-                setAllowedHosts([]);
-                void window.agent.browserSetAllowedHosts([]).catch(() => undefined);
-                setNotice("已清除全部已授权站点（下次访问会重新询问）");
+                commitHosts(new Set(), "清除站点授权失败", "已清除全部已授权站点（下次访问会重新询问）");
               }}
             >忘记全部已授权站点</DropdownMenu.Item>
             <DropdownMenu.Separator className="menu-sep" />
@@ -518,138 +537,10 @@ function BrowserPane(props: {
       </div>
     </div>
   );
-}
-
-declare const __IPC_PROTOCOL_VERSION__: number;
-
-/** 终端窗格（macOS）：xterm.js 渲染 + Python PTY 宿主，行列随面板尺寸同步。
- *  xterm 动态 import（SSR/判卷环境不加载 DOM 依赖）；卸载即 kill 终端（不留孤儿 shell）。 */
-function TerminalPane(): React.JSX.Element {
-  const hostRef = useRef<HTMLDivElement | null>(null);
-  const [notice, setNotice] = useState<{ message: string; canRetry: boolean } | null>(null);
-  // 退出后可就地重启（2026-10-18）：此前只把“已退出”写进终端，唯一出路是关窗格再开。
-  // gen 递增触发 effect 重跑：旧 xterm 在 cleanup 里 dispose + kill，新会话接在同一 host 上。
-  const [exited, setExited] = useState<string | null>(null);
-  const [gen, setGen] = useState(0);
-  useEffect(() => {
-    const host = hostRef.current;
-    if (host === null) return;
-    let alive = true;
-    const showError = (message: string, canRetry = true): void => { if (alive) setNotice({ message, canRetry }); };
-    let term: import("@xterm/xterm").Terminal | null = null;
-    let termId: string | null = null;
-    let offData: (() => void) | null = null;
-    let offExit: (() => void) | null = null;
-    let dataSub: { dispose: () => void } | null = null;
-    let resizeSub: { dispose: () => void } | null = null;
-    let resizeObserver: ResizeObserver | null = null;
-    void Promise.all([window.agent.protocolVersion(), import("@xterm/xterm"), import("@xterm/addon-fit")]).then(([version, { Terminal }, { FitAddon }]) => {
-      if (!alive) return;
-      if (version !== __IPC_PROTOCOL_VERSION__) { showError("桌面协议版本不一致，请关闭并重新打开应用", false); return; }
-      const t = new Terminal({
-        fontSize: 12,
-        cursorBlink: true,
-        fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-        scrollback: 4000,
-      });
-      const fit = new FitAddon();
-      t.loadAddon(fit);
-      // 复制/粘贴/全选（2026-10-18）：xterm 默认不把选区写进系统剪贴板，Ctrl/Cmd+V 也不归它管——
-      // 终端里选中的文字复制不出来、粘贴不进去，是“按键功能缺失”最典型的一处。只在“主修饰键”上拦：
-      // macOS 用 ⌘；其他平台用 Ctrl+Shift（裸 Ctrl+C 必须留给 SIGINT）。
-      t.attachCustomKeyEventHandler((e) => {
-        if (e.type !== "keydown") return true;
-        const primary = e.metaKey || (e.ctrlKey && e.shiftKey);
-        if (!primary) return true;
-        const k = e.key.toLowerCase();
-        if (k === "a" && !e.shiftKey) { t.selectAll(); return false; }
-        if (k === "c") {
-          const sel = t.getSelection();
-          if (sel !== "") void navigator.clipboard.writeText(sel).catch(() => undefined);
-          return false;
-        }
-        if (k === "v") {
-          void navigator.clipboard.readText().then(
-            (text) => { if (text !== "") t.paste(text); },
-            () => undefined,
-          );
-          return false;
-        }
-        return true;
-      });
-      term = t;
-      t.open(host);
-      const syncSize = (): void => {
-        const id = termId;
-        if (!alive || id === null || host.clientWidth === 0 || host.clientHeight === 0) return;
-        void window.agent.terminalResize(id, t.cols, t.rows).then((ok) => {
-          if (alive && termId === id && !ok) showError("终端尺寸未能同步，请重新启动终端");
-        }, (error: unknown) => {
-          if (alive && termId === id) showError(`终端尺寸同步失败：${error instanceof Error ? error.message : String(error)}`);
-        });
-      };
-      resizeSub = t.onResize(syncSize);
-      // 列数自适应容器宽（此前固定 80 列在窄格被右缘裁切）；容器尺寸变化跟随。
-      try { fit.fit(); } catch { /* 容器尺寸为 0 时忽略 */ }
-      resizeObserver = new ResizeObserver(() => { try { fit.fit(); } catch { /* 同上 */ } });
-      resizeObserver.observe(host);
-      offData = window.agent.onTerminalData((e) => { if (termId !== null && e.id === termId) t.write(e.data); });
-      offExit = window.agent.onTerminalExit((e) => {
-        if (termId !== null && e.id === termId) {
-          const why = e.code === null ? "信号终止" : `code ${String(e.code)}`;
-          t.write(`\r\n[terminal] 已退出（${why}）——点上方「重新启动」或重开窗格\r\n`);
-          termId = null;
-          setExited(why);
-        }
-      });
-      dataSub = t.onData((d) => {
-        const id = termId;
-        if (id === null) return;
-        void window.agent.terminalWrite(id, d).then((ok) => {
-          if (alive && termId === id && !ok) showError("终端已不可写，请重新启动终端");
-        }, (error: unknown) => {
-          if (alive && termId === id) showError(`终端输入失败：${error instanceof Error ? error.message : String(error)}`);
-        });
-      });
-      void window.agent.terminalStart().then((r) => {
-        if (r === undefined) { showError("通道无应答（主进程未返回终端）"); return; }
-        if (!alive) { if (r.ok) void window.agent.terminalKill(r.id); return; }
-        if (!r.ok) { showError(r.error); t.write(`[terminal] ${r.error}\r\n`); return; }
-        termId = r.id;
-        syncSize(); // fit 可能早于 IPC 返回 id；创建完成后必须补初次同步。
-      }).catch((err: unknown) => {
-        showError(err instanceof Error ? err.message : String(err));
-      });
-    }).catch((err: unknown) => {
-      if (alive) showError(`终端无法启动：${err instanceof Error ? err.message : String(err)}`);
-    });
-    return () => {
-      alive = false;
-      offData?.(); offExit?.(); dataSub?.dispose(); resizeSub?.dispose();
-      resizeObserver?.disconnect();
-      if (termId !== null) void window.agent.terminalKill(termId);
-      term?.dispose();
-    };
-  }, [gen]);
-  return (
-    <div className="term-pane">
-      {notice !== null && <div className="fp-note err" role="alert">{notice.message}</div>}
-      {(exited !== null || notice?.canRetry === true) && (
-        <div className="fp-note" role="status">
-          {exited !== null && <span>终端已退出（{exited}）</span>}
-          <button
-            className="mini-btn ghost"
-            onClick={() => { setExited(null); setNotice(null); setGen((g) => g + 1); }}
-          >重新启动</button>
-        </div>
-      )}
-      <div className="term-host" ref={hostRef} aria-label="终端会话" />
-    </div>
-  );
-}
+});
 
 /** 方案窗格：全部方案（提交序）+ 决议状态。 */
-function PlanPane(props: { events: readonly AgentEvent[] }): React.JSX.Element {
+const PlanPane = memo(function PlanPane(props: { events: readonly AgentEvent[] }): React.JSX.Element {
   const plans = projectPlans(props.events);
   if (plans.length === 0) {
     return <div className="pane-empty">本会话还没有提交过方案。<br />模型提请计划后会在审核后留档在这里。</div>;
@@ -689,10 +580,10 @@ function PlanPane(props: { events: readonly AgentEvent[] }): React.JSX.Element {
       ))}
     </div>
   );
-}
+});
 
 /** 任务窗格：多 agent 状态（worker 簇）。 */
-function TasksPane(props: { events: readonly AgentEvent[] }): React.JSX.Element {
+const TasksPane = memo(function TasksPane(props: { events: readonly AgentEvent[] }): React.JSX.Element {
   const workers = projectWorkers(props.events);
   const [ask, setAsk] = useState<{ w: WorkerPaneItem; action: "merge" | "reject" } | null>(null);
   const [diff, setDiff] = useState<{ agentId: string; text: string; hunks: ReturnType<typeof parseUnifiedPatch>; truncated: boolean } | null>(null);
@@ -791,7 +682,7 @@ function TasksPane(props: { events: readonly AgentEvent[] }): React.JSX.Element 
     )}
     </>
   );
-}
+});
 
 /** 窗格容器（网格化）：tabs 里的每个窗格各占一格、纵向堆叠，格间分割线可拖行高。
  *  tabs 为空时给空态说明（罕见路径——App 侧 tabs 空即整列收起）。 */
@@ -893,8 +784,7 @@ export function PaneDock(props: {
       else if (right > viewRight - pad) scroller.scrollTo({ left: right - scroller.clientWidth + pad, behavior });
     };
     const raf = window.requestAnimationFrame(() => {
-      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      reveal(reduced || document.documentElement.dataset.reduceMotion === "true" ? "instant" : "smooth");
+      reveal(appMotionReduced() ? "instant" : "smooth");
     });
     // 打开上下文侧栏或拖窄面板时，active/tabsSig 不变，仍需把关闭按钮带回视口。
     const observer = new ResizeObserver(() => reveal("instant"));

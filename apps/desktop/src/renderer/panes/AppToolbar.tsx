@@ -71,6 +71,8 @@ interface AppToolbarProps {
   togglePluginSidebar: () => void;
   focusMode: boolean;
   toggleFocusMode: () => void;
+  /** 左栏开着时它的 `.sb-brand` 已经在印 Cairn 标志 + 字标；顶栏中槽再印一份就是同屏双标。 */
+  sidebarBrandVisible: boolean;
   /** demo provider：标题栏常驻「演示模式」小胶囊，点开模型设置。 */
   demo?: boolean;
   onOpenProviderSettings?: () => void;
@@ -83,7 +85,9 @@ interface AppToolbarProps {
 }
 
 export function renderAppToolbar(deps: AppToolbarProps) {
-  const { settingsOpen, activeId, activeWorkspace, activeProjectLabel, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, onOpenPane, inspectorOpen, onToggleInspector, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode, demo, onOpenProviderSettings } = deps;
+  const { settingsOpen, activeId, activeWorkspace, activeProjectLabel, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, onOpenPane, inspectorOpen, onToggleInspector, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode, sidebarBrandVisible, demo, onOpenProviderSettings } = deps;
+  // 第 1156 页：重命名提交/失焦共用同一原始标题，别在两次事件里各 find 一遍会话表。
+  const renameOriginalTitle = barRenaming === null ? "" : sessions.find((s) => s.id === barRenaming.id)?.title ?? "";
   const toolbarContext = !settingsOpen && activeId !== null && activeWorkspace !== null && activeProjectLabel !== null ? (
     <span className="tb-workspace" title={activeWorkspace} aria-label={`${STR.composer.workspaceAria}：${activeProjectLabel}`}>
       <Folder size={12} aria-hidden="true" />
@@ -92,10 +96,11 @@ export function renderAppToolbar(deps: AppToolbarProps) {
   ) : null;
 
   // 统一工具栏 · 中栏主体（2026-10-20 批 129）：上下文锚点。
-  // 首页无会话 ⇒ 品牌名；会话内 ⇒ 可重命名的会话名。
+  // 首页无会话：左栏收起 / 专注模式时补印品牌名，左栏开着时留空（左栏顶 `.sb-brand` 已印，不同屏双印）；
+  // 会话内 ⇒ 可重命名的会话名。
   // **任何时刻只有一个标题**——批 120/121 的「标题出现两次」争点随两栏合并自然消解。
   const toolbarCenter = activeId === null ? (
-    <span className="tb-brand"><CairnMark />Cairn</span>
+    sidebarBrandVisible ? null : <span className="tb-brand"><CairnMark />Cairn</span>
   ) : (
     <>
       {/* 会话名可点重命名（蓝本 §2.1「点工具栏会话名可重命名」）：Enter/失焦提交，Esc 取消。 */}
@@ -119,8 +124,7 @@ export function renderAppToolbar(deps: AppToolbarProps) {
               e.preventDefault();
               // 提交给**绑定的那条会话**（不是 activeId）：会话切换过也不能改名改到别人头上。
               const v = barRenaming.text.trim();
-              const original = sessions.find((s) => s.id === barRenaming.id)?.title ?? "";
-              if (v !== "" && v !== original) void renameSessionById(barRenaming.id, v);
+              if (v !== "" && v !== renameOriginalTitle) void renameSessionById(barRenaming.id, v);
               setBarRenaming(null);
             } else if (e.key === "Escape") {
               e.preventDefault();
@@ -129,8 +133,7 @@ export function renderAppToolbar(deps: AppToolbarProps) {
           }}
           onBlur={() => {
             const v = barRenaming.text.trim();
-            const original = sessions.find((s) => s.id === barRenaming.id)?.title ?? "";
-            if (v !== "" && v !== original) void renameSessionById(barRenaming.id, v);
+            if (v !== "" && v !== renameOriginalTitle) void renameSessionById(barRenaming.id, v);
             setBarRenaming(null);
           }}
         />

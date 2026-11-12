@@ -62,6 +62,17 @@ describe("run_shell 超限输出保留尾部结论", () => {
     expect(r.ok).toBe(false);
     expect(r.output.endsWith("[exit code: 3]")).toBe(true);
   });
+
+  it("成功且无输出的命令给显式回执（空串会被读成「没跑成」——SWE-agent ACI 结论）", async () => {
+    const r = await runCmd("true");
+    expect(r.ok).toBe(true);
+    expect(r.output).toBe("（命令成功结束，无输出）");
+    // 失败侧不占用这句：非零退出有 [exit code]，超时/取消有各自那句——三支分开。
+    const failed = await runCmd(`node -e ${JSON.stringify('process.exit(7)')}`);
+    expect(failed.ok).toBe(false);
+    expect(failed.output).toContain("[exit code: 7]");
+    expect(failed.output).not.toContain("无输出");
+  });
 });
 
 // #56 的下游一格（第 74 页那条「半句话」判据的**消费者形状**）：超限提示说了"省略中间 N 字节"，

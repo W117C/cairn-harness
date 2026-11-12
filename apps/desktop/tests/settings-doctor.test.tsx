@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { STR } from "../src/renderer/strings";
 import { AboutSection, DoctorResultView } from "../src/renderer/components/settings-sections";
 import { doctorReportText, doctorRows, doctorTarget, doctorVerdictText, type DoctorKeyStatus } from "../src/renderer/components/settings/doctor-view";
 import type { DoctorCheck, DoctorReport } from "../../../src/main/doctor";
@@ -75,6 +76,9 @@ describe("AboutSection：运行诊断入口", () => {
 
   it("按钮与「工程细节」在场；点击前不摆结果（不在面板打开时偷偷跑诊断）", () => {
     expect(html).toContain("运行诊断");
+    // 第 1093 页：行标签已经是「运行诊断」，按钮不再复述同四个字；只留动作「运行」。
+    expect((html.match(/运行诊断/g) ?? []).length).toBe(1);
+    expect(html).toContain(">运行</button>");
     expect(html).toContain("工程细节");
     // 第 866 页：desc 原样复述了行标签（「工程细节」），已删——展开的 `<details>` 就是它的说明。
     expect(html).not.toContain("排查问题时对照日志使用的工程细节");
@@ -82,11 +86,15 @@ describe("AboutSection：运行诊断入口", () => {
   });
 
   it("接线：走 window.agent.doctor()，同时读 providerKeyStatus 合成凭据行", () => {
-    const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/settings-sections.tsx", import.meta.url)), "utf8");
+    // 第 1071 页：AboutSection 按区拆分至 settings/，诊断接线源文断言随段走（读新文件，不放宽）。
+    const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/settings/AboutSection.tsx", import.meta.url)), "utf8");
     expect(src).toContain("window.agent.doctor()");
     expect(src).toContain("window.agent.providerKeyStatus().catch(() => null)");
-    expect(src).toContain('aria-label="诊断结果"');
-    expect(src).toContain("doctorRows(doctor.report, doctor.keys)");
+    // 第 1078 页：aria 收编进 STR 后源文只剩键——键形＋值锚（原意不放宽）。
+    expect(src).toContain("aria-label={STR.about.diagnosisResultAria}");
+    expect(STR.about.diagnosisResultAria).toBe("诊断结果");
+    expect(src).toContain("const doctorRowsView = useMemo(() => doctor.status === \"ready\" ? doctorRows(doctor.report, doctor.keys) : [], [doctor]);");
+    expect(src).toContain("const doctorVerdict = doctor.status === \"ready\" ? doctorVerdictText(doctor.report, doctorRowsView) : \"\";");
     // 第 803 页：复制报告走同一份行投影，不另拼一套。
     expect(src).toContain("doctorReportText({");
     expect(src).toContain("navigator.clipboard.writeText(text)");

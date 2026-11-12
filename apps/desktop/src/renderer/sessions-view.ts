@@ -232,6 +232,13 @@ export const SESSION_FILTERS = [
   { id: "scheduled", label: STR.filter.scheduled },
 ] as const;
 
+const SESSION_FILTER_BY_ID = new Map(SESSION_FILTERS.map((f) => [f.id, f] as const));
+
+/** 筛选 id → 元数据（菜单/按钮共用；未知 id 回退第一项，保持旧行为）。 */
+export function sessionFilterInfo(id: SessionFilterId): (typeof SESSION_FILTERS)[number] {
+  return SESSION_FILTER_BY_ID.get(id) ?? SESSION_FILTERS[0];
+}
+
 export type SessionFilterId = (typeof SESSION_FILTERS)[number]["id"];
 
 export const SESSION_FILTER_NOTE = STR.filter.note;
@@ -264,4 +271,20 @@ export function filterSessions<T extends { id: string; title?: string; pinned?: 
   input: { search: string; filter: SessionFilterId; running?: ReadonlySet<string> },
 ): T[] {
   return sessions.filter((s) => matchSession(s, input));
+}
+
+/** 侧栏筛选菜单的计数：一次遍历，与 matchSession(search 空) 同口径。 */
+export function countSessionsByFilter(
+  sessions: readonly { id: string; workspace?: string; pinned?: boolean; archived?: boolean; origin?: "scheduled" }[],
+  running: ReadonlySet<string>,
+): Record<SessionFilterId, number> {
+  const counts: Record<SessionFilterId, number> = { all: 0, running: 0, pinned: 0, archived: 0, scheduled: 0 };
+  for (const s of sessions) {
+    counts.all += 1;
+    if (running.has(runKey(s.workspace, s.id))) counts.running += 1;
+    if (s.pinned === true) counts.pinned += 1;
+    if (s.archived === true) counts.archived += 1;
+    if (s.origin === "scheduled") counts.scheduled += 1;
+  }
+  return counts;
 }

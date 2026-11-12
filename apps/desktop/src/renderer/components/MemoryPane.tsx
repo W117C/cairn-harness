@@ -1,6 +1,6 @@
 // 记忆系统页（2026-11-05 重做：内容前置卡片网格 —— Mem0/Letta 的开源记忆 UI 语言：
 // 正文前两行直接上卡，元信息退为卡脚；层别徽标随卡走。搜索/筛选/排序/导出/详情抽屉/删除全保留）。
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { BookOpen, Brain } from "lucide-react";
 import type { MemorySnapshot } from "../../../../../src/main/ipc-protocol";
 import { renderInline } from "../markdown";
@@ -33,12 +33,16 @@ export function MemoryPane(props: {
   const [topicAsk, setTopicAsk] = useState<{ layer: "project" | "global"; topic: string } | null>(null);
   const filter = props.filter ?? localFilter;
   const setFilter = props.onFilter ?? setLocalFilter;
-  const sorted = memoryRows(memory, query, filter, sortByName);
+  // 第 1127 页：记忆行只在 snapshot/搜索/筛选/排序变化时重建，选中与导出状态不重扫。
+  const sorted = useMemo(() => memoryRows(memory, query, filter, sortByName), [memory, query, filter, sortByName]);
   // 「全部」下按语义分组：同类主题挨在一起，层别仍由卡片徽标表达；筛选到单层时不重复组头。
   const grouped = filter === "all";
   const [selLayer, selTopic] = sel === null ? [null, null] : [sel.slice(0, sel.indexOf(":")), sel.slice(sel.indexOf(":") + 1)];
-  const selected = sorted.find((row) => row.layer === selLayer && row.topic.topic === selTopic)?.topic ?? null;
+  // 第 1129 页：选中主题的查找也按 sorted/层/主题记忆，导出忙碌等局部状态不重扫。
+  const selected = useMemo(() => sorted.find((row) => row.layer === selLayer && row.topic.topic === selTopic)?.topic ?? null, [sorted, selLayer, selTopic]);
   const selectedLayer = selLayer === "project" ? memory.project : memory.global;
+  // 第 1121 页：正文行只 split 一次；空态判断与逐行渲染共用同一结果。
+  const selectedBody = selected === null ? [] : bodyLines(selected.body);
   useEffect(() => {
     if (sel !== null && selected === null) setSel(null);
   }, [sel, selected]);
@@ -156,9 +160,9 @@ export function MemoryPane(props: {
                 主题正文 v13 接通：正文随快照来（frontmatter 已剥）；空正文给一句话回落，不摆空壳。 */}
             <section className="ap-sec">
               <h3>主题正文</h3>
-              {bodyLines(selected.body).length === 0 && <div className="ap-empty">此主题暂无正文</div>}
+              {selectedBody.length === 0 && <div className="ap-empty">此主题暂无正文</div>}
               <div className="ap-drawer-body">
-                {bodyLines(selected.body).map((line, i) => (
+                {selectedBody.map((line, i) => (
                   <div key={String(i)} className="ap-body-line">{renderInline(line)}</div>
                 ))}
               </div>

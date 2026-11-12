@@ -9,14 +9,15 @@
 // 用法（先 build）：cd apps/desktop && env -u ELECTRON_RUN_AS_NODE \
 //   ./node_modules/.bin/electron scripts/same-id-workspace-smoke.cjs outputs/same-id-753
 const { app, BrowserWindow, nativeTheme } = require("electron");
-const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
+const { mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
 const { join, resolve } = require("node:path");
 const { tmpdir } = require("node:os");
 
 const profile = mkdtempSync(join(tmpdir(), "cairn-same-id-profile-"));
 app.setPath("userData", profile);
 nativeTheme.themeSource = "light";
-app.on("quit", () => { rmSync(profile, { recursive: true, force: true }); });
+app.on("quit", () => scheduleProfileCleanup(profile));
 const out = process.argv[2] ? resolve(process.argv[2]) : mkdtempSync(join(tmpdir(), "cairn-same-id-"));
 mkdirSync(out, { recursive: true });
 
@@ -109,21 +110,34 @@ async function main() {
     return { clicked: true };
   })()`);
   await pause(700);
-  const setCalls = await js(`JSON.stringify((window.__cairnSameId ? window.__cairnSameId.calls().queueSet : []))`);
   // 侧车里必须留下**按 workspace 区分**的记录：两个同名会话各写一次 ⇒ 两条记录、
   // 两条 workspace 不同。写用裸 id 时，两次写会落到同一条记录里（后写覆盖先写）⇒
   // 这条判据当场红。
+  // 2026-11-12（第 1081 页）：切会话本身只读队列（queueSet 只在队列变更时触发）——
+  // 旧版只移出甲侧一条就断言「两条记录」，前提已过期，脚本此前又因 TS 注解根本跑不起来。
+  // 现在两侧各移出一条（各触发一次 queueSet），断言两条记录的 workspace 分别为两棵树。
+  const openB2 = await openByTitle("同名会话 · 项目乙");
+  await pause(700);
+  const removedB = await js(`(() => {
+    const btn = document.querySelector('.queue-item button[aria-label^="移出队列"]');
+    if (!btn) return { clicked: false };
+    btn.click();
+    return { clicked: true };
+  })()`);
+  await pause(500);
   const calls = await js(`JSON.stringify((window.__cairnSameId ? window.__cairnSameId.calls().queueSet : []))`);
   let parsed = [];
   try { parsed = JSON.parse(calls); } catch { parsed = []; }
-  const wsOf = (w: string) => parsed.filter((c) => c.workspace === w);
+  const wsOf = (w) => parsed.filter((c) => c.workspace === w);
   check(
     "队列写回按 workspace 区分（两个同名会话各写一次 ⇒ 侧车两条、workspace 不同）",
     removed?.clicked === true
+      && removedB?.clicked === true
       && parsed.length >= 2
+      && parsed.every((c) => c.sessionId === "dup")
       && wsOf("/tmp/demo-ws").length >= 1
       && wsOf("/tmp/demo-ws-other").length >= 1,
-    { removed, calls },
+    { removed, removedB, openB2, calls },
   );
 
   check("渲染过程无控制台错误", errors.length === 0, errors);

@@ -79,8 +79,10 @@ describe("上游钉：版本与摘要必须记在仓里（与机器无关，永�
     // 为什么要有这一格：「薄是纯 CSS」那一格能挡住**尾部**混进压缩 JS，
     // 但**切在半路**（起点锚点命中了更早的一处、或止点提前）它查不出来——
     // 文件仍然是合法 CSS，sha 也自洽，只有「内容不完整」这一种病。
-    // 官方薄是**单个模板串**（实测：起点→</style> 之间 2 个反引号、0 个 `+`），
-    // 所以「起点块 ＋ 终点块 ＋ 花括号配平」三件事合起来就证明抽的是整张。
+    // ⚠️ 第 1182 页实测更正：起点＋终点＋花括号配平**不足以**证明整张——删掉中间一整块
+    // （@media screen，683–827 行）后这三件仍全绿（探针实测），只有字节数/声明数/sha 会响。
+    // 所以这一格自己也要钉「与 UPSTREAM.json 记录的字节数相等」，才对得起「防切少」这个标题；
+    // 形状三钉保留作**尾部/切在半途失衡**的便宜早报，不再冒充完整性证明。
     const sheet = readFileSync(`${vendorDir}tokens.css`, "utf8");
     // 起点：官方薄的第一块是 :root 的 radius 刻度（抽取器起点锚点所在处）。
     expect(sheet).toMatch(/^:root \{\n\s*--radius: calc\(0\.5rem \* var\(--cds-rem-scale, 1\)\);/);
@@ -91,6 +93,10 @@ describe("上游钉：版本与摘要必须记在仓里（与机器无关，永�
     const open = (sheet.match(/\{/g) ?? []).length;
     const close = (sheet.match(/\}/g) ?? []).length;
     expect(open, `薄的花括号不配平（{=${open} }=${close}）⇒ 抽取切在了半路`).toBe(close);
+    // 实测字节数对账：中间少一整块也仍满足上面三条，但字节数必然变 ⇒ 这一格才真能「防切少」。
+    const record = upstream.files.find((f) => f.file === "tokens.css");
+    expect(record).toBeDefined();
+    expect(Buffer.byteLength(sheet)).toBe(record?.bytes);
   });
   it("判据自身的接线：抽取脚本在仓里（缺席 ⇒ 这一格恒真）", () => {
     expect(existsSync(extractor)).toBe(true);

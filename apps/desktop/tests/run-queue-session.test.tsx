@@ -207,6 +207,23 @@ describe("workspace scoped run controls", () => {
     expect(agent.run).not.toHaveBeenCalled(); expect(agent.queueSet).not.toHaveBeenCalled();
     expect(deps.sendQueue.current.get(key)).toEqual(items);
   });
+  // 第 1082 页：停止/取消的 IPC **拒绝**（通道异常/窗口销毁/main 抛错）也要说出来——
+  // 952/1073/1080 同族。resolve-{ok:false} 已 surfaced（上一格），同文件 resumeQueueFor 的
+  // reject 也接 setLastError；唯独 cancelRunHeal 的 .catch(() => undefined) 把拒绝吞了：
+  // 用户点停止、run 照跑、界面毫无反应，正是业主实测过的「点了像没点」。
+  it("a rejected cancel (IPC throw) surfaces a stop failure instead of silently doing nothing", async () => {
+    const { actions, agent, deps } = harness();
+    const key = runKey("/other-ws", "same");
+    const items = [{ id: 1, text: "keep this queued", attachments: [] }];
+    deps.sendQueue.current.set(key, items); deps.runningSet.current.add(key);
+    agent.runCancel.mockRejectedValueOnce(new Error("IPC channel closed"));
+    actions.cancelRunHeal("same", "/other-ws");
+    await vi.waitFor(() => expect(deps.setLastError).toHaveBeenCalledWith("停止失败：IPC channel closed", "same"));
+    expect(agent.runCancel).toHaveBeenCalledWith("same", "/other-ws");
+    // 拒绝与 resolve-{ok:false} 同口径：不续队列、不派发、不丢队首。
+    expect(agent.run).not.toHaveBeenCalled(); expect(agent.queueSet).not.toHaveBeenCalled();
+    expect(deps.sendQueue.current.get(key)).toEqual(items);
+  });
 });
 
 function deferred<T>() {

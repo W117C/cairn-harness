@@ -21,8 +21,8 @@ describe("首帧主题", () => {
     expect(normalizeThemePreference("dark")).toBe("dark");
   });
 
-  it("背景色取 v3 surface-1：亮 #fcfcfb / 暗 #151515", () => {
+  it("启动底色跟随业主裁的暗色画布：亮 #fcfcfb / 暗 #1b1b1b（第 1053 页 A 轻度）", () => {
     expect(bootBackgroundFor("light")).toBe("#fcfcfb");
-    expect(bootBackgroundFor("dark")).toBe("#151515");
+    expect(bootBackgroundFor("dark")).toBe("#1b1b1b");
   });
 });

@@ -112,6 +112,36 @@ describe("图片块按像素计价（base64 字符数不是 token 数）", () =>
 });
 
 describe("识图不再把请求挤爆硬闸", () => {
+  it("includes a pending frame in the overflow cut and sends it with the current tool result", async () => {
+    dir = await mkdtemp(join(tmpdir(), "image-budget-overflow-"));
+    const path = join(dir, "events.jsonl");
+    log = createEventLog(path);
+    const current = "latest ".repeat(3_400);
+    await log.append({ type: "user_message", content: "retain the active screenshot" });
+    for (let index = 0; index < 8; index++) await log.append({ type: "assistant_message", content: "small note" });
+    await log.append({ type: "tool_call", id: "old", name: "read_file", args: { path: "old.ts" } });
+    await log.append({ type: "tool_result", callId: "old", ok: true, output: "older ".repeat(800) });
+    await log.append({ type: "user_message", content: "continue" });
+    await log.append({ type: "tool_call", id: "current", name: "read_file", args: { path: "current.ts" } });
+    await log.append({ type: "tool_result", callId: "current", ok: true, output: current });
+    const channel = createImageChannel();
+    const dataUrl = pngDataUrl(900, 1200);
+    channel.push([{ type: "image", dataUrl }]);
+    const sent: { current?: string | null; images?: readonly { dataUrl: string }[] }[] = [];
+    const provider = createSessionProvider(path, {
+      map: false, workspace: dir, imageChannel: channel,
+      compaction: { config: { inputLimit: 10_000, maxOutputReserve: 2_000 } },
+      transport: async function* (messages) {
+        sent.push({ current: messages.find((message) => message.tool_call_id === "current")?.content,
+          images: messages.at(-1)?.contentParts });
+        yield { type: "assistant_message", content: "ok" };
+      },
+    });
+    for await (const _ of provider.stream([])) { /* drain */ }
+    expect(sent).toEqual([{ current, images: [{ type: "image", dataUrl }] }]);
+    expect(channel.size()).toBe(0);
+  });
+
   it("两张 106KB 的帧照常发得出去（旧口径会把它们折成 7 万 token）", async () => {
     dir = await mkdtemp(join(tmpdir(), "image-budget-"));
     const path = join(dir, "events.jsonl");

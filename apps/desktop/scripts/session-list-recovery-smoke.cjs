@@ -1,14 +1,15 @@
 // 真实 renderer + 合成 IPC，断言首读/缓存/重试/乱序成功与失败；不调用 Provider。
 // CAIRN_RENDERER_DIST 可指向隔离构建；第一个参数是证据目录。
 const { app, BrowserWindow } = require("electron");
-const { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } = require("node:fs");
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
+const { mkdtempSync, mkdirSync, readFileSync, writeFileSync } = require("node:fs");
 const { join, resolve } = require("node:path");
 const { tmpdir } = require("node:os");
 const profile = mkdtempSync(join(tmpdir(), "cairn-list-recovery-profile-"));
 const out = resolve(process.argv[2] || mkdtempSync(join(tmpdir(), "cairn-list-recovery-")));
 mkdirSync(out, { recursive: true });
 app.setPath("userData", profile);
-app.on("quit", () => rmSync(profile, { recursive: true, force: true }));
+app.on("quit", () => scheduleProfileCleanup(profile));
 const checks = [];
 const check = (name, ok) => { checks.push({ name, ok }); console.log(`${ok ? "PASS" : "FAIL"} ${name}`); };
 const pause = () => new Promise((r) => setTimeout(r, 80));

@@ -8,6 +8,7 @@
 //  · 基线过而候选挂 = 回归，直接失败并点名任务。
 
 import type { CandidateSafety, CandidateScores } from "./candidates";
+import { isRecord } from "../../is-record";
 
 export type OfflineSplit = "search" | "validation" | "holdout";
 
@@ -59,13 +60,41 @@ export function mcnemarExactP(b: number, c: number): number {
   return Math.min(1, 2 * tail);
 }
 
+function isNonnegativeNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function indexRuns(
+  rows: readonly unknown[],
+  taskIds: ReadonlySet<string>,
+  arm: "baseline" | "candidate",
+): Map<string, OfflineRun> {
+  const runs = new Map<string, OfflineRun>();
+  for (const row of rows) {
+    if (!isRecord(row) || typeof row.taskId !== "string") throw new Error(`${arm} 运行必须包含 taskId`);
+    const { taskId, ok, costUsd, latencyMs } = row;
+    const label = `${arm} 任务 ${JSON.stringify(taskId)}`;
+    if (!taskIds.has(taskId)) throw new Error(`${label} 未登记`);
+    if (runs.has(taskId)) throw new Error(`${label} 有重复运行`);
+    if (typeof ok !== "boolean" && ok !== null) throw new Error(`${label} 的 ok 必须为布尔值或 null`);
+    if (costUsd !== undefined && costUsd !== null && !isNonnegativeNumber(costUsd)) {
+      throw new Error(`${label} 的 costUsd 必须为非负有限数或 null`);
+    }
+    if (latencyMs !== undefined && latencyMs !== null && !isNonnegativeNumber(latencyMs)) {
+      throw new Error(`${label} 的 latencyMs 必须为非负有限数或 null`);
+    }
+    runs.set(taskId, { taskId, ok, costUsd: costUsd ?? null, latencyMs: latencyMs ?? null });
+  }
+  return runs;
+}
+
 function sumOrNull(values: readonly (number | null | undefined)[]): number | null {
   let total = 0;
   for (const value of values) {
-    if (value === null || value === undefined || !Number.isFinite(value)) return null;
+    if (value === null || value === undefined) return null;
     total += value;
   }
-  return total;
+  return Number.isFinite(total) ? total : null;
 }
 
 function scoresFor(
@@ -85,13 +114,35 @@ function scoresFor(
   };
 }
 
-/** 配对评估。任务必须有 baseline 与 candidate 两边各一条 run；缺一即不可测。 */
-export function evaluateOffline(input: OfflineEvalInput): OfflineEvalResult {
-  const baseline = new Map(input.baseline.map((run) => [run.taskId, run]));
-  const candidate = new Map(input.candidate.map((run) => [run.taskId, run]));
+/** 配对评估。畸形证据直接拒绝；合法任务缺一臂或结局未知时保留不可测。 */
+export function evaluateOffline(input: unknown): OfflineEvalResult {
+  if (!isRecord(input) || !Array.isArray(input.tasks) || !Array.isArray(input.baseline) || !Array.isArray(input.candidate)) {
+    throw new Error("输入 JSON 必须是 {tasks, baseline, candidate} 三个数组");
+  }
+  const { minCostImprovement } = input;
+  if (minCostImprovement !== undefined && (!isNonnegativeNumber(minCostImprovement) || minCostImprovement > 1)) {
+    throw new Error("minCostImprovement 必须在 0..1");
+  }
+
+  const tasks: OfflineTask[] = [];
+  const taskIds = new Set<string>();
+  for (const task of input.tasks) {
+    if (!isRecord(task) || typeof task.id !== "string" || task.id.trim() === "") {
+      throw new Error("tasks 条目必须有非空字符串 id");
+    }
+    const { id, split } = task;
+    if (split !== "search" && split !== "validation" && split !== "holdout") {
+      throw new Error(`任务 ${JSON.stringify(id)} 的 split 必须为 search、validation 或 holdout`);
+    }
+    if (taskIds.has(id)) throw new Error(`重复任务 ${JSON.stringify(id)}`);
+    taskIds.add(id);
+    tasks.push({ id, split });
+  }
+  const baseline = indexRuns(input.baseline, taskIds, "baseline");
+  const candidate = indexRuns(input.candidate, taskIds, "candidate");
 
   const missing: string[] = [];
-  for (const task of input.tasks) {
+  for (const task of tasks) {
     const b = baseline.get(task.id);
     const c = candidate.get(task.id);
     if (b === undefined || c === undefined || b.ok === null || c.ok === null) missing.push(task.id);
@@ -106,7 +157,7 @@ export function evaluateOffline(input: OfflineEvalInput): OfflineEvalResult {
     };
   }
 
-  const holdout = input.tasks.filter((task) => task.split === "holdout");
+  const holdout = tasks.filter((task) => task.split === "holdout");
   if (holdout.length === 0) {
     return {
       status: "unmeasurable",
@@ -117,12 +168,12 @@ export function evaluateOffline(input: OfflineEvalInput): OfflineEvalResult {
     };
   }
 
-  const regressions = input.tasks
+  const regressions = tasks
     .filter((task) => baseline.get(task.id)!.ok === true && candidate.get(task.id)!.ok !== true)
     .map((task) => task.id);
   const regressionSet = new Set(regressions);
-  const searchScores = scoresFor(input.tasks.filter((task) => task.split === "search"), candidate, regressionSet);
-  const validationScores = scoresFor(input.tasks.filter((task) => task.split === "validation"), candidate, regressionSet);
+  const searchScores = scoresFor(tasks.filter((task) => task.split === "search"), candidate, regressionSet);
+  const validationScores = scoresFor(tasks.filter((task) => task.split === "validation"), candidate, regressionSet);
   const holdoutScores = scoresFor(holdout, candidate, regressionSet);
 
   const holdoutFailures = holdout.filter((task) => candidate.get(task.id)!.ok !== true).map((task) => task.id);
@@ -154,8 +205,8 @@ export function evaluateOffline(input: OfflineEvalInput): OfflineEvalResult {
 
   const baselineCost = sumOrNull(holdout.map((task) => baseline.get(task.id)!.costUsd));
   const candidateCost = sumOrNull(holdout.map((task) => candidate.get(task.id)!.costUsd));
-  const minImprovement = input.minCostImprovement ?? 0.05;
-  if (baselineCost !== null && candidateCost !== null && baselineCost > 0
+  const minImprovement = minCostImprovement ?? 0.05;
+  if (baselineCost !== null && candidateCost !== null && candidateCost < baselineCost
     && candidateCost <= baselineCost * (1 - minImprovement)) {
     return {
       status: "passed",

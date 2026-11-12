@@ -10,6 +10,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { AgentEvent } from "../../../src/events";
 import { changedFilesOf } from "../src/renderer/components/panes";
 import { Inspector, inspectorTabIndexForKey } from "../src/renderer/components/Inspector";
+import { STR } from "../src/renderer/strings";
 import { readAppSurface } from "./helpers/app-surface";
 
 const appSrc = readAppSurface();
@@ -108,6 +109,41 @@ describe("④ Inspector SSR", () => {
   });
 });
 
+describe("④b 检查器文案走 STR 单源（第 1064 页收编）", () => {
+  it("16 个键值锚定（迁移只搬字面量不改一字）", () => {
+    const expected: Record<string, string> = {
+      aria: "检查器",
+      tabChanges: "改动",
+      tabPlan: "计划",
+      tabTimeline: "时间线",
+      undoAria: "撤销此文件改动",
+      undoTitle: "把「{path}」还原到这次改动前的版本",
+      undo: "撤销",
+      diffLoading: "正在读快照与当前文件…",
+      addPaneAria: "打开窗格",
+      addPaneTitle: "打开窗格（文件 / 终端 / 浏览器 / 旁路…）",
+      closeAria: "关闭检查器",
+      closeTitle: "关闭检查器（⌘⌥I）",
+      planApproved: "已批准",
+      planRejected: "已拒绝",
+      planPending: "待决",
+      planFiles: "{count} 个文件",
+    };
+    const ns = STR.inspector as unknown as Record<string, string>;
+    for (const [k, v] of Object.entries(expected)) expect(ns[k], `inspector.${k} 值变了`).toBe(v);
+  });
+
+  it("SSR 消费 STR：两处模板按 .replace 落值，撤销/关闭/计划态文案上屏", () => {
+    const changes = renderToStaticMarkup(<Inspector events={events} onRestore={() => undefined} onClose={() => undefined} />);
+    expect(changes).toContain(STR.inspector.undoTitle.replace("{path}", "b.ts"));
+    expect(changes).toContain(`>${STR.inspector.undo}<`);
+    expect(changes).toContain(STR.inspector.closeTitle);
+    const plan = renderToStaticMarkup(<Inspector events={events} initialTab="plan" />);
+    expect(plan).toContain(STR.inspector.planFiles.replace("{count}", "1"));
+    expect(plan).toContain(STR.inspector.planPending);
+  });
+});
+
 describe("⑤b 关闭钮（2026-10-20 真机：「右边侧栏打开就没有关闭」）", () => {
   it("给了 onClose 才摆 × 钮；没给不摆（判卷/嵌用面没有右 Panel 可关）", () => {
     const withClose = renderToStaticMarkup(<Inspector events={events} onClose={() => undefined} />);
@@ -150,6 +186,12 @@ describe("⑤ App 接线哨兵（右 Panel / ⌘⌥I / 跳转锚 / 快照撤销�
     expect(appSrc).toContain("revealInspector()");
   });
 
+  it("改动/计划/时间线投影按 events 引用记忆（第 1117 页）", () => {
+    expect(appSrc).toContain("useMemo(() => changedFilesOf(props.events), [props.events])");
+    expect(appSrc).toContain("useMemo(() => projectPlans(props.events), [props.events])");
+    expect(appSrc).toContain("useMemo(() => timelineItems(props.events), [props.events])");
+  });
+
   it("检查器收起时整列 inert：屏外控件不进入 Tab 与无障碍树", () => {
     const css = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
     expect(appSrc).toContain("const [inspectorCollapsed, setInspectorCollapsed] = useState(true)");
@@ -173,7 +215,7 @@ describe("⑤ App 接线哨兵（右 Panel / ⌘⌥I / 跳转锚 / 快照撤销�
     expect(appSrc).toContain("setSidebarCollapsed(true)");
     // 2026-10-20：expand 改到侧栏 240ms 收起过渡之后（旧两个 rAF 会抢跑被夹回 0，真机
     // 窄窗 ⌘⌥I 第一次只写 storage 不展开）。判据跟着实现走，不保留旧针脚。
-    expect(appSrc).toContain('const expandDelay = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 260;');
+    expect(appSrc).toContain("const expandDelay = appMotionReduced() ? 0 : 260;");
     expect(appSrc).toContain("window.setTimeout(() => { inspectorRef.current?.expand(); setInspectorCollapsed(false); }, expandDelay);");
     expect(appSrc).not.toContain("window.requestAnimationFrame(() => { inspectorRef.current?.expand(); })");
     expect(appSrc).toContain("sidebarAutoCollapsedRef.current = true");
@@ -206,8 +248,8 @@ describe("⑤ App 接线哨兵（右 Panel / ⌘⌥I / 跳转锚 / 快照撤销�
   });
 
   it("减少动态偏好下不再白等 240/260ms", () => {
-    expect(appSrc).toContain('window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 260');
-    expect(appSrc).toContain('window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 240');
+    expect(appSrc).toContain("const expandDelay = appMotionReduced() ? 0 : 260;");
+    expect(appSrc).toContain("const restoreDelay = appMotionReduced() ? 0 : 240;");
   });
 
   it("timeline 跳转锚（data-event-id → scrollIntoView）与快照撤销接线", () => {

@@ -38,14 +38,14 @@ export interface ToolSearchOutcome {
   hits: ToolSearchHit[];
   /** 目录里实际参与打分的条目数。 */
   scanned: number;
-  /** 目录超过扫描帽、后段未参与打分。 */
+  /** 目录超过语义扫描上限，有条目未参与打分。 */
   truncated: boolean;
 }
 
 export const TOOL_SEARCH_MAX_QUERY_CHARS = 200;
 export const TOOL_SEARCH_MAX_RESULTS = 8;
 export const TOOL_SEARCH_DEFAULT_RESULTS = 5;
-/** 目录扫描上限：一次搜索不拿无界目录赌延迟；超出时 truncated=true，不静默截断。 */
+/** 语义打分上限。精确工具名的查找仍覆盖全目录。 */
 export const TOOL_SEARCH_SCAN_LIMIT = 512;
 
 const BM25_K1 = 1.2;
@@ -109,7 +109,7 @@ function scoreEntry(entry: ToolCatalogEntry, queryTokens: readonly string[], que
   return { entry, score: Math.round(score * 10_000) / 10_000, matched: matched.slice(0, 12) };
 }
 
-/** 确定性检索：分数降序、名字升序。同分同名的条目按目录顺序（排序稳定）。 */
+/** 确定性检索：完整调用名优先，其余按分数降序、名字升序。 */
 export function searchToolCatalog(
   catalog: readonly ToolCatalogEntry[],
   query: string,
@@ -132,6 +132,13 @@ export function searchToolCatalog(
   const scanLimit = Math.max(1, opts.scanLimit ?? TOOL_SEARCH_SCAN_LIMIT);
   const scannedCatalog = catalog.slice(0, scanLimit);
   const truncated = catalog.length > scannedCatalog.length;
+  // An exact name is an address. Reserve a slot for it without widening the BM25 scan.
+  const normalizedName = raw.toLowerCase();
+  const exactIndex = catalog.findIndex((entry) => entry.name.toLowerCase() === normalizedName);
+  const exact = catalog[exactIndex];
+  if (exact !== undefined && exactIndex >= scannedCatalog.length) {
+    scannedCatalog[scannedCatalog.length - 1] = exact;
+  }
   const queryTokens = [...uniqueTokens(raw)];
   if (queryTokens.length === 0) {
     return { ok: true, query: raw, hits: [], scanned: scannedCatalog.length, truncated };
@@ -152,7 +159,8 @@ export function searchToolCatalog(
   const hits = scannedCatalog
     .map((entry) => scoreEntry(entry, queryTokens, raw, idf, avgdl))
     .filter((hit): hit is ScoredEntry => hit !== null)
-    .sort((left, right) => right.score - left.score || left.entry.name.localeCompare(right.entry.name))
+    .sort((left, right) => Number(right.entry === exact) - Number(left.entry === exact) ||
+      right.score - left.score || left.entry.name.localeCompare(right.entry.name))
     .slice(0, limit)
     .map(({ entry, score, matched }) => {
       const activation = entry.activation ?? (entry.source === "mcp" && !entry.active && entry.server !== undefined

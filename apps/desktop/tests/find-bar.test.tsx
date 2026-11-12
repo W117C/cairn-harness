@@ -9,6 +9,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { FindBar, foldedHitSeqs } from "../src/renderer/components/FindBar";
 import type { StreamRow } from "../src/renderer/derived/stream";
 import { readAppSurface } from "./helpers/app-surface";
+import { STR } from "../src/renderer/strings";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 
@@ -59,9 +60,13 @@ describe("FindBar 面板", () => {
 
   it("快捷键表：⌘F 进速查与会话组", () => {
     const src = read("../src/renderer/shortcuts.ts");
-    expect(src).toContain('{ id: "find", keys: "⌘F", label: "对话内查找" }');
-    expect(src).toContain("在对话里查找");
-    expect(src).toContain('{ keys: "⌘G / ⇧⌘G", what: "查找下一个 / 上一个" }');
+    // 收编后（第 1065 页）：⌘F 核心 label 与会话组两条描述走 STR——源里钉接线，值在 STR 锚定。
+    expect(src).toContain('{ id: "find", keys: "⌘F", label: STR.shortcut.find }');
+    expect(src).toContain('{ keys: "⌘F", what: STR.shortcutTable.find }');
+    expect(src).toContain('{ keys: "⌘G / ⇧⌘G", what: STR.shortcutTable.findNext }');
+    expect(STR.shortcut.find).toBe("对话内查找");
+    expect(STR.shortcutTable.find).toContain("在对话里查找");
+    expect(STR.shortcutTable.findNext).toBe("查找下一个 / 上一个");
   });
 });
 

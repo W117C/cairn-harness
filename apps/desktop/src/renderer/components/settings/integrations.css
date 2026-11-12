@@ -20,7 +20,6 @@
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
-.integrations-toolbar p,
 .integrations-note {
   margin: var(--space-xs) 0 0;
   color: hsl(var(--text-300));

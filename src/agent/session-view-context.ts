@@ -207,3 +207,21 @@ export function projectViewContext(
   // 否则被回退/坏声明清掉的旧判据会借合成 session_meta 复活。
   return projectContext(resolved.events, resolved.replacements, { acceptanceNote: note });
 }
+
+/** Project the live history or preview a compaction without appending to the log. */
+export function projectSessionContext(
+  events: AgentEvent[],
+  options: { view?: SessionView; replacements?: Map<number, string>; compaction?: CompactionEvent } = {},
+): ContextMessage[] {
+  const { view, replacements, compaction } = options;
+  if (view === undefined) return projectContext(compaction ? [...events, compaction] : events, replacements);
+  const byRef = replacements === undefined ? undefined : new Map(
+    [...replacements].map(([eventId, text]) => [eventRefKey({ ...view.session, eventId }), text]),
+  );
+  if (!compaction) return projectViewContext(view, byRef);
+  return projectViewContext({
+    ...view,
+    entries: [...view.entries, { event: compaction, ref: { ...view.session, eventId: events.length + 1 }, inherited: false }],
+    localEvents: [...view.localEvents, compaction],
+  }, byRef);
+}

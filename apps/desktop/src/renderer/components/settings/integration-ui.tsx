@@ -91,14 +91,13 @@ export function IntegrationFeedback({ error, notice }: { error: string | null; n
   </>;
 }
 
-export function IntegrationToolbar({ title, description, headingRef, children }: {
-  title: string; description: string; headingRef?: Ref<HTMLHeadingElement>; children?: ReactNode;
+export function IntegrationToolbar({ title, headingRef, children }: {
+  title: string; headingRef?: Ref<HTMLHeadingElement>; children?: ReactNode;
 }): React.JSX.Element {
   return (
     <header className="integrations-toolbar">
       <div>
         <h2 tabIndex={-1} ref={headingRef}>{title}</h2>
-        <p>{description}</p>
       </div>
       {children}
     </header>

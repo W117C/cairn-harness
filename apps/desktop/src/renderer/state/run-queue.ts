@@ -357,7 +357,11 @@ export function useRunQueue(deps: RunQueueDeps) {
       runningSet.current.delete(key);
       force((n) => n + 1);
       resumeQueueFor(sid, runWs); // 无队列 ⇒ 自然 no-op
-    }).catch(() => undefined);
+    }).catch((err: unknown) => {
+      // 拒绝（通道异常/窗口销毁/main 抛错）与 resolve-{ok:false} 同口径：停止失败要说出来，
+      // 不续队列、不派发（第 1082 页；同文件 resumeQueueFor 的 reject 早已接 setLastError）。
+      setLastError(`停止失败：${err instanceof Error ? err.message : String(err)}`, sid);
+    });
   }, [resumeQueueFor, setLastError]);
 
 

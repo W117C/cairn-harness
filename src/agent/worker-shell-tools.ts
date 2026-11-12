@@ -224,9 +224,11 @@ export const shell_rw: Tool = makeShellRw();
  *  run_shell/merge/commit 依旧根本不在表内（合并权只在 git 面板）。 */
 export function workerToolSpecs(mode: "read" | "write" = "read", opts: { impactAnalysis?: boolean } = {}): GlmToolSpec[] {
   // 2026-11-06 两表都 +git_read：worker 调查「上游改了什么」高频；零写权零 shell（与 shell_ro 同档）。
+  // 2026-11-10 两表都 +list_dir/read_doc/calc（纯文本只读三件）；write 面 +fs_ops（结构化文件生命周期，
+  // 与 write_file/edit_file 同档的写向工具）。与 orchestrator-config 的两张表必须同源（G-B 对账盯着）。
   const allow = mode === "write"
-    ? new Set<string>(["read_file", "grep", "glob", "lsp", "write_file", "edit_file", "remember", "git_read"])
-    : new Set<string>(["read_file", "grep", "glob", "lsp", "git_read"]);
+    ? new Set<string>(["read_file", "grep", "glob", "lsp", "write_file", "edit_file", "remember", "git_read", "list_dir", "read_doc", "calc", "fs_ops", "read_image"])
+    : new Set<string>(["read_file", "grep", "glob", "lsp", "git_read", "list_dir", "read_doc", "calc", "read_image"]);
   const specs = gateToolSpecs().filter((s) => allow.has(s.function.name)).map((spec) =>
     spec.function.name === "remember"
       ? { ...spec, function: { ...spec.function, description: REMEMBER_SPEC_DESCRIPTION } }

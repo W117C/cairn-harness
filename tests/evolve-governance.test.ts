@@ -161,6 +161,62 @@ describe("Evolve 治理面", () => {
     expect(report.experiments).toHaveLength(1);
     expect(report.candidates.total).toBe(1);
     expect(report.budget.source).toBe("default");
+    expect(report.episodes.byOutcomeSource).toEqual({
+      judge: 0,
+      verify: 0,
+      user_feedback: 0,
+      unmeasured: 1,
+    });
     expect(formatEvolveReport(report)).toContain("FROZEN");
+    expect(formatEvolveReport(report)).toContain("归因 judge 0 / verify 0 / user 0 / unmeasured 1");
+  });
+
+  it("实验达到 maxRuns 预算上限后 prepareEvolutionInjection 自动停止新分配", async () => {
+    const workspace = await tempWorkspace();
+    const entry = newExperience({
+      id: "exp_0123456789abcdef", kind: "strategy", scope: { workspace },
+      trigger: { when: "always" }, body: "candidate body", status: "candidate",
+      evidenceEpisodes: ["ep_1"], now: 1_000,
+    });
+    await appendPlaybookEvents(workspace, [{ v: 1, op: "add", ts: 1_000, entry, evidence: [], reason: "test" }]);
+    const exp = {
+      ...experiment(workspace),
+      minSamplesPerArm: 2,
+      budget: { maxRuns: 4, maxUsd: null, maxWallMs: null },
+    };
+    await createExperiment(workspace, exp);
+
+    for (let i = 0; i < 4; i += 1) {
+      const ep = projectEpisode({
+        events: [
+          { type: "user_message", content: `修复 parser 报错 ${i}` } as AgentEvent,
+          { type: "usage", inputTokens: 10, outputTokens: 2 } as AgentEvent,
+        ],
+        workspace,
+        sessionId: `s-${i}`,
+        logPath: join(workspace, `events-${i}.jsonl`),
+        observedAt: 2_000 + i,
+        assignment: {
+          source: "sidecar",
+          experimentId: exp.id,
+          arm: i % 2 === 0 ? "control" : "treatment",
+          propensity: 0.5,
+          policyVersion: "evolve-v1",
+          injectedExperienceIds: i % 2 === 0 ? [] : [entry.id],
+          injectedChars: i % 2 === 0 ? 0 : 40,
+        },
+      });
+      await appendEpisode(workspace, ep);
+    }
+
+    const injection = await prepareEvolutionInjection({
+      workspace,
+      sessionId: "s-after-budget",
+      taskContent: "修复 parser 的报错",
+      now: 5_000,
+    });
+    expect(injection.experimentId).toBeNull();
+    expect(injection.arm).toBe("none");
+    expect(injection.reason).toBe("experiment-budget-exhausted");
   });
 });

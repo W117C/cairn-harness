@@ -45,7 +45,6 @@ function sidebarHtml(sessions: Parameters<typeof Sidebar>[0]["sessions"]): strin
       running={new Set<string>()}
       waitingIds={new Set<string>()}
       outcomes={new Map<string, "ok" | "failed">()}
-      providerOk={null}
       onOpen={() => undefined}
       onNewTask={() => undefined}
       onOpenPalette={() => undefined}

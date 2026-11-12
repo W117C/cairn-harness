@@ -4,7 +4,15 @@ import { describe, expect, it } from "vitest";
 import { INVOKE_CHANNELS } from "../src/main/channels";
 import { IPC_PROTOCOL_VERSION } from "../../../src/main/ipc-protocol";
 
-const repo = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
+const repo = (rel: string): string => {
+  if (rel === "../src/main/index.ts") {
+    return [
+      readFileSync(fileURLToPath(new URL("../src/main/index.ts", import.meta.url)), "utf8"),
+      readFileSync(fileURLToPath(new URL("../src/main/plugin-ipc.ts", import.meta.url)), "utf8"),
+    ].join("\n");
+  }
+  return readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
+};
 
 describe("plugin marketplace catalog wiring", () => {
   it("keeps the read-only catalog channel at protocol v51", () => {

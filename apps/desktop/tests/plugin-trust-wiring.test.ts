@@ -23,7 +23,7 @@ describe("技能信任接线", () => {
     expect(sh).toContain("if (pluginSnapshotWorkspace === ws) pluginSnapshot = null");
     expect(read("../../../src/main/ipc-protocol.ts")).toContain("pluginDecide(plugin: string, trusted: boolean, workspace?: string)");
     // 2026-10-21 批 133：workspace 参数不再任意直通——先过已登记根闸，再交给运行时。
-    const main = read("../src/main/index.ts");
+    const main = [read("../src/main/index.ts"), read("../src/main/plugin-ipc.ts")].join("\n");
     expect(main).toContain("resolveProvidedWorkspace(workspace, await knownProjectRoots(), workspaceContext())");
     expect(main).toContain("handlePluginDecide(plugin as string, trusted as boolean, gate.workspace)");
     expect(main).not.toContain('String(workspace ?? "") || workspaceContext');

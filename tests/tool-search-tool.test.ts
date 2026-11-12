@@ -130,4 +130,56 @@ describe("tool_search runtime wiring", () => {
     expect(denied.output).toContain("[permission denied]");
     expect(calls).toHaveLength(0);
   });
+
+  it("lets the model discover, activate and call one tool using a compact receipt", async () => {
+    const { rt, active, calls } = fakeRuntime();
+    for (const name of installPluginTools(rt)) injected.add(name);
+    const ctx = { workspace: process.cwd() };
+    const surface = pluginToolSpecsFromRuntime(rt).find((t) => t.name === "tool_search")!;
+    expect(surface.parameters.required).toContain("detail");
+    const summary = await TOOLS["tool_search"]!.run({ query: scoped("echo"), detail: "summary", max_results: 1 }, ctx);
+    const hit = JSON.parse(summary.output).hits[0];
+    expect(hit.name).toBe(scoped("echo"));
+    expect(hit.active).toBe(false);
+    expect(hit.inputSchema).toBeUndefined();
+    expect(hit.next_call).toEqual({ name: "mcp_activate", arguments: { server: SERVER, tool: scoped("echo") } });
+    expect(active.size).toBe(0);
+    const full = await TOOLS["tool_search"]!.run({ query: scoped("echo"), detail: "schema", max_results: 1 }, ctx);
+    const fullHit = JSON.parse(full.output).hits[0];
+    expect(fullHit.inputSchema).toEqual(rt.mcpTools.get(scoped("echo"))!.inputSchema);
+    expect(fullHit.next_call).toEqual(hit.next_call);
+
+    expect((await TOOLS[hit.next_call.name]!.run(hit.next_call.arguments, ctx)).ok).toBe(true);
+    expect([...active]).toEqual([scoped("echo")]);
+    const nextFace = pluginToolSpecsFromRuntime(rt);
+    expect(nextFace.find((t) => t.name === scoped("echo"))?.parameters).toEqual(rt.mcpTools.get(scoped("echo"))!.inputSchema);
+    expect(nextFace.some((t) => t.name === scoped("write_note"))).toBe(false);
+    setToolGateDeps({ currentSession: () => readOnlyGateSession(ctx.workspace) });
+    const result = await resolveLivePluginTool(scoped("echo"), rt)!.run({ text: "receipt" }, ctx);
+    expect(result.ok).toBe(true);
+    expect(calls).toEqual([{ tool: "echo", args: { text: "receipt" } }]);
+  });
+
+  it("honors a legacy tool_name receipt without activating the entire server", async () => {
+    const { rt, active } = fakeRuntime();
+    const activateServer = vi.spyOn(rt, "activateMcpServer");
+    for (const name of installPluginTools(rt)) injected.add(name);
+    const result = await TOOLS["mcp_activate"]!.run({ server: SERVER, tool_name: scoped("echo") }, { workspace: process.cwd() });
+    expect(result.ok).toBe(true);
+    expect([...active]).toEqual([scoped("echo")]);
+    expect(activateServer).not.toHaveBeenCalled();
+  });
+
+  it.each([{ tool: "" }, { tool: null }, { tools: [] }, { tools: ["echo", 1] }, { toolName: "echo" }, { tool: "echo", tool_name: "write_note" }])(
+    "rejects an invalid selector instead of broadening activation %j",
+    async (selector) => {
+      const { rt, active } = fakeRuntime();
+      const activateServer = vi.spyOn(rt, "activateMcpServer");
+      for (const name of installPluginTools(rt)) injected.add(name);
+      const result = await TOOLS["mcp_activate"]!.run({ server: SERVER, ...selector }, { workspace: process.cwd() });
+      expect(result.ok).toBe(false);
+      expect(active.size).toBe(0);
+      expect(activateServer).not.toHaveBeenCalled();
+    },
+  );
 });

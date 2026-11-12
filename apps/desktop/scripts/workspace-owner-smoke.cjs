@@ -1,5 +1,6 @@
 // Real application main + preload; two temporary projects, no model requests.
 const { app, BrowserWindow } = require('electron');
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
 const { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { tmpdir } = require('node:os');
@@ -29,7 +30,7 @@ const check = (name, ok, detail) => { checks.push({ name, ok, detail }); console
 const save = () => writeFileSync(output, JSON.stringify({ checks }, null, 2));
 const cleanup = () => {
   for (const win of BrowserWindow.getAllWindows()) win.destroy();
-  rmSync(root, { recursive: true, force: true });
+  scheduleProfileCleanup(root);
 };
 async function waitFor(fn, label) {
   const until = Date.now() + 20000;

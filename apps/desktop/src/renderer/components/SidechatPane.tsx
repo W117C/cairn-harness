@@ -6,7 +6,7 @@
 //   · 模型解析走 core 的 sidechat 面（CAIRN_API_KEY→GLM / 演示脚本 / fail-closed）——不可用时
 //     原文展示错误，不假装能答。
 import { isCompositionEnter } from "../ime";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MessageCirclePlus, Send } from "lucide-react";
 import type { SidechatPanelSnapshot } from "../../../../../src/main/ipc-protocol";
 
@@ -37,8 +37,9 @@ export function SidechatPane(props: { sessionId: string | null }): React.JSX.Ele
     refresh();
   }, [refresh]);
 
-  const sessions = snap?.sessions ?? [];
-  const current = sessions.find((s) => s.id === active) ?? sessions[0] ?? null;
+  // 第 1164 页：旁路会话列表/当前项按快照与选择记忆；输入与提示变化不重扫。
+  const sessions = useMemo(() => snap?.sessions ?? [], [snap]);
+  const current = useMemo(() => sessions.find((s) => s.id === active) ?? sessions[0] ?? null, [sessions, active]);
   const currentId = current?.id ?? null;
   useEffect(() => { bottomRef.current?.scrollIntoView({ block: "end" }); }, [current?.messages.length, busy]);
 

@@ -1,0 +1,72 @@
+{
+  "note": "临时 CSS 覆盖生成的方向样板，产品源码未改；左=现在，中=轻度，右=明显。",
+  "theme": "dark",
+  "viewport": [
+    1440,
+    900
+  ],
+  "chipOpened": true,
+  "popOpen": true,
+  "errors": [],
+  "tokenProbe": {
+    "now": {
+      "htmlBg100": "0 0% 8.2%",
+      "bodyBg100": "from #151515 h s l",
+      "bodySurface1": "#151515",
+      "bodySurface2": "#1a1a19",
+      "bodyDswBase": "#151515",
+      "bodyAttrs": [
+        "data-dsh-claude-style=",
+        "data-dsh-claude-palette=claude",
+        "data-dsh-claude-brand=claude",
+        "data-ds-dark-theme="
+      ],
+      "mainBg": "color(srgb 0.0823529 0.0823529 0.0823529)",
+      "composerBg": "rgb(26, 26, 25)"
+    },
+    "light": {
+      "htmlBg100": "0 0% 8.2%",
+      "bodyBg100": "from #151515 h s l",
+      "bodySurface1": "#151515",
+      "bodySurface2": "#1a1a19",
+      "bodyDswBase": "#151515",
+      "bodyAttrs": [
+        "data-dsh-claude-style=",
+        "data-dsh-claude-palette=claude",
+        "data-dsh-claude-brand=claude",
+        "data-ds-dark-theme="
+      ],
+      "mainBg": "rgb(27, 27, 27)",
+      "composerBg": "rgb(48, 48, 46)"
+    },
+    "strong": {
+      "htmlBg100": "0 0% 8.2%",
+      "bodyBg100": "from #151515 h s l",
+      "bodySurface1": "#151515",
+      "bodySurface2": "#1a1a19",
+      "bodyDswBase": "#151515",
+      "bodyAttrs": [
+        "data-dsh-claude-style=",
+        "data-dsh-claude-palette=claude",
+        "data-dsh-claude-brand=claude",
+        "data-ds-dark-theme="
+      ],
+      "mainBg": "rgb(33, 33, 33)",
+      "composerBg": "rgb(57, 57, 55)"
+    }
+  },
+  "options": {
+    "A": {
+      "title": "暗色层级与颜色艳度",
+      "now": "",
+      "light": "\n[data-theme=\"dark\"] .main { background: hsl(0 0% 10.5%) !important; }\n[data-theme=\"dark\"] .side-wrap { background: hsl(60 3.4% 13.5%) !important; }\n[data-theme=\"dark\"] .composer-card,\n[data-theme=\"dark\"] .pop { background: hsl(60 2.4% 18.4%) !important; }\n[data-theme=\"dark\"] .composer-card,\n[data-theme=\"dark\"] .pop,\n[data-theme=\"dark\"] .empty-chip,\n[data-theme=\"dark\"] .empty-context-item { border-color: hsl(0 0% 100% / 22%) !important; }",
+      "strong": "\n[data-theme=\"dark\"] .main { background: hsl(0 0% 10.5%) !important; }\n[data-theme=\"dark\"] .side-wrap { background: hsl(60 3.4% 13.5%) !important; }\n[data-theme=\"dark\"] .composer-card,\n[data-theme=\"dark\"] .pop { background: hsl(60 2.4% 18.4%) !important; }\n[data-theme=\"dark\"] .composer-card,\n[data-theme=\"dark\"] .pop,\n[data-theme=\"dark\"] .empty-chip,\n[data-theme=\"dark\"] .empty-context-item { border-color: hsl(0 0% 100% / 22%) !important; }\n[data-theme=\"dark\"] .main { background: hsl(0 0% 13%) !important; }\n[data-theme=\"dark\"] .composer-card,\n[data-theme=\"dark\"] .pop { background: hsl(60 2.4% 22%) !important; }\n[data-theme=\"dark\"] .composer-card,\n[data-theme=\"dark\"] .pop,\n[data-theme=\"dark\"] .empty-chip,\n[data-theme=\"dark\"] .empty-context-item { border-color: hsl(0 0% 100% / 32%) !important; }\n[data-theme=\"dark\"] .app { filter: saturate(.8); }\n[data-theme=\"dark\"] .empty-greet-mark, [data-theme=\"dark\"] .chip.on { filter: saturate(.72); }"
+    },
+    "B": {
+      "title": "菜单打开时背景降层",
+      "now": "",
+      "light": "\nbody:has(.chip-pop.show)::after {\n  content: \"\"; position: fixed; inset: 0; z-index: 35; pointer-events: none;\n  background: hsl(0 0% 0% / 9%);\n}",
+      "strong": "\nbody:has(.chip-pop.show)::after {\n  content: \"\"; position: fixed; inset: 0; z-index: 35; pointer-events: none;\n  background: hsl(0 0% 0% / 20%);\n}\n.pop.chip-pop.show { box-shadow: 0 12px 34px hsl(0 0% 0% / 48%); }"
+    }
+  }
+}

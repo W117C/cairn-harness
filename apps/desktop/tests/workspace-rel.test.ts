@@ -28,7 +28,9 @@ describe("relInWorkspace", () => {
 
 describe("Composer 附件与历史附件同口径（2026-10-18）", () => {
   it("inWorkspace 与 chip 点击都走 relInWorkspace", () => {
-    const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/Composer.tsx", import.meta.url)), "utf8");
+    const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/Composer.tsx", import.meta.url)), "utf8")
+      + "\n"
+      + readFileSync(fileURLToPath(new URL("../src/renderer/components/ComposerAttachments.tsx", import.meta.url)), "utf8");
     expect(src).toContain('import { relInWorkspace } from "../workspace-rel";');
     expect(src).toContain("const inWorkspace = (p: string): boolean => relInWorkspace(wsPath, p) !== null;");
     expect(src).toContain("const rel = relInWorkspace(wsPath, a.path);");

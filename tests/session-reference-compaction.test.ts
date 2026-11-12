@@ -167,6 +167,42 @@ describe("裁剪替换按来源", () => {
 });
 
 describe("分叉会话的压缩生产端产出来源形式", () => {
+  it("fits a later overflow without reusing an excluded local event as its anchor", async () => {
+    const { ws, root } = await workspace();
+    const parent = await writeSession(root, "parent", [user("PARENT_GOAL"), assistant("PARENT_FACT")]);
+    const ref = (eventId: number) => ({ workspace: ws, sessionId: "child", eventId });
+    const recent = "recent data ".repeat(2_000);
+    const local: AgentEvent[] = [
+      forkMeta(parent, 2, "parent"),
+      user("ORIGINAL_CONSTRAINT"),
+      { type: "tool_call", id: "old", name: "read_file", args: { path: "old.ts" } },
+      { type: "tool_result", callId: "old", ok: true, output: "older data ".repeat(1_700) },
+      assistant("ALREADY_REMOVED".repeat(1_000)),
+      { type: "compaction", trigger: "auto", reason: "threshold", reference_version: 1,
+        compressed_event_refs: [ref(5)], summary_anchor: { before: ref(7) }, superseded_summary_refs: [],
+        summary: "PREVIOUS_FACT", tokens_before: 10_000, tokens_after: 100 },
+      user("LATEST_CONSTRAINT"),
+      assistant(recent),
+    ];
+    const child = await writeSession(root, "child", local);
+    const view = await readSessionView({ workspace: ws, sessionId: "child" }, root);
+    const outcome = await runCompaction({
+      events: await replay(child), view, trigger: "overflow", reason: "hard_buffer",
+      config: { inputLimit: 10_000, maxOutputReserve: 2_000 },
+    });
+    if (!outcome.ok || !isReferencedCompaction(outcome.event)) throw new Error("missing referenced compaction");
+    expect(outcome.event.compressed_event_refs).toEqual([ref(3), ref(4)]);
+    expect(outcome.event.tokens_after).toBeLessThanOrEqual(8_000);
+    await writeSession(root, "child", [...local, outcome.event]);
+    const projected = text(projectViewContext(await readSessionView({ workspace: ws, sessionId: "child" }, root)));
+    expect(projected).toContain("PARENT_FACT");
+    expect(projected).toContain("ORIGINAL_CONSTRAINT");
+    expect(projected).toContain("LATEST_CONSTRAINT");
+    expect(projected).toContain(recent);
+    expect(projected.split("PREVIOUS_FACT")).toHaveLength(2);
+    expect(projected).not.toContain("ALREADY_REMOVED");
+  });
+
   it("摘除是本文件 EventRef、旧摘要进 superseded；投影只注入新摘要", async () => {
     const { ws, root } = await workspace();
     const parent = await writeSession(root, "parent", [

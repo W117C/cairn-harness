@@ -8,6 +8,7 @@
 //   env -u ELECTRON_RUN_AS_NODE npx electron scripts/repro-new-session-jump.cjs \
 //     /Users/ze/Downloads/Cairn/cairn/.tmp/audit-design/session-jump/real
 const { app, BrowserWindow, nativeTheme } = require("electron");
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
 const { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } = require("node:fs");
 const { join, resolve } = require("node:path");
 const { tmpdir } = require("node:os");
@@ -176,7 +177,7 @@ async function main() {
 function finish(code) {
   writeFileSync(join(out, "checks.json"), JSON.stringify({ checks, errors }, null, 2));
   for (const w of BrowserWindow.getAllWindows()) w.destroy();
-  rmSync(root, { recursive: true, force: true });
+  scheduleProfileCleanup(root);
   app.exit(code);
 }
 const watchdog = setTimeout(() => { console.error("repro 超时"); finish(2); }, 150000);

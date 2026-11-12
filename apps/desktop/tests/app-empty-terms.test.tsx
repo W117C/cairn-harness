@@ -27,11 +27,11 @@ describe("批 6：四页空状态（数据为 0 只显示 EmptyState，不摆统
     expect(h).not.toContain("ap-summary");
   });
 
-  it("技能：「还没有技能。在输入框输入技能名即可调用。」+ 统计行不在场", () => {
+  it("技能：「还没有技能。输入技能名即可调用。」+ 统计行不在场", () => {
     const h = renderToStaticMarkup(<SkillsPane snap={PLUGINS_EMPTY} onError={noop} refresh={noop} />);
     expect(h).toContain("ss-empty");
     expect(h).toContain("还没有技能");
-    expect(h).toContain("在输入框输入技能名即可调用");
+    expect(h).toContain("输入技能名即可调用");
     expect(h).not.toContain("ap-stats");
     expect(h).not.toContain("ap-summary");
   });

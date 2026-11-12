@@ -236,6 +236,9 @@ const SIDE_EFFECT_TOOLS: ReadonlySet<string> = new Set([
   // 派生本身的审批在 orchestrator 按风险分级出卡（租约相交 / pipeline / supervise / merge）。
   // 变异锚点：删掉本行 ⇒ session-tools「只读档随写向工具一并摘除」必红（实测）。
   "spawn_agent",
+  // fs_ops（2026-11-10）：文件生命周期（mkdir/move/rename/delete）= 写向操作。漏登的后果
+  // 与 apply_patch 那条同形：只读档不摘除、方案门不挡、沙箱通道对它失效。
+  "fs_ops",
 ]);
 
 export function isSideEffectTool(tool: string): boolean {
@@ -263,6 +266,9 @@ export function isNetworkCommandCall(tool: ToolName, args: Record<string, unknow
   // web_search / browser_navigate 同族：检索与侧栏页加载都出网、都带回外部不可信内容
   // ⇒ 同一条口径（scope 钉 once + 卡面措辞）。runtime 注入名同样不在 TOOL_NAMES 联合里。
   if ((tool as string) === "web_fetch" || (tool as string) === "web_search") return true;
+  // web_doc（2026-11-10）：出网家族第四个名字——同一条口径（scope 钉 once，
+  // 「总是允许」点一次不得把出网写成永久免批）。
+  if ((tool as string) === "web_doc") return true;
   if ((tool as string) === "browser_navigate") return true;
   if (!isShellFamily(tool)) return false;
   return isNetworkCommand(typeof args.command === "string" ? args.command : undefined);

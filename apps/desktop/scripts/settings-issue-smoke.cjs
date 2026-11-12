@@ -2,6 +2,7 @@
 // （v26 StateResponse.settingsIssue 的端到端接线）。不使用产品用户数据：profile/工作区都在临时目录。
 // ELECTRON_RUN_AS_NODE= pnpm --filter cairn-desktop exec electron scripts/settings-issue-smoke.cjs [输出目录]
 const { app, BrowserWindow } = require('electron');
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
 const { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { tmpdir } = require('node:os');
@@ -37,7 +38,7 @@ async function waitFor(predicate, label) {
 function finish(code) {
   writeFileSync(join(out, 'checks.json'), JSON.stringify({ fixtureData: true, checks, errors }, null, 2));
   for (const win of BrowserWindow.getAllWindows()) win.destroy();
-  rmSync(root, { recursive: true, force: true });
+  scheduleProfileCleanup(root);
   console.log('Evidence: ' + out);
   app.exit(code);
 }

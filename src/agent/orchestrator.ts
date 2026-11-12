@@ -259,6 +259,7 @@ export class Orchestrator {
       markAgentOwner: (agentId) => agentOwners.set(agentId, this),
       runWorker: (w) => this.runWorker(w),
       releaseWorkerMemory: (w) => this.releaseWorkerMemory(w),
+      ...(this.opts.conflictRadar !== undefined ? { conflictRadar: this.opts.conflictRadar } : {}),
       rootSignal: this.root.signal, // 评审重启消费（B3 同族：拒绝已取消会话的重启 + 重挂监听）
     });
     this.wf = new WorkerFinish({
@@ -808,6 +809,7 @@ export class Orchestrator {
       // 拿不到档（未路由 / 注入模型）就等于没有阶梯，而不是从角色表再猜一份。
       ...(routeDecision ? { routeTier: routeDecision.tier, routePicked: routeDecision.picked } : {}),
       events: [],
+      touchedFiles: new Set<string>(),
       usage: { inputTokens: 0, outputTokens: 0 },
       toolStats: {},
       finished: false,
@@ -1418,6 +1420,11 @@ export class Orchestrator {
         kind: "progress",
         text: scannedContent.slice(0, 500),
       } as AgentEvent);
+    }
+    // 第 1074 页：改动面累积（合并时点的语义冲突雷达只认「这一跑落地写过哪些文件」）。
+    // 只认真实回执的 changedPaths——从 assistant 文本里猜路径是第二套事实源，不做。
+    if (e.type === "tool_result" && e.changedPaths !== undefined) {
+      for (const p of e.changedPaths) w.touchedFiles.add(p);
     }
     // M3c 卡死判定：tool_result 到达后跑纯函数检测器（触发 → waiting_input(stuck) + 提醒 + 暂停）
     if (e.type === "tool_result") {

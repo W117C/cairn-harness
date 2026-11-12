@@ -1,0 +1,548 @@
+{
+  "theme": "light",
+  "checks": [
+    {
+      "name": "第 1046 页 · 等待占位行有 Claude 同档入场动画（computed）",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "name": "cairn-placeholder-reveal",
+        "duration": "0.15s",
+        "fill": "both"
+      }
+    },
+    {
+      "name": "逐词流式全程不闪（23 拍，含 3 次块结构易主）",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "frames": 23,
+        "badFrames": [],
+        "wordRange": [
+          1,
+          8
+        ],
+        "animNames": [
+          "md-word-arrive"
+        ]
+      }
+    },
+    {
+      "name": "已输出的首词不透明度不回退（旧病灶：animTime 重置到 83ms 重播）",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "dips": [],
+        "firstTexts": [
+          "这是一个",
+          "-",
+          "第一项",
+          "随后"
+        ]
+      }
+    },
+    {
+      "name": "词色恒中性墨，不落品牌橙（canvas 色偏尺 + 双令牌基线自证）",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "badFrames": [],
+        "textSpread": 0,
+        "brandSpread": 130,
+        "methodOk": true,
+        "textBase": "color(srgb 0.0431373 0.0431373 0.0431373)",
+        "brandBase": "color(srgb 0.85098 0.466667 0.341177)"
+      }
+    },
+    {
+      "name": "助手行只在首绘入场一次（row-in）；流式稳定后每行 opacity 恒 1",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "firstFrames": [
+          [
+            "0"
+          ],
+          [
+            "1"
+          ]
+        ],
+        "laterFrames": [
+          "1"
+        ]
+      }
+    },
+    {
+      "name": "收束后历史正文不多包 md-word 节点",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "mdWord": 0
+      }
+    }
+  ],
+  "consoleErrors": [],
+  "pageErrors": [],
+  "samples": [
+    {
+      "i": 0,
+      "tok": "这是一个",
+      "ok": true,
+      "words": 1,
+      "badOpacity": [],
+      "badColor": [],
+      "animNames": [
+        "md-word-arrive"
+      ],
+      "textBase": "color(srgb 0.0431373 0.0431373 0.0431373)",
+      "brandBase": "color(srgb 0.85098 0.466667 0.341177)",
+      "textSpread": 0,
+      "brandSpread": 130,
+      "methodOk": true,
+      "rowOpacity": [
+        "0"
+      ],
+      "firstText": "这是一个"
+    },
+    {
+      "i": 1,
+      "tok": "**重要的**",
+      "ok": true,
+      "words": 1,
+      "badOpacity": [],
+      "badColor": [],
+      "animNames": [
+        "md-word-arrive"
+      ],
+      "textBase": "color(srgb 0.0431373 0.0431373 0.0431373)",
+      "brandBase": "color(srgb 0.85098 0.466667 0.341177)",
+      "textSpread": 0,
+      "brandSpread": 130,
+      "methodOk": true,
+      "rowOpacity": [
+        "1"
+      ],
+      "firstText": "这是一个"
+    },
+    {
+      "i": 2,
+      "tok": "结论",
+      "ok": true,
+      "words": 2,
+      "badOpacity": [],
+      "badColor": [],
+      "animNames": [
+        "md-word-arrive"
+      ],
+      "textBase": "color(srgb 0.0431373 0.0431373 0.0431373)",
+      "brandBase": "color(srgb 0.85098 0.466667 0.341177)",
+      "textSpread": 0,
+      "brandSpread": 130,
+      "methodOk": true,
+      "rowOpacity": [
+        "1"
+      ],
+      "firstText": "这是一个"
+    },
+    {
+      "i": 3,
+      "tok": "：",
+      "ok": true,
+      "words": 3,
+      "badOpacity": [],
+      "badColor": [],
+      "animNames": [
+        "md-word-arrive"
+      ],
+      "textBase": "color(srgb 0.0431373 0.0431373 0.0431373)",
+      "brandBase": "color(srgb 0.85098 0.466667 0.341177)",
+      "textSpread": 0,
+      "brandSpread": 130,
+      "methodOk": true,
+      "rowOpacity": [
+        "1"
+      ],
+      "firstText": "这是一个"
+    },
+    {
+      "i": 4,
+      "tok": "我们",
+      "ok": true,
+      "words": 4,
+      "badOpacity": [],
+      "badColor": [],
+      "animNames": [
+        "md-word-arrive"
+      ],
+      "textBase": "color(srgb 0.0431373 0.0431373 0.0431373)",
+      "brandBase": "color(srgb 0.85098 0.466667 0.341177)",
+      "textSpread": 0,
+      "brandSpread": 130,
+      "methodOk": true,
+      "rowOpacity": [
+        "1"
+      ],
+      "firstText": "这是一个"
+    },
+    {
+      "i": 5,
+      "tok": "需要",
+      "ok": true,
+      "words": 5,
+      "badOpacity": [],
+      "badColor": [],
+      "animNames": [
+        "md-word-arrive"
+      ],
+      "textBase": "color(srgb 0.0431373 0.0431373 0.0431373)",
+      "brandBase": "color(srgb 0.85098 0.466667 0.341177)",
+      "textSpread": 0,
+      "brandSpread": 130,
+      "methodOk": true,
+      "rowOpacity": [
+        "1"
+      ],
+      "firstText": "这是一个"
+    },
+    {
+      "i": 6,
+      "tok": "核对",
+      "ok": true,
+      "words": 6,
+      "badOpacity": [],
+      "badColor": [],
+      "animNames": [
+        "md-word-arrive"
+      ],
+      "textBase": "color(srgb 0.0431373 0.0431373 0.0431373)",
+      "brandBase": "color(srgb 0.85098 0.466667 0.341177)",
+      "textSpread": 0,
+      "brandSpread": 130,
+      "methodOk": true,
+      "rowOpacity": [
+        "1"
+      ],
+      "firstText": "这是一个"
+    },
+    {
+      "i": 7,
+      "tok": "每一项",
+      "ok": true,
+      "words": 7,
+      "badOpacity": [],
+      "badColor": [],
+      "animNames": [
+        "md-word-arrive"
+      ],
+      "textBase": "color(srgb 0.0431373 0.0431373 0.0431373)",
+      "brandBase": "color(srgb 0.85098 0.466667 0.341177)",
+      "textSpread": 0,
+      "brandSpread": 130,
+      "methodOk": true,
+      "rowOpacity": [
+        "1"
+      ],
+      "firstText": "这是一个"
+    },
+    {
+      "i": 8,
+      "tok": "配置",
+      "ok": true,
+      "words": 8,
+      "badOpacity": [],
+      "badColor": [],
+      "animNames": [
+        "md-word-arrive"
+      ],
+      "textBase": "color(srgb 0.0431373 0.0431373 0.0431373)",
+      "brandBase": "color(srgb 0.85098 0.466667 0.341177)",
+      "textSpread": 0,
+      "brandSpread": 130,
+      "methodOk": true,
+      "rowOpacity": [
+        "1"
+      ],
+      "firstText": "这是一个"
+    },
+    {
+      "i": 9,
+      "tok": "。\n\n-",
+      "ok": true,
+      "words": 1,
+      "badOpacity": [],
+      "badColor": [],
+      "animNames": [
+        "md-word-arrive"
+      ],
+      "textBase": "color(srgb 0.0431373 0.0431373 0.0431373)",
+      "brandBase": "color(srgb 0.85098 0.466667 0.341177)",
+      "textSpread": 0,
+      "brandSpread": 130,
+      "methodOk": true,
+      "rowOpacity": [
+        "1"
+      ],
+      "firstText": "-"
+    },
+    {
+      "i": 10,
+      "tok": "第一项",
+      "ok": true,
+      "words": 1,
+      "badOpacity": [],
+      "badColor": [],
+      "animNames": [
+        "md-word-arrive"
+      ],
+      "textBase": "color(srgb 0.0431373 0.0431373 0.0431373)",
+      "brandBase": "color(srgb 0.85098 0.466667 0.341177)",
+      "textSpread": 0,
+      "brandSpread": 130,
+      "methodOk": true,
+      "rowOpacity": [
+        "1"
+      ],
+      "firstText": "第一项"
+    },
+    {
+      "i": 11,
+      "tok": "检查",
+      "ok": true,
+      "words": 2,
+      "badOpacity": [],
+      "badColor": [],
+      "animNames": [
+        "md-word-arrive"
+      ],
+      "textBase": "color(srgb 0.0431373 0.0431373 0.0431373)",
+      "brandBase": "color(srgb 0.85098 0.466667 0.341177)",
+      "textSpread": 0,
+      "brandSpread": 130,
+      "methodOk": true,
+      "rowOpacity": [
+        "1"
+      ],
+      "firstText": "第一项"
+    },
+    {
+      "i": 12,
+      "tok": "接口\n-",
+      "ok": true,
+      "words": 1,
+      "badOpacity": [],
+      "badColor": [],
+      "animNames": [
+        "md-word-arrive"
+      ],
+      "textBase": "color(srgb 0.0431373 0.0431373 0.0431373)",
+      "brandBase": "color(srgb 0.85098 0.466667 0.341177)",
+      "textSpread": 0,
+      "brandSpread": 130,
+      "methodOk": true,
+      "rowOpacity": [
+        "1"
+      ],
+      "firstText": "-"
+    },
+    {
+      "i": 13,
+      "tok": "第二项",
+      "ok": true,
+      "words": 4,
+      "badOpacity": [],
+      "badColor": [],
+      "animNames": [
+        "md-word-arrive"
+      ],
+      "textBase": "color(srgb 0.0431373 0.0431373 0.0431373)",
+      "brandBase": "color(srgb 0.85098 0.466667 0.341177)",
+      "textSpread": 0,
+      "brandSpread": 130,
+      "methodOk": true,
+      "rowOpacity": [
+        "1"
+      ],
+      "firstText": "第一项"
+    },
+    {
+      "i": 14,
+      "tok": "核对",
+      "ok": true,
+      "words": 5,
+      "badOpacity": [],
+      "badColor": [],
+      "animNames": [
+        "md-word-arrive"
+      ],
+      "textBase": "color(srgb 0.0431373 0.0431373 0.0431373)",
+      "brandBase": "color(srgb 0.85098 0.466667 0.341177)",
+      "textSpread": 0,
+      "brandSpread": 130,
+      "methodOk": true,
+      "rowOpacity": [
+        "1"
+      ],
+      "firstText": "第一项"
+    },
+    {
+      "i": 15,
+      "tok": "默认值\n\n随后",
+      "ok": true,
+      "words": 1,
+      "badOpacity": [],
+      "badColor": [],
+      "animNames": [
+        "md-word-arrive"
+      ],
+      "textBase": "color(srgb 0.0431373 0.0431373 0.0431373)",
+      "brandBase": "color(srgb 0.85098 0.466667 0.341177)",
+      "textSpread": 0,
+      "brandSpread": 130,
+      "methodOk": true,
+      "rowOpacity": [
+        "1"
+      ],
+      "firstText": "随后"
+    },
+    {
+      "i": 16,
+      "tok": "再看",
+      "ok": true,
+      "words": 2,
+      "badOpacity": [],
+      "badColor": [],
+      "animNames": [
+        "md-word-arrive"
+      ],
+      "textBase": "color(srgb 0.0431373 0.0431373 0.0431373)",
+      "brandBase": "color(srgb 0.85098 0.466667 0.341177)",
+      "textSpread": 0,
+      "brandSpread": 130,
+      "methodOk": true,
+      "rowOpacity": [
+        "1"
+      ],
+      "firstText": "随后"
+    },
+    {
+      "i": 17,
+      "tok": "代码块",
+      "ok": true,
+      "words": 3,
+      "badOpacity": [],
+      "badColor": [],
+      "animNames": [
+        "md-word-arrive"
+      ],
+      "textBase": "color(srgb 0.0431373 0.0431373 0.0431373)",
+      "brandBase": "color(srgb 0.85098 0.466667 0.341177)",
+      "textSpread": 0,
+      "brandSpread": 130,
+      "methodOk": true,
+      "rowOpacity": [
+        "1"
+      ],
+      "firstText": "随后"
+    },
+    {
+      "i": 18,
+      "tok": "与",
+      "ok": true,
+      "words": 4,
+      "badOpacity": [],
+      "badColor": [],
+      "animNames": [
+        "md-word-arrive"
+      ],
+      "textBase": "color(srgb 0.0431373 0.0431373 0.0431373)",
+      "brandBase": "color(srgb 0.85098 0.466667 0.341177)",
+      "textSpread": 0,
+      "brandSpread": 130,
+      "methodOk": true,
+      "rowOpacity": [
+        "1"
+      ],
+      "firstText": "随后"
+    },
+    {
+      "i": 19,
+      "tok": "表格",
+      "ok": true,
+      "words": 5,
+      "badOpacity": [],
+      "badColor": [],
+      "animNames": [
+        "md-word-arrive"
+      ],
+      "textBase": "color(srgb 0.0431373 0.0431373 0.0431373)",
+      "brandBase": "color(srgb 0.85098 0.466667 0.341177)",
+      "textSpread": 0,
+      "brandSpread": 130,
+      "methodOk": true,
+      "rowOpacity": [
+        "1"
+      ],
+      "firstText": "随后"
+    },
+    {
+      "i": 20,
+      "tok": "是否",
+      "ok": true,
+      "words": 6,
+      "badOpacity": [],
+      "badColor": [],
+      "animNames": [
+        "md-word-arrive"
+      ],
+      "textBase": "color(srgb 0.0431373 0.0431373 0.0431373)",
+      "brandBase": "color(srgb 0.85098 0.466667 0.341177)",
+      "textSpread": 0,
+      "brandSpread": 130,
+      "methodOk": true,
+      "rowOpacity": [
+        "1"
+      ],
+      "firstText": "随后"
+    },
+    {
+      "i": 21,
+      "tok": "稳定",
+      "ok": true,
+      "words": 7,
+      "badOpacity": [],
+      "badColor": [],
+      "animNames": [
+        "md-word-arrive"
+      ],
+      "textBase": "color(srgb 0.0431373 0.0431373 0.0431373)",
+      "brandBase": "color(srgb 0.85098 0.466667 0.341177)",
+      "textSpread": 0,
+      "brandSpread": 130,
+      "methodOk": true,
+      "rowOpacity": [
+        "1"
+      ],
+      "firstText": "随后"
+    },
+    {
+      "i": 22,
+      "tok": "。",
+      "ok": true,
+      "words": 8,
+      "badOpacity": [],
+      "badColor": [],
+      "animNames": [
+        "md-word-arrive"
+      ],
+      "textBase": "color(srgb 0.0431373 0.0431373 0.0431373)",
+      "brandBase": "color(srgb 0.85098 0.466667 0.341177)",
+      "textSpread": 0,
+      "brandSpread": 130,
+      "methodOk": true,
+      "rowOpacity": [
+        "1"
+      ],
+      "firstText": "随后"
+    }
+  ]
+}

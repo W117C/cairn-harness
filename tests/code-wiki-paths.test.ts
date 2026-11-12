@@ -35,3 +35,19 @@ describe("CODE-WIKI 是一张能走通的地图（第 938 页）", () => {
     expect(read("apps/desktop/tests/render-structure.test.tsx")).toContain(inner);
   });
 });
+// 第 1181 页：地图的 Verification 段不能和门表说反。
+// 旧句「The gate manifest contains only core checks」与同文件开头「desktop-test 在 GATES/CERT_GATES」自相矛盾，
+// 实测 scripts/gate-manifest.ts 的 GATES/CERT_GATES 两处都含 desktop-test ⇒ 旧句是过期话。
+describe("CODE-WIKI 的门禁说明与门表同源（第 1181 页）", () => {
+  it("门表确有 desktop-test，且 Verification 段不许再说「只含核心检查」", () => {
+    const manifest = read("scripts/gate-manifest.ts");
+    // 必须按数组边界切：/GATES[\s\S]*desktop-test/ 会一路吃到 CERT_GATES，
+    // 把 GATES 里的条目删光也照样绿（本格第一版真踩到这个假绿）。
+    const gates = manifest.slice(manifest.indexOf("export const GATES"), manifest.indexOf("export const CERT_GATES"));
+    const certGates = manifest.slice(manifest.indexOf("export const CERT_GATES"));
+    expect(gates).toContain('"desktop-test"');
+    expect(certGates).toContain('name: "desktop-test"');
+    expect(wiki).toContain("`desktop-test` is in both `GATES` and `CERT_GATES`");
+    expect(wiki).not.toContain("The gate manifest contains only core checks in this checkout.");
+  });
+});

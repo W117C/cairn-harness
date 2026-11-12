@@ -1,14 +1,15 @@
 // 启动检查更新的真实 renderer 冒烟（2026-10-30 · 第 810 页）。
 // 判：有更新源时启动会调 checkUpdate；发现新版本后 notice 上屏；不弹错误、不自动下载。
 const { app, BrowserWindow, nativeTheme } = require("electron");
-const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
+const { mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
 const { join, resolve } = require("node:path");
 const { tmpdir } = require("node:os");
 
 const profile = mkdtempSync(join(tmpdir(), "cairn-update-profile-"));
 app.setPath("userData", profile);
 nativeTheme.themeSource = "light";
-app.on("quit", () => { rmSync(profile, { recursive: true, force: true }); });
+app.on("quit", () => scheduleProfileCleanup(profile));
 const out = process.argv[2] ? resolve(process.argv[2]) : mkdtempSync(join(tmpdir(), "cairn-update-smoke-"));
 mkdirSync(out, { recursive: true });
 
@@ -61,8 +62,10 @@ async function main() {
   const calls = await js(`window.agent.getSettings().then(() => true)`);
   check("设置读取成功（没有把未配置源当错误）", calls === true, calls);
   // 第 811 页：notice 会随会话走，头像上的点不随会话走——点开菜单能到「关于与更新」。
-  check("头像按钮带更新红点", await js(`document.querySelector('.side-foot .avatar')?.getAttribute('data-update') === 'true'`), null);
-  const avatarClicked = await pointerOn(`document.querySelector('.side-foot .avatar')`);
+  // 落位按 2026-11-03 裁决改钉：侧栏页脚已删，头像入口在全局轨底部（`.app-rail-user`），
+  // 旧选择器 `.side-foot .avatar` 永远取不到 ⇒ 红点与菜单两格恒红（第 1059 页实测 4 PASS / 2 FAIL）。
+  check("头像按钮带更新红点", await js(`document.querySelector('.app-rail-user button.avatar')?.getAttribute('data-update') === 'true'`), null);
+  const avatarClicked = await pointerOn(`document.querySelector('.app-rail-user button.avatar')`);
   await waitFor(() => js(`document.body.innerText.includes('发现新版本 0.2.0')`), "update menu item");
   check("头像菜单里有「发现新版本 0.2.0」", avatarClicked === true && await js(`[...document.querySelectorAll('[role="menuitem"]')].some((el) => el.textContent.includes('发现新版本 0.2.0'))`), null);
   const clicked = await js(`(() => { const item = [...document.querySelectorAll('[role="menuitem"]')].find((el) => el.textContent.includes('发现新版本 0.2.0')); if (!item) return false; item.click(); return true; })()`);

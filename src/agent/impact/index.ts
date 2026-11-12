@@ -4,14 +4,13 @@
 // 缓存只写应用数据目录（~/.cairn-harness/impact-tags），绝不写进用户仓库。
 // 与 map 的差异：map 静默降级（ok:false）；影响面是「改代码护栏」，grammar
 // 环境级失败必须 fail-loud（ImpactUnavailableError，文案含 unavailable）。
-import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { fileSymbols, TAGS_EXTRACT_VERSION, TreeSitterUnavailableError, type ImportRef, type SymbolTag } from "../map/parse.js";
 import { resolveModuleSpecifier } from "../map/import-edge.js";
 import { applyFileCap, scanSourceFilesAll, type ScannedFile } from "../map/build.js";
 import { MAX_FILES_CEILING, MAX_FILES_DEFAULT } from "../map/cap.js";
+import { scheduleTagsCachePrune, tagsCacheDir, tagsCacheFile } from "../map/tags-cache.js";
 import { attributionNote, attributeRefToDef, bindingSourceKey, emptyAttributionStats, mixedSitesNote, type Attribution, type AttributionStats } from "./attribution.js";
 import { coverageNote, graphIsPartial } from "./coverage.js";
 import { currentCommitSha, impactIndexDirFor, loadImpactIndex, saveImpactIndex } from "./persist.js";
@@ -99,12 +98,7 @@ export const IMPACT_MAX_FILES_CEILING = MAX_FILES_CEILING;
 // ---- tags 磁盘缓存（同 map/build.ts 模式：{mtimeMs,size} 指纹；缓存只在 cacheDir 内）----
 
 export function defaultImpactCacheDir(): string {
-  return process.env.M7_IMPACT_TAGS_DIR ?? join(homedir(), ".cairn-harness", "impact-tags");
-}
-
-function cacheFileFor(dir: string, abs: string): string {
-  const key = createHash("sha1").update(abs).digest("hex");
-  return join(dir, key + ".json");
+  return process.env.M7_IMPACT_TAGS_DIR ?? tagsCacheDir("impact-tags");
 }
 
 interface ImpactTagsCacheEntry {
@@ -121,7 +115,7 @@ interface ImpactTagsCacheEntry {
 
 async function readTagsCache(dir: string, f: ScannedFile): Promise<{ tags: SymbolTag[]; imports: ImportRef[] } | null> {
   try {
-    const raw = await readFile(cacheFileFor(dir, f.abs), "utf8");
+    const raw = await readFile(tagsCacheFile(dir, f.abs), "utf8");
     const e = JSON.parse(raw) as ImpactTagsCacheEntry;
     if (e.v !== TAGS_EXTRACT_VERSION) return null; // 判据换过（含旧条目无 v 字段）→ 作废
     if (e.mtimeMs === f.mtimeMs && e.size === f.size && Array.isArray(e.tags) && Array.isArray(e.imports)) {
@@ -137,7 +131,7 @@ async function writeTagsCache(dir: string, f: ScannedFile, tags: SymbolTag[], im
   try {
     await mkdir(dir, { recursive: true });
     const entry: ImpactTagsCacheEntry = { v: TAGS_EXTRACT_VERSION, mtimeMs: f.mtimeMs, size: f.size, tags, imports };
-    await writeFile(cacheFileFor(dir, f.abs), JSON.stringify(entry), "utf8");
+    await writeFile(tagsCacheFile(dir, f.abs), JSON.stringify(entry), "utf8");
   } catch (err) {
     // 缓存写失败不影响本次建图（下次全量重解析），与 map 同口径
     console.debug("[impact] tags 缓存写失败（忽略）:", err instanceof Error ? err.message : String(err));
@@ -165,6 +159,7 @@ export async function buildImpact(opts: BuildImpactOptions): Promise<ImpactGraph
   const candidates = await scanSourceFilesAll(opts.workspace);
   const files = applyFileCap(candidates, cap);
   const dir = opts.cacheDir ?? defaultImpactCacheDir();
+  if (files.length > 0) scheduleTagsCachePrune(dir, "impact-tags");
 
   if (opts.persistIndex === true) {
     const wsAbs = resolve(opts.workspace);

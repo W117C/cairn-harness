@@ -13,13 +13,15 @@ const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, im
 const GUARDED: readonly (readonly [string, string])[] = [
   // 新建项目 / 项目设置：回车提交
   ["../src/renderer/components/NewProjectDialog.tsx", 'if (e.key === "Enter" && !isCompositionEnter(e, null)) { e.preventDefault(); submit(); }'],
-  ["../src/renderer/components/Sidebar.tsx", 'if (e.key === "Enter" && !isCompositionEnter(e, null)) { e.preventDefault(); submit(); }'],
+  ["../src/renderer/components/SidebarProjects.tsx", 'if (e.key === "Enter" && !isCompositionEnter(e, null)) { e.preventDefault(); submit(); }'],
   // 会话改名（行内 F2）/ 项目显示名行内改名 / 会话搜索
   ["../src/renderer/components/Sidebar.tsx", 'if (e.key === "Enter" && !isCompositionEnter(e, null)) { e.preventDefault(); props.onRenameCommit(); }'],
   ["../src/renderer/components/Sidebar.tsx", 'if (e.key === "Enter" && !isCompositionEnter(e, null)) {\n                          e.preventDefault();\n                          const v = renamingProject.value.trim();'],
   ["../src/renderer/components/Sidebar.tsx", 'if (e.key === "Enter" && !isCompositionEnter(e, null)) {\n                const first = visibleActive[0]'],
   // 设置数字框 / 更新源：回车 = blur（走既有校验）
-  ["../src/renderer/components/settings-sections.tsx", 'if (e.key === "Enter" && !isCompositionEnter(e, null)) { e.preventDefault(); e.currentTarget.blur(); }'],
+  // 第 1070–1071 页：数字框随 AdvancedSection、更新源随 AboutSection 拆到 settings/——锚随段走，两处各钉（不放宽）。
+  ["../src/renderer/components/settings/AdvancedSection.tsx", 'if (e.key === "Enter" && !isCompositionEnter(e, null)) { e.preventDefault(); e.currentTarget.blur(); }'],
+  ["../src/renderer/components/settings/AboutSection.tsx", 'if (e.key === "Enter" && !isCompositionEnter(e, null)) { e.preventDefault(); e.currentTarget.blur(); }'],
   // 设置导航搜索：组字期间回车与上下键均不跳转；实际键盘行为另由 settings-navigation-smoke 验证。
   ["../src/renderer/components/SettingsPanel.tsx", 'if (isCompositionEnter(e, null)) return;\n                if (e.key === "Enter" || e.key === "ArrowDown" || e.key === "ArrowUp")'],
   // 会话内查找
@@ -46,7 +48,10 @@ describe("IME：文本输入消费 Enter 前必须过 isCompositionEnter", () =>
     const offenders = [
       "../src/renderer/components/NewProjectDialog.tsx",
       "../src/renderer/components/Sidebar.tsx",
+      "../src/renderer/components/SidebarProjects.tsx",
       "../src/renderer/components/settings-sections.tsx",
+      "../src/renderer/components/settings/AdvancedSection.tsx",
+      "../src/renderer/components/settings/AboutSection.tsx",
       "../src/renderer/components/FindBar.tsx",
       "../src/renderer/components/SidechatPane.tsx",
       "../src/renderer/panes/AppToolbar.tsx",

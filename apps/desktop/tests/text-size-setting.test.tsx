@@ -16,11 +16,15 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readAppShell } from "./helpers/app-surface";
+import { STR } from "../src/renderer/strings";
 
 const tokens = readFileSync(fileURLToPath(new URL("../src/renderer/tokens.css", import.meta.url)), "utf8");
 const appSrc = readAppShell();
 const panelSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/SettingsPanel.tsx", import.meta.url)), "utf8");
-const sectionsSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/settings-sections.tsx", import.meta.url)), "utf8");
+// 第 1072 页：patch 白名单随纯函数资产解耦到叶子 settings/provider-assets.ts——钉五键的源文断言随资产走（不放宽）。
+const providerAssetsSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/settings/provider-assets.ts", import.meta.url)), "utf8");
+// 通用段第 1066 页按区拆分至 settings/GeneralSection.tsx；控件锚随正文走。
+const generalSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/settings/GeneralSection.tsx", import.meta.url)), "utf8");
 
 /** 从 tokens.css 抓 `--fs-<name>: calc(<rem>rem * var(--rem-scale))`。 */
 function fontSizeRem(name: string): number {
@@ -119,13 +123,16 @@ describe("接线（属性有人写、控件有人点）", () => {
   });
 
   it("设置页有控件，且走单键直写（不动 panelPatch 白名单）", () => {
-    expect(sectionsSrc).toContain("aria-label=\"文字大小\"");
+    // 第 1075 页：通用段收编进 STR 后，源文里是键不是字面量——钉「键 + 值」两半，
+    // 值锚保住「用户看到的就是『文字大小』」这一原意（只把形状从字面量迁到 STR，不放宽）。
+    expect(generalSrc).toContain("aria-label={STR.general.textSize}");
+    expect(STR.general.textSize).toBe("文字大小");
     expect(panelSrc).toContain('onTextSize={(next) => { setTextSize(next); void saveSettingKey("textSize", next); }}');
     // 反向：白名单仍是五键（那份判卷钉的；planRequiredByDefault 2026-11-03 出列）
-    expect(sectionsSrc).toContain('export const PANEL_PATCH_KEYS = ["provider", "model", "mode", "theme", "locale"] as const;');
+    expect(providerAssetsSrc).toContain('export const PANEL_PATCH_KEYS = ["provider", "model", "mode", "theme", "locale"] as const;');
   });
 
   it("三档预览各自变字号（点下去之前就看见差别）", () => {
-    expect(sectionsSrc).toContain('className="ts-thumb" data-ts={t.id}');
+    expect(generalSrc).toContain('className="ts-thumb" data-ts={t.id}');
   });
 });

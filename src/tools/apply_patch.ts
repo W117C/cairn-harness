@@ -65,13 +65,32 @@ interface Placement {
   offset: number;
 }
 
-/** 一个 hunk 的失败归因：位置 + 期望首行 + 该处实际首行。光说「对不上」等于让模型重读整个文件。 */
-function mismatchError(f: PatchFile, h: PatchHunk, seq: number, at: number, actual: string | undefined): string {
+/** 一个 hunk 的失败归因：位置 + 期望首行 + 该处实际首行。光说「对不上」等于让模型重读整个文件。
+ *  末尾追加「最像的位置」提示（edit_file 的 nearestHint 同族，只定位不替换）：缩进漂移是 hunk
+ *  失配的主成因（Aider 实测 hunk 病之首）。SWE-agent 实测失败编辑级联占总失败 23.4%、
+ *  首败后成功率 90.5%→57.2% ⇒ 失败回执必须设计成「可恢复」——把下一步直接放进报错里，
+ *  而不是让模型重读整个文件再猜。刻意**不静默放宽匹配**：空白模糊匹配被本仓既有裁决否过
+ *  （locate 的注释），这里只给定位信息，语义与逐字纪律不变。 */
+function hunkNearHint(lines: string[], expect: string): string {
+  const want = expect.trim();
+  if (want === "") return "";
+  const idx = lines.findIndex((l) => l.trim() === want);
+  if (idx < 0) return "";
+  // 只在「该行真实存在空白漂移」时出声：trim 相等但逐字不等 ⇒ 缩进确实变了，提示才有信息量；
+  // 逐字相等的行不值得指认（漂移在别的行，指这里就是把模型指去一处没病的地方）。
+  if (lines[idx] === expect) return "";
+  return `｜提示：文件第 ${String(idx + 1)} 行去掉缩进后与补丁上下文首行逐字相同——多半是缩进漂移：` +
+    `修补丁里这一段的缩进，或核对 @@ 旧侧行号是否声明在漂移前的版本上；别改文件去凑补丁。`;
+}
+
+function mismatchError(f: PatchFile, h: PatchHunk, seq: number, at: number, actual: string | undefined, lines: string[]): string {
   const expect = beforeOf(h)[0] ?? afterOf(h)[0] ?? "";
   const where = actual === undefined ? "文件到这里已经结束了" : `实际是 ${JSON.stringify(clip(actual))}`;
   return (
     `${f.path} 第 ${String(seq)} 个 hunk（补丁第 ${String(h.declaredAt)} 行，声明旧侧第 ${String(h.oldStart)} 行起）上下文对不上：` +
-    `期望 ${JSON.stringify(clip(expect))}，${where}`
+    `期望 ${JSON.stringify(clip(expect))}，${where}` +
+    // 纯新增 hunk（before 为空）时 expect 取的是新增侧首行，在旧文件里找它只会误导——不加提示。
+    (beforeOf(h).length > 0 ? hunkNearHint(lines, expect) : "")
   );
 }
 
@@ -92,7 +111,7 @@ function locate(f: PatchFile, h: PatchHunk, seq: number, lines: string[]): Place
     // 中间插入都整体早一行（往文件尾追加时甚至插到末行之前），而回执照报 `ok: true`：
     // 静默改错地方比改不动危险得多。`@@ -0,0`（新建）两式都落到 0，行为不变。
     const at = Math.min(Math.max(h.oldStart, 0), lines.length);
-    if (h.oldStart > lines.length) return mismatchError(f, h, seq, at, undefined);
+    if (h.oldStart > lines.length) return mismatchError(f, h, seq, at, undefined, lines);
     return { hunk: h, at, offset: 0 };
   }
   if (matches(declared)) return { hunk: h, at: declared, offset: 0 };
@@ -107,7 +126,7 @@ function locate(f: PatchFile, h: PatchHunk, seq: number, lines: string[]): Place
   }
   if (found === -1) {
     const actual = lines[declared] === undefined ? undefined : lines[declared];
-    return mismatchError(f, h, seq, declared, actual);
+    return mismatchError(f, h, seq, declared, actual, lines);
   }
   // 多处一样：不猜。上下文本就不足以唯一定位，猜中是运气，猜错是静默改错地方。
   if (ambiguous > 1) {

@@ -67,6 +67,10 @@ export const run_shell: Tool = {
         if (timedOut) output += "\n[error: run_shell 超时（" + String(SHELL_TIMEOUT_MS / 1000) + "s），已强制终止]";
         if (cancelled) output += "\n[error: run_shell 随会话取消终止]";
         if (code !== 0 && !timedOut && !cancelled) output += `\n[exit code: ${String(code)}]`;
+        // SWE-agent ACI 结论（2026-11-09 调研批）：空回执会被读成「没跑成/工具坏了」——成功且
+        // 无输出的调用必须显式声明，不给模型留猜的余地（grep/glob 的阴性说明是同一条纪律）。
+        // 走到这一步 output 还是空串的只有 exit 0 且无输出（非零有 [exit code]、超时/取消有各自那句）。
+        if (output === "") output = "（命令成功结束，无输出）";
         // 快照事实排在最后：命令自己的输出与结论是模型第一眼要看的，这一句是「这次覆写能不能回滚」。
         output += shellRedirectReceipt(plan);
         const res: ToolResult = {
@@ -90,7 +94,7 @@ export const run_shell: Tool = {
       // 前台沙箱（foregroundShellLaunch，同审批面）：直接 spawn sandbox-exec + 参数表，
       // 命令串保持模型原文（`.agent` 闸与快照面看到的都是用户命令，宿主包装不进闸）。
       const launch = ctx.foregroundShellLaunch;
-      const handle = spawnTracked(launch?.executable ?? "bash", launch?.args ?? ["-c", command], {
+      const handle = spawnTracked(launch?.executable ?? "bash", launch?.args ?? ["--norc", "-c", command], {
         cwd: ctx.workspace,
         env: launch?.env ?? sanitizedEnv(),
         timeoutMs: SHELL_TIMEOUT_MS,

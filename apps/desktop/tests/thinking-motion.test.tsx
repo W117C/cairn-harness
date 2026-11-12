@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { ThinkingLive } from "../src/renderer/components/Stream";
+import { readAppSurface } from "./helpers/app-surface";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 
@@ -28,16 +29,18 @@ describe("思考体：DOM 开合语义", () => {
     expect(thinking).toContain('aria-expanded="true"');
   });
 
-  it("生成中且有正文 ⇒ 强制展开并锁折叠；完成后交还用户（参考库互斥锁）", () => {
-    const live = renderToStaticMarkup(<ThinkingLive seq={1} thinking="先想" running />);
-    expect(live).toContain('aria-expanded="true"');
-    expect(live).toContain('aria-disabled="true"');
-    expect(live).toContain("模型思考中，完成后可折叠");
+  it("生成中可折叠（第 1042 页改钉，zcode 同形）：折叠态 ticker 给最后一行；限高跟尾取代互斥锁", () => {
+    // 旧契约（参考库 ThinkingAccordion 互斥锁）强制展开 + aria-disabled，病因是流式正文
+    // 无限长高把阅读面顶跳；展开体限高 240px + 自动跟尾后根因消失 ⇒ 锁下架，运行中交还用户开合。
+    const live = renderToStaticMarkup(<ThinkingLive seq={1} thinking={"先想\n再想"} running view="normal" />);
+    expect(live).toContain('aria-expanded="false"');
+    expect(live).not.toContain("aria-disabled");
+    expect(live).toContain("think-ticker");
     const done = renderToStaticMarkup(<ThinkingLive seq={1} thinking="先想" view="normal" running={false} />);
     expect(done).toContain('aria-expanded="false"');
     expect(done).not.toContain('aria-disabled="true"');
-    // 锁定时点击不折叠：源码里只有 !lock 才写 expanded。
-    expect(read("../src/renderer/components/Stream.tsx")).toContain("if (!lock) setExpanded(!open)");
+    // 开合写在用户点击上，不再有 lock 闸（否定断言读面，不单读一个文件）。
+    expect(readAppSurface()).not.toContain("if (!lock) setExpanded(!open)");
   });
 });
 

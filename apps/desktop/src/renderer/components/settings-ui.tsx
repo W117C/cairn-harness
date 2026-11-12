@@ -1,6 +1,7 @@
 // 设置页公共组件：页头、分组、标签/控件行，以及共享表单状态。
 // 设置页的紧凑布局在 settings-refinement.css 中，并限定于 .sp-page。
 import type { ReactNode } from "react";
+import { STR } from "../strings";
 
 export function SettingsPage(props: { title: string; desc?: string; children: ReactNode }): React.JSX.Element {
   return (
@@ -25,7 +26,7 @@ export function SettingsSection(props: { title: string; hint?: ReactNode; childr
   );
 }
 
-export function SettingsRow(props: { label: ReactNode; desc?: string; children: ReactNode }): React.JSX.Element {
+export function SettingsRow(props: { label: ReactNode; desc?: string; children?: ReactNode }): React.JSX.Element {
   // 参照 ChatGPT 桌面端设置行（2026-10-24 业主）：标题 + 说明**同列上下排**（左列），
   // 控件靠右垂直居中。说明拿到整条左列宽度——2026-10-22「独占整行」要解的中文碎行
   // 问题由本布局一并解决，且观感与参考页一致。
@@ -35,7 +36,7 @@ export function SettingsRow(props: { label: ReactNode; desc?: string; children: 
         <span className="ss-row-label">{props.label}</span>
         {props.desc !== undefined && <span className="ss-row-desc">{props.desc}</span>}
       </div>
-      <div className="ss-row-ctl">{props.children}</div>
+      {props.children !== undefined && <div className="ss-row-ctl">{props.children}</div>}
     </div>
   );
 }
@@ -142,7 +143,7 @@ export function Badge(props: {
     <span className={"ss-badge " + (props.tone ?? "neutral")}>
       {props.children}
       {props.onRemove !== undefined && (
-        <button className="x" aria-label={props.removeLabel ?? "移除"} onClick={props.onRemove}>×</button>
+        <button className="x" aria-label={props.removeLabel ?? STR.common.remove} onClick={props.onRemove}>×</button>
       )}
     </span>
   );

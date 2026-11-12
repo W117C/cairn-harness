@@ -25,11 +25,14 @@ describe("侧栏会话列表 ARIA 结构", () => {
   });
 
   it("位置读数由渲染序算出（与 ↑↓ 依据同源）", () => {
-    expect(sidebar).toContain("const flatOrder: readonly WorkspaceSession[] = [");
-    expect(sidebar).toContain("posInSet={flatOrder.indexOf(s) + 1}");
+    expect(sidebar).toContain("const flatOrder: WorkspaceSession[] = [];");
+    expect(sidebar).toContain("const positionOf = new Map<WorkspaceSession, number>();");
+    expect(sidebar).toContain("posInSet={positionOf.get(s) ?? 1}");
+    expect(sidebar).not.toContain("posInSet={flatOrder.indexOf(s) + 1}");
     expect(sidebar).toContain("setSize={flatOrder.length}");
+    expect(sidebar).toContain("positionOf.set(s, flatOrder.length);");
     // 归档组在末尾（与渲染顺序一致，不能漏）
-    expect(sidebar).toContain("...visibleArchived,");
+    expect(sidebar).toContain("for (const s of visibleArchived) {");
   });
 
   it("不再把行当裸 button（那会儿读屏报不出位置）", () => {

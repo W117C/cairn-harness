@@ -1,5 +1,5 @@
 // 技能中心页（独立 loose 技能卡片、信任决议与 SKILL.md 正文按需读取）。
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BookOpen } from "lucide-react";
 import type { PluginPanelSnapshot } from "../../../../../src/agent/plugins";
 import { PageFrame } from "./PageFrame";
@@ -28,12 +28,13 @@ export function SkillsPane(props: {
   const filter = props.filter === undefined || props.filter === "" ? localFilter : props.filter;
   const setFilter = props.onFilter ?? setLocalFilter;
   const q = query.trim().toLowerCase();
-  const rows = plugins.looseSkills
+  // 第 1133 页：技能行/选中/scope 按快照/查询/筛选/选择记忆；正文加载态变化不重扫。
+  const rows = useMemo(() => plugins.looseSkills
     .filter((s) => (filter === "all" ? true : filter === "trusted" ? s.trust === "trusted" : s.trust !== "trusted"))
-    .filter((s) => (s.invoke + s.description).toLowerCase().includes(q));
-  const selected = sel === null ? null : plugins.looseSkills.find((x) => x.invoke === sel) ?? null;
+    .filter((s) => (s.invoke + s.description).toLowerCase().includes(q)), [plugins.looseSkills, filter, q]);
+  const selected = useMemo(() => sel === null ? null : plugins.looseSkills.find((x) => x.invoke === sel) ?? null, [plugins.looseSkills, sel]);
   const selectedName = selected?.name ?? null;
-  const scope = selected === null ? undefined : plugins.toolScopes.find((x) => x.invoke === selected.invoke);
+  const scope = useMemo(() => selected === null ? undefined : plugins.toolScopes.find((x) => x.invoke === selected.invoke), [plugins.toolScopes, selected]);
   // 指令正文（2026-10-18 §8 #15）：快照只带元信息，正文按需走 agent:skill-body。
   // 信任之前能读到它做什么，是「批准」这个动作的前提。
   const [body, setBody] = useState<null | { loading: boolean; text?: string; truncated?: boolean; path?: string; error?: string }>(null);
@@ -66,7 +67,7 @@ export function SkillsPane(props: {
         <EmptyState
           icon={<BookOpen size={22} />}
           title="还没有技能"
-          desc="在输入框输入技能名即可调用。"
+          desc="输入技能名即可调用。"
         />
       </PageFrame>
     );
@@ -148,7 +149,7 @@ export function SkillsPane(props: {
           </Drawer>
         )}
       </div>
-      <div className="ap-note">在输入框输入技能名即可调用。</div>
+      <div className="ap-note">输入技能名即可调用。</div>
     </PageFrame>
   );
 }

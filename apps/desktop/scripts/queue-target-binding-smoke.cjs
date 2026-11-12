@@ -1,12 +1,13 @@
 // 同名会话：插话等待期间切项目，失败回包只能入原项目队列；循环快捷键保留 workspace。
 const { app, BrowserWindow } = require("electron");
-const { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } = require("node:fs");
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
+const { mkdtempSync, mkdirSync, readFileSync, writeFileSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 const profile = mkdtempSync(join(tmpdir(), "cairn-queue-target-profile-"));
 const out = resolve(process.argv[2] || mkdtempSync(join(tmpdir(), "cairn-queue-target-")));
 mkdirSync(out, { recursive: true }); app.setPath("userData", profile);
-app.on("quit", () => rmSync(profile, { recursive: true, force: true }));
+app.on("quit", () => scheduleProfileCleanup(profile));
 const checks = [];
 const checkControls = process.argv.includes("--check-controls");
 const check = (name, ok) => { checks.push({ name, ok }); console.log(`${ok ? "PASS" : "FAIL"} ${name}`); };

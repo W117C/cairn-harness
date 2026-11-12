@@ -1,5 +1,6 @@
 // 真实 renderer 的路由加载与资源闭包：弹出窗不得先加载主聊天工作台。
 const { app, BrowserWindow } = require('electron');
+const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
 const { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync, statSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join, resolve, dirname } = require('node:path');
@@ -7,7 +8,7 @@ const { fileURLToPath } = require('node:url');
 const profile = mkdtempSync(join(tmpdir(), 'cairn-route-'));
 app.setPath('userData', profile);
 app.on('window-all-closed', () => {});
-app.on('quit', () => rmSync(profile, { recursive: true, force: true }));
+app.on('quit', () => scheduleProfileCleanup(profile));
 const output = resolve(process.argv[2]);
 const waitFor = async (win, condition) => {
   const start = Date.now();
