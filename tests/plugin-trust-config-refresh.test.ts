@@ -6,6 +6,18 @@ import { PluginRuntime, setPluginSecretBackend, writePluginUserConfig, type McpS
 import { McpManager } from "../src/agent/plugins/mcp";
 import { loadLspConfig } from "../src/tools/lsp";
 
+// F2 余项迁移（2026-11-13）：信任表不得落工作区（PluginRuntime 装载 fail loud 拒载）。
+// 共享一个工作区外的信任目录：本测试文件内复用，文件级 afterEach 清尾。
+let trustHome = "";
+afterEach(async () => {
+  if (trustHome) await rm(trustHome, { recursive: true, force: true }).catch(() => {});
+  trustHome = "";
+});
+const trustRoot = async (): Promise<string> => {
+  if (!trustHome) trustHome = await mkdtemp(join(tmpdir(), "dsh-trust-out-"));
+  return trustHome;
+};
+
 const name = "config-refresh";
 const token = "fixture-token-original";
 const dirs: string[] = [];
@@ -48,7 +60,7 @@ async function setup() {
   const runtime = await PluginRuntime.load({
     workspace: dir, home: dir, projectPluginsDir: join(dir, "plugins"),
     userPluginsDir: join(dir, "none"), projectSkillsDir: join(dir, "skills"), looseRoots: [],
-    pluginDataRoot: join(dir, "data"), trustFile: join(dir, "trust.json"),
+    pluginDataRoot: join(dir, "data"), trustFile: join(await trustRoot(), "trust.json"),
   });
   runtimes.push(runtime);
   runtime.mcp = new McpManager(async () => { throw new Error("fixture transport: no network"); });

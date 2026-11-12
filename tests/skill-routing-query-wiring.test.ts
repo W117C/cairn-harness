@@ -9,9 +9,21 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { PluginRuntime } from "../src/agent/plugins";
 import { SKILL_ROUTING_CHAR_LIMIT } from "../src/agent/plugins/skills";
+
+// F2 余项迁移（2026-11-13）：信任表不得落工作区（PluginRuntime 装载 fail loud 拒载）。
+// 共享一个工作区外的信任目录：本测试文件内复用，文件级 afterEach 清尾。
+let trustHome = "";
+afterEach(async () => {
+  if (trustHome) await rm(trustHome, { recursive: true, force: true }).catch(() => {});
+  trustHome = "";
+});
+const trustRoot = async (): Promise<string> => {
+  if (!trustHome) trustHome = await mkdtemp(join(tmpdir(), "dsh-trust-out-"));
+  return trustHome;
+};
 
 const cleanups: string[] = [];
 afterAll(async () => {
@@ -27,7 +39,7 @@ async function loadTrustedRuntime(): Promise<PluginRuntime> {
     userPluginsDir: join(dir, "user-plugins"),
     workspace: dir,
     pluginDataRoot: join(dir, "plugin-data"),
-    trustFile: join(dir, "trust.json"),
+    trustFile: join(await trustRoot(), "trust.json"),
     home: dir,
   };
   const pluginDir = join(dir, "user-plugins", "crew");
