@@ -1,53 +1,42 @@
 # Cairn / DSH —— 现态
 
-rev: 2ce852b6
+rev: a7a1a03c
 
-核对日期：2026-11-08（Asia/Shanghai）。`rev` 是现役集成分支基线；本轮把 `main` 的 PR #18/#19
-与公开候选的打包批合入开发线，提交后以新 tip 为现役基线。仓库与分支入口见
-[仓库状态与分支](docs/REPOSITORY-STATUS.md)；历史与证据在 `PROGRESS.md`、`outputs/`、`archive/`，
-本页只写状态与下一步。
+核对日期 2026-11-12（Asia/Shanghai）。`rev` 指本地集成的代码基线。分支、GitHub CI
+与清理状态见[仓库状态与分支](docs/REPOSITORY-STATUS.md)，历史证据见 `PROGRESS.md` 与 `outputs/`。
 
 ## 当前工作
 
-- 分支整合：`integration/main-dev-20261108` 以开发线 `ccf35864` 为底，已含五笔安全移植；本轮再合
-  `main` 与公开候选 `8d798077`（运行依赖锁、`release.json`/`SHA256SUMS`、预览说明）。冲突按
-  「安全实现取较新者、功能面保留双方」处理，IPC 与桌面边界未放宽。
-- 历史材料：`outputs/` 已生成可恢复归档（`/Users/ze/Downloads/Cairn-archives/` 下按提交命名的目录，
-  含逐文件清单与 `SHA256SUMS`）；归档内全部文件经解包回读与哈希核对，源文件未删、未改。
-  逐文件引用与隐私审阅状态见归档 `inventory.jsonl`。
-- 真实模型验收：使用本机 `~/.config/cairn/env` 的既有端点做最小真实任务（凭据不写入仓库）；
-  范围、费用档与结果见 `outputs/` 对应证据。未做跨机器与下载路径验收。
+- `integration/security-closure-20261112` 是本地集成入口。`a404c825` 汇入开发线已提交的桌面变更
+  与权限修复，`c0a227ad` 补入离线评估证据校验，`a7a1a03c` 贯通宿主联网免批——2026-11-05 业主裁的
+  设置总闸此前被 L4-risk 裸 allow 守卫拦回审批（评审遗留 F4，其余四条评审遗留的处置见台账评审页）。
+  主工作树的未提交改动保留在各自工作树。
+- GitHub `main` 是 AGPL 公开主线，`750913ef` 更新权限与审批行为，该提交的 verify 与 CodeQL Actions
+  均绿。内测开发历史保留在本地集成线；`a7a1a03c` 的公开线移植未做。
+- 集成判据四件套在 tip `a7a1a03c` 工作树现跑全绿：core 663 文件 / 8006 条（`pnpm test:capped`，exit 0）、
+  desktop 334 文件 / 2321 条（`VITEST_MAX_WORKERS=2`，exit 0）、根 typecheck 0、`docs-check` 全绿；
+  desktop build 绿。`a7a1a03c` 修复本体另有红绿证明：gate-audit 两格先红后绿（43/43）＋相邻权限面 136/136。
+- 历史证据已按[归档记录](docs/history-evidence-migration.md)做过解包和哈希回读。原始材料继续保留。
 
 ## 代码入口
 
-- core 在 `src/`，应用服务在 electron-free 的 `src/main/`；desktop 在 `apps/desktop/`，
-  依赖方向与 IPC 规则见 `AGENTS.md`。
-- 桌面视觉契约在 `apps/desktop/design/desktop-design-spec.md`；列宽/气沟单源与品牌补位的判卷见
-  `apps/desktop/tests/column-single-source.test.ts`、`apps/desktop/tests/app-toolbar-brand.test.tsx`。
-- 打包与预览说明见 `docs/desktop-preview.md`；符号和稳定契约见 [CODE-WIKI](docs/CODE-WIKI.md)；
-  功能使用见 `README.md`。
+- 核心在 `src/`，应用服务在 `src/main/`，桌面在 `apps/desktop/`。依赖方向与 IPC 规则见 `AGENTS.md`。
+- 桌面视觉契约见 `apps/desktop/design/desktop-design-spec.md`，稳定符号见 [CODE-WIKI](docs/CODE-WIKI.md)，
+  启动与使用说明见 `README.md`。
 
-## 未决（待业主裁，登记不动）
+## 未决
 
-- 助手行 fluid stop 的作用层级：现作用于整行 `margin-right`，代码块/表格/交付卡右缘比输入卡内缩一截；
-  反转第 862 页「四段同右缘」裁决需拍板。
-- 设置页分段控件选中态的强调色边界（「中性用色」与「焦点环=强调色域」两条裁决的交界），
-  第 910 页登记未动。
-- 公开许可与第三方素材分发权限：`LICENSE` 为 proprietary；外部分发前需单独确认，
-  不以仓库可见性替代授权。
+- 权限规则链按最长前缀匹配：同一命令段内，更长的本机授权 allow 会盖过更短的项目 ask/deny。是否改为
+  项目限制优先属设计裁决（2026-11-12 评审遗留 F5，源码注释记着现行约定），登记不动。
+- 显式配置的插件信任表文件（`M2E_TRUST_FILE`）可落在项目控制目录内：真边界、低危——生产路径由主机
+  装配面给出，缺口需主机误配置才成立；fail-loud 修法需迁移多个测试夹具，登记不动、修法随下一批安全批次。
+- 助手行目前对整行使用 fluid stop，代码块、表格与交付卡右缘内缩。是否调整第 862 页的四段同右缘裁决仍待确认。
+- 设置页分段控件选中态的强调色边界见第 910 页。
+- 内测许可和第三方素材外部分发权限仍需在发版前单独确认。
 
 ## 下一步
 
-- 对集成 tip 跑 core/desktop/typecheck/boundary/build 与现行门禁；红项修到绿再谈合并/发布。
-- 在隔离工作区处理 `product/public-candidate-20261108` 与集成 tip 的收口；不直接改 `main`，
-  不推送、不发布。
-- 预览包按 `docs/desktop-preview.md` 在另一台受支持机器做解压/首次允许/启动/退出与真实任务；
-  本机临时目录结果不替代跨机器验收。
-
-## 验证与交付边界
-
-- 本页所在工作树已跑根 typecheck；core/desktop 全量与 `docs-check` 的读数按对应提交现跑，
-  不把历史认证转移到新树。
-- `head-cert-check` 在 `f6bece63` 上 25/25 道绿（core `7977/7977`，证据 `outputs/head-cert-f6bece6-2026-11-08-1307/`）；
-  完整 `mutate-verify` 变异跑未执行，不引用其全绿。
-- 离屏假 API 截图与几何读数证明版式与状态属性；真机观感（字体渲染、拖拽、Radix 菜单手感）归业主目验。
+- `a7a1a03c` 的公开线移植（公开 main 的同一守卫缺口仍在 `750913ef` 上）按公开仓库门禁另批处理。
+- 按[路线图](docs/ROADMAP.md)继续处理冻结评测入口的 shell 写边界、真实模型验收和跨机器预览。
+  预览验证步骤见[桌面预览](docs/desktop-preview.md)。
+- 待确认本地清理清单后移除冗余引用与已经归档的工作树。测试与发布证据按对应提交复核，门禁读数见 `pnpm facts`。
