@@ -1,21 +1,26 @@
 # Cairn / DSH —— 现态
 
-rev: 21d47ec9
+rev: 744132fc
 
-核对日期 2026-11-12（Asia/Shanghai）。`rev` 指本地集成的代码基线。分支、GitHub CI
-与清理状态见[仓库状态与分支](docs/REPOSITORY-STATUS.md)，历史证据见 `PROGRESS.md` 与 `outputs/`。
+核对日期 2026-11-13（Asia/Shanghai）。`rev` 是开发线现役基线：安全批次与桌面修复已随集成线
+`744132fc` 回并。分支与门禁状态见[仓库状态与分支](docs/REPOSITORY-STATUS.md)，历史证据见
+`PROGRESS.md` 与 `outputs/`。
 
 ## 当前工作
 
-- `integration/security-closure-20261112` 是本地集成入口。`a404c825` 汇入开发线已提交的桌面变更
-  与权限修复，`c0a227ad` 补入离线评估证据校验，`a7a1a03c` 贯通宿主联网免批（评审遗留 F4），
-  `2f7aa8de` 并入开发线第 1041–1181 页在飞工作（`be41e26b`），`21d47ec9` 修自动合并复活的老写法
-  （profile-cleanup 判卷逮住）。主工作树的未提交改动保留在各自工作树。
-- GitHub `main` 是 AGPL 公开主线，`6fb20860` 移植宿主联网免批贯通（F4 公开移植，红绿独立取证：
-  gate-audit 先红 1/42 后绿 43/43、core 646 文件 / 7346 条全绿、tsc 0）。内测开发历史保留在本地集成线。
-- 集成判据在 tip `21d47ec9` 现跑：desktop 385 文件 / 2489 条全绿（exit 0）、根 typecheck 0、
-  `docs-check` 全绿、desktop build 绿；core 全量见[读数表](docs/REPOSITORY-STATUS.md)（8104 条全绿）。
-  F4 修复本体另有红绿证明：gate-audit 两格先红后绿（43/43）＋相邻权限面 136/136。
+- **2026-11-13 安全批次**（全部先红后绿）：F5 项目层 ask/deny 优先于更长本机 allow（`99662be7`，
+  修前探针：项目 ask/deny「git push」＋本机 allow「git push --force」⇒ 判 allow）；显式信任表
+  落工作区 fail loud 拒载（`4858ca78`＋`741d23f4` 夹具迁移 17 文件 25 站点）；冻结判卷闸关闭
+  ⑥号声明的 shell 写边界（`6c82de60`，重定向/tee/cp/mv/rm/sed -i 目标进闸，非冻结目标零打扰）。
+- **2026-11-13 桌面修复**：`PluginDiscover` 两个 useMemo 曾排在三个早退之后，真实 app 插件屏
+  loading→ready 翻转即 React #310 整屏崩进错误边界（design-audit 23-plugins 起 15 miss/13 dup
+  实证）；`30f70887` 上移 hooks＋源序判卷钉，design-audit 复原 41 shots / 41 unique / 0 dup /
+  0 miss / 0 pageErrors。
+- **批内全量读数**（tip `741d23f4` 现跑）：core 673 文件 / 8111 条全绿、desktop 385 文件 / 2490 条
+  全绿（均 `--maxWorkers=2`，exit 0）；tsc 0；docs-check 全绿；desktop build 绿。
+- GitHub `main` 是 AGPL 公开主线，`6fb20860` 移植宿主联网免批贯通（F4，红绿独立取证）；
+  Actions verify/codeql 以该提交为准。内测开发历史只在本地（集成线不推公开远端）。
+- 历史证据已按[归档记录](docs/history-evidence-migration.md)做过解包和哈希回读。原始材料继续保留。
 - 历史证据已按[归档记录](docs/history-evidence-migration.md)做过解包和哈希回读。原始材料继续保留。
 
 ## 代码入口
@@ -36,7 +41,6 @@ rev: 21d47ec9
 
 ## 下一步
 
-- `a7a1a03c` 的公开线移植（公开 main 的同一守卫缺口仍在 `750913ef` 上）按公开仓库门禁另批处理。
-- 按[路线图](docs/ROADMAP.md)继续处理冻结评测入口的 shell 写边界、真实模型验收和跨机器预览。
-  预览验证步骤见[桌面预览](docs/desktop-preview.md)。
-- 待确认本地清理清单后移除冗余引用与已经归档的工作树。测试与发布证据按对应提交复核，门禁读数见 `pnpm facts`。
+- 按[路线图](docs/ROADMAP.md)继续：真实模型验收、跨机器桌面预览、扫描与依赖告警处置。
+- 4 支独有内容分支（React 19 升级支、依赖批支 ×2、公开仓构建支）逐支核对后裁去留。
+- 集成分支 `integration/security-closure-20261112` 只在本地；公开线改动走移植＋公开门禁。
