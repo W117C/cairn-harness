@@ -551,7 +551,17 @@ export function evaluate(
     }
     // 「总是允许」在 UI 上落成**裸工具名** allow（无 pattern）：一次普通 write_file 批准
     // 不能把 `.env` / `.git/hooks` 这类 high 风险路径一起免掉（非 shell 的 scopeKey 也是工具级）。
-    if (risk === "high" && chain.pattern === undefined && !isShellFamily(tool) && staticRisk(tool, args).level === "high") {
+    // 例外（2026-11-12）：宿主设置种下的联网免批规则（id 前缀 `web-auto-approve:`，agent-runner 只在
+    // host settings 总闸开时种内存 allow，workspace 层永远拿不到）不是 UI「总是允许」——不豁免它，
+    // 「联网免批」这条 2026-11-05 业主裁决就永远被这条守卫打不通（实测：设置开 ⇒ 仍每次问）。
+    // 豁免面按 id 前缀收口，不按工具名：用户手写的裸 allow（UI 批准落库／permissions.json，加载器
+    // 会重生成 id，伪造不了前缀）照旧被拦。critical 守卫与 shell 侧网络红线（L4-network／sandbox 出口）
+    // 原样不动——豁免的是「问不问」，不是风险判据本身。
+    if (risk === "high"
+        && chain.pattern === undefined
+        && !isShellFamily(tool)
+        && staticRisk(tool, args).level === "high"
+        && !chain.ruleId?.startsWith("web-auto-approve:")) {
       return {
         verdict: "ask",
         layer: "L4-risk",
