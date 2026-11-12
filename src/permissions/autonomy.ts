@@ -7,6 +7,7 @@
 // 零私有状态：规则库与放行集是仅有的两个输入源；断路器计数在 session 入参里，evaluate 只读不写
 // （调用方经 note* helper 更新）——同一输入两次调用结果一致。
 import { posix } from "node:path";
+import { tokenize } from "./command-shape";
 import { FROZEN_TABLE_REL } from "../frozen";
 import { TOOL_NAMES, type ToolName } from "../tools/base";
 // 判卷闸的补丁取料：与 `apply_patch` 工具层共用同一个解析器（同一个决策点，不在闸里再解析一遍 diff）。
@@ -410,7 +411,55 @@ function judgeTargetsOf(tool: string, args: Record<string, unknown>): JudgeTarge
       ...(parsed.why !== undefined ? { why: parsed.why } : {}),
     };
   }
+  // ⑥号边界关闭（2026-11-13）：shell 写/毁原语的目标也进冻结闸的取料面。
+  if (tool === "run_shell" && typeof args.command === "string") {
+    return {
+      targets: shellWriteTargetsOf(args.command).map((t) => relTargetKeyOf(t)).filter((t): t is string => t !== null),
+      unreadable: false,
+    };
+  }
   return { targets, unreadable: false };
+}
+
+const REDIRECT_RE = /^[0-9*&]?>{1,2}\|?$/;
+
+/** shell 写/毁原语的目标提取（覆盖集与边界见 judgeTargetsOf 的注释）。
+ *  伪目标无害：非冻结键（如 `&&`、`git`）归一后不落冻结集，照旧放行。 */
+function shellWriteTargetsOf(command: string): string[] {
+  const toks = tokenize(command);
+  const out: string[] = [];
+  const push = (t: string | undefined): void => {
+    if (t === undefined) return;
+    out.push(t);
+  };
+  for (let i = 0; i < toks.length; i++) {
+    const t = toks[i] as string;
+    if (REDIRECT_RE.test(t)) {
+      push(toks[i + 1]);
+      continue;
+    }
+    switch (t) {
+      case "tee":
+      case "rm":
+      case "mv":
+        for (const f of toks.slice(i + 1)) if (!f.startsWith("-")) push(f);
+        break;
+      case "cp": {
+        const rest = toks.slice(i + 1).filter((f) => !f.startsWith("-"));
+        push(rest.at(-1));
+        break;
+      }
+      case "sed": {
+        const rest = toks.slice(i + 1);
+        if (rest.some((f) => f === "-i" || f.startsWith("-i."))) {
+          const positional = rest.filter((f) => !f.startsWith("-"));
+          for (const f of positional.slice(1)) push(f);
+        }
+        break;
+      }
+    }
+  }
+  return out;
 }
 
 function collectRisk(
@@ -467,7 +516,9 @@ export function evaluate(
   // ⇒ 判卷面的完整性不能靠提示词自觉。
   // 取料走 `judgeTargetsOf`（一次调用的**全部**目标）：闸原先只读 `args.path`，而 `apply_patch`
   // 的路径在 `args.patch` 正文里 ⇒ 同一张表下 write_file 写不动、apply_patch 写得动（2026-10-08 修）。
-  if (s.frozenJudgePaths.size > 0 && isWriteCall(tool, grade)) {
+  // run_shell 一并进闸（⑥号边界关闭的一半）：它不在写向静态表里，旧条件把它整族漏掉——
+  // 闸进了 shell 也不扰民：提取不出目标的常规命令 targets 为空、原路放行。
+  if (s.frozenJudgePaths.size > 0 && (isWriteCall(tool, grade) || tool === "run_shell")) {
     const targets = judgeTargetsOf(tool, args);
     if (targets.unreadable) {
       // 取不出目标 ⇒ 这条闸**没法判**。没法判不许折成判通过：把「读不到目标」读成「目标安全」，
