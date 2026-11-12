@@ -1539,7 +1539,7 @@ async function main(): Promise<number> {
   // 到 /tmp 假档），沙箱自检的最后一份结果正好是 `handleAgentRun` 读的那份（只自检一次）。
   const settingsPath = join(opts.workspace, ".agent", "settings.json");
   const sessionsDir = join(opts.workspace, ".agent", "sessions");
-  initSettingsStore(settingsPath);
+  initSettingsStore(settingsPath, { source: "workspace" });
   initSessionsDir(sessionsDir);
   // 运行与压缩都要往会话目录写（锁文件、事件、压缩记录）；写不进去时先给一句产品话。
   const sessionsWrite = await sessionDirWriteProblem(sessionsDir);

@@ -23,7 +23,7 @@ import {
   gateBase,
   isNetworkCommandCall,
   isWriteCall,
-  loadPermissionRules,
+  loadWorkspacePermissionRules,
   newAutonomySession,
   noteCriticalDenial,
   noteCriticalResolved,
@@ -37,7 +37,7 @@ import {
   type PermissionRule,
   type ToolResultWithAudit,
 } from "../permissions";
-import { alwaysRulesPath, globalPermissionsPath, savePermissionRules, splitCommandChain } from "../permissions/rules";
+import { alwaysRulesPath, readPermissionFile, savePermissionRules, splitCommandChain } from "../permissions/rules";
 import type { GlmToolSpec } from "../providers/glm";
 import { TOOLS, type Tool, type ToolResult } from "../tools";
 import type { ToolContext, ToolName } from "../tools/base";
@@ -246,12 +246,10 @@ export function gatedTool(
         } else if (effScope === "always") {
           if (await persistAlwaysRule(ctx.workspace, name as ToolName, args)) {
             // 当前轮与下轮使用同一套规则加载/匹配语义，并保留全局和项目的拒绝约束。
-            // 重载失败不许吃掉这次已批准的执行：`loadPermissionRules` 对读不出/解析不了的规则库
-            // 是 fail-closed 抛错（拒载），而这里抛出去的结果是「人点了总是允许、规则也落了盘、
-            // 工具却没执行」——下一次会话才会生效，本轮只见一句解析错误。授权已成立 ⇒ 执行优先，
-            // 但失败必须留痕（与 persistAlwaysRule 同一口径：不阻断、不静默）。
+            // 重载拒载时保留已批准的单次执行，同时报告错误。
             try {
-              s.autonomy.rules = loadPermissionRules(join(ctx.workspace, ".agent", "permissions.json"), globalPermissionsPath());
+              const runRules = s.autonomy.rules.filter((rule) => rule.layer === undefined);
+              s.autonomy.rules = [...loadWorkspacePermissionRules(ctx.workspace), ...runRules];
             } catch (err) {
               console.error("[permissions] always 规则已落库，但重载失败（本次仍执行；下个会话生效）：", err instanceof Error ? err.message : String(err));
             }
@@ -333,12 +331,12 @@ export function gatedTool(
 
 /** 独立只读面的门会话（sidechat）：不借主会话的 run scope/全局档位，也**不装审批门**——
  *  旁路无人值守，需要问人的调用一律 fail-closed，而不是悄悄放行或挂 60s。
- *  规则库照载（项目的 deny/allow 与主会话同源）；解析失败向外抛，由调用方显式拒绝这一轮。 */
+ *  规则库与主会话同源；解析失败向外抛，由调用方显式拒绝这一轮。 */
 export function readOnlyGateSession(workspace: string): GateSession {
   return {
     askGate: null,
     autonomy: newAutonomySession("read-only", {
-      rules: loadPermissionRules(join(workspace, ".agent", "permissions.json"), globalPermissionsPath()),
+      rules: loadWorkspacePermissionRules(workspace),
     }),
     sandbox: null,
   };
@@ -779,15 +777,11 @@ export function pluginToolSpecsFromRuntime(rt: PluginToolSource | null): Session
 // 宿主进程内的 always 追加串行化：锁住读取到保存的整段，避免并发批准丢掉另一项授权。
 let alwaysRuleWrites: Promise<void> = Promise.resolve();
 
-/** always scope 批准落库为 allow 条目（项目规则库，原子写）；拒绝永不生成规则。 */
+/** 只把用户批准的 always scope 写入本机的工作区授权库。 */
 async function persistAlwaysRule(workspace: string, name: string, args: Record<string, unknown>): Promise<boolean> {
-  // #57（2026-10-05）：授权记录落**独立且被 git 忽略**的那一份，不写回受跟踪的 permissions.json。
-  // 理由：受跟踪那份里可能有人写的项目策略（该随仓库走），而"这台机器上某人点过一次总是允许"
-  // 是授权记录、属于机器——写在一起就等于谁 clone 谁继承。读侧由 loadPermissionRules 透明并入，
-  // 所以批准过的规则照样生效（那一半已入库，见 src/permissions/rules.ts 的 ALWAYS_RULES_FILE）。
-  const path = alwaysRulesPath(workspace);
   const write = alwaysRuleWrites.then(async () => {
-    const existing = loadPermissionRules(path);
+    const path = alwaysRulesPath(workspace);
+    const existing = readPermissionFile(path);
     // 命令链**逐段**匹配（`judgeChain` 先 `splitCommandChain`，再要求**每一段**都命中规则，
     // 否则整链 miss）⇒ 「总是允许」一条命令必须落成**每段各一条** allow：
     // 把 `pnpm test && echo done` 整条当 pattern 存，匹配时它已不是任何一段 ⇒ 这条授权

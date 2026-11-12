@@ -11,22 +11,15 @@ export function mapSandboxTestCommand(command: string, aliases: readonly string[
   return aliases.includes(command.trim()) ? VITEST_DIRECT : command;
 }
 
-const vitestCache = new Map<string, boolean>();
 export function workspaceDeclaresVitest(workspace: string): boolean {
-  const cached = vitestCache.get(workspace);
-  if (cached !== undefined) return cached;
-
-  let declares: boolean;
   try {
     const { scripts } = JSON.parse(readFileSync(join(workspace, "package.json"), "utf8")) as {
       scripts?: Record<string, unknown>;
     };
-    declares = typeof scripts?.test === "string" && scripts.test.includes("vitest");
+    return typeof scripts?.test === "string" && scripts.test.includes("vitest");
   } catch {
-    declares = false;
+    return false;
   }
-  vitestCache.set(workspace, declares);
-  return declares;
 }
 
 export function mapSandboxTestCommandForWorkspace(
@@ -34,6 +27,7 @@ export function mapSandboxTestCommandForWorkspace(
   workspace: string | undefined,
   aliases: readonly string[] = SANDBOX_TEST_ALIASES,
 ): string {
+  if (!aliases.includes(command.trim())) return command;
   return workspace === undefined || workspaceDeclaresVitest(workspace)
     ? mapSandboxTestCommand(command, aliases)
     : command;

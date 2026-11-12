@@ -350,6 +350,15 @@ describe("C1 actual main runner integration (local scripts, no model calls)", ()
 });
 
 describe("content guard boundaries", () => {
+  it("leaves the write intact and does not invoke lint without repository verify consent", async () => {
+    await config(["echo lint"]);
+    const shell = vi.spyOn(run_shell, "run").mockResolvedValue({ ok: true, output: "lint" });
+    const [result] = toolResults(await run([writeCall()], { trustedRepo: false }));
+    expect(result?.output).toContain("[fused_lint:skipped]");
+    expect(shell).not.toHaveBeenCalled();
+    expect(await readFile(join(dir, "target.txt"), "utf8")).toBe("new");
+  });
+
   it("checks hash twice with a yield, rejects traversal/system area/symlink escapes", async () => {
     await config(["printf LINT"]);
     await writeFile(join(dir, "target.txt"), "old");

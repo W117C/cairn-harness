@@ -337,7 +337,12 @@ export class SettingsStore {
      燃料是现成的：layout 那一笔包在 renderSide 外层（每帧重绘一笔），设置页点一下又是一笔。 */
   private writes: Promise<unknown> = Promise.resolve();
 
-  constructor(private readonly filePath: string) {}
+  constructor(private readonly filePath: string, private readonly source: "host" | "workspace" = "host") {}
+
+  /** 仓库可设置运行偏好，不能自行授权联网免审批。 */
+  async webAutoApproveForRun(): Promise<boolean> {
+    return this.source === "host" && (await this.get()).webAutoApprove === true;
+  }
 
   /** 读取：首读落盘校验（坏文件回退默认），后续走缓存。 */
   async get(): Promise<AppSettings> {

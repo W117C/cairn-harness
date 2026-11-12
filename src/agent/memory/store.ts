@@ -3,11 +3,12 @@
 // 读写是纯 fs 语义：frontmatter 解析往返不丢字段、modified 写入落账、索引 upsert、索引硬上限写入端拒绝。
 // 本模块是唯一知道记忆文件布局的地方；remember 工具与注入器都经它读写（写入口收敛 §8.1.8 第 4 条）。
 import { constants } from "node:fs";
-import { mkdir, open, readFile, readdir, unlink } from "node:fs/promises";
+import { mkdir, open, readFile, readdir, realpath, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { projectAgentPath } from "../../app-data";
 import { writeFileAtomic } from "../../atomic-write";
+import { resolveDeepest } from "../../tools/base";
 import type { MemoryStat } from "./strength.js";
 
 // ---- 布局常量（§8.1.3 定稿文件名）----
@@ -42,6 +43,30 @@ export function globalMemoryDir(): string {
 
 export function projectMemoryDir(workspace: string): string {
   return projectAgentPath(workspace, "memory");
+}
+
+/** 项目授权只覆盖该工作区的规范记忆目录，不能顺着别名写入其他作用域。 */
+async function projectMemoryWritePath(workspace: string, path: string): Promise<string> {
+  const root = await realpath(workspace);
+  const expected = join(root, relative(resolve(workspace), path));
+  if (await resolveDeepest(expected, "memory") !== expected) {
+    throw new MemoryError("call_failed", "项目记忆不能通过符号链接访问: " + path);
+  }
+  const global = await resolveDeepest(resolve(globalMemoryDir()), "memory");
+  const rel = relative(global, expected);
+  if (!isAbsolute(rel) && rel !== ".." && !rel.startsWith(".." + sep)) {
+    throw new MemoryError("call_failed", "项目记忆不能写入全局记忆目录");
+  }
+  return expected;
+}
+
+export async function projectMemoryWriteDir(workspace: string, topic?: string): Promise<string> {
+  const dir = await projectMemoryWritePath(workspace, projectMemoryDir(workspace));
+  await projectMemoryWritePath(workspace, projectAgentPath(workspace, "memory", MEMORY_INDEX));
+  if (topic !== undefined) {
+    await projectMemoryWritePath(workspace, projectAgentPath(workspace, "memory", validateTopic(topic) + ".md"));
+  }
+  return dir;
 }
 
 /** 根三文件路径（kind → 文件名映射 §8.1.4；仅项目层——全局层只有 memory）。 */
@@ -257,12 +282,12 @@ async function readOrNull(path: string): Promise<string | null> {
  *  E9（审查 P2）：追加走 appendFile（O_APPEND 单写）——旧实现 read-modify-write 整文件重写，
  *  并发追加互相覆盖（后写者带着旧全文，先写者的条目被抹掉）。分隔换行只看文件末字节。 */
 export async function appendRootFile(workspace: string, kind: keyof typeof ROOT_FILES, content: string): Promise<void> {
-  const path = rootFilePath(workspace, kind);
+  const path = await projectMemoryWritePath(workspace, rootFilePath(workspace, kind));
   // E9 收口（审查 S2-14）：末字节探测与 appendFile 是两步，两个并发 remember（交互 run +
   // 定时 unattended run 同工作区）会读到同一个旧末字节 => 都判「无需补换行」=> 条目粘成
   // 一行，"## " 分块解析被破坏。整段按文件路径串行（与 writeTopic 按 dir 串行同口径）。
   await serializeOn(path, async () => {
-    await ensureDir(projectAgentPath(workspace));
+    await ensureDir(dirname(path));
     const fh = await open(
       path,
       constants.O_RDWR | constants.O_APPEND | constants.O_CREAT | (constants.O_NOFOLLOW ?? 0),
@@ -372,11 +397,11 @@ export async function replaceRootFileIfMatches(
   expected: string,
   content: string,
 ): Promise<{ matched: boolean; current: string | null }> {
-  const path = rootFilePath(workspace, kind);
+  const path = await projectMemoryWritePath(workspace, rootFilePath(workspace, kind));
   return await serializeOn(path, async () => {
     const current = await readOrNull(path);
     if (current === null || current !== expected) return { matched: false, current };
-    await ensureDir(projectAgentPath(workspace));
+    await ensureDir(dirname(path));
     await writeFileAtomic(path, content);
     return { matched: true, current };
   });

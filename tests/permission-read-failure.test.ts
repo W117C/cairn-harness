@@ -1,8 +1,8 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { alwaysRulesPath, loadPermissionRules } from "../src/permissions/rules";
+import { alwaysRulesPath, loadPermissionRules, loadWorkspacePermissionRules } from "../src/permissions/rules";
 
 const failure = vi.hoisted(() => ({ path: "", code: "" }));
 vi.mock("node:fs", async (importOriginal) => {
@@ -24,15 +24,18 @@ afterEach(async () => {
 });
 
 async function setup() {
-  const dir = await mkdtemp(join(tmpdir(), "permission-read-failure-"));
-  temporaryDirs.push(dir);
+  const root = await mkdtemp(join(tmpdir(), "permission-read-failure-"));
+  temporaryDirs.push(root);
+  const dir = join(root, "workspace");
+  const appData = join(root, "appdata");
   const project = join(dir, ".agent", "permissions.json");
-  const global = join(dir, "global.json");
-  const always = alwaysRulesPath(dir);
+  const global = join(appData, "permissions.json");
   await mkdir(join(dir, ".agent"), { recursive: true });
+  const always = alwaysRulesPath(dir, appData);
+  await mkdir(dirname(always), { recursive: true });
   const deny = { behavior: "deny", tool: "write_file", scope: "always" };
   for (const path of [project, global, always]) await writeFile(path, JSON.stringify({ rules: [deny] }));
-  return { dir, project, global, always };
+  return { dir, appData, project, global, always };
 }
 
 describe("权限库读取失败必须拒载", () => {
@@ -40,29 +43,29 @@ describe("权限库读取失败必须拒载", () => {
     const paths = await setup();
     failure.path = paths[layer];
     failure.code = "EACCES";
-    expect(() => loadPermissionRules(paths.project, paths.global)).toThrow(/权限库读取失败.*拒载/);
-    expect(() => loadPermissionRules(paths.project, paths.global)).toThrow(paths[layer]);
+    expect(() => loadWorkspacePermissionRules(paths.dir, paths.appData)).toThrow(/权限库读取失败.*拒载/);
+    expect(() => loadWorkspacePermissionRules(paths.dir, paths.appData)).toThrow(paths[layer]);
   });
 
   it("I/O 错误也必须报告，不得丢掉已有 deny 继续运行", async () => {
     const paths = await setup();
     failure.path = paths.global;
     failure.code = "EIO";
-    expect(() => loadPermissionRules(paths.project, paths.global)).toThrow(/权限库读取失败.*拒载/);
+    expect(() => loadWorkspacePermissionRules(paths.dir, paths.appData)).toThrow(/权限库读取失败.*拒载/);
   });
 
   it.each(["project", "global", "always"] as const)("%s 规则路径被目录占用时拒载（真实文件系统）", async (layer) => {
     const paths = await setup();
     await rm(paths[layer]);
     await mkdir(paths[layer]);
-    expect(() => loadPermissionRules(paths.project, paths.global)).toThrow(/权限库读取失败.*拒载/);
+    expect(() => loadWorkspacePermissionRules(paths.dir, paths.appData)).toThrow(/权限库读取失败.*拒载/);
   });
 
   it("父路径不是目录时也拒载（真实文件系统）", async () => {
     const paths = await setup();
     await rm(join(paths.dir, ".agent"), { recursive: true });
     await writeFile(join(paths.dir, ".agent"), "not a directory");
-    expect(() => loadPermissionRules(paths.project, paths.global)).toThrow(/权限库读取失败.*拒载/);
+    expect(() => loadWorkspacePermissionRules(paths.dir, paths.appData)).toThrow(/权限库读取失败.*拒载/);
   });
 
   it("真正不存在的文件仍可缺省，另一层的 deny 保留", async () => {

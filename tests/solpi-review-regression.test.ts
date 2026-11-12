@@ -47,7 +47,7 @@ for (const cancelAt of [0, 1, 2]) {
       if (calls === cancelAt) controller.abort();
       const denied = await beforeExecute();
       return denied ?? { ok: true, output: "checked" };
-    });
+    }, { trustedRepo: true });
     if (cancelAt === 0) controller.abort();
     const result = await fusion({ ok: true, output: "write succeeded" }, "target.txt", { workspace: root, signal: controller.signal });
     expect(result.ok).toBe(false);

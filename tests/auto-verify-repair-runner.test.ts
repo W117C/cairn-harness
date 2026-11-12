@@ -12,12 +12,14 @@
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { handleAgentRun, initSettingsStore } from "../src/main/agent-runner";
+import { alwaysRulesPath, savePermissionRules } from "../src/permissions/rules";
 import type { AgentEvent } from "../src/events";
 
 const dirs: string[] = [];
 afterAll(async () => {
+  vi.unstubAllEnvs();
   delete process.env.M3A_MAIN_SCRIPT;
   for (const d of dirs) await rm(d, { recursive: true, force: true }).catch(() => {});
 });
@@ -32,11 +34,8 @@ async function runViaProduction(settingsRaw: Record<string, unknown>): Promise<A
   await mkdir(join(ws, ".agent"), { recursive: true });
   // 批条必须在场：auto + 无人值守 + 无批条 ⇒ 权限门先拒写，那一拍**正确地**不发生，
   // 于是"只拍一次"可以被"根本没写盘"满足（同 auto-verify-wiring ② 与影响面第四环的教训）。
-  await writeFile(
-    join(ws, ".agent", "permissions.json"),
-    JSON.stringify({ rules: [{ behavior: "allow", tool: "write_file", scope: "always" }] }),
-    "utf8",
-  );
+  vi.stubEnv("DSH_APPDATA", join(home, "appdata"));
+  await savePermissionRules(alwaysRulesPath(ws), [{ behavior: "allow", tool: "write_file", scope: "always" }]);
   // 一个**必失败**的验证面：返修那一支只认代码红，所以这里不能是"没得验"（那会被归成因 no-surface 而整段跳过）。
   await writeFile(
     join(ws, ".agent", "config.json"),

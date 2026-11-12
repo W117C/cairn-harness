@@ -97,6 +97,8 @@ OpenAI 兼容网关可直接用 `OPENAI_BASE_URL` + `OPENAI_API_KEY`；表外模
 审批门在管道 / CI / `--unattended` 下当场按拒绝收束。`run_shell` 在 macOS 上走 Seatbelt 沙箱：
 写收敛到工作区、敏感目录拒读、默认断网；沙箱不可用时会明说，不假装有。
 
+项目的权限规则可以要求审批或拒绝操作。本机的「总是允许」记录按工作区保存在应用数据目录。升级后需要重新批准旧项目里的持久授权。除 `full-access` 外，写入全局记忆需要逐次批准。
+
 ## 事件日志
 
 每轮落一份 JSONL，默认在 `<workspace>/.agent/sessions/cli-<时间戳>.jsonl`：

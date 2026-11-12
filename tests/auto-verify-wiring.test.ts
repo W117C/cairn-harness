@@ -1,3 +1,4 @@
+import { alwaysRulesPath, savePermissionRules } from "../src/permissions/rules";
 // 能力 5 收束闸的**中间那一棒**（任务 #55）。两头各自早有判卷：读盘回退在 `tests/settings.test.ts`，
 // 那一拍本身在 `tests/loop.test.ts` / `context-auto-verify-note.test.ts`——但把两者接起来的那一行
 // （`src/main/agent-runner.ts:1559`：`autoVerify: over.autoVerify ?? (await store().get()).autoVerify`）
@@ -22,6 +23,7 @@ import { replay } from "../src/events";
 import type { AgentEvent } from "../src/events";
 
 let dir: string;
+let appData: string;
 let seq = 0;
 let scriptPath: string;
 
@@ -65,7 +67,8 @@ beforeEach(async () => {
   await script([WRITE, TEXT]);
   vi.stubEnv("M0A_PROVIDER", "mock");
   vi.stubEnv("M1E_SAFE_MODE", "off");
-  vi.stubEnv("DSH_APPDATA", dir);
+  appData = await mkdtemp(join(tmpdir(), "auto-verify-appdata-"));
+  vi.stubEnv("DSH_APPDATA", appData);
   vi.stubEnv("M2E_USER_PLUGINS", join(dir, "plugins"));
   vi.stubEnv("M2E_LOOSE_SKILLS", join(dir, "skills"));
   vi.stubEnv("M2E_PLUGIN_DATA", join(dir, "plugin-data"));
@@ -77,7 +80,7 @@ beforeEach(async () => {
 afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
-  await rm(dir, { recursive: true, force: true }).catch(() => {});
+  await Promise.all([dir, appData].map((path) => rm(path, { recursive: true, force: true })));
 });
 
 describe("能力 5 收束闸的装配链（runAgent 直调 vs 生产入口）", () => {
@@ -119,11 +122,7 @@ describe("能力 5 收束闸的装配链（runAgent 直调 vs 生产入口）", 
   // #55 的正向半边：**批条在场**（allow 规则）时，生产入口那一拍必须发生。
   // 上一格证伪了"入口那条路从不触发"，这一格才是它该钉的断言——两头都钉住，中间那一棒才算有观察着。
   it("②b 走 handleAgentRun + allow 批条 ⇒ 写成功，那一拍真补上（正向观察）", async () => {
-    await writeFile(
-      join(dir, ".agent/permissions.json"),
-      JSON.stringify({ rules: [{ behavior: "allow", tool: "write_file", scope: "always" }] }),
-      "utf8",
-    );
+    await savePermissionRules(alwaysRulesPath(dir), [{ behavior: "allow", tool: "write_file", scope: "always" }]);
     await settings({ provider: "demo", safeMode: "off" }); // 无 autoVerify 键 ⇒ 吃到缺省开（裁决 6）
     const events = await runViaIpc({ trustedRepo: true }); // S3：本目录是本用例现搭的 fixture，自行断言可信
     const results = events.filter((e) => e.type === "tool_result");
@@ -138,11 +137,7 @@ describe("能力 5 收束闸的装配链（runAgent 直调 vs 生产入口）", 
   // 那一行是 `over.autoVerify ?? settings 的值`：右半边有 ②b 观察着，**左半边此前一格都没有**
   // （没有任何用例在 settings 为真时显式传 false）⇒ 把整行写成"只读 settings"今天没有任何用例会红。
   it("②c settings 侧为真、overrides 显式 false ⇒ 那一拍不补（override 那一半的观察着）", async () => {
-    await writeFile(
-      join(dir, ".agent/permissions.json"),
-      JSON.stringify({ rules: [{ behavior: "allow", tool: "write_file", scope: "always" }] }),
-      "utf8",
-    );
+    await savePermissionRules(alwaysRulesPath(dir), [{ behavior: "allow", tool: "write_file", scope: "always" }]);
     await settings({ provider: "demo", safeMode: "off" }); // 无键 ⇒ 缺省开，故只有 override 能关掉它
     // 第 449 页修：这一格原先没给 `trustedRepo`（②b 给了）⇒ 生产路径在 S3 信任闸就被拒、
     // 一个事件都不产生，而下面两条断言在**空集**上恒真（`[].every()` 是 true、`length` 是 0）

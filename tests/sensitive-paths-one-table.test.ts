@@ -15,8 +15,10 @@ import { join } from "node:path";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { assertNotSensitivePathReal } from "../src/tools/base";
+import { assertNotSensitivePathReal, resolveReadTarget } from "../src/tools/base";
 import { SENSITIVE_PATH_SEGMENTS, SENSITIVE_SCAN_ROOTS } from "../src/sensitive-paths";
+import { grep } from "../src/tools/grep";
+import { glob } from "../src/tools/glob";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -58,5 +60,32 @@ describe("敏感落点表：一份，两个消费者", () => {
     // 裸文件名条目不是根（它们是文件，不是目录）
     expect(SENSITIVE_SCAN_ROOTS).not.toContain(".env");
     expect(SENSITIVE_PATH_SEGMENTS).toContain(".agent/lsp.json");
+  });
+
+  it("reads resolve a harmless alias but require the direct spelling for a sensitive target", async () => {
+    const ws = await mkdtemp(join(tmpdir(), "sensitive-read-"));
+    dirs.push(ws);
+    await writeFile(join(ws, ".env.local"), "");
+    await writeFile(join(ws, "note.txt"), "");
+    await symlink(".env.local", join(ws, "placeholder"));
+    await symlink("note.txt", join(ws, "note-alias"));
+    await expect(resolveReadTarget(ws, "placeholder", "read_file", undefined)).rejects.toThrow(/敏感路径/);
+    await expect(resolveReadTarget(ws, ".env.local", "read_file", undefined)).resolves.toMatchObject({ display: ".env.local" });
+    await expect(resolveReadTarget(ws, "note-alias", "read_file", undefined)).resolves.toMatchObject({ display: "note-alias" });
+  });
+
+  it("broad scans return ordinary results and omit sensitive file matches", async () => {
+    const ws = await mkdtemp(join(tmpdir(), "sensitive-scan-"));
+    dirs.push(ws);
+    await writeFile(join(ws, "note.txt"), "fixture marker");
+    await writeFile(join(ws, "id_ed25519"), "fixture marker");
+    for (const result of [
+      await grep.run({ pattern: "fixture marker" }, { workspace: ws }),
+      await glob.run({ pattern: "**/*" }, { workspace: ws }),
+    ]) {
+      expect(result.ok).toBe(true);
+      expect(result.output).toContain("note.txt");
+      expect(result.output).not.toContain("id_ed25519");
+    }
   });
 });

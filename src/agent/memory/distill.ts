@@ -11,7 +11,7 @@ import type { Provider, ProviderMessage } from "../../providers";
 import type { Tool, ToolContext } from "../../tools/base";
 import type { GateMeta } from "../../permissions/autonomy";
 import { LESSON_MEMORY_TYPE, distillLessons, sessionOf } from "./lessons";
-import { globalMemoryDir, projectMemoryDir, writeTopic } from "./store";
+import { globalMemoryDir, projectMemoryWriteDir, writeTopic } from "./store";
 import { flushRecallHits } from "./inject";
 import { consolidateMemoryDir, consolidationDigest, type ConsolidationReport } from "./consolidate";
 // 能力 10 的落盘那一跳（失败轨迹 → 靶场草稿）；纯取料在 gym/draft，本模块只负责在会话结束时递上 events 与证据。
@@ -190,10 +190,10 @@ export async function writeLessons(opts: {
     await opts.emit({ type: "tool_result", callId: "", ok: false, output: "[memory] 教训提炼失败: " + (err instanceof Error ? err.message : String(err)) });
     return out;
   }
-  const dir = projectMemoryDir(opts.workspace);
   for (const l of lessons) {
     if (opts.signal?.aborted) break;
     try {
+      const dir = await projectMemoryWriteDir(opts.workspace, l.topic);
       await writeTopic(dir, l.topic, LESSON_MEMORY_TYPE, l.body, opts.nowISO ?? new Date().toISOString());
       out.written.push(l.topic);
     } catch (err) {
@@ -294,7 +294,7 @@ export async function runSessionEndDistill(opts: DistillOptions): Promise<Distil
   for (const scope of ["project", "global"] as const) {
     if (opts.signal?.aborted) return cancelledDistillOutcome(opts.signal);
     try {
-      const dir = scope === "project" ? projectMemoryDir(opts.workspace) : globalMemoryDir();
+      const dir = scope === "project" ? await projectMemoryWriteDir(opts.workspace) : globalMemoryDir();
       consolidationNotes.push({ scope, report: await consolidateMemoryDir({ dir, nowISO: new Date().toISOString() }) });
     } catch (err) {
       await opts.emit({ type: "tool_result", callId: "", ok: false, output: "[memory] " + (scope === "project" ? "项目层" : "全局层") + "记忆巩固失败（其余收尾照常）: " + (err instanceof Error ? err.message : String(err)) });
