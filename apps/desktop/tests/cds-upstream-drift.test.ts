@@ -74,6 +74,24 @@ describe("上游钉：版本与摘要必须记在仓里（与机器无关，永�
     // 旧写法 chunk[start:chunk.find(TOKENS_END, start)] 会把压缩 JS 尾巴一起写进 CSS。
     expect(src).not.toContain("end = chunk.find(TOKENS_END, start)");
   });
+
+  it("抽出来的是**整张薄**：起点块在、终点块在、花括号配平（防切多也防切少）", () => {
+    // 为什么要有这一格：「薄是纯 CSS」那一格能挡住**尾部**混进压缩 JS，
+    // 但**切在半路**（起点锚点命中了更早的一处、或止点提前）它查不出来——
+    // 文件仍然是合法 CSS，sha 也自洽，只有「内容不完整」这一种病。
+    // 官方薄是**单个模板串**（实测：起点→</style> 之间 2 个反引号、0 个 `+`），
+    // 所以「起点块 ＋ 终点块 ＋ 花括号配平」三件事合起来就证明抽的是整张。
+    const sheet = readFileSync(`${vendorDir}tokens.css`, "utf8");
+    // 起点：官方薄的第一块是 :root 的 radius 刻度（抽取器起点锚点所在处）。
+    expect(sheet).toMatch(/^:root \{\n\s*--radius: calc\(0\.5rem \* var\(--cds-rem-scale, 1\)\);/);
+    // 终点：官方薄的最后是「跟随系统偏好」的暗色媒体块。
+    expect(sheet).toContain('[data-mode="system"]:not(:root)');
+    expect(sheet.trimEnd().endsWith("}")).toBe(true);
+    // 花括号配平：切在半路必然失衡。
+    const open = (sheet.match(/\{/g) ?? []).length;
+    const close = (sheet.match(/\}/g) ?? []).length;
+    expect(open, `薄的花括号不配平（{=${open} }=${close}）⇒ 抽取切在了半路`).toBe(close);
+  });
   it("判据自身的接线：抽取脚本在仓里（缺席 ⇒ 这一格恒真）", () => {
     expect(existsSync(extractor)).toBe(true);
   });

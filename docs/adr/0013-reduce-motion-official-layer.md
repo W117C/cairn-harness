@@ -14,7 +14,17 @@
 逐个组件族覆盖。本仓的对应机制在 **2026-10-28 第 758 页**就照上游做了
 （`apps/desktop/src/renderer/state/motion-pref.ts`，文件头原话「对标 Claude 的 `data-reduce-motion` 根属性」）：
 偏好（跟系统 / 应用内强制减弱）、localStorage 持久化、根属性 `html[data-reduce-motion="true"]`、
-CSS 侧停动规则、JS 侧 `appMotionReduced()`（`useStickyScroll.ts` 的平滑滚动降级正在读它）。
+**CSS 侧**停动规则。
+
+> **更正（2026-11-12 晚些时候，验收指出）**：本条初稿在这里写「JS 侧 `appMotionReduced()`
+> （`useStickyScroll.ts` 的平滑滚动降级正在读它）」——**对 HEAD 是错的**。
+> `git show HEAD:apps/desktop/src/renderer/state/motion-pref.ts` 里**没有** `appMotionReduced` 这个函数，
+> `git show HEAD:apps/desktop/src/renderer/useStickyScroll.ts` 只读 `window.matchMedia("(prefers-reduced-motion: reduce)")`。
+> `appMotionReduced()` 及其 5 处接线是**并发会话在共享工作树里的未提交工作**
+> （他们自己在台账第 1177 页记了这件事：「第 1176 页写『JS 侧 appMotionReduced() 正在读它』，
+> 但 `git show HEAD` 实测 HEAD 无此函数——它描述的是本页未提交的工作树」）。
+> ⇒ **HEAD 上的实情**：机制是「**CSS/落位那半早就在**（偏好＋持久化＋根属性＋CSS 停动规则），
+> **JS 读取那半在 HEAD 上没有**」；而**本 ADR 修的是官方组件层（CSS）那一半**，那一条在 HEAD 上确实成立、确实是本 ADR 做的。
 
 ⇒ **机制不是差距**。ADR 0010 把这条列成候选是**判错了**（更正见该 ADR 第四节第 5 条与台账第 1174 页）。
 

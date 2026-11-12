@@ -102,7 +102,7 @@ ADR 0009 记的是「插件声明的 `rea` stdio MCP 未挂载、`npx -y rea-age
    > **机制那半是错的**：本仓在 **2026-10-28 第 758 页**就已经照上游做了根节点属性开关
    > （`apps/desktop/src/renderer/state/motion-pref.ts`，文件头原话「对标 Claude 的 `data-reduce-motion` 根属性」）——
    > 偏好（跟系统 / 应用内强制减弱）、localStorage 持久化、根属性 `html[data-reduce-motion="true"]`、
-   > CSS 侧停动规则、JS 侧 `appMotionReduced()`（`useStickyScroll.ts` 的平滑滚动降级正在读它）。
+   > CSS 侧停动规则。**（更正：`appMotionReduced()` 那半在 HEAD 上没有**——`git show HEAD:…/motion-pref.ts` 里没有这个函数，`useStickyScroll.ts` 只读 `matchMedia`；它是并发会话在共享工作树里的**未提交**工作，见 ADR 0013 第一节的更正块与台账第 1180 页。）
    > **真缺口是覆盖面**：上游那 88 处 `[data-reduce-motion]` 钩子**逐族覆盖**，本仓的应用内开关只停了**自有**动效，
    > **官方 CDS 组件层一条都没盖** ⇒ 用户在应用里关掉动效，**骨架照样呼吸、消息操作条照样显现**
    > （系统偏好那条走全局媒体查询，才停得住）。
