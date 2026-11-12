@@ -1,0 +1,53 @@
+{
+  "evidence_id": "ev_904d04ee7067c3975a15128f9774b0658eb6fbf49d60d4be1200ed7b0be8ed8a",
+  "subject": {
+    "name": "app.asar",
+    "digest": {
+      "sha256": "3695c17edcab8d66c1e5f2faa03e07826a59a39bf78b369ec87854547d4843c1"
+    },
+    "format": "asar",
+    "architecture": null,
+    "local_path": "/Applications/ChatGPT.app/Contents/Resources/app.asar"
+  },
+  "provider": "REA analysis view projection",
+  "confidence": "derived",
+  "authority": "shipped-artifact",
+  "statistics": {
+    "relevant_files": 10958,
+    "nested_asar_containers": 0,
+    "text_bytes_read": 570862140,
+    "invalid_utf8_files": 0,
+    "parsed_javascript_files": 1056,
+    "visited_ast_nodes": 6510525,
+    "findings": 2301,
+    "modules": 71,
+    "parse_failures": 0
+  },
+  "electron": {
+    "browser_windows": 0,
+    "explicit_web_preferences": 0,
+    "preload_entrypoints": 0,
+    "context_bridge_apis": 4,
+    "exposed_api_members": 2,
+    "ipc": {
+      "operations": 44,
+      "literal_channels": 25,
+      "dynamic_channel_operations": 19,
+      "renderer_transmissions": 35,
+      "renderer_listeners": 9,
+      "main_handlers": 0,
+      "paired_renderer_transmissions": 0,
+      "ambiguous_renderer_transmissions": 0,
+      "unpaired_literal_renderer_transmissions": 18
+    },
+    "sender_validation_observations": 17,
+    "utility_processes": 0,
+    "resolved_utility_entrypoints": 0,
+    "native_addon_bindings": 0,
+    "resolved_native_addon_bindings": 0
+  },
+  "coverage_application": "partial",
+  "coverage_semantic": "partial",
+  "limitation_count": 2108,
+  "unknown_count": 2112
+}

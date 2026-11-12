@@ -1,0 +1,218 @@
+取出 1,339,815 B  webview/assets/async/9ec44337a842.css
+取出   181,373 B  webview/assets/async/d1ed4eefdb48.css
+取出   154,178 B  webview/assets/async/4d4bc71faeae.css
+取出   135,656 B  webview/assets/async/2385db866d8d.css
+取出   127,772 B  webview/assets/async/c3b97f2ae033.css
+取出   120,776 B  webview/assets/async/6aae4f312e76.css
+取出     9,840 B  webview/index.html
+
+合并 CSS 2,059,562 B
+
+=== @keyframes 全表 ===
+共 84 个
+   FastModeTickFade-lSHBzF
+   FastModeTickReturnFade-cRfa2r
+   FastModeTickReturnScale-wVva7v
+   FastModeTickReturnTranslate-HnkAfv
+   FastModeTickScale-kxqpPf
+   FastModeTickTranslate-_DViX0
+   PageImageLift-FIiTnL
+   PageImageLiftCrop-oM_1oS
+   activity-shimmer-K09nKA
+   attention-DBRDZN
+   browserAutocompleteMentionFadeOut-T7fMR_
+   caret-HpTbmF
+   chatGptLoadingResultsShimmer-xV00aH
+   chatGptProjectSkeleton-RQb9Gi
+   cursorPulse-LX8OLe
+   desktop-refresh-pulse
+   docked-controls-in-cyaSER
+   edge-fade
+   edge-fade-bottom
+   edge-fade-horizontal
+   edge-fade-top
+   enter-kVsg_d
+   fade-in-TyYJOE
+   fadeIn-sugbzF
+   float-iEW0E4
+   floating-controls-out-MmQz8k
+   frameTilt-W9aStk
+   glow-PVZJ_w
+   image-loaded-Ynqsiw
+   incoming-tab-in-QgLQAI
+   loading-block-pulse-kGFJAQ
+   loading-indeterminate-Kk4Nlj
+   loading-pulse-d0_8Sr
+   loading-sheen-WV8D5M
+   loading-shimmer
+   loading-shimmer-mask
+   loadingResultsShimmer-sDqi9i
+   mapboxgl-spin
+   mapboxgl-user-location-dot-pulse
+   marqueeTextFadeRightMask-bd4Ijj
+   marqueeTextScroll-vRgqyp
+   messaging-reply-highlight
+   messaging-spin
+   native-autofill-in-Ny30wB
+   native-autofill-in-RzOL_f
+   native-autofill-in-SbiCvZ
+   native-autofill-in-pm5MDI
+   native-autofill-in-snFRpz
+   onboarding-control-enter
+   page-image-caret-blink-sCb03h
+   ping
+   profile-loading-page-sweep-WmsXxH
+   progression-donut-fill-Fr2Avu
+   pulse
+   pulse-KBGyYy
+   pulse-rtaWda
+   pulse-size-TgCFaq
+   reduced-glow-ux7t77
+   reveal-S6akTC
+   reveal-response-word-AMBNTw
+   reveal-wo8Ti9
+   reveal-word-fzhp0b
+   rise-RJe6sT
+   rotate-B1uBgq
+   rotate-OdiGJs
+   rotate-oT73x0
+   rotate-ol1o4w
+   scale-in-GUncIP
+   shake
+   shake-wTa0w2
+   shimmer-FdfSTi
+   shimmer-Kfmloo
+   shimmer-ZEh1Pz
+   sink-ZKdHmi
+   slide-from-left-DOQxt5
+   slide-to-left-mslGpU
+   spin
+   sweep-wuZoqb
+   tip-enter-QmCodx
+   token-pulsing-dot
+   turn-lCfJO7
+   typing-bubble-opacity
+   typing-shimmer
+   w-entrance-reveal-Y1xMiT
+
+=== 计时令牌（CSS 变量里带 duration/time 的） ===
+  x5    --tw-duration                                .3s
+  x5    --tw-ease                                    var(--ease-out)
+  x5    --tw-duration                                var(--transition-duration-basic,.15s)
+  x4    --tw-duration                                .12s
+  x4    --tw-ease                                    var(--ease-out,cubic-bezier(0, 0, .2, 1))
+  x3    --tw-duration                                .15s
+  x3    --tw-duration                                .2s
+  x3    --tw-duration                                .5s
+  x3    --tw-duration                                var(--transition-duration-basic)
+  x3    --tw-duration                                var(--transition-duration-relaxed)
+  x3    --tw-ease                                    var(--ease-basic)
+  x3    --tw-ease                                    var(--ease-enter-snappy)
+  x3    --tw-ease                                    var(--ease-in-out)
+  x3    --tw-ease                                    linear
+  x2    --transition-duration-basic                  .15s
+  x2    --tw-duration                                0s
+  x2    --tw-duration                                .25s
+  x2    --tw-duration                                .125s
+  x2    --tw-duration                                1.1s
+  x2    --tw-ease                                    cubic-bezier(.22,1,.36,1)
+  x2    --tw-ease                                    steps(1,end)
+  x2    --tw-ease                                    steps(1,start)
+  x2    --tw-duration                                var(--transition-duration-relaxed,.3s)
+  x2    --tw-ease                                    var(--ease-enter-snappy,cubic-bezier(.23, 1, .32, 
+  x2    --model-picker-power-slider-tick-opacity-delay 0s
+  x2    --model-picker-power-slider-mode-transition-duration 0s
+  x2    --model-picker-power-slider-tick-transform-duration 0s
+  x2    --model-picker-power-slider-tick-translate-duration 0s
+  x1    --tw-duration                                initial
+  x1    --tw-ease                                    initial
+
+=== cubic-bezier 取值 ===
+  x10   cubic-bezier(0, 0, .2, 1)
+  x10   cubic-bezier(.4, 0, .2, 1)
+  x7    cubic-bezier(.23, 1, .32, 1)
+  x6    cubic-bezier(.22,1,.36,1)
+  x6    cubic-bezier(.333333,0,.666667,1)
+  x5    cubic-bezier(.2,0,0,1)
+  x3    cubic-bezier(.16,1,.3,1)
+  x2    cubic-bezier(.19, 1, .22, 1)
+  x2    cubic-bezier(.8, 0, .4, 1)
+  x2    cubic-bezier(.65, 0, .35, 1)
+  x2    cubic-bezier(.25,.46,.45,.94)
+  x2    cubic-bezier(.32, .72, 0, 1)
+  x2    cubic-bezier(.16, 1.8, .3, 1)
+  x2    cubic-bezier(.23,1,.32,1)
+  x2    cubic-bezier(.19,1,.22,1)
+  x1    cubic-bezier(.4, 0, 1, 1)
+  x1    cubic-bezier(.4, 0, .6, 1)
+  x1    cubic-bezier(.65, 0, .4, 1)
+  x1    cubic-bezier(.77,0,.175,1)
+  x1    cubic-bezier(.16, 1, .3, 1)
+
+=== 状态钩子（data-* 属性） ===
+  x896   [data-theme]
+  x524   [data-codex-window-type]
+  x277   [data-appearance-preset]
+  x258   [data-reduced-motion]
+  x235   [data-variant]
+  x206   [data-state]
+  x168   [data-w-component]
+  x130   [data-avatar-overlay-material-variant]
+  x107   [data-color]
+  x94    [data-w-direction]
+  x79    [data-disabled]
+  x61    [data-size]
+  x56    [data-composer-markdown]
+  x55    [data-page-block-type]
+  x53    [data-w-variant]
+  x51    [data-w-size]
+  x47    [data-page-block-viewport]
+  x46    [data-composer-layout]
+  x44    [data-w-auto-spacing]
+  x44    [data-composer-expanded-top-tray]
+  x40    [data-app-shell-main-surface]
+  x39    [data-composer-utility-bar-variant]
+  x37    [data-page-block-diff]
+  x36    [data-w-weight]
+  x35    [data-page-block-row]
+  x34    [data-appearance]
+  x34    [data-composer-code-block]
+  x33    [data-selected]
+  x33    [data-comment-layout]
+  x32    [data-testid]
+  x31    [data-page-block-layout]
+  x30    [data-owl-native-glass]
+  x29    [data-stripe-checkout-dialog]
+  x29    [data-w-flush]
+  x29    [data-composer-radius-variant]
+
+=== 减弱动效 / 暗色机制 ===
+  prefers-reduced-motion           147
+  data-reduce-motion               0
+  reduce-motion                    0
+  prefers-color-scheme             1
+  data-mode                        0
+  data-theme                       896
+  prefers-contrast                 1
+  prefers-reduced-transparency     4
+  forced-colors                    73
+
+=== 顶层 CSS 变量前缀（前缀分布） ===
+  --color-                     6084
+  --tw-                        5708
+  --font-                      947
+  --button-                    741
+  --text-                      727
+  --app-                       667
+  --radius-                    499
+  --vscode-                    394
+  --blue-                      299
+  --theme-                     288
+  --gray-                      285
+  --control-                   272
+  --codex-                     261
+  --composer-                  245
+  --red-                       240
+  --green-                     240
+  --default-                   226
+  --padding-                   216
