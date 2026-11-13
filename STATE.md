@@ -23,6 +23,10 @@ rev: 744132fc
   登记专项批次）。锁定分支裁决表：deps-20261109 留（React 19 候选）、esbuild-20261109 留（工具升
   级可用 `pnpm up` 达成，整支合并会拖全史）、deps-batch-20261108 删除候选（271 笔旧 churn 被精选
   支覆盖意图）、public-repo-audit 留（谱系审计属深水区）。
+- **2026-11-13 race 加固批**（`f19d8ade`，三线同源）：CodeQL 14 条 file-system-race 逐条 triage——
+  4 条真暴露已修（mutation-lock 句柄内读＋inode 对照；preferences/registry 读后复查字节上限；
+  diagnostics 双分支走单句柄有界读）；10 条登记不动（保守失效/已有读后复查/只读工具）。
+  同批清掉 Mimosa 两个 blocking high（抽取脚本落点收口＋smoke 走临时文件程序）。
 - **批内全量读数**（tip `741d23f4` 现跑）：core 673 文件 / 8111 条全绿、desktop 385 文件 / 2490 条
   全绿（均 `--maxWorkers=2`，exit 0）；tsc 0；docs-check 全绿；desktop build 绿。
 - GitHub `main` 是 AGPL 公开主线：F4（`6fb20860`）与本批移植 `a95c2147`（trust guard `c37bd78b`、
