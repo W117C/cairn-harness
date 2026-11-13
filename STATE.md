@@ -16,6 +16,13 @@ rev: 744132fc
   loading→ready 翻转即 React #310 整屏崩进错误边界（design-audit 23-plugins 起 15 miss/13 dup
   实证）；`30f70887` 上移 hooks＋源序判卷钉，design-audit 复原 41 shots / 41 unique / 0 dup /
   0 miss / 0 pageErrors。
+- **2026-11-13 续批**：`c56b7523` 用 workspace override 把 `@hono/node-server` 抬到补丁线 2.1.7
+  （GHSA-qv5m-9pm6-hqp3／GHSA-jpvv-r467-5p4w，MCP SDK 传递依赖；公开线 `98ed97a1`——该线旧 override
+  钉死 2.1.3 正是两条开放告警的根源）；`0ad71cc1` 锁文件读取 race 加固（stat-read-stat inode 三明治）
+  ＋scheduler 两格显式 await（CodeQL 真类告警里唯一当场可修的；其余 12 条 race 多为保守失效/工具脚本，
+  登记专项批次）。锁定分支裁决表：deps-20261109 留（React 19 候选）、esbuild-20261109 留（工具升
+  级可用 `pnpm up` 达成，整支合并会拖全史）、deps-batch-20261108 删除候选（271 笔旧 churn 被精选
+  支覆盖意图）、public-repo-audit 留（谱系审计属深水区）。
 - **批内全量读数**（tip `741d23f4` 现跑）：core 673 文件 / 8111 条全绿、desktop 385 文件 / 2490 条
   全绿（均 `--maxWorkers=2`，exit 0）；tsc 0；docs-check 全绿；desktop build 绿。
 - GitHub `main` 是 AGPL 公开主线：F4（`6fb20860`）与本批移植 `a95c2147`（trust guard `c37bd78b`、
