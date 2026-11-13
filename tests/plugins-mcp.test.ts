@@ -1,7 +1,7 @@
 // M2e 任务 6/7 集成测试：stub MCP server（官方 SDK，stdio，仓库内 fixtures）——
 // tools/list 进注册表且名字为 scoped 形态 / tools/call 结果回传（含 isError 路径）/
 // 权限门对 MCP 工具同样生效（deny 规则）/ server 状态投影 / 信任门（未信任不激活→信任后生效）。
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { cp, mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -17,6 +17,18 @@ import { McpManager } from "../src/agent/plugins/mcp";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 
+
+// F2 余项迁移（2026-11-13）：信任表不得落工作区（PluginRuntime 装载 fail loud 拒载）。
+// 共享一个工作区外的信任目录：本测试文件内复用，文件级 afterEach 清尾。
+let trustHome = "";
+afterEach(async () => {
+  if (trustHome) await rm(trustHome, { recursive: true, force: true }).catch(() => {});
+  trustHome = "";
+});
+const trustRoot = async (): Promise<string> => {
+  if (!trustHome) trustHome = await mkdtemp(join(tmpdir(), "dsh-trust-out-"));
+  return trustHome;
+};
 const asTool = (s: string): ToolName => s as ToolName;
 
 function fx(...parts: string[]): string {
@@ -94,7 +106,7 @@ describe("M2e MCP 适配器（任务 7，真 stub server）", () => {
     const rt = await PluginRuntime.load({
       workspace: ws,
       pluginDataRoot: join(ws, "data"),
-      trustFile: join(ws, "trust.json"),
+      trustFile: join(await trustRoot(), "trust.json"),
       projectPluginsDir: join(ws, "no-plugins"),
     });
     const names: string[] = [];
@@ -296,7 +308,8 @@ describe("M2e 信任门（任务 6）", () => {
       join(pluginsDir, "echo-suite", "linked.json"),
       "file",
     );
-    const trustFile = join(ws, "trust-link.json");
+    // F2 余项：信任表不得落工作区 ⇒ 复用本文件 TRUST_DIR（tmpdir 级，工作区外）。
+    const trustFile = join(TRUST_DIR, "trust-link.json");
     const load = (): Promise<PluginRuntime> =>
       PluginRuntime.load({ projectPluginsDir: pluginsDir, workspace: ws, pluginDataRoot: join(ws, "data"), trustFile });
     const rt = await load();

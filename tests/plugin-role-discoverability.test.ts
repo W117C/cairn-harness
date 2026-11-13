@@ -14,6 +14,18 @@ import { PluginRuntime } from "../src/agent/plugins";
 import { buildSkillRoutingList, SKILL_ROUTING_CHAR_LIMIT } from "../src/agent/plugins/skills";
 import { resolvePluginRole, PLUGIN_ROLE_CONSUMED_KEYS } from "../src/agent/sequencer";
 
+
+// F2 余项迁移（2026-11-13）：信任表不得落工作区（PluginRuntime 装载 fail loud 拒载）。
+// 共享一个工作区外的信任目录：本测试文件内复用，文件级 afterEach 清尾。
+let trustHome = "";
+afterEach(async () => {
+  if (trustHome) await rm(trustHome, { recursive: true, force: true }).catch(() => {});
+  trustHome = "";
+});
+const trustRoot = async (): Promise<string> => {
+  if (!trustHome) trustHome = await mkdtemp(join(tmpdir(), "dsh-trust-out-"));
+  return trustHome;
+};
 describe("resolvePluginRole：不读的字段必须吭声", () => {
   it("只写合法键 ⇒ 零警告（反控：不许用「什么都警告」蒙过这条）", () => {
     const r = resolvePluginRole({
@@ -85,7 +97,7 @@ describe("路由清单把插件 agent 角色一起列给模型（发现面）", 
       projectPluginsDir: join(dir, "plugins"),
       workspace: dir,
       pluginDataRoot: join(dir, "plugin-data"),
-      trustFile: join(dir, "trust.json"),
+      trustFile: join(await trustRoot(), "trust.json"),
     });
     if (trust) await rt.trustDecide("crew", true);
     return rt;

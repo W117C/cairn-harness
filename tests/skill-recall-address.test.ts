@@ -10,7 +10,7 @@
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { skillRecallSuffix, expandSkillInvocation, skillInvokeName } from "../src/agent/plugins/skills";
 import { PluginRuntime } from "../src/agent/plugins";
@@ -18,6 +18,18 @@ import { read_file } from "../src/tools/read_file";
 import type { SkillEntry } from "../src/agent/plugins/types";
 import type { ToolContext } from "../src/tools/base";
 
+
+// F2 余项迁移（2026-11-13）：信任表不得落工作区（PluginRuntime 装载 fail loud 拒载）。
+// 共享一个工作区外的信任目录：本测试文件内复用，文件级 afterEach 清尾。
+let trustHome = "";
+afterEach(async () => {
+  if (trustHome) await rm(trustHome, { recursive: true, force: true }).catch(() => {});
+  trustHome = "";
+});
+const trustRoot = async (): Promise<string> => {
+  if (!trustHome) trustHome = await mkdtemp(join(tmpdir(), "dsh-trust-out-"));
+  return trustHome;
+};
 let ws = "";
 const relInside = ".agent/plugins/p/skills/big/SKILL.md";
 
@@ -118,7 +130,7 @@ describe("模型那条 face 的 producer 也有观测者（少传 workspace 会�
       looseRoots: [],
       workspace: root,
       pluginDataRoot: dataDir,
-      trustFile: join(dataDir, "trust.json"),
+      trustFile: join(await trustRoot(), "trust.json"),
     });
     try {
       await rt.trustDecide("cap-suite", true);
