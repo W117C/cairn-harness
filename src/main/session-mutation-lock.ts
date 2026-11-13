@@ -31,12 +31,22 @@ async function acquireRootLock(root: string): Promise<void> {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       // TOCTOU 加固（CodeQL js/file-system-race，2026-11-13）：EEXIST 与读取之间锁文件可能被
       // 换掉（崩溃→重建），旧实现直接 readFile 会把**新持有者**的 pid 读进来判旧锁。
-      // stat-read-stat 三明治：两次 stat 的 inode 不一致 ⇒ 这次读取不可信，pid 按 unknown 处理
-      // （保守方向不变：不抢活人的锁，也绝不据假 pid 强拆）。
-      const inoBefore = await stat(lockPath).then((s) => s.ino).catch(() => null);
-      const raw = await readFile(lockPath, "utf8").catch(() => "");
-      const inoAfter = await stat(lockPath).then((s) => s.ino).catch(() => null);
-      const pid = inoBefore !== null && inoBefore === inoAfter ? parseMutationLockPid(raw) : null;
+      // 句柄内读：内容与 fstat 出自同一个 open；路径 stat 对照句柄 inode，不一致 ⇒ 读取期间
+      // 文件被换过，pid 按 unknown 处理（保守方向不变：不抢活人的锁，也绝不据假 pid 强拆）。
+      const lockHandle = await open(lockPath, "r").catch(() => null);
+      let raw = "";
+      let handleIno: number | null = null;
+      if (lockHandle !== null) {
+        try {
+          handleIno = (await lockHandle.stat()).ino;
+          raw = await lockHandle.readFile("utf8");
+        } catch {
+          raw = "";
+        }
+      }
+      const pathIno = await stat(lockPath).then((s) => s.ino).catch(() => null);
+      await lockHandle?.close().catch(() => undefined);
+      const pid = handleIno !== null && handleIno === pathIno ? parseMutationLockPid(raw) : null;
       const liveness = pid === null ? "unknown" : processLiveness(pid);
       // 只有 ESRCH 能证明持有者已退出；EPERM / 坏内容都按「还在」等多一个截止期，
       // 不能把「不归我管」误报成崩溃遗留，更不能据此抢走活人的临界区。

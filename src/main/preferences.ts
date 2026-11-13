@@ -137,6 +137,9 @@ export async function readPreferencesFile(file: string): Promise<PreferencesImpo
     if (!info.isFile()) return { ok: false, error: "选择的不是文件" };
     if (info.size > PREFERENCES_MAX_BYTES) return { ok: false, error: `偏好备份过大（上限 ${String(PREFERENCES_MAX_BYTES)} 字节）` };
     text = await readFile(file, "utf8");
+    // 读后复查（CodeQL js/file-system-race，2026-11-13）：stat 限长与读取之间文件可能被换大
+    // ⇒ 边界必须在读到的**实际内容**上再判一次，不靠读之前的那次 stat。
+    if (Buffer.byteLength(text, "utf8") > PREFERENCES_MAX_BYTES) return { ok: false, error: `偏好备份过大（上限 ${String(PREFERENCES_MAX_BYTES)} 字节）` };
   } catch (err) {
     return { ok: false, error: `读取偏好备份失败：${err instanceof Error ? err.message : String(err)}` };
   }
