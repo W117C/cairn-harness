@@ -18,8 +18,9 @@ rev: 744132fc
   0 miss / 0 pageErrors。
 - **批内全量读数**（tip `741d23f4` 现跑）：core 673 文件 / 8111 条全绿、desktop 385 文件 / 2490 条
   全绿（均 `--maxWorkers=2`，exit 0）；tsc 0；docs-check 全绿；desktop build 绿。
-- GitHub `main` 是 AGPL 公开主线，`6fb20860` 移植宿主联网免批贯通（F4，红绿独立取证）；
-  Actions verify/codeql 以该提交为准。内测开发历史只在本地（集成线不推公开远端）。
+- GitHub `main` 是 AGPL 公开主线：F4（`6fb20860`）与本批移植 `a95c2147`（trust guard `c37bd78b`、
+  F5 `00ec8be0`、冻结闸 `2297543e`、夹具迁移）已推；公开树红绿独立取证＋全量 core 647 文件 /
+  7353 条全绿。内测开发历史只在本地（集成线不推公开远端）。
 - 历史证据已按[归档记录](docs/history-evidence-migration.md)做过解包和哈希回读。原始材料继续保留。
 - 历史证据已按[归档记录](docs/history-evidence-migration.md)做过解包和哈希回读。原始材料继续保留。
 
