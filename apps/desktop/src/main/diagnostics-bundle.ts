@@ -34,19 +34,25 @@ export async function readLogTail(
   let text: string;
   let truncated = false;
   try {
-    if (info.size > maxBytes) {
-      // 只读尾部：日志是追加写的，头部对一次事故的定位价值最低。
-      const handle = await open(file, "r");
-      try {
+    // 句柄内取大小并读（CodeQL js/file-system-race，2026-11-13）：stat→readFile 的换文件
+    // 窗口曾让「换大的文件」绕过上限整读。两个分支都走同一个句柄：fstat 定分支、
+    // 按句柄大小有界读，读到的内容与做判断的大小出自同一个 open。
+    const handle = await open(file, "r");
+    try {
+      const size = (await handle.stat()).size;
+      if (size > maxBytes) {
+        // 只读尾部：日志是追加写的，头部对一次事故的定位价值最低。
         const buffer = Buffer.alloc(maxBytes);
-        await handle.read(buffer, 0, maxBytes, Math.max(0, info.size - maxBytes));
+        await handle.read(buffer, 0, maxBytes, Math.max(0, size - maxBytes));
         text = buffer.toString("utf8");
-      } finally {
-        await handle.close();
+        truncated = true;
+      } else {
+        const buffer = Buffer.alloc(size);
+        await handle.read(buffer, 0, size, 0);
+        text = buffer.toString("utf8");
       }
-      truncated = true;
-    } else {
-      text = await readFile(file, "utf8");
+    } finally {
+      await handle.close();
     }
   } catch {
     return null;

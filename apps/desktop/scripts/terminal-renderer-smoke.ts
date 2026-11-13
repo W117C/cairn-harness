@@ -109,12 +109,15 @@ async function main(){
   await query('AFTER_SIGINT');
   check('Ctrl+C 中断前台命令后 shell 仍可用',true);
   // 双向大流量：前台程序边读边回显，能抓住“阻塞写入导致无法排空回显”的死锁。
+  // 2026-11-13：程序改走临时文件（Mimosa high「命令注入」形状消除——命令行不再拼接
+  // 任何插值串；字节计数写进程序文件本身，typed 命令只剩 `python3 <路径>`）。
   const payload='你好🌍'.repeat(16384);
   const bytes=Buffer.byteLength(payload);
   const digest=createHash('sha256').update(payload).digest('hex');
-  const program=`import os,termios,tty,hashlib; old=termios.tcgetattr(0); tty.setraw(0); print("BULK_READY",flush=True); data=bytearray(); remaining=${bytes}\nwhile remaining:\n chunk=os.read(0,min(4096,remaining)); data.extend(chunk); remaining-=len(chunk); os.write(1,chunk)\ntermios.tcsetattr(0,termios.TCSANOW,old); print("\\nBULK_RESULT:"+str(len(data))+":"+hashlib.sha256(data).hexdigest(),flush=True)`;
-  const encoded=Buffer.from(program).toString('base64');
-  await type(`python3 -c 'import base64;exec(base64.b64decode("${encoded}"))'`);
+  const progDir=mkdtempSync(join(tmpdir(),'term-bulk-'));
+  const progPath=join(progDir,'bulk.py');
+  writeFileSync(progPath,`import os,termios,tty,hashlib\nold=termios.tcgetattr(0)\ntty.setraw(0)\nprint("BULK_READY",flush=True)\ndata=bytearray()\nremaining=${bytes}\nwhile remaining:\n chunk=os.read(0,min(4096,remaining))\n data.extend(chunk)\n remaining-=len(chunk)\n os.write(1,chunk)\ntermios.tcsetattr(0,termios.TCSANOW,old)\nprint("\\nBULK_RESULT:"+str(len(data))+":"+hashlib.sha256(data).hexdigest(),flush=True)\n`);
+  await type(`python3 ${progPath}`);
   await waitFor(()=>/[\r\n]BULK_READY\r?\n/.test(text()),'大段输入检查就绪');
   await win.webContents.insertText(payload);
   await waitFor(()=>text().includes(`BULK_RESULT:${bytes}:${digest}`),'大段中文输入完整往返',25000);

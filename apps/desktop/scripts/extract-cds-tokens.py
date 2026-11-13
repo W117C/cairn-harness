@@ -17,7 +17,7 @@
 #   python3 scripts/extract-cds-tokens.py --write <out-dir>  # 落盘 tokens.css + 渲染层 CSS
 #
 # --write 的 out-dir 通常就是 src/renderer/vendor/cds-official；
-# 渲染层 CSS 落到 <out-dir>/../_cache/ 供组件抽取脚本使用（不入库）。
+# 渲染层 CSS 落到输出目录旁的 _cache/（上一级，不入库）供组件抽取脚本使用。
 import argparse
 import hashlib
 import json
@@ -26,6 +26,7 @@ import re
 import struct
 import sys
 import tempfile
+from pathlib import Path
 
 DEFAULT_ASAR = "/Applications/Claude.app/Contents/Resources/app.asar"
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -175,16 +176,27 @@ def main():
     report["verdict"] = verdict
 
     if args.write:
-        out_dir = os.path.abspath(args.write)
+        # 防路径逃逸收口（Mimosa high，2026-11-13）：--write/--css-out 是操作者输入，
+        # 落点 realpath 后收进当前工作目录；rendererCss 缺省不再另建 /tmp 临时目录，
+        # 直接落到 out_dir（与 tokens.css 同目录，证据同处）。写盘走 Path.write_bytes。
+        out_dir = os.path.realpath(args.write)
+        cwd = os.getcwd()
+        rel = os.path.relpath(out_dir, cwd)
+        if rel == ".." or rel.startswith(".." + os.sep):
+            print(json.dumps({"error": "--write 落点必须在当前工作目录内：" + out_dir}, ensure_ascii=False))
+            return 2
         os.makedirs(out_dir, exist_ok=True)
-        tokens_out = os.path.join(out_dir, "tokens.css")
-        with open(tokens_out, "wb") as fh:
-            fh.write(tokens_bytes)
-        css_out = args.css_out or os.path.join(tempfile.mkdtemp(prefix="cds-renderer-"), os.path.basename(css_path))
-        os.makedirs(os.path.dirname(os.path.abspath(css_out)), exist_ok=True)
-        with open(css_out, "wb") as fh:
-            fh.write(css_bytes)
-        report["written"] = {"tokens.css": tokens_out, "rendererCss": css_out}
+        tokens_out = Path(out_dir) / "tokens.css"
+        tokens_out.write_bytes(tokens_bytes)
+        css_out = Path(args.css_out or tokens_out.parent / os.path.basename(css_path))
+        css_resolved = css_out.resolve()
+        css_rel = os.path.relpath(css_resolved, cwd)
+        if css_rel == ".." or css_rel.startswith(".." + os.sep):
+            print(json.dumps({"error": "--css-out 落点必须在当前工作目录内：" + str(css_out)}, ensure_ascii=False))
+            return 2
+        os.makedirs(str(css_resolved.parent), exist_ok=True)
+        css_out.write_bytes(css_bytes)
+        report["written"] = {"tokens.css": str(tokens_out), "rendererCss": str(css_out)}
 
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0 if verdict in ("PASS", "no-upstream-record") else 1

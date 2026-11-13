@@ -182,9 +182,23 @@ export class InstalledPluginRegistry implements PluginInstallRegistryPort {
     if (size > MAX_REGISTRY_BYTES) {
       throw new InstalledPluginRegistryError(`installed registry exceeds ${String(MAX_REGISTRY_BYTES)} byte limit`);
     }
+    // 读后复查（CodeQL js/file-system-race，2026-11-13）：stat 限长与读取之间文件可能被换大
+    // ⇒ 上限在读到的**实际内容**上再判一次。读取与尺寸两格都在 parse 的 try 外抛——
+    // 「读不出」「超限」「内容坏」是三种病，报错必须分开说，尺寸病不许被包装成 malformed。
+    let raw: string;
+    try {
+      raw = await readFile(this.filePath, "utf8");
+    } catch (err) {
+      throw new InstalledPluginRegistryError(
+        `installed registry read failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    if (Buffer.byteLength(raw, "utf8") > MAX_REGISTRY_BYTES) {
+      throw new InstalledPluginRegistryError(`installed registry exceeds ${String(MAX_REGISTRY_BYTES)} byte limit`);
+    }
     let parsed: unknown;
     try {
-      parsed = JSON.parse(await readFile(this.filePath, "utf8"));
+      parsed = JSON.parse(raw);
     } catch (err) {
       throw new InstalledPluginRegistryError(
         `installed registry is malformed: ${err instanceof Error ? err.message : String(err)}`,
