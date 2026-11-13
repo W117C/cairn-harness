@@ -1,5 +1,5 @@
 // 会话根的短临界区：创建/删除/改名与运行锁恢复共用，避免各自检查后抢写。
-import { open, readFile, realpath, unlink, type FileHandle } from "node:fs/promises";
+import { open, readFile, realpath, stat, unlink, type FileHandle } from "node:fs/promises";
 import { join } from "node:path";
 import { processLiveness } from "../process-liveness";
 
@@ -29,8 +29,14 @@ async function acquireRootLock(root: string): Promise<void> {
       handle = await open(lockPath, "wx");
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      // TOCTOU 加固（CodeQL js/file-system-race，2026-11-13）：EEXIST 与读取之间锁文件可能被
+      // 换掉（崩溃→重建），旧实现直接 readFile 会把**新持有者**的 pid 读进来判旧锁。
+      // stat-read-stat 三明治：两次 stat 的 inode 不一致 ⇒ 这次读取不可信，pid 按 unknown 处理
+      // （保守方向不变：不抢活人的锁，也绝不据假 pid 强拆）。
+      const inoBefore = await stat(lockPath).then((s) => s.ino).catch(() => null);
       const raw = await readFile(lockPath, "utf8").catch(() => "");
-      const pid = parseMutationLockPid(raw);
+      const inoAfter = await stat(lockPath).then((s) => s.ino).catch(() => null);
+      const pid = inoBefore !== null && inoBefore === inoAfter ? parseMutationLockPid(raw) : null;
       const liveness = pid === null ? "unknown" : processLiveness(pid);
       // 只有 ESRCH 能证明持有者已退出；EPERM / 坏内容都按「还在」等多一个截止期，
       // 不能把「不归我管」误报成崩溃遗留，更不能据此抢走活人的临界区。
