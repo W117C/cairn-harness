@@ -167,11 +167,14 @@ export async function handleIdleTaskList(workspace?: string): Promise<IdleTaskSn
 }
 
 export async function handleIdleTaskEnqueue(raw: unknown, workspace?: string): Promise<IdleTaskResult> {
-  return scheduler?.enqueueIdleTask(raw, workspace) ?? { ok: false, error: "本地调度器尚未启动" };
+  // 显式 await（CodeQL js/missing-await 消音，2026-11-13）：async 函数里 `promise ?? 字面量`
+  // 这个形状语义本来就等价于 await 后再空值合并，写显式让「返回的是已完成值」读得出，
+  // 也让扫描器不再把这格当浮 promise（行为零变化）。
+  return (await scheduler?.enqueueIdleTask(raw, workspace)) ?? { ok: false, error: "本地调度器尚未启动" };
 }
 
 export async function handleIdleTaskUpdate(id: unknown, action: unknown, workspace?: string): Promise<IdleTaskResult> {
-  return scheduler?.updateIdleTask(id, action, workspace) ?? { ok: false, error: "本地调度器尚未启动" };
+  return (await scheduler?.updateIdleTask(id, action, workspace)) ?? { ok: false, error: "本地调度器尚未启动" };
 }
 
 export async function handleScheduleUpsert(raw: unknown, form = true): Promise<{ ok: boolean; error?: string }> {
