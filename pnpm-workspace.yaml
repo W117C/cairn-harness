@@ -17,3 +17,7 @@ overrides:
   # GHSA-mrhx-c7xc-m3w5：zod 3.x 没有补丁线，MCP SDK 已声明兼容 ^4.0，
   # 因此把传递依赖抬到 4.6.7。zod-to-json-schema 同样声明支持 zod 4。
   zod: "^4.6.7"
+  # GHSA-qv5m-9pm6-hqp3（WebSocket 升级期 ECONNRESET 崩进程）＋ GHSA-jpvv-r467-5p4w
+  # （反斜杠路径绕过反向代理的访问控制）：@hono/node-server 是 MCP SDK 的传递依赖，
+  # SDK 范围 ^1.19.9 || ^2.0.5 容得下 2.1.6，但 pnpm 死守旧解析 ⇒ 用 overrides 抬到补丁线。
+  "@hono/node-server": "^2.1.6"
