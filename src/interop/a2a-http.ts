@@ -40,8 +40,15 @@ export function bearerTokensMatch(expected: string, presented: string): boolean 
 function extractBearer(req: IncomingMessage): string | null {
   const header = req.headers["authorization"];
   if (typeof header !== "string") return null;
-  const match = /^Bearer\s+(.+)$/.exec(header.trim());
-  return match === null ? null : match[1]!.trim();
+  const trimmed = header.trim();
+  // 不用 /^Bearer\s+(.+)$/：`Bearer ` 后面接一长串空白时，`\s+` 与 `(.+)` 的回溯是多项式的
+  // （CodeQL js/polynomial-redos）。本服务默认只绑 loopback，但鉴权头来自任何能连上端口的客户端，
+  // 而 Node 的单头 16KiB 上限仍够把回溯放大到肉眼可见的卡顿。手写切分是线性的。
+  if (!trimmed.startsWith("Bearer")) return null;
+  const rest = trimmed.slice("Bearer".length);
+  if (rest === "" || !/^\s/.test(rest)) return null;
+  const token = rest.trim();
+  return token === "" ? null : token;
 }
 
 interface HttpError {
@@ -110,8 +117,14 @@ async function serveStream(
       if (event.final) break;
     }
   } catch (error) {
-    const code = error instanceof A2AError ? error.code : -32603;
-    writeEvent({ jsonrpc: "2.0", id: rpcId, error: { code, message: error instanceof Error ? error.message : String(error) } });
+    // 非协议错误不把内部消息发给客户端（CodeQL js/stack-trace-exposure：异常正文可能带路径/栈/
+    // 上游回执）。协议层只需要一个稳定的 -32603，详情留在服务端日志。
+    if (error instanceof A2AError) {
+      writeEvent({ jsonrpc: "2.0", id: rpcId, error: { code: error.code, message: error.message } });
+    } else {
+      console.warn("[a2a] stream 内部错误（详情只留在服务端）:", error);
+      writeEvent({ jsonrpc: "2.0", id: rpcId, error: { code: -32603, message: "internal error" } });
+    }
   } finally {
     res.end();
   }
@@ -168,14 +181,18 @@ export function createA2AHttpHandler(
         sendJson(res, httpError.status, jsonRpcError(null, httpError.code, httpError.message));
         return;
       }
-      sendJson(res, 400, jsonRpcError(null, -32700, error instanceof Error ? error.message : String(error)));
+      // 读体失败的内部原因不外发（同上：异常正文可能带路径）。
+      console.warn("[a2a] 读取请求体失败:", error);
+      sendJson(res, 400, jsonRpcError(null, -32700, "request body could not be read"));
       return;
     }
     let parsed: unknown;
     try {
       parsed = JSON.parse(body);
     } catch (error) {
-      sendJson(res, 400, jsonRpcError(null, -32700, "parse error: " + (error instanceof Error ? error.message : String(error))));
+      // 只报协议层能自证的事实；解析器原文（可能含输入片段/位置）留给服务端日志。
+      console.warn("[a2a] JSON 解析失败:", error);
+      sendJson(res, 400, jsonRpcError(null, -32700, "parse error"));
       return;
     }
     if (!isRecord(parsed) || typeof parsed.method !== "string") {
@@ -225,7 +242,8 @@ export function serveA2AHttp(opts: ServeA2AOptions): Promise<A2AHttpServer> {
         res.destroy();
         return;
       }
-      sendJson(res, 500, jsonRpcError(null, -32603, error instanceof Error ? error.message : String(error)));
+      console.warn("[a2a] 请求处理内部错误（详情只留在服务端）:", error);
+      sendJson(res, 500, jsonRpcError(null, -32603, "internal error"));
     });
   });
   return new Promise((resolve, reject) => {

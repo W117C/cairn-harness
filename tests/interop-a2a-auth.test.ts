@@ -82,6 +82,30 @@ describe("A2A HTTP bearer auth", () => {
     }
   });
 
+  it("tolerates extra whitespace after the scheme and rejects a bare scheme", async () => {
+    const server = await serveA2AHttp({ handler: createA2AHandler({ runtime: fakeRuntime() }), authToken: "secret-token" });
+    try {
+      const spaced = await fetch(server.url + "/.well-known/agent-card.json", {
+        headers: { authorization: "Bearer    secret-token" },
+      });
+      expect(spaced.status).toBe(200);
+
+      const bare = await fetch(server.url + "/.well-known/agent-card.json", {
+        headers: { authorization: "Bearer" },
+      });
+      expect(bare.status).toBe(401);
+
+      // 旧解析器是 /^Bearer\s+(.+)$/（CodeQL js/polynomial-redos）。长空白串必须仍然落到
+      // 同一条判定上：拿到 trim 后的 token 并判 401，而不是挂起或放行。
+      const longWhitespace = await fetch(server.url + "/.well-known/agent-card.json", {
+        headers: { authorization: "Bearer " + " ".repeat(8000) + "nope" },
+      });
+      expect(longWhitespace.status).toBe(401);
+    } finally {
+      await server.close();
+    }
+  });
+
   it("stays open when no authToken is configured", async () => {
     const server = await serveA2AHttp({ handler: createA2AHandler({ runtime: fakeRuntime() }) });
     try {

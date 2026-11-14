@@ -388,8 +388,12 @@ export async function dispatchA2ARequest(handler: A2AHandler, request: A2AJsonRp
     return request.id === undefined ? null : { jsonrpc: "2.0", id: request.id, result };
   } catch (error) {
     if (request.id === undefined) return null;
-    const code = error instanceof A2AError ? error.code : -32603;
-    const message = error instanceof Error ? error.message : String(error);
-    return { jsonrpc: "2.0", id: request.id, error: { code, message } };
+    if (error instanceof A2AError) {
+      return { jsonrpc: "2.0", id: request.id, error: { code: error.code, message: error.message } };
+    }
+    // 非协议异常：**不把内部消息回给客户端**（CodeQL js/stack-trace-exposure）。异常正文可能
+    // 带文件路径、上游回执或栈信息；JSON-RPC 只需要一个稳定的 -32603，详情只留在服务端。
+    console.warn("[a2a] 内部错误（详情只留在服务端）:", error);
+    return { jsonrpc: "2.0", id: request.id, error: { code: -32603, message: "internal error" } };
   }
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AgentRecord, AgentRuntime } from "../src/agent/runtime-types";
-import { A2A_PROTOCOL_VERSION, createA2AHandler } from "../src/interop/a2a";
+import { A2A_PROTOCOL_VERSION, createA2AHandler, type A2AHandler } from "../src/interop/a2a";
 import { serveA2AHttp } from "../src/interop/a2a-http";
 
 interface FakeRuntime extends AgentRuntime {
@@ -194,6 +194,24 @@ describe("A2A HTTP transport", () => {
 
       const getCardPost = await rpc(server.url + "/.well-known/agent-card.json", { jsonrpc: "2.0", id: 1, method: "tasks/get", params: {} });
       expect(getCardPost.status).toBe(405);
+    } finally {
+      await server.close();
+    }
+  });
+
+  // CodeQL js/stack-trace-exposure：异常正文（路径 / 上游回执 / 栈）不许经 JSON-RPC 回给客户端。
+  it("does not echo internal error messages to the client", async () => {
+    const handler = {
+      agentCard: () => ({ name: "test", description: "", version: "0", skills: [] }),
+      handle: async () => { throw new Error("boom: /Users/ze/secret-provider-key"); },
+    } as unknown as A2AHandler;
+    const server = await serveA2AHttp({ handler });
+    try {
+      const response = await rpc(server.url + "/", { jsonrpc: "2.0", id: 7, method: "tasks/get", params: {} });
+      expect(response.status).toBe(200);
+      const body = await json(response);
+      expect(body.error).toEqual({ code: -32603, message: "internal error" });
+      expect(JSON.stringify(body)).not.toContain("secret-provider-key");
     } finally {
       await server.close();
     }

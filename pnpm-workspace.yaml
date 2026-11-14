@@ -21,3 +21,9 @@ overrides:
   # （反斜杠路径绕过反向代理的访问控制）：@hono/node-server 是 MCP SDK 的传递依赖，
   # SDK 范围 ^1.19.9 || ^2.0.5 容得下 2.1.6，但 pnpm 死守旧解析 ⇒ 用 overrides 抬到补丁线。
   "@hono/node-server": "^2.1.6"
+  # 2026-11-14：hono 自身五条（补丁线 4.13.16）——mount 前缀绕过中间件（GHSA-4m76-xfj5-7975）、
+  # RegExpRouter 跳过通配中间件（GHSA-h7mg-cq63-vhpq）、csrf 不查 text/ping（GHSA-46wx-v44x-9hh2）、
+  # validator('form') 在 multipart 带额外参数时跳过校验（GHSA-4h7h-rv7c-7m2v）、css helper 转义
+  # （GHSA-3gg2-335m-rxc6）。它同样是 @modelcontextprotocol/sdk 的传递依赖（SDK 的 ^4 范围容得下），
+  # 与上面 @hono/node-server 同一条抬线理由。
+  hono: "^4.13.16"
