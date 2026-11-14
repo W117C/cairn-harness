@@ -58,11 +58,6 @@ export class WorkerFinish {
   private dropAgentOwner(agentId: string): void { this.deps.dropAgentOwner(agentId); }
   private dropApprovalOwner(id: string): void { this.deps.dropApprovalOwner(id); }
   private hasMergeOwner(agentId: string): boolean { return this.deps.hasMergeOwner(agentId); }
-  private notifyIdleIfIdle(): void { this.deps.notifyIdleIfIdle(); }
-  private async rewardBandit(w: WorkerHandle, status: TerminalStatus): Promise<void> { await this.deps.rewardBandit(w, status); }
-  private async subagentHook(w: WorkerHandle, event: "SubagentStart" | "SubagentStop"): Promise<string> {
-    return await this.deps.subagentHook(w, event);
-  }
   private resolveTerminalWaiters(agentId: string, status: TerminalStatus, result: AgentResultEvent | null): void {
     this.deps.resolveTerminalWaiters(agentId, status, result);
   }

@@ -4,10 +4,10 @@
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { PermissionMode } from "../../permissions/modes";
 import {
-  discoverPlugins, activeHooks, pendingPlugins,
+  discoverPlugins, activeHooks,
 } from "./discover";
 import { defaultForeignSources, type ForeignSource } from "./foreign";
-import { TrustStore, pluginFingerprint, pluginFingerprintEx } from "./trust";
+import { TrustStore, pluginFingerprintEx } from "./trust";
 import { HookEngine, type HookModelCallFn } from "./hooks";
 import {
   McpManager, capMcpDescription, mcpServerKey, scopedToolName,
@@ -16,7 +16,7 @@ import {
 } from "./mcp";
 import {
   buildSkillRoutingList, skillInvokeName, commandInvokeName, resolveSkillName, skillRemount, modelInvocable,
-  clampSkillBody, clampSkillBodyWithResources, skillRecallSuffix, skillResourceSuffix, substituteVars, declaredArgumentNames, expandConfigVars, expandUserConfig, referencedUserConfigKeys,
+  clampSkillBodyWithResources, skillRecallSuffix, skillResourceSuffix, substituteVars, declaredArgumentNames, expandConfigVars, expandUserConfig, referencedUserConfigKeys,
   skillToolPolicy, capRoutingText,
   SKILL_REMOUNT_TOKENS_PER_SKILL,
   type ActivatedSkill, type RoutingListResult, type RemountResult, type SubstitutionContext, type SkillToolPolicy,

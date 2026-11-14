@@ -3,7 +3,7 @@
 // 懒启动、按 (root, serverID) 复用、in-flight 去重、失败进 broken 集合不再重试；
 // read_file 命中源码时后台预热（prefetchLsp，尽力而为零阻塞）。
 // 对外一律 1-based 行列，内部转 LSP 的 0-based。
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { statSync as stat } from "node:fs";
 import { spawn, type ChildProcess } from "node:child_process";

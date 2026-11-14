@@ -13,7 +13,7 @@ import type {
   AgentWaitResult,
 } from "../agent/runtime-types";
 import { A2A_TASK_ID_PATTERN } from "../interop/a2a";
-import type { ClientEventV1, RunHandle } from "../interop/sdk";
+import type { RunHandle } from "../interop/sdk";
 import { createProductAgentClientV1, type ProductInteropOptions } from "./interop-host";
 
 interface PendingMessage {

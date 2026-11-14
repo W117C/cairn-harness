@@ -25,7 +25,7 @@ import {
   type PatchEffect,
 } from "./patch-effect";
 import { extractSignals } from "./signal";
-import { strategyPatches, renderPatches, MAX_PATCHES_PER_RUN, type StrategyPatch } from "./strategy-patch";
+import { strategyPatches, renderPatches, type StrategyPatch } from "./strategy-patch";
 import { loadEvolution, persistEvolution } from "./store";
 import {
   appendLedger,

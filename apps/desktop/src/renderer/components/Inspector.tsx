@@ -5,7 +5,7 @@
 // 宽度与开合收口在 App 的右 Panel（320–420，默认收起，⌘⌥I 开合）——本组件只管内容。
 // 2026-11-03 业主：Token 用量/会话活动统计页与模型档位 chips 不是这个栏该装的东西——整页撤掉，
 // Tab 只剩有数据才出现的改动/计划/时间线；默认选中第一个可用的。
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ChevronRight, Plus, X } from "lucide-react";
 import type { AgentEvent } from "../../../../../src/events";

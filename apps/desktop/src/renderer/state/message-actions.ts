@@ -8,7 +8,6 @@
 // 为什么住一起：它们都作用在**某一条消息/某一轮**上，且共用同两件东西——事件流与当前会话 id。
 import { useCallback, useState } from "react";
 import type { AgentEvent } from "../../../../../src/main/ipc-protocol";
-import { userTextOfRound } from "../projections";
 import { findSessionByRef, type SessionEditContext, type WorkspaceSession } from "../sessions-view";
 import { stripMarkdownForSpeech } from "../speech";
 import { STR } from "../strings";
@@ -54,7 +53,7 @@ export interface MessageActionsState {
 
 export function useMessageActions(deps: MessageActionsDeps): MessageActionsState {
   const {
-    activeIdRef, eventsRef, sessions, activeWorkspaceRef,
+    activeIdRef, sessions, activeWorkspaceRef,
     refreshSessions, openSession, cancelRunHealRef, injectText, setEditCtx, setLastError, setEvents,
   } = deps;
 

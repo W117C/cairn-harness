@@ -618,20 +618,6 @@ function ruleM5(decls: Decl[], file: string, stylesSrc: string): RuleResult {
     return { rule: "M5", title: "prefers-reduced-motion 块是实的（不是一行注释）", findings, exempted };
   }
   // 块体：注释已剥 ⇒ 只写注释的块在这里是空的（M5(iv) 天然判红）。
-  const open = stylesSrc.indexOf("{", m.index);
-  let depth = 0;
-  let close = -1;
-  for (let i = open; i < stylesSrc.length; i++) {
-    if (stylesSrc[i] === "{") depth++;
-    else if (stylesSrc[i] === "}") {
-      depth--;
-      if (depth === 0) {
-        close = i;
-        break;
-      }
-    }
-  }
-  const body = stylesSrc.slice(open + 1, close === -1 ? stylesSrc.length : close);
   const inner = decls.filter((d) => d.atRules.some((a) => REDUCED_MOTION_QUERY.test(a)));
   if (inner.length === 0) {
     findings.push({
@@ -844,7 +830,6 @@ export function checkMotionPolicy(target: Target): CheckOutcome {
   const defined = definedTokens(tokensRaw);
   const relStyles = relative(ROOT, stylesPath);
   const relSticky = relative(ROOT, stickyPath);
-  const relRenderer = relative(ROOT, rendererDir);
 
   const results: RuleResult[] = [
     ruleM1(decls, relStyles),

@@ -7,7 +7,7 @@
 //   字段级保存（无全局保存键，SettingsStore patch 语义）；校验失败行内红字，不静默。
 // 纯函数资产（panelPatch / providerStatusLabel / …）随迁 settings-sections，
 // 本文件重导出保旧 import 面（settings-panel.test 判卷锚不动）。
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, Search, X } from "lucide-react";
 import type { AgentApi, AppSettings, CapabilityReadout, ProviderInfo } from "../../../../../src/main/ipc-protocol";
 import type { SettingsLoadIssue, TextSizeSetting, UiSizeSetting } from "../../../../../src/main/settings";

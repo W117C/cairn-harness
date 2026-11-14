@@ -3,7 +3,7 @@
 // 真实门在本模块的工具包装里 —— 复用 src/permissions 的 checkPermission，语义与 M0 一致：
 // read-only 拒副作用 / default 询问（UI 批准才执行）/ auto 放行；沙箱不可用时写工具强制逐条审批。
 import { readFileSync } from "node:fs";
-import { rm, appendFile } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { basename, dirname, join, resolve } from "node:path";
@@ -13,7 +13,6 @@ import { runLoop } from "../agent/loop";
 import { DELIVERY_GUARD_CALL_ID, describePhantomDelivery, eventsForCurrentRun, findPhantomDelivery } from "../agent/delivery-guard";
 import { createImageChannel } from "../agent/image-channel";
 import type { SteeringChannel } from "../agent/steering-channel";
-import { runCompaction } from "../agent/compaction";
 import { buildMap } from "../agent/map/build";
 import { computePrune, writePruneAttachments } from "../agent/prune";
 import {
@@ -82,7 +81,7 @@ import { type ProviderKind } from "./settings";
 import { getLastWorkspace, setRunWorkspace } from "./runner-workspace";
 import { pathOf, sessionExists } from "./sessions";
 import { validateThinkingEffort } from "../providers/capabilities";
-import type { ModelOutput, Provider } from "../providers";
+import type { Provider } from "../providers";
 import { customProviderById, isFreeformModelId, withCustomProviders } from "../providers/registry";
 import { loadCustomProviders } from "./custom-provider-store";
 import { customProviderKeyForRun } from "./provider-key-inject";
@@ -123,13 +122,9 @@ import { PluginRuntime, trustFilePathOf, setCurrentPluginRuntime, currentPluginR
 import { TrustStore } from "../agent/plugins/trust";
 import { createVerifyTrustGate } from "./verify-trust-gate";
 import { verifySurfaceFingerprint, type VerifyTrustResolver } from "../agent/verify-trust";
-import type { ScheduleSnapshot } from "./scheduler";
-import { validateAutomation, isUnattendedTier } from "./automations";
 import {
   Orchestrator,
   orchestratorForAgent,
-  orchestratorForApproval,
-  orchestratorForMerge,
   parseSpawnedAgentId,
   type OrchestratorOptions,
   type SpawnArgs,
@@ -140,16 +135,11 @@ import {
   type LocalAgentOrchestrator,
   type LocalAgentRuntime,
 } from "../agent/local-agent-runtime";
-import type { RespawnArgs } from "../agent/recovery";
-import {
-  cleanOrphanWorktree,
-  type WorktreeCleanupResult,
-} from "../agent/worktree";
 // ---- 拆分面（同 provider-key-inject 先例：实现搬去轻模块，本装配根按原路径继续导出）----
 // settings/BYOK/license/更新面 → ./settings-handlers；会话列表与崩溃恢复 → ./session-handlers；
 // 记忆快照与删除 → ./memory-handlers；「最近一次 run 的工作区」单一事实源 → ./runner-workspace。
 import { setSettingsHostDeps, store } from "./settings-handlers";
-import { getSessionsDir, requireSessionsDir, resolveSessionRoot } from "./session-handlers";
+import { requireSessionsDir, resolveSessionRoot } from "./session-handlers";
 import { acquireSessionRunLock, type SessionRunLock } from "./session-lock";
 // 会话/编排器装配面（唯一构造口 + 崩溃恢复兜底 + 扩展接线 + worker shell 出口）2026-10-17 搬去
 // `./session-assembly.ts`（结构债审查报告 #2 的第三缝）。`workerShellRunnerFor` 是导出 API

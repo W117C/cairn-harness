@@ -1,5 +1,4 @@
 import type { AnchoredEvent } from "./state/session-identity";
-import type { StreamRow } from "./projections";
 export interface StreamActions {
   /** eventId → 当前生效评分（listFeedback 投影）；缺席 = 未评。 */
   feedback?: ReadonlyMap<string, "up" | "down">;

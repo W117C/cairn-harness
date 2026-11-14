@@ -26,13 +26,11 @@ import {
   resolveWriteTarget,
   ToolError,
   type Tool,
-  type ToolContext,
   type ToolResult,
 } from "./base.js";
 import { snapshotBeforeOverwrite, snapshotNote } from "./snapshot.js";
 
 const ACTIONS = ["mkdir", "move", "rename", "delete"] as const;
-type Action = (typeof ACTIONS)[number];
 
 /** 三道真实落点闸（.agent 禁区 / 判卷冻结 / 敏感面）对 path 与 target 各跑一遍。
  *  词法 rel 与真实落点都要查——软链把落点搬进禁区那族缺口（C3/P0-6 的教训）词法看不见。 */

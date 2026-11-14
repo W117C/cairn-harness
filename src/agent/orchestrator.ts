@@ -5,49 +5,32 @@
 // 事件纪律（§4.4.9 / 任务书裁决 1）：worker 事件落主会话 JSONL（子流：agent_* + 带 agent_id 的
 // tool_call/tool_result/usage），agent_spawned 携 parent_event_id 建立血缘树；重放主流后投影一致。
 import { execFile } from "node:child_process";
-import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { AgentEvent, HarnessHoldReason } from "../events";
-import { replay } from "../events";
-import type { ModelOutput, Provider } from "../providers";
-import { glmDefaultModelName, type GlmMessage, type GlmToolSpec } from "../providers/glm";
+import { glmDefaultModelName } from "../providers/glm";
 import { envKeyOf, providerApiKey } from "../providers/env-keys";
-import { effectiveModelTable, findSpecByNameOrId, resolveModel, type ModelTier } from "../providers/registry";
+import { effectiveModelTable, resolveModel, type ModelTier } from "../providers/registry";
 import { toWorkerModel } from "../providers/worker-adapters";
 import { routeFor, TIER_ORDER as MODEL_TIER_ORDER } from "../routing/policy";
 import type { ToolResult } from "../tools/base";
-import { glob } from "../tools/glob";
-import { run_shell } from "../tools/run_shell";
-import { write_file } from "../tools/write_file";
-import { remember } from "../tools/remember";
 import { runLoop } from "./loop";
 import { redactEventForLog } from "../events";
 import { DELIVERY_GUARD_CALL_ID, EMPTY_RUN_DELIVERY } from "./delivery-guard";
 import {
   dependsOnCycle,
-  type FrozenStage,
-  type PluginAgentRoleDef,
-  type ResolvedPluginRole,
 } from "./sequencer";
-import { DEFAULT_STUCK_CONFIG, detectStuck, stuckActionOf, stuckObservationOf, type StuckConfig, type StuckTurn } from "./stuck";
+import { DEFAULT_STUCK_CONFIG, detectStuck, stuckActionOf, stuckObservationOf, type StuckConfig } from "./stuck";
 import { unconsumedSpawnArgs } from "./spawn-surface";
 import { respawnSpawnArgs, type RespawnArgs } from "./recovery";
 import {
-  branchForAgent,
   createWorktree,
   removeWorktree,
-  worktreeDiff,
   worktreePathFor,
 } from "./worktree";
 import {
-  evaluate,
   newAutonomySession,
-  scopeKey,
   type AskScope,
-  type AutonomySession,
-  type EvaluateDecision,
-  type PermissionRule,
   type RiskLevel,
 } from "../permissions";
 import { frozenJudgePathSet } from "../frozen";
@@ -59,16 +42,16 @@ import { createWorkerProvider } from "./worker-runtime";
 import { WorkerFinish } from "./worker-finish";
 import { BudgetCascadeBandit } from "./orchestrator-budget";
 import { WorkerMergeReview } from "./worker-merge";
-import { MAX_CONCURRENT_WORKERS, READ_MODE_MAX_TURNS, SPAWN_MODES, WORKER_TOOL_TABLE, WRITE_WORKER_TOOL_TABLE, workerBudgetConfig, workerToolTable } from "./orchestrator-config";
-import { shell_rw, workerToolSpecs } from "./worker-shell-tools";
-import { clampTier, clipWorkerSummary, isPermissionMode, parseSpawnedAgentId, scanModelOutput, workerVerificationEvidence } from "./worker-report";
-import { priceForModel, priceTagText, spentUsdFor, type JoinPayloadBody, type WorkerPrice } from "./orchestrator-join";
-import { WorkerCancelled, defaultWorkerModel, isScriptedModel, usageNameOf, type WorkerModel } from "./worker-model";
-import { workerThreadFields, type OrchestratorOptions, type PipelineChain, type SpawnArgs, type StageRoleResolution, type WorkerContext, type WorkerHandle } from "./orchestrator-types";
-import { filterWorkerSpecs, filterWorkerTable, parseStringList, parseWorkerContext, scanStreamEvent, withAgentId } from "./worker-projection";
+import { MAX_CONCURRENT_WORKERS, READ_MODE_MAX_TURNS, SPAWN_MODES, workerBudgetConfig, workerToolTable } from "./orchestrator-config";
+import { workerToolSpecs } from "./worker-shell-tools";
+import { clampTier, isPermissionMode, parseSpawnedAgentId } from "./worker-report";
+import { priceForModel, priceTagText, type JoinPayloadBody, type WorkerPrice } from "./orchestrator-join";
+import { WorkerCancelled, isScriptedModel, usageNameOf } from "./worker-model";
+import { workerThreadFields, type OrchestratorOptions, type PipelineChain, type SpawnArgs, type StageRoleResolution, type WorkerHandle } from "./orchestrator-types";
+import { filterWorkerSpecs, filterWorkerTable, parseStringList, parseWorkerContext, withAgentId } from "./worker-projection";
 import { globIntersects, semanticConflictsVia } from "./lease-conflicts";
 import { findToolCallEventId } from "./call-id-index";
-import { buildWorkerSystemMessages, lastAssistantText } from "./worker-prompt";
+import { buildWorkerSystemMessages } from "./worker-prompt";
 import { buildWorkerToolTable } from "./worker-tool-table";
 
 // ---- 跨编排器路由（worker 与审批的生命周期长于父 turn）：agent_id / approval_id → 编排器 ----
@@ -129,7 +112,6 @@ export interface RecoveryBaseline {
 }
 
 export class Orchestrator {
-  private seq = 0;
   private readonly workers = new Map<string, WorkerHandle>();
   private readonly pendingApprovals = new Map<
     string,
@@ -548,7 +530,6 @@ export class Orchestrator {
 
   /** spawn 内核入口（模型面与 sequencer 逐环共用；stageRole 只由 sequencer 代码注入）。 */
   private async spawnInternal(args: SpawnArgs, ctx: { callId?: string; cascadeFrom?: ModelTier; recovery?: RecoveryBaseline; threadId?: string; fence?: string }, task: string, stageRole?: StageRoleResolution): Promise<ToolResult> {
-    const mode = typeof args.mode === "string" ? args.mode : "";
     // H2（审查 B-3）：入口 fail-closed——主会话已取消时不再派发任何 worker
     //（addEventListener 对已 abort 的 signal 不会触发，靠入口检查补上取消窗口）。
     if (this.root.signal.aborted) {
@@ -1090,21 +1071,6 @@ export class Orchestrator {
   /** 薄委托：M5c supervise 受限自适应循环（整支在 orchestrator-approvals.ts）。 */
   private async spawnSupervise(args: SpawnArgs, ctx: { callId?: string }): Promise<ToolResult> {
     return await this.acs.spawnSupervise(args, ctx);
-  }
-
-  /** 薄委托：级联前提（cascadeUpgrade × routing）整支在 orchestrator-budget.ts。 */
-  private cascadeReady(): boolean {
-    return this.bcb.cascadeReady();
-  }
-
-  /** 薄委托：升档决策面（同 provider 阶梯）整支在 orchestrator-budget.ts。 */
-  private cascadePlanFor(agentId: string, budgetLeft: number): { from: ModelTier | undefined; ladder: { id: string; tier: ModelTier }[]; note: string } {
-    return this.bcb.cascadePlanFor(agentId, budgetLeft);
-  }
-
-  /** 薄委托：被淘汰档的收尾（cleanupWrite）在 orchestrator-budget.ts。 */
-  private async cleanupSuperseded(agentId: string): Promise<void> {
-    await this.bcb.cleanupSuperseded(agentId);
   }
 
   /** 薄委托：stage 角色解析（内置 implement/review/test 与 plugin: 形态，整支在 orchestrator-approvals.ts）。 */

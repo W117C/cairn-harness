@@ -24,7 +24,6 @@ import {
   judgeNoProgressEvents,
   noProgressLadder,
   type NoProgressCase,
-  type NoProgressVerdict,
   type VerifyBeat,
 } from "../src/agent/no-progress";
 

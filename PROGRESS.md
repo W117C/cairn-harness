@@ -39458,3 +39458,43 @@ Error: 未知主会话 provider: agnes-ai（内置 5 家，或在 .agent/provide
   但 HEAD 的台账止于第 1040 页、1041–1181 页全在共享工作树且分属多会话，逐页归属无法在本轮核实，
    wholesale 重写会写出假精确 ⇒ 明确登记为待办，不冒充已修）。未提交；gates/head-cert-check/mutate-verify
   量 HEAD，未跑、不引用。
+
+## 2026-11-13 · 第 1182 页：CodeQL 死代码告警批（81 条）——以 tsc 为判卷清空导入面＋逐点人工核（工作树，未提交）
+
+**入口**：接 ZCode 被 quota 掐断的那一笔。取证在 `~/.zcode/cli/rollout/model-io-sess_25d96331-f425-4b75-b15f-4167870cc02a.jsonl` 与 `~/.zcode/cli/log/zcode-2026-11-13.jsonl`：该会话 11-13 00:52–09:00（本机时）做的是 CodeQL 死代码清理——拉了 79 条 `js/unused-local-variable` / `js/useless-assignment-to-local`，自证「相当一部分是误报（多行导入的行号错位）」，准备写精确移除脚本时被 Mimosa 钩子拦「Bash 直写源码」⇒ 改用 Write/Edit 的那一轮没落地，随后 `exceed quota limit` 断流 ⇒ **一行都没入库**（主树 `git status` 干净）。本页接续的就是这件事。
+
+### 一、判卷换法（本批与 ZCode 那轮最实质的一处不同）
+
+- ZCode 那轮用**正则脚本按告警行号**核「标识符是否真死」，自己得出「误报不少」；本轮改用 **`tsc --noUnusedLocals` 当权威**（逐个绑定精确到列），CodeQL 的行号只当**索引**不当判据。依据：CodeQL 快照量的是公开线 `main`（`73e775a6`），与开发线有行号漂移——同一文件 `scripts/motion-policy-check.ts` 告警说 814/601，现树实际在 634/847；`src/agent/session-provider.ts` 那条告警原文点名的是 `view`（公开线 1569 的 `({ events, history, view } = await assemble())`），而开发线 1617 已无 `view` 且其后无读取 ⇒ **那条在开发线上早已修好，随公开线并入即自动关闭**。
+- 告警清单现读：**81 条**（比 ZCode 快照多 2 条：`src/main/session-mutation-lock.ts:2`、`apps/desktop/src/main/diagnostics-bundle.ts:8`，来自本日的 race 加固批）。81 条里 77 条能逐条对上 tsc 诊断，4 条 `useless-assignment-to-local` 人工核。
+
+### 二、处置分类（五类，逐条带理由）
+
+1. **未用导入／类型导入（绝大多数）**：删名或删整条声明。**删整条导入前逐个查了导入期副作用**——扫 `src/tools`、`src/events`、`src/agent/plugins`、渲染层 `state/`+`components/` 全部顶层语句：无 `register*` / `globalThis` / `process.on` / `document` 一类顶层副作用；工具注册集中在 `src/tools/index.ts` 一张表 ⇒ 删散落导入不改变注册行为。
+2. **死函数／死局部**：`orchestrator.ts` 的 `private seq`、`spawnInternal` 里的 `mode`、三个薄委托（`cascadeReady`/`cascadePlanFor`/`cleanupSuperseded`，委给 `orchestrator-budget.ts` 但本类无调用点）、`worker-finish.ts` 三个薄委托（`notifyIdleIfIdle`/`rewardBandit`/`subagentHook`）、`evolve/episode.ts` 的 `isWorkerEvent`（同名的另一支在 `delivery-guard.ts` 仍活着）、`loop.ts` 的 `isAbortLike`（旧的 AbortError 判别，现形状一律走 `opts.signal?.aborted`；`tests/loop-abort-attribution.test.ts` 的注释记着旧形状）、`automations.ts` 的 `lastUlidRandom`（ulid 改 `crypto.randomBytes` 后遗留）、`plugin-install-operations.ts` 的 `activePath`、`fs_ops.ts` 的 `Action` 类型、`motion-policy-check.ts` 的 `body`（连带 `open`/`close` 那段块范围计算整段没人用）与 `relRenderer`。
+3. **4 条 `useless-assignment-to-local`**：`list_dir.ts` 的 `size`（初值必被覆盖 ⇒ 改成 `let size: string;`）、`provider-key-inject.ts` 的 `injected`（撤销后下一行必再置真 ⇒ 改成**裸调用** `revokeInjectedProviderKey(provider, envName);`，**撤销这个副作用一字不丢**）、`loop.ts` 的 `hasSurface`（try/catch 两路都赋 ⇒ `let hasSurface: boolean;`）、`session-provider.ts` 的 `view`（开发线已修，见上）。
+4. **一处不是死代码而是事实源被内联复制**：`scripts/probe-promise-recall.ts` 的 `WEAK_MARKS`（`[" available"]`）——真面是「同一句里点了一个可调用的工具名才算可回取承诺」，而调用点把 `" available"` 硬写进判别式 ⇒ **接回常量**（`WEAK_MARKS.includes(mark)`），判定逐字等价、单一事实源恢复。删常量反而会把这条规矩的名字从代码里抹掉。
+5. **一处半接线**：置顶消息进对话目录（`workbench.ts` 的 `pinnedTurns`）——memo 算完没人接（`conversation-navigation.ts` 的 deps 里没有 `pinnedTurns` 参数）⇒ 删死计算；**该功能至今未实现**，登记为下一批可选项（不是本批能顺手补的）。
+
+### 三、三条例外（不自行裁决，已挂起等业主一句话）
+
+1. `apps/desktop/src/renderer/panes/WorkbenchView.tsx` 的 `draftIds`：**判卷钉住的形状**——`apps/desktop/tests/composer-drafts.test.tsx:45` 钉 `expect(workbench).toContain("draftIds,")`。链路上它在 WorkbenchView 里确实无用（host 从整包 `deps` 取，渲染铅笔那一环在 `WorkbenchSidebarHost.tsx`），但删它会让该判卷红 ⇒ **改判卷属改判卷**，不在本批做，**保留**。CodeQL 并未点名它（无对应告警），保留不影响告警清零。
+2. `src/agent/plugins/content.ts` 的 `RESOURCE_MAX_DEPTH`：注释声明「更深层目录允许下探到 RESOURCE_MAX_DEPTH」，而代码**从引入那笔起（`b072e2c0`）就没用过它**（现状＝顶层只认四个约定目录、深层不限深）。删常量＝把声明的边界改小；补接线＝改运行时行为（深层资源不再被索引）⇒ 两条路都改变结论，挂起等裁决。
+3. `src/main/plugin-install-registry.ts` 的 `now`：注入时钟无人读——记录的时间戳由调用方自己盖（`installedAt`/`updatedAt` 随 record 进），8 处调用方传 `() => NOW` 是空转。删参数＝改公开构造签名；接上去＝改「谁盖时间戳」的归属 ⇒ 挂起等裁决。
+
+### 四、验证（全部覆盖工作树，未提交）
+
+- 类型：根 `tsc -p tsconfig.json` 0；桌面 `tsc -p tsconfig.json` 0；`node --import tsx scripts/typecheck.ts` 0 条报错。
+- **产品代码零未用绑定**（`tsc --noUnusedLocals`，根＋桌面）：只剩上面三条例外（2＋1 条），其余 78 条对应告警全清。
+- 门：`desktop-boundary-check` 绿、`renderer-layer-check` 绿（241 渲染层源文件）、`repo-hygiene-check` 绿、`motion-policy-check` 绿（7 规则 0 发现）、`docs-check` 全绿（下一个未占用页号 1182＝本页）。
+- **核心全量** 673 文件 / 8111 条（`--maxWorkers=2`）：8056 绿 / **55 红**；**与 HEAD 基线逐条一致**——同一 18 个失败文件（`git stash` 后在 HEAD 上跑同一条命令，失败文件清单 `diff` 为空）。红的成因全是本机沙箱/宿主限制：`.claude/` 与 `.mcp.json` 拒写、Electron 原生宿主起不来、CLI 临时目录写不进。
+- **桌面全量** 385 文件 / 2490 条：2486 绿 / **4 红**；与 HEAD 基线逐条一致（同 2 文件：`desktop-review-batch.test.ts` 的 Electron 原生宿主冒烟、`settings-migration.test.ts` 的 3 条 `.mcp.json` 拒写）。中途 `composer-drafts.test.tsx` 曾被顶红一次（`draftIds` 那条判卷），已按上面第 1 条例外处理并复绿。
+- 变异针脚：`scripts/lib/mutations/agent-runtime.mjs` 的 `loop-treats-stall-abort-as-user-cancel` 针脚原来把「旧条件」写成 `!isAbortLike(err) && …`，而 `isAbortLike` 已随死代码删除 ⇒ 变异会退化成「未定义标识符崩溃」这种**假杀伤**；已把旧条件**就地内联**（语义逐字不变），并核过锚点仍在源文件里、变异后确实改写、改法产出合法源文件（针脚体检「改法语法体检 1677 条全 ✅」）。`pnpm mutate-needles-check` 另有 **4 条阻断，全是存量**（`gate-cause-bare-allow-walks-highrisk-path`、`judge-deny-bypassed`、`worktrees-dirty-badge-hidden`、`license-label-always-inactive`，体检自己给出的归属是 `a7a1a03c`／`6c82de60`／`be41e26b` 三个旧提交，涉及的 `src/permissions/autonomy.ts`、`WorktreesPane.tsx`、`settings-sections.tsx` **不在本批改动集内**）。
+
+### 五、边界与登记
+
+- 本批改动：**45 个文件（43 个产品代码 + 1 个针脚文件 + 本页台账），产品代码面 +71 / −213**。全是删未用绑定与两处等价改写，**零新增能力、零行为面改动**（两处会改行为的候选已挂起，见第三节）。
+- 未碰 `STATE.md`：它的 `rev` 字段必须点名一个真实提交，而本批未提交；且它已落后 9 笔提交（第 1181 页已登记这件事）⇒ 本批不冒充已更新，留给下一次能点名提交的场合整篇重写（D-5）。
+- `tests/` 未动：仍有 **106 处**未用绑定（核心 66 + 桌面 40）留作下一批单独成批（不与告警清零混在一个 diff 里）。
+- 未跑：`pnpm gates` / `head-cert-check` / `mutate-verify`（三者量 HEAD，本批未提交；本机新建 worktree 受沙箱限制，跑不了）。
+- 未提交、未推送。公开线（AGPL `main`）要并本批时按老规矩走「移植 + 公开门禁」；其中 `session-provider.ts` 那条告警在公开线并入后自动关闭。

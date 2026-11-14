@@ -51,16 +51,15 @@ import { QueueDock } from "./QueueDock";
 import { todoProjection } from "../derived/todo";
 import type { StreamActions } from "../components/Stream";
 import { TitleBar } from "../components/TitleBar";
-import { movePane,type PaneKind } from "../components/panes";
-import { destinationForSection,PAGE_CONTEXT_ITEMS,pageForDestination } from "../navigation";
-import { greetingFor,type QuickStartInput } from "../quick-starts";
+import { type PaneKind } from "../components/panes";
+import { PAGE_CONTEXT_ITEMS, pageForDestination } from "../navigation";
+import { greetingFor } from "../quick-starts";
 import type { QueuedSend } from "../send-queue";
 import type { SurfaceError } from "../surface-error";
 import type { DeleteConfirmTarget, SessionConfirmTarget, SessionEditContext, WorkspaceSession } from "../sessions-view";
 import type { SlashSkill } from "../slash";
 import { STR } from "../strings";
 import { type ThemePref } from "../theme";
-import { toast } from "../toast";
 import { type ViewMode } from "../view-mode";
 import type { PermissionConfirmApi } from "../state/use-permission-confirm";
 import { DestinationWorkspace } from "./DestinationWorkspace";
@@ -73,13 +72,6 @@ interface EmptySurface {
   quickStarts: string[];
   branch: string | null;
 }
-const NULL_QUICK_INPUT: QuickStartInput = {
-  git: null,
-  hasPackageJson: false,
-  scripts: [],
-  readmeExists: false,
-  lastSessionTitle: null,
-};
 
 export interface WorkbenchViewDeps {
   activeWorkspace: string | null;
@@ -335,7 +327,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
   const browserLinkSeqRef = useRef(0);
   const [changesFocus, setChangesFocus] = useState<ChangesFocus | null>(null);
   const changesFocusSeq = useRef(0);
-  const { activeWorkspace, projects, pickerValue, providerInfo, settingsOpen, destination, pageFilter, openDestination, setPageFilter, activeId, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, togglePane, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode, sidebarCollapsed, toggleSidebar, newSession, handleOpenPalette, openPane, setSettingsSection, setSettingsOpen, sidebarWidth, runningSet, waitingIdSet, draftIds, outcomes, registryNotice, retryProjects, sessionsLoaded, sessionsLoadError, sessionsLoadErrorDetail, retrySessions, providerOk, openSession, setActiveWorkspace, activeWorkspaceRef, touchWorkspace, handleAddProject, handleCloneProject, setNewProjectOpen, handleUpdateProject, handleRelocateProject, handleRemoveProject, handleRevealProject, pinSessionById, forkSessionFromMenu, requestArchiveSession, openSessionInCli, setWtDiscard, sessionWorktreeOp, requestDeleteSession, themePref, changeTheme, usageStats, startSidebarDrag, persistSidebarWidth, sidebarWidthRef, mainGroupRef, showEmpty, findRef, findOpen, streamEl, closeFind, lastError, clearLastError, setLogTarget, lastNotice, clearLastNotice, importDiagnosis, setImportDiagnosis, chipRef, chipOpen, openChipPopover, emptyData, chipQuery, setChipQuery, chipRecent, chipList, closeChip, setLastError, setStreamEl, stick, streamRows, rowRefs, inheritedSeqs, viewMode, runningActive, foldedRounds, flashRound, streamActions, deliveryTrailItems, deliveryExpandedFor, openPreview, setDeliveryExpandedFor, outlineCurrent, jumpToRound, unfoldAllTurns, foldAllTurns, askForActive, setMode, setLastNotice, pendingClarify, pendingPlan, composerZoneRef, editCtx, events, sendQueue, setEditCtx, setDraftRemap, draftRemapSeq, refreshSessions, setQueueFor, cancelRunHeal, resumeQueueFor, sendTo, queueLoading, pendingSend, skills, composerLock, mode, stopped, usage, phaseLabel, phase, elapsedSec, steps, runSteps, chosenCtx, recentRefsBySession, noteRecentRef, promptHistory, noteDraft, injectedText, injectedTextSeq, draftRemap, draftRestore, sendWithGoal, configuredProviders, thinkingBySession, pendingThinking, setPendingThinking, force, selections, refreshProviderInfo, compactNow, composerMenuSignal, onSuggestNext, injectedAttachment, injectedElement, injectText, inspectorRef, inspectorDefault, setInspectorCollapsed, inspectorSaveTimer, inspectorColRef, jumpToEvent, handleRestoreSnapshot, toggleInspector, attachFromPane, pickSignal, handlePickResult, preview, closePane, send, setPaneTabs, pluginSidebarWidth, setPluginSidebarWidthPersist, closePluginSidebar, fillPluginCommand, viewToast, cheatOpen, closeCheat, revertConfirm, setRevertConfirm, doRevertTurn, permissionGuard, projectRemoveConfirm, setProjectRemoveConfirm, doRemoveProject, archiveConfirm, setArchiveConfirm, doArchiveSession, deleteConfirm, setDeleteConfirm, doDeleteSession, wtDiscard, paletteOpen, setPaletteOpen, focusComposer, handlePaletteAction, startBarRename, logTarget, settingsSection, refreshProviderKeys, setThemePref, setTextSize, setUiSize, setCtrlTabCycle, dragOverApp, newProjectOpen, templates, handleCreateFromDialog } = deps;
+  const { activeWorkspace, projects, pickerValue, providerInfo, settingsOpen, destination, pageFilter, openDestination, setPageFilter, activeId, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode, sidebarCollapsed, toggleSidebar, draftIds, newSession, openPane, setSettingsSection, setSettingsOpen, providerOk, openSession, setActiveWorkspace, activeWorkspaceRef, touchWorkspace, handleAddProject, handleCloneProject, setNewProjectOpen, requestArchiveSession, setWtDiscard, sessionWorktreeOp, requestDeleteSession, mainGroupRef, showEmpty, findRef, findOpen, streamEl, closeFind, lastError, clearLastError, setLogTarget, lastNotice, clearLastNotice, importDiagnosis, setImportDiagnosis, chipRef, chipOpen, openChipPopover, emptyData, chipQuery, setChipQuery, chipRecent, chipList, closeChip, setLastError, setStreamEl, stick, streamRows, rowRefs, inheritedSeqs, viewMode, runningActive, foldedRounds, flashRound, streamActions, deliveryTrailItems, deliveryExpandedFor, setDeliveryExpandedFor, outlineCurrent, jumpToRound, unfoldAllTurns, foldAllTurns, askForActive, setMode, setLastNotice, pendingClarify, pendingPlan, composerZoneRef, editCtx, events, sendQueue, setEditCtx, setDraftRemap, draftRemapSeq, refreshSessions, setQueueFor, cancelRunHeal, resumeQueueFor, queueLoading, pendingSend, skills, composerLock, mode, stopped, usage, phaseLabel, phase, elapsedSec, steps, runSteps, chosenCtx, recentRefsBySession, noteRecentRef, promptHistory, noteDraft, injectedText, injectedTextSeq, draftRemap, draftRestore, sendWithGoal, configuredProviders, thinkingBySession, pendingThinking, setPendingThinking, force, selections, refreshProviderInfo, compactNow, composerMenuSignal, onSuggestNext, injectedAttachment, injectedElement, injectText, inspectorRef, inspectorDefault, setInspectorCollapsed, inspectorSaveTimer, toggleInspector, closePane, pluginSidebarWidth, setPluginSidebarWidthPersist, closePluginSidebar, fillPluginCommand, viewToast, cheatOpen, closeCheat, revertConfirm, setRevertConfirm, doRevertTurn, permissionGuard, projectRemoveConfirm, setProjectRemoveConfirm, doRemoveProject, archiveConfirm, setArchiveConfirm, doArchiveSession, deleteConfirm, setDeleteConfirm, doDeleteSession, wtDiscard, paletteOpen, setPaletteOpen, focusComposer, handlePaletteAction, startBarRename, logTarget, settingsSection, refreshProviderKeys, setThemePref, setTextSize, setUiSize, setCtrlTabCycle, dragOverApp, newProjectOpen, templates, handleCreateFromDialog } = deps;
   // 第 1048 页：空屏下半区承接只取真实会话（派生层纯函数，无会话则不渲染）。
   const recentEmptySessions = showEmpty ? pickRecentSessions(sessions, activeWorkspace) : [];
   // 启动时轻量检查更新：有更新源才查，24h 一次，有可用版本才出 notice。

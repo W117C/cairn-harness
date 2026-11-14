@@ -1,9 +1,9 @@
 import { existsSync } from "node:fs";
-import { rename, rm, readdir, stat } from "node:fs/promises";
+import { rm, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { createEventLog, forkSession, replay, type AgentEvent, type EventRef } from "../events";
+import { createEventLog, replay, type AgentEvent, type EventRef } from "../events";
 import { scanStreamEvent } from "../agent/worker-projection";
-import { forkPointOf, forkSessionName } from "../agent/fork-cli";
+import { forkSessionName } from "../agent/fork-cli";
 import { applyTurnRevert, planTurnRevert, planTurnRevertView, type FileRevertResult } from "../agent/file-revert";
 import { isEventRef, readSessionView } from "../events";
 import { getLastWorkspace } from "./runner-workspace";

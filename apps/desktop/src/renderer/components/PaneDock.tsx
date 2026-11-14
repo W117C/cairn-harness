@@ -6,13 +6,12 @@
 //   空态诚实：无数据即说明（不摆空壳）；价格不可知显式写"价格不可知"（不当 0）。
 // 数据面全部来自 panes.ts 纯投影 + turnDelivery（既有）+ changeDiff（v4 通道，懒加载）。
 import { isCompositionEnter } from "../ime";
-import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { memo, useEffect, useRef, useState, type CSSProperties } from "react";
 import "@xterm/xterm/css/xterm.css";
 import "./pane-tabs.css";
-import { AlertTriangle, ArrowLeft, ArrowRight, Check, ChevronRight, Crosshair, ExternalLink, Loader2, Maximize2, Minimize2, MoreHorizontal, Plus, RotateCw, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, Check, Crosshair, ExternalLink, Loader2, Maximize2, Minimize2, MoreHorizontal, Plus, RotateCw, X } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import type { AgentEvent } from "../../../../../src/events";
-import { turnDelivery } from "../projections";
 import { planActionLabel } from "../derived/change-labels";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { clipDiff, parseUnifiedPatch } from "../diff-patch";
@@ -33,7 +32,7 @@ import { OrchestrationPane } from "./OrchestrationPane";
 import { PathMenu } from "./PathMenu";
 import { ChangesPane, type ChangesFocus } from "./ChangesPane";
 import { TerminalPane } from "./TerminalPane";
-import { changedFileCount, PANE_META, PANE_OPENABLE, paneTabTargetForKey, projectPlans, projectWorkers, reorderTarget, sitePermissionFor, workerCardAction, type PaneKind, type WorkerPaneItem } from "./panes";
+import { PANE_META, PANE_OPENABLE, paneTabTargetForKey, projectPlans, projectWorkers, reorderTarget, sitePermissionFor, workerCardAction, type PaneKind, type WorkerPaneItem } from "./panes";
 import { pushAllowedHosts } from "../allowed-hosts";
 // PaneKind / PANE_META 的唯一事实源在 panes.ts（独立窗口路由同用）；此处 re-export 保接口。
 export { PANE_META, PANE_OPENABLE, type PaneKind } from "./panes";

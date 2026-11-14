@@ -189,10 +189,6 @@ function extensionOf(path: string): string {
   return dot < 0 ? "" : base.slice(dot + 1).toLowerCase();
 }
 
-function isWorkerEvent(event: AgentEvent): boolean {
-  return typeof (event as { agent_id?: unknown }).agent_id === "string";
-}
-
 function isSteeringMessage(event: AgentEvent): boolean {
   return event.type === "user_message" && event.origin?.kind === "steering";
 }

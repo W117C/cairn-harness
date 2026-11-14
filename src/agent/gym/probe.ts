@@ -15,7 +15,7 @@ import { createEventLog } from "../../events";
 import { createSessionProvider, sessionToolSpecs } from "../session-provider";
 import { loadScriptOutputs, takeRound } from "./script";
 import { streamGlm, type GlmMessage, type GlmToolSpec } from "../../providers/glm";
-import type { ModelOutput, Provider } from "../../providers";
+import type { Provider } from "../../providers";
 import type { ScriptItem } from "../../providers/round-marker";
 import type { AgentEvent } from "../../events";
 import type { PermissionMode } from "../../permissions";

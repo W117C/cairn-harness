@@ -202,7 +202,7 @@ export function scanPromiseSites(files: readonly { path: string; text: string }[
   // 提示句误收（「using available tools … via verify」——同一句里恰好有工具名，且词序相反）。
   const recallAvailable = new RegExp("\\b(" + CALLABLE_NAMES.join("|") + ")\\s+available");
   return scanMarkedSites(files, PROMISE_MARKS, (text, mark) =>
-    !(mark === " available" && !recallAvailable.test(text)), false);
+    !(WEAK_MARKS.includes(mark) && !recallAvailable.test(text)), false);
 }
 
 /* ---------------- 第二个 claim 类：模型可见的「能力断言」有没有证人（第 311 页） ----------------

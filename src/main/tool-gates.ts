@@ -34,7 +34,6 @@ import {
   type GateMeta,
   type GateVerdict,
   type PermissionMode,
-  type PermissionRule,
   type ToolResultWithAudit,
 } from "../permissions";
 import { alwaysRulesPath, readPermissionFile, savePermissionRules, splitCommandChain } from "../permissions/rules";

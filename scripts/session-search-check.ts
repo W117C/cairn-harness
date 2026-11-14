@@ -6,7 +6,7 @@ import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { closeAllEventLogs, createEventLog, type AgentEvent } from "../src/events";
-import { searchSessions, type SessionSearchResult } from "../src/main/session-search";
+import { searchSessions } from "../src/main/session-search";
 
 let failures = 0;
 function assert(cond: boolean, label: string): void {

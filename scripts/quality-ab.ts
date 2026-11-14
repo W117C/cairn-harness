@@ -6,16 +6,15 @@
 // 真实模型读数需要凭据：CAIRN_API_KEY / CAIRN_ENDPOINT / CAIRN_MODEL（见 README 的质量档一节）。
 //
 // 用法：node --import tsx scripts/quality-ab.ts [--keep]
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { createEventLog, replay } from "../src/events";
 import { QualityGateError, runLoop } from "../src/agent/loop";
 import { createVerifyHook } from "../src/agent/verify";
 import { planVerification, runVerificationPlan } from "../src/agent/quality/verifiers";
-import { QUALITY_MINIMAL_TOOLS, qualityCompactionConfig } from "../src/agent/quality/policy";
+import { QUALITY_MINIMAL_TOOLS } from "../src/agent/quality/policy";
 import { qualityToolTable } from "../src/agent/quality/tools";
-import { TOOLS } from "../src/tools";
 import type { ModelOutput, Provider, ProviderMessage } from "../src/providers";
 
 interface Task {

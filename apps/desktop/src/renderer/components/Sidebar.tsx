@@ -9,14 +9,13 @@
 //   2026-11-03：页脚用户菜单整体下架——设置/外观/用量/关于搬到全局左轨底部的头像入口
 //     （components/AccountMenu.tsx），侧栏只保留会话上下文。
 // 文案一律走 STR（strings.ts——源文扫描判卷钉死）；图标 = lucide（ADR 0003）；会话行菜单 = Radix。
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { readMotionPref, setMotionPref, type MotionPref } from "../state/motion-pref";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Archive, Check, ChevronRight, Filter, Folder, GitBranch, Loader2, MoreHorizontal, Pencil, Pin, Plus, Search, X } from "lucide-react";
+import { Archive, Check, ChevronRight, Folder, GitBranch, Loader2, MoreHorizontal, Pencil, Pin, Plus, Search, X } from "lucide-react";
 import type { ProjectRecord } from "../../../../../src/main/ipc-protocol";
 import { relativeTime } from "../projections";
 import { keysOf } from "../shortcuts";
-import { countSessionsByFilter, filterSessions, groupByWorkspace, projectMenuItems, projectSections, sessionFilterInfo, sessionStatus, sessionTime, splitArchived, workspaceLabel, OTHER_WORKSPACE, SESSION_FILTERS, SESSION_FILTER_NOTE, type SessionFilterId, type TimeBucket, type WorkspaceSession } from "../sessions-view";
+import { countSessionsByFilter, filterSessions, groupByWorkspace, projectMenuItems, projectSections, sessionFilterInfo, sessionStatus, sessionTime, splitArchived, workspaceLabel, OTHER_WORKSPACE, SESSION_FILTERS, type SessionFilterId, type TimeBucket, type WorkspaceSession } from "../sessions-view";
 import { draftKeyFor } from "../drafts";
 import { sessionKeyOf } from "../state/session-identity";
 import { parseSidebarDensity, SIDEBAR_DENSITY_KEY, type SidebarDensity } from "../state/sidebar-density";
@@ -26,12 +25,10 @@ import { STR } from "../strings";
 import { isCompositionEnter } from "../ime";
 import { CairnMark } from "./CairnMark";
 import { useNow } from "../useNow";
-import { ModalSurface } from "./ModalSurface";
 import { ProjectContextMenu, ProjectSettingsDialog } from "./SidebarProjects";
 export { ProjectSettingsDialog } from "./SidebarProjects";
 import { AddProjectMenu } from "./AddProjectMenu";
 import { SessionFilterMenu } from "./SessionFilterMenu";
-import { menuNavIndex } from "./popover-keys";
 import { toast } from "../toast";
 import "./sidebar-filter.css";
 
@@ -402,8 +399,6 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
   const pinnedOrder = usePinnedOrder();
   // 第 1116 页：400 行共用一个活时钟，不再每行各订阅一次 useNow。
   const nowMs = useNow();
-  // 减弱动效偏好（窗口级，落 localStorage；见 state/motion-pref.ts）。
-  const [motionPref, setMotionPrefState] = useState<MotionPref>(readMotionPref);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => {
     try {
       if (typeof window === "undefined") return new Set();

@@ -9,8 +9,11 @@ export const MUTATIONS = [
     id: "loop-treats-stall-abort-as-user-cancel",
     src: "src/agent/loop.ts",
     test: "tests/loop-abort-attribution.test.ts",
-    desc: "把「谁叫停的」判回旧条件（isAbortLike && signal.aborted 共用一个判据）⇒ 对端停滞这一趟落 0 条 error，事件流只剩一条 user_message 就戛然而止；用户与审计都看不到「为什么停了」",
-    apply: (s) => s.replace("      const userCancelled = opts.signal?.aborted === true;\n      if (!userCancelled) {", "      if (!isAbortLike(err) && !opts.signal?.aborted) {"),
+    desc: "把「谁叫停的」判回旧条件（AbortError 与 signal.aborted 共用一个判据）⇒ 对端停滞这一趟落 0 条 error，事件流只剩一条 user_message 就戛然而止；用户与审计都看不到「为什么停了」",
+    // 旧形状里的 isAbortLike 谓词在 2026-11-13 死代码清理批里随「未用局部」被删（loop.ts 已无此函数）
+    // ⇒ 旧条件就地内联，语义逐字不变（isAbortLike ≡ typeof err === "object" && err !== null && name === "AbortError"），
+    //    针脚的分辨力不因那个辅助函数消失而退化成「未定义标识符崩溃」那种假杀伤。
+    apply: (s) => s.replace("      const userCancelled = opts.signal?.aborted === true;\n      if (!userCancelled) {", "      if (!(typeof err === \"object\" && err !== null && (err as { name?: unknown }).name === \"AbortError\") && !opts.signal?.aborted) {"),
     expectFail: "★ 对端停滞（provider 侧 abort）⇒ **必须**落 error：那是「为什么停了」的唯一证据",
   },
   {

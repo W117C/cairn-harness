@@ -3,9 +3,8 @@
 // 发现期把它合成一支**虚拟插件**（user-mcp，user 作用域、恒 trusted）进同一套运行时：
 // 激活流（mcp_list / mcp_activate）、权限门、工具命名（mcp__plugin_user-mcp_<server>__<tool>）、
 // 面板 summaries 与禁用开关全部零改动复用——不造第二套连接/激活/门控。
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { readFile } from "node:fs/promises";
-import { normalizeMcp } from "./manifest";
 import type { DiscoveredPlugin, McpServerConfig } from "./types";
 
 /** 虚拟插件名：工具命名与面板里它就是这一支（mcp__plugin_user-mcp_<server>__<tool>）。 */

@@ -23,9 +23,9 @@
 import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
 import { constants, existsSync, readFileSync } from "node:fs";
-import { access, mkdir, rename, rm, appendFile, stat } from "node:fs/promises";
+import { access, mkdir, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { argsDigest, firstLine, forkPointOf, forkSessionName, formatReplay } from "./agent/fork-cli";
+import { argsDigest, firstLine, forkSessionName, formatReplay } from "./agent/fork-cli";
 import {
   applyReverts,
   isWorkerDiffReceipt,
@@ -97,7 +97,6 @@ import {
 } from "./agent/delivery-guard";
 import {
   createEventLog,
-  forkSession,
   isEnvVerifyCause,
   readSessionView,
   mergeAssistantDeltas,

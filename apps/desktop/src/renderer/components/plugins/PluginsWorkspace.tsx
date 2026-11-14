@@ -1,9 +1,8 @@
 import { useEffect, useMemo } from "react";
-import { AlertTriangle, CheckCircle2, LoaderCircle, RefreshCw } from "lucide-react";
+import { AlertTriangle, CheckCircle2, LoaderCircle } from "lucide-react";
 import {
   filterPluginRows,
   type PluginCapabilityCategory,
-  type PluginRowView,
 } from "../../derived/plugins";
 import {
   usePluginsMarketplace,

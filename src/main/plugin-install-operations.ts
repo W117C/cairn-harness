@@ -182,7 +182,6 @@ export async function uninstallPlugin(input: UninstallPluginInput): Promise<{ ok
     workspace: input.workspace,
   });
   await assertOperationRoots(input, paths);
-  const activePath = join(paths.activeRoot, input.entryId);
   const sourceRoot = record.enabled ? paths.activeRoot : paths.disabledRoot;
   const source = join(sourceRoot, input.entryId);
   const existed = await pathExists(source);

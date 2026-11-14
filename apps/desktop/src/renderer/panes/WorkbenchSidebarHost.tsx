@@ -19,7 +19,7 @@ export function WorkbenchSidebarHost({ deps, chatSidebarVisible, pageItems, plug
   const {
     destination, sidebarCollapsed, focusMode, sidebarWidth,
     projects, sessions, sessionsLoaded, activeId, activeWorkspace, runningSet, waitingIdSet, draftIds, outcomes, registryNotice,
-    retryProjects, sessionsLoadError, sessionsLoadErrorDetail, retrySessions, sessionsRefreshing,
+    retryProjects, sessionsLoadError, sessionsLoadErrorDetail, retrySessions,
     openSession, openPane, newSession, handleOpenPalette, setActiveWorkspace, activeWorkspaceRef, touchWorkspace,
     handleAddProject, handleCloneProject, handleUpdateProject, handleRelocateProject, handleRemoveProject,
     handleRevealProject, renameSessionById, pinSessionById, forkSessionFromMenu, requestArchiveSession,

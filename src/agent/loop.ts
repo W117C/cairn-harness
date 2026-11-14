@@ -209,12 +209,6 @@ function readToolOutput(output: unknown): string {
 // verify 是系统门不是普通工具：调 verify_hook 跑 lint/test，
 //   通过 → 立即停止（不再调用模型）；失败 → 错误输出注入同轮继续修；
 //   连续失败达上限（缺省 3）→ verify_result(failed) 后停止（不再调用模型）。
-/** 取消与失败的边界：AbortError（Error 与 DOMException 两种形态）是取消，不是出错。 */
-function isAbortLike(err: unknown): boolean {
-  return typeof err === "object" && err !== null &&
-    (err as { name?: unknown }).name === "AbortError";
-}
-
 /** 事件日志落盘前的凭据脱敏（§A4）。
  *
  *  事件日志是**可重放**的：一份 JSONL 存着每一条 tool_call 的 args 与每一条 tool_result 的

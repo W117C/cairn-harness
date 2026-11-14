@@ -3,7 +3,7 @@
 // 未安装 → 「安装」胶囊钮（忙时转圈）；已安装 → 启停 Switch + 悬停露出的卸载（走确认弹窗）。
 // 收藏保留（ZCode 没有此物，Cairn 既有功能不丢），同样悬停露出。
 // 判卷锚不动：data-catalog-state / data-plugin-row="discover" / data-plugin-id。
-import { AlertTriangle, Download, Loader2, Puzzle, Star, Trash2, WifiOff } from "lucide-react";
+import { Download, Loader2, Puzzle, Star, Trash2, WifiOff } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { PluginRowView } from "../../derived/plugins";
 import type { PluginsMarketplaceState } from "../../state/plugins-marketplace";

@@ -70,7 +70,6 @@ export const MIN_INTERVAL_MINUTES = 5;
 
 const ULID_ENCODING = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 let lastUlidTime = 0;
-let lastUlidRandom: number[] = [];
 
 /** ulid 生成（单调性：同一毫秒内随机位 +1，保证排序稳定）。 */
 export function makeUlid(now = Date.now()): string {
@@ -88,7 +87,6 @@ export function makeUlid(now = Date.now()): string {
     }
   }
   lastUlidTime = time;
-  lastUlidRandom = random;
   let timeChars = "";
   for (let i = 9; i >= 0; i--) {
     timeChars = ULID_ENCODING[time % 32]! + timeChars;

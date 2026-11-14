@@ -12,7 +12,7 @@
 // data-round-anchor、think-live/think-body/think-elapsed/aria 全套、复制/还原 aria-label ——
 // 全部逐字保留（本文件换形态与图标，不动锚）。
 // 图标 = lucide-react（ADR 0003）。
-import { AlertTriangle,Check,ChevronRight,ChevronUp,CircleDashed,Copy,Eye,FileCode2,FileText,Folder,GitBranch,Globe,History,Image as ImageIcon,Loader2,SquareTerminal,Undo2,Pin,RotateCcw,RotateCw,ThumbsDown,ThumbsUp } from "lucide-react";
+import { AlertTriangle, Check, ChevronRight, ChevronUp, CircleDashed, Copy, Eye, FileCode2, FileText, Folder, GitBranch, Globe, History, Image as ImageIcon, Loader2, SquareTerminal, Undo2, Pin, RotateCw, ThumbsDown, ThumbsUp } from "lucide-react";
 import { Fragment,memo,useEffect,useId,useRef,useState } from "react";
 import type { ChangeDiffPayload } from "../../../../../src/main/change-diff";
 import { eventRefKey, type EventRef } from "../../../../../src/events/session-ref";
@@ -257,7 +257,7 @@ const ToolCluster = memo(function ToolCluster(props: { rows: Extract<StreamRow, 
   // 第 1170 页：四个状态桶 + 总耗时原为 4 次 filter + 1 次 reduce（每次流式 delta 重扫 5 遍）。
   // 收成派生层一次遍历；状态判定仍走同一个 toolStatusOf（与单行 data-tool-status 同源）。
   const stats = collectToolClusterStats(props.rows, toolStatusOf);
-  const { pending, failed: failures, interrupted, unknown, latestPending: latest, lastFailure: failure, totalMs } = stats;
+  const { failed: failures, interrupted, unknown, latestPending: latest, lastFailure: failure, totalMs } = stats;
   // 单次调用不再说「1 次工具调用」——那句话把真正有用的工具名/对象挤到省略号后面
   // （2026-11-03 业主截图：一行只剩「1 次工具调用 执行中」）。一次调用直接用人话动词+对象当标题。
   const single = props.rows.length === 1 && failures.length === 0 ? props.rows[0] : null;
@@ -331,7 +331,6 @@ function AssistantActions(props: { text: string; eventId: number; eventRef?: Eve
   const pinned = props.actions.pinnedEventIds?.has(key) === true;
   const feedbackBusy = props.actions.feedbackBusy?.(anchor) === true;
   const pinBusy = props.actions.pinBusy?.(anchor) === true;
-  const running = props.actions.running === true;
   return (
     <span className="row-actions" data-cds="MessageActions" data-saving={props.actions.annotationPending?.(anchor) === true}>
       <button className="row-action" aria-label="复制这行输出" data-hint="复制" onClick={() => onCopyText?.(props.text)}>

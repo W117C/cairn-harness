@@ -12,7 +12,7 @@ import { streamGlm, type GlmMessage, type GlmToolSpec } from "../providers/glm";
 import type { Tool, ToolName } from "../tools/base";
 import { runLoop } from "./loop";
 import { redactEventForLog } from "../events";
-import { projectContext, summaryEnvelope, excludedIds, eventIdAt, isCompaction, isWorkerCompaction, type ContextMessage } from "./context";
+import { projectContext, summaryEnvelope, excludedIds, eventIdAt, isCompaction, isWorkerCompaction } from "./context";
 import {
   DEFAULT_COMPACTION_CONFIG,
   calibrateFactor,

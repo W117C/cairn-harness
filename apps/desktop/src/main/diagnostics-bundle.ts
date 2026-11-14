@@ -5,7 +5,7 @@
  * 这里把两者拼成一份 Markdown：报告在前、日志尾部在后，一个文件就能贴进 issue。
  * 纯拼接 + 有界读尾：不跑模型、不扫工作区，只读 `logs/main.log` 的最后若干行。
  */
-import { open, readFile, stat } from "node:fs/promises";
+import { open, stat } from "node:fs/promises";
 
 export const DIAGNOSTICS_LOG_MAX_BYTES = 256 * 1024;
 export const DIAGNOSTICS_LOG_MAX_LINES = 200;

@@ -2,47 +2,17 @@ import { isCompositionEnter } from "../ime";
 import type { Dispatch,MutableRefObject,SetStateAction } from 'react';
 // renderAppToolbar: extracted without changing event or callback behavior.
 import { Folder,List } from "lucide-react";
-import type { PointerEvent } from "react";
-import { type PanelImperativeHandle } from "react-resizable-panels";
 import type { GoalTrace } from "../../../../../src/agent/goal-trace";
-import type { ClarifyQuestion,PlanProposal } from "../../../../../src/events";
-import type { AgentEvent,AskPayload,ProjectDiagnosis,ProjectRecord,ProviderInfo,RunAttachmentReference,SuggestNextResult } from "../../../../../src/main/ipc-protocol";
-import type { PreviewSnapshot } from "../../../../../src/main/project-preview";
-import type { TextSizeSetting,UiSizeSetting } from "../../../../../src/main/settings";
-import type { PaletteAction } from "../components/CommandPalette";
-import { type FindBarHandle } from "../components/FindBar";
 import { GoalChip } from "../components/GoalChip";
 import { CairnMark } from "../components/CairnMark";
 import { WorkbenchTools } from "../components/WorkbenchTools";
-import type { StreamActions } from "../components/Stream";
-import { PANE_META,PANE_OPENABLE,type PaneKind } from "../components/panes";
-import type { SectionId } from "../components/settings-nav";
+import { type PaneKind } from "../components/panes";
 import { writeDismissedGoals } from "../goal-dismiss";
-import { paneShortcutKeys } from "../pane-shortcuts";
 import { WorkStatusPill } from "../components/WorkStatusPanel";
 import type { TodoProjection } from "../derived/todo";
-import type { DeliveryTrailItem,RunPhase,StreamRow,UsageSummary } from "../projections";
-import { type QuickStartInput } from "../quick-starts";
-import type { ComposerLockReason } from "../send-queue";
-import { type QueuedSend } from "../send-queue";
 import type { WorkspaceSession } from "../sessions-view";
-import type { SlashSkill } from "../slash";
 import { STR } from "../strings";
 import { runKey } from "../state/session-identity";
-import { type ThemePref } from "../theme";
-import type { StickyScroll } from "../useStickyScroll";
-import { type ViewMode } from "../view-mode";
-interface EmptySurface {
-  quickStarts: string[];
-  branch: string | null;
-}
-const NULL_QUICK_INPUT: QuickStartInput = {
-  git: null,
-  hasPackageJson: false,
-  scripts: [],
-  readmeExists: false,
-  lastSessionTitle: null,
-};
 
 interface AppToolbarProps {
   settingsOpen: boolean;

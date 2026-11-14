@@ -6,7 +6,7 @@ import { turnChanges } from "../projections";
 
 // ── 窗格集合与路由（唯一事实源；PaneDock 与独立窗口路由共用）────────
 
-import { PANE_META, PANE_OPENABLE, type PaneKind } from "../pane-registry";
+import { PANE_META, type PaneKind } from "../pane-registry";
 // 窗格登记表（类型/标签表/重排/⌘\ 选窗格）已搬到顶层 pane-registry.ts（Phase 2 · 批 2.3）：
 // state/ 不许 import components/，而那份是数据与纯函数、不是组件。导出面照旧从本文件转出。
 export { PANE_META, PANE_OPENABLE, lastOpenedPane, movePane, paneTabTargetForKey, type PaneKind } from "../pane-registry";

@@ -25,7 +25,7 @@ import { ArrowUp, Clock, FileText, Folder, Plus, Square } from "lucide-react";
 import { classifyDrop } from "../sessions-view";
 import { ModelPicker, THINKING_LEVELS } from "./ModelPicker";
 import { UsageMeter } from "./UsageMeter";
-import { Popover, usePopoverDismiss, useMenuKeyboard } from "./Popover";
+import { usePopoverDismiss, useMenuKeyboard } from "./Popover";
 import { mentionBreadcrumb, parseMentionQuery, replaceMentionToken } from "../mention";
 import { isCompositionEnter } from "../ime";
 import { useComposerOverlaySlot } from "../composer-overlays";

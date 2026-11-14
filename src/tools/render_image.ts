@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawnTracked } from "./process.js";
-import { assertRealContainment, resolveInWorkspace, type Tool, type ToolContext, type ToolResult } from "./base.js";
+import { assertRealContainment, resolveInWorkspace, type Tool, type ToolResult } from "./base.js";
 import { artifactKindOf } from "./write_file.js";
 
 /** 渲染工作区内的 HTML/SVG 成 PNG，作为图片内容块进上下文（识图的另一只眼）。

@@ -1,5 +1,5 @@
 // 会话根的短临界区：创建/删除/改名与运行锁恢复共用，避免各自检查后抢写。
-import { open, readFile, realpath, stat, unlink, type FileHandle } from "node:fs/promises";
+import { open, realpath, stat, unlink, type FileHandle } from "node:fs/promises";
 import { join } from "node:path";
 import { processLiveness } from "../process-liveness";
 

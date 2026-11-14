@@ -9,7 +9,6 @@ import { inheritedDisplayIndexes, mergeViewEvents, refsByDisplayIndex } from "..
 import { runKey } from "./session-identity";
 import type { SessionRef, SessionView } from "../../../../../src/events";
 import { useSessionSubscription } from "./session-subscription";
-import { composerThinking, thinkingChangeTarget } from "./thinking-selection";
 import type { ThinkingEffort } from "../../../../../src/providers/capabilities";
 // App 根（Claude 蓝本 v1 重建）：外壳（TitleBar + Sidebar + Main）+ 覆盖层（设置页）。
 // 状态编排/事件驱动/运行链全部沿用既有实现（逻辑资产原样搬运）：
@@ -23,7 +22,7 @@ import type { StreamActions } from "../stream-actions";
 // 预览状态是**类型**导入（值面留在主进程：project-preview 拖 node:http/child_process，
 // 渲染层只消费推送快照；文案在渲染层按 status 组合）。
 import { traceGoal } from "../../../../../src/agent/goal-trace";
-import type { AppDestination,AppPageDestination,PaletteAction,SectionId } from "../app-controls";
+import type { PaletteAction, SectionId } from "../app-controls";
 import { type FindBarHandle } from "../app-controls";
 import { readDismissedGoals } from "../goal-dismiss";
 import { decideLastSessionRestore,parseLastSession,serializeLastSession,type LastSessionRef } from "../last-session";
@@ -31,12 +30,11 @@ import { changedFileCount } from "../changed-files";
 import { nextPermissionMode } from "../permission-labels";
 import { usePermissionConfirm } from "./use-permission-confirm";
 import { deliveryTrail,formatRevertNotice,mergeSessionSnapshot,projectStream,turnDelivery,usageAggregate,usageSummary } from "../projections";
-import { type QuickStartInput } from "../quick-starts";
 import { composerLockReason,fromSessionQueueEntries,type QueuedSend } from "../send-queue";
 import type { DeleteConfirmTarget, SessionConfirmTarget, WorkspaceSession } from "../sessions-view";
 import { findSessionByRef } from "../sessions-view";
 import type { SlashSkill } from "../slash";
-import { truncateSummary, turnSummaries } from "../stream-model";
+import { turnSummaries } from "../stream-model";
 import { STR } from "../strings";
 import { buildSuggestContext } from "../suggest";
 import { type ThemePref } from "../theme";
@@ -164,7 +162,7 @@ export function useWorkbenchModel() {
   // 第 1115 页：附件打开/复制回执拆到 state/message-clipboard.ts（消息级动作，不占 workbench 主体）。
   const { openAttachment, handleCopyText } = useMessageClipboard(activeWorkspace, setLastError);
 
-  const { providerInfo, providerKeys, refreshProviderInfo, refreshProviderKeys, configuredProviders } = useProviderCatalog(setLastNotice);
+  const { providerInfo, refreshProviderInfo, refreshProviderKeys, configuredProviders } = useProviderCatalog(setLastNotice);
 
   // 输入与草稿簇（Phase 2 · 批 2.3）：填入信号 / 草稿搬家 / 附件注入 / 元素选择 / 菜单信号。
   const {
@@ -182,14 +180,14 @@ export function useWorkbenchModel() {
   // 外观与布局簇（Phase 2 · 批 2.3）：侧栏 / 插件侧栏 / 主题与字号 / 视图三档 / 专注模式 /
   // 检查器 / 窗格集 / v6 预览。
   const {
-    sidebarCollapsed, setSidebarCollapsed, sidebarWidth, sidebarWidthRef, persistSidebarWidth, startSidebarDrag, toggleSidebar,
+    sidebarCollapsed, sidebarWidth, sidebarWidthRef, persistSidebarWidth, startSidebarDrag, toggleSidebar,
     pluginSidebarOpen, pluginSidebarWidth, setPluginSidebarWidthPersist, togglePluginSidebar, closePluginSidebar,
-    themePref, setThemePref, changeTheme, textSize, setTextSize, uiSize, setUiSize,
+    themePref, setThemePref, changeTheme, setTextSize, setUiSize,
     viewMode, setViewMode, viewToast, setViewToast, viewRef, viewToastTimer,
-    focusMode, focusModeRef, focusRestoreRef, exitFocusRef, toggleFocusMode,
+    focusMode, toggleFocusMode,
     inspectorCollapsed, setInspectorCollapsed, inspectorDefault, inspectorRef, inspectorColRef,
-    mainGroupRef, inspectorSaveTimer, revealInspector, revealInspectorRef, toggleInspector,
-    paneTabs, setPaneTabs, notePaneOpened, togglePane, closePane, closeLastPane, openPane, requestPickElement,
+    mainGroupRef, inspectorSaveTimer, toggleInspector,
+    paneTabs, setPaneTabs, togglePane, closePane, closeLastPane, openPane, requestPickElement,
     preview, openPreview, exportActiveProject,
   } = useChrome({ setLastError, setLastNotice, setPickSignal, activeId, activeWorkspace, activeWorkspaceRef });
 
@@ -510,7 +508,7 @@ export function useWorkbenchModel() {
   // 撤回（编辑）前停生成：cancelRunHeal 声明在后，经 ref 晚绑（revealInspectorRef 同款）。
   const cancelRunHealRef = useRef<((sid: string) => void) | null>(null);
   const {
-    speakingEventId, setSpeakingEventId, handleBranch, compactNow, goalAct,
+    speakingEventId, handleBranch, compactNow, goalAct,
     handleEditUser, handleRestoreSnapshot, handleSpeak,
   } = useMessageActions({
     activeIdRef, eventsRef, sessions, activeWorkspaceRef, refreshSessions, openSession, cancelRunHealRef,
@@ -743,16 +741,6 @@ export function useWorkbenchModel() {
   }, [streamRows, chosen]);
   // 目录数据（v7.2）：用户轮列表（round + 首句）；≥2 轮才出目录入口（1 轮没有可跳的目标）。
   const outlineTurns = useMemo(() => turnSummaries(streamRows), [streamRows]);
-  // 置顶消息进对话目录（2026-11-04 补全「只是做了个外观」）：pin 此前只落 sidecar、大纲零呈现。
-  // 锚 = assistant 行 eventId（Stream 行面自带 eventId+round+text），映射零猜测。
-  const pinnedTurns = useMemo(() => {
-    if (pinnedEventIds.size === 0) return [];
-    return streamRows.flatMap((r) => (
-      r.kind === "assistant" && pinnedEventIds.has(`#${String(r.eventId)}`)
-        ? [{ round: r.round, text: truncateSummary(r.text) }]
-        : []
-    ));
-  }, [streamRows, pinnedEventIds]);
   const hasThinking = useMemo(
     () => streamRows.some((r) => r.kind === "assistant" && r.thinking !== undefined && r.thinking !== ""),
     [streamRows],
