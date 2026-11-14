@@ -11,8 +11,14 @@ import "./dsh-claude-style.css";
 // 任何第三个样式 import 都算接线漂移。轨道只动自己的落位（.reading::before /
 // .row.assistant 的两处），与官方变量无冲突，排在前面不影响它的优先级。
 import "./components/conversation-rail.css";
+// 壁纸层与玻璃表面（2026-11-14）：画布让位 + 五类玻璃面 + 可读性地板。
+// 位置在 CDS 适配层**之前**——适配层必须最后载入（见下面的 cds-adapter 注释），
+// 本层只消费 --cw-* 变量，不碰官方令牌。
+import "./wallpaper.css";
 // 减弱动效：启动时按偏好 + 系统事实落根属性（对标 Claude 的 data-reduce-motion 根属性）。
 import { bootMotionPref } from "./state/motion-pref";
+import { bootWallpaper, useWallpaperView } from "./state/wallpaper";
+import { WallpaperLayer } from "./components/WallpaperLayer";
 // CDS 适配层必须**最后**载入：它要把 Cairn 语义令牌和第三方皮肤的 --dsw-* 调色板
 // 一起钉到官方 CDS 值上；只要它先载入，`dsh-claude-style.css` 的近似色就会盖住官方值
 // （2026-10-28 实测：暗色整屏被覆盖成 #141413，而官方 surface-1 是 #151515）。
@@ -22,6 +28,8 @@ import "./cds-components.css";
 
 // 减弱动效落位（应用内开关 + 系统媒体查询两路事实 ⇒ 一个根属性）。
 bootMotionPref();
+// 壁纸层落位（2026-11-14）：读一次设置、挂接缝属性、写 --cw-* 变量（地板权重现算）。
+bootWallpaper();
 document.body.setAttribute("data-dsh-claude-style", "");
 document.body.setAttribute("data-dsh-claude-palette", "claude");
 document.body.setAttribute("data-dsh-claude-brand", "claude");
@@ -29,20 +37,32 @@ document.body.setAttribute("data-dsh-claude-brand", "claude");
 const PopoutApp = lazy(() => import("./components/PopoutApp").then((m) => ({ default: m.PopoutApp })));
 const App = lazy(() => import("./App").then((m) => ({ default: m.App })));
 
-// 路由：`#pane=<kind>[&session=<id>]` = 独立窗格窗口（弹出）；其余 = 主窗口。
-// 主窗口专属 ToastHost：首次成功/失败提示时才加载 sonner；弹窗窗格没有发 toast 的调用面。
-const popout = parsePaneHash(window.location.hash);
+/**
+ * 根组件：壁纸视图是 hook ⇒ 必须在组件里取，不能在 render 里按条件调。
+ * 弹出窗格窗口（`#pane=…`）不挂壁纸层，也不设 `data-we-wallpaper`——
+ * 否则 vendored 主题会在弹窗里也让掉画布，弹窗变成透明壳。
+ */
+function Root(): React.JSX.Element {
+  const view = useWallpaperView();
+  // 路由：`#pane=<kind>[&session=<id>]` = 独立窗格窗口（弹出）；其余 = 主窗口。
+  // 主窗口专属 ToastHost：首次成功/失败提示时才加载 sonner；弹窗窗格没有发 toast 的调用面。
+  const popout = parsePaneHash(window.location.hash);
+  if (popout !== null) {
+    return <PopoutApp kind={popout.kind} sessionId={popout.sessionId} workspace={popout.workspace} />;
+  }
+  return (
+    <>
+      <WallpaperLayer view={view} />
+      <App />
+      <ToastHost />
+    </>
+  );
+}
+
 createRoot(document.getElementById("root")!).render(
   <RenderErrorBoundary variant="page">
     <Suspense fallback={null}>
-      {popout !== null ? (
-        <PopoutApp kind={popout.kind} sessionId={popout.sessionId} workspace={popout.workspace} />
-      ) : (
-        <>
-          <App />
-          <ToastHost />
-        </>
-      )}
+      <Root />
     </Suspense>
   </RenderErrorBoundary>,
 );
