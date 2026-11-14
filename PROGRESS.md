@@ -40134,3 +40134,20 @@ require 生产模块 `src/main/wallpaper.ts`；合成面只有 AgentApi（preloa
 - 状态 **Proposed**：待业主批准；批准前不写实现代码（调研计划 §0 的放行条件）。
 - 本页不改冻结表、不改事件种类、不改权限档；只新增 ADR 文件与 STATE/ROADMAP 指针。
 - 上游 DS-Bot 只作参考材料（Apache-2.0，不复制代码/命名/数据结构/文案/界面）。
+
+## 2026-11-15 · 第 1202 页：GLM 强档模型名修正（`18495794`）
+
+**事实**：`src/providers/registry.ts` 的 `glm-strong` 指向 `glm-5.2-pro`。2026-11-15 对照官方模型总览
+（`docs.bigmodel.cn/cn/guide/start/model-overview`）与 GLM-5.3 模型页：官方全表**没有**这个模型名；
+旗舰是 `glm-5.3`（1M 上下文、最大输出 128K）。强档一旦被选中，请求会 404。
+
+**改动**：`glm-strong` → `glm-5.3`，`ctxWindow` 256K → 1M；`tests/providers.test.ts` 的查找断言同步，
+并加反向哨兵「`glm-5.2-pro` 必须查不到」。`tests/main-run-routing-bandit.test.ts` 的历史注释同步
+（旧读数写的模型名作废，价格表键未变）。**价表未动**：GLM 三行仍是占位，F4 的价梯映射仍待裁决
+（`docs/glm-pricing-decision-2026-11-15.md` §四 C 的模型名部分）。
+
+**读数**：`providers` + `goal-price` + `usage-attribution` 92 条绿；`main-run-routing-bandit` 6 条绿；
+`pnpm routing-check` 40/40；`typecheck` 0。
+
+**边界**：只修「模型名不存在」这一格；没有标定价、没有改 `standard`、没有改美元闸。强档的价格
+仍是 8/8 占位（比真实价 1.20/4.20 高约 6.7 倍），这是第 1198 页登记的待裁决项。
