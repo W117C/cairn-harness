@@ -77,9 +77,29 @@ describe("玻璃样式与模型的漂移守卫", () => {
     expect(glassBlock).toContain("backdrop-filter");
   });
 
+  it("设置行的三个类都有样式：.cw-settings / .cw-settings-actions / .cw-slider 不许是裸 HTML", () => {
+    // 2026-11-15 实测：GeneralSection 里写了这三个类名，但没有任何样式表定义它们 ⇒
+    // 三个没有名字的蓝条与「未设置/清除」两个按钮挤在同一 flex 行里互相压缩。
+    // 这条判据钉「组件用了的类，样式表里必须有规则」，而不是「看着还行」。
+    // 钉**顶层**规则（行首无缩进）：只在 @container 里写一条，窄窗以外的宽度就全裸奔了——
+    // 第一版判据用 `toContain` 正好被这条挡住（变异测试实测：删掉顶层 `.cw-slider {` 判据仍绿）。
+    for (const cls of [".cw-settings", ".cw-settings-actions", ".cw-slider"]) {
+      const pattern = new RegExp("^" + cls.replace(/\./g, "\\.") + " \\{", "m");
+      expect(CSS, `${cls} 在 wallpaper.css 里没有顶层规则`).toMatch(pattern);
+    }
+  });
+
   it("壁纸层落在应用壳之下：.cw-layer 用负 z-index", () => {
     const layerRule = /\.cw-layer\s*\{([^}]*)\}/.exec(CSS)?.[1] ?? "";
     expect(layerRule).toContain("z-index: -1");
+  });
+
+  it("设置整页不在画布让位名单里：它是 z-index:60 的覆盖层，透明会把工作台文字叠进设置文字", () => {
+    // 2026-11-15 真机截图取证：让位名单里带 .sp-page 时，composer 与空态文案整层透在设置行下面。
+    // 整页态的页面自己就是画布（设计规格：设置页是整页态，非浮层），保持实体底色。
+    const yieldBlock = /body\[data-we-wallpaper\] :is\(([^)]*)\)/.exec(CSS)?.[1] ?? "";
+    expect(yieldBlock).toContain(".app");
+    expect(yieldBlock).not.toContain(".sp-page");
   });
 
   it("玻璃规则带我们自己的根属性：主题那条 (0,3,2) 会压过普通写法", () => {
@@ -99,12 +119,21 @@ describe("玻璃样式与模型的漂移守卫", () => {
     expect(declarations).not.toContain("-webkit-backdrop-filter");
   });
 
-  it("新样式表零字面色值（颜色一律走 --cw-* 变量）", () => {
-    // 只查声明（注释里允许说明契约，但也不许出现色值——两边都守住）。
+  it("新样式表零字面色值：颜色只许经主题变量进来", () => {
+    // 本仓的颜色消费形制是 `hsl(var(--token))`（token 存 HSL 三元组，见 tokens.css）——
+    // 那不是字面色值，而是把主题变量接进 CSS 颜色的**唯一正确写法**，所以判据放行它。
+    // 真正要禁的是「颜色函数里没有 var()」：`hsl(15 63.1% 59.6%)`、`#fcfcfb`、`rgb(20,20,19)`。
+    // 2026-11-15 收紧这处：旧判据连 `hsl(var(--x))` 一起禁，于是任何要上强调色的新规则都写不了
+    // （只能自绘色值或干脆不写样式——后者正是设置行裸奔的原因之一）。
     const declarations = CSS.replace(/\/\*[\s\S]*?\*\//g, "");
-    expect(declarations).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
-    expect(declarations).not.toMatch(/\b(?:rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch)\(/);
-    expect(CSS).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
-    expect(CSS).not.toMatch(/\b(?:rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch)\(/);
+    const withoutTokenColors = declarations.replace(
+      /(?:rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch)\(\s*var\([^)]*\)[^)]*\)/g,
+      "VARCOLOR",
+    );
+    expect(withoutTokenColors).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(withoutTokenColors).not.toMatch(/\b(?:rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch)\(/);
+    // 注释里同样不许藏整色值（注释会被抄进新文件，是泄漏面；三元组形制不算）。
+    const comments = CSS.replace(/\/\*([\s\S]*?)\*\//g, "$1");
+    expect(comments).not.toMatch(/#[0-9a-fA-F]{6}\b/);
   });
 });

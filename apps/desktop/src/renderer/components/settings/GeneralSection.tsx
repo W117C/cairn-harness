@@ -122,8 +122,13 @@ export function GeneralSection(props: {
         <SettingsRow label={STR.general.wallpaper}>
           <div className="cw-settings">
             <div className="cw-settings-actions">
+              {/* 「未设置」是状态词，不是动作：放在按钮左边当静态回执。
+                  2026-11-15 真机实测：旧写法把它塞进按钮文案，已设壁纸时按钮反而读「未设置」。 */}
+              {props.settings.wallpaper.kind === "none" && (
+                <span className="ss-static">{STR.general.wallpaperNone}</span>
+              )}
               <button type="button" className="mini-btn" onClick={props.onWallpaperPick}>
-                {props.settings.wallpaper.kind === "none" ? STR.general.wallpaperPick : STR.general.wallpaperNone}
+                {STR.general.wallpaperPick}
               </button>
               {props.settings.wallpaper.kind !== "none" && (
                 <button type="button" className="mini-btn" onClick={props.onWallpaperClear}>

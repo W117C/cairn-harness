@@ -13,6 +13,7 @@
     "smoke:layout": "electron scripts/layout-smoke.cjs",
     "smoke:marketplace": "electron scripts/plugin-marketplace-smoke.cjs",
     "smoke:performance": "electron scripts/performance-smoke.cjs",
+    "smoke:wallpaper": "electron scripts/wallpaper-csp-smoke.cjs",
     "smoke:install": "node scripts/install-smoke.mjs",
     "preview:ui": "pnpm --dir preview dev",
     "preview:ui:build": "pnpm --dir preview build",

@@ -1575,4 +1575,24 @@ if (process.argv.includes("--cairn-project-entry-fixture")) {
   });
 }
 
+// 壁纸冒烟夹具（wallpaper-csp-smoke.cjs 专用；不进产品链路）：真 scheme 与真 CSP 由主进程给，
+// 这里只喂「设置里已选了一张壁纸」这一格，并记录 wallpaperPick 的调用次数。
+// 缺这一格时渲染层读 settings.wallpaper.kind 会抛（画廊种子设置里没有 wallpaper 键）。
+const wallpaperFixturePath = argOf("--cairn-wallpaper-fixture=", "");
+if (wallpaperFixturePath !== "") {
+  settingsState.wallpaper = {
+    kind: "image", path: wallpaperFixturePath,
+    opacity: 1, scrim: 0.35, glassAlpha: 0.25, revision: 0,
+  };
+  const wallpaperPicks = [];
+  stub.wallpaperPick = () => {
+    wallpaperPicks.push(Date.now());
+    return Promise.resolve({ ok: true, kind: "image", path: wallpaperFixturePath });
+  };
+  contextBridge.exposeInMainWorld("__cairnWallpaper", {
+    picks: () => wallpaperPicks.length,
+    path: wallpaperFixturePath,
+  });
+}
+
 contextBridge.exposeInMainWorld("agent", stub);

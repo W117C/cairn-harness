@@ -14,15 +14,18 @@
  */
 
 /* ① 画布让位：vendored 主题只让出了它自己画的三处，**我们自己的画布仍在**——
-   styles.css 的 body 那条、以及 tokens.css 的 `[data-theme=…] .app / .destination-page /
-   .sp-page` 那条——不接管就会「选了壁纸但什么也没变」。
+   styles.css 的 body 那条、以及 tokens.css 的 `[data-theme=…] .app / .destination-page`
+   那条——不接管就会「选了壁纸但什么也没变」。
    ⚠️ 这是实测出来的第三处：body 之外，.app 自己还铺着不透明画布底色，
-   把 z-index:-1 的壁纸层整个盖住（body 透明了、壁纸仍看不见）。 */
+   把 z-index:-1 的壁纸层整个盖住（body 透明了、壁纸仍看不见）。
+   ⚠️ .sp-page **不在让位名单里**（2026-11-15 真机实测撤掉）：它是 z-index:60 的固定覆盖层，
+   底下还压着工作台。让它透明 ⇒ 设置文字与 composer/空态文字叠成两层（截图取证）。
+   整页态的页面自己就是画布，保持实体底色；壁纸在工作台可见即可。 */
 body[data-we-wallpaper] {
   background: transparent;
 }
 
-body[data-we-wallpaper] :is(.app, .destination-page, .sp-page) {
+body[data-we-wallpaper] :is(.app, .destination-page) {
   background: transparent;
 }
 
@@ -84,4 +87,69 @@ html[data-theme][data-cairn-wallpaper] body[data-we-wallpaper] :is(
    ⇒ 覆盖成立（改 vendored 主题是一字节都不许的）。 */
 body[data-we-wallpaper] :is(.side) {
   background: transparent;
+}
+/* ⑤ 设置行（外观分段）：.cw-settings 这一族是**这一行自己的**布局，
+   不借 .ss-row-ctl 的 flex——三个滑杆各带一行标签，挤在一行里会互相吃掉宽度
+   （实测：1280 宽时三个 range 各 129px，标签与滑杆在同一 flex 行里互相压缩，
+   看上去像三个没有名字的蓝条）。改成两列网格：左列标签定宽、右列滑杆吃余量；
+   窄窗（@container，settings 的 .sp-body 是容器）回落成单列。
+   为什么写在这里而不是 styles.css：这一族只为壁纸那一行存在，跟壁纸一起删才是对的；
+   styles.css 是产品公共层，塞进去就成了没人敢删的孤儿。 */
+.cw-settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+  width: 100%;
+}
+
+.cw-settings-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+/* 一行一个滑杆：标签定宽、滑杆吃余量。标签列按最长那条（六个汉字）算且不许换行——
+   5.5em 实测会把「壁纸不透明度」折成两行；短标签靠右对齐，三行滑杆左缘才齐。 */
+.cw-slider {
+  display: grid;
+  grid-template-columns: 6.5em minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+  font-size: var(--fs-caption-sm);
+  color: hsl(var(--text-300));
+}
+
+.cw-slider > span {
+  min-width: 0;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* range 本体：只定高与强调色，轨道外观交给引擎（不自绘 thumb——自绘就得手抄色值，
+   而本文件的纪律是零字面色值）。accent-color 走主题的品牌强调色。
+   宽度走控件宽度契约的 md 档（240px，同 .ss-field[data-w=md]）：.ss-row 的控件列是
+   auto 轨，width:100% 在其中会塌回 range 的固有宽（实测 129px）⇒ 必须给定宽。 */
+.cw-slider > input[type="range"] {
+  width: 240px;
+  max-width: 100%;
+  min-width: 0;
+  height: 16px;
+  margin: 0;
+  accent-color: hsl(var(--accent-brand));
+  cursor: pointer;
+}
+
+/* 窄容器（设置页 .sp-body 是 @container）：标签与滑杆上下叠，标签左对齐。 */
+@container (max-width: 640px) {
+  .cw-slider {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+  .cw-slider > span {
+    text-align: left;
+  }
 }

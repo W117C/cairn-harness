@@ -1,0 +1,159 @@
+{
+  "builtCsp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: cairn-wallpaper:; font-src 'self' data:; media-src 'self' data: blob: cairn-wallpaper:; connect-src 'self' http: https: ws: wss:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'",
+  "protocol": {
+    "full": {
+      "status": 200,
+      "bytes": 6843,
+      "type": "image/png",
+      "acceptRanges": "bytes"
+    },
+    "ranged": {
+      "status": 206,
+      "bytes": 100,
+      "contentRange": "bytes 0-99/6843"
+    },
+    "wrongPath": 404,
+    "badRange": 416
+  },
+  "layer": {
+    "layer": true,
+    "kind": "image",
+    "src": "cairn-wallpaper://media/current?v=0",
+    "natural": [
+      640,
+      400
+    ],
+    "complete": true,
+    "bodyBg": "rgba(0, 0, 0, 0)",
+    "bodyAttr": true,
+    "htmlAttr": true,
+    "mainBackdrop": "blur(14px)",
+    "floor": "61%",
+    "wallpaperOpacity": "1"
+  },
+  "settingsRow": {
+    "found": true,
+    "display": "flex",
+    "direction": "column",
+    "actionsDisplay": "flex",
+    "status": null,
+    "pageBg": "rgb(27, 27, 27)",
+    "sliders": [
+      {
+        "label": "壁纸不透明度",
+        "columns": "78px 240px",
+        "display": "grid",
+        "top": 436,
+        "labelWidth": 78,
+        "labelLines": 1,
+        "rangeWidth": 240,
+        "rangeHeight": 16,
+        "accent": "color(srgb 0.85098 0.466667 0.341177)",
+        "value": "1"
+      },
+      {
+        "label": "压暗",
+        "columns": "78px 240px",
+        "display": "grid",
+        "top": 460,
+        "labelWidth": 78,
+        "labelLines": 1,
+        "rangeWidth": 240,
+        "rangeHeight": 16,
+        "accent": "color(srgb 0.85098 0.466667 0.341177)",
+        "value": "0.35"
+      },
+      {
+        "label": "玻璃透明度",
+        "columns": "78px 240px",
+        "display": "grid",
+        "top": 485,
+        "labelWidth": 78,
+        "labelLines": 1,
+        "rangeWidth": 240,
+        "rangeHeight": 16,
+        "accent": "color(srgb 0.85098 0.466667 0.341177)",
+        "value": "0.25"
+      }
+    ],
+    "buttons": [
+      {
+        "text": "选择图片或视频",
+        "width": 125,
+        "bg": "color(srgb 0.101961 0.101961 0.0980392)",
+        "color": "color(srgb 0.764706 0.760784 0.717647)"
+      },
+      {
+        "text": "清除",
+        "width": 60,
+        "bg": "color(srgb 0.101961 0.101961 0.0980392)",
+        "color": "color(srgb 0.764706 0.760784 0.717647)"
+      }
+    ],
+    "rowWidth": 326,
+    "containerWidth": 1232
+  },
+  "sliderPointer": {
+    "point": {
+      "x": 1067,
+      "y": 450
+    },
+    "hit": {
+      "tag": "INPUT",
+      "cls": "",
+      "hits": true
+    },
+    "value": "0.2",
+    "lastPatch": {
+      "wallpaper": {
+        "kind": "image",
+        "path": "/Users/ze/Downloads/Cairn/cairn/outputs/wallpaper-csp-2026-11-15/fixture-wallpaper.png",
+        "opacity": 0.2,
+        "scrim": 0.35,
+        "glassAlpha": 0.25,
+        "revision": 0
+      }
+    }
+  },
+  "pickPointer": {
+    "point": {
+      "x": 1129,
+      "y": 432
+    },
+    "hit": {
+      "tag": "BUTTON",
+      "cls": "mini-btn",
+      "hits": true
+    },
+    "picks": 1,
+    "revision": null,
+    "layer": true
+  },
+  "clearPointer": {
+    "point": {
+      "x": 1229,
+      "y": 432
+    },
+    "hit": {
+      "tag": "BUTTON",
+      "cls": "mini-btn",
+      "hits": true
+    },
+    "layer": false,
+    "bodyAttr": false,
+    "htmlAttr": false,
+    "bodyBg": "rgb(21, 21, 21)",
+    "backdrop": "none",
+    "status": "未设置",
+    "buttons": [
+      "选择图片或视频"
+    ]
+  },
+  "negativeControl": {
+    "layer": false,
+    "natural": null,
+    "bodyAttr": false,
+    "cspViolations": 1,
+    "sample": "Loading the image 'cairn-wallpaper://media/current?v=0' violates the following Content Security Policy directive: \"img-src 'self' data: blob: https:\". The action has been blocked."
+  }
+}
