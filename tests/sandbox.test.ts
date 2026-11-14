@@ -2,6 +2,7 @@
 // 断网判据（三种真实 OS 形状抓住、两种「像但不是」不误伤）、env 白名单+秘密剥除。
 // 四项真实断言（写收敛/拒读/断网/自检）由 pnpm sandbox:check 端到端负责。
 import { realpathSync } from "node:fs";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -26,6 +27,28 @@ describe("buildSandboxProfile", () => {
 
   it("显式 deny 与缺省逐字一致（调用方误传「deny」不得改变现形态）", () => {
     expect(buildSandboxProfile(tmpdir(), { network: "deny" })).toBe(buildSandboxProfile(tmpdir()));
+  });
+
+  it("判卷面写保护：有冻结表 ⇒ 每个键（含表自身）一条 literal 拒绝且排在 allow 之后；无表零行为", async () => {
+    // 两个根：`frozenJudgePathSet` 按 root 缓存，先问过「无表」的根再写表会读到缓存——
+    // 生产的工作区表在会话开始前就存在，测试也照这个次序建两个独立根。
+    const plainRoot = await mkdtemp(join(tmpdir(), "sbx-nofrozen-"));
+    const root = await mkdtemp(join(tmpdir(), "sbx-frozen-"));
+    try {
+      expect(buildSandboxProfile(plainRoot), "没有冻结表的工作区必须逐字零行为").not.toContain("deny file-write* (literal");
+      await mkdir(join(root, "scripts"), { recursive: true });
+      await writeFile(join(root, "judge.txt"), "x", "utf8");
+      await writeFile(join(root, "scripts", "frozen-sha256.json"), JSON.stringify({ "judge.txt": "0".repeat(64) }), "utf8");
+      const lines = buildSandboxProfile(root).split("\n");
+      const allowAt = lines.findIndex((l) => l.startsWith("(allow file-write* (subpath"));
+      const judgeAt = lines.indexOf('(deny file-write* (literal "' + join(realpathSync(root), "judge.txt") + '"))');
+      const tableAt = lines.findIndex((l) => l.includes("frozen-sha256.json") && l.startsWith("(deny file-write*"));
+      expect(judgeAt).toBeGreaterThan(allowAt);
+      expect(tableAt).toBeGreaterThan(allowAt);
+    } finally {
+      await rm(plainRoot, { recursive: true, force: true }).catch(() => undefined);
+      await rm(root, { recursive: true, force: true }).catch(() => undefined);
+    }
   });
 
   it("allow 支只加两条 network 放行，写收敛与拒读一字不动（放行面不得顺手放宽别的）", () => {

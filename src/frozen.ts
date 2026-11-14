@@ -9,7 +9,11 @@ export const FROZEN_TABLE_REL = join("scripts", "frozen-sha256.json");
 
 const judgeSetCache = new Map<string, ReadonlySet<string>>();
 
-/** 该工作区声明的判卷文件集合（= 冻结表的键集，归一成 `/` 分隔的工作区相对路径）。
+/** 该工作区声明的判卷文件集合（= 冻结表的键集 **+ 表自身**，归一成 `/` 分隔的工作区相对路径）。
+ *  表自身也必须进集合（2026-11-15 实测）：它此前不在自己的键里 ⇒ `write_file` 写
+ *  `scripts/frozen-sha256.json` 在 auto 档一条 allow 规则下判 approve，模型可以先把基线改成
+ *  自己改过的判卷文件的 sha，再把测试改绿——**闸的基线不能被闸保护的对象改写**。
+ *
  *  · 表不存在 ⇒ **空集**：用户自己的仓库没有这张表 ⇒ 本条闸零行为，不强加我们的判卷纪律。
  *  · 表存在但解析不出对象 / 键数为 0 ⇒ **显式抛**：静默折成「这个工作区没有判卷面」
  *    等于把刚建起来的闸从最省事的地方拆掉（清空一张表比改一行代码安静得多）。
@@ -28,7 +32,8 @@ export function frozenJudgePathSet(root: string): ReadonlySet<string> {
     if (keys.length === 0) {
       throw new Error(`判卷表为空（${file}）——0 条判卷文件不是"没有判卷面"，是表被清空`);
     }
-    set = new Set(keys);
+    // 表自身进集合：基线不是「判卷文件清单之外的一份配置」，它承重。
+    set = new Set([...keys, FROZEN_TABLE_REL.split("\\").join("/")]);
   }
   judgeSetCache.set(root, set);
   return set;

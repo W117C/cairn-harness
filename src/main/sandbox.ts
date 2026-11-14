@@ -8,6 +8,7 @@ import { mkdir } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PermissionMode } from "../permissions";
+import { frozenJudgePathSet } from "../frozen";
 import { type ToolResult } from "../tools/base";
 import { createOutputRing } from "../tools/output-ring";
 import { killGroup, sanitizedEnv, spawnTracked } from "../tools/process";
@@ -41,7 +42,23 @@ export interface SandboxProfileOptions {
   network?: "deny" | "allow";
 }
 
-/** 生成 SBPL profile：写收敛到 writableRoot（realpath），敏感目录拒读，network 按 opts 决定。 */
+/** SBPL 字符串字面量：路径里的 `"` 与 `\\` 要转义（工作区路径可能带引号；未转义会让整份
+ *  profile 编译失败 ⇒ 沙箱起不来，那是比多写一行更糟的失效方向）。 */
+function sbplString(value: string): string {
+  return '"' + value.split("\\").join("\\\\").split('"').join('\\"') + '"';
+}
+
+/** 生成 SBPL profile：写收敛到 writableRoot（realpath），敏感目录拒读，network 按 opts 决定。
+ *
+ *  **判卷面写保护（2026-11-15）**：工作区声明了 `scripts/frozen-sha256.json` 时，为其中每个
+ *  冻结文件追加一条 `(deny file-write* (literal <realpath>))`，排在 `allow file-write*` **之后**
+ *  （SBPL 后者胜出——本函数上面那条 `(allow file-read*)` → `(deny file-read* …)` 用的就是同一
+ *  语义）。为什么必须在 OS 层：F1 实测 12 条写命令里 9 条能穿过词法取料（`python3 -c`、`node -e`、
+ *  变量间接、`truncate`、`dd`、`git checkout --`…），而 Seatbelt 按 vnode 判：软链别名、硬链、
+ *  rename 覆盖、`rm`、`chmod` 都被同一条 literal 规则挡住（本机 15 形状实测，见
+ *  `tests/sandbox-frozen-deny.test.ts`）。表自身也在 `frozenJudgePathSet` 里 ⇒ 基线同样写不动。
+ *
+ *  缺省零行为：没有冻结表的工作区（用户自己的仓库）一条都不追加。 */
 export function buildSandboxProfile(writableRoot: string, opts: SandboxProfileOptions = {}): string {
   const root = real(writableRoot);
   const home = real(homedir());
@@ -61,6 +78,10 @@ export function buildSandboxProfile(writableRoot: string, opts: SandboxProfileOp
   }
   lines.push('(allow file-write* (subpath "' + root + '"))');
   lines.push('(allow file-write* (subpath "/dev/null"))');
+  // 判卷面：逐文件 literal 拒绝，必须排在 allow 之后（后写的规则胜出）。
+  for (const rel of frozenJudgePathSet(root)) {
+    lines.push("(deny file-write* (literal " + sbplString(real(join(root, rel))) + "))");
+  }
   return lines.join("\n");
 }
 

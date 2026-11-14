@@ -356,3 +356,68 @@ describe("判卷面硬闸的批量形态（apply_patch：目标路径在补丁�
   });
 });
 
+
+/* ⑲（2026-11-15 · F1 P0）：⑥ 的覆盖集只有重定向 / tee / cp / mv / rm / sed -i，实测另有
+   python3 -c / node -e / 变量间接 / truncate / ln / git checkout -- / perl -i / bash -c / install / dd
+   十条能写穿。本段把**词法层现在认得出的**形状逐条钉住；认不出的两条（解释器、变量间接）**不**
+   在这里造一个恒绿的假判据——它们由执行层承重：Seatbelt literal 拒绝（tests/sandbox-frozen-deny.test.ts）
+   与 run_shell 的跑后字节校验（tests/frozen-shell-guard.test.ts）。 */
+describe("判卷面硬闸：shell 写/毁形状的覆盖集（2026-11-15）", () => {
+  const armed = (frozen: readonly string[] = [JUDGE]) =>
+    newAutonomySession("auto", {
+      rules: rules([allowShell, allowWrite]),
+      frozenJudgePaths: new Set(frozen),
+    });
+
+  it("⑲ 认得出的写/毁形状逐条 deny（含 bash -c 与 $() 载荷、perl -i、git checkout --）", () => {
+    const s = armed();
+    for (const cmd of [
+      `bash -c 'echo x > ${JUDGE}'`,
+      `sh -lc 'echo x > ${JUDGE}'`,
+      `echo $(echo x > ${JUDGE})`,
+      `truncate -s 0 ${JUDGE}`,
+      `install -m 644 /tmp/x ${JUDGE}`,
+      `ln -sf /tmp/x ${JUDGE}`,
+      `dd if=/dev/zero of=${JUDGE} bs=1 count=1`,
+      `perl -i -pe 's/a/b/' ${JUDGE}`,
+      `git checkout -- ${JUDGE}`,
+      `git restore ${JUDGE}`,
+      `touch ${JUDGE}`,
+      `unlink ${JUDGE}`,
+    ]) {
+      const d = evaluate("run_shell", { command: cmd }, s);
+      expect(d.verdict, cmd).toBe("deny");
+      expect(d.layer, cmd).toBe("L0-hard");
+    }
+  });
+
+  it("⑳ 反向哨兵：同形状打非冻结文件不 deny；链式命令不把后段只读的判卷路径栽给前段", () => {
+    const s = armed();
+    for (const cmd of [
+      `bash -c 'echo x > scratch.txt'`,
+      `truncate -s 0 scratch.txt`,
+      `install -m 644 /tmp/x scratch.txt`,
+      `ln -sf /tmp/x scratch.txt`,
+      `dd if=/dev/zero of=scratch.txt bs=1 count=1`,
+      `perl -i -pe 's/a/b/' scratch.txt`,
+      `git checkout -- scratch.txt`,
+      `touch scratch.txt`,
+    ]) {
+      expect(evaluate("run_shell", { command: cmd }, s).verdict, cmd).not.toBe("deny");
+    }
+    expect(evaluate("run_shell", { command: `rm scratch.txt && cat ${JUDGE}` }, s).verdict).not.toBe("deny");
+  });
+
+  it("㉑ 冻结表自身进集合：write_file / run_shell 都写不动基线（否则改表＝改判据）", () => {
+    const s = armed([JUDGE, "scripts/frozen-sha256.json"]);
+    for (const d of [
+      evaluate("write_file", { path: "scripts/frozen-sha256.json", content: "{}" }, s),
+      evaluate("run_shell", { command: "echo {} > scripts/frozen-sha256.json" }, s),
+    ]) {
+      expect(d.verdict).toBe("deny");
+      expect(d.layer).toBe("L0-hard");
+    }
+    // 装载器这一面：真表（scripts/frozen-sha256.json）的集合里必须有表自身。
+    expect(frozenJudgePathSet(ROOT).has("scripts/frozen-sha256.json"), "表自身不在集合里 ⇒ 基线可被改写").toBe(true);
+  });
+});

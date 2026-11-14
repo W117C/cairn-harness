@@ -7,7 +7,7 @@
 // 零私有状态：规则库与放行集是仅有的两个输入源；断路器计数在 session 入参里，evaluate 只读不写
 // （调用方经 note* helper 更新）——同一输入两次调用结果一致。
 import { posix } from "node:path";
-import { tokenize } from "./command-shape";
+import { shellWriteTargetsOf } from "./shell-write-targets";
 import { FROZEN_TABLE_REL } from "../frozen";
 import { TOOL_NAMES, type ToolName } from "../tools/base";
 // 判卷闸的补丁取料：与 `apply_patch` 工具层共用同一个解析器（同一个决策点，不在闸里再解析一遍 diff）。
@@ -421,47 +421,8 @@ function judgeTargetsOf(tool: string, args: Record<string, unknown>): JudgeTarge
   return { targets, unreadable: false };
 }
 
-const REDIRECT_RE = /^[0-9*&]?>{1,2}\|?$/;
-
-/** shell 写/毁原语的目标提取（覆盖集与边界见 judgeTargetsOf 的注释）。
- *  伪目标无害：非冻结键（如 `&&`、`git`）归一后不落冻结集，照旧放行。 */
-function shellWriteTargetsOf(command: string): string[] {
-  const toks = tokenize(command);
-  const out: string[] = [];
-  const push = (t: string | undefined): void => {
-    if (t === undefined) return;
-    out.push(t);
-  };
-  for (let i = 0; i < toks.length; i++) {
-    const t = toks[i] as string;
-    if (REDIRECT_RE.test(t)) {
-      push(toks[i + 1]);
-      continue;
-    }
-    switch (t) {
-      case "tee":
-      case "rm":
-      case "mv":
-        for (const f of toks.slice(i + 1)) if (!f.startsWith("-")) push(f);
-        break;
-      case "cp": {
-        const rest = toks.slice(i + 1).filter((f) => !f.startsWith("-"));
-        push(rest.at(-1));
-        break;
-      }
-      case "sed": {
-        const rest = toks.slice(i + 1);
-        if (rest.some((f) => f === "-i" || f.startsWith("-i."))) {
-          const positional = rest.filter((f) => !f.startsWith("-"));
-          for (const f of positional.slice(1)) push(f);
-        }
-        break;
-      }
-    }
-  }
-  return out;
-}
-
+// shell 写/毁原语的目标取料已搬到 `./shell-write-targets`（run_shell 执行层闸与这里共用一份）：
+// 原先这套 switch 只住在权限层，工具层不调它 ⇒ 同一张冻结表下两层各说各话（F1，2026-11-15）。
 function collectRisk(
   tool: ToolName,
   args: Record<string, unknown>,

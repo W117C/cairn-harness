@@ -41,8 +41,16 @@ export class BackgroundTaskRegistry {
   private seq = 0;
   private tasks = new Map<string, TaskEntry>();
 
-  /** 起一个后台任务：spawn 不等待；返回任务号（错误立返，不留悬空 promise）。 */
-  start(command: string, workspace: string, signal?: AbortSignal, launch?: ToolContext["backgroundShellLaunch"]): { id: string } {
+  /** 起一个后台任务：spawn 不等待；返回任务号（错误立返，不留悬空 promise）。
+   *  `onExit`（可选）：正常退出后、标记 done 之前跑的收尾校验；返回一句话就拼进该任务的输出环。
+   *  run_shell 用它接判卷面的跑后字节复查（后台命令也要有地板；否则「后台」就是绕开守卫的门）。 */
+  start(
+    command: string,
+    workspace: string,
+    signal?: AbortSignal,
+    launch?: ToolContext["backgroundShellLaunch"],
+    onExit?: () => Promise<string | null>,
+  ): { id: string } {
     const id = `bg_${String(++this.seq)}`;
     const ring = createOutputRing(BG_OUTPUT_LIMIT);
     const entry: TaskEntry = {
@@ -78,7 +86,16 @@ export class BackgroundTaskRegistry {
       collect(Buffer.from("[后台命令启动失败] " + err.message + "\n"));
       finish(null);
     });
-    handle.child.on("close", (code) => { finish(code); });
+    handle.child.on("close", (code) => {
+      if (onExit === undefined) { finish(code); return; }
+      // 先校验再标记 done：task_output 读到 done 时，判卷面要么没被动过，要么那句守卫说明已经进环。
+      void onExit()
+        .then((note) => { if (note !== null && note !== "") collect(Buffer.from("\n" + note + "\n")); })
+        .catch((err: unknown) => {
+          collect(Buffer.from("\n[后台任务收尾校验失败] " + (err instanceof Error ? err.message : String(err)) + "\n"));
+        })
+        .finally(() => { finish(code); });
+    });
     // 会话取消 → 这一任务组杀（监听配对摘除，同 run_shell 的 C12 口径）。
     if (signal) {
       const onAbort = (): void => { if (!entry.done) { killGroup(handle.child); finish(null, "stopped"); } };

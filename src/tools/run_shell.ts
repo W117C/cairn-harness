@@ -4,6 +4,7 @@ import { killGroup, sanitizedEnv, spawnTracked } from "./process.js";
 import { createOutputRing } from "./output-ring.js";
 import { shellRedirectReceipt, snapshotShellRedirects } from "./snapshot.js";
 import { backgroundTasksFor } from "./background-tasks.js";
+import { assertShellWriteTargetsNotFrozen, captureFrozenBaseline, enforceFrozenBaseline, FROZEN_GUARD_TAG, FROZEN_GUARD_TAINT } from "./frozen-guard.js";
 
 // 输出上限 32KB；只在 ctx.workspace 下执行；超时 60s 强杀。
 // 超限后的「头 + 尾环」截断在 output-ring（与 verify 共用——两处都得留住尾部结论）。
@@ -28,6 +29,12 @@ export const run_shell: Tool = {
       throw new Error("run_shell: command 参数必须是非空字符串");
     }
     assertShellCommandNotAgentArea(command);
+    // 判卷面执行层闸（F1，2026-11-15）：权限层的词法取料认不全（python3 -c / node -e / 变量间接…），
+    // 这里在 spawn 前把**认得出的**写目标按真实落点再复查一次；认不出的形状由沙箱 literal 拒绝
+    // 与跑后字节校验兜底（见 tools/frozen-guard.ts）。
+    await assertShellWriteTargetsNotFrozen(ctx.workspace, command, "run_shell");
+    // 跑前基线：无冻结表 ⇒ null（零行为）；有表 ⇒ 命令跑完逐字节复查并复原。
+    const frozenBaseline = await captureFrozenBaseline(ctx.workspace);
     // #99：重定向覆写在**跑之前**留一份原件——三个内容写工具一直有这一格，`> file` 这一面绕得开它。
     // 排在 spawn 之前是有意的：先拍后跑，拍不到的那一条只在回执里点名，命令照跑（不改审批语义）。
     // 这里唯一的「拒」是 `.agent/` 那条既有地板（assertNotAgentArea 抛出 ⇒ 命令根本没 spawn）。
@@ -40,7 +47,16 @@ export const run_shell: Tool = {
     // 审批语义不变：还是 run_shell 这一格门；后台只是执行形态，不是绕门的后门。
     if (args.background === true) {
       if (ctx.signal?.aborted) return { ok: false, output: "[cancelled] 会话已取消，工具没有执行" };
-      const { id } = backgroundTasksFor(ctx).start(command, ctx.workspace, ctx.signal, ctx.backgroundShellLaunch);
+      const { id } = backgroundTasksFor(ctx).start(
+        command,
+        ctx.workspace,
+        ctx.signal,
+        ctx.backgroundShellLaunch,
+        async () => {
+          const guard = await enforceFrozenBaseline(ctx.workspace, frozenBaseline);
+          return guard.tampered ? guard.note : null;
+        },
+      );
       // 重定向回执与前台同一只函数：后台命令跑 30 分钟、覆写文件时，模型也要看得到
       // 「覆盖前快照」的指针，而不是只有 snapshotId 一个裸号（前台路径同一纪律）。
       return {
@@ -87,7 +103,22 @@ export const run_shell: Tool = {
         // 归因走 verify 那一只谓词（`classifyVerifyFailure`，同正则同枚举）：127 与「包管理器自身报错」
         // 这两类「命令根本没跑成」对模型必须点名，否则它会照着一条环境红去改本来正确的代码
         // （取消这一支不贴——它的原因已经写在 `[error: … 随会话取消终止]` 那行了）。
-        settle(cancelled ? res : annotateExecCause(res, { timedOut, exitCode: code }));
+        // 判卷面跑后复查：同步出口必须等它做完再 settle——否则模型会先拿到「成功」再被告知
+        // 判卷面被动过，顺序反了就等于把一次越界读成一次通过。
+        void (async () => {
+          const guard = await enforceFrozenBaseline(ctx.workspace, frozenBaseline).catch((err: unknown) => ({
+            tampered: true,
+            note:
+              FROZEN_GUARD_TAG + " 跑后校验失败：" + (err instanceof Error ? err.message : String(err)) +
+              "——" + FROZEN_GUARD_TAINT + "。",
+          }));
+          if (guard.tampered) {
+            res.ok = false;
+            res.output = res.output + "\n" + guard.note;
+          }
+          // 这一行必须逐字保留（tests/shell-family-cause.test.ts 按源文本钉「取消支不贴归因」）。
+          settle(cancelled ? res : annotateExecCause(res, { timedOut, exitCode: code }));
+        })();
       };
       // env 消毒：spawn 不传 env 会继承 process.env，而主进程把 BYOK key 写进了
       // process.env.CAIRN_API_KEY —— 一条 `env` 就能把明文 key 读进事件流（P1-1）。
