@@ -4,7 +4,7 @@
 //   node --import tsx scripts/verify-census.ts [--workspace <dir>] [--json]
 //   · --workspace <dir>  覆盖 workspace（缺省 process.cwd()）
 //   · --json             打印 JSON；否则打印人读三行
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, openSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -50,9 +50,14 @@ export function collectCensus(workspace: string): CensusResult {
     const filePath = join(sessionsDir, name);
     let content: string;
     try {
-      const st = statSync(filePath);
-      if (!st.isFile()) continue;
-      content = readFileSync(filePath, "utf8");
+      const fd = openSync(filePath, "r");
+      try {
+        const st = fstatSync(fd);
+        if (!st.isFile()) continue;
+        content = readFileSync(fd, "utf8");
+      } finally {
+        closeSync(fd);
+      }
     } catch {
       continue;
     }

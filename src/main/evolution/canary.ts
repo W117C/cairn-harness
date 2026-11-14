@@ -27,6 +27,7 @@
 //  · 读不动观察档不许折成"没有档"（那等于把连败计数静默清零）：一个点名 refused，一个不动账。
 import { constants } from "node:fs";
 import { mkdir, open, readdir, readFile, rename, rm, stat, type FileHandle } from "node:fs/promises";
+import { readFileBounded } from "../../fs-safe-read.js";
 import { dirname, join, relative, sep } from "node:path";
 import { tmpPathFor, writeFileAtomic } from "../../atomic-write";
 import { processLiveness } from "../../process-liveness";
@@ -238,21 +239,23 @@ export class RuntimeLoader {
     }
     const rel = manifest.entry;
     const abs = join(dir, rel);
-    let st;
-    try {
-      st = await stat(abs);
-    } catch {
-      throw new LoadRefusedError(`${id}@${version} 的 entry ${rel} 不在安装目录里——盘上字节与账本不符，拒绝装载`);
+    // 同一句柄上量、读：换路径不会让「量过的字节」与「读到的字节」分家。
+    const read = await readFileBounded(abs, this.caps.maxFileBytes);
+    if (!read.ok) {
+      if (read.reason === "missing") {
+        throw new LoadRefusedError(`${id}@${version} 的 entry ${rel} 不在安装目录里——盘上字节与账本不符，拒绝装载`);
+      }
+      if (read.reason === "not-file") {
+        throw new LoadRefusedError(`${id}@${version} 的 entry ${rel} 不是常规文件——entry 必须是一份普通文件`);
+      }
+      if (read.reason === "too-large") {
+        throw new LoadRefusedError(
+          `${id}@${version} 的 entry ${rel} 有 ${String(read.size)} 字节，越过装载帽 ${String(this.caps.maxFileBytes)}`,
+        );
+      }
+      throw new LoadRefusedError(`${id}@${version} 的 entry ${rel} 读不到——entry 必须是一份可读文件`);
     }
-    if (!st.isFile()) {
-      throw new LoadRefusedError(`${id}@${version} 的 entry ${rel} 不是常规文件——entry 必须是一份普通文件`);
-    }
-    if (st.size > this.caps.maxFileBytes) {
-      throw new LoadRefusedError(
-        `${id}@${version} 的 entry ${rel} 有 ${String(st.size)} 字节，越过装载帽 ${String(this.caps.maxFileBytes)}`,
-      );
-    }
-    return { entry: rel, source: await readFile(abs, "utf8") };
+    return { entry: rel, source: read.bytes.toString("utf8") };
   }
 
   /** 收集包内文本文件（不含 manifest.json 自身），按路径排序并按帽计数。 */
@@ -270,15 +273,19 @@ export class RuntimeLoader {
         if (!e.isFile()) continue;
         const rel = relative(dir, abs).split(sep).join("/");
         if (rel === "manifest.json") continue;
-        const st = await stat(abs);
         if (files.length + 1 > this.caps.maxFiles) {
           throw new LoadRefusedError(`${dir} 的文件数越过装载帽 ${String(this.caps.maxFiles)}`);
         }
-        total += st.size;
-        if (st.size > this.caps.maxFileBytes || total > this.caps.maxTotalBytes) {
+        const read = await readFileBounded(abs, this.caps.maxFileBytes);
+        if (!read.ok) {
+          if (read.reason === "too-large") total += read.size;
           throw new LoadRefusedError(`${dir} 的文本体量越过装载帽（单文件 ${String(this.caps.maxFileBytes)} / 总量 ${String(this.caps.maxTotalBytes)}）`);
         }
-        files.push({ rel, text: await readFile(abs, "utf8") });
+        total += read.bytes.byteLength;
+        if (total > this.caps.maxTotalBytes) {
+          throw new LoadRefusedError(`${dir} 的文本体量越过装载帽（单文件 ${String(this.caps.maxFileBytes)} / 总量 ${String(this.caps.maxTotalBytes)}）`);
+        }
+        files.push({ rel, text: read.bytes.toString("utf8") });
       }
     };
     await walk(dir);

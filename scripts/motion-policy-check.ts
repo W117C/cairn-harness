@@ -24,7 +24,7 @@
 //  用法：node --import tsx scripts/motion-policy-check.ts
 //        可选：--styles/--tokens/--sticky/--renderer <路径>（判卷自己造坏标本时用）。
 //  退出码：0 = 全过；1 = 有发现（每条带 文件:行 + 规则号）。
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -697,12 +697,12 @@ interface RendererFile {
 function listRendererFiles(dir: string): RendererFile[] {
   const out: RendererFile[] = [];
   const walk = (d: string): void => {
-    for (const name of readdirSync(d)) {
+    for (const ent of readdirSync(d, { withFileTypes: true })) {
+      const name = ent.name;
       if (name === "node_modules" || name === "dist" || name === "dist-electron") continue;
       const p = join(d, name);
-      const st = statSync(p);
-      if (st.isDirectory()) walk(p);
-      else if (/\.(ts|tsx)$/.test(name)) {
+      if (ent.isDirectory()) walk(p);
+      else if (ent.isFile() && /\.(ts|tsx)$/.test(name)) {
         out.push({ file: p, text: stripJsComments(readFileSync(p, "utf8")) });
       }
     }

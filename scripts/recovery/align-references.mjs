@@ -96,8 +96,13 @@ if (!REPORT_ONLY) {
   let total = 0;
   for (const rel of ["PROGRESS.md", "STATE.md"]) {
     const p = join(ROOT, rel);
-    if (!existsSync(p)) continue;
-    const before = readFileSync(p, "utf8");
+    // 不先 existsSync 再读（那是 check-then-use 的 race 形状）：读不到就跳过，语义一致。
+    let before: string;
+    try {
+      before = readFileSync(p, "utf8");
+    } catch {
+      continue;
+    }
     const { out, hits } = swap(before);
     if (hits > 0) {
       writeFileSync(p, out, "utf8");

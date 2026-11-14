@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { chmod, copyFile, cp, lstat, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, cp, lstat, mkdir, open, readFile, readdir, realpath, rename, rm, writeFile } from "node:fs/promises";
+import type { Stats } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { tmpPathFor, writeFileAtomic } from "../atomic-write";
 import { runLoop } from "../agent/loop";
@@ -33,6 +34,26 @@ const WRITE_TOOLS = new Set(["write_file", "edit_file"]);
 const SYSTEM_DIRS = new Set([".git", ".agent", ".agents", "node_modules"]);
 const MAX_FILES = 20_000;
 const MAX_BYTES = 64 * 1024 * 1024;
+
+/** 在同一句柄上读并与 lstat 的 inode 对照：路径被换掉 ⇒ 抛冲突，不拿 B 的哈希去比 A 的期望值。
+ *  修的是 CodeQL js/file-system-race：`lstat(path)` → `readFile(path)` 之间换文件。 */
+async function readIfUnchanged(abs: string, state: Stats | null): Promise<Buffer> {
+  const handle = await open(abs, "r");
+  try {
+    const st = await handle.stat();
+    if (state !== null && st.ino !== state.ino) throw new Error("delivery path changed while reading: " + abs);
+    const buf = Buffer.allocUnsafe(st.size);
+    let offset = 0;
+    while (offset < buf.length) {
+      const { bytesRead } = await handle.read(buf, offset, buf.length - offset, offset);
+      if (bytesRead === 0) break;
+      offset += bytesRead;
+    }
+    return buf.subarray(0, offset);
+  } finally {
+    await handle.close().catch(() => undefined);
+  }
+}
 
 function cleanPath(path: string, allowRoot = false): boolean {
   return typeof path === "string" && path.length > 0 && !isAbsolute(path) && !path.includes("\\") && !path.includes("\0") &&
@@ -365,7 +386,7 @@ export function createLocalBackend(options: LocalBackendOptions): ExecutionBacke
           for (const change of record.delivering.changes) {
             const absolute = join(workspace, change.path);
             const state = await lstat(absolute).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; return null; });
-            const current = state?.isFile() ? contentHash(await readFile(absolute)) : null;
+            const current = state?.isFile() ? contentHash(await readIfUnchanged(absolute, state)) : null;
             if (current === change.after.hash) alreadyWritten.add(change.path);
             else if (current !== (change.before?.hash ?? null)) throw new Error(`delivery recovery conflict: ${change.path}`);
           }
@@ -380,7 +401,7 @@ export function createLocalBackend(options: LocalBackendOptions): ExecutionBacke
           await assertSafeWrite(workspace, change.path);
           const absolute = join(workspace, change.path); const state = await lstat(absolute).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; return null; });
           if (state?.isSymbolicLink() || state && !state.isFile()) throw new Error("delivery symlink/special file conflict");
-          const current = state ? contentHash(await readFile(absolute)) : null;
+          const current = state ? contentHash(await readIfUnchanged(absolute, state)) : null;
           if (alreadyWritten.has(change.path) && current === change.after.hash) {
             contents.set(change.path, await store.read(change.artifact));
             continue;
@@ -439,7 +460,7 @@ export function createLocalBackend(options: LocalBackendOptions): ExecutionBacke
           for (const change of manifest.changes) {
             await assertSafeWrite(workspace, change.path);
             const absolute = join(workspace, change.path); const state = await lstat(absolute);
-            if (!state.isFile() || contentHash(await readFile(absolute)) !== change.after.hash) throw new Error(`rollback conflict: ${change.path}`);
+            if (!state.isFile() || contentHash(await readIfUnchanged(absolute, state)) !== change.after.hash) throw new Error(`rollback conflict: ${change.path}`);
             if (change.before && contentHash(await readFile(join(record.directory, "baseline", change.path))) !== change.before.hash) throw new Error("rollback baseline hash integrity mismatch");
           }
           for (const change of manifest.changes) {

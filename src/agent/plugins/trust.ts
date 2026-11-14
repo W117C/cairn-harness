@@ -3,6 +3,7 @@
 // 用户级插件免信任（用户自己装的）；散装 skill 免信任（纯 markdown，无执行面）。
 import { createHash } from "node:crypto";
 import { readFile, rm, readdir, stat, lstat } from "node:fs/promises";
+import { readFileBounded } from "../../fs-safe-read.js";
 import { basename, dirname, join, relative } from "node:path";
 import { writeFileAtomic } from "../../atomic-write";
 import { pluginSnapshot } from "./snapshot";
@@ -114,16 +115,11 @@ async function fingerprintDirs(root: string, startDirs: readonly string[]): Prom
         continue;
       }
       if (!ent.isFile()) continue;
-      const st = await stat(abs).catch(() => null);
-      if (st === null) { bounded = true; continue; }
-      if (st.size > FP_MAX_FILE_BYTES) {
-        bounded = true; // 超大文件不入指纹 = 绑定不完整（信任会被拒绝）
-        continue;
-      }
-      const content = await readFile(abs).catch(() => null);
-      if (content === null) { bounded = true; continue; }
+      // 同一句柄上量、读：超大/读不到都按「绑定不完整」处理（信任会被拒绝），语义与原实现一致。
+      const read = await readFileBounded(abs, FP_MAX_FILE_BYTES);
+      if (!read.ok) { bounded = true; continue; }
       count++;
-      parts.push(relative(root, abs).replaceAll("\\", "/") + ":" + createHash("sha1").update(content).digest("hex"));
+      parts.push(relative(root, abs).replaceAll("\\", "/") + ":" + createHash("sha1").update(read.bytes).digest("hex"));
     }
   };
   /** `.git` 里只绑定会参与执行的两处：config（可重定向 hooksPath）与 hooks/ 下的全部文件。 */

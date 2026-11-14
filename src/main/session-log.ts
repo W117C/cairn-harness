@@ -33,26 +33,29 @@ function skipContinuationBytes(buf: Buffer): Buffer {
 }
 
 export async function readSessionLogTail(file: string, tailLines?: number): Promise<SessionLogTail> {
-  const st = await stat(file);
   const want = clampInt(tailLines, 1, SESSION_LOG_MAX_LINES, SESSION_LOG_DEFAULT_LINES);
-  const size = Math.min(st.size, SESSION_LOG_MAX_BYTES);
-  const start = st.size - size;
-  let truncated = start > 0;
+  let truncated = false;
   let raw: Buffer = Buffer.alloc(0);
-
-  if (size > 0) {
-    const fh = await open(file, "r");
-    try {
+  let bytes = 0;
+  // 同一句柄上量、读：路径在 stat 与 read 之间被换掉时，size/起点与真正读到的位置不会分家。
+  const fh = await open(file, "r");
+  try {
+    const st = await fh.stat();
+    bytes = st.size;
+    const size = Math.min(st.size, SESSION_LOG_MAX_BYTES);
+    const start = st.size - size;
+    truncated = start > 0;
+    if (size > 0) {
       const buf = Buffer.allocUnsafe(size);
       const { bytesRead } = await fh.read(buf, 0, size, start);
       raw = buf.subarray(0, bytesRead);
-    } finally {
-      await fh.close().catch(() => undefined);
+      if (start > 0) {
+        const nl = raw.indexOf(0x0a);
+        raw = nl >= 0 ? raw.subarray(nl + 1) : skipContinuationBytes(raw);
+      }
     }
-    if (start > 0) {
-      const nl = raw.indexOf(0x0a);
-      raw = nl >= 0 ? raw.subarray(nl + 1) : skipContinuationBytes(raw);
-    }
+  } finally {
+    await fh.close().catch(() => undefined);
   }
 
   const all = raw.toString("utf8").split(/\r?\n/);
@@ -62,5 +65,5 @@ export async function readSessionLogTail(file: string, tailLines?: number): Prom
     lines = lines.slice(-want);
     truncated = true;
   }
-  return { text: lines.join("\n"), truncated, bytes: st.size, lines: lines.length };
+  return { text: lines.join("\n"), truncated, bytes, lines: lines.length };
 }
