@@ -118,7 +118,7 @@ export const DEFAULT_MODEL_TABLE: readonly ModelSpec[] = [
   // GLM（M5 既有，id 不变）
   { id: "glm-flash", provider: "glm", model: "glm-5.3-flash", tier: "cheap", ctxWindow: 1_000_000 }, // 旧 glm-4.5-flash；官方模型页 docs.bigmodel.cn/cn/guide/models/vlm/glm-5.3-flash（上下文 1M）
   { id: "glm-standard", provider: "glm", model: "glm-5.2", tier: "standard", ctxWindow: 1_000_000 }, // 调用名官方页确认；上下文页写 1M（旧值 128k 是拍的）
-  { id: "glm-strong", provider: "glm", model: "glm-5.2-pro", tier: "strong", ctxWindow: 256_000 }, // ⚠️ 未证：官方页只确认了 glm-5.2 与 glm-5.3-flash，-pro 后缀没查到
+  { id: "glm-strong", provider: "glm", model: "glm-5.3", tier: "strong", ctxWindow: 1_000_000 }, // 2026-11-15 官方模型页：glm-5.2-pro 不存在；旗舰 glm-5.3，1M 上下文（docs.bigmodel.cn/cn/guide/models/text/glm-5.3）
   // OpenAI（M6 白名单；三个调用名都出现在官方 pricing 表上）
   { id: "openai-cheap", provider: "openai", model: "gpt-4o-mini", tier: "cheap", ctxWindow: 128_000 },
   { id: "openai-standard", provider: "openai", model: "gpt-4o", tier: "standard", ctxWindow: 128_000 },

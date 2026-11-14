@@ -424,8 +424,10 @@ describe("DeepSeek 预设 wire 形状", () => {
    （查不到就走缺省帽），两者用途不同故行为不同。 */
 describe("findSpecByNameOrId（档位 id 与 provider 模型名双态，重复取最小窗口）", () => {
   it("id 与 model 名都认；未知 / 空 → undefined", () => {
-    expect(findSpecByNameOrId(DEFAULT_MODEL_TABLE, "glm-strong")?.ctxWindow).toBe(256_000);
-    expect(findSpecByNameOrId(DEFAULT_MODEL_TABLE, "glm-5.2-pro")?.ctxWindow).toBe(256_000);
+    expect(findSpecByNameOrId(DEFAULT_MODEL_TABLE, "glm-strong")?.ctxWindow).toBe(1_000_000);
+    expect(findSpecByNameOrId(DEFAULT_MODEL_TABLE, "glm-5.3")?.ctxWindow).toBe(1_000_000);
+    // 反向哨兵：不存在的 -pro 后缀不许再被解析成一条真模型
+    expect(findSpecByNameOrId(DEFAULT_MODEL_TABLE, "glm-5.2-pro")).toBeUndefined();
     expect(findSpecByNameOrId(DEFAULT_MODEL_TABLE, "gpt-4o")?.id).toBe("openai-standard");
     expect(findSpecByNameOrId(DEFAULT_MODEL_TABLE, "no-such-model")).toBeUndefined();
     expect(findSpecByNameOrId(DEFAULT_MODEL_TABLE, "")).toBeUndefined();

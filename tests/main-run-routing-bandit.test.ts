@@ -24,8 +24,9 @@
  * 分辨力自检（本文件落地时实测，不是推算）：把 `runOnce` 里那句 `...(c.over ?? {})` 摘掉
  * （等价于「三跳通道断了：CLI 的值没递进 `handleAgentRun`」）⇒ 6 条红 4 条
  * （开 / A ≠ 旧值 / override 顶掉盘上的 true / 计价形状），而「关」与「只改设置盘那一位」两条
- * 仍绿——正是它们不该被这根断线影响。读数：开 = `picked glm-strong`、真拨 `glm-5.2-pro`、
- * `spent_usd 0.012`；关 = 零 `routing_decision`、真拨 `glm-5.2`、`spent_usd 0.003`。
+ * 仍绿——正是它们不该被这根断线影响。读数：开 = `picked glm-strong`、真拨该档模型（
+ * 2026-11-15 起为 `glm-5.3`；旧记录写的是不存在的 `glm-5.2-pro`）、`spent_usd 0.012`；
+ * 关 = 零 `routing_decision`、真拨 `glm-5.2`、`spent_usd 0.003`。
  */
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
