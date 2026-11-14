@@ -82,6 +82,23 @@ describe("玻璃样式与模型的漂移守卫", () => {
     expect(layerRule).toContain("z-index: -1");
   });
 
+  it("玻璃规则带我们自己的根属性：主题那条 (0,3,2) 会压过普通写法", () => {
+    // 主题的 `html[data-theme="dark"] body[data-dsh-claude-style] [data-composer-card]` 是
+    // (0,3,2)；玻璃规则若只有 (0,2,1)，composer 的不透明底色就把玻璃盖住（真渲染层实测过）。
+    // 抬权重的办法是挂一个我们自己的 html 根属性（state/wallpaper.ts 单点写）。
+    const glassBlock =
+      CSS.split("}").find((block) => block.includes("color-mix(in srgb, var(--cw-canvas)")) ?? "";
+    expect(glassBlock).toContain("data-cairn-wallpaper");
+    expect(glassBlock).toContain("data-theme");
+  });
+
+  it("只写标准 backdrop-filter：压缩器去重时会挑带前缀那条，而 Chromium 只认标准写法", () => {
+    // 实测：两条都写 ⇒ 产物只剩 -webkit-backdrop-filter ⇒ 计算值 = none ⇒ 玻璃没有模糊。
+    const declarations = CSS.replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(declarations).toContain("backdrop-filter:");
+    expect(declarations).not.toContain("-webkit-backdrop-filter");
+  });
+
   it("新样式表零字面色值（颜色一律走 --cw-* 变量）", () => {
     // 只查声明（注释里允许说明契约，但也不许出现色值——两边都守住）。
     const declarations = CSS.replace(/\/\*[\s\S]*?\*\//g, "");
