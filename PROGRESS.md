@@ -39680,3 +39680,34 @@ Error: 未知主会话 provider: agnes-ai（内置 5 家，或在 .agent/provide
 - 未跑 `mutate-verify`（本批不涉及变异表；第 1185 页刚跑过 4/4 全杀）。
 - 桌面那条 CDS 漂移仍红，属于第 1185 页登记的「重抽 + 真渲染器探针」批，不在这里顺手改记录。
 
+
+## 2026-11-14 · 第 1187 页：HEAD 认证复跑（`20464376`）——24/25，唯一红仍是桌面宿主条件
+
+**入口**：第 1186 页把测试面清完后，HEAD 变了，认证要重跑一次才配得上「本笔绿」这句话。
+取料：`outputs/head-cert-2046437-2026-11-14-1416/provenance.md`（门自己落盘的原样读数）。
+
+### 一、读数
+
+- 判卷：**673 文件 / 8113 条全绿**（`maxWorkers=2`，exit 0，两端独占，本趟墙钟 277.96s）。
+- 门：25 道跑到 25，**绿 24、红 1**（`desktop-test`）；超预算只 1 格（desktop-test 18158ms）。
+- `mutate-needles-check`：exit=0 14593ms（第 1185 页改指后的表，0 阻断）。
+- 未证 5 项（绿而零输出/连网凭据限制，不等于通过）：gate-check / autonomy-check / compaction-check /
+  provider:check / gym-check 各 1。
+
+### 二、唯一红
+
+`desktop-test`：383 文件 / 2487 条绿，2 文件 3 条红——2 条是 `cds-upstream-drift.test.ts` 的
+Claude.app 上游漂移，1 条是认证树里 Electron 原生宿主起不来。本笔只动测试面，没有碰这条路径。
+
+**CDS 漂移的实测范围（临时目录重抽，未入库）**：`tokens.css` 与上游仍**逐字节一致**（38913B）；
+变的是组件薄——上游渲染层 CSS 251161B（记录 246160B），抽出 48 组件 / 114 规则 / 472 声明
+（记录 112 / 468）。新增的是两格 `svg[data-cds=Icon]:has(>:nth-child(2))` 的 @supports 规则与
+toolbar 选择器的 `[data-cds-contrast=more]` 扩展。要收口得整批重抽 `components.css`／
+`components.json`／`UPSTREAM.json`，并同步 `cds-components.test.ts` 里钉住的上游数字——
+那是改判据的动作，留给专门一批，不在这里顺手改。
+
+### 三、边界
+
+- 认证跑的是 `20464376`（docs 笔），代码面与 `7ad88cb1` 相同；本轮没有再改代码。
+- 认证树已回收；`mutate-verify` 整表未跑（本笔不涉及变异表，第 1185 页的 4 条已 4/4 全杀）。
+
