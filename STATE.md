@@ -1,6 +1,6 @@
 # Cairn / DSH —— 现态
 
-rev: 9b4f6e17
+rev: 2dd11acd
 
 核对日期 2026-11-14（Asia/Shanghai）。`rev` 是开发线现役基线：第 1182 页死代码清理与第 1183 页
 扫描告警收口第一批都在它之上。分支与门禁状态见[仓库状态与分支](docs/REPOSITORY-STATUS.md)，历史
@@ -24,6 +24,9 @@ rev: 9b4f6e17
 - **2026-11-14 整表变异**（`ba6807db`）：整表跑完，仅 `remember-gate-if-chain-back` 与
   `usage-stamp-after-append` 两条存活，都是判据/锚点缺口；已在 `9b4f6e17` 改好并复杀 2/2。
   明细（含读数）见第 1191 页。
+- **2026-11-14 并发壁纸批判据归位**（`d10540e8`／`2dd11acd`）：另一会话的壁纸层落库后，两条普查
+  判据（README 通道数、wallpaper-protocol 执行路径）与两条测试 import 已补齐；HEAD 认证六维全过。
+  明细见第 1192 页。
 - **2026-11-14 fs-race 收官与置顶进目录**（`dba71aa6`／`ba6807db`）：剩余 10 条 fs-race 改同一
   句柄读或去掉 check-then-use；大纲按轮显示置顶 Pin，draftIds 判卷改钉真实消费者。分支裁决与
   工作树归位同页记录，见第 1191 页。

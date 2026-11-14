@@ -39861,3 +39861,31 @@ toolbar 选择器的 `[data-cds-contrast=more]` 扩展。要收口得整批重�
 - 整表读数是在 `ba6807db` 上取的（判据修复在 `9b4f6e17`）；两条修复之外的锚点与判据未变，
   所以这张表仍然是那 1675 条的同分母读数。
 
+
+## 2026-11-14 · 第 1192 页：并发壁纸批的判据归位（`d10540e8`／`2dd11acd`）＋ HEAD 六维全过
+
+**背景**：另一会话在 23:26–23:52 把壁纸层（`d700215c`…`56acf614`）落进同一分支；本会话的
+`9b4f6e17`／`0c4bb33a` 与它交错。认证在 `d10540e8` 上抓到 2 条红，都是壁纸批的**普查判据**没跟上。
+
+### 一、两条红与修法
+
+1. **README 的 invoke 通道数**：表里已有 **157** 条（壁纸批新增 `wallpaperPick`），README 仍写 156。
+   改 README 为 157——事实源仍是运行时表，README 只是陈述。
+2. **`src/main/wallpaper-protocol.ts` 没有从测试出发的执行路径**：它不是纯类型面、也不是 Electron
+   入口，属于真缺口。新增 `tests/wallpaper-protocol.test.ts`，钉住 scheme 与媒体前缀同源
+   （`WALLPAPER_MEDIA_URL === WALLPAPER_SCHEME + "://media/current"`）。
+3. 顺手修掉两条壁纸测试的 import 路径（`../../src/main/settings` → `../../../src/main/settings`）——
+   `d10540e8` 的桌面 tsc 曾因此报 2 条 module-not-found。
+
+### 二、最终认证（`2dd11acd`，exit 0）
+
+- **判决输入六维全过**；认证门面 **25/25 绿**；超预算 1 格（只出声不判红）。
+- 判卷：**676 文件 / 8126 条全绿**（`maxWorkers=2`，exit 0，两端独占，本趟墙钟 273.45s）。
+- 取料：`outputs/head-cert-2dd11ac-2026-11-14-1616/provenance.md`。
+
+### 三、边界
+
+- 壁纸功能本身的实现、视觉验收与设计裁决归那一会话；本页只记它与本会话交错处被判据抓住的两格、
+  以及最终认证读数。
+- 认证树已回收；工作树只余那一会话的未跟踪计划文档（`docs/superpowers/plans/2026-11-14-ds-bot-benchmark.md`），未动。
+
