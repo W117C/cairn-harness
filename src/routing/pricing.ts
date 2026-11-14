@@ -80,7 +80,7 @@ export const DEFAULT_PRICE_TABLE: Readonly<Record<string, ModelPrice>> = {
   "deepseek-strong": { inputPerMTok: 1.32, outputPerMTok: 3.96, cacheReadPerMTok: 0.044, cacheWritePerMTok: 1.32, calibrated: true },
 };
 
-/** 有效价表 = 内置 12 行 + 已装自定义 provider 给的那些行（`.agent/providers.json` 的 price）。
+/** 有效价表 = 内置 14 行 + 已装自定义 provider 给的那些行（`.agent/providers.json` 的 price）。
  *
  *  两条纪律：
  *   · **价不齐就不进表**：只给了输出价、没给输入价的行整条不收录 —— 拿另一样按 0 算

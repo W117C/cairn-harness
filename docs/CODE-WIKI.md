@@ -151,9 +151,11 @@ git 只隔离**文本**冲突：两个 worker 各改各的文件、却动同一�
 [`docs/superpowers/specs/2026-10-07-desktop-ui-productization-design.md`](superpowers/specs/2026-10-07-desktop-ui-productization-design.md)
 重排后，有三个"只有一处"的底座，动 UI 前先认路：
 
-- **图标唯一事实源：`components/icons.tsx` 的 `Ic` 表**。16px 网格、stroke 1.5、currentColor；
-  组件一律 `import { Ic }`，不许再内联 `<svg>` 路径或用 emoji 当图标（render-structure 判卷
-  豁免的 `⚠`/`✓` 字面量除外）。`providerHue(id)` 给 provider 品牌色相（确定性哈希）。
+- **图标：直接 `import` lucide-react**（渲染层 76 个文件；判卷钉 `lucide-*` 类名，如
+  `composer-running.test.tsx` / `work-status-panel.test.tsx`）。曾规划的 `components/icons.tsx`
+  `Ic` 表与 `providerHue(id)` 已在 a10f4fd1 移除，本段此前陈旧指路（第 1193 页收口）；
+  2026-10-07 spec 里「新增 icons.tsx」一句是当日规划，不是现状。图形 emoji 不许当图标
+  （`diff-split.test.tsx` 的 emoji 哨兵读整个渲染面；`⚠`/`✓` 不在其码段内，是状态字面量）。
 - **markdown 渲染：`markdown.tsx` 的 `parseBlocks`（纯函数，apps/desktop/tests/markdown.test.tsx 判卷）+
   `<Markdown>`**。零依赖、零 `dangerouslySetInnerHTML`（全部 React 文本节点转义，链接只放行
   http(s)）；未闭合围栏按"开放代码块"渲染（流式不闪烁）。样式全部前缀 `.md-*`——不许裸选

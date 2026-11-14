@@ -1257,7 +1257,7 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
 // UNWIRED 是**带理由的未接白名单**（仿 gate-manifest 的 EXEMPT_SCRIPTS）：真有一条通道 v1
 // 不做，唯一合法出口是写进这个集合（每行注记理由）⇒ 注册成 fail-loud handler，绝不静默跳过。
 const UNWIRED_FAIL_LOUD: ReadonlySet<InvokeChannel> = new Set([
-  // 空 = 全部 39 条通道都已接真。要留白请在此逐条加键并写理由。
+  // 空 = 全部 157 条通道都已接真。要留白请在此逐条加键并写理由。
 ]);
 for (const [key, channel] of Object.entries(INVOKE_CHANNELS) as [InvokeChannel, string][]) {
   const handler = wired[key];
