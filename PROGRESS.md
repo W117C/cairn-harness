@@ -39711,3 +39711,47 @@ toolbar 选择器的 `[data-cds-contrast=more]` 扩展。要收口得整批重�
 - 认证跑的是 `20464376`（docs 笔），代码面与 `7ad88cb1` 相同；本轮没有再改代码。
 - 认证树已回收；`mutate-verify` 整表未跑（本笔不涉及变异表，第 1185 页的 4 条已 4/4 全杀）。
 
+
+## 2026-11-14 · 第 1188 页：CDS 组件薄重抽（`f1f40649`）＋ 两条死面收口（`a5cdc052`）
+
+**入口**：第 1187 页的认证只剩 `desktop-test` 一道红；红里 2 条是 Claude.app 的 CDS 上游漂移。
+第 1182 页另外留了三条候选等裁决（`RESOURCE_MAX_DEPTH`、registry 注入时钟、`draftIds`）。
+
+### 一、CDS 重抽（`f1f40649`）
+
+- **范围实测**：`tokens.css` 与上游仍逐字节一致（38913B，sha 不变）⇒ 变的只有组件层。
+  上游渲染层 CSS 246160B → **251161B**；抽出 **48 组件 / 114 规则 / 472 声明**（原 112 / 468）。
+  逐组件只有 `Icon` 变：10 规则/30 声明 → **12 / 34**（两格
+  `svg[data-cds=Icon]:has(>:nth-child(2))` 的 @supports 规则）；`Toolbar` 的选择器多了
+  `[data-cds-contrast=more]`，声明数不变。
+- **全部由仓里的抽取器生成**：`extract-cds-tokens.py --write` ＋ `extract-cds-components.mjs`；
+  `components.css` 37368B、`components.json` 24777B、`component-map.json` 的
+  `sourceSha256` 与 `Icon` 两格一并刷新。`UPSTREAM.json` 的版本（5.11492.5）、app.asar sha、
+  member、evidence、componentExtraction 同步。
+- **判卷钉更新**：`cds-components.test.ts` 的 source sha/bytes 与 totals（48/114/472）随重抽改钉；
+  `quotedFacts` 逐条在新 CSS 里复核仍在（radius / font-size 的 comfortable 档一字未变）。
+- **验证**：`extract-cds-tokens.py --check` **PASS**（tokens + rendererCss 两面）；
+  `cds-parity` / `cds-components` / `cds-upstream-drift` **3 文件 / 61 条全绿**；
+  桌面全量（干净树 `f1f40649`）**385 文件 / 2490 条全绿**，boundary-check 绿。
+
+### 二、两条死面收口（`a5cdc052`）
+
+1. **`RESOURCE_MAX_DEPTH` 接回判据**：`src/agent/plugins/content.ts` 的注释声明「更深层目录
+   允许下探到 RESOURCE_MAX_DEPTH」，但代码从引入起就没比较过它——60 个文件的帽只帽文件、不帽
+   空目录链。现在目录递归到第 3 层即停；新增判卷证明第 3 层文件可见、第 4 层不再下探。
+   **先红后绿**：去掉守卫后该用例当场红（`references/a/b/c/four.md` 被列出来），复原后
+   sha256 与改前逐字一致（064d94c0…）。
+2. **registry 注入时钟删掉**：`InstalledPluginRegistry` 的构造器收了一个从不读的 `now` 参数
+   （`installedAt`/`updatedAt` 由调用方随 record 带进来）。参数删除，38 处测试调用点同步收口；
+   生产侧本来就只传一个参数。判卷 `plugin-install-registry` 7 条 ＋ `plugin-install-jobs` 17 条全绿。
+
+### 三、剩下一候选（仍挂起）
+
+`WorkbenchView.draftIds`：判卷 `apps/desktop/tests/composer-drafts.test.tsx` 逐字钉着
+`toContain("draftIds,")`，删它属改判卷；功能面（置顶消息进目录）仍是未实现项，留待交互裁决。
+
+### 四、边界
+
+- 未跑 `mutate-verify` 整表；本笔的深度判据已按「去掉守卫必红」做过反向验证。
+- 桌面全量跑在干净树 `f1f40649`；主树那 33 个删除仍是另一会话的在飞改动，未纳入。
+
