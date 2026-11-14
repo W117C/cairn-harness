@@ -250,19 +250,24 @@ revision 非负整数。坏值一律回默认，不落库（与既有偏好校�
 
 ---
 
-### Task 2: 主进程壁纸服务（协议 + 文件校验 + IPC 通道）
+### Task 2: 主进程壁纸服务（协议 + 文件校验）
 
 **Files:**
+- Create: `src/main/wallpaper-protocol.ts`（主进程与渲染层共用的协议常量）
 - Create: `apps/desktop/src/main/wallpaper.ts`
-- Modify: `src/main/ipc-protocol.ts`（`AgentApi` 加方法）、`apps/desktop/src/main/channels.ts`（`INVOKE_CHANNELS` 加行）、`apps/desktop/src/main/index.ts`（协议注册 + 两个 handler）
+- Modify: `apps/desktop/src/main/index.ts`（协议注册 + 媒体 handler）
 - Test: `apps/desktop/tests/wallpaper-media.test.ts`
 
 **Interfaces:**
 - Consumes: Task 1 的 `WallpaperKind`
 - Produces:
   ```ts
+  // src/main/wallpaper-protocol.ts
+  export const WALLPAPER_SCHEME = "cairn-wallpaper";
+  export const WALLPAPER_MEDIA_URL = `${WALLPAPER_SCHEME}://media/current`;
+  ```
+  ```ts
   // apps/desktop/src/main/wallpaper.ts
-  export const WALLPAPER_SCHEME: "cairn-wallpaper";
   export function wallpaperKindOf(path: string): "image" | "video" | null;
   export interface WallpaperPickResult { ok: boolean; kind?: "image" | "video"; path?: string; error?: string; }
   export async function validateWallpaperFile(path: string): Promise<WallpaperPickResult>;
@@ -273,12 +278,17 @@ revision 非负整数。坏值一律回默认，不落库（与既有偏好校�
     range: string | null;
     open: (path: string, start: number, end: number) => ReadableStream<Uint8Array>;
   }): Promise<Response>;
+  export function openWallpaperStream(path: string, start: number, end: number): ReadableStream<Uint8Array>;
   export function registerWallpaperScheme(register: (s: { scheme: string; privileges: Record<string, boolean> }) => void): void;
   ```
-  ```ts
-  // src/main/ipc-protocol.ts（AgentApi 内）
-  wallpaperPick(): Promise<{ ok: boolean; kind?: "image" | "video"; path?: string; error?: string }>;
-  ```
+
+  > **`wallpaperPick` 通道不在本任务**：仓规有一条「每条 invoke 通道至少有一个渲染层调用点」
+  > 的普查判卷（`apps/desktop/tests/invoke-consumer-census.test.ts`）——主进程接了却没人调的通道
+  > 判死。壁纸的消费者是设置页的选壁纸按钮（Task 5）⇒ 通道与消费者**同一批落地**，
+  > 不在这里登记豁免。
+  >
+  > **协议常量另立文件**：不塞进 `src/main/ipc-protocol.ts`——那份是**类型面**
+  > （除协议版本常量外全部 type-only，跨层引用不产生运行时依赖）。
 
 - [ ] **Step 1: 写失败测试**
 
@@ -520,34 +530,20 @@ export function registerWallpaperScheme(
 Run: `pnpm --filter cairn-desktop exec vitest run --config vitest.config.ts tests/wallpaper-media.test.ts`
 Expected: PASS（4 条）。
 
-- [ ] **Step 5: 接 IPC 通道**
-
-`src/main/ipc-protocol.ts` 的 `AgentApi` 里（`attachmentThumb` 那条附近）加：
-
-```ts
-  /** 桌面端壁纸：选一个本地图片/视频（设计规格 §3.3）。单选、带扩展名过滤；
-   *  返回 kind 与绝对路径，**路径只留在主进程与 settings.json**，渲染层经协议取媒体。 */
-  wallpaperPick(): Promise<{ ok: boolean; kind?: "image" | "video"; path?: string; error?: string }>;
-```
-
-`apps/desktop/src/main/channels.ts` 的 `INVOKE_CHANNELS` 里加一行：
-
-```ts
-  wallpaperPick: "agent:wallpaper-pick",
-```
+- [ ] **Step 5: 接协议（scheme 注册 + 媒体 handler）**
 
 `apps/desktop/src/main/index.ts`：
 
-1. **模块顶层**（`app.whenReady()` 之前，紧挨 import 区之后）注册 scheme：
+1. **模块顶层**（`app.whenReady()` 之前）注册 scheme——Electron 的
+   `registerSchemesAsPrivileged` 只在 ready 前有效：
 
 ```ts
 // 壁纸协议必须在 app ready 之前登记（否则拿不到标准/安全 origin 语义）。
 registerWallpaperScheme((entry) => { protocol.registerSchemesAsPrivileged([entry]); });
 ```
 
-2. `app.whenReady().then(() => { ... })` 里注册 handler（`index.ts` 顶部 import
-   `WALLPAPER_SCHEME`、`handleWallpaperMedia`、`openWallpaperStream`、`validateWallpaperFile`、
-   `registerWallpaperScheme`）：
+2. `app.whenReady().then(() => { ... })` 里注册媒体 handler（`index.ts` 顶部 import
+   `WALLPAPER_SCHEME`、`handleWallpaperMedia`、`openWallpaperStream`、`registerWallpaperScheme`）：
 
 ```ts
   // 壁纸媒体：只服务设置里当前那一个文件（白名单 = 当前路径）。
@@ -563,29 +559,14 @@ registerWallpaperScheme((entry) => { protocol.registerSchemesAsPrivileged([entry
   });
 ```
 
-3. `wired` 表里加 `wallpaperPick` handler（`dialog.showOpenDialog` 有「带窗口 / 不带窗口」两个重载，
-   按窗口有没有分支，不要把 `undefined` 当窗口传）：
-
-```ts
-  wallpaperPick: async () => {
-    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null;
-    const options = {
-      title: "选择壁纸",
-      properties: ["openFile" as const],
-      filters: [
-        { name: "图片与视频", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp", "mp4", "webm", "mov"] },
-      ],
-    };
-    const picked = win === null ? await dialog.showOpenDialog(options) : await dialog.showOpenDialog(win, options);
-    if (picked.canceled || picked.filePaths.length === 0) return { ok: false, error: "未选择文件" };
-    return validateWallpaperFile(picked.filePaths[0]!);
-  },
-```
+> **`wallpaperPick` 通道（选文件）不在本任务**——它与渲染层消费者（设置页的选壁纸按钮）
+> 一起落在 Task 5：仓规的 invoke 通道普查判卷要求每条通道都有渲染层调用点，
+> 主进程接了却没人调的通道判死。详见 Task 5 的 Step 5。
 
 - [ ] **Step 6: 跑类型检查与桌面边界**
 
 Run: `node --import tsx scripts/typecheck.ts`
-Expected: exit 0（`INVOKE_CHANNELS` 缺行会在这里红）。
+Expected: exit 0。
 
 Run: `pnpm --filter cairn-desktop test`
 Expected: 全绿（含既有 385 文件）。
@@ -593,11 +574,12 @@ Expected: 全绿（含既有 385 文件）。
 - [ ] **Step 7: 提交**
 
 ```bash
-git add apps/desktop/src/main/wallpaper.ts src/main/ipc-protocol.ts apps/desktop/src/main/channels.ts apps/desktop/src/main/index.ts apps/desktop/tests/wallpaper-media.test.ts
-git commit -m "feat(desktop): 壁纸媒体服务与 wallpaperPick 通道
+git add src/main/wallpaper-protocol.ts apps/desktop/src/main/wallpaper.ts apps/desktop/src/main/index.ts apps/desktop/tests/wallpaper-media.test.ts
+git commit -m "feat(desktop): 壁纸媒体服务与协议
 
 主进程是路径的唯一持有者：cairn-wallpaper:// 只服务当前选中的那一个文件，
-其余 404；Range 请求回 206（<video> 会发 Range）。渲染层拿不到任意读文件能力。"
+其余 404；Range 请求回 206（<video> 会发 Range）。渲染层拿不到任意读文件能力。
+协议常量另立 src/main/wallpaper-protocol.ts（ipc-protocol.ts 是类型面）。"
 ```
 
 ---
@@ -1276,12 +1258,27 @@ git commit -m "feat(desktop): 玻璃表面与可读性地板模型
 ### Task 5: 外观分段的壁纸设置行
 
 **Files:**
+- Modify: `src/main/ipc-protocol.ts`（`AgentApi` 加方法 + **协议版本 bump**）、`apps/desktop/src/main/channels.ts`（`INVOKE_CHANNELS` + `CHANNEL_DOMAINS` 两张表加行）、`apps/desktop/src/main/index.ts`（`wired` 表加 handler）
+- Modify: `apps/desktop/tests/channels.test.ts`（invoke 通道计数 + `mustWire` 名单）、`tests/ipc-protocol-version.test.ts` 与 `apps/desktop/tests/protocol-version.test.ts`（版本钉）
 - Modify: `apps/desktop/src/renderer/strings-settings.ts`（`general` 段）、`apps/desktop/src/renderer/components/settings/GeneralSection.tsx`、`apps/desktop/src/renderer/components/SettingsPanel.tsx`
 - Test: `apps/desktop/tests/wallpaper-settings-ui.test.tsx`
 
 **Interfaces:**
-- Consumes: Task 1 的 `AppSettings.wallpaper`；Task 2 的 `window.agent.wallpaperPick()`
-- Produces: 无新导出（只接线）
+- Consumes: Task 1 的 `AppSettings.wallpaper`；Task 2 的 `validateWallpaperFile`
+- Produces:
+  ```ts
+  // src/main/ipc-protocol.ts（AgentApi 内）——与本任务的渲染层消费者同一批落地
+  wallpaperPick(): Promise<{ ok: boolean; kind?: "image" | "video"; path?: string; error?: string }>;
+  ```
+
+> **为什么通道在这个任务**：仓规的 invoke 通道普查判卷
+> （`apps/desktop/tests/invoke-consumer-census.test.ts`）要求每条 invoke 通道至少有一个
+> **渲染层调用点**——主进程接了却没人调的通道判死。本任务的设置行就是那个消费者，
+> 通道与消费者一起落地，不登记豁免。
+>
+> **协议版本**：`AgentApi` 增删方法 ⇒ `IPC_PROTOCOL_VERSION` 必须 bump（53 → 54），
+> 两处版本钉（`tests/ipc-protocol-version.test.ts`、`apps/desktop/tests/protocol-version.test.ts`）
+> 同步改。
 
 - [ ] **Step 1: 写失败测试**
 
@@ -1325,9 +1322,53 @@ describe("壁纸设置行", () => {
 Run: `pnpm --filter cairn-desktop exec vitest run --config vitest.config.ts tests/wallpaper-settings-ui.test.tsx`
 Expected: FAIL（props 不存在）。
 
-- [ ] **Step 3: 加文案**
+- [ ] **Step 2b: 落 `wallpaperPick` 通道（与消费者同批）**
 
-`apps/desktop/src/renderer/strings-settings.ts` 的 `general` 段加：
+`src/main/ipc-protocol.ts` 的 `AgentApi` 里（`attachmentThumb` 那条附近）加：
+
+```ts
+  /** 桌面端壁纸：选一个本地图片/视频（设计规格 §3.3）。单选、带扩展名过滤；
+   *  返回 kind 与绝对路径——**路径只留在主进程与 settings.json**，渲染层经
+   *  `cairn-wallpaper://` 协议取媒体（白名单＝当前那一个文件）。 */
+  wallpaperPick(): Promise<{ ok: boolean; kind?: "image" | "video"; path?: string; error?: string }>;
+```
+
+并把 `IPC_PROTOCOL_VERSION` 从 53 改成 54；两处版本钉同步改
+（`tests/ipc-protocol-version.test.ts`、`apps/desktop/tests/protocol-version.test.ts`）。
+
+`apps/desktop/src/main/channels.ts` **两张表**都要加行（第二张是通道域表，缺行 typecheck 红）：
+
+```ts
+  // INVOKE_CHANNELS
+  wallpaperPick: "agent:wallpaper-pick",
+  // CHANNEL_DOMAINS
+  wallpaperPick: "app",
+```
+
+`apps/desktop/src/main/index.ts` 的 `wired` 表加 handler
+（`dialog.showOpenDialog` 有「带窗口 / 不带窗口」两个重载，按窗口有没有分支，
+不要把 `undefined` 当窗口传）：
+
+```ts
+  wallpaperPick: async () => {
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null;
+    const options = {
+      title: "选择壁纸",
+      properties: ["openFile" as const],
+      filters: [
+        { name: "图片与视频", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp", "mp4", "webm", "mov"] },
+      ],
+    };
+    const picked = win === null ? await dialog.showOpenDialog(options) : await dialog.showOpenDialog(win, options);
+    if (picked.canceled || picked.filePaths.length === 0) return { ok: false, error: "未选择文件" };
+    return validateWallpaperFile(picked.filePaths[0]!);
+  },
+```
+
+`apps/desktop/tests/channels.test.ts` 与 `apps/desktop/tests/channel-domains.test.ts` 跟着改：
+① invoke 通道计数 156 → 157；② `mustWire` 名单加 `"wallpaperPick"`；③ app 域计数 +1。
+
+- [ ] **Step 3: 加文案**`apps/desktop/src/renderer/strings-settings.ts` 的 `general` 段加：
 
 ```ts
     wallpaper: "壁纸",
