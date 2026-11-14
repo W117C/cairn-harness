@@ -90,7 +90,6 @@ describe("工具路径边界 · realpath 归属校验（C-2/C-3）", () => {
     await symlink(join(outside, "pwned.txt"), join(ws, "ghost")); // 目标刻意不存在
     await expect(write_file.run({ path: "ghost", content: "pwned" }, ctx))
       .rejects.toThrow(/越出 workspace 边界/);
-    const { readFile: rd } = await import("node:fs/promises");
     expect(existsSync(join(outside, "pwned.txt"))).toBe(false); // 界外文件没被创建出来
     await rm(outside, { recursive: true, force: true });
   });

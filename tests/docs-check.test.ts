@@ -5,7 +5,7 @@
 // 这样每条 D 都能双向断言（红相命中 + 反相不误伤），且不依赖工作树状态。
 // 真实文件读取只发生在该模块的 main()，由 `pnpm docs-check` 承担。
 import { describe, expect, it } from "vitest";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
@@ -1077,7 +1077,6 @@ describe("HEAD 取料面必须吃得到中文文件名（第 290 页：`git ls-t
   // 真机哨兵：这条不是合成输入——本仓 HEAD 里那 164 条中文证人只有 `-z` 才进得来。
   // 从前 `trackedFilesAtHead()` 按 `\n` 切默认输出，于是每一条中文证人都「不在清单里」⇒ D-10/D-11 假红，
   // 而 `dirs` 那道折目录的正则也因行首多了引号一起落空（规则 237：取值域要按真机形状量，不按「大概都是 ASCII」量）。
-  const CJK_PROBE = "没尺这一态";
   const CJK_PATH = "outputs/anchor-no-ruler-face-2026-09-26/01-没尺这一态被算出来又扔掉.md";
 
   it("哨兵：盘上真有、HEAD 真有 ⇒ 清单里必须真有（这条不可能靠空面变绿）", () => {

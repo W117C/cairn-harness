@@ -2,7 +2,7 @@
 // ①未改文件 → 命中缓存且结果逐字相同 ②改一个文件 → 重算且结果变化 ③用户仓库里没有 tags 缓存文件
 // ④坏 grammar 路径 → 不抛异常、返回空地图（降级）
 import { describe, expect, it, beforeEach } from "vitest";
-import { mkdtemp, rm, mkdir, writeFile, utimes, readdir, access } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, utimes, readdir, access } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

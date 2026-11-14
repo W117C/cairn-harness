@@ -1,13 +1,9 @@
 // 统一确认卡（2026-10-17）：把四处 window.confirm 换成产品自绘卡。
 // 判两点：① SSR 形态（标题/后果说明/两枚按钮/danger 样式）；② 源码里不再有原生 confirm 调用。
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { ConfirmDialog } from "../src/renderer/components/ConfirmDialog";
 import { readAppShell, readAppSurface } from "./helpers/app-surface";
-
-const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 
 describe("ConfirmDialog（产品自绘二次确认）", () => {
   it("SSR：标题 + 后果说明 + 取消/确认两枚按钮；破坏性动作走 danger 实底", () => {

@@ -6,7 +6,7 @@
 //
 // 落盘是**侧信道**：写失败只出声，绝不改变任何一道门的结论或退出码（同 gates.ts 耗时账本的口径）。
 import { describe, expect, it } from "vitest";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {

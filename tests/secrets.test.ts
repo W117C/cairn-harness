@@ -8,10 +8,9 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
   return { ...actual, writeFile: vi.fn(actual.writeFile), rename: vi.fn(actual.rename) };
 });
-import { mkdtemp, readFile, readdir, rename as renameFn, rm, stat, writeFile as writeFileFn } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rename as renameFn, rm, stat } from "node:fs/promises";
 // 工厂把 rename/writeFile 换成了 vi.fn；vi.mocked() 给出 Mock 类型（.mock/.mockImplementation 才有类型）。
 const rename = vi.mocked(renameFn);
-const writeFile = vi.mocked(writeFileFn);
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

@@ -1,8 +1,4 @@
-// 窗格快捷键判卷（批 99/100）：七个窗格键位收进 pane-shortcuts.ts 单一事实源。
-// 口径：App dispatch 与速查表都从这张表来（表里写了就必须接得上，不会一边改一边忘）；
-// 修饰键精确匹配（多按不吞普通键）；⌘F 查找 / ⌘B 侧栏 / ⌘⌥B 检查器仍是各自语义。
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 import { PANE_SHORTCUTS, paneShortcutFor, paneShortcutKeys, type PaneKeyMods } from "../src/renderer/pane-shortcuts";
 import { PANE_OPENABLE } from "../src/renderer/components/panes";

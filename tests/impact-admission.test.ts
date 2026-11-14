@@ -1,6 +1,6 @@
 /* B1 语义合并闸：把 M7 的影响面从「回注给模型看的提示」升级成 spawn 准入判据。
    靶子 = fixtures/impact/mini-repo（已知调用图，判卷文件）；测试只在临时副本上跑，绝不改冻结件。 */
-import { cp, mkdtemp, rm } from "node:fs/promises";
+import { cp, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";

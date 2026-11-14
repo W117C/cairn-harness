@@ -20,7 +20,7 @@ import {
   initSessionsDir,
   setSessionRootResolver,
 } from "../src/main/session-handlers";
-import { createSession, pathOf, readSessionEvents } from "../src/main/sessions";
+import { createSession, readSessionEvents } from "../src/main/sessions";
 import { setRunWorkspace } from "../src/main/runner-workspace";
 
 const dirs: string[] = [];

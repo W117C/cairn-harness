@@ -1,7 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { collectCensus } from "../scripts/verify-census";
 
@@ -10,14 +9,8 @@ const SCRIPT = join(REPO_ROOT, "scripts", "verify-census.ts");
 
 const tempDirs: string[] = [];
 afterEach(() => {
-  for (const d of tempDirs) {
-    try {
-      // 测试数据绝不落工作区：建在 OS 临时目录，跑完即弃（不递归删，避免误伤宿主机）。
-      // 这里只留空目录引用，由 OS 回收；不主动 rm 整棵以防删错。
-    } catch {
-      /* noop */
-    }
-  }
+  // 测试数据绝不落工作区：建在 OS 临时目录，跑完即弃（不递归删，避免误伤宿主机）。
+  // 这里只留空目录引用，由 OS 回收；不主动 rm 整棵以防删错。
   tempDirs.length = 0;
 });
 

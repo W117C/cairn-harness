@@ -13,11 +13,6 @@ import type { SuiteRow } from "../scripts/lib/head-cert-deps";
 import { acquireToolLock, decideToolLock, lockAgeCap, parseToolLock, shouldReleaseLock, toolLockPath, UNREGISTERED_CAP_REASON } from "../scripts/lib/tool-lock";
 
 const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
-const listWorktrees = (cwd: string): string[] =>
-  execFileSync("git", ["worktree", "list", "--porcelain"], { cwd, encoding: "utf8" })
-    .split("\n")
-    .filter((l) => l.startsWith("worktree "));
-
 const pkg = (fields: Record<string, Record<string, string>>): string => JSON.stringify(fields);
 
 describe("declaredDeps：取料面", () => {

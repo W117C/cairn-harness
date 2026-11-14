@@ -3,17 +3,11 @@
 // 无正文不提案、已注册不重复毕业、modules/ 缺席零行为。
 import { describe, expect, it } from "vitest";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent } from "../src/events/index.js";
-import {
-  distillWorkflows,
-  RECUR_MIN,
-  WORKFLOW_MEMORY_TYPE,
-  WORKFLOW_TOPIC_PREFIX,
-  writeWorkflows,
-} from "../src/agent/memory/workflow.js";
+import { distillWorkflows, WORKFLOW_MEMORY_TYPE, WORKFLOW_TOPIC_PREFIX, writeWorkflows } from "../src/agent/memory/workflow.js";
 import { MEMORY_INDEX, readTopicBody, writeTopic } from "../src/agent/memory/store.js";
 import { GATES } from "../scripts/gate-manifest";
 import { ModuleRegistry } from "../src/main/evolution/registry";

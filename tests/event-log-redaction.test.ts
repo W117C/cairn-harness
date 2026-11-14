@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { runLoop } from "../src/agent/loop";
-import { createEventLog, type AgentEvent, type EventLog } from "../src/events";
+import { createEventLog, type EventLog } from "../src/events";
 import type { ModelOutput, Provider } from "../src/providers";
 
 /** 形状足以被 SECRET_PATTERNS 命中的假凭据（不是真密钥，只是一串该被掩掉的长随机串）。 */

@@ -1,8 +1,4 @@
-// 运行代际（2026-10-18 真机）：打断并发送后，队列里那条会立刻开新 run；旧 run 的 finally
-// 若无条件 runningSet.delete，会把新 run 刚置上的旗摘掉——界面上“新 run 在跑、running=false”，
-// 停止键消失、状态错位。修法：每轮领一个代际号，清理/停止态写入只在号还是自己的时生效。
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 import { readAppSurface } from "./helpers/app-surface";
 

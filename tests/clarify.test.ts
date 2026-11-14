@@ -8,7 +8,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { runLoop } from "../src/agent/loop";
 import { ClarifyGate } from "../src/agent/gates";
 import { createEventLog, replay, type AgentEvent, type ClarifyAnswerMap, type ClarifyQuestion } from "../src/events";
-import { createMockProvider } from "../src/providers/mock";
 import { clarify, parseClarifyQuestions } from "../src/tools/clarify";
 import type { ModelOutput } from "../src/providers";
 

@@ -1,6 +1,4 @@
-// 检查器宽度跨重启（2026-10-18）：320–420 内才记（0=收起不记）；拖动防抖 300ms；启动读回并夹紧。
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 import { readAppSurface } from "./helpers/app-surface";
 

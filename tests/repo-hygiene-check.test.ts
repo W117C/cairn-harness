@@ -169,7 +169,6 @@ describe("帽的取值有据（防「悄悄把帽调到让门绿」）", () => {
     // 刻意不把它抽成共享函数：那会动门的 IO 面，而本判卷要的是"**盘上现状**"这个独立事实——
     // 两处各自取料、互相印证，比共享一次取料更能发现"取料面本身坏了"。
     const max = maxSrcFile();
-    const files = [max];
     expect(
       SRC_FILE_LINE_CAP > max.lines,
       "帽 " + String(SRC_FILE_LINE_CAP) + " ≤ 现状最大 " + max.path + "（" + String(max.lines) + " 行）"

@@ -11,7 +11,7 @@ import { execFile } from "node:child_process";
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { Orchestrator, scriptedWorkerModel } from "../src/agent/orchestrator";
 import type { AgentEvent } from "../src/events";
 import type { ModelOutput } from "../src/providers";

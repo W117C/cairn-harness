@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { GATES } from "../scripts/gate-manifest";
 import { GateRunner } from "../src/main/evolution/gate-runner";
-import { Installer, InstallRefusedError } from "../src/main/evolution/installer";
+import { Installer } from "../src/main/evolution/installer";
 import { adjudicateInstall, DEFAULT_HIGH_RISK_NAMESPACES } from "../src/main/evolution/permission-broker";
 import { ModuleRegistry, RegistryStateError } from "../src/main/evolution/registry";
 

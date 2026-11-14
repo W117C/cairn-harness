@@ -8,10 +8,8 @@
 // 都会让异常窜出 mergeWorker：登记已摘、回滚没跑 ⇒ 同一张卡再按一次合并读到
 // 「merge 未登记…」——**这个 worker 永久无法合并**，而用户连一条事件都没看到
 // （handleCardAction 没有 try/catch）。
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { rm } from "node:fs/promises";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { WorkerMergeReview } from "../src/agent/worker-merge";
 import type { AgentEvent } from "../src/events";
 import type { WorkerHandle } from "../src/agent/orchestrator";

@@ -1950,7 +1950,6 @@ describe("指针接线：enclosingSymbol／testCaseBody／auditPointerWiring（�
 
   it("真面证人：本笔那条锚点判成 wired；只把指针换成同文件里不调 parseTscLine 的兄弟用例，就翻成 suspect", () => {
     const src = readRel("scripts/lib/evidence-typecheck.ts") ?? "";
-    const test = readRel("tests/evidence-typecheck.test.ts") ?? "";
     expect(src.length, "取料面读不到 ⇒ 这一格没量到，不等于接线正确").toBeGreaterThan(0);
     const base = { srcRel: "scripts/lib/evidence-typecheck.ts", needle: "return { file: m[1]!, code: m[4]! };", test: "tests/evidence-typecheck.test.ts" };
     const good = auditPointerWiring([{ ...base, id: "g", expectFail: "真报错行 ⇒ file 与 code 都取对（code 必须是 TS 码，不是 'error'）" }],

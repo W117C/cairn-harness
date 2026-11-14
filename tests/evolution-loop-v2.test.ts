@@ -3,7 +3,7 @@
 // tests/evolution.test.ts 原有判卷守着，这里只钉 v2 新增的三格。
 import { describe, expect, it } from "vitest";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { appendLedger, evolutionLedgerPathFor, loadLedger, projectLedger } from "../src/agent/evolution/ledger.js";

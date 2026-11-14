@@ -86,7 +86,7 @@ describe("置顶的来源键", () => {
 
 describe("生产入口：owner 是子会话，父日志与父 sidecar 不动", () => {
   it("handleFeedbackSubmit 收 eventRef，落子会话所在的 sidecar；父文件 sha 不变", async () => {
-    const { ws, root, parent } = await setup();
+    const { root, parent } = await setup();
     initSessionsDir(root);
     const parentPath = join(root, "parent.jsonl");
     const before = await sha(parentPath);

@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildMemoryInjection, extractExternalRefs, isExternalRef, MEMORY_TOKEN_BUDGET_DEFAULT } from "../src/agent/memory/inject";
 import { escapeControlTags } from "../src/agent/control-tags";
 import { estimateTextTokens } from "../src/agent/text-budget";
-import { checkIndexLimit, indexLine, initMemoryHome, parseTopicDoc, renderTopicDoc, topicDocRoundtrip, upsertIndexLine } from "../src/agent/memory/store";
+import { checkIndexLimit, indexLine, initMemoryHome, parseTopicDoc, topicDocRoundtrip, upsertIndexLine } from "../src/agent/memory/store";
 
 let ws: string;
 let home: string;

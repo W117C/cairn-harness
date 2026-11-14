@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AgentRecord, AgentRuntime } from "../src/agent/runtime-types";
-import { A2A_PROTOCOL_VERSION, createA2AHandler } from "../src/interop/a2a";
+import { createA2AHandler } from "../src/interop/a2a";
 import { serveA2AHttp } from "../src/interop/a2a-http";
 
 // 最小替身：spawn 落一个 running 任务；wait 第一次返回 running，之后按 setStatus 推进。

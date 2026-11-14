@@ -1,7 +1,4 @@
-// 窗格布局跨重启（2026-10-18）：只存 kind 列表；初始化过滤未知/重复；写效应必须在 useState
-// 初始化器**之外**（第一版塞进 try 里，paneTabs 在 deps 中 TDZ、被 catch 吞掉 ⇒ key 永远读写不到）。
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 import { readAppSurface } from "./helpers/app-surface";
 

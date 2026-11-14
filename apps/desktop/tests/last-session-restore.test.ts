@@ -1,7 +1,4 @@
-// 重启回到上次会话（2026-10-18）：写入 key、启动恢复；恢复要走 openSession（含事件/队列加载），
-// 只 activate 会「标题回来了、内容没回来」；⌘N 回主页要清 key。
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 import { readAppSurface } from "./helpers/app-surface";
 

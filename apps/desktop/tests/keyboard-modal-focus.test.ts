@@ -1,12 +1,4 @@
-// 键盘浮层的两条交互（2026-10-20 真机实测发现）：
-// ① 审批卡在场时按 Esc：卡面写着「Esc 不做决议」，旧实现却让全局 Esc 顺带取消整轮。
-//    停止有明确出口（停止键 / ⌘.），Esc 不该承担这个语义。
-// ② ⌘K / ⌘F / ⌘/ 关闭后焦点落到 BODY：要接着打字得先点一下输入框。
-//    浮层关闭的语义是回到刚才的写作，不是离开输入。
-//
-// 本仓桌面判卷无 jsdom，交互接线用源码见证（与本目录既有 a11y 接线判卷同形）。
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 import { readAppSurface } from "./helpers/app-surface";
 

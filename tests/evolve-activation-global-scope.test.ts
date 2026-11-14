@@ -4,7 +4,7 @@
 // outcome 非 unknown）。那句万能阻断于是干了两件坏事：①把能走通的路永久堵死（业主显式晋升过的条目
 // 与没晋升的在这道门前没有区别）；②对读者**说不清真实边界**——"没人验"与"验不过"与"验不了"是三件事。
 // 本文件钉的就是这三种话各归其位，以及门、报告、CLI 三个面共用同一份核验。
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

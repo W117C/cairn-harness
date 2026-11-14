@@ -17,7 +17,6 @@ const item: QueuedSend = {
     { path: "/ws/dir", kind: "directory", explicit: true },
   ],
 };
-const second: QueuedSend = { id: 2, text: "再跑一条", attachments: [] };
 const noop = (): void => undefined;
 
 describe("排队条 · 截图形制", () => {

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { OrchestrationStore } from "../src/orchestration/store";
 import { OrchestrationEngine } from "../src/orchestration/engine";
-import type { ExecutionBackend, ExecutionRequest } from "../src/orchestration/types";
+import type { ExecutionBackend } from "../src/orchestration/types";
 import { orchestrationPlan } from "./orchestration-fixture";
 
 const cleanup: (() => Promise<void>)[] = [];

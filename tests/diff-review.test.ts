@@ -3,7 +3,7 @@
 // 另钉一条跨文件棘轮：生产端（orchestrator 的 emit）与消费端（cli/fork-cli 的判定）
 // 必须讲同一个 `[diff] v` 标记——2026-10-01 实测的断口正是两侧标记分家后没人发现。
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";

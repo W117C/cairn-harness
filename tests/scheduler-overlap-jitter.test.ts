@@ -167,7 +167,7 @@ describe("触发抖动 jitterSec", () => {
 
   it("jitter 等待中的同一拍不被后续 tick 双进管线（jitterPending 去重）", async () => {
     const { s, setNow } = makeScheduler({ getCap: () => 8, runSession: hangExecutor(), jitterRand: () => 0.9 });
-    const created = await upsertOk(s, base({ jitterSec: 2, maxConcurrent: 2 }));
+    await upsertOk(s, base({ jitterSec: 2, maxConcurrent: 2 }));
     // 启动 tick 先行（首拍必须 startup），02:00 一拍 catchup 立即入飞
     await s.tick({ startup: true });
     expect(s.inflightCount).toBe(1);

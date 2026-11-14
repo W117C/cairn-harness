@@ -3,7 +3,7 @@
 // 夹具：mini-repo 四文件拷进 tmp 并 git init（冻结原件不动），sha 与指纹全部真实——
 // 不 mock buildImpact、不 mock git，载入路径坏了测试必须红。
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";

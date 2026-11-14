@@ -10,7 +10,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { MENTIONED_SOURCE, PATHISH_SOURCE, makeMentionedRe, makePathishRe } from "../src/agent/context-signals.js";
+import { MENTIONED_SOURCE, makeMentionedRe, makePathishRe } from "../src/agent/context-signals.js";
 
 const tokens = (re: RegExp, text: string): string[] => text.match(re) ?? [];
 

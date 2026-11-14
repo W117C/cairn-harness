@@ -1,16 +1,4 @@
-// 命令动作的**统一前置门**（2026-10-20 独立评审追出的 HIGH 的修法这一半）。
-//
-// 缺陷形状：macOS 上 `registerAccelerator:false` 是**空操作**（Electron 自己的 typings 标着
-// `@platform linux,win32`）⇒ 菜单里那把"渲染层拥有键位"的项照样被系统注册 ⇒
-// macOS 把键交给菜单、渲染层 keydown 根本不响 ⇒ **菜单路径绕过了 keydown 那道浮层门**。
-// 实测形状：确认卡开着时按 ⌘W ⇒ 会话被关掉，而那张卡还开着。
-//
-// 修法：键盘路径与菜单路径走**同一道门**（`src/renderer/command-gate.ts`）。
-// 本份判卷是**行为面**：DOM 以**可注入的假身**喂进去（桌面端那套 vitest 是 node 环境、
-// 不装 jsdom ⇒ 判据要能不依赖真 DOM 才跑得起来），判断本身是纯函数。
-// 另配一条**接线钉**：App 的两条入口都必须走这道门（不许各写一份判断）。
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+
 import { afterAll, describe, expect, it } from "vitest";
 import {
   CARET_YIELDING_COMMANDS,

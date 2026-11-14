@@ -1,6 +1,6 @@
 // 持久 allow 规则管理读端（roadmap 2026-11-10）：列出与按指纹撤销。
 // 只管程序写的 always 文件——受跟踪 permissions.json（人策展）与全局层（用户自管）刻意不在管域。
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";

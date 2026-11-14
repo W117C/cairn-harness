@@ -1,14 +1,10 @@
 // 撤回（编辑并重发，2026-10-24 业主重定名）：行操作里的一支「撤回」——停止生成，fork 到该轮之前，
 // 把这条用户消息的原文放回输入框；用户改完再发；原会话保留（可从行菜单删除）。
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { readAppSurface } from "./helpers/app-surface";
 import { useMessageActions } from "../src/renderer/state/message-actions";
-
-const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 
 describe("撤回（编辑并重发）", () => {
   it("用户行有撤回按钮（Undo2 + 明确 aria/标题）", () => {

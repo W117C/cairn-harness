@@ -1,7 +1,4 @@
-// 编辑并重发的分支上下文条（2026-10-18）：点「编辑」会立刻建 fork 并切过去；没有一句话说明
-// 就会像原会话被改了。条上要写清轮号与原会话名，并提供回到原会话；发送后条消失。
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 import { readAppSurface } from "./helpers/app-surface";
 

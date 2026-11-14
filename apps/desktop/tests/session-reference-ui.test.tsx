@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { AgentEvent, EventRef, SessionView } from "../../../src/events";
+import type { AgentEvent, SessionView } from "../../../src/events";
 import { eventRefKey } from "../../../src/events/session-ref";
 import { inheritedDisplayIndexes, mergeViewEvents, refsByDisplayIndex } from "../src/renderer/derived/event-reference";
 import { isInheritedRef, isStaleForActive, sessionKeyOf } from "../src/renderer/state/session-identity";

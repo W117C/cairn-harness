@@ -1,7 +1,4 @@
-// 专注模式判卷（批 101）：⌘⌥F / 顶栏按钮进入时收起侧栏与检查器，退出回到进入前的开合。
-// 口径：专注中改开侧栏/检查器/窗格 = 放弃专注（不还原旧布局），状态与画面不打架。
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 import { SHORTCUT_GROUPS } from "../src/renderer/shortcuts";
 import { readAppSurface } from "./helpers/app-surface";

@@ -182,7 +182,7 @@ describe("LSP 框架（M2a 任务 5）", () => {
   });
 
   it("同一 (root, serverID) 只起一个进程", async () => {
-    const ctx = await newCtx();
+    await newCtx();
     await writeSample();
     const c1 = await getLspClient(ws, loadLspConfig(ws), "stub");
     const c2 = await getLspClient(ws, loadLspConfig(ws), "stub");
@@ -363,7 +363,7 @@ describe("workspaceSymbol 问全部服务器", () => {
 
 describe("诊断回流（M2a 任务 6）", () => {
   it("只取 ERROR 级，≤20 条，附 <diagnostics> 块在输出尾部", async () => {
-    const ctx = await newCtx();
+    await newCtx();
     // 22 个 ERROR_HERE + 1 个 WARN_HERE → 只保留 20 条 ERROR，WARNING 被过滤
     const lines: string[] = [];
     for (let i = 0; i < 22; i++) lines.push("ERROR_HERE " + String(i));
@@ -381,7 +381,7 @@ describe("诊断回流（M2a 任务 6）", () => {
   });
 
   it("无错误（仅 WARN 或干净文件）→ 空串（输出不变）", async () => {
-    const ctx = await newCtx();
+    await newCtx();
     await mkdir(join(ws, "src"), { recursive: true });
     await writeFile(join(ws, "src", "clean.ts"), "const a = 1;\nWARN_HERE\n", "utf8");
     const diag = await collectDiagnostics(ws, join(ws, "src", "clean.ts"));

@@ -2,7 +2,6 @@
 // 术语清理（journal 投影 / serveScheduler / expandSkillInvocation 出正文，收容进「关于与更新」诊断区）。
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { readFileSync } from "node:fs";
 import { AutomationPane, MemoryPane, PluginsPane, SkillsPane } from "../src/renderer/components/AppPage";
 import { readAppPageSurface } from "./helpers/app-surface";
 import { DIAGNOSTICS_TEXT } from "../src/renderer/components/settings-sections";

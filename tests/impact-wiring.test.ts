@@ -2,7 +2,7 @@
 // 成功落盘会（a）发出 impact_report 事件、（b）把跨文件波及摘要回注 tool_result。
 // 这是「defaultImpactHook 此前在 src/ 零调用者、sidechat 的 impact_report 投影是死代码」
 // 那个半成品缺口的端到端闭合证明。
-import { cp, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -71,7 +71,7 @@ describe("影响面·写工具接线（ToolContext.impact）", () => {
   });
 
   it("不注入钩子时零行为（输出不含 [impact]，不发事件）", async () => {
-    const { ws, cacheDir } = await freshWs();
+    const { ws } = await freshWs();
     const emitted: AgentEvent[] = [];
     const r = await edit_file.run(
       { path: "math.js", old_string: "return boosted;", new_string: "return boosted; // x" },
@@ -94,7 +94,7 @@ describe("影响面·写工具接线（ToolContext.impact）", () => {
   });
 
   it("钩子抛错不影响已成功的写入（best-effort：输出正常、事件为空）", async () => {
-    const { ws, cacheDir } = await freshWs();
+    const { ws } = await freshWs();
     const emitted: AgentEvent[] = [];
     const ctx: ToolContext = {
       workspace: ws,

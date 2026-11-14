@@ -6,13 +6,9 @@
 //
 // 判据落在**纯函数**上（elapsedSecondsFor）：本仓无 jsdom，交互逻辑走「纯函数 + 接线见证」两面
 // （见 render-structure.test.tsx 头注）。纯函数能真跑 ⇒ 这一条不是恒真的源码断言。
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { elapsedSecondsFor } from "../src/renderer/projections";
 import { readAppSurface } from "./helpers/app-surface";
-
-const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 
 describe("运行秒表读数（elapsedSecondsFor）", () => {
   it("★两个会话各跑各的：A 的读数只认 A 的起点（旧实现是一个 ref ⇒ 切回 A 会读成 B 的耗时）", () => {

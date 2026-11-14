@@ -20,7 +20,7 @@ describe("模型弹层的空间与键盘语义", () => {
     // 单调性：任何一侧空间更大，就不许选另一侧（扫一遍，不靠单点）。
     let worst = "";
     for (let top = 60; top <= 800; top += 7) {
-      const { up, maxHeight } = modelMenuLayout(top, top + 32, 864);
+      const { maxHeight } = modelMenuLayout(top, top + 32, 864);
       const above = Math.max(0, Math.min(560, Math.floor(top - 44)));
       const below = Math.max(0, Math.min(560, Math.floor(864 - top - 32 - 8)));
       if (Math.max(above, below) < 260) continue; // 矮窗口那档走窗口内浮层

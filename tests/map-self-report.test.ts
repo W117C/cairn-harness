@@ -15,7 +15,6 @@ import { createEventLog, type EventLog } from "../src/events";
 
 const TMP: string[] = [];
 let cache = "";
-const dirs: string[] = [];
 
 async function mkChain(n: number): Promise<string> {
   // f0 最新、fN-1 最旧（mtime 依次递减）⇒ "谁在帽内"确定，不赌毫秒精度

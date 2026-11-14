@@ -77,7 +77,6 @@ describe("replay:effect-sampler 的判据", () => {
     ];
     const one = scanSamplerFace([f1]);
     expect(one.heal).toEqual(pool(1, 1));
-    const both = scanSamplerFace([f1, f2]);
     // 池化 = 1/2 = 50%；按文件取均值 = (100% + 0%)/2 = 50% —— 恰好一样，所以再补一个 2 轮的文件把它们分开。
     const twoRound = [
       { type: "user_message", content: "c" },

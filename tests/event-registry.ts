@@ -1,7 +1,7 @@
 // 事件类型注册表的读料口（两份判卷共用：event-type-coverage 与 stream-redaction）。
 // 为什么要抽出来：这两张闸判的是同一句「注册表里有哪些型」，各抄一份正则的话，
 // KNOWN_TYPES 换个写法就会只有一支红、另一支静默数到 0 个类型而报「全过」。
-import { join, dirname } from "node:path";
+import { join } from "node:path";
 import { readFileSync } from "node:fs";
 
 const ROOT = join(import.meta.dirname, "..");

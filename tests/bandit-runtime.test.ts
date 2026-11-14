@@ -3,7 +3,7 @@
 // spawn(bandit 启用) → routing_decision{reason:"bandit"} → worker done → 后验更新且持久化。
 // 判据口径：reward 面写**等式**（β=2 / β=3，代价为 0 的两种跑各一个数），钱面单独一条比例性判据
 // ——旧写法 β≥2 / β>2 对"代价项被换成常量 0"零分辨力（2026-09-21 核出）。
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";

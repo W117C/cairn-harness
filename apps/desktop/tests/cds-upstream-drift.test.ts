@@ -21,7 +21,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
 const vendorDir = fileURLToPath(new URL("../src/renderer/vendor/cds-official/", import.meta.url));
 const extractor = fileURLToPath(new URL("../scripts/extract-cds-tokens.py", import.meta.url));
 const upstream = JSON.parse(readFileSync(`${vendorDir}UPSTREAM.json`, "utf8")) as {

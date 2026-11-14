@@ -1,9 +1,4 @@
-// 预览失败不留空白窗格（2026-10-18）：
-//   旧顺序 = 先开浏览器窗格再 previewStart；失败时窗格已开、页面空，用户要手动关。
-//   新顺序 = 先 start；failed 直接错误条返回，有页面才开窗格。
-// 真机两径都验过：无入口 → error-strip 有文案、无 pane；有 index.html → pane 打开且 URL 就绪。
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 import { readAppSurface } from "./helpers/app-surface";
 

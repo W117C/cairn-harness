@@ -8,7 +8,6 @@ import { todoProjection, currentTodoText } from "../src/renderer/derived/todo";
 import { STR } from "../src/renderer/strings";
 import type { AgentEvent } from "../../../src/events";
 
-const noop = (): void => undefined;
 const todoEvents = [
   { type: "user_message", content: "干活" },
   { type: "todo_updated", callId: "t1", items: [{ text: "退出行为修复", state: "done" }, { text: "侧边栏瘦身", state: "pending" }, { text: "方案自治", state: "pending" }] },

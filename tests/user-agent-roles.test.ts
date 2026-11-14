@@ -142,7 +142,7 @@ describe("PluginRuntime：用户级角色与插件角色同一条查找面、同
   });
 
   it("装载期的问题要能在快照警告里看到（面板那一侧有出口，不是只进内存）", async () => {
-    const rt = await loaded();
+    await loaded();
     await writeFile(join(root, ".dsh", "agents", "empty.md"), "", "utf8");
     const again = await PluginRuntime.load({
       projectPluginsDir: join(root, "plugins"), workspace: root,

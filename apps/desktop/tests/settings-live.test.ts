@@ -1,8 +1,4 @@
-// 设置页保存后的 live 回灌（2026-10-18 真机）：Ctrl+Tab 开关只写进 settings，没更新 App 的
-// ctrlTabCycle state ⇒ 界面上关掉了，快捷键照旧切会话，重启才生效。凡是快捷键读取的设置，
-// 保存回调必须回灌到 live state。
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 import { readAppSurface } from "./helpers/app-surface";
 

@@ -7,10 +7,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import {
-  CORPUS_HELPERS, corpusJudgesFor, findReadCallSites, normalizeRel, readerSummary, readersOf, scanJudgeForCorpusReaders, scanJudgeForReaders,
-  SOURCE_FACES, corpusSummary, type CorpusScan, type ReaderScan, type ReaderShape,
-} from "../scripts/lib/text-readers";
+import { CORPUS_HELPERS, corpusJudgesFor, findReadCallSites, normalizeRel, readerSummary, readersOf, scanJudgeForCorpusReaders, scanJudgeForReaders, SOURCE_FACES, type CorpusScan, type ReaderScan, type ReaderShape } from "../scripts/lib/text-readers";
 
 const always = (_rel: string): boolean => true;
 const none = (_rel: string): boolean => false;

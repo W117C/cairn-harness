@@ -4,9 +4,8 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { readAppSurface, readRendererFile } from "./helpers/app-surface";
+import { readRendererFile } from "./helpers/app-surface";
 
-const app = readAppSurface();
 const view = readRendererFile("panes/WorkbenchView.tsx");
 const stream = readFileSync(fileURLToPath(new URL("../src/renderer/components/Stream.tsx", import.meta.url)), "utf8");
 

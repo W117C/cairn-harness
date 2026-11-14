@@ -104,7 +104,6 @@ describe("CX-01 session/project organization handlers", () => {
     await log.append({ type: "user_message", content: "第二轮" });
     await log.append({ type: "assistant_message", content: "回应二" });
     const before = await readFile(logPath);
-    const srcEvents = await replay(logPath);
 
     const r = await handleSessionFork(id, 1);
     expect(r.ok, r.error).toBe(true);

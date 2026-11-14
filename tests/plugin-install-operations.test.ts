@@ -12,15 +12,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { pluginFingerprintEx, TrustStore } from "../src/agent/plugins/trust";
 import { discoverPlugins, defaultUserPluginsDir } from "../src/agent/plugins";
-import {
-  getPluginSecret,
-  pluginUserConfigDir,
-  putPluginSecret,
-  readPluginUserConfig,
-  setPluginSecretBackend,
-  writePluginUserConfig,
-  type PluginSecretBackend,
-} from "../src/agent/plugins/secrets";
+import { getPluginSecret, pluginUserConfigDir, readPluginUserConfig, setPluginSecretBackend, writePluginUserConfig, type PluginSecretBackend } from "../src/agent/plugins/secrets";
 import {
   InstalledPluginRegistry,
   type InstalledPluginRecord,

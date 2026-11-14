@@ -2,7 +2,7 @@
 // 边界（src/env-refs.ts 头注释同源）：只认全大写 ${VAR}；缺变量不编值（原样保留 + 报 missing）；
 // 接线面收窄在用户私有配置——随仓分发的 .agent/config.json 刻意不接（克隆配置读 env = 渗漏通道）。
 import { describe, expect, it } from "vitest";
-import { expandEnvRefs, hasEnvRef } from "../src/env-refs";
+import { expandEnvRefs } from "../src/env-refs";
 import { parseCustomProviders } from "../src/providers/provider-config";
 
 describe("expandEnvRefs", () => {

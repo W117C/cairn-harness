@@ -3,7 +3,7 @@
 // ④被裁原文可从附件目录读回且逐字一致。类型化：code/log/doc 三类 + 摘要 2k 截断。
 import { describe, expect, it, beforeEach, vi } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
-import { mkdir, mkdtemp, writeFile, readFile, readdir, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { isAbsolute, join, resolve } from "node:path";

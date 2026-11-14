@@ -16,8 +16,6 @@ import { projectStream } from "../src/renderer/projections";
 import { STR } from "../src/renderer/strings";
 import type { AgentEvent } from "../../../src/main/ipc-protocol";
 
-const ev = (e: unknown): AgentEvent => e as AgentEvent;
-
 /** 一轮的真实形态（照业主截图那一屏排）：问 → 思考+旁白 → 查文件 → 思考+最终答复。 */
 const ROUND = [
   { type: "user_message", content: "你现在是什么模式在运行", ts: 1 },

@@ -12,7 +12,6 @@ import type { AgentEvent } from "../src/events";
 import type { PermissionMode } from "../src/permissions";
 
 const FX = join(process.cwd(), "fixtures", "plugins");
-const SCOPED_ECHO = "mcp__plugin_echo-suite_stub__echo"; // server 自标 readOnlyHint
 const SCOPED_FAIL = "mcp__plugin_echo-suite_stub__fail"; // 什么都不标 = fail-closed 样本
 
 let dir = "";

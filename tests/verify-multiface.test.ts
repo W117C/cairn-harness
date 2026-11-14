@@ -11,19 +11,7 @@ import { mkdtemp, mkdir, rm, writeFile, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  ESCALATE_REPEAT_ATTEMPT,
-  PROBED_LANG_TIMEOUT_MS,
-  classifyVerifyFailure,
-  createVerifyHook,
-  defaultExec,
-  loadVerifyConfig,
-  probeTypecheckCommands,
-  repeatDigestNote,
-  runVerifyOutcome,
-  verifyCommands,
-  type VerifyOutcome,
-} from "../src/agent/verify";
+import { ESCALATE_REPEAT_ATTEMPT, PROBED_LANG_TIMEOUT_MS, classifyVerifyFailure, createVerifyHook, defaultExec, loadVerifyConfig, probeTypecheckCommands, repeatDigestNote, verifyCommands, type VerifyOutcome } from "../src/agent/verify";
 import { isEnvVerifyCause, type AgentEvent, type VerifyCause, type VerifyResultEvent } from "../src/events";
 import { runLoop } from "../src/agent/loop";
 import { fileURLToPath } from "node:url";

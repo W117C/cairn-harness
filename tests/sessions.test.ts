@@ -396,7 +396,7 @@ describe("会话列表只读头 + 行数增量计数", () => {
   });
 
   it("sidechat 按首行 meta 过滤：不匹配父会话的那些连一次整文件重放都不做", async () => {
-    const pA = sidechatEventsPath(root, await createSidechatSession(root, "父A", "sc-a"));
+    await createSidechatSession(root, "父A", "sc-a");
     const pB = sidechatEventsPath(root, await createSidechatSession(root, "父B", "sc-b"));
     const logB = createEventLog(pB);
     await logB.append({ type: "user_message", content: "别写进我的父会话" });

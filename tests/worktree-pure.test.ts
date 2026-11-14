@@ -15,9 +15,6 @@
 import { describe, expect, it } from "vitest";
 import { branchForAgent, cleanOrphanWorktree, orphanWorktrees, parseWorktreeRef, taskSlug } from "../src/agent/worktree";
 
-/** 事件流的最小形状（`orphanWorktrees` 只读这几个字段）。 */
-type Ev = { type: string; agent_id?: string; status?: string; callId?: string; ok?: boolean };
-
 describe("taskSlug：用户任务文本 ⇒ git 分支名", () => {
   it("正常文本：小写、非安全字符折叠成连字符、长度有界", () => {
     expect(taskSlug("Fix the failing test")).toBe("fix-the-failing-test");

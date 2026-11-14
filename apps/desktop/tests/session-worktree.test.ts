@@ -4,10 +4,7 @@
 // kernel-host 里两行——它偏了不会红任何东西：树建得漂亮，run 还在主 checkout 里写。
 // 这类"接上了但没人用"的缺口，本仓口径就是读源文点针脚（对面是 interaction-deadends / channels 一族）。
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-
-const src = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 
 describe("会话级 worktree 隔离接线（§3.7 · G4）", () => {
   it("run 真的会跑进隔离树（kernel-host 接线；接不上 = 建了也没人用）", () => {

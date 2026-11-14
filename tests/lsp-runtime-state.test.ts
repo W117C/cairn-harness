@@ -78,7 +78,7 @@ async function seededThenCleared(ctx: ToolContext): Promise<void> {
 describe("LSP 运行态落盘", () => {
   it("没起过的服务器：状态是 not-started，provider 缺格（第 995 页口径不因本批而退化）", async () => {
     await isolateHome();
-    const ctx = await newWs();
+    await newWs();
     const st = await lspServerStatus(ws);
     expect(st.servers[0]?.state).toBe("not-started");
     expect(st.servers[0]?.providers).toBeUndefined();

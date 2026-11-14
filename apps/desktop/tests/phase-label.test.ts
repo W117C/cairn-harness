@@ -1,14 +1,4 @@
-// 状态条那一格的文案（2026-10-20 独立评审追出的 MEDIUM-HIGH 的修法这一半）。
-//
-// 缺陷形状：`finishing`（收尾中）的第二个条件是 `answerQuiet`（正文停了 >1.5s）——
-// 而那**恰好是"工具在跑"的形状**（模型吐完字就调工具，然后等着它跑完）⇒
-// 任何超过 1.5s 的构建/测试都被报成"收尾中"，而 agent 还在干活。
-// 那条注释自己写着「读错比不读更坏」——报错的相位比不报更坏。
-//
-// 修法：文案口径搬进 `projections.runPhaseLabel`（纯函数）⇒ 判卷可以**行为**地钉它，
-// 不用钉源码里那串三元表达式（钉字面量＝判据追着实现跑）。
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 import { runPhaseLabel } from "../src/renderer/projections";
 import { readAppSurface } from "./helpers/app-surface";

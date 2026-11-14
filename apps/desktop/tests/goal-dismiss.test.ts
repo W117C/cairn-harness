@@ -1,6 +1,4 @@
-// 已停目标「隐藏」的持久化（2026-10-18）：按会话 id 记账、只收整数；重启后不复活。
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 import { dismissedFrom } from "../src/renderer/goal-dismiss";
 import { readAppSurface } from "./helpers/app-surface";

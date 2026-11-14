@@ -1,14 +1,11 @@
 // 目标芯片（2026-10-18）：桌面此前没有 goal 的可视/可操作面；/goal 斜杠项只塞字。
 // 现在 sendWithGoal 先 setGoal 再发目标原文（首页先建会话再落目标），芯片读 traceGoal 同一份 reduce。
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { GoalChip } from "../src/renderer/components/GoalChip";
 import type { GoalTrace } from "../../../src/agent/goal-trace";
 import { readAppSurface } from "./helpers/app-surface";
 
-const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 const trace = (over: Partial<GoalTrace>): GoalTrace => ({
   spec: { objective: "完成一个小目标", maxTurns: 8, maxUsd: 0 },
   turn: 1, stopped: null, paused: null, at: 3, ...over,

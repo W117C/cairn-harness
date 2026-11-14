@@ -124,7 +124,7 @@ describe("git_read 行为面", () => {
     dirs.push(dir);
     const badOp = await git_read.run({ op: "push" }, { workspace: dir }).catch((e: unknown) => e);
     expect(badOp).toBeInstanceOf(ToolError);
-    const { dir: gdir, ctx } = await repo();
+    const { ctx } = await repo();
     const badPath = await git_read.run({ op: "diff", path: "../outside" }, ctx).catch((e: unknown) => e);
     expect(badPath).toBeInstanceOf(ToolError);
     const nongit = await git_read.run({ op: "status" }, { workspace: dir });
