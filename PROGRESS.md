@@ -39848,5 +39848,16 @@ toolbar 选择器的 `[data-cds-contrast=more]` 扩展。要收口得整批重�
 
 ### 五、mutate-verify 整表
 
-MUTATION_PLACEHOLDER
+- **整表跑完**：`1677/1677` 条，本次耗时 **3442.9s**（本机实时，非预算外推）；**存活 2 条**——
+  `remember-gate-if-chain-back` 与 `usage-stamp-after-append`，其余 1675 条全部被正确杀死。
+- **两条存活都不是产品缺陷，是判据/锚点缺口**：
+  1. `usage-stamp-after-append`：原判据只比「stamp 在 append 之前」，把 stamp 挪到 `commit?.()`
+     之后仍然通过。已加一条**贴邻**断言（stamp 必须紧挨 `hookEvent` 之前）。
+  2. `remember-gate-if-chain-back`：原改法是**等价变异**——`rememberDecision` 在表查询之后还有
+     scope 分层（global→ask、project→allow），表外档位在两条路上落到同一答案。已改钉「表本身被读」：
+     `read-only` 必须仍是 deny。
+- **改后复杀**：隔离树 `.worktrees/mutate-judges` @ `9b4f6e17`，两条 **2/2 全部被正确杀死**，
+  6.8s／2 条、spawn 4 次（2 拍×2）；selector 4 拍中位 0.95s、坏拍 0。
+- 整表读数是在 `ba6807db` 上取的（判据修复在 `9b4f6e17`）；两条修复之外的锚点与判据未变，
+  所以这张表仍然是那 1675 条的同分母读数。
 
