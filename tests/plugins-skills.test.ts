@@ -191,6 +191,29 @@ describe("M2e skill：L2 资源索引（只列路径，不读内容）", () => {
     await rm(ws, { recursive: true, force: true });
   }, 30_000);
 
+  it("资源索引按声明的深度帽停下（第 3 层文件可见，第 4 层不再下探）", async () => {
+    const ws = await mkdtemp(join(tmpdir(), "m2e-skill-depth-"));
+    const skillDir = join(ws, ".agent", "skills", "deep");
+    await mkdir(join(skillDir, "references", "a", "b", "c"), { recursive: true });
+    await writeFile(join(skillDir, "SKILL.md"),
+      "---\nname: deep\ndescription: 深目录\n---\n正文\n", "utf8");
+    await writeFile(join(skillDir, "references", "a", "b", "three.md"), "x", "utf8");
+    await writeFile(join(skillDir, "references", "a", "b", "c", "four.md"), "x", "utf8");
+    const rt = await PluginRuntime.load({
+      projectSkillsDir: join(ws, ".agent", "skills"),
+      workspace: ws,
+      pluginDataRoot: join(ws, "data"),
+      trustFile: join(await trustRoot(), "trust.json"),
+    });
+    await rt.trustDecide("deep", true);
+    const out = rt.triggerSkill("/deep");
+    expect(out.ok).toBe(true);
+    expect(out.output).toContain("references/a/b/three.md");
+    expect(out.output).not.toContain("references/a/b/c/four.md");
+    await rt.shutdown();
+    await rm(ws, { recursive: true, force: true });
+  }, 30_000);
+
   it("工作区外的插件资源只报数量、不递绝对路径", async () => {
     const ws = await mkdtemp(join(tmpdir(), "m2e-skill-ws-"));
     const outside = await mkdtemp(join(tmpdir(), "m2e-skill-outside-"));

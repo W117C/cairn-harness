@@ -64,6 +64,9 @@ async function readSkillResources(dir: string): Promise<{ path: string; bytes: n
       const abs = join(current, ent.name);
       if (ent.isDirectory()) {
         if (depth === 0 && !RESOURCE_TOP_DIRS.has(ent.name)) continue;
+        // 声明的边界接回判据（2026-11-14）：常量一直在、判据一直没写——深层目录实际不限深，
+        // 一条空目录链就能把 readdir 递归拖到路径上限。现在按注释兑现：最深 RESOURCE_MAX_DEPTH 层。
+        if (depth + 1 > RESOURCE_MAX_DEPTH) continue;
         await walk(abs, rel, depth + 1);
         continue;
       }

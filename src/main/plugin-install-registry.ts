@@ -164,10 +164,9 @@ function clone(row: InstalledPluginRecord): InstalledPluginRecord {
 export class InstalledPluginRegistry implements PluginInstallRegistryPort {
   private writes: Promise<unknown> = Promise.resolve();
 
-  constructor(
-    private readonly filePath: string,
-    private readonly now: () => number = Date.now,
-  ) {}
+  // 2026-11-14：构造器原有一个注入时钟参数，但本类从不盖时间戳（installedAt/updatedAt 随
+  // record 由调用方带进来）——参数是死面，删掉；时间戳归属仍是调用方，语义未变。
+  constructor(private readonly filePath: string) {}
 
   private async load(): Promise<RegistryFile> {
     let size: number;

@@ -53,7 +53,7 @@ function record(overrides: Partial<InstalledPluginRecord> = {}): InstalledPlugin
 describe("installed plugin registry", () => {
   it("round-trips records atomically with private file permissions", async () => {
     const file = join(scratch(), "marketplace", "installed.json");
-    const registry = new InstalledPluginRegistry(file, () => NOW);
+    const registry = new InstalledPluginRegistry(file);
     await registry.upsert(record());
 
     expect(await registry.list()).toEqual([record()]);
@@ -65,7 +65,7 @@ describe("installed plugin registry", () => {
   });
 
   it("replaces the same entry/scope/workspace key without duplicating it", async () => {
-    const registry = new InstalledPluginRegistry(join(scratch(), "installed.json"), () => NOW);
+    const registry = new InstalledPluginRegistry(join(scratch(), "installed.json"));
     await registry.upsert(record({ version: "1.2.3", sha256: "a".repeat(64) }));
     await registry.upsert(record({
       version: "1.3.0",
@@ -79,7 +79,7 @@ describe("installed plugin registry", () => {
   });
 
   it("keeps project workspaces distinct and removes only the exact key", async () => {
-    const registry = new InstalledPluginRegistry(join(scratch(), "installed.json"), () => NOW);
+    const registry = new InstalledPluginRegistry(join(scratch(), "installed.json"));
     await registry.upsert(record({ scope: "project", workspace: "/tmp/a" }));
     await registry.upsert(record({ scope: "project", workspace: "/tmp/b" }));
 
@@ -94,7 +94,7 @@ describe("installed plugin registry", () => {
     mkdirSync(dir, { recursive: true });
     const file = join(dir, "installed.json");
     writeFileSync(file, "{broken", "utf8");
-    const registry = new InstalledPluginRegistry(file, () => NOW);
+    const registry = new InstalledPluginRegistry(file);
 
     await expect(registry.list()).rejects.toThrow(/malformed|invalid/i);
   });
@@ -118,7 +118,7 @@ describe("installed plugin registry", () => {
       }],
     };
     writeFileSync(file, JSON.stringify(legacy), "utf8");
-    const registry = new InstalledPluginRegistry(file, () => NOW);
+    const registry = new InstalledPluginRegistry(file);
 
     const [migrated] = await registry.list();
 
@@ -132,7 +132,7 @@ describe("installed plugin registry", () => {
   });
 
   it("round-trips Git and local provenance with an unversioned Git install", async () => {
-    const registry = new InstalledPluginRegistry(join(scratch(), "installed.json"), () => NOW);
+    const registry = new InstalledPluginRegistry(join(scratch(), "installed.json"));
     const git = record({
       version: null,
       source: {
@@ -153,7 +153,7 @@ describe("installed plugin registry", () => {
   });
 
   it("rejects malformed provenance before writing", async () => {
-    const registry = new InstalledPluginRegistry(join(scratch(), "installed.json"), () => NOW);
+    const registry = new InstalledPluginRegistry(join(scratch(), "installed.json"));
     await expect(registry.upsert(record({
       source: {
         kind: "git",

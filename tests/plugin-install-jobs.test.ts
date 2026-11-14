@@ -161,7 +161,7 @@ describe("plugin install jobs", () => {
   it("stages a verified package and exposes a review without publishing it", async () => {
     const pluginDataRoot = scratch();
     const artifact = await archive();
-    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"), () => NOW);
+    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
     const states: PluginInstallJobState[] = [];
     const jobs = manager(pluginDataRoot, registry, downloader(artifact), (state) => states.push(state));
 
@@ -193,7 +193,7 @@ describe("plugin install jobs", () => {
   it("rejects manifest identity mismatch and JavaScript entry files", async () => {
     const mismatchRoot = scratch();
     const mismatchArtifact = await archive({ name: "other-plugin" });
-    const mismatchRegistry = new InstalledPluginRegistry(join(mismatchRoot, "installed.json"), () => NOW);
+    const mismatchRegistry = new InstalledPluginRegistry(join(mismatchRoot, "installed.json"));
     const mismatchJobs = manager(mismatchRoot, mismatchRegistry, downloader(mismatchArtifact));
     const mismatch = await mismatchJobs.wait((await mismatchJobs.start(entry(mismatchArtifact), "user", null)).id);
     expect(mismatch.state).toBe("failed");
@@ -201,7 +201,7 @@ describe("plugin install jobs", () => {
 
     const jsRoot = scratch();
     const jsArtifact = await archive({ globalJsEntry: true });
-    const jsRegistry = new InstalledPluginRegistry(join(jsRoot, "installed.json"), () => NOW);
+    const jsRegistry = new InstalledPluginRegistry(join(jsRoot, "installed.json"));
     const jsJobs = manager(jsRoot, jsRegistry, downloader(jsArtifact));
     const rejected = await jsJobs.wait((await jsJobs.start(entry(jsArtifact), "user", null)).id);
     expect(rejected.state).toBe("failed");
@@ -211,7 +211,7 @@ describe("plugin install jobs", () => {
   it("cancels an active download and removes its staging directory", async () => {
     const pluginDataRoot = scratch();
     const artifact = await archive();
-    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"), () => NOW);
+    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
     let markDownloadStarted: (() => void) | null = null;
     const downloadStarted = new Promise<void>((resolve) => { markDownloadStarted = resolve; });
     const blockedDownload: typeof downloadPluginPackage = async (_entry, _destination, options = {}) => {
@@ -233,7 +233,7 @@ describe("plugin install jobs", () => {
   it("commits a reviewed package as disabled and records its digest", async () => {
     const pluginDataRoot = scratch();
     const artifact = await archive();
-    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"), () => NOW);
+    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
     const jobs = manager(pluginDataRoot, registry, downloader(artifact));
     const reviewed = await jobs.wait((await jobs.start(entry(artifact), "user", null)).id);
 
@@ -263,7 +263,7 @@ describe("plugin install jobs", () => {
     const sentinel = join(target, "sentinel.txt");
     mkdirSync(target, { recursive: true });
     writeFileSync(sentinel, "manual package");
-    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"), () => NOW);
+    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
     const jobs = manager(pluginDataRoot, registry, downloader(artifact));
     const reviewed = await jobs.wait((await jobs.start(entry(artifact), "user", null)).id);
 
@@ -280,7 +280,7 @@ describe("plugin install jobs", () => {
     mkdirSync(join(workspace, ".agent"), { recursive: true });
     symlinkSync(outside, join(workspace, ".agent", "plugin-disabled"), "dir");
     const artifact = await archive();
-    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"), () => NOW);
+    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
     const jobs = manager(pluginDataRoot, registry, downloader(artifact));
     const reviewed = await jobs.wait((await jobs.start(entry(artifact), "project", workspace)).id);
 
@@ -316,7 +316,7 @@ describe("plugin install jobs", () => {
       installedAt: new Date(NOW - 10_000).toISOString(),
       updatedAt: new Date(NOW - 10_000).toISOString(),
     };
-    const base = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"), () => NOW);
+    const base = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
     await base.upsert(oldRecord);
     let releaseUpsert!: () => void;
     const upsertRelease = new Promise<void>((resolve) => { releaseUpsert = resolve; });
@@ -346,7 +346,7 @@ describe("plugin install jobs", () => {
   it("waits for an in-flight commit before shutdown finishes", async () => {
     const pluginDataRoot = scratch();
     const artifact = await archive();
-    const base = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"), () => NOW);
+    const base = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
     let releaseUpsert!: () => void;
     const upsertRelease = new Promise<void>((resolve) => { releaseUpsert = resolve; });
     let markStarted!: () => void;
@@ -380,7 +380,7 @@ describe("plugin install jobs", () => {
   it("rejects signed capability counts that do not match the extracted package", async () => {
     const pluginDataRoot = scratch();
     const artifact = await archive({ skill: false });
-    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"), () => NOW);
+    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
     const jobs = manager(pluginDataRoot, registry, downloader(artifact));
 
     const reviewed = await jobs.wait((await jobs.start(entry(artifact), "user", null)).id);
@@ -392,7 +392,7 @@ describe("plugin install jobs", () => {
   it("rejects entries that require a newer app version", async () => {
     const pluginDataRoot = scratch();
     const artifact = await archive();
-    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"), () => NOW);
+    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
     const jobs = manager(pluginDataRoot, registry, downloader(artifact), undefined, {
       currentAppVersion: "0.1.0",
     });
@@ -408,7 +408,7 @@ describe("plugin install jobs", () => {
     const pluginDataRoot = scratch();
     const userPluginsDir = scratch();
     const artifact = await archive();
-    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"), () => NOW);
+    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
     const jobs = manager(pluginDataRoot, registry, downloader(artifact), undefined, { userPluginsDir });
     const reviewed = await jobs.wait((await jobs.start(entry(artifact), "user", null)).id);
 
@@ -418,7 +418,7 @@ describe("plugin install jobs", () => {
   it("leaves a review unpublished when the mutation gate rejects commit", async () => {
     const pluginDataRoot = scratch();
     const artifact = await archive();
-    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"), () => NOW);
+    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
     const jobs = manager(pluginDataRoot, registry, downloader(artifact), undefined, {
       beforeCommit: () => { throw new Error("session still running"); },
     });
@@ -455,7 +455,7 @@ describe("plugin install jobs", () => {
       installedAt: new Date(NOW - 10_000).toISOString(),
       updatedAt: new Date(NOW - 10_000).toISOString(),
     };
-    const base = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"), () => NOW);
+    const base = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
     await base.upsert(oldRecord);
     const failingRegistry: PluginInstallRegistryPort = {
       list: () => base.list(),
@@ -482,7 +482,7 @@ describe("plugin install jobs", () => {
   ])("stages $kind through one review path", async ({ kind, request }) => {
     const pluginDataRoot = scratch();
     const artifact = await archive();
-    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"), () => NOW);
+    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
     const catalogEntry = entry(artifact);
     const jobs = manager(pluginDataRoot, registry, downloader(artifact), undefined, {
       sourceResolver: stagedResolver(),
@@ -507,7 +507,7 @@ describe("plugin install jobs", () => {
   it("rejects duplicate names and cross-source replacement before publication", async () => {
     const pluginDataRoot = scratch();
     const artifact = await archive();
-    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"), () => NOW);
+    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
     await registry.upsert({
       entryId: "demo-plugin",
       manifestName: "demo-plugin",
