@@ -39784,3 +39784,27 @@ toolbar 选择器的 `[data-cds-contrast=more]` 扩展。要收口得整批重�
   本轮没有顺手改。
 - 第 1188 页那笔的核心全量是 8113 条；本页多出的 1 条是资源深度判据（第 1188 页新增）。
 
+
+## 2026-11-14 · 第 1190 页：认证抓到的漏笔（`6dbfbb74`）＋ HEAD 六维全过（`6dbfbb74`）
+
+**入口**：第 1189 页交笔后跑认证（`a601a54`），门面 25/25 全绿、核心 673/8114 全绿，但**退出码 1**：
+`typecheck exit=2`，`tests/plugin-install-operations.test.ts` 三处还在给 `InstalledPluginRegistry`
+传第二个参数。原因是 `a5cdc052` 的 `git add` 漏了这个文件——工作树是绿的，提交是红的。
+
+### 一、补笔（`6dbfbb74`）
+
+- 三处构造调用去掉 `() => NOW`；`typecheck` 复跑 0 条报错；
+  `plugin-install-operations` 16 条全绿。
+- 教训照旧成立：**工作树的 typecheck 绿不等于提交绿**，认证那一步量的是 HEAD。
+
+### 二、最终认证（`6dbfbb74`，exit 0）
+
+- **判决输入六维全过**；认证门面 **25/25 绿**；超预算 4 格（只出声不判红）。
+- 核心：**673 文件 / 8114 条全绿**（`maxWorkers=2`，exit 0，两端独占，本趟墙钟 299.24s）。
+- 取料：`outputs/head-cert-6dbfbb7-2026-11-14-1456/provenance.md`。
+
+### 三、边界
+
+- 认证树已回收；常驻只余 `gate-mutate-verify`（规则 120 判定为可留残树）。
+- 本页不重述前几页的逐条改动；CDS / 插件 / fs-race 的读数分别在第 1188、1189 页。
+
