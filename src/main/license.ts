@@ -5,7 +5,7 @@
 // V1 收敛（任务书 §2.2 拍板）：验证失败/缺失 = **不阻断功能**——只在设置页与关于页显示状态；
 //   私钥不入仓库（.tmp 一次性工具签发测试 license），内置公钥为常量。
 // 可测性：publicKey / now 可注入（缺省 = 内置公钥 + 当前时间），headless 单测与 commercial-check 零文件依赖。
-import { readFile, stat } from "node:fs/promises";
+import { open, readFile } from "node:fs/promises";
 import { writeFileAtomic } from "../atomic-write";
 import { createPublicKey, sign as edSign, verify as edVerify } from "node:crypto";
 
@@ -131,12 +131,26 @@ export async function importLicenseFile(
   const maxBytes = opts.maxBytes ?? 64 * 1024;
   let text: string;
   try {
-    const info = await stat(sourcePath);
-    if (!info.isFile()) return { ok: false, state: { state: "invalid", reason: "不是文件" }, error: "选择的不是文件" };
-    if (info.size > maxBytes) {
-      return { ok: false, state: { state: "invalid", reason: "文件过大" }, error: `许可证文件过大（上限 ${String(maxBytes)} 字节）` };
+    // 同一句柄上量、读、复查：stat 与 read 之间路径被换掉时，帽按量过的字节数执行，
+    // 读到的字节也不会超过它（CodeQL js/file-system-race；与 mutation-lock / read_doc 同修法）。
+    const handle = await open(sourcePath, "r");
+    try {
+      const info = await handle.stat();
+      if (!info.isFile()) return { ok: false, state: { state: "invalid", reason: "不是文件" }, error: "选择的不是文件" };
+      if (info.size > maxBytes) {
+        return { ok: false, state: { state: "invalid", reason: "文件过大" }, error: `许可证文件过大（上限 ${String(maxBytes)} 字节）` };
+      }
+      const raw = Buffer.allocUnsafe(info.size);
+      let offset = 0;
+      while (offset < raw.length) {
+        const { bytesRead } = await handle.read(raw, offset, raw.length - offset, offset);
+        if (bytesRead === 0) break;
+        offset += bytesRead;
+      }
+      text = raw.subarray(0, offset).toString("utf8");
+    } finally {
+      await handle.close().catch(() => undefined);
     }
-    text = await readFile(sourcePath, "utf8");
   } catch (err) {
     return { ok: false, state: { state: "inactive" }, error: `读取许可证失败：${err instanceof Error ? err.message : String(err)}` };
   }
