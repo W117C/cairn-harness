@@ -39575,3 +39575,33 @@ Error: 未知主会话 provider: agnes-ai（内置 5 家，或在 .agent/provide
   `dsh-claude-style.css` 第 9/11 行仍按路径引用 ⇒ 删了就是真实回归，等那名业主自己收口。
 - `tests/` 仍有 106 处未用绑定（第 1182 页登记），本批未动。
 
+
+## 2026-11-14 · 第 1184 页：HEAD 认证读数（`7fd98f2`）——23/25 门绿，两道红各有归属
+
+**入口**：第 1183 页交笔时写的是「未跑 head-cert」。本轮补跑，取料
+`outputs/head-cert-7fd98f2-2026-11-14-1343/provenance.md`（门自己落盘的原样读数，未改写）。
+
+### 一、读数（HEAD `7fd98f2`，认证树 DIRTY_JUDGED=0）
+
+- 判卷：**673 文件 / 8113 条全绿**（maxWorkers 2，exit 0，本趟墙钟 334.67s，两端独占）。
+- 门：**25 道跑到 25，绿 23、红 2**；超预算 3 格（只出声不判红：docs-check 1383ms、
+  evidence-typecheck-check 5544ms、desktop-test 21967ms）。
+- 未证 5 项（绿而零输出或连网/凭据限制，不等于通过）：gate-check / autonomy-check /
+  compaction-check / provider:check / gym-check 各 1。
+
+### 二、两道红
+
+1. **mutate-needles-check（存量，非本批）**：4 条锚点的针脚已不在源文件里，归属三个旧提交——
+   `gate-cause-bare-allow-walks-highrisk-path`（`a7a1a03c`）、`judge-deny-bypassed`（`6c82de60`）、
+   `worktrees-dirty-badge-hidden` 与 `license-label-always-inactive`（`be41e26b`）。这是**判卷面的
+   真缺口**：四条变异今天必然不生效，对应判据没有变异证据；下一批应逐条改指现实现并重新杀锚。
+2. **desktop-test（宿主条件，非本批）**：383 文件 / 2487 条绿、2 文件 3 条红——2 条是 Claude.app 的
+   CDS 上游漂移（`extract-cds-tokens.py --check` 现读 251161B，记录 246160B），1 条是认证树里
+   Electron 原生宿主起不来（`Electron failed to install correctly`）。主树另有 2 条红来自
+   另一会话删掉的字体文件（见第 1183 页边界一节）。
+
+### 三、边界
+
+- 认证跑的是 `7fd98f2`（docs 笔），代码面与 `18738ade` 相同；本轮没有再改代码。
+- 认证树已回收；`mutate-verify` 未跑（它要独立长窗口，且当前工作树有另一会话的在飞删除）。
+
