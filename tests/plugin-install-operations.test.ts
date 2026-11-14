@@ -91,7 +91,7 @@ function record(enabled: boolean, overrides: Partial<InstalledPluginRecord> = {}
 describe("plugin install operations", () => {
   it("moves a disabled plugin into the active root before reporting enabled", async () => {
     const pluginDataRoot = scratch();
-    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"), () => NOW);
+    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
     const disabledRoot = join(pluginDataRoot, "marketplace", "disabled", "user");
     const installed = pluginDir(disabledRoot, "demo-plugin");
     await registry.upsert(record(false, { fingerprint: (await pluginFingerprintEx(installed)).fp }));
@@ -116,7 +116,7 @@ describe("plugin install operations", () => {
     const pluginDataRoot = scratch();
     const activeRoot = join(pluginDataRoot, "plugins");
     pluginDir(activeRoot, "demo-plugin");
-    const base = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"), () => NOW);
+    const base = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
     await base.upsert(record(true));
     const failing: PluginInstallRegistryPort = {
       list: () => base.list(),
@@ -145,7 +145,7 @@ describe("plugin install operations", () => {
     const activeRoot = join(pluginDataRoot, "plugins");
     const owned = pluginDir(activeRoot, "demo-plugin");
     const manual = pluginDir(activeRoot, "manual-plugin");
-    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"), () => NOW);
+    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
     await registry.upsert(record(true));
     const trust = new TrustStore(join(pluginDataRoot, "plugin-trust.json"));
     await trust.decide(owned, true, "f".repeat(32));
@@ -182,7 +182,7 @@ describe("plugin install operations", () => {
     const disabledRoot = join(pluginDataRoot, "marketplace", "disabled", "user");
     const owned = pluginDir(disabledRoot, "demo-plugin");
     const fingerprint = (await pluginFingerprintEx(owned)).fp;
-    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"), () => NOW);
+    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
     await registry.upsert(record(false, { fingerprint }));
     const trust = new TrustStore(join(pluginDataRoot, "plugin-trust.json"));
     await trust.decide(owned, true, fingerprint);
@@ -205,7 +205,7 @@ describe("plugin install operations", () => {
     const pluginDataRoot = scratch();
     const activeRoot = join(pluginDataRoot, "plugins");
     const owned = pluginDir(activeRoot, "demo-plugin");
-    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"), () => NOW);
+    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
     await registry.upsert(record(true));
     const failingTrust = {
       status: async () => "trusted" as const,
@@ -231,7 +231,7 @@ describe("plugin install operations", () => {
     const disabledRoot = join(pluginDataRoot, "marketplace", "disabled", "user");
     const owned = pluginDir(disabledRoot, "demo-plugin");
     const fingerprint = (await pluginFingerprintEx(owned)).fp;
-    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"), () => NOW);
+    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
     await registry.upsert(record(false, { fingerprint }));
     const trust = new TrustStore(join(pluginDataRoot, "plugin-trust.json"));
     await trust.decide(owned, true, fingerprint);
@@ -276,7 +276,7 @@ describe("plugin install operations", () => {
     mkdirSync(join(workspace, ".agent"), { recursive: true });
     const installed = pluginDir(outside, "demo-plugin");
     symlinkSync(outside, join(workspace, ".agent", "plugin-disabled"), "dir");
-    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"), () => NOW);
+    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
     await registry.upsert(record(false, {
       scope: "project",
       workspace,
@@ -299,7 +299,7 @@ describe("plugin install operations", () => {
   it("honors the actual user plugin root when enabling a package", async () => {
     const pluginDataRoot = scratch();
     const userPluginsDir = scratch();
-    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"), () => NOW);
+    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
     const installed = pluginDir(join(pluginDataRoot, "marketplace", "disabled", "user"), "demo-plugin");
     await registry.upsert(record(false, { fingerprint: (await pluginFingerprintEx(installed)).fp }));
 
@@ -318,7 +318,7 @@ describe("plugin install operations", () => {
 
   it("does not move a package when the mutation gate rejects the operation", async () => {
     const pluginDataRoot = scratch();
-    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"), () => NOW);
+    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
     const disabled = pluginDir(join(pluginDataRoot, "marketplace", "disabled", "user"), "demo-plugin");
     await registry.upsert(record(false));
 
@@ -338,7 +338,7 @@ describe("plugin install operations", () => {
 
   it("refuses to enable a package whose content no longer matches the registry", async () => {
     const pluginDataRoot = scratch();
-    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"), () => NOW);
+    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
     const disabled = pluginDir(join(pluginDataRoot, "marketplace", "disabled", "user"), "demo-plugin");
     await registry.upsert(record(false));
 
@@ -359,7 +359,7 @@ describe("plugin install operations", () => {
     const pluginDataRoot = scratch();
     const activeRoot = join(pluginDataRoot, "plugins");
     pluginDir(activeRoot, "demo-plugin");
-    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"), () => NOW);
+    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
     await registry.upsert(record(true));
     let releaseForget!: () => void;
     const forgetRelease = new Promise<void>((resolve) => { releaseForget = resolve; });
@@ -407,7 +407,7 @@ describe("plugin install operations", () => {
     const pluginDataRoot = scratch();
     const secrets = memorySecrets();
     setPluginSecretBackend(secrets.backend);
-    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"), () => NOW);
+    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
     const installed = pluginDir(
       join(pluginDataRoot, "marketplace", "disabled", "user"),
       "demo-plugin",
@@ -445,7 +445,7 @@ describe("plugin install operations", () => {
   it("rejects unknown or missing required config without enabling the package", async () => {
     const pluginDataRoot = scratch();
     setPluginSecretBackend(memorySecrets().backend);
-    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"), () => NOW);
+    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
     const installed = pluginDir(
       join(pluginDataRoot, "marketplace", "disabled", "user"),
       "demo-plugin",
@@ -476,7 +476,7 @@ describe("plugin install operations", () => {
     const owned = pluginDir(activeRoot, "demo-plugin", "1.2.3", {
       userConfig: { TOKEN: { type: "string", sensitive: true } },
     });
-    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"), () => NOW);
+    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
     await registry.upsert(record(true, { fingerprint: (await pluginFingerprintEx(owned)).fp }));
     const trust = new TrustStore(join(pluginDataRoot, "plugin-trust.json"));
     await trust.decide(owned, true, "f".repeat(32));
@@ -510,7 +510,7 @@ describe("plugin install operations", () => {
     const owned = pluginDir(activeRoot, "demo-plugin", "1.2.3", {
       userConfig: { TOKEN: { type: "string", sensitive: true } },
     });
-    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"), () => NOW);
+    const registry = new InstalledPluginRegistry(join(pluginDataRoot, "installed.json"));
     const original = record(true, { fingerprint: (await pluginFingerprintEx(owned)).fp });
     await registry.upsert(original);
     const trust = new TrustStore(join(pluginDataRoot, "plugin-trust.json"));
