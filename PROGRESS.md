@@ -39889,3 +39889,143 @@ toolbar 选择器的 `[data-cds-contrast=more]` 扩展。要收口得整批重�
   以及最终认证读数。
 - 认证树已回收；工作树只余那一会话的未跟踪计划文档（`docs/superpowers/plans/2026-11-14-ds-bot-benchmark.md`），未动。
 
+
+## 2026-11-15 · 第 1193 页：壁纸 CSP 与设置行批的真机收口（`8d278985`）
+
+**背景**：工作树里压着一批未入库的壁纸改动（CSP 抽模块 + 设置行样式 + 三个判卷改读真值）。
+上一批（第 1192 页之前那会话）留了两格「真渲染层未验证」，且 CSP 白名单只有源码文本判据——
+漏一个 scheme 的表现是「选了壁纸但什么也没变」，无异常无红字。本批补真机证据并收口。
+
+### 一、真机冒烟（新工件 `apps/desktop/scripts/wallpaper-csp-smoke.cjs`，登记 `smoke:wallpaper`）
+
+口径：真 Electron 44.9.1 / Chromium 152；真构建产物的生产 CSP meta；scheme 特权与 handler 都
+require 生产模块 `src/main/wallpaper.ts`；合成面只有 AgentApi（preload 新增
+`--cairn-wallpaper-fixture=` 分支）；隔离 profile；真 `sendInputEvent` 指针（先命中测试）。
+**23/23 绿**，含：
+
+- 协议真出网：200 + 6843B + `accept-ranges`；`bytes=0-99` ⇒ 206 + `content-range: bytes 0-99/6843`；
+  非当前路径 404；越界 416（关掉上一批的未验证格之一）。
+- **反证臂**：dist 副本摘掉 `img-src` 的 scheme ⇒ 图 `naturalWidth=null` + 1 条 CSP violation
+  ⇒ 白名单承重，不是夹具自证。
+- 设置行布局、真指针点滑杆/选/清、清除后撤层摘属性、两态按钮文案。
+
+### 二、真机抓出并修掉的三个缺陷（都有修前/修后读数或截图）
+
+1. **`.sp-page` 在画布让位名单里** ⇒ 设置整页透明，composer 与空态文字叠在设置行下
+   （修前截图 `00-defect-double-text-before-fix.png`）。修：让位只留 `.app / .destination-page`；
+   修后 `.sp-page` 计算底色 `rgb(27, 27, 27)`。判卷新增「让位名单不含 .sp-page」。
+2. **标签折行 + 轨道塌宽**：`5.5em` 装不下六汉字；`.ss-row` 控件列是 auto 轨，`width:100%`
+   塌回 range 固有宽 129px。修：`6.5em` + nowrap、轨道定宽 240px（控件 md 档）。
+   修后列 `78px 240px`、标签单行、整行 326px。
+3. **选按钮文案反了**：已设壁纸读「未设置」。修：动作词恒为「选择图片或视频」，状态词只在
+   none 时作 `.ss-static` 回执；冒烟两态都断言。
+
+### 三、门禁读数（工作树，提交前）
+
+- 桌面 **390 文件 / 2518 条**绿（含 boundary）；定向 4 文件 / 48 条绿。
+- 核心 `pnpm test:capped`（`--maxWorkers=2`）**676 文件 / 8128 条**绿，exit 0。
+- `typecheck` 0 报错；`renderer-layer-check` 绿（244 文件）；`docs-check` 全绿。
+- 取证件：`outputs/wallpaper-csp-2026-11-15/`（REPORT.md / checks.json / readings.json / 5 张截图）。
+
+### 四、边界与事故记录
+
+- 未验证：视频失焦暂停（本机无 ffmpeg/ffprobe）、亮色主题真机截图、真·系统选文件对话框。
+- **事故**：本会话清理自己的临时证据目录时误 `rm -rf apps/desktop/outputs`（内含他批证据）。
+  410 个受跟踪文件已按路径 `git restore` 全数恢复（恢复后该路径 0 删除、99 个目录回位），
+  无未跟踪损失；自己的修前截图先拷进本批证据目录才删。教训：破坏性命令不与发现命令串联执行。
+
+
+## 2026-11-15 · 第 1194 页：全仓普查与陈旧文档/计数收口（`b8cefbb3`）
+
+**背景**：业主要求「没完成的或新开的做完、修复问题、功能自研」。先派只读普查（不跑套件），
+再按依赖序收口。普查八条发现与处置：
+
+| # | 发现（普查实测） | 处置 |
+| --- | --- | --- |
+| F1 | shell 冻结闸可绕：`shellWriteTargetsOf` 只认重定向/tee/rm/mv/cp/sed -i；12 条写命令 2 deny / 1 ask / 9 approve（python3 -c、node -e、变量间接、truncate、ln -sf、git checkout --、perl -i、bash -c、install）；`run_shell.ts` 不调 `assertNotFrozenReal` | **P0，待修**：执行层闸 + 每种绕过形态反向判据 |
+| F2 | CODE-WIKI 指路 `components/icons.tsx`／`Ic`／`providerHue`，a10f4fd1 已移除；图标实为 lucide-react 直 import（渲染层 76 文件） | 本页收口 |
+| F3 | `@radix-ui/themes` 死依赖（src 0 引用）；ADR 0003 仍「待业主确认」且 D1 与 387 处裸 button 冲突 | 摘依赖＋裁 ADR 属设计裁决 ⇒ 进业主裁决轮 |
+| F4 | GLM 三档未标定（`unpricedModels()` 实测三条），占位价进美元闸 | 待标定（需官方页联网）＋闸不吃占位价 |
+| F5 | `index.ts` 注释「39 条通道」实 157；`pricing.ts`「内置 12 行」实 14 | 本页收口 |
+| F6 | `web_search` 仅付费第三方后端（brave/tavily），无自研 | 进业主裁决轮（自研方向） |
+| F7 | hook `agent` 档装载期拒载（fail-loud，CODE-WIKI 明写） | 文档化排除，不动 |
+| F8 | 远程 worker 仅 read-only（403 显式） | ROADMAP 已登记待开工，不动 |
+
+普查同时核实：IPC 157/157 全接真（`UNWIRED_FAIL_LOUD` 空集）、门清单 40 gates / 0 violations、
+冻结基线 sha 全匹配、`src/providers/reasoning.ts` 已完整映射（文件头描述的是已修旧缺口）。
+
+### 本页改动（`b8cefbb3`）
+
+- CODE-WIKI 图标段改写为现状（lucide-react 直 import；emoji 哨兵判卷在 `diff-split.test.tsx`，
+  读整个渲染面；`⚠`/`✓` 不在其码段内）；2026-10-07 spec 那句「新增 icons.tsx」注明为当日规划。
+- 两处陈旧计数注释改真值（157 / 14）。
+- 读数：桌面 390/2518 绿、核心 676/8128 绿（`--maxWorkers=2`）、docs-check 全绿（与 1193 页同树）。
+
+### 边界
+
+- F1 的 12 条是普查实测，绕过面未穷举；F4 需联网读官方价；F3/F6 不代替业主裁决。
+- 自研 bot 团队（`docs/superpowers/plans/2026-11-14-ds-bot-benchmark.md`）仍按该计划的门走：
+  ADR 0015 未经业主批准前不落实现代码。
+
+
+
+## 2026-11-15 · 第 1195 页：判卷面 shell 绕过收口（`01d2ae2`；第 1194 页 F1 的 P0）
+
+**背景**：第 1194 页普查把 F1 定为 P0——`shellWriteTargetsOf` 只认重定向 / tee / rm / mv / cp / sed -i，
+12 条写命令实测 2 deny / 1 ask / 9 approve；`run_shell.ts` 不调 `assertNotFrozenReal`。本页收口，
+并把同族另两格一起量了：①判卷表自身可写（`write_file` 到 `scripts/frozen-sha256.json` 在 auto 档
+一条 allow 下判 approve ⇒ 先改基线再改判卷）；②跑完没有任何执行层复核。
+
+### 一、词法层：取料搬成一份，形状补到 16 条
+
+- 新模块 `src/permissions/shell-write-targets.ts`：`evaluate()` 与 `run_shell` 共用同一份取料。
+  取料走 `splitCommandChain` + `invocations`（`bash -c` / `sh -lc` / `$(…)` 载荷递归展开），
+  原语新增 `truncate` / `install` / `ln` / `dd of=` / `perl -i` / `git checkout --` / `git restore` /
+  `touch` / `unlink`。
+- 本机复跑 16 条形状：**14 deny / 2 approve**。仍 approve 的两条是 `python3 -c` 与变量间接——
+  词法层不假装认得出，交给下面两层（刻意的边界，不是遗漏）。
+- 冻结表自身进 `frozenJudgePathSet`：`write_file` / `run_shell` 写基线都 deny（`L0-hard`）。
+
+### 二、执行层：Seatbelt literal 拒绝（macOS 承重）
+
+- `buildSandboxProfile` 从工作区 `scripts/frozen-sha256.json` 的键集自动追加
+  `(deny file-write* (literal <realpath>))`，排在 `(allow file-write*)` 之后（SBPL 后者胜出）。
+  没有冻结表 ⇒ 一行都不追加（用户仓库零行为）。
+- 真 `sandbox-exec` 判卷（`tests/sandbox-frozen-deny.test.ts`，darwin）：20 种形状全部被 OS 拒、
+  冻结文件逐字未变——含 `python3 -c` / `node -e` / `truncate` / `ln -sf` / `dd` / `perl -i` /
+  `install` / `chmod` / `touch` / `unlink` / rename 覆盖 / 硬链 / symlink 别名；配对臂：同 profile
+  写非冻结文件成功（不是「全拒」冒充绿）。
+- 同一条 literal 也盖住表自身（`scripts/frozen-sha256.json`）。
+
+### 三、无沙箱宿主的兜底：跑前基线 + 跑后逐字节复原
+
+- `src/tools/frozen-guard.ts`：跑前按字节记下冻结集（含表），跑后复查；变了就按原字节原子复原，
+  把这次调用判 `ok=false` 并在回执点名「输出不可作为判据」；改动后的字节留档在
+  `.agent/snapshots/*--frozen-guard/`（留档上限 8MB，超过只记「变了」不读进内存）。
+- `run_shell` 在 spawn 前对**认得出的**写目标按真实落点再跑一次 `assertNotFrozenReal`
+  （软链别名 `alias.ts -> judge.ts` 在这一层拒）；后台任务在 `close` 后、标记 done 前跑同一复查。
+
+### 四、读数（HEAD 认证 `01d2ae2`，六维全过）
+
+- `pnpm head-cert-check`：**25/25 门绿**，核心 **678 文件 / 8142 条**绿（`--maxWorkers=2`），exit 0；
+  认证树已回收；逐条日志 `/tmp/dsh-head-cert-01d2ae2`；凭证 `outputs/head-cert-01d2ae2-2026-11-14-1800/`。
+- 工作树同口径：核心 678 文件 / 8143 条（与 HEAD 差 1 条，两趟的环境/在飞面不同，未逐条归因）；
+  桌面 390 / 2518 条；`typecheck` 0；`sandbox:check` 绿；docs-check / desktop-boundary-check /
+  renderer-layer-check 绿。
+- 选定门两批：**16/16 绿**；第二批 **7/8**（`plugins-check` 红——另一会话在改 `src/agent/plugins/**`
+  的信任表边界，与本页无交集）。
+- 定向：`judge-frozen-gate` 22 条、`frozen-shell-guard` 7 条、`sandbox-frozen-deny` 3 条、
+  `sandbox` 11 条。
+
+- 本批取证件：`outputs/judge-integrity-2026-11-15/REPORT.md`（修前/修后读数与边界）。
+
+### 五、边界与并行会话
+
+- 解释器与变量间接只在**执行层**被挡；同一条命令内先改判卷再跑测试、拿到一次假绿，在无沙箱
+  宿主上挡不住（跑后复原只保证工具返回时盘面是原件）。有沙箱时由 Seatbelt 预防。
+- 后台任务的 `timeout` / `stop` 两条收束不走跑后复查（正常 `close` 走）；已登记，不冒充全覆盖。
+- `frozenJudgePathSet` 按 root 缓存：会话中途新建冻结表要重启进程才生效（生产的工作区表在会话前就在）。
+- 未改：`fs_ops` 的 move/delete 仍只做精确键匹配（它拒绝删非空目录；整树搬走会让判卷缺失
+  而不是变绿），留作下一轮的同族普查。
+- 并行会话在同一工作树里有大量未提交改动（`src/agent/**`、`plugins`、desktop 测试等）；
+  本页只提交上面点名的 11 个文件，未触碰它们。

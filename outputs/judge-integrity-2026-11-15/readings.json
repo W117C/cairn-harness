@@ -1,0 +1,39 @@
+{
+  "batch": "judge-integrity-2026-11-15",
+  "commit": "01d2ae2",
+  "before": {
+    "shells_tested": 12,
+    "deny": 2,
+    "approve": 10,
+    "table_write_verdict": "approve"
+  },
+  "after": {
+    "lexical_shapes": 16,
+    "deny": 14,
+    "approve_by_design": 2
+  },
+  "sandbox_shapes_blocked": 20,
+  "sandbox_shapes_total": 20,
+  "guard_cases": 7,
+  "head_cert": {
+    "commit": "01d2ae2",
+    "gates_green": 25,
+    "gates_total": 25,
+    "test_files": 678,
+    "tests": 8142,
+    "workers": 2
+  },
+  "worktree": {
+    "test_files": 678,
+    "tests": 8143
+  },
+  "desktop": {
+    "test_files": 390,
+    "tests": 2518
+  },
+  "boundaries": [
+    "interpreter and variable indirection depend on the execution layer",
+    "background timeout/stop skip the post-run check",
+    "fs_ops move/delete out of scope"
+  ]
+}

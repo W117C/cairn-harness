@@ -83,6 +83,10 @@ L4         风险层：L4-critical（任何档强制审批，allow 规则也批�
 - **沙箱与权限是两道独立的闸**：`run_shell` 在 macOS 走 Seatbelt（`src/main/sandbox.ts`），
   权限层管审批。网络默认全拒，三条同时成立才出网（判为网络类 + 真的问过并获批 + 非无人值守）。
   **没有「网络开关」**：不放行环境变量、不读配置项。
+- **判卷面两条闸都有落点**：`src/permissions/shell-write-targets.ts` 的 `shellWriteTargetsOf` 只做
+  词法快拒（`evaluate` 与 `run_shell` 共用一份）；真正的强制在 `buildSandboxProfile` 生成的
+  Seatbelt literal 写拒绝（每个冻结文件一条，表自身也在冻结集里），无沙箱宿主由
+  `src/tools/frozen-guard.ts` 的跑前基线 + 跑后逐字节复原兜底。
 
 ## ③ 编排：worker 生命周期长于父 turn
 
