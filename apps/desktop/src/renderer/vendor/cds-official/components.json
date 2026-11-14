@@ -1,8 +1,8 @@
 {
   "source": {
-    "file": "MainWindowPage-CinbABxl.css",
-    "sha256": "1be41faf06028ae594f077095575181d3d34008183e1492caedd27a28d9e9fbf",
-    "bytes": 246160
+    "file": "MainWindow.css",
+    "sha256": "d28063ca960037bb1f25e652085f450bba0e5fb9bf11418827926c3aa9a1aaf3",
+    "bytes": 251161
   },
   "transform": {
     "root": ".cds-root -> body[data-dsh-claude-style]",
@@ -10,8 +10,8 @@
   },
   "totals": {
     "components": 48,
-    "rules": 112,
-    "declarations": 468
+    "rules": 114,
+    "declarations": 472
   },
   "components": [
     {
@@ -84,21 +84,12 @@
       ]
     },
     {
-      "name": "MessageAttachmentsImage",
-      "rules": 12,
-      "declarations": 21,
-      "conditions": [],
-      "sampleSelectors": [
-        ".cds-root :is([data-cds=MessageAttachmentsImage],[data-cds=MessageAttachmentsVideo])[data-fit=natural]",
-        ".cds-root :is([data-cds=MessageAttachmentsImage],[data-cds=MessageAttachmentsVideo])[data-fit=natural] [data-cds-tile-media]",
-        ".cds-root :is([data-cds=MessageAttachmentsImage],[data-cds=MessageAttachmentsVideo])[data-fit=natural] [data-cds-tile-picture]"
-      ]
-    },
-    {
       "name": "Icon",
-      "rules": 10,
-      "declarations": 30,
+      "rules": 12,
+      "declarations": 34,
       "conditions": [
+        "@media screen",
+        "@supports selector(::details-content) and (color:rgb(from currentColor r g b / 1))",
         "@supports (color:color-mix(in lab, red, red))",
         "@media (forced-colors:active)",
         "@supports (forced-color-adjust:preserve-parent-color)"
@@ -107,6 +98,17 @@
         "[data-cds=Icon]:not(svg)",
         "[data-cds=Icon]:not(svg):not(#_)",
         ":root[dir=rtl] :is([data-cds=Icon],svg)[data-cds-mirror]:is(:lang(ae),:lang(ar),:lang(arc),:lang(bcc),:lang(bqi),:lang(ckb),:lang(dv),:lang(fa),:lang(glk),:lang(he),:lang(ku),:lang(mzn),:lang(nqo),:lang(pnb),:lang(ps),:lang(sd),:lang(ug),:l"
+      ]
+    },
+    {
+      "name": "MessageAttachmentsImage",
+      "rules": 12,
+      "declarations": 21,
+      "conditions": [],
+      "sampleSelectors": [
+        ".cds-root :is([data-cds=MessageAttachmentsImage],[data-cds=MessageAttachmentsVideo])[data-fit=natural]",
+        ".cds-root :is([data-cds=MessageAttachmentsImage],[data-cds=MessageAttachmentsVideo])[data-fit=natural] [data-cds-tile-media]",
+        ".cds-root :is([data-cds=MessageAttachmentsImage],[data-cds=MessageAttachmentsVideo])[data-fit=natural] [data-cds-tile-picture]"
       ]
     },
     {

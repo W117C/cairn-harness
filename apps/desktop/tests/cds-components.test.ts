@@ -1,4 +1,4 @@
-// CDS 组件层判卷（2026-10-28 · 第 734 页；2026-11-12 随上游 5.1231.2 重抽）。
+// CDS 组件层判卷（2026-10-28 · 第 734 页；2026-11-14 随上游 5.11492.5 重抽）。
 //
 // 这批判的不是「颜色对不对」（那是 cds-parity.test.ts），而是：
 //   ① 官方 `data-cds=*` 组件是否**逐条有账**（抽取结果 + Cairn 侧状态表，一条不落）；
@@ -40,13 +40,13 @@ const statuses = new Set(["ported", "no-cairn-counterpart", "no-component-css"])
 
 describe("官方组件规则抽取：48 个组件逐条有账", () => {
   it("components.css 头部记的源摘要 = components.json 的源摘要 = UPSTREAM 引用的渲染层 CSS", () => {
-    expect(manifest.source.sha256).toBe("1be41faf06028ae594f077095575181d3d34008183e1492caedd27a28d9e9fbf");
-    expect(manifest.source.bytes).toBe(246160);
+    expect(manifest.source.sha256).toBe("d28063ca960037bb1f25e652085f450bba0e5fb9bf11418827926c3aa9a1aaf3");
+    expect(manifest.source.bytes).toBe(251161);
     expect(componentsCss).toContain(`sha256: ${manifest.source.sha256}`);
   });
 
-  it("组件数 48、规则 112、声明 468（与抽取脚本现跑一致，改动须重跑脚本）", () => {
-    expect(manifest.totals).toEqual({ components: 48, rules: 112, declarations: 468 });
+  it("组件数 48、规则 114、声明 472（与抽取脚本现跑一致，改动须重跑脚本）", () => {
+    expect(manifest.totals).toEqual({ components: 48, rules: 114, declarations: 472 });
     expect(manifest.components).toHaveLength(48);
     expect(new Set(manifest.components.map((c) => c.name)).size).toBe(48);
   });

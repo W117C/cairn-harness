@@ -1,6 +1,6 @@
 {
   "source": "vendor/cds-official/components.css",
-  "sourceSha256": "1be41faf06028ae594f077095575181d3d34008183e1492caedd27a28d9e9fbf",
+  "sourceSha256": "d28063ca960037bb1f25e652085f450bba0e5fb9bf11418827926c3aa9a1aaf3",
   "note": "48 个 data-cds 组件逐条对账；ported 由 cds-components.css 消费，其余两档原因见 reason。三档含义：ported＝Cairn 消费该组件的官方契约；no-cairn-counterpart＝官方有规则但 Cairn 无对应形态、规则无处落；no-component-css＝官方产物里没有该组件的规则体（只在 Tailwind 工具类里被引用）。本版相对上一版：新增 4 个（CellChartContainer、CoachMark、ShimmerText、Spinner）、上游删掉 1 个（Heatmap）；规则数与声明数取自 components.json（唯一事实源），状态与理由见本表逐条。",
   "components": [
     {
@@ -54,8 +54,8 @@
     {
       "name": "Icon",
       "status": "no-cairn-counterpart",
-      "rules": 10,
-      "declarations": 30,
+      "rules": 12,
+      "declarations": 34,
       "cairn": null,
       "reason": "官方本版补了 RTL 镜像与 data-cds-icon-layer=secondary 层（共 10 条）；但规则针对 Anthropicons 字体字形（:not(svg)），Cairn 全部用 lucide 内联 SVG、尺寸由 size prop 控制，套字体规则会破坏图标。"
     },
