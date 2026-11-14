@@ -39605,3 +39605,46 @@ Error: 未知主会话 provider: agnes-ai（内置 5 家，或在 .agent/provide
 - 认证跑的是 `7fd98f2`（docs 笔），代码面与 `18738ade` 相同；本轮没有再改代码。
 - 认证树已回收；`mutate-verify` 未跑（它要独立长窗口，且当前工作树有另一会话的在飞删除）。
 
+
+## 2026-11-14 · 第 1185 页：四条失效变异锚点改指现实现（提交 `8ad29820`）＋ HEAD 认证复跑
+
+**入口**：第 1184 页记的两道红里，`mutate-needles-check` 是判卷面的真缺口——四条锚点的针脚
+指向的实现已被三个旧提交搬走，变异永远不生效，对应判据等于没有变异证据。本页逐条改指并复杀。
+
+### 一、四条改指（搬走者 → 现实现）
+
+1. `gate-cause-bare-allow-walks-highrisk-path`：`a7a1a03c` 给守卫加了「静态 high 风险」与
+   `web-auto-approve:` 前缀两格，条件从单行变三行 ⇒ 针脚改钉三行条件的第一格，变成 `if (false ...`。
+2. `judge-deny-bypassed`：`6c82de60` 把 `run_shell` 也纳进冻结闸，条件多了一层括号
+   （`&& (isWriteCall(tool, grade) || tool === "run_shell")`）⇒ 针脚按新括号重写。
+3. `worktrees-dirty-badge-hidden`：第 1107/1146 页把逐行 `details.find` 换成按 details 记忆的
+   `dirtyByName` Map ⇒ 针脚改钉 `dirtyByName.get(name) === true`。
+4. `license-label-always-inactive`：`licenseLabel` 随拆分搬到
+   `apps/desktop/src/renderer/components/settings/AboutSection.tsx`，文案改走 `STR.about.*` ⇒
+   `src` 与针脚一起改指。
+
+### 二、验证（隔离树）
+
+- `pnpm mutate-needles-check`：**阻断 0**（原 4）；待复认 4、未覆盖 5 与逐行式 5 与改前同量。
+- `node --import tsx scripts/mutate-verify.mjs --in-worktree=.worktrees/mutate-anchors <4 id>`
+  （树 `8ad2982`）：**4/4 全部被正确杀死**，本次耗时 6.8s，判卷 spawn 8 次／4 条（2 拍×4）；
+  selector 2 拍中位 1.08s／坏拍 0，whole 6 拍中位 0.58s／坏拍 0；最贵 `judge-deny-bypassed` 1.6s。
+- HEAD 认证复跑（`8ad2982`）：**24/25 门绿，红 1 道**（`desktop-test`）；核心
+  **673 文件 / 8113 条全绿**（`maxWorkers=2`，exit 0，两端独占，本趟墙钟 289.71s）；
+  `mutate-needles-check` 门自身 exit=0 15949ms。取料：
+  `outputs/head-cert-8ad2982-2026-11-14-1358/provenance.md`。
+
+### 三、剩下的那道红
+
+`desktop-test`：2 文件 / 3 条红（383 文件、2487 条绿）——
+2 条是 Claude.app 的 CDS 上游漂移（本机 5.11492.5，仓里记录 5.1231.2；`extract-cds-tokens.py --check`
+现读渲染层 CSS 251161B，记录 246160B），1 条是认证树里 Electron 原生宿主起不来。两者都不在本笔改动面，
+且 CDS 重抽要走「重抽 + 真渲染器 `getComputedStyle` 探针」的完整验收，不能只改记录。
+
+### 四、边界
+
+- 本笔只改判卷表（`scripts/lib/mutations/*.mjs`），未动产品代码与判卷文件。
+- 隔离树 `.worktrees/mutate-anchors` 已回收（`git worktree remove`）。
+- 四条锚点的 `expectFail` 指针未改（标题在表格驱动的 `tests/gate-audit.test.ts` 里，选择子抽不出
+  ⇒ 其中一条走整文件跑法；这不是新问题，静态体检已在选择子那一格点名）。
+
