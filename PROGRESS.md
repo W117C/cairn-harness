@@ -40094,3 +40094,19 @@ require 生产模块 `src/main/wallpaper.ts`；合成面只有 AgentApi（preloa
 - F4 的价表仍是占位；美元闸仍按占位价算。裁决文件 §五 给了三种口径，等映射裁决一起改。
 - F3 的 ADR 0003 组件栈裁决未做；预览仍用 Radix Themes，主包只是不再声明它。
 - 并行会话的未提交改动（`src/agent/**`、plugins、desktop 测试等）未触碰。
+
+## 2026-11-15 · 第 1199 页：776c026 的 HEAD 认证（25/25；F3 / 标定闸 / GLM 裁决输入）
+
+**对象**：`776c026`（第 1198 页的代码与文档；`4240634c` 摘依赖、`962548a9` 修 F2d、`776c026` 落裁决文件）。
+
+- `pnpm head-cert-check`：**25/25 门绿**，核心 **678 文件 / 8142 条**（`--maxWorkers=2`），exit 0；
+  六维全过；认证树已回收；逐条日志 `/tmp/dsh-head-cert-776c026`；凭证
+  `outputs/head-cert-776c026-2026-11-14-1824/provenance.md`。
+- 门面里的 `desktop-test=0`；工作树同一套桌面判卷 390 文件 / 2520 条绿（含并行会话新增的 2 条），
+  `pnpm --filter cairn-desktop build` 绿（去掉主包 Radix Themes 声明后构建无变化）。
+- `pnpm routing-check` 40 ✅ / 0 ❌；`pnpm docs-check` 全绿。
+- 认证面有 5 项「未证」（gate-check / autonomy-check / compaction-check / provider:check / gym-check
+  各 1 条），与第 1190 页同形，属门自己登记的连网/凭据限制，不是本页新增。
+
+**边界**：F4 的价表仍是占位；本页只证明「摘依赖 + 标定闸修形 + 裁决文件」这一笔的 HEAD 绿。
+认证树回收后失败日志不保留，下一笔若红先 `--keep-tree`（第 1196 页的教训）。
