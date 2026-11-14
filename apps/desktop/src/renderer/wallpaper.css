@@ -1,0 +1,70 @@
+/* 壁纸层与玻璃表面（2026-11-14 · 设计规格 §4/§5）。
+ *
+ * 色值纪律：本文件**零字面色值**（连注释里也不写色值）——画布色、文字色、玻璃色、
+ * 地板权重全部由 state/wallpaper.ts 从真实计算样式读出后写成 CSS 变量（--cw-*）。变量契约：
+ *   --cw-canvas           画布色（主题画布色）
+ *   --cw-glass            玻璃叠色，**alpha 写进颜色值本身**（不是另设一个变量）
+ *   --cw-floor            可读性地板权重，**百分比字符串**（数值由模型算，不手抄）
+ *   --cw-glass-blur       玻璃模糊半径
+ *   --cw-wallpaper-opacity / --cw-scrim  壁纸自身不透明度 / 压暗强度
+ *
+ * 地板公式（与 derived/wallpaper-contrast.ts 的 glassSurface 逐字对应）：
+ *   color-mix(in srgb, 画布 floor%, 玻璃 (1-floor)%)
+ *   ⇒ 合成后 alpha = floor + (1-floor)×玻璃自身 alpha，滑杆压不动地板。
+ */
+
+/* ① 画布让位：vendored 主题只让出了它自己画的三处，**我们自己的 body 画布仍在**
+   （styles.css 的 body 那条画布底色）——不接管就会「选了壁纸但什么也没变」。 */
+body[data-we-wallpaper] {
+  background: transparent;
+}
+
+/* ② 壁纸层：落在应用壳之下、html 画布之上（vendored 主题的原话：the layer sits
+   above this canvas and below the shell）。z-index 用负值而不是 0：z-index:0 的定位
+   元素与 .app（position: relative）同层，只靠 DOM 顺序压住，脆；负层稳定地落在所有
+   流内内容之下。 */
+body[data-we-wallpaper] .cw-layer {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: var(--cw-wallpaper-opacity, 1);
+}
+
+body[data-we-wallpaper] .cw-media {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* scrim = 画布色的一层 veil：把壁纸拉回主题方向（亮色主题提亮、暗色主题压暗）。 */
+body[data-we-wallpaper] .cw-scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--cw-canvas);
+  opacity: var(--cw-scrim, 0.35);
+}
+
+/* ③ 玻璃面（五类，业主裁决含左栏）：对话列 / composer / 检查器与右窗 / 浮层 / 左栏。
+   互为兄弟层，**不做嵌套玻璃**（Chromium 的 backdrop-filter 嵌套采样会错乱）。
+   地板是固定权重，滑杆只改玻璃那一项 ⇒ 压不动可读性地板。 */
+body[data-we-wallpaper] :is(
+  .main,
+  .composer-card,
+  .inspector-col,
+  .modal-card,
+  .side-wrap
+) {
+  background: color-mix(in srgb, var(--cw-canvas) var(--cw-floor), var(--cw-glass) calc(100% - var(--cw-floor)));
+  backdrop-filter: blur(var(--cw-glass-blur, 14px));
+  -webkit-backdrop-filter: blur(var(--cw-glass-blur, 14px));
+}
+
+/* ④ 左栏真正画底色的是 .side（.side-wrap 只是外壳）：玻璃面留在 .side-wrap，
+   .side 的实体底色让位——否则玻璃被它整个盖住，壁纸透不过来。
+   选择器权重与 vendored 主题的 body[data-dsh-claude-style] .side 相同、位置更靠后
+   ⇒ 覆盖成立（改 vendored 主题是一字节都不许的）。 */
+body[data-we-wallpaper] :is(.side) {
+  background: transparent;
+}
