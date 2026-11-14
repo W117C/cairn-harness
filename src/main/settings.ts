@@ -45,6 +45,27 @@ export type LocaleSetting = "zh-CN" | "en-US";
  *  代价是类型不再是封闭联合 ⇒ 判据必须落在运行时那一道：`validateSettings` 里问 `isKnownProviderId`。 */
 export type ProviderKind = "demo" | (typeof ENV_KEYED_PROVIDERS)[number] | (string & {});
 
+/** 壁纸类型：none = 无壁纸；image / video = 用户自选的本地文件。
+ *  2026-11-14（设计规格 §3.4）：壁纸是**应用内**对话背后的一层，不是系统桌面壁纸。
+ *  kind=none 时 path 必为 null——「有路径才有壁纸」是单一事实，两个字段不许各说各话。 */
+export type WallpaperKind = "none" | "image" | "video";
+
+export interface WallpaperSettings {
+  kind: WallpaperKind;
+  /** 绝对路径。只在主进程与 settings.json 里；渲染层经 cairn-wallpaper:// 协议取媒体。 */
+  path: string | null;
+  /** 壁纸自身不透明度 0..1。 */
+  opacity: number;
+  /** 压暗强度 0..1（把壁纸拉回主题方向）。 */
+  scrim: number;
+  /** 玻璃透明度 0..0.6：只改玻璃那一项，压不动可读性地板。 */
+  glassAlpha: number;
+  /** 主进程单调自增，用于给媒体 URL 破缓存；**只在 path 变化时自增**（滑杆不得重载媒体）。 */
+  revision: number;
+}
+
+export const WALLPAPER_KINDS: readonly WallpaperKind[] = ["none", "image", "video"];
+
 export interface AppSettings {
   layout: LayoutState;
   mode: PermissionMode;
@@ -140,6 +161,8 @@ export interface AppSettings {
    *  → --size-scale .833/1/1.167/1.333/1.667，乘在每一个几何 calc 上（控件高/圆角/间距/内边距）。
    *  "2" = 不动 --size-scale（维持 1）⇒ 缺省对既有用户逐像素零变化。 */
   uiSize: UiSizeSetting;
+  /** 桌面端壁纸层（2026-11-14 · 设计规格 §3.4）。默认关：壁纸是功耗敏感项，不主动开。 */
+  wallpaper: WallpaperSettings;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -192,6 +215,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ctrlTabCycle: true,
   textSize: "md",
   uiSize: "2",
+  // 壁纸层默认关：功耗敏感项（视频解码持续耗电），不主动开（设计规格 §6）。
+  wallpaper: { kind: "none", path: null, opacity: 1, scrim: 0.35, glassAlpha: 0.25, revision: 0 },
 };
 
 export const SAFE_MODES = ["off", "report", "gate"] as const;
@@ -219,6 +244,36 @@ export function isPersistableProvider(v: unknown): boolean {
 
 function isPanelId(v: unknown): v is PanelId {
   return typeof v === "string" && (PANEL_IDS as readonly string[]).includes(v);
+}
+
+/** 0..1 的滑杆值：越界/非数回默认（坏值不落库，与既有偏好校验同形）。 */
+function unitInterval(v: unknown, fallback: number): number {
+  return typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1 ? v : fallback;
+}
+
+/** 玻璃透明度：0..1 再收到 0.6（玻璃再厚就吃掉可读性地板的余量）。 */
+function glassAlphaOf(v: unknown, fallback: number): number {
+  return Math.min(0.6, unitInterval(v, fallback));
+}
+
+/** 壁纸字段：kind 白名单、path 与 kind 从属（kind=none ⇒ path 归零）、revision 非负整数。 */
+function validateWallpaper(raw: unknown): WallpaperSettings {
+  const d = DEFAULT_SETTINGS.wallpaper;
+  if (typeof raw !== "object" || raw === null) return { ...d };
+  const r = raw as Record<string, unknown>;
+  const kind = WALLPAPER_KINDS.includes(r.kind as WallpaperKind) ? (r.kind as WallpaperKind) : d.kind;
+  const path =
+    typeof r.path === "string" && r.path.trim() !== "" && r.path.length <= 4096 ? r.path : null;
+  const revision =
+    typeof r.revision === "number" && Number.isInteger(r.revision) && r.revision >= 0 ? r.revision : d.revision;
+  return {
+    kind,
+    path: kind === "none" ? null : path,
+    opacity: unitInterval(r.opacity, d.opacity),
+    scrim: unitInterval(r.scrim, d.scrim),
+    glassAlpha: glassAlphaOf(r.glassAlpha, d.glassAlpha),
+    revision,
+  };
 }
 
 /** 逐字段校验：合法取原值，非法/缺失取默认（验收②：非法布局值回退默认）。
@@ -317,6 +372,7 @@ export function validateSettings(raw: unknown): AppSettings {
       typeof r.workspace === "string" && r.workspace.trim() !== "" && r.workspace.length <= 4096
         ? r.workspace
         : d.workspace,
+    wallpaper: validateWallpaper(r.wallpaper),
   };
 }
 
