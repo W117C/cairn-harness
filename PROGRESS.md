@@ -39808,3 +39808,45 @@ toolbar 选择器的 `[data-cds-contrast=more]` 扩展。要收口得整批重�
 - 认证树已回收；常驻只余 `gate-mutate-verify`（规则 120 判定为可留残树）。
 - 本页不重述前几页的逐条改动；CDS / 插件 / fs-race 的读数分别在第 1188、1189 页。
 
+
+## 2026-11-14 · 第 1191 页：fs-race 收官、置顶进目录、分支裁决与工作树归位（`dba71aa6` / `ba6807db`）
+
+### 一、剩余 10 条 fs-race 全部改形（`dba71aa6`）
+
+- 新增 `src/fs-safe-read.ts`：一次 open、fstat、按 size 定长读；trust 指纹与 canary 两处改走它。
+- `src/main/session-log.ts`：tail 的 stat 改到句柄上；`src/orchestration/local-backend.ts` 三处
+  交付/回滚哈希改成句柄内读 + inode 对照（与 mutation-lock 同法）。
+- 脚本面：`verify-census` 走 openSync/fstatSync/readFileSync(fd)；`motion-policy-check` 用
+  `readdirSync(..., { withFileTypes: true })` 取代逐路径 stat；`align-references` 去掉
+  existsSync→readFileSync 的 check-then-use。
+- 判据：`fs-safe-read` 3 条；trust／session-log 67 条；canary／orchestration／verify-census／motion
+  113 条——合计 183 条绿；typecheck 0。CodeQL 侧要等下一次分析收口。
+
+### 二、置顶消息进对话目录（`ba6807db`）
+
+- `workbench.ts` 由 `pinnedEventIds` × assistant 行算出 `pinnedRounds`；`OutlinePanel` 在对应轮
+  行上显示 Pin（`aria-label="含置顶消息"`），**不造新行**——目录仍是「跳到某一轮」的单一语义。
+- 同时把 `draftIds` 判卷改钉**真实消费者**：原断言 `WorkbenchView` 含 `draftIds,` 钉的是一行
+  没人读的解构（假接线）；现在钉 `WorkbenchSidebarHost`，并删掉 WorkbenchView 里的死解构。
+- 判据：`stream-nav` ＋ `composer-drafts` 30 条绿；桌面 tsc 0；`renderer-layer-check` 绿（241 文件）。
+
+### 三、4 支独有分支的裁决（执行）
+
+- **删除** `chore/deps-batch-20261108`：其 tip 树与 `chore/deps-20261109` **逐字相同**
+  （两树同为 `b7c880da…`），后者已推 `origin`；被删掉的只是 271 笔旧 churn。删除前 tip＝`1c8c898d`
+  （留在此处备查；内容在 `chore/deps-20261109` 里完整保留）。
+- **保留** `chore/deps-20261109`（React 19 候选，origin 有）、`chore/esbuild-20261109`
+  （工具升级组，origin 有）、`chore/public-repo-audit-20261108`（谱系审计，本地）。
+
+### 四、工作树归位
+
+- 另一会话留下的 **33 个已跟踪删除**（2 个 `vendor/dsh-claude-style/fonts` 字体 ＋ 31 张 `outputs/` PNG）
+  **已按 HEAD 复原**：字体被 `font-resources` 判卷逐字节钉住且 CSS 仍按路径引用；`outputs/` 是证据面，
+  删除没有台账依据。复原后工作树对 HEAD 干净。
+- 唯一未跟踪文件 `docs/superpowers/plans/2026-11-14-ds-bot-benchmark.md`（67KB，另一会话 23:01 落盘）
+  **未动**：不是本笔产物，也不替它入库。
+
+### 五、mutate-verify 整表
+
+MUTATION_PLACEHOLDER
+

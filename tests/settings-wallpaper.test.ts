@@ -60,6 +60,6 @@ describe("壁纸设置", () => {
 
   it("不进偏好导出：路径是机器本地的，跨机搬运只会指向不存在的文件", () => {
     expect((PREFERENCE_KEYS as readonly string[]).includes("wallpaper")).toBe(false);
-    expect(pickPreferences(DEFAULT_SETTINGS).wallpaper).toBeUndefined();
+    expect(Object.keys(pickPreferences(DEFAULT_SETTINGS))).not.toContain("wallpaper");
   });
 });

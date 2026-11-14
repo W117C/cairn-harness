@@ -1,7 +1,7 @@
 // Electron main 装配根（M1-6）：kernel-host 单点装配 + IPC 薄映射。
 // 装载通道：entry.cjs 注册 repo 根 tsx 后 require 本 TS 源——core 链零打包零漂移
 // （esbuild 打包会把 agent-runner 的 ROOT 漂进 <repo>/apps，fixtures 运行时静默落空）。
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, Notification, powerSaveBlocker, safeStorage, screen, shell, webContents, type IpcMainInvokeEvent, type WebContents } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, Notification, powerSaveBlocker, protocol, safeStorage, screen, shell, webContents, type IpcMainInvokeEvent, type WebContents } from "electron";
 import { clampToWorkArea, readWindowState, writeWindowState } from "./window-state";
 import { bootBackgroundFor, normalizeThemePreference, resolveBootTheme, type ThemePreference } from "./boot-theme";
 import { windowVibrancyOptions } from "./window-vibrancy";
@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import { INVOKE_CHANNELS, PUSH_CHANNELS } from "./channels";
 import { installAppMenu } from "./menu";
 import { handleAttachmentThumb } from "./thumb";
+import { handleWallpaperMedia, openWallpaperStream, registerWallpaperScheme, WALLPAPER_SCHEME } from "./wallpaper";
 import type { InvokeChannel, PushChannel } from "./channels";
 // SEMA §3.5/§12：IPC_PROTOCOL_VERSION 是本文件从协议面取的唯一**值**（其余全 type import）——
 // wired 表的 protocolVersion 行把它递给 renderer 比对构建期注入的期望版本。
@@ -1442,9 +1443,25 @@ function requestRestart(): void {
   app.quit();
 }
 
+// 壁纸协议必须在 app ready **之前**登记（Electron：registerSchemesAsPrivileged 只在
+// ready 前有效），否则这个 scheme 拿不到标准/安全 origin 语义，渲染层加载它会被
+// 当成不透明来源 ⇒ 表现是「壁纸选了但什么也没变」。
+registerWallpaperScheme((entry) => { protocol.registerSchemesAsPrivileged([entry]); });
+
 app.whenReady().then(() => {
   // 副进程：锁已被别的实例持有，退出即可。return 挡在一切装配之前（菜单/调度器/BYOK/建窗）。
   if (!primaryInstance) return;
+  // 壁纸媒体：只服务设置里当前那一个文件（白名单＝当前路径），其余一律 404。
+  protocol.handle(WALLPAPER_SCHEME, async (request) => {
+    const url = new URL(request.url);
+    if (url.hostname !== "media" || url.pathname !== "/current") return new Response("not found", { status: 404 });
+    const s = await getSettings();
+    return handleWallpaperMedia({
+      currentPath: s.wallpaper.kind === "none" ? null : s.wallpaper.path,
+      range: request.headers.get("range"),
+      open: openWallpaperStream,
+    });
+  });
   if (process.env.CAIRN_SMOKE === "1") console.error("[cairn-smoke] app ready");
   if (process.platform === "darwin" && appIcon !== undefined) app.dock?.setIcon(appIcon);
   // 主题真相在 settings.json；ready 后先同步，再建窗（createWindow 里的 bootBackground 也读同一字段）。
