@@ -40045,3 +40045,52 @@ require 生产模块 `src/main/wallpaper.ts`；合成面只有 AgentApi（preloa
 
 **代价与改正**：认证树回收会把唯一失败日志带走；下一笔认证若再红，先 `--keep-tree` 留树再回收。
 凭证：`outputs/head-cert-97b24a8-2026-11-14-1806/provenance.md`（只有汇总，没有逐条失败）。
+
+## 2026-11-15 · 第 1198 页：桌面死依赖摘除、路由标定闸修形与 GLM 价表裁决输入（`4240634c` / `962548a9`）
+
+**背景**：第 1194 页 F3（`@radix-ui/themes` 死依赖）与 F4（GLM 三档未标定、占位价进美元闸）都标注
+「待裁决」。本页把能独立修的两半收口，把必须裁决的那半写成可复算的裁决输入。
+
+### 一、F3：主包摘掉未使用的 `@radix-ui/themes`（`4240634c`）
+
+- 事实：`apps/desktop/src/**` 零 import；唯一消费者是独立 workspace `apps/desktop/preview`
+  （自己声明了同名依赖，不动）。主包声明它 = 清单与 import 面不一致。
+- 改动：`apps/desktop/package.json` 删一行；`pnpm install --lockfile-only --offline` 只动 3 行
+  importer 条目；预览侧保留。
+- 边界：workspace 整体安装仍会为 preview 装这个包，所以这不是「省下 node_modules 体积」；
+  收益是主包清单与生产 filter 安装面不再带死依赖。ADR 0003 的组件栈裁决仍未做，本页不代替。
+
+### 二、F4：官方价读到了，但价梯有冲突（不改表）
+
+- 官方定价页 2026-11-15 实读（CNY/百万 tokens）：GLM-5.3 8/28、GLM-5.2 8/28、GLM-5.3-Flash 0.8/2.8；
+  汇率取 2026-11-13 ECB 1 USD = 6.6719 CNY。折算 USD 见裁决文件。
+- 同页核对模型名：**官方全表没有 `glm-5.2-pro`**；`glm-strong` 现在指向它（`src/providers/registry.ts:121`），
+  强档一旦被选中会 404。旗舰是 `glm-5.3`（1M 上下文）。
+- 价梯冲突：官方文本模型最高价就是 8/28，5.2 与 5.3 同价 ⇒ 若 standard=5.2、strong=5.3，
+  `routing-check` F2c 的「三档可区分」和 bandit 的「贵档更贵」都塌；若 standard=5.1（6/24）、
+  strong=5.3，则默认模型 `glm-5.2` 失去价表键。
+- 隔离 worktree 探针（HEAD `81596a8d`，只改 pricing/registry，跑五文件 57 条）：同价映射红 10 条、
+  5.1 映射红 17 条。两趟都不是「改几个数字」⇒ 写裁决输入，不改表。
+- 裁决文件：`docs/glm-pricing-decision-2026-11-15.md`（官方价、汇率、两处缺陷、A/B/C 三案、
+  美元闸三口径与建议）。**未改价表、未改 `glm-strong`、未改美元闸。**
+
+### 三、路由标定闸修形（`962548a9`）
+
+- `scripts/routing-check.ts` F2d 旧写法要求线上**至少有一行未标定**（`unpriced.length > 0`）——
+  等于把「全部标定完」这个目标态判红。改成「未标定数 < 总行数」，并用**合成表**自证：
+  占位行被 `unpricedModels` 列出、已标定行不被列出。F2e 只留 Anthropic 作为线上实测证人，
+  不再把 GLM 钉死在未标定态。这不是放松判据：判据从「厂商必须留一行占位」改成
+  「机制必须能分辨」，后者与线上标定进度解耦。
+
+### 四、读数
+
+- `pnpm routing-check`：40 ✅ / 0 ❌（含 F2d/F2d2/F2e）。
+- 桌面：390 文件 / 2520 条绿（含 boundary）；`pnpm --filter cairn-desktop build` 绿。
+- `node --import tsx scripts/typecheck.ts`：0 报错。
+- `pnpm docs-check`：本页落库后复跑。
+
+### 五、边界
+
+- F4 的价表仍是占位；美元闸仍按占位价算。裁决文件 §五 给了三种口径，等映射裁决一起改。
+- F3 的 ADR 0003 组件栈裁决未做；预览仍用 Radix Themes，主包只是不再声明它。
+- 并行会话的未提交改动（`src/agent/**`、plugins、desktop 测试等）未触碰。
