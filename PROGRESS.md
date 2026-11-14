@@ -39498,3 +39498,80 @@ Error: 未知主会话 provider: agnes-ai（内置 5 家，或在 .agent/provide
 - `tests/` 未动：仍有 **106 处**未用绑定（核心 66 + 桌面 40）留作下一批单独成批（不与告警清零混在一个 diff 里）。
 - 未跑：`pnpm gates` / `head-cert-check` / `mutate-verify`（三者量 HEAD，本批未提交；本机新建 worktree 受沙箱限制，跑不了）。
 - 未提交、未推送。公开线（AGPL `main`）要并本批时按老规矩走「移植 + 公开门禁」；其中 `session-provider.ts` 那条告警在公开线并入后自动关闭。
+
+## 2026-11-14 · 第 1183 页：扫描告警收口第一批——依赖抬线＋A2A 传输加固（提交 18738ade）
+
+**入口**：接第 1182 页的尾巴。那一页写完时是**未提交**状态（45 文件；页面自报的 55 红是当时沙箱
+下的宿主限制）。本轮先把它落库为 `50cae991`，再按「先修漏洞」处理 GitHub 开放告警里能当场修
+的部分；不能当场修或不该改的逐条登记理由。
+
+### 一、两个面现读（2026-11-14）
+
+- Code Scanning 开放 **120 条**：77 条 `js/unused-local-variable` ＋ 4 条 `js/useless-assignment-to-local`
+  （第 1182 页已清，等下一次分析收口）、16 条 `js/file-system-race`、其余 7 条单点
+  （ReDoS／栈外泄／口令哈希／三处 HTML 洗料／文件数据出网／两处恒真假条件／字符串当正则）。
+- `pnpm audit`：5 条 `hono`（1 low ＋ 4 moderate），**全部**经 `@modelcontextprotocol/sdk` 传递；
+  补丁线 4.13.16。
+
+### 二、依赖：hono 抬到补丁线
+
+- `pnpm-workspace.yaml` 增加 override `hono: "^4.13.16"`，实装 **4.13.18**；`pnpm-lock.yaml` 17 行
+  变动（9＋／8−）。
+- 五条一并关闭：GHSA-4m76-xfj5-7975（mount 前缀绕过中间件）、GHSA-h7mg-cq63-vhpq（RegExpRouter
+  跳过通配中间件）、GHSA-46wx-v44x-9hh2（csrf 不查 text/ping）、GHSA-4h7h-rv7c-7m2v
+  （validator('form') 在 multipart 带额外参数时跳过校验）、GHSA-3gg2-335m-rxc6（css helper 转义）。
+- 现读：`pnpm audit` 与 `pnpm audit --prod` 均 **No known vulnerabilities found**。
+- 抬线而不是升 SDK：SDK 的 `^4` 范围容得下补丁线——与第 1181 页 `@hono/node-server` 同一条理由。
+
+### 三、A2A 传输：两处真缺陷（先红后绿）
+
+1. **多项式回溯**（CodeQL `js/polynomial-redos`）：`/^Bearer\s+(.+)$/` 在「Bearer 」后接长串空白时
+   `\s+` 与 `(.+)` 互相回溯；改成手写线性切分。语义逐条对齐：多空白仍通、裸 scheme 仍 401、
+   大小写仍敏感、token 仍 trim。
+2. **内部异常外泄**（CodeQL `js/stack-trace-exposure`）：五个出口（`dispatchA2ARequest` 的非协议异常、
+   SSE catch、读体失败、JSON 解析失败、500 兜底）不再回 `error.message`，统一
+   `internal error`／`parse error`／`request body could not be read`；`A2AError` 的协议消息原样保留
+   （-32001／-32601／-32602 各有判卷钉着）。
+- 新增 2 条判卷：`does not echo internal error messages to the client`（断言正文不含探针字符串）、
+  `tolerates extra whitespace after the scheme ...`（含 8000 空白的头判 401，不挂起不放行）。
+
+### 四、登记不修（逐条理由）
+
+1. **`js/insufficient-password-hash`（`src/main/provider-keys.ts#customProviderKeyRoute`）**：sha256 的是 **route 指纹**
+   （id＋protocol＋baseURL＋apiKeyEnv **变量名**），不是口令；真钥匙经 backend 进 OS 安全存储。
+   换哈希不改变任何攻击面，只会把「配置指纹」误叫成「口令存储」。
+2. **`js/incomplete-multi-character-sanitization` ×3（read_doc.ts）**：输出是纯文本；渲染层没有
+   `dangerouslySetInnerHTML`（`markdown.tsx:4` 明写这条纪律），全走 React 文本节点 ⇒ 无 HTML sink。
+3. **`js/file-access-to-http`（`src/agent/plugins/hooks.ts#defaultFetch`）**：hook 配置里的 URL → fetch 是 hooks 功能的定义；
+   同一份配置本来就能跑 shell，出网不是新增信任边界。
+4. **`js/file-system-race` ×12**：其中 4 条（mutation-lock／preferences／plugin-install-registry／
+   diagnostics-bundle）第 1182 批已按「句柄内读＋inode 对照」加固；查询对「stat 后读」这个**形状**
+   本身触发、不区分对照，所以告警仍在。其余为只读工具／保守失效（读后复查上限）／装机目录与进程
+   同权限面。
+5. **`js/trivial-conditional` ×2、`js/string-instead-of-regex` ×1**：质量面，非安全；登记。
+
+没有 dismiss 任何 GitHub 告警——dismiss 是外部面动作，裁决留给业主。
+
+### 五、验证（覆盖提交 18738ade 的工作树）
+
+- 类型：`node --import tsx scripts/typecheck.ts` 0 条报错。
+- 核心全量：**673 文件 / 8113 条全绿**（`--maxWorkers=2`，exit 0；本轮新增 2 条判卷）。
+- 第 1182 页那批落库为 `50cae991`，同轮全量 **673 / 8111 全绿**——页面里那 55 红在
+  danger-full-access 下**不再复现**。
+- A2A 子集：5 文件 / 19 条全绿。
+- 依赖面：`pnpm audit`（含 dev）与 `--prod` 全清。
+- 桌面（干净树 `18738ade`，`VITEST_MAX_WORKERS=2`）：**383 文件 / 2487 条绿**、2 文件 3 条红——
+  2 条是 Claude.app 的 CDS 上游漂移（`extract-cds-tokens.py --check` 现读 251161B，记录里是 246160B），
+  1 条是这棵临时树里 Electron 没装成（`Electron failed to install correctly`）；三条都与本批改动无关。
+  主树那趟的 4 红同理：2 条上游漂移 ＋ 2 条是另一会话删掉字体（干净树里字体判卷全绿）。
+- 未跑：`pnpm gates` 整趟、`mutate-verify`、`head-cert-check`（三者量 HEAD，需要独立树与长窗口；
+  本批未扩张到那个面）。
+
+### 六、边界
+
+- 未 push；未动公开线（AGPL `main`）。公开线要并本批时走「移植＋公开门禁」的老规矩。
+- 工作树里另有**另一会话**的 33 个删除（`vendor/dsh-claude-style/fonts/` 两个字体 ＋ `outputs/` 31 张
+  PNG），本批未纳入、未还原：其中两个字体被 `font-resources.test.ts` 逐字节钉住、且
+  `dsh-claude-style.css` 第 9/11 行仍按路径引用 ⇒ 删了就是真实回归，等那名业主自己收口。
+- `tests/` 仍有 106 处未用绑定（第 1182 页登记），本批未动。
+
