@@ -15,7 +15,7 @@ import { Orchestrator, scriptedWorkerModel } from "../src/agent/orchestrator";
 import type { RespawnArgs } from "../src/agent/recovery";
 import { DEFAULT_MODEL_TABLE } from "../src/providers/registry";
 import { createRng, newBanditState, nextRandom, selectArm, update, updatePriced } from "../src/routing/bandit";
-import { costUsd, DEFAULT_PRICE_TABLE, priceCoverage, priceOf, unpricedModels } from "../src/routing/pricing";
+import { costUsd, DEFAULT_PRICE_TABLE, priceCoverage, priceOf, unpricedModels, type ModelPrice } from "../src/routing/pricing";
 import { routeFor } from "../src/routing/policy";
 import { runCascade } from "../src/routing/cascade";
 import { DEFAULT_SETTINGS, SettingsStore, validateSettings } from "../src/main/settings";
@@ -303,13 +303,23 @@ console.log("[routing-check] F 价格表接线（覆盖护栏 / 真钱折算 / �
     check(bad.length === 0, "F2c 每家三档的 blended 成本可区分且 cheap 最低（bandit 代价项的前提）", bad.join("；"));
     console.log("  ℹ️ 官方价倒挂（非缺陷，档位语义待裁决）：" + (inversions.length > 0 ? inversions.join("；") : "无"));
   }
-  // F2d：标定来源可审计——未标定行必须显式列出来，而不是混在数表里当实测
+  // F2d：标定来源可审计——未标定行必须显式列出来，而不是混在数表里当实测。
+  // 不要求「线上必须留一行占位」：全标定是目标态，不是漂移；机制用合成表自证。
+  // （2026-11-15：旧写法 `unpriced.length > 0` 会把「全部标定完」判红——判据把自己的现状当契约。）
   {
     const unpriced = unpricedModels();
-    check(unpriced.length > 0 && unpriced.length < Object.keys(DEFAULT_PRICE_TABLE).length,
-      "F2d 占位价与实测价可分辨（未标定 " + String(unpriced.length) + " 行：" + unpriced.join(",") + "）", "全占位或全实测都算漂");
-    check(priceOf("anthropic-standard").calibrated === true && priceOf("glm-flash").calibrated !== true,
-      "F2e Anthropic 行认作实测、GLM 行不认（官方页没抓到数就不打标）");
+    check(unpriced.length < Object.keys(DEFAULT_PRICE_TABLE).length,
+      "F2d 占位价与实测价可分辨（未标定 " + String(unpriced.length) + " 行：" + unpriced.join(",") + "）", "全占位算漂");
+    const synthetic: Record<string, ModelPrice> = {
+      ...DEFAULT_PRICE_TABLE,
+      "synthetic-unpriced": { inputPerMTok: 1, outputPerMTok: 2, cacheReadPerMTok: null, cacheWritePerMTok: null },
+      "synthetic-priced": { inputPerMTok: 1, outputPerMTok: 2, cacheReadPerMTok: null, cacheWritePerMTok: null, calibrated: true },
+    };
+    const flagged = unpricedModels(synthetic);
+    check(flagged.includes("synthetic-unpriced") && !flagged.includes("synthetic-priced"),
+      "F2d2 合成表：未标定行被列出、已标定行不被列出（机制自证，不靠线上留占位）", flagged.join(","));
+    check(priceOf("anthropic-standard").calibrated === true,
+      "F2e Anthropic 行认作实测（官方页读到过）");
   }
   // F3/F4：真钱代价驱动的 bandit 收敛（cheap $0.2 vs strong $8 每 MTok，每轮 500 token）
   const moneyRun = (prices: { cheap: number; strong: number }, seed = 42, envSeed = 7): { cheapPicks: number; strongPicks: number } => {
