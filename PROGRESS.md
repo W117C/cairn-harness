@@ -39755,3 +39755,32 @@ toolbar 选择器的 `[data-cds-contrast=more]` 扩展。要收口得整批重�
 - 未跑 `mutate-verify` 整表；本笔的深度判据已按「去掉守卫必红」做过反向验证。
 - 桌面全量跑在干净树 `f1f40649`；主树那 33 个删除仍是另一会话的在飞改动，未纳入。
 
+
+## 2026-11-14 · 第 1189 页：两条 file-system-race 真修（提交 `8fe17161`）
+
+**入口**：第 1183 页登记的 fs-race 里，license 导入与附件缩略图是「按路径 stat → 按路径 read」
+的同形：中间被换文件，帽量的是 A、读的是 B。与 2026-11-13 的 mutation-lock／read_doc 同一条修法——
+**同一句柄上量、读、复查**。
+
+### 一、改动
+
+1. `src/main/license.ts#importLicenseFile`：`open(sourcePath, "r")` 一次；句柄内 `stat` → 定长读
+   → 读后按文本字节复查 64KiB 帽。换路径不再能让「量过的字节」与「读到的字节」分家。
+2. `apps/desktop/src/main/thumb.ts#handleAttachmentThumb`：同上，25MB 帽；读到的实际字节再过一次帽。
+
+两处都保持原有返回形状与错误文案，只换取数方式。
+
+### 二、验证
+
+- 定向：`license-import` / `license` / `license-store-init` **17 条绿**；
+  `wave5-main-regressions` ＋ `attachment-thumb` **11 条绿**。
+- 核心全量：**673 文件 / 8114 条全绿**（`--maxWorkers=2`，exit 0）。
+- 桌面（干净树 `8fe17161`，`VITEST_MAX_WORKERS=2`）：**385 文件 / 2490 条全绿**，boundary-check 绿。
+
+### 三、边界
+
+- CodeQL 侧要等下一次分析才会收口（本地不跑 query）；本条只登记「同形修法已落地」。
+- 剩余 fs-race（trust／canary／session-log／local-backend／脚本面）仍按第 1183 页逐条理由登记，
+  本轮没有顺手改。
+- 第 1188 页那笔的核心全量是 8113 条；本页多出的 1 条是资源深度判据（第 1188 页新增）。
+
