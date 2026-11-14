@@ -131,6 +131,13 @@ describe("对话目录面板（真 HTML）", () => {
     expect(html).toContain('aria-label="关闭目录"');
   });
 
+  it("含置顶消息的轮次带 Pin 标记（只标有置顶的那一轮）", () => {
+    expect(render()).not.toContain("含置顶消息");
+    const html = render({ pinnedRounds: new Set([2]) });
+    expect((html.match(/aria-label="含置顶消息"/g) ?? []).length).toBe(1);
+    expect(html).toContain("ol-pin");
+  });
+
   it("有折叠 ⇒ 动作钮翻面为「展开全部」", () => {
     const html = render({ anyFolded: true });
     expect(html).toContain("展开全部");

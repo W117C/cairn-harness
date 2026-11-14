@@ -39,10 +39,12 @@ describe("Composer 每会话草稿", () => {
     expect(sidebar).toContain('className="s-draft"');
     expect(sidebar).toContain("hasDraft={props.draftIds?.has(draftKeyFor(s.workspace, s.id)) === true || props.draftIds?.has(s.id) === true}");
     const app = readAppSurface();
-    const workbench = readRendererFile("panes/WorkbenchView.tsx");
     expect(app).toContain("useState<Set<string>>(() => readDraftIds())");
     expect(app).toContain("onDraftPresence={noteDraft}");
-    expect(workbench).toContain("draftIds,");
+    // 断言落在**真正的消费者**上：WorkbenchView 只是把整包 deps 透传给宿主，
+    // draftIds 由 WorkbenchSidebarHost 取用并送进 Sidebar（原来的 toContain("draftIds,")
+    // 钉的是 WorkbenchView 里一行没人读的解构，属假接线）。
+    expect(readRendererFile("panes/WorkbenchSidebarHost.tsx")).toContain("draftIds,");
   });
 
   it("附件 chip 与草稿同键分桶（切会话不带着别人选的附件去发）", () => {

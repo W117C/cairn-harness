@@ -4,10 +4,12 @@
 //   键盘：↑↓ 选行、Enter 跳（焦点在面板内即生效）；Esc 由 App 全局浮层链统一处理（一处事实源，不在这里抢）。
 //   跳转不关面板（可连着跳着看）；「折叠全部/展开全部」一个钮翻面（有任意折叠即显示展开全部）。
 import { useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { Pin, X } from "lucide-react";
 
 export function OutlinePanel(props: {
   turns: readonly { round: number; text: string }[];
+  /** 含置顶消息的轮次（2026-11-14）：只标轮次，不造新行。 */
+  pinnedRounds?: ReadonlySet<number>;
   /** 视口当前所在轮（scrollspy）；null = 还没算出来。 */
   currentRound: number | null;
   /** 有任意折叠 ⇒ 动作钮翻面为「展开全部」。 */
@@ -62,6 +64,9 @@ export function OutlinePanel(props: {
           >
             <span className="ol-round">第 {String(t.round)} 轮</span>
             <span className="ol-sum">{t.text}</span>
+            {props.pinnedRounds?.has(t.round) === true && (
+              <Pin size={12} className="ol-pin" aria-label="含置顶消息" />
+            )}
           </button>
         ))}
       </div>

@@ -741,6 +741,16 @@ export function useWorkbenchModel() {
   }, [streamRows, chosen]);
   // 目录数据（v7.2）：用户轮列表（round + 首句）；≥2 轮才出目录入口（1 轮没有可跳的目标）。
   const outlineTurns = useMemo(() => turnSummaries(streamRows), [streamRows]);
+  // 置顶消息进目录（2026-11-14）：pin 此前只落 sidecar、大纲零呈现。按 assistant 行的 eventId
+  // 反查它落在哪一轮，只标轮次、不造新行——目录仍是「跳到某一轮」的单一语义。
+  const pinnedRounds = useMemo(() => {
+    const rounds = new Set<number>();
+    if (pinnedEventIds.size === 0) return rounds;
+    for (const row of streamRows) {
+      if (row.kind === "assistant" && pinnedEventIds.has(`#${String(row.eventId)}`)) rounds.add(row.round);
+    }
+    return rounds;
+  }, [streamRows, pinnedEventIds]);
   const hasThinking = useMemo(
     () => streamRows.some((r) => r.kind === "assistant" && r.thinking !== undefined && r.thinking !== ""),
     [streamRows],
@@ -885,6 +895,7 @@ export function useWorkbenchModel() {
     activeIdRef,
     setDismissedGoals,
     outlineTurns,
+    pinnedRounds,
     outlineOpen,
     setOutlineOpen,
     paneTabs,

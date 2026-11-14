@@ -1198,7 +1198,8 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 }
 .ol-fold:hover { color: hsl(var(--text-000)); border-color: hsl(var(--text-400)); }
 .ol-list { overflow-y: auto; padding: var(--space-xs) var(--space-xs) var(--space-sm); min-height: 0; outline: none; }
-.ol-item { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 6px; align-items: baseline; width: 100%; padding: 5px var(--space-sm); border-radius: var(--radius-sm); text-align: left; }
+.ol-item { position: relative; display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 6px; align-items: baseline; width: 100%; padding: 5px 24px 5px var(--space-sm); border-radius: var(--radius-sm); text-align: left; }
+.ol-pin { position: absolute; right: 6px; top: 6px; color: hsl(var(--text-400)); }
 .ol-item:hover { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover)); }
 .ol-item.kb { outline: 1px solid var(--hairline-strong); outline-offset: -1px; }
 .ol-item.on { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-selected)); }
