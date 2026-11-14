@@ -39648,3 +39648,35 @@ Error: 未知主会话 provider: agnes-ai（内置 5 家，或在 .agent/provide
 - 四条锚点的 `expectFail` 指针未改（标题在表格驱动的 `tests/gate-audit.test.ts` 里，选择子抽不出
   ⇒ 其中一条走整文件跑法；这不是新问题，静态体检已在选择子那一格点名）。
 
+
+## 2026-11-14 · 第 1186 页：测试面的未用绑定清零（提交 `7ad88cb1`）
+
+**入口**：第 1182 页登记「`tests/` 仍有 106 处未用绑定（核心 66 + 桌面 40），留作下一批单独成批」。
+本页就是那一批。只动测试面，产品代码零改动。
+
+### 一、做法
+
+- **核心 66**：43 个未用导入说明符（用 TypeScript AST 定位并删名，不手抄行号）＋ 23 处本地面。
+  其中 6 处是「有副作用的调用 + 未读绑定」，一律改成裸 `await`，**副作用一字不丢**：
+  `newCtx()`×3、`newWs()`、`upsertOk(...)`、`createSidechatSession(...)`。
+  `tests/verify-census.test.ts` 的空 `for` 循环删掉，保留 `tempDirs.length = 0`。
+- **桌面 40**：28 个导入说明符 ＋ 11 处本地面/类型 ＋ 级联未用导入
+  （`readFileSync`／`fileURLToPath`／`readAppSurface`）同轮清。
+- **保留 1 条例外**：`apps/desktop/tests/channels.test.ts` 的 `_invokeKeysAreExact` 是编译期
+  `Equal` 断言（钉 `keyof INVOKE_CHANNELS` 与 `AgentApi` 的方法面），删了就是**把判据删了** ⇒
+  保留并登记，所以桌面面读数是 0 而不是「清空」。
+
+### 二、验证
+
+- `tsc --noUnusedLocals`：核心 `tests/` **0** 条；桌面 `tests/` 只剩上面那 1 条例外。
+- `node --import tsx scripts/typecheck.ts`：0 条报错。
+- 核心全量：**673 文件 / 8113 条全绿**（`--maxWorkers=2`，exit 0）。
+- 桌面（干净树 `7ad88cb1`，`VITEST_MAX_WORKERS=2`）：**384 文件 / 2488 条绿**，2 条红全是
+  `cds-upstream-drift.test.ts` 的 Claude.app 上游漂移（与第 1185 页同因，不是本批改动面）。
+
+### 三、边界
+
+- 只动 `tests/` 与 `apps/desktop/tests/`；`src/`、`apps/desktop/src/`、判卷文件与变异表均未碰。
+- 未跑 `mutate-verify`（本批不涉及变异表；第 1185 页刚跑过 4/4 全杀）。
+- 桌面那条 CDS 漂移仍红，属于第 1185 页登记的「重抽 + 真渲染器探针」批，不在这里顺手改记录。
+
