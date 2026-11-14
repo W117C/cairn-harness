@@ -13,9 +13,16 @@
  *   ⇒ 合成后 alpha = floor + (1-floor)×玻璃自身 alpha，滑杆压不动地板。
  */
 
-/* ① 画布让位：vendored 主题只让出了它自己画的三处，**我们自己的 body 画布仍在**
-   （styles.css 的 body 那条画布底色）——不接管就会「选了壁纸但什么也没变」。 */
+/* ① 画布让位：vendored 主题只让出了它自己画的三处，**我们自己的画布仍在**——
+   styles.css 的 body 那条、以及 tokens.css 的 `[data-theme=…] .app / .destination-page /
+   .sp-page` 那条——不接管就会「选了壁纸但什么也没变」。
+   ⚠️ 这是实测出来的第三处：body 之外，.app 自己还铺着不透明画布底色，
+   把 z-index:-1 的壁纸层整个盖住（body 透明了、壁纸仍看不见）。 */
 body[data-we-wallpaper] {
+  background: transparent;
+}
+
+body[data-we-wallpaper] :is(.app, .destination-page, .sp-page) {
   background: transparent;
 }
 
@@ -48,8 +55,15 @@ body[data-we-wallpaper] .cw-scrim {
 
 /* ③ 玻璃面（五类，业主裁决含左栏）：对话列 / composer / 检查器与右窗 / 浮层 / 左栏。
    互为兄弟层，**不做嵌套玻璃**（Chromium 的 backdrop-filter 嵌套采样会错乱）。
-   地板是固定权重，滑杆只改玻璃那一项 ⇒ 压不动可读性地板。 */
-body[data-we-wallpaper] :is(
+   地板是固定权重，滑杆只改玻璃那一项 ⇒ 压不动可读性地板。
+
+   选择器为什么这么长（级联实测出来的，不是随手写的）：
+   主题那条 `html[data-theme="dark"] body[data-dsh-claude-style] [data-composer-card]`
+   特异性 (0,3,2) ⇒ 普通写法 (0,2,1) 会被它压过（composer 的不透明底色就压住了玻璃）。
+   仓规不许在 cds-adapter 之后再插第三个样式 import（cds-parity 钉着「adapter 之后只允许
+   组件层」），所以只能抬权重：`html[data-theme][data-cairn-wallpaper] body[data-we-wallpaper]`
+   ⇒ (0,4,2)，稳定压过主题那条。两个属性都由 state/wallpaper.ts 单点写。 */
+html[data-theme][data-cairn-wallpaper] body[data-we-wallpaper] :is(
   .main,
   .composer-card,
   .inspector-col,
@@ -57,8 +71,11 @@ body[data-we-wallpaper] :is(
   .side-wrap
 ) {
   background: color-mix(in srgb, var(--cw-canvas) var(--cw-floor), var(--cw-glass) calc(100% - var(--cw-floor)));
+  /* 只写标准写法：Chromium（Electron 44 / Chromium 142）不认 `-webkit-backdrop-filter`，
+     而 CSS 压缩器去重时会**优先留带前缀那条** ⇒ 两条都写反而把标准写法丢掉
+     （实测：构建产物只剩 -webkit- 前缀，计算值 = none）。本应用只发布 Electron 壳，
+     不需要为老 Safari 保留前缀。 */
   backdrop-filter: blur(var(--cw-glass-blur, 14px));
-  -webkit-backdrop-filter: blur(var(--cw-glass-blur, 14px));
 }
 
 /* ④ 左栏真正画底色的是 .side（.side-wrap 只是外壳）：玻璃面留在 .side-wrap，

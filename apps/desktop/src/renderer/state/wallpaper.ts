@@ -16,6 +16,16 @@ import { floorFor, type Rgb, type ThemeContrastSpec } from "../derived/wallpaper
 /** vendored 主题的接缝属性名（不是我们发明的名字）。 */
 export const WALLPAPER_ATTR = "data-we-wallpaper";
 
+/**
+ * 我们自己的根属性（落在 documentElement 上）：只为一件事存在——**级联权重**。
+ *
+ * 主题那条 `html[data-theme="dark"] body[data-dsh-claude-style] [data-composer-card]`
+ * 的特异性是 (0,3,2)，比任何「普通」的壁纸规则（0,2,1）都高 ⇒ composer 的不透明底色
+ * 会压过玻璃。仓规不许在 cds-adapter 之后再插第三个样式 import（cds-parity 钉着），
+ * 所以只能把权重抬上去：本属���挂在 html 上，配合 `html[data-theme]` 一起把规则抬到 (0,4,2)。
+ */
+export const CAIRN_WALLPAPER_ATTR = "data-cairn-wallpaper";
+
 export interface WallpaperView {
   kind: "none" | "image" | "video";
   url: string | null;
@@ -38,10 +48,15 @@ export function shouldPauseMedia(focused: boolean, visible: boolean): boolean {
   return !focused || !visible;
 }
 
-/** 接缝属性的唯一写者。 */
+/** 接缝属性的唯一写者（body 上是上游接缝、html 上是我们自己的权重属性）。 */
 export function applyWallpaperAttr(active: boolean): void {
-  if (active) document.body.setAttribute(WALLPAPER_ATTR, "");
-  else document.body.removeAttribute(WALLPAPER_ATTR);
+  if (active) {
+    document.body.setAttribute(WALLPAPER_ATTR, "");
+    document.documentElement.setAttribute(CAIRN_WALLPAPER_ATTR, "");
+  } else {
+    document.body.removeAttribute(WALLPAPER_ATTR);
+    document.documentElement.removeAttribute(CAIRN_WALLPAPER_ATTR);
+  }
 }
 
 /* ── 视图存储：设置面改完后回灌这里（components → state 的允许方向）─────────── */
