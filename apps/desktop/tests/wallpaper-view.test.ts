@@ -2,7 +2,7 @@
 // 设置 → 视图是纯函数；kind=none ⇒ 无 URL；revision 进 URL 破缓存。
 import { describe, expect, it } from "vitest";
 import { shouldPauseMedia, wallpaperUrl, wallpaperViewOf } from "../src/renderer/state/wallpaper";
-import { DEFAULT_SETTINGS, type AppSettings } from "../../src/main/settings";
+import { DEFAULT_SETTINGS, type AppSettings } from "../../../src/main/settings";
 
 function settingsWith(wallpaper: Partial<AppSettings["wallpaper"]>): AppSettings {
   return { ...DEFAULT_SETTINGS, wallpaper: { ...DEFAULT_SETTINGS.wallpaper, ...wallpaper } };

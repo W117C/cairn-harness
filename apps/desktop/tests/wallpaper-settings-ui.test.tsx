@@ -3,7 +3,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { GeneralSection } from "../src/renderer/components/settings/GeneralSection";
-import { DEFAULT_SETTINGS, type AppSettings } from "../../src/main/settings";
+import { DEFAULT_SETTINGS, type AppSettings } from "../../../src/main/settings";
 
 const noop = (): void => undefined;
 
