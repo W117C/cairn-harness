@@ -40029,3 +40029,19 @@ require 生产模块 `src/main/wallpaper.ts`；合成面只有 AgentApi（preloa
   而不是变绿），留作下一轮的同族普查。
 - 并行会话在同一工作树里有大量未提交改动（`src/agent/**`、`plugins`、desktop 测试等）；
   本页只提交上面点名的 11 个文件，未触碰它们。
+
+
+## 2026-11-15 · 第 1196 页：97b24a8 的认证读出一次 desktop-test 红（复核未复现；失败日志未留存）
+
+**事实**：文档笔 `97b24a8` 的 `pnpm head-cert-check` 25 道门里 **24 绿 / 1 红**：
+`desktop-test` exit=1（1 failed / 2518，20137ms，超 10000ms 预算）；核心 678 文件 / 8142 条绿，
+其余 24 道绿。认证脚本按既定策略回收了认证树，唯一失败日志
+（`.worktrees/gate-head-cert/.tmp/gate-failures/desktop-test.log`）随树删掉，**没有留存**。
+
+**复核**：在 `97b24a8` 的独立 worktree（硬链 node_modules）连跑两趟
+`pnpm --filter cairn-desktop test`：**390 文件 / 2518 条，两趟全绿**（11.87s 与同量级）；
+工作树同一套也绿（390/2518）。判断：首趟形如 8GB 机器上的负载假红（AGENTS.md 已登记），
+但**没有拿到失败用例名** ⇒ 只能说「两趟复核未复现」，不能说「已证明是假红」。
+
+**代价与改正**：认证树回收会把唯一失败日志带走；下一笔认证若再红，先 `--keep-tree` 留树再回收。
+凭证：`outputs/head-cert-97b24a8-2026-11-14-1806/provenance.md`（只有汇总，没有逐条失败）。
