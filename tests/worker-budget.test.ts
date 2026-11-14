@@ -109,7 +109,7 @@ describe("spawn 处的窗口接线", () => {
       const orch = makeOrch({ routing: true });
       const r = await orch.spawn({ mode: "read", task: "定档任务", model: "glm-strong" }, { callId: "s1" });
       expect(r.ok).toBe(true);
-      expect(firstHandle(orch)?.modelCtxWindow).toBe(256_000);
+      expect(firstHandle(orch)?.modelCtxWindow).toBe(1_000_000); // glm-strong → glm-5.3（官方 1M，2026-11-15）
       await orch.cancelAll();
     } finally {
       if (key === undefined) delete process.env.CAIRN_API_KEY;
