@@ -31,6 +31,7 @@ import { menuNavIndex } from "./popover-keys";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { isCompositionEnter } from "../ime";
 import { readOrError } from "../read-result";
+import { refreshWallpaper } from "../state/wallpaper";
 import { RenderErrorBoundary } from "./RenderErrorBoundary";
 import { UsageSection } from "./settings/UsageSection";
 import { EvolveSection } from "./settings/EvolveSection";
@@ -373,6 +374,59 @@ export function SettingsPanel(props: {
     }
   };
 
+  /** 选壁纸（2026-11-14 · 设计规格 §3.3）：主进程弹窗选文件，返回 kind + 绝对路径；
+   *  path 只落 settings.json，媒体经 cairn-wallpaper:// 取（渲染层不碰文件系统）。 */
+  const pickWallpaper = async (): Promise<void> => {
+    setError(null);
+    try {
+      const r = await window.agent.wallpaperPick();
+      // 用户自己取消 = 不是错误（canceled 是显式形状，不拿错误文案做判断）。
+      if (r.canceled === true) return;
+      if (!r.ok) {
+        setError(r.error ?? STR.settingsPanel.saveFailedPrefix);
+        return;
+      }
+      if (r.path === undefined || r.kind === undefined || settings === null) return;
+      const next = await window.agent.setSettings({
+        wallpaper: {
+          ...settings.wallpaper,
+          kind: r.kind,
+          path: r.path,
+          revision: settings.wallpaper.revision + 1,
+        },
+      });
+      setS(next);
+      await refreshWallpaper();
+      pulse(STR.settingsPanel.savedCheck);
+    } catch (err) {
+      setError(STR.settingsPanel.saveFailedPrefix + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
+  /** 改壁纸的一个字段（滑杆）：走单键直调，不进 panelPatch 白名单。
+   *  revision **只在 path 变了时自增**——滑杆每动一下都自增会让 URL 变、媒体重载、视频闪断。
+   *  壁纸与系统 vibrancy 同开时 vibrancy 被完全遮住 ⇒ 一起关掉（规格 §5.5）。 */
+  const saveWallpaper = async (patch: Partial<AppSettings["wallpaper"]>): Promise<void> => {
+    setError(null);
+    if (settings === null) return;
+    try {
+      const turningOn = (patch.kind ?? settings.wallpaper.kind) !== "none";
+      const next = await window.agent.setSettings({
+        wallpaper: {
+          ...settings.wallpaper,
+          ...patch,
+          revision: patch.path !== undefined ? settings.wallpaper.revision + 1 : settings.wallpaper.revision,
+        },
+        ...(turningOn && settings.windowVibrancy === true ? { windowVibrancy: false } : {}),
+      });
+      setS(next);
+      await refreshWallpaper();
+      pulse(STR.settingsPanel.savedCheck);
+    } catch (err) {
+      setError(STR.settingsPanel.saveFailedPrefix + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
   const saveKey = async () => {
     setError(null);
     setBusy(true);
@@ -553,6 +607,11 @@ export function SettingsPanel(props: {
                 onUiSize={(next) => { setUiSize(next); void saveSettingKey("uiSize", next); }}
                 onWindowVibrancy={(next) => { void saveSettingKey("windowVibrancy", next); }}
                 onNotify={(next) => { void saveSettingKey("notifyOnComplete", next); }}
+                onWallpaperPick={() => { void pickWallpaper(); }}
+                onWallpaperOpacity={(next) => { void saveWallpaper({ opacity: next }); }}
+                onWallpaperScrim={(next) => { void saveWallpaper({ scrim: next }); }}
+                onWallpaperGlass={(next) => { void saveWallpaper({ glassAlpha: next }); }}
+                onWallpaperClear={() => { void saveWallpaper({ kind: "none", path: null }); }}
               />
             </SettingsPage>
           )}

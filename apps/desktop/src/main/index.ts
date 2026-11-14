@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { INVOKE_CHANNELS, PUSH_CHANNELS } from "./channels";
 import { installAppMenu } from "./menu";
 import { handleAttachmentThumb } from "./thumb";
-import { handleWallpaperMedia, openWallpaperStream, registerWallpaperScheme, WALLPAPER_SCHEME } from "./wallpaper";
+import { handleWallpaperMedia, openWallpaperStream, registerWallpaperScheme, validateWallpaperFile, WALLPAPER_SCHEME } from "./wallpaper";
 import type { InvokeChannel, PushChannel } from "./channels";
 // SEMA §3.5/§12：IPC_PROTOCOL_VERSION 是本文件从协议面取的唯一**值**（其余全 type import）——
 // wired 表的 protocolVersion 行把它递给 renderer 比对构建期注入的期望版本。
@@ -809,6 +809,22 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   pickFiles: async () => {
     const picked = await dialog.showOpenDialog({ properties: ["openFile", "multiSelections"] });
     return picked.filePaths.length > 0 ? picked.filePaths : null;
+  },
+  // 桌面端壁纸（2026-11-14 · 设计规格 §3.3）：单选 + 扩展名过滤。
+  // 路径只回给 renderer 一次、由它写进 settings.json；媒体本身经 cairn-wallpaper:// 取，
+  // 渲染层拿不到任意读文件的能力。
+  wallpaperPick: async () => {
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null;
+    const options = {
+      title: "选择壁纸",
+      properties: ["openFile" as const],
+      filters: [
+        { name: "图片与视频", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp", "mp4", "webm", "mov"] },
+      ],
+    };
+    const picked = win === null ? await dialog.showOpenDialog(options) : await dialog.showOpenDialog(win, options);
+    if (picked.canceled || picked.filePaths.length === 0) return { ok: false, canceled: true };
+    return validateWallpaperFile(picked.filePaths[0]!);
   },
   // v9：Tab 想下一条（业主裁 A②）：按「当前选中模型（会话覆盖 > 设置缺省）」单发一次上下文建议。
   // 不走会话归属/漂移——单发不进会话流、不落 JSONL；解析失败（模型未登记等）也分类返回，

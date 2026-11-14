@@ -73,7 +73,8 @@ describe("通道名表完整性", () => {
     // （用户级 MCP 服务器管理：配置读写 + 单台真握手探测）⇒ 143。
     // 2026-11-05 「继续」：＋hooksUserConfig/hooksUserSave（用户级 hooks 管理面读写）⇒ 145。
     // v53：角色 4 项、迁移 2 项、闲时任务 3 项、后台命令 2 项。
-    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(156);
+    // v54：＋wallpaperPick（桌面端壁纸选文件；单选 + 扩展名过滤）。
+    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(157);
     const keys = Object.keys(INVOKE_CHANNELS) as (keyof typeof INVOKE_CHANNELS)[];
     expect(keys.length).toBeGreaterThan(0);
     for (const key of keys) expect(INVOKE_CHANNELS[key]).toBeTruthy();
@@ -320,6 +321,9 @@ describe("通道名表完整性", () => {
       // 它是一屏只读事实（配了几台 / 实测支持什么 / 授权态），落进 fail-loud 就等于
       // 用户一直在被审批卡问 lsp，却没有任何地方看得见 lsp。
       "lspStatus",
+      // 2026-11-14（设计规格 §3.3）：桌面端壁纸选文件——单选 + 扩展名过滤。
+      // 必须接真：它是设置页「壁纸」行唯一的入口，落进 fail-loud 就等于用户点了没反应。
+      "wallpaperPick",
     ];
     // ④ fail-loud 白名单（带理由的未接）：B3 修复后为空——39 条全部接真。要留白须在此
     //    逐条列名并注记理由，且 index.ts 的 UNWIRED_FAIL_LOUD 同步加键（下方断言钉死两者一致）。

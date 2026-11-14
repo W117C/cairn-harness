@@ -131,7 +131,7 @@ export type { SearchProvider } from "../tools/web-search";
  *  v51 = RunResponse.accepted 区分未接收的请求和已接收后的执行失败，供队列安全恢复。
  *  v52 = 读 LSP 状态（lspStatus；第 996 页那份跨进程可读的运行态第一次进桌面——只读、不起进程、不改授权）。
  *  v53 = 子 Agent 角色、配置迁移、闲时队列与会话后台命令管理。 */
-export const IPC_PROTOCOL_VERSION = 53;
+export const IPC_PROTOCOL_VERSION = 54;
 
 export type SettingsMigrationSource = "claude-code" | "codex";
 export interface SettingsMigrationItem {
@@ -691,6 +691,11 @@ export interface AgentApi {
   revealInFinder(path: string): Promise<{ ok: boolean; error?: string }>;
   /** 附件图片缩略图（2026-10-18 desktop 扩展）：仅图片扩展名、≤25MB；返回 40px PNG data URL。 */
   attachmentThumb(path: string): Promise<{ ok: boolean; dataUrl?: string; error?: string }>;
+  /** 桌面端壁纸：选一个本地图片/视频（设计规格 §3.3）。单选、带扩展名过滤；
+   *  返回 kind 与绝对路径——**路径只留在主进程与 settings.json**，渲染层经
+   *  `cairn-wallpaper://` 协议取媒体（白名单＝当前那一个文件）。
+   *  `canceled` 是用户自己取消（不是错误）——不拿错误文案做判断。 */
+  wallpaperPick(): Promise<{ ok: boolean; canceled?: boolean; kind?: "image" | "video"; path?: string; error?: string }>;
   /** v2.16 用户反馈沉淀（赞/踩）：落 sidecar `feedback.jsonl`（append-only，不进事件流）。
    *  `rating:"none"` = 撤销（读时取最后一条生效）。未接线前界面只选中、不假提交。 */
   submitFeedback(req: { sessionId: string; eventId: number; rating: "up" | "down" | "none"; note?: string; workspace?: string; eventRef?: EventRef }): Promise<{ ok: boolean; error?: string }>;

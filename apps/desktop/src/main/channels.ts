@@ -176,6 +176,9 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   pickDirectory: "agent:pick-directory",
   // v8：dialog 选文件（附件引用「选择文件…」）——main 端 dialog.showOpenDialog({ openFile, multiSelections })。
   pickFiles: "agent:pick-files",
+  // 桌面端壁纸（2026-11-14 · 设计规格 §3.3）：单选、带扩展名过滤的选文件通道。
+  // 不复用 pickFiles——它无过滤且是多选，语义与「挑一个壁纸」不符。
+  wallpaperPick: "agent:wallpaper-pick",
   // v9：Tab 想下一条（业主裁 A②）——main 端按上下文单发模型调用（suggestNextMessage），
   // renderer 原样上屏结果/分类文案。
   suggestNext: "agent:suggest-next",
@@ -389,6 +392,7 @@ export const CHANNEL_DOMAINS: { [K in InvokeChannel]: ChannelDomain } = {
   openExternal: "app",
   pickDirectory: "app",
   pickFiles: "app",
+  wallpaperPick: "app",
   speakText: "app",
   stopSpeaking: "app",
   saveTempFile: "app",

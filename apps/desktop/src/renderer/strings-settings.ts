@@ -87,6 +87,15 @@ export const settingsStrings = {
     uiSize5: "超大",
     vibrancy: "窗口材质",
     vibrancyDesc: "改动需重启窗口。",
+    // 2026-11-14（设计规格 §3.4/§5.4）：壁纸层——用户自选本地图片/视频，
+    // 铺在对话界面背后；三个滑杆（不透明度 / 压暗 / 玻璃透明度）。
+    wallpaper: "壁纸",
+    wallpaperPick: "选择图片或视频",
+    wallpaperClear: "清除",
+    wallpaperNone: "未设置",
+    wallpaperOpacity: "壁纸不透明度",
+    wallpaperScrim: "压暗",
+    wallpaperGlass: "玻璃透明度",
     habitTitle: "使用习惯",
     locale: "界面语言",
     localeValue: "中文（简体）",

@@ -91,7 +91,7 @@ describe("各域的通道数被钉住（改归属是显式动作）", () => {
       memory: 2,
       automation: 9,
       pane: 15,
-      app: 18,
+      app: 19,
       integration: 5,
       evolve: 7,
       orchestration: 3,

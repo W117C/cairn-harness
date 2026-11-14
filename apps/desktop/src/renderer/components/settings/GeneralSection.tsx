@@ -47,6 +47,13 @@ export function GeneralSection(props: {
   onWindowVibrancy: (next: boolean) => void;
   /** 完成通知开关（同样走单键直调：panelPatch 白名单不动）。 */
   onNotify: (next: boolean) => void;
+  /** 2026-11-14（设计规格 §3.3/§5.4）：壁纸行——选文件 / 清除 / 三个滑杆。
+   *  全部走单键直调（不进 panelPatch 白名单）。 */
+  onWallpaperPick: () => void;
+  onWallpaperOpacity: (next: number) => void;
+  onWallpaperScrim: (next: number) => void;
+  onWallpaperGlass: (next: number) => void;
+  onWallpaperClear: () => void;
 }): React.JSX.Element {
   return (
     <>
@@ -109,6 +116,55 @@ export function GeneralSection(props: {
             onText={STR.general.on}
             offText={STR.general.off}
           />
+        </SettingsRow>
+        {/* 壁纸（2026-11-14）：一行里放「选/清」与三个滑杆——同一屏同一件事，
+            不再拆第二个二级标签（设计规范：布局优先，避免二级标签）。 */}
+        <SettingsRow label={STR.general.wallpaper}>
+          <div className="cw-settings">
+            <div className="cw-settings-actions">
+              <button type="button" className="mini-btn" onClick={props.onWallpaperPick}>
+                {props.settings.wallpaper.kind === "none" ? STR.general.wallpaperPick : STR.general.wallpaperNone}
+              </button>
+              {props.settings.wallpaper.kind !== "none" && (
+                <button type="button" className="mini-btn" onClick={props.onWallpaperClear}>
+                  {STR.general.wallpaperClear}
+                </button>
+              )}
+            </div>
+            <label className="cw-slider">
+              <span>{STR.general.wallpaperOpacity}</span>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={props.settings.wallpaper.opacity}
+                onChange={(e) => { props.onWallpaperOpacity(Number(e.target.value)); }}
+              />
+            </label>
+            <label className="cw-slider">
+              <span>{STR.general.wallpaperScrim}</span>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={props.settings.wallpaper.scrim}
+                onChange={(e) => { props.onWallpaperScrim(Number(e.target.value)); }}
+              />
+            </label>
+            <label className="cw-slider">
+              <span>{STR.general.wallpaperGlass}</span>
+              <input
+                type="range"
+                min={0}
+                max={0.6}
+                step={0.05}
+                value={props.settings.wallpaper.glassAlpha}
+                onChange={(e) => { props.onWallpaperGlass(Number(e.target.value)); }}
+              />
+            </label>
+          </div>
         </SettingsRow>
       </SettingsSection>
       <SettingsSection title={STR.general.habitTitle}>
