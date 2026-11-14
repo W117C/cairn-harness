@@ -177,9 +177,11 @@ export const MUTATIONS = [
     src: "src/permissions/autonomy.ts",
     test: "tests/gate-audit.test.ts",
     desc: "裸 allow 规则（「总是允许该工具」）带走高风险路径 ⇒ 一次普通 write_file 批准把 .env / .git/hooks 一起免批",
+    // 2026-11-14 改指：a7a1a03c 给这条守卫加了「静态 high 风险 + web-auto-approve 前缀」两格，
+    // 条件从单行变三行；旧针脚是单行前缀，搬走后必然不命中。新针脚只把第一格换成 false。
     apply: (s) => s.replace(
-      'if (risk === "high" && chain.pattern === undefined && !isShellFamily(tool)',
-      'if (false && chain.pattern === undefined && !isShellFamily(tool)',
+      '    if (risk === "high"\n        && chain.pattern === undefined\n        && !isShellFamily(tool)',
+      '    if (false\n        && chain.pattern === undefined\n        && !isShellFamily(tool)',
     ),
     expectFail: "裸 allow 规则不带走高风险路径（非 shell）",
   },
@@ -917,7 +919,8 @@ export const MUTATIONS = [
     src: "src/permissions/autonomy.ts",
     test: "tests/judge-frozen-gate.test.ts",
     desc: "摘掉 L0 那段 ⇒ 判卷文件回到「靠提示词自觉」（真模型评测实测 8 格里 3 格改写了 tests/todo.test.ts）",
-    apply: (s) => s.replace("  if (s.frozenJudgePaths.size > 0 && isWriteCall(tool, grade)) {", "  if (false) {"),
+    // 2026-11-14 改指：6c82de60 把 run_shell 也纳进冻结闸，条件多了一层括号；旧针脚不再命中。
+    apply: (s) => s.replace("  if (s.frozenJudgePaths.size > 0 && (isWriteCall(tool, grade) || tool === \"run_shell\")) {", "  if (false) {"),
     expectFail: "① 写向工具命中冻结表 ⇒ deny，理由指明「写 BLOCKED.md 换判据」而不是改文件",
   },
   {

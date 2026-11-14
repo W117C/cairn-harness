@@ -175,19 +175,22 @@ export const MUTATIONS = [
     config: "apps/desktop/vitest.config.ts",
     desc: "孤儿行的未提交改动标记恒假 ⇒ 清理前看不见自己会丢什么：确认框只有一句泛泛的「未提交改动无法恢复」，"
       + "而当前这棵树到底是干净还是攒着活，界面一个字不说（数据丢失面的信息缺口）",
-    apply: (s) => s.replace("const dirty = props.snap.details?.find((d) => d.name === name)?.dirty === true;", "const dirty = false;"),
+    // 2026-11-14 改指：第 1107/1146 页把逐行 find 换成按 details 记忆的 Map；旧针脚不再命中。
+    apply: (s) => s.replace("const dirty = dirtyByName.get(name) === true;", "const dirty = false;"),
     expectFail: "工作树页：孤儿逐条列出 + 清理按钮；空态不摆假列表",
   },
   {
     id: "license-label-always-inactive",
-    src: "apps/desktop/src/renderer/components/settings-sections.tsx",
+    // 2026-11-14 改指：licenseLabel 已随拆分搬到 components/settings/AboutSection.tsx，
+    // 文案也换成 STR.about.* 单一事实源；旧针脚（settings-sections.tsx 里的字符串拼接版）不再命中。
+    src: "apps/desktop/src/renderer/components/settings/AboutSection.tsx",
     test: "apps/desktop/tests/settings-sections.test.tsx",
     config: "apps/desktop/vitest.config.ts",
     desc: "许可证有效也显示「未激活」⇒ 用户以为自己的 license 没生效，而主进程其实验过了；"
       + "四态被压成一态，设置页的「许可证」行就成了装饰",
     apply: (s) => s.replace(
-      'case "valid": return state.expiresAt === null ? "有效 · " + state.licensee : "有效 · " + state.licensee + " · 至 " + licenseDate(state.expiresAt);',
-      'case "valid": return "未激活";',
+      '    case "valid": return state.expiresAt === null ? STR.about.licenseValid.replace("{licensee}", state.licensee) : STR.about.licenseValidUntil.replace("{licensee}", state.licensee).replace("{date}", licenseDate(state.expiresAt));',
+      '    case "valid": return "未激活";',
     ),
     expectFail: "valid / expired / invalid / inactive 各有话说，未读取不冒充未激活",
   },
