@@ -861,9 +861,12 @@ export const MUTATIONS = [
     id: "remember-gate-if-chain-back",
     src: "src/permissions/index.ts",
     test: "tests/remember.test.ts",
-    desc: "remember 门退回按档位字面量的 if 链 ⇒ 表外档位一路掉到底、直接落盘（粗档表在这条路上没人读）",
-    apply: (s) => s.replace('const decision = SIDE_EFFECT_DECISION[opts.mode] ?? "ask";', 'const decision = opts.mode === "read-only" ? "deny" : opts.mode === "default" ? "ask" : "allow";'),
-    expectFail: "表外档位不落盘：走 ask，无审批口即 fail-closed（旧 if 链在这里静默放行）",
+    desc: "粗档表被绕过 ⇒ read-only 也放行（表在这条路上没人读）",
+    // 2026-11-14 整表实测：原改法（表查询换 if 链）已是**等价变异**——rememberDecision 后面还有
+    // scope 分层（global→ask、其余→allow），表外档位在两条路上落到同一个答案，任何判据都分不出来。
+    // 改钉「表本身被读」这一格：read-only 必须仍是 deny。
+    apply: (s) => s.replace('  "read-only": "deny",\n', '  "read-only": "allow",\n'),
+    expectFail: "read-only 档一律拒；auto 档放行",
   },
   {
     id: "remember-project-scope-free-write",

@@ -324,6 +324,9 @@ describe("接线：盖章点=主会话＋基准跑器两处，且不许再抄第
     const stamp = t.indexOf("usageAttribution.stamp(e);");
     expect(stamp).toBeGreaterThan(-1);
     expect(t.indexOf("await log!.append(e);", stamp)).toBeGreaterThan(stamp);
+    // 盖章点必须**贴着** hookEvent 之前：只比「stamp 在 append 前」挡不住把 stamp 挪到
+    // commit?.() 之后（那样 live 与盘就不是同一个对象；2026-11-14 整表变异实测存活）。
+    expect(t).toContain("        usageAttribution.stamp(e); // 落盘前先盖：live 与盘必须是同一个对象（同 events 盖 ts 的口径）\n        const hookEvent");
     expect([...t.matchAll(/\.stamp\(/g)].length).toBe(1);
     // 空载自证：盖章器真被接进 pipeline 的那条队列里，不是只建不用
     expect(t).toMatch(/const usageAttribution = createUsageAttributor\(\(\) => mainUsageModel\);/);
