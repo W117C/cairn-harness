@@ -40359,3 +40359,25 @@ NUL/ESC 等控制字符，直接进入模型面会破坏可读性；无 url 的�
 超 10s 预算只出声。凭证：`outputs/head-cert-a5a6954-2026-11-15-0556/`。
 
 **边界**：仍是结果面卫生；F6 的独立 html provider / 默认页未做。
+
+## 2026-11-15 · 第 1216 页：web_search 的 html provider 端到端（`9b1a50d4`；认证 `9b1a50d` 25/25）
+
+**背景**：第 1213 页的 HTML 抽取只能靠 `custom` 端点「碰巧」返回 HTML；设置面没有「这是一个 HTML
+搜索页」的明确选项。本页把 F6 A1 的 provider 层补齐；默认搜索页（A2）仍未做。
+
+### 改动
+
+- `SearchProvider` 增加 `html`：端点必填、没有默认端点、无需 API Key；`parseSearchConfig` 与
+  `search-settings` 的 provider 白名单同步。
+- 桌面设置「联网搜索」增加「HTML 页面」选项；标签走 `STR.network.htmlSearch`（不写裸中文）。
+- 请求层复用既有 `q`/`{query}` 逻辑与第 1213 页的保守抽取；没有新增依赖。
+
+### 认证链路（一红一绿）
+
+- `df5016d`：核心 1 红（`scratch-tree-naming` 把并发会话新建的 worktree 算进分母）+ 桌面 1 红
+  （`strings.test` 抓到我写的裸中文「HTML 页面」）。处置：标签改 `STR.network.htmlSearch`；重跑。
+- `9b1a50d`：**25/25 门绿，核心 678 文件 / 8155 条（`--maxWorkers=2`），exit 0**；六维全过。
+  凭证：`outputs/head-cert-9b1a50d-2026-11-15-0619/`；红凭证
+  `outputs/head-cert-df5016d-2026-11-15-0609/` 一并入库。
+
+**边界**：这是 A1 的 provider 层；没有默认搜索页（A2）、没有新依赖、没有改 Brave/Tavily/SearXNG。

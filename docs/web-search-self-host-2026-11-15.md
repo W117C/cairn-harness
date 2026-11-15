@@ -40,6 +40,7 @@
 - 新增 `provider: "html"`（或复用 `custom` 加 `format: "html"`），把 HTML 结果页抽成 `SearchResult[]`：
   标题、URL、摘要、去重、同源过滤、10 条帽；纯函数 + fixture 判卷。
 - **无 API Key、无新依赖**；端点仍由用户填（A1），或由业主选一个默认页（A2，涉及供应商/ToS，另裁）。
+  **2026-11-15 已落 A1 的 provider 层**：`html` provider 端到端（`9b1a50d4`，第 1216 页）；A2 默认页仍未做。
 - 代价：解析器 + 3 种页面 fixture + 负向（空页/登录墙/编码）约 150–250 行实现 + 100–200 行判卷；
   1–2 个工作日量级。
 - 风险：HTML 会漂；页面可能反爬/要 JS；ToS 与 robots 要逐站确认；不能承诺 SLA。
