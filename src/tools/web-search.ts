@@ -121,12 +121,12 @@ export interface SearchResult {
 /** 结果抽取（纯函数，可单测）：认 `{ results: [{ title, url, snippet|content|description }] }`
  *  —— SearxNG `format=json` 的原生形状，也是本工具对端点的文档化契约。
  *  缺 title 补占位、缺 url 且缺 title 的条目丢掉（编不出一条能点的结果比少一条更坏）。
- *  非空 url 必须是 http(s)：`javascript:`/`data:` 等不进入结果清单（外部端点不可信）；空 url 的
- *  无链接占位仍保留，由渲染面如实呈现。 */
+ *  非空 url 必须是 http(s) 且不带用户名/密码：`javascript:`/`data:` 等不进入结果清单（外部端点
+ *  不可信）；同一 URL 只留第一条；空 url 的无链接占位仍保留，由渲染面如实呈现。 */
 const isHttpUrl = (url: string): boolean => {
   try {
     const u = new URL(url);
-    return u.protocol === "http:" || u.protocol === "https:";
+    return (u.protocol === "http:" || u.protocol === "https:") && u.username === "" && u.password === "";
   } catch {
     return false;
   }
@@ -136,6 +136,7 @@ export function extractResults(payload: unknown): SearchResult[] {
   const root = payload as { results?: unknown } | null;
   const arr = root !== null && typeof root === "object" && Array.isArray(root.results) ? root.results : [];
   const out: SearchResult[] = [];
+  const seen = new Set<string>();
   for (const item of arr) {
     if (typeof item !== "object" || item === null) continue;
     const o = item as Record<string, unknown>;
@@ -143,6 +144,8 @@ export function extractResults(payload: unknown): SearchResult[] {
     const title = typeof o.title === "string" ? o.title : "";
     if (url === "" && title === "") continue;
     if (url !== "" && !isHttpUrl(url)) continue;
+    if (url !== "" && seen.has(url)) continue;
+    if (url !== "") seen.add(url);
     const snippet = [o.snippet, o.content, o.description].find((v): v is string => typeof v === "string");
     out.push({ title: title === "" ? "(无标题)" : title, url, ...(snippet !== undefined ? { snippet } : {}) });
   }

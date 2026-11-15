@@ -76,6 +76,18 @@ describe("extractResults：认 SearxNG 形状，别名与缺字段逐条钉", ()
     expect(r[1]!.url).toBe("");
   });
 
+  it("同一 URL 只留第一条；带用户名/密码的 URL 丢掉", () => {
+    const r = extractResults({
+      results: [
+        { title: "a", url: "https://x.example/" },
+        { title: "dup", url: "https://x.example/" },
+        { title: "creds", url: "https://u:p@x.example/" },
+        { title: "b", url: "https://y.example/" },
+      ],
+    });
+    expect(r.map((x) => x.title)).toEqual(["a", "b"]);
+  });
+
   it("非对象 / 没有 results 数组 ⇒ 空数组（不抛，由调用方按降级处理）", () => {
     expect(extractResults(null)).toEqual([]);
     expect(extractResults({ items: [{ title: "x", url: "y" }] })).toEqual([]);
