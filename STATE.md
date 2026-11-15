@@ -1,6 +1,6 @@
 # Cairn / DSH —— 现态
 
-rev: ddc2e023
+rev: 6cd6947f
 
 核对日期 2026-11-15（Asia/Shanghai）。`rev` 是开发线现役基线；第 1200 / 1203 / 1204 页的判卷面与桌面改动在
 它之上的工作树里，尚未提交。分支与门禁状态见[仓库状态与分支](docs/REPOSITORY-STATUS.md)，历史证据见
