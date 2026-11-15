@@ -48,7 +48,7 @@
 |---|---|
 | bot 团队协作核心（自研） | ADR 0015 已写（Proposed，`docs/adr/0015-ds-bot-benchmark.md`）；待业主批准后先写 Phase 4 spec，不直接落实现代码 |
 | 桌面组件栈（F3 / ADR 0003） | 裁决输入已写（`docs/component-stack-decision-2026-11-15.md`）；待业主选 A/B/C/D，批准前不迁组件 |
-| 联网搜索自研方向（F6） | 裁决输入已写（`docs/web-search-self-host-2026-11-15.md`）；待业主回答 C1/C2/C3 与 A1/A2 四问，批准前不改 provider |
+| 联网搜索自研方向（F6） | 裁决输入已写（`docs/web-search-self-host-2026-11-15.md`）；A1 provider 已落（`9b1a50d4`）、B 指南已写（`docs/searxng-self-host-2026-11-15.md`）；A2/C3 与四问待业主 |
 | 远程 worker、动态 Flow、更高并发 | 从现有编排缺口拆独立任务，先定权限强制、取消与断线恢复协议 |
 | 编排 P5 真实评测 | 独立验收、明确费用预算和完整失败回执；scripted 运行不证明真实收益 |
 | 元认知扩大确认试验 | 开发线有界 pilot 与大样本采用结论分别记账；更多未见任务、固定预算和重复配对后再决定默认启用 |

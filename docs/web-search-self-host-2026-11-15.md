@@ -50,7 +50,8 @@
 
 - 代码零改动（`src/tools/web-search.ts:89-92` 已按 `/search?format=json` 请求）；补一份「本机/内网部署 +
   `allowLocalEndpoint` + 端口/防火墙」的运维文档，或一个仓库内的 compose 示例。
-- 代价：文档 0.5 天；用户要装 Docker/Python 并维护实例。
+- 代价：文档 0.5 天；用户要装 Docker/Python 并维护实例。**2026-11-15 指南已写**：
+  `docs/searxng-self-host-2026-11-15.md`（第 1218 页）。
 - 风险：SearXNG 本身是第三方 OSS（不是本仓自研），且它聚合的上游引擎仍有各自 ToS；但数据面在用户手里。
 
 ### C. 自有 crawler + 本地索引（C3）

@@ -40396,3 +40396,21 @@ exit 0**；`desktop-test` 20.0s 超 10s 预算只出声。凭证：
 `outputs/head-cert-4205051-2026-11-15-0639/`。
 
 **边界**：这是 html provider 的连接测试修正；A2 默认搜索页仍未做，没有默认厂商/端点。
+
+## 2026-11-15 · 第 1218 页：F6 B 的 SearXNG 自托管接入指南（文档；无代码）
+
+**背景**：F6 的 B 路径是「自己跑 SearXNG，本仓只做客户端」；客户端代码已支持（`/search` + `format=json`、
+无需 key、`allowLocalEndpoint` 显式放开本机），缺的是可照着做的运维步骤。
+
+### 内容
+
+- 起本机实例的 Docker 示例：只绑 `127.0.0.1:8080`，配置目录挂到 `searxng/`；明确标注「示例，本仓未在
+  本机实测，按上游版本核对」。
+- `settings.yml` 的 `search.formats` 要留 `html` 与 `json`；JSON 关着时客户端收到 HTML/403，不是解析问题。
+- 验证命令：`curl -s 'http://127.0.0.1:8080/search?q=cairn&format=json'`。
+- Cairn 设置：SearXNG → `http://127.0.0.1:8080` → 打开「允许本机/内网端点」→ 测试连接 → 保存。
+- 安全边界：只绑回环、不把端口开公网、不把凭据塞 URL；SearXNG 是第三方 OSS，上游引擎 ToS 由部署者承担；
+  本文件不改变 `web_search` 的 fail-closed 默认，也不做 A2 默认搜索页。
+
+**边界**：纯文档；没有新增依赖、provider 或默认端点。文件
+`docs/searxng-self-host-2026-11-15.md`。
