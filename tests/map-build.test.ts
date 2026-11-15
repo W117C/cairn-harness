@@ -209,6 +209,16 @@ describe("候选面的载荷目录排除（能力 1：地图预算别花在靶�
     await writeFile(join(fixtureWs, "helper.ts"), "export function helper(): number { return 2; }\n", "utf8");
     const rels = (await scanSourceFiles(fixtureWs)).map((f) => f.rel).sort();
     expect(rels, "工作区就是夹具目录时，rels 是 app.ts/helper.ts ⇒ 第一段不是 fixtures ⇒ 全量在图里").toEqual(["app.ts", "helper.ts"]);
+
+    // 绝对路径 glob 那种错法的可观察后果（@vscode/ripgrep 与裸 rg 形状不同）：
+    // 以 ws 为根时，`--glob '!**/fixtures/**'` 不只排掉根级 fixtures/，还会把
+    // **深层同名目录** src/fixtures/ 一起掏空——那是用户项目里正常的被测代码。
+    // 正确实现只在 rel 已相对化之后按第一段判，深层同名目录必须留在候选面。
+    await mkdir(join(ws, "src", "fixtures"), { recursive: true });
+    await writeFile(join(ws, "src", "fixtures", "truth.ts"), "export function truth(): number { return 3; }\n", "utf8");
+    const rootRels = (await scanSourceFilesAll(ws)).map((f) => f.rel);
+    expect(rootRels, "src/fixtures/ 是深层同名目录，绝对路径 glob 的错法会连它一起掏空").toContain("src/fixtures/truth.ts");
+    expect(rootRels, "根级 fixtures/ 仍按政策排掉（正反两侧同时成立）").not.toContain("fixtures/mini/app.ts");
   });
 
   it("真仓现读：候选面里没有任何载荷目录文件，而 src/tests/scripts 仍在（分母自证）", async () => {
