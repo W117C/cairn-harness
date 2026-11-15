@@ -40173,3 +40173,35 @@ require 生产模块 `src/main/wallpaper.ts`；合成面只有 AgentApi（preloa
 **边界**：`desktop-test` 17.0s 与 `evidence-typecheck-check` 5.7s 超预算只出声、不判红。
 认证树是复用的共享树（本次不是新建）⇒ 脚本未回收；失败日志已在认证树 `.tmp/gate-failures/` 与
 `/tmp/dsh-head-cert-<rev>` 留档。
+
+## 2026-11-15 · 第 1207 页：占位价只当上界（`907deda7`；认证 `907deda` 25/25）
+
+**背景**：第 1198 页 F4 的「占位价进美元闸」只写了裁决输入，闸仍把 GLM 三行占位价当实付报。
+本页落裁决文件 §五 的**口径 1**（与 A/B/C 档位映射无关）：硬上限继续按上界拦，但读数与回执
+不许把上界叫实付。
+
+### 改动
+
+- `bucketsSpendUsd` 返回 `calibrated`（任一贡献桶的价行未标定 ⇒ false）；`goalWindowSpend` 透传，
+  并读 worker 终态回执的 `price_calibrated`（缺字段按未标定）。
+- `goalReminder` / `goalStopDecision` 在读数含占位价时追加「含**未标定上界，不是实付**」；
+  默认文案逐字不变。`Orchestrator` 的成本闸对未标定行只出声一次。
+- 判据新增：GLM 占位行 `priceCalibrated=false`、Anthropic 实测行 true；提醒与停止理由都带
+  上界说法；`bucketsSpendUsd` 的标定态单测。文案片段导出为
+  `UNCALIBRATED_UPPER_BOUND_NOTE`，测试不再抄字面量（prose-needle 的顶包候选不涨）。
+
+### 认证链路（一红一绿，红也留档）
+
+- `74f6561`：核心 1 红（`prose-needle-scan` 11>10，新文案字面量被测试抄了）+ `mutate-needles`
+  3 条断针（我改了 `goalWindowSpend` 的 `booked += s` 与 `goalReminder` 调用点，三条锚点还指旧文本）。
+  处置：导出常量消除抄写；三条锚点改指新文本（`booked += s`、调用点仍保留 `decision.hint` 与
+  `unbookedWorkers` 两个形状位）。
+- 三条变异实跑：`goal-window-booked-sum-dropped` / `goal-lag-count-not-passed-at-call-site` /
+  `goal-hint-lost-at-callsite` **3/3 被杀死**（6.1s，跑 3/3 条）。
+- `907deda`：**25/25 门绿，核心 678 文件 / 8145 条（`--maxWorkers=2`），exit 0**；六维全过。
+  凭证：`outputs/head-cert-907deda-2026-11-15-0517/`；红凭证 `outputs/head-cert-74f6561-2026-11-15-0505/`。
+
+### 边界
+
+- 价表未改：GLM 三行仍是占位；美元闸仍按上界拦（宁可早停，不超支）。
+- F4 的 standard/strong 映射仍待裁决；本页只改「读数怎么说」，不改「哪一档填什么价」。
