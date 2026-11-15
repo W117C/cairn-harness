@@ -1,6 +1,6 @@
 // 自动化任务页（定时工作流模板、保唤开关、任务启停与运行历史）。
 import { useEffect, useMemo, useState } from "react";
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import * as DropdownMenu from "./ui/dropdown-menu";
 import { Activity, ChevronDown, FileText, Info, ListChecks, Target, TriangleAlert } from "lucide-react";
 import type { AutomationDefinition, AutomationSchedule } from "../../../../../src/main/automations";
 import type { HistoryEntry, ScheduleSnapshot } from "../../../../../src/main/scheduler";

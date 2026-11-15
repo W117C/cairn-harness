@@ -1,4 +1,4 @@
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import * as DropdownMenu from "./ui/dropdown-menu";
 import { ChevronDown, FileDiff } from "lucide-react";
 import { PANE_META, type PaneKind } from "../pane-registry";
 import { paneShortcutKeys } from "../pane-shortcuts";

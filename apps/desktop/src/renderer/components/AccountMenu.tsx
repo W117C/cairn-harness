@@ -4,7 +4,7 @@
 //
 // 菜单内容与旧页脚逐项相同（更新 / 外观 / 用量 / 设置 / 关于），不新增语义；
 // 唯一变化是位置与触发件：头像图标 + `aria-haspopup`，不再有文字标签。
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import * as DropdownMenu from "./ui/dropdown-menu";
 import { CircleUser } from "lucide-react";
 import { useState } from "react";
 import { readMotionPref, setMotionPref, type MotionPref } from "../state/motion-pref";

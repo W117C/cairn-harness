@@ -10,7 +10,7 @@ import { memo, useEffect, useRef, useState, type CSSProperties } from "react";
 import "@xterm/xterm/css/xterm.css";
 import "./pane-tabs.css";
 import { AlertTriangle, ArrowLeft, ArrowRight, Check, Crosshair, ExternalLink, Loader2, Maximize2, Minimize2, MoreHorizontal, Plus, RotateCw, X } from "lucide-react";
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import * as DropdownMenu from "./ui/dropdown-menu";
 import type { AgentEvent } from "../../../../../src/events";
 import { planActionLabel } from "../derived/change-labels";
 import { ConfirmDialog } from "./ConfirmDialog";

@@ -6,7 +6,7 @@
 // 2026-11-03 业主：Token 用量/会话活动统计页与模型档位 chips 不是这个栏该装的东西——整页撤掉，
 // Tab 只剩有数据才出现的改动/计划/时间线；默认选中第一个可用的。
 import { useId, useMemo, useState } from "react";
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import * as DropdownMenu from "./ui/dropdown-menu";
 import { ChevronRight, Plus, X } from "lucide-react";
 import type { AgentEvent } from "../../../../../src/events";
 import { timelineItems } from "../projections";

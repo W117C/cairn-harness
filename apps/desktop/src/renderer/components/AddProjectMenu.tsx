@@ -2,7 +2,7 @@
 // 全程零路径手输（原则 1）：打开与克隆位置都走系统选择器；克隆表单只收 URL + 选位置 + 预览。
 // 文案走 STR；菜单 = Radix DropdownMenu。
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import * as DropdownMenu from "./ui/dropdown-menu";
 import { FolderOpen, FolderPlus, GitBranch, History, X } from "lucide-react";
 import type { ProjectRecord } from "../../../../../src/main/ipc-protocol";
 import { STR } from "../strings";

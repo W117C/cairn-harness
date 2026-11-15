@@ -1,7 +1,7 @@
 // 目标芯片（2026-10-18）：桌面此前根本没有 goal 的可视面——/goal 斜杠项只是往输入框塞字，
 // 协议里的 setGoal 渲染层一次都没调过。芯片读 core 的 traceGoal（与主进程续跑判据同一份 reduce），
 // 展示目标原文/轮次/暂停态，并提供暂停/继续/清除三个动作（都走 setGoal IPC，事件回流后自更新）。
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import * as DropdownMenu from "./ui/dropdown-menu";
 import { ChevronDown, Target } from "lucide-react";
 import type { GoalTrace } from "../../../../../src/agent/goal-trace";
 import { STR } from "../strings";
