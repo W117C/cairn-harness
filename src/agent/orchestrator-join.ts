@@ -43,7 +43,7 @@ export function priceForModel(
   const id = findSpecByNameOrId(table, model)?.id ?? pickedId;
   return id === undefined ? { model } : { model, priceId: id };
 }
-/** 一笔表价花费。`calibrated=false` = 单价仍是占位数（GLM 三档），只可横向比较、不可当省钱证据。 */
+/** 一笔表价花费。`calibrated=false` = 单价仍是占位/未标定行，只可横向比较、不可当省钱证据。 */
 export interface WorkerSpend {
   usd: number;
   calibrated: boolean;
@@ -99,7 +99,7 @@ export interface SpendBucket {
 /** 会话真钱尺（唯一实现）：**每个桶按自己那一档的表价**折，再相加。
  *  为什么需要它（2026-09-23 实测）：两把美元闸原先都按「全部 token × 会话那一档单价」算花费，
  *  而 worker 可以跑在别的档位上（路由选档 / cascade 升档 / 显式 args.model）。本仓价表里同一份
- *  100k in + 1k out 是 flash $0.0202 / standard $0.2020 / strong $0.8080 ⇒ 会话档选 flash、
+ *  100k in + 1k out 是 flash $0.0124 / standard/strong $0.1241（5.2 与 5.3 同价）⇒ 会话档选 flash、
  *  钱实际花在 strong 时，闸读到的是实付的 **1/40**：「上限 $1」最坏要实际花到几十美元才拦，
  *  而同一屏的 worker 回执报的却是真价——**限制类判据与它要限制的那个读数分叉**。
  *  姿态沿用既有那条：真实但算不出的部分**不折成 $0** ⇒ 计入 `unpricedTokens` 由调用方出声；
@@ -130,7 +130,7 @@ export function bucketsSpendUsd(buckets: readonly SpendBucket[]): { usd: number;
 const PRICE_UNKNOWN = "价格未知（脚本回放、未注册档位或价表漂移；不记为免费）";
 
 /** spawn 回执上给人/模型看的一行人话；`sessionSpentUsd` = 派这一条**之前**本会话 worker 已付的表价合计。
- *  措辞里必须带着"表价"与标定态：这张表 GLM 三档仍是占位数（见 pricing.ts 文件头）。 */
+ *  措辞里必须带着"表价"与标定态：未标定行仍按上界口径（见 pricing.ts 文件头）。 */
 export function priceTagText(price: WorkerPrice | null | undefined, sessionSpentUsd: number | null): string {
   if (price === null || price === undefined || price.priceId === undefined) return PRICE_UNKNOWN;
   const id = price.priceId;

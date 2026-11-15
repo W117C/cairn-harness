@@ -93,7 +93,8 @@ describe("goalWindowSpend（主会话一档 + worker 已入账表价）", () => 
       artifacts: spentUsd === undefined ? {} : { spent_usd: spentUsd },
     } as AgentEvent);
 
-  // 100k in + 1k out 在当前价表：flash $0.0202 / standard $0.2020 / strong $0.8080
+  // 100k in + 1k out：flash $0.0124 / standard $0.1241 / strong $0.1241（官方 5.2/5.3 同价）。
+  // 回执里的 0.0202 是测试写死的入账值，不要求等于实际价——这一组量的是「回执 vs 会话档」的分离。
   const FLASH_WORKER = [spawned("w1", "glm-5.3-flash"), workerUse("w1", 100_000, 1_000), done("w1", 0.0202)];
 
   it("反向那一格：会话档很贵而 worker 跑便宜档 ⇒ 闸只看回执里那 $0.0202，不乘成 $0.808", () => {
@@ -115,7 +116,7 @@ describe("goalWindowSpend（主会话一档 + worker 已入账表价）", () => 
 
   it("主会话那一段仍按会话档折（与 #54 那条端到端同一把尺，两半相加不互相顶包）", () => {
     const r = goalWindowSpend([mainUse(100_000, 1_000), ...FLASH_WORKER], "glm-5.2");
-    expect(r.spentUsd).toBeCloseTo(0.202 + 0.0202, 6);
+    expect(r.spentUsd).toBeCloseTo(0.1241067 + 0.0202, 6);
   });
 
   it("在途 worker（还没终态回执）⇒ 本拍不入账，但 unbookedWorkers 报出来，好让提醒块说「可能晚一步」", () => {
@@ -150,13 +151,18 @@ describe("goalWindowSpend（主会话一档 + worker 已入账表价）", () => 
 describe("价表标定态：占位价只当上界", () => {
   const mainUse = (i: number, o: number): AgentEvent => ({ type: "usage", inputTokens: i, outputTokens: o } as AgentEvent);
 
-  it("GLM 占位行 ⇒ priceCalibrated=false；Anthropic 实测行 ⇒ true", () => {
+  it("GLM/Anthropic 已标定 ⇒ true；带未标定回执的 worker ⇒ false", () => {
     const glm = goalWindowSpend([mainUse(100_000, 1_000)], "glm-5.2");
     expect(glm.spentUsd).not.toBeNull();
-    expect(glm.priceCalibrated, "GLM 行未标定，读数只能是上界").toBe(false);
+    expect(glm.priceCalibrated).toBe(true);
     const anth = goalWindowSpend([mainUse(100_000, 1_000)], "claude-sonnet-5");
     expect(anth.spentUsd).not.toBeNull();
     expect(anth.priceCalibrated).toBe(true);
+    const uncal = goalWindowSpend([
+      { type: "agent_result", agent_id: "w1", status: "done", summary: "s", usage: { inputTokens: 0, outputTokens: 0 }, tool_stats: {}, artifacts: { spent_usd: 0.1, price_calibrated: false } } as AgentEvent,
+    ], "glm-5.2");
+    expect(uncal.spentUsd).toBeCloseTo(0.1, 6);
+    expect(uncal.priceCalibrated).toBe(false);
   });
 
   it("续跑提醒与美元停止理由都写明「未标定上界」", () => {

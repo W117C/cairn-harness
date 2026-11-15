@@ -6,7 +6,7 @@ import { createRng, newBanditState, selectArm, updatePriced } from "../src/routi
 describe("M6 价格表", () => {
   it("priceOf 已知 id 返回单价；未知 id fail-visible 抛错", () => {
     // 缓存两列随 A1 一起入表，值 = null（待联网实测校准，2026-09-19 裁决不编数）
-    expect(priceOf("glm-flash")).toEqual({ inputPerMTok: 0.2, outputPerMTok: 0.2, cacheReadPerMTok: null, cacheWritePerMTok: null });
+    expect(priceOf("glm-flash")).toEqual({ inputPerMTok: 0.1199, outputPerMTok: 0.4197, cacheReadPerMTok: 0.0345, cacheWritePerMTok: null, calibrated: true });
     expect(priceOf("openai-cheap").inputPerMTok).toBe(0.15);
     expect(() => priceOf("nope-model")).toThrow(/未知 model 价格/);
   });

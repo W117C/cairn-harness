@@ -28,12 +28,12 @@ afterEach(() => {
 
 describe("budgetPriceKeyOf / resolveRunModel：闸的价键取自真拨的那一档", () => {
   it("② per-run 指定强档：闸折钱的档 = 拨号的档（旧写法只读到实付的 1/4）", () => {
-    const sel = resolveRunModel({ provider: "glm", model: "glm-5.2" }, "glm-strong");
+    const sel = resolveRunModel({ provider: "glm", model: "glm-5.3-flash" }, "glm-strong");
     const dialed = sel.kind === "demo" ? "" : sel.spec.model;
     expect(budgetPriceKeyOf(sel)).toBe(dialed);
     expect(usdOf(budgetPriceKeyOf(sel))).toBe(usdOf(dialed));
     // 牙齿：设置盘那个字段（旧写法用的键）必须**不是**同一个数，否则这条判据零分辨力。
-    expect(usdOf("glm-5.2")).not.toBe(usdOf(dialed));
+    expect(usdOf("glm-5.3-flash")).not.toBe(usdOf(dialed));
   });
 
   it("③ per-run 指定便宜档：闸不再读到 10 倍（假「预算耗尽」会掐掉还在预算内的任务）", () => {

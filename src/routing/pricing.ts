@@ -11,8 +11,9 @@
 //     gpt-4o $2/$10 cached $1.25、o3 $2/$8 cached $0.50；写侧价厂商未单列 ⇒ 留 null。
 //   · Gemini ai.google.dev/gemini-api/docs/pricing —— 2.5-Flash $0.30/$2.50 cache read $0.03、
 //     3.8-Flash $0.75/$3.75 cache read $0.075、2.5-Pro $1.25/$10 cache read $0.125。
-//   · 智谱 docs.bigmodel.cn 的定价页是 JS 渲染，**官方数字没抓到** ⇒ GLM 三行仍是占位（未证）。
-//     第三方报道的「GLM-5.2 输入 8 元 / 输出 28 元 每百万 tokens」按未证处理，不写进数表。
+//   · 智谱 docs.bigmodel.cn（2026-11-15 实读）：GLM-5.3 / 5.2 输入 8 CNY、输出 28 CNY、缓存命中 2 CNY
+//     每百万 tokens；GLM-5.3-Flash 0.8 / 2.8 / 0.23。按 1 USD=6.6719 CNY 折 USD；缓存写价官方未单列，
+//     保持 null（仍进 `uncalibratedCachePrices`，但输入/输出价已 `calibrated: true`）。
 //   · DeepSeek api-docs.deepseek.com/quick_start/pricing（2026-10-25 实读）——分**峰谷**两档，
 //     谷时价恰为峰时一半；这里取**峰时**（美元闸宁可高估一半，不低估一半）：
 //     flash 未命中输入 $0.30 / 输出 $1.20 / 命中读 $0.006；pro $1.32 / $3.96 / $0.044。
@@ -54,15 +55,12 @@ export function unpricedModels(
   return Object.keys(table).filter((id) => table[id].calibrated !== true).sort();
 }
 
-/** 缓存价共用「未标定」值：联网实测后按档位逐条覆盖（覆盖一处即该档转精确计价）。 */
-const CACHE_UNCALIBRATED = { cacheReadPerMTok: null, cacheWritePerMTok: null } as const;
-
 /** 缺省价格表（key = 档位表 id；打 `calibrated` 的行是厂商官方页实测值，GLM 三行仍是占位）。 */
 export const DEFAULT_PRICE_TABLE: Readonly<Record<string, ModelPrice>> = {
-  // GLM（智谱）——占位：官方定价页 JS 渲染未取到数（见文件头），三行一律不打 calibrated
-  "glm-flash": { inputPerMTok: 0.2, outputPerMTok: 0.2, ...CACHE_UNCALIBRATED },
-  "glm-standard": { inputPerMTok: 2.0, outputPerMTok: 2.0, ...CACHE_UNCALIBRATED },
-  "glm-strong": { inputPerMTok: 8.0, outputPerMTok: 8.0, ...CACHE_UNCALIBRATED },
+  // GLM（智谱）——2026-11-15 官方价按 1 USD=6.6719 CNY 折算；5.2 与 5.3 同价（8/28/cache 2 CNY）
+  "glm-flash": { inputPerMTok: 0.1199, outputPerMTok: 0.4197, cacheReadPerMTok: 0.0345, cacheWritePerMTok: null, calibrated: true },
+  "glm-standard": { inputPerMTok: 1.1991, outputPerMTok: 4.1967, cacheReadPerMTok: 0.2998, cacheWritePerMTok: null, calibrated: true },
+  "glm-strong": { inputPerMTok: 1.1991, outputPerMTok: 4.1967, cacheReadPerMTok: 0.2998, cacheWritePerMTok: null, calibrated: true },
   // OpenAI（cached input 实测；写侧价厂商未单列 ⇒ null，仍留在缓存待标定清单里）
   "openai-cheap": { inputPerMTok: 0.15, outputPerMTok: 0.6, cacheReadPerMTok: 0.075, cacheWritePerMTok: null, calibrated: true },
   "openai-standard": { inputPerMTok: 2.0, outputPerMTok: 10.0, cacheReadPerMTok: 1.25, cacheWritePerMTok: null, calibrated: true },
@@ -134,7 +132,7 @@ export function costUsd(
 
 /** 已校准行里**最不利**的输出/输入单价比（PC7 的摊销判据用它）。
  *  为什么不把比值写死在判据里：那样加一档更贵的输出价时判据不会跟着收紧（机制判据挂现状不挂抄本）。
- *  只算 `calibrated: true` 的行——占位数（GLM 三档）按本文件口径不可当省钱证据，宁可让线由已校准行决定。 */
+ *  只算 `calibrated: true` 的行——未标定行按本文件口径不可当省钱证据，宁可让线由已校准行决定。 */
 export function worstCalibratedOutputRatio(
   table: Readonly<Record<string, ModelPrice>> = DEFAULT_PRICE_TABLE,
 ): number {

@@ -338,12 +338,12 @@ export const MUTATIONS = [
     id: "pricing-unpriced-audit-always-empty",
     src: "src/routing/pricing.ts",
     test: "tests/prompt-cache-breakpoints.test.ts",
-    desc: "占位价审计清单恒空（GLM 三行官方页没抓到数这件事被抹掉 ⇒ 未标定的数被当成实测喂进 bandit 代价项）",
+    desc: "占位价审计清单恒空（未标定行被当成实测喂进 bandit 代价项）",
     apply: (s) => s.replace(
       "  return Object.keys(table).filter((id) => table[id].calibrated !== true).sort();\n",
       "  return [];\n",
     ),
-    expectFail: "输入价仍是占位的档位单独可查（GLM 官方页没抓到数 ⇒ 不许当省钱证据）",
+    expectFail: "GLM 已标定 ⇒ 不再列入未标定；合成未标定行仍可查",
   },
   {
     id: "pricing-cache-write-bucket-priced-as-zero",

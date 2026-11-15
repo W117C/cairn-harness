@@ -61,7 +61,7 @@ function makeOrch(model: WorkerModel, budget: { maxUsd: number; pricePerMTok: nu
 }
 
 const REPORT: ModelOutput = { type: "assistant_message", content: "## 结论\n- 完成了。\n\n## 证据路径\n- a.ts:1\n\n## 风险\n- 低。\n\n## 未决问题\n- 无。" };
-/** 100k in + 1k out：价表里 flash=$0.0202 / standard=$0.2020 / strong=$0.8080。 */
+/** 100k in + 1k out：官方价 flash=$0.0124 / standard/strong=$0.1241（5.2 与 5.3 同价）。 */
 const HEAVY: ModelOutput = { type: "usage", inputTokens: 100_000, outputTokens: 1_000 };
 
 async function settle(orch: Orchestrator): Promise<void> {
@@ -101,7 +101,7 @@ describe("会话美元闸按每桶真实档位计价", () => {
     expect(r.ok, r.output).toBe(true);
     await settle(orch);
     await orch.appendProtocol({ type: "usage", inputTokens: 100_000, outputTokens: 1_000 } as AgentEvent); // 无 agent_id = 主会话自己那一跳
-    expect(orch.budgetEstimateUsd(), "主会话的 token 必须进账（拆桶不是把 main 丢掉）").toBeCloseTo(0.404, 4);
+    expect(orch.budgetEstimateUsd(), "主会话的 token 必须进账（拆桶不是把 main 丢掉）").toBeCloseTo(0.2482, 4);
   });
 
   it("冻结回放的 token 不冒充实付：全脚本 ⇒ 闸读数 0 且不告警（价不可知才要出声）", async () => {
@@ -132,10 +132,10 @@ describe("bucketsSpendUsd（每桶按自己那一档折）", () => {
       { usage: HEAVY_USAGE, price: STRONG },
     ]);
     expect(s).not.toBeNull();
-    expect(s!.usd).toBeCloseTo(0.0202 + 0.808, 6);
+    expect(s!.usd).toBeCloseTo(0.136517, 6);
     // 成对判两侧：旧尺（全按会话 flash 档）会读成 0.0404，全按强档会读成 1.616
-    expect(s!.usd).not.toBeCloseTo(0.0202 + 0.0202, 6);
-    expect(s!.usd).not.toBeCloseTo(0.808 + 0.808, 6);
+    expect(s!.usd).not.toBeCloseTo(0.0124097 + 0.0124097, 6);
+    expect(s!.usd).not.toBeCloseTo(0.1241067 + 0.1241067, 6);
     expect(s!.unpricedTokens).toBe(0);
   });
 
@@ -145,7 +145,7 @@ describe("bucketsSpendUsd（每桶按自己那一档折）", () => {
       { usage: HEAVY_USAGE, price: { model: "神秘档-9000", priceId: undefined } },
     ]);
     expect(s).not.toBeNull();
-    expect(s!.usd).toBeCloseTo(0.0202, 6);
+    expect(s!.usd).toBeCloseTo(0.0124097, 6);
     expect(s!.unpricedTokens).toBe(101_000);
   });
 
@@ -171,9 +171,9 @@ describe("bucketsSpendUsd（每桶按自己那一档折）", () => {
 /* 2026-11-15：桶读数带上标定态——硬上限可以照上界拦，但「省了钱」的证据不能拿占位价说。 */
 describe("bucketsSpendUsd 的标定态", () => {
   const USAGE = { inputTokens: 100_000, outputTokens: 1_000 };
-  it("GLM 占位行 false；Anthropic 实测行 true", () => {
+  it("GLM/Anthropic 已标定 ⇒ true", () => {
     const glm = bucketsSpendUsd([{ usage: USAGE, price: priceForModel("glm-5.2") }]);
-    expect(glm?.calibrated).toBe(false);
+    expect(glm?.calibrated).toBe(true);
     const anth = bucketsSpendUsd([{ usage: USAGE, price: priceForModel("claude-sonnet-5") }]);
     expect(anth?.calibrated).toBe(true);
   });

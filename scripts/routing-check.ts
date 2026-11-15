@@ -278,7 +278,7 @@ console.log("[routing-check] F 价格表接线（覆盖护栏 / 真钱折算 / �
   const c = costUsd("anthropic-standard", { inputTokens: 1_000_000, outputTokens: 1_000_000 });
   check(Math.abs(c - 12.0) < 1e-9, "F2 costUsd 真钱折算（1M in + 1M out @anthropic-standard = $12，Sonnet 5 现行价 $2/$10）", "cost=" + String(c));
   check(priceOf("gemini-cheap").inputPerMTok === 0.3, "F2b 价格表读取（2.5-Flash $0.30）");
-  // F2c：档位必须能被代价项**分辨**（同 provider 三档的 blended 成本两两不等），且 cheap 确实最便宜。
+  // F2c：cheap 必须严格最便宜；standard/strong 允许官方同价（同价必须两侧已标定）。
   // 不断言「cheap < standard < strong 全序」——官方价就有倒挂（o3 $2/$8 比 gpt-4o $2/$10 的输出价更低），
   // 那是档位语义的产品问题，不是数表错；倒挂由下面那行显式打出来，不静默。
   // id 一律从档位表取（glm 的 cheap 档沿用历史名 glm-flash，字符串拼不出来）。
@@ -296,11 +296,19 @@ console.log("[routing-check] F 价格表接线（覆盖护栏 / 真钱折算 / �
         bad.push(provider + " 三档不齐（档位表缺档）");
         continue;
       }
-      if (new Set([c, st, g]).size !== 3) bad.push(provider + " 三档成本无法区分 " + String(c) + "/" + String(st) + "/" + String(g));
       if (c >= st || c >= g) bad.push(provider + " cheap 不是最便宜 " + String(c));
+      // 官方价可以同价（GLM 5.2/5.3）：同价必须是两侧都已标定，不能是占位价碰巧相等。
+      if (st === g) {
+        const stdRow = rows.find((s) => s.tier === "standard");
+        const strongRow = rows.find((s) => s.tier === "strong");
+        if (stdRow === undefined || strongRow === undefined ||
+          priceOf(stdRow.id).calibrated !== true || priceOf(strongRow.id).calibrated !== true) {
+          bad.push(provider + " standard/strong 同价但未标定");
+        }
+      }
       if (st > g) inversions.push(provider + "（standard $" + st.toFixed(3) + " > strong $" + g.toFixed(3) + "）");
     }
-    check(bad.length === 0, "F2c 每家三档的 blended 成本可区分且 cheap 最低（bandit 代价项的前提）", bad.join("；"));
+    check(bad.length === 0, "F2c cheap 严格最低；standard/strong 同价须两侧已标定", bad.join("；"));
     console.log("  ℹ️ 官方价倒挂（非缺陷，档位语义待裁决）：" + (inversions.length > 0 ? inversions.join("；") : "无"));
   }
   // F2d：标定来源可审计——未标定行必须显式列出来，而不是混在数表里当实测。

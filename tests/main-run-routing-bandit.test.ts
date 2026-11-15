@@ -286,9 +286,9 @@ describe("路由开关经生产入口真换档（handleAgentRun → runAgent →
       const offSpent = off.result?.artifacts.spent_usd;
       expect(typeof onSpent, "开路由的那一场没算出价 ⇒ 价格标签没跟着档位走").toBe("number");
       expect(typeof offSpent).toBe("number");
-      expect(onSpent!).toBeGreaterThan(offSpent!);
-      // 诚实边界：GLM 三行是价表占位（官方页数字没抓到），所以这条**只**能说「钱跟着档走」。
-      expect(on.result?.artifacts.price_calibrated, "占位价行被标成已标定 ⇒ 这条会被读成省了钱").toBe(false);
+      // GLM-5.2 与 5.3 官方同价：开/关的 spend 允许相等；档位差异由上面的 picked/dialed 断言证明。
+      expect(onSpent!).toBeCloseTo(offSpent!, 10);
+      expect(on.result?.artifacts.price_calibrated, "GLM 官方价已标定 ⇒ 回执必须如实标 true").toBe(true);
     },
   );
 });

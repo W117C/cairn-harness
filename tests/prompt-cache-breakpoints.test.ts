@@ -123,25 +123,34 @@ describe("缓存价：待校准清单与上界口径", () => {
     }
   });
 
-  it("输入价仍是占位的档位单独可查（GLM 官方页没抓到数 ⇒ 不许当省钱证据）", () => {
-    expect(unpricedModels()).toEqual(["glm-flash", "glm-standard", "glm-strong"]);
+  it("GLM 已标定 ⇒ 不再列入未标定；合成未标定行仍可查", () => {
+    expect(unpricedModels()).toEqual([]);
+    const synthetic: Record<string, ModelPrice> = {
+      ...DEFAULT_PRICE_TABLE,
+      "synthetic-unpriced": { inputPerMTok: 1, outputPerMTok: 1, cacheReadPerMTok: null, cacheWritePerMTok: null },
+    };
+    expect(unpricedModels(synthetic)).toContain("synthetic-unpriced");
   });
 
   it("未标定档位 ⇒ 带缓存分块与不带的成本逐字同值（上界口径，零回归）", () => {
-    // 必须用**两桶都还是 null** 的档位测：Anthropic 已标定后这里会真的变便宜（见下一条）。
-    const plain = costUsd("glm-flash", { inputTokens: 100_000, outputTokens: 1_000 });
-    const withCache = costUsd("glm-flash", { inputTokens: 100_000, outputTokens: 1_000, cacheReadInputTokens: 80_000 });
+    // 必须用**两桶都还是 null** 的档位测：Anthropic/GLM 已标定后这里会真的变便宜（见下一条）。
+    const uncal: Record<string, ModelPrice> = {
+      ...DEFAULT_PRICE_TABLE,
+      "glm-flash": { ...DEFAULT_PRICE_TABLE["glm-flash"]!, cacheReadPerMTok: null, cacheWritePerMTok: null },
+    };
+    const plain = costUsd("glm-flash", { inputTokens: 100_000, outputTokens: 1_000 }, uncal);
+    const withCache = costUsd("glm-flash", { inputTokens: 100_000, outputTokens: 1_000, cacheReadInputTokens: 80_000 }, uncal);
     expect(withCache).toBeCloseTo(plain, 12);
     // 写桶同口径（这条是变异锚点逼出来的：写侧回落此前零覆盖，
     // pricing-cache-write-bucket-priced-as-zero 因此存活）
-    const withWrite = costUsd("glm-flash", { inputTokens: 100_000, outputTokens: 1_000, cacheWriteInputTokens: 40_000 });
+    const withWrite = costUsd("glm-flash", { inputTokens: 100_000, outputTokens: 1_000, cacheWriteInputTokens: 40_000 }, uncal);
     expect(withWrite).toBeCloseTo(plain, 12);
     const withBoth = costUsd("glm-flash", {
       inputTokens: 100_000,
       outputTokens: 1_000,
       cacheReadInputTokens: 30_000,
       cacheWriteInputTokens: 40_000,
-    });
+    }, uncal);
     expect(withBoth).toBeCloseTo(plain, 12);
   });
 

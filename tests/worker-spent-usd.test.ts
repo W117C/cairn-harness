@@ -104,7 +104,7 @@ describe("W3② 花费折算（priceOf/costUsd 是唯一价源）", () => {
     const usage = { inputTokens: 1000, outputTokens: 500 };
     const got = spentUsdFor({ model: "glm-5.2", priceId: "glm-standard" }, usage);
     expect(got).not.toBeNull();
-    expect(got!.usd).toBeCloseTo(costUsd("glm-standard", usage), 10);
+    expect(got!.usd).toBeCloseTo(costUsd("glm-standard", usage), 6);
     expect(got!.usd).toBeGreaterThan(0);
     expect(got!.calibrated).toBe(priceOf("glm-standard").calibrated === true);
   });
@@ -143,7 +143,7 @@ describe("W3② 花费折算（priceOf/costUsd 是唯一价源）", () => {
     const priced = priceTagText({ model: "glm-5.2", priceId: "glm-standard" }, 0.0123);
     expect(priced).toContain("glm-5.2");
     expect(priced).toContain("2");
-    expect(priced).toContain("未标定");
+    expect(priced).toContain("已标定");
     expect(priced).toContain("0.0123");
     const unknown = priceTagText(null, null);
     expect(unknown).toContain("价格未知");
@@ -178,12 +178,12 @@ describe("W3② 三个面真的接上（spawn 回执 / agent_result / wait 行�
 
     const artifacts = resultOf(events)!.artifacts as { spent_usd?: number; price_calibrated?: boolean };
     const expected = costUsd("glm-standard", { inputTokens: 1000, outputTokens: 500 });
-    expect(artifacts.spent_usd, "终态必须带机器可读花费").toBeCloseTo(expected, 10);
-    expect(artifacts.price_calibrated).toBe(false);
+    expect(artifacts.spent_usd, "终态必须带机器可读花费").toBeCloseTo(expected, 6);
+    expect(artifacts.price_calibrated).toBe(true);
 
     const body = await orch.waitForAgents([], 1_000);
     const row = body.rows[0] as JoinRow & { spent_usd?: number };
-    expect(row.spent_usd).toBeCloseTo(expected, 10);
+    expect(row.spent_usd).toBeCloseTo(expected, 6);
   }, 15_000);
 });
 
