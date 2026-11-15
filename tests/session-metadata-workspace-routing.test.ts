@@ -3,12 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  claimSessionMetadata,
   handleSessionDelete,
   handleSessionRename,
   handleSessionSetArchived,
   handleSessionSetPinned,
   initSessionsDir,
   listSessionMetadataForRoot,
+  listUnattributedSessionMetadata,
   requireSessionMetadata,
   requireSessionMetadataFor,
   setSessionRootsProvider,
@@ -146,5 +148,101 @@ describe("会话 metadata 按会话根分卷", () => {
     await seedLegacyMetadata({ title: "归属不明" });
 
     expect(await listSessionMetadataForRoot(sessionsB)).toEqual([]);
+  });
+});
+
+describe("重复 id 历史记录的裁决（不猜、可枚举、显式认领）", () => {
+  it("两个根都有同 id：孤儿记录可枚举、带标题与原始事实，不自动选边", async () => {
+    await seedLegacyMetadata({ title: "归属不明", pinned: true });
+
+    const orphans = await listUnattributedSessionMetadata();
+    expect(orphans).toEqual([
+      expect.objectContaining({ id: sessionId, title: "归属不明", pinned: true }),
+    ]);
+    expect(orphans[0]?.workspaceScoped).toBeUndefined();
+    // 枚举本身不写盘：两边仍读不到，旧卷原样保留。
+    expect(await listSessionMetadataForRoot(sessionsA)).toEqual([]);
+    expect(await listSessionMetadataForRoot(sessionsB)).toEqual([]);
+    expect((await requireSessionMetadata().find(sessionId))?.title).toBe("归属不明");
+  });
+
+  it("单根 CLI 形态：根集合只有装配根自己，旧记录照旧读（不被新过滤误伤）", async () => {
+    setSessionRootsProvider(null);
+    await rm(join(sessionsB, `${sessionId}.jsonl`));
+    await seedLegacyMetadata({ title: "单根旧标题" });
+
+    expect(await listUnattributedSessionMetadata()).toEqual([]);
+    expect(await listSessionMetadataForRoot(sessionsA)).toEqual([
+      expect.objectContaining({ id: sessionId, title: "单根旧标题" }),
+    ]);
+  });
+
+  it("唯一归属的旧记录不算孤儿（沿用既有回退，不需业主裁决）", async () => {
+    await rm(join(sessionsA, `${sessionId}.jsonl`));
+    await seedLegacyMetadata();
+
+    expect(await listUnattributedSessionMetadata()).toEqual([]);
+    expect(await listSessionMetadataForRoot(sessionsB)).toEqual([
+      expect.objectContaining({ id: sessionId, title: "旧标题" }),
+    ]);
+  });
+
+  it("显式认领到 B：B 读到带标记的记录，A 仍空，旧卷移出该 id", async () => {
+    await seedLegacyMetadata({ title: "业主判给 B", pinned: true });
+
+    const result = await claimSessionMetadata(sessionId, sessionsB);
+    expect(result.ok).toBe(true);
+    expect(result.record).toMatchObject({
+      id: sessionId, title: "业主判给 B", pinned: true, workspaceScoped: true,
+    });
+    expect(await listSessionMetadataForRoot(sessionsB)).toEqual([
+      expect.objectContaining({ id: sessionId, title: "业主判给 B", workspaceScoped: true }),
+    ]);
+    expect(await listSessionMetadataForRoot(sessionsA)).toEqual([]);
+    expect(await requireSessionMetadata().find(sessionId)).toBeUndefined();
+    expect(await listUnattributedSessionMetadata()).toEqual([]);
+  });
+
+  it("认领不覆盖目标根已有的权威记录：本地卷赢，旧卷记录清掉", async () => {
+    await seedLegacyMetadata({ title: "旧标题", pinned: true });
+    await requireSessionMetadataFor(sessionsB).setTitle(sessionId, "B 的新标题");
+
+    const result = await claimSessionMetadata(sessionId, sessionsB);
+    expect(result.ok).toBe(true);
+    expect(result.record).toMatchObject({ title: "B 的新标题", workspaceScoped: true });
+    expect(await listSessionMetadataForRoot(sessionsB)).toEqual([
+      expect.objectContaining({ id: sessionId, title: "B 的新标题" }),
+    ]);
+    expect(await requireSessionMetadata().find(sessionId)).toBeUndefined();
+  });
+
+  it("拒绝路径：未登记根 / 根里没这条会话 / 没有旧记录 / 已落卷 / 非法 id 都不写盘", async () => {
+    const foreignRoot = join(root, "not-registered", ".agent", "sessions");
+    expect((await claimSessionMetadata(sessionId, foreignRoot)).ok).toBe(false);
+
+    await seedLegacyMetadata();
+    await rm(join(sessionsB, `${sessionId}.jsonl`));
+    expect((await claimSessionMetadata(sessionId, sessionsB)).ok).toBe(false);
+    expect((await requireSessionMetadata().find(sessionId))?.title).toBe("旧标题");
+    expect(await requireSessionMetadataFor(sessionsB).find(sessionId)).toBeUndefined();
+
+    await seedSession(sessionsB);
+    await requireSessionMetadataFor(sessionsB).setTitle(sessionId, "已落卷");
+    await requireSessionMetadata().remove(sessionId);
+    expect((await claimSessionMetadata(sessionId, sessionsB)).ok).toBe(false);
+    expect(await requireSessionMetadataFor(sessionsB).find(sessionId)).toMatchObject({ title: "已落卷" });
+
+    expect((await claimSessionMetadata("bad id", sessionsB)).ok).toBe(false);
+  });
+
+  it("装配根旧卷里已有带标记的记录 ⇒ 明确拒绝「无需认领」，不改动任何卷", async () => {
+    // 「这条记录已按根落卷，无需认领」是模型可见的能力断言：判据逐字点名它，
+    // 让 promise-recall-inventory 的证人面有原句证人，而不是靠登记豁免。
+    await seedLegacyMetadata({ title: "已按根落卷", workspaceScoped: true });
+
+    const result = await claimSessionMetadata(sessionId, sessionsB);
+    expect(result).toMatchObject({ ok: false, error: expect.stringContaining("这条记录已按根落卷，无需认领") });
+    expect((await requireSessionMetadata().find(sessionId))?.title).toBe("已按根落卷");
+    expect(await requireSessionMetadataFor(sessionsB).find(sessionId)).toBeUndefined();
   });
 });

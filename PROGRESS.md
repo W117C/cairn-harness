@@ -41302,3 +41302,51 @@ desktop boundary 绿。核心仍为 `pnpm test:capped` **681 文件 / 8179 条�
   根级 `cds-parity-verify/values.json` 旧副本；保持未跟踪原状，不替业主删现场。
 - 旧装配根全局卷里重复 id、无 `workspaceScoped` 标记的历史记录归属仍待业主裁决；
   分卷只对新写入与唯一归属回退生效，不做批量迁移。
+
+## 2026-11-15 · 第 1241 页：重复 id 历史 metadata 归属裁决（ADR 0016，工作树）
+
+**背景**：第 1238 页把 `session-metadata.json` 按会话根分卷后，旧装配根全局卷里「两个根同时有同 id、
+记录无 `workspaceScoped` 标记」的那批历史数据仍未被裁决；`STATE.md`「未决」挂了四轮。业主令
+「先裁决重复 id 历史记录的归属」，并授权按最优解收口。实测 `~/Library/Application Support/cairn*`
+下**没有** `session-metadata.json` ⇒ 本机无待认领实数据，本题是规则面而非数据认领：
+哪条标题属于 A 项目只有业主知道，自动选边就是本轮在修的串根 bug 本身。
+
+**裁决**（`docs/adr/0016-legacy-session-metadata-ownership.md`，已接受）：**不猜、不批量迁移、
+不静默丢弃**；无主记录可枚举、可诊断，消解只走显式认领。四条细则：
+① 唯一归属回退沿用；② 枚举只报 0 个或 ≥2 个拥有者的无标记记录，不写盘；
+③ 认领过三道闸（已登记根 / 会话在场 / 只允许无标记旧记录），本地卷已有权威记录时原样返回不覆盖；
+④ 不新增 IPC 通道、不进 UI、不 bump 协议——认领是低频数据修复动作，为它造 invoke 通道会连锁
+协议版本、通道计数与 11 个契约判据，还违背「Avoid unnecessary secondary labels」。
+
+### 改动
+
+- `session-handlers` 新增 `listUnattributedSessionMetadata()` 与 `claimSessionMetadata(id, root)`；
+  后者复用 `adoptIfAbsent` 写 `workspaceScoped: true` 并从旧全局卷移出该 id，清理失败只出声。
+- **本轮实际抓到并修掉一处真漏洞**：`listSessionMetadataForRoot` 在装配根走
+  `sessionsRoot === sessionsDir` 早退，直读全局卷 ⇒ 业主还没裁决的无主重复 id 记录被当成 A 的组织
+  事实展示（kernel-host 的 duplicate 兜底只挡桌面渲染层，core 读面没挡）。现装配根也过滤
+  `owners > 1 && !workspaceScoped` 的记录；单根 CLI 形态 `owners <= 1` 照旧读，专门补了判据防误伤。
+- 文档四层同步：ADR 0016（含红绿证明表）、`decision-queue` 第五节改「已裁」、`STATE.md`
+  把该项从「未决」移入「下一步」并记裁决、`docs/ROADMAP.md` 把桌面 UI 认领入口登记为另立裁决。
+
+### 读数（工作树；取料 `outputs/legacy-metadata-ownership-2026-11-15/`）
+
+- 定向判据：`tests/session-metadata-workspace-routing.test.ts` **13/13 绿**（7 条本题新增：
+  孤儿可枚举、单根形态不受影响、唯一归属不算未决、显式认领两侧隔离、本地卷赢、五类拒绝路径、
+  「已落卷无需认领」原句证人）；
+  同族 `session-metadata` / `audit` / `organization` / `prefs-routing` / `pin-workspace-routing`
+  合计 **6 文件 / 47 条绿**；`tests/promise-recall-inventory.test.ts` 的证人面（含反向对照）绿。
+- **两次真红都按机理修复**：① 定向首跑抓到装配根读面直读全局卷（修的是实现，不是断言）；
+  ② 核心首跑 `promise-recall-inventory` 抓到新错误文案「这条记录已按根落卷」是无证人的能力断言
+  （`CLAIM_UNWITNESSED_CAP=0`），补了逐字点名该原句的判据，没有走登记豁免。两次首红日志均不冒充通过，
+  本页只引用修复后的读数。
+- 核心 `pnpm test:capped`：`outputs/legacy-metadata-ownership-2026-11-15/core-test-capped.log`。
+- 桌面 `VITEST_MAX_WORKERS=2 pnpm --filter cairn-desktop test`：**396 文件 / 2574 条绿，exit 0**，
+  desktop boundary 绿（`outputs/legacy-metadata-ownership-2026-11-15/desktop-test.log`）。
+- 静态门：根与桌面 `typecheck` 0、`docs-check` 受检项全绿（证人点名面 508 页 / 732 条红 0、
+  下一页号 1241）、`repo-hygiene-check` 四面绿（`outputs/` 5798 / 8964 = 64.7%，帽 70%）、
+  `git diff --check` 0（`outputs/legacy-metadata-ownership-2026-11-15/static-gates.log`）。
+
+**边界**：全部是工作树读数，不是提交/HEAD 认证/真实模型/打包态验收；本协议面零变更
+（IPC 仍 v58、通道数仍 157），桌面认领 UI 若要做需另立一次裁决并同步版本契约面。
+零拥有者的孤儿记录只进清单、认领闸会拒（没有目标会话），需先恢复日志或明确废弃，本页不替它决定删除。

@@ -163,7 +163,23 @@ async function hasUniqueSessionOwner(sessionId: string, owner: string): Promise<
 export async function listSessionMetadataForRoot(sessionsRoot: string): Promise<SessionMetadataRecord[]> {
   const repository = requireSessionMetadataFor(sessionsRoot);
   const records = await repository.list();
-  if (sessionsRoot === sessionsDir) return records;
+  const roots = knownSessionRoots();
+  // 装配根就是旧全局卷本身。旧版桌面把所有工作区的记录都写进这一卷，重复 id 且没有
+  // `workspaceScoped` 标记的记录归属未决（第 1241 页）：这一卷也不能把它当成自己的组织事实，
+  // 否则 A 侧栏会把业主还没裁决的标题/置顶显示出来——与「不猜」相违。
+  // 单根 CLI/headless 形态（根集合只有装配根自己）不受影响：owners=1 时照旧读。
+  if (sessionsRoot === sessionsDir) {
+    const filtered: SessionMetadataRecord[] = [];
+    for (const record of records) {
+      if (record.workspaceScoped === true) { filtered.push(record); continue; }
+      let owners = 0;
+      for (const root of roots) {
+        if (await sessionExists(root, record.id)) owners += 1;
+      }
+      if (owners <= 1) filtered.push(record);
+    }
+    return filtered;
+  }
   const localIds = new Set(records.map((record) => record.id));
   for (const record of await requireSessionMetadata().list()) {
     if (localIds.has(record.id)) continue;
@@ -171,6 +187,80 @@ export async function listSessionMetadataForRoot(sessionsRoot: string): Promise<
     if (await hasUniqueSessionOwner(record.id, sessionsRoot)) records.push(record);
   }
   return records;
+}
+
+/**
+ * 旧装配根全局卷里「归属未决」的记录：两个（或更多）已登记根里都有同 id 会话，
+ * 而这条记录没有 `workspaceScoped` 标记 ⇒ 无法从数据本身判断它属于哪一边。
+ *
+ * 裁决（第 1241 页 / ADR 0016）：**不猜、不自动迁移、不静默丢弃**。
+ * 本机哪条记录属于哪个项目只有业主知道；自动按 mtime / 标题 / 根顺序选边，正是本轮在修的串根 bug。
+ * 这里只把「孤儿」变成可枚举、可诊断的事实，消解必须走 `claimSessionMetadata` 的显式认领。
+ */
+export async function listUnattributedSessionMetadata(): Promise<SessionMetadataRecord[]> {
+  const legacy = await requireSessionMetadata().list();
+  const roots = knownSessionRoots();
+  const out: SessionMetadataRecord[] = [];
+  for (const record of legacy) {
+    if (record.workspaceScoped === true) continue;
+    let owners = 0;
+    for (const root of roots) {
+      if (await sessionExists(root, record.id)) owners += 1;
+    }
+    // 唯一归属的记录由 listSessionMetadataForRoot / readSessionMetadataForSession 回退并按需搬迁，
+    // 不属于「未决」；只有 0 个或 2 个以上拥有者才需要业主裁决（0 = 孤儿日志已不在任何根里）。
+    if (owners === 1) continue;
+    out.push(record);
+  }
+  return out;
+}
+
+export interface ClaimSessionMetadataResult {
+  ok: boolean;
+  /** 认领后落在目标根的记录（带 `workspaceScoped` 标记）。失败时缺席。 */
+  record?: SessionMetadataRecord;
+  error?: string;
+}
+
+/**
+ * 显式认领一条归属未决的旧记录到指定会话根。
+ *
+ * 三道闸，缺一不可（第 1241 页）：
+ *  ① 目标根必须是**已登记根集合**里的显式根——调用方（CLI / 维护脚本）必须先过
+ *     `explicitSessionsRoot` 那一侧的登记闸；这里不采信路径字符串，只认集合成员。
+ *  ② 该根里必须**当场存在**这条会话日志（闸只说「去哪儿」，不替它说「存在」）。
+ *  ③ 只允许认领无 `workspaceScoped` 标记的旧全局记录；本地卷已有记录时不覆盖
+ *     （`adoptIfAbsent` 原样返回），新卷的权威事实永远赢。
+ *
+ * 不做唯一归属回退、不按 mtime/标题/根顺序选边：那是自动猜，正是本裁决禁止的。
+ * 成功后从旧全局卷移出该 id；清理失败只出声（本地卷优先的读面已挡住残留）。
+ */
+export async function claimSessionMetadata(
+  sessionId: string,
+  sessionsRoot: string,
+): Promise<ClaimSessionMetadataResult> {
+  try {
+    if (!isSessionId(sessionId)) return { ok: false, error: `会话名非法: ${JSON.stringify(sessionId)}` };
+    const roots = knownSessionRoots();
+    if (!roots.includes(sessionsRoot)) {
+      return { ok: false, error: `未登记的会话根，已拒绝：${sessionsRoot}` };
+    }
+    if (!(await sessionExists(sessionsRoot, sessionId))) {
+      return { ok: false, error: `会话不存在: ${sessionId}` };
+    }
+    const legacy = await requireSessionMetadata().find(sessionId);
+    if (legacy === undefined) return { ok: false, error: `旧全局卷里没有这条记录: ${sessionId}` };
+    if (legacy.workspaceScoped === true) {
+      return { ok: false, error: `这条记录已按根落卷，无需认领: ${sessionId}` };
+    }
+    const adopted = await requireSessionMetadataFor(sessionsRoot).adoptIfAbsent(legacy);
+    await requireSessionMetadata().remove(sessionId).catch((error: unknown) => {
+      console.warn("[session-metadata] 认领后旧卷清理失败:", error instanceof Error ? error.message : String(error));
+    });
+    return { ok: true, record: adopted };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 /** 单条 metadata 的读面（偏好迁移等只读调用）：本地记录优先，唯一归属时回退旧全局卷。 */

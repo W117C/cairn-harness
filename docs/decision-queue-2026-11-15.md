@@ -1,6 +1,6 @@
 # 待裁决队列（2026-11-15）
 
-- **状态**：索引，不是裁决本身；四项各自有独立裁决输入，本文件只把「要你选什么、推荐什么、选完解锁什么」
+- **状态**：索引，不是裁决本身；各项各自有独立裁决输入，本文件只把「要你选什么、推荐什么、选完解锁什么」
   放在一页，避免四份文档分散。
 - **基线**：代码 `42050518`（HEAD 的文档提交 `46be5bb7` 之后只有文档）；各文件里的证据不重复抄。
 
@@ -40,13 +40,22 @@
   已在 ADR §四/§五。批准后下一步是 Phase 4 spec（先判据后实现），不是直接写代码。
 - **选完解锁**：bot 团队项目进入 spec；当前不写实现代码。
 
-## 五、如果只想先答一个
+## 五、ADR 0016：重复 id 历史 metadata 归属（已裁）
 
-F4 已落 A；现在先答 **F6 的 A2/C3** 或 **F3 的 A/B/C/D**；ADR 0015 批准后可进 Phase 4 spec。
+- **裁决输入**：`docs/adr/0016-legacy-session-metadata-ownership.md`（**已接受**，2026-11-15）
+- **要选**：自动按启发式选边／批量迁移／**不猜 + 可枚举 + 显式认领**／直接删除旧卷。
+- **已裁**：第三项。无 `workspaceScoped` 的重复 id 记录永不自动选边；`listUnattributedSessionMetadata`
+  可枚举，`claimSessionMetadata(id, root)` 经已登记根闸显式认领；装配根读面也过滤未决记录。
+- **选完解锁**：`STATE.md` 那条「需业主裁决」关闭；本轮不新增 IPC/UI/协议版本，桌面认领入口另立裁决。
 
-## 六、参考
+## 六、如果只想先答一个
+
+F4 已落 A、ADR 0016 已裁；现在先答 **F6 的 A2/C3** 或 **F3 的 A/B/C/D**；ADR 0015 批准后可进 Phase 4 spec。
+
+## 七、参考
 
 - `docs/glm-pricing-decision-2026-11-15.md`
 - `docs/web-search-self-host-2026-11-15.md`、`docs/searxng-self-host-2026-11-15.md`
 - `docs/component-stack-decision-2026-11-15.md`
 - `docs/adr/0015-ds-bot-benchmark.md`
+- `docs/adr/0016-legacy-session-metadata-ownership.md`（已接受）
