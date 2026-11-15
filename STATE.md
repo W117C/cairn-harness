@@ -1,6 +1,6 @@
 # Cairn / DSH —— 现态
 
-rev: c8b4cde2
+rev: 68305ca5
 
 核对日期 2026-11-15（Asia/Shanghai）。`rev` 是开发线现役基线；第 1200 / 1203 / 1204 页的判卷面与桌面改动在
 它之上的工作树里，尚未提交。分支与门禁状态见[仓库状态与分支](docs/REPOSITORY-STATUS.md)，历史证据见
@@ -8,8 +8,8 @@ rev: c8b4cde2
 
 ## 当前工作
 
-- **2026-11-15 web_search HTML 解析**（`c8b4cde2`）：`html` provider + HTML 抽取（`<base href>` 优先、测试连接
-  接受 HTML）；A2 默认页仍未做。第 1221 页；认证 `c8b4cde` 25/25、678/8158。
+- **2026-11-15 web_search HTML 解析**（`68305ca5`）：`html` provider + HTML 抽取（`<base href>`、`result__snippet`、
+  测试连接接受 HTML）；A2 默认页仍未做。第 1222 页；认证 `68305ca` 25/25、678/8159。
 - **2026-11-15 F3 组件栈裁决输入**：`docs/component-stack-decision-2026-11-15.md`；现状 Radix 原语
   ＋手写＋CDS，非 ADR D2 的 Themes；建议 B（Primitives + CDS），待选 A/B/C/D。第 1209 页。
 - **2026-11-15 F6 自研搜索裁决输入**：`docs/web-search-self-host-2026-11-15.md` 区分 C1 代码自研 / C2
