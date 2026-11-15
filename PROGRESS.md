@@ -40505,3 +40505,23 @@ exit 0**；`desktop-test` 20.0s 超 10s 预算只出声。凭证：
   `desktop-test` 16.9s 超 10s 预算只出声。凭证：`outputs/head-cert-70f232d-2026-11-15-0739/`。
 
 **边界**：仍是 F3 B 的入口层；Dialog/Select/Tooltip 未迁，A/B/C/D 未裁决。
+
+## 2026-11-15 · 第 1225 页：F4 A 的代价复核（12 红 / 5 文件；已还原）
+
+**目的**：F4 裁决输入里 A 的「10 条红」是 HEAD `81596a8d` 的旧探针；在现 HEAD `70f232d0` 重跑一次，
+确认它是否仍是「改几个数字」的量级。
+
+**做法**：只把 `DEFAULT_PRICE_TABLE` 的 GLM 三行改成官方折算值（flash 0.1199/0.4197/cache 0.0345；
+standard/strong 1.1991/4.1967/cache 0.2998，均 `calibrated: true`），**不动** `routing-check` F2c、
+不动测试；跑 memo 点名的五个文件：`goal-price` / `session-spend-ruler` / `prompt-cache-breakpoints` /
+`main-run-routing-bandit` / `worker-spent-usd`。
+
+**读数**：**12 条红 / 5 文件**（60 条里）。形状分三类：
+- 旧占位数写死（如主会话桶 0.2222、混合桶 0.8282、worker 0.0202）；
+- 「GLM 未标定」断言（`priceCalibrated=false`、回执含「未标定」、`unpricedModels` 含三行）；
+- 舍入期望（`spent_usd` 6 位小数与 `costUsd` 全精度差 4.5e-7）。
+
+**处置**：改动已 `git checkout -- src/routing/pricing.ts` 还原；`git status` 确认价表无 diff。**没有提交**。
+结论与 memo 一致：A 不是改三个数字，要连同 F2c 与这五个文件的判据一起做；这是裁决项，不是顺手修。
+
+**边界**：本页只给「A 的代价」实测，不做 F4 裁决；B/C 未跑。
