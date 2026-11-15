@@ -63,6 +63,19 @@ describe("extractResults：认 SearxNG 形状，别名与缺字段逐条钉", ()
     expect(r[2]).toMatchObject({ title: "(无标题)", url: "https://no-title.example/" });
   });
 
+  it("非空 url 必须是 http(s)：javascript:/data: 丢掉，空 url 的无链接占位保留", () => {
+    const r = extractResults({
+      results: [
+        { title: "js", url: "javascript:alert(1)" },
+        { title: "data", url: "data:text/html,<b>x</b>" },
+        { title: "ok", url: "https://ok.example/" },
+        { title: "placeholder" },
+      ],
+    });
+    expect(r.map((x) => x.title)).toEqual(["ok", "placeholder"]);
+    expect(r[1]!.url).toBe("");
+  });
+
   it("非对象 / 没有 results 数组 ⇒ 空数组（不抛，由调用方按降级处理）", () => {
     expect(extractResults(null)).toEqual([]);
     expect(extractResults({ items: [{ title: "x", url: "y" }] })).toEqual([]);
