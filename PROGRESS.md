@@ -41378,3 +41378,36 @@ desktop boundary 绿。核心仍为 `pnpm test:capped` **681 文件 / 8179 条�
 - `mutate-verify` 整表仍未跑（280/1677 条锚点单独排期）；真实模型、跨机器桌面、正式签名/公证、
   真机四探针与 DMG 重打包均未做；本机 ad-hoc DMG 仍是第 1237 页的读数。
 - 零拥有者的孤儿记录只进未决清单、认领闸会拒；需业主先恢复日志或明确废弃，本轮不替它决定删除。
+
+## 2026-11-15 · 第 1243 页：共享工作树残留清理（业主授权「全清」）
+
+**范围**：第 1239 / 1240 页反复点名的 3 个未跟踪残留目录、`gate-mutate-verify` 残树、
+4 个陈旧 `mutate-verify-judge-*.lock`。业主在交互卡里选了「全清（推荐）」。
+
+### 清理前核对
+
+- `outputs/cds-parity-verify/`（根级，1 份 9282B `values.json`，13:58 旧副本）：台账/docs/判卷
+  点名的都是**已跟踪的** `apps/desktop/outputs/cds-parity-verify/`；清理后定向复跑
+  `tests/cds-parity.test.ts` + `tests/cds-components.test.ts` **2 文件 / 54 条绿**，证实无依赖。
+- 两份别趟未落库的 `head-cert-*` provenance（一份 rev `0331605`，**exit=1 失败认证**；
+  一份 rev `b8cefbb`）：均未被任何页点名为证人，目录全名只出现在回收站的包名里。
+- 4 个锁文件 PID（10370 / 21828 / 27622 / 93567）逐个 `kill -0` 确认已死，最早 10 月 2 日、
+  最晚 11 月 2 日；`.worktrees/gate-mutate-verify` detached、盘上 0 项在飞、无进程占用。
+
+### 动作与可回退
+
+- 3 个目录各自 `tar -czf` 校验后移入 `/tmp/cairn-cleanup-20261115-2134/`（三份 `.tar.gz`），
+  4 个锁文件打包进 `stale-locks.tar.gz`；**没有硬删证据**，需要时按包名原样解回。
+- 残树走 `git worktree remove .worktrees/gate-mutate-verify`（正规移除，不留 git 元数据）；
+  `gate-head-cert` 与 `review-fixes-20261107` 保留：前者是认证脚本复用的共享树、后者是别趟的。
+
+### 读数（清理后工作树）
+
+- `git status --porcelain=v1` **空**；typecheck 0、`docs-check` 受检项全绿（证人点名面
+  510 页 / 738 条红 0）、`repo-hygiene-check` 四面绿（`outputs/` 5804 / 8971 = 64.7%，帽 70%）、
+  cds 两判卷 54 条绿。
+- 本页不新增代码、不新增判据；这是纯工作树卫生动作，按第 1240 页写下的纪律不触发新的完整
+  HEAD 认证（下一次由下一次代码改动承担）。
+
+**边界**：`/tmp` 回收站不入库、重启后可能被系统清掉；若要长期留存需另找位置。工作区外的
+`~/.codex/worktrees/*`、Alma worktree 与其它分支本次一律未动。
