@@ -41225,3 +41225,47 @@ desktop boundary 绿。核心仍为 `pnpm test:capped` **681 文件 / 8179 条�
 真机探针与 DMG 证据仍对应更早的 renderer 摘要，本轮只改主进程/核心 sidecar 面，未重跑四支真机探针、
 未重新打包。旧全局卷不批量迁移：只有唯一归属且被读到/写到时才搬进项目根；重复 id 的历史记录仍留在装配根，
 需业主裁决后再定归属。
+
+## 2026-11-15 · 第 1239 页：`fb5a034` 落地与提交态 HEAD 认证（凭证）
+
+**背景**：第 1215 / 1219 / 1228–1238 页长期停在「工作树读数」；业主授权独占收口后，
+本笔把整轮（协议 v58、同 id 限定键、三类 sidecar 按根分卷、打包资产与判据）落成 `fb5a034`，
+并跑只有提交后才能成立的 HEAD 认证。提交前最后一遍核心全量的唯一红是 `tests/docs-check.test.ts`
+的 D-11：它拒绝台账点名但尚未入 HEAD 的 6 位证人；门的红字自己写着「提交即归零，别当成旧账登记掉」，
+所以**顺序是先提交再复验**，不是拿登记豁免糊过去。提交后 `docs-check` 证人面 728 条红 0、
+`tests/docs-check.test.ts` 115/115 绿，该红按预期归零。
+
+### 改动
+
+- `fb5a034`：**170 文件 / +11595 −997**。含 15 个新源文件/判据/品牌资产与
+  `outputs/session-metadata-root-scoping-2026-11-15/` 十份读数（含提交前那份 D-11 红日志，
+  原样保留作诊断，不改写、不冒充通过）。
+- 3 个旧会话残留目录（`outputs/head-cert-0331605-*`、`outputs/head-cert-b8cefbb-*`、
+  根级 `outputs/cds-parity-verify/`）不进本笔：前两份是别趟未落库的 provenance（其中一份带
+  typecheck 红），第三份是 `apps/desktop/outputs/` 的副本；保持未跟踪原状，不删别人的现场。
+- 18:42 成片误删的 31 张 outputs 截图与两份 vendored 字体从 HEAD 原样取回，`cairn.icns`
+  由同轮 iconset 重建；恢复后 `repo-hygiene-check` 四面绿、桌面全量 396 文件 / 2574 条绿。
+
+### 读数（提交态；取料 `outputs/head-cert-fb5a034-2026-11-15-1221/`）
+
+- `pnpm head-cert-check`（`--tree=.worktrees/gate-head-cert`，`--at=HEAD`）：**exit 0**；
+  TREE=`fb5a0344e06be192dcc8c091064c8dcdf0911150`、`DIRTY_JUDGED=0`、收尾复核同一笔、
+  两端独占（起前 0 套／跑完 0 套）、依赖缺 0、import 面 7800 边悬空 0、门表 40 道齐。
+- 核心全量在认证树里：**682 文件 / 8187 条绿，exit 0**（`--maxWorkers=2`）；
+  `typecheck exit=0`；贴帽读数 8187 条里 0 条 ≥ 有效预算 80%。
+- 认证门面 **25/25 绿**（名单取自 `fb5a034`）；唯一 ⚠️：`desktop-test` 13718ms > 10000ms
+  预算，按脚本纪律「只出声，不判红」，是负载读数不是逻辑回归。本趟墙钟 238.35s
+  （两端独占 ⇒ 时间量可引用）。逐条原文见
+  `outputs/head-cert-fb5a034-2026-11-15-1221/provenance.md`。
+- 提交后静态门：`docs-check` 绿（证人点名面 505 页 / 728 条，红 0）、`renderer-layer-check` 绿
+  （247 源文件）、`evidence-typecheck-check` 危险码 12/12、`repo-hygiene-check` 四面绿
+  （`outputs/` 5794 / 8960 = 64.7%，帽 70%）、根与桌面 typecheck 0、`git diff --check` 0。
+
+### 边界
+
+- HEAD 认证证明的是 `fb5a034` 这棵干净树的代码/判据/文档面，**不是**真实模型验收、跨机器桌面、
+  正式签名/公证或发版：第 1235–1237 页的 DMG 仍是本机 ad-hoc、`sourceDirty: true`、未公证。
+- `mutate-verify` 本轮未跑（它按 `--changed-since` 选条目，需单独排期）；本页不把
+  `mutate-needles-check` 绿说成变异复验通过——那是针脚体检，不是注入变异。
+- 旧装配根全局卷不批量迁移：重复 id 的历史记录仍无 `workspaceScoped` 标记，归属待业主裁决；
+  真机四探针与 UI 画廊证据保持第 1236–1237 页的 renderer 摘要，本轮未改 renderer 后重跑。

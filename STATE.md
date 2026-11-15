@@ -1,9 +1,9 @@
 # Cairn / DSH —— 现态
 
-rev: 56cb24e4
+rev: fb5a034
 
-核对日期 2026-11-15（Asia/Shanghai）。`rev` 是已提交开发线基线；第 1215 / 1219 / 1228–1238 页的
-判卷面与桌面改动在它之上的工作树里，尚未提交。分支与门禁状态见[仓库状态与分支](docs/REPOSITORY-STATUS.md)，
+核对日期 2026-11-15（Asia/Shanghai）。`rev` 是已提交开发线基线；第 1215 / 1219 / 1228–1239 页的
+判卷面与桌面改动已随 `fb5a034` 入库，并经提交态 HEAD 认证（第 1239 页）。分支与门禁状态见[仓库状态与分支](docs/REPOSITORY-STATUS.md)，
 历史证据见 `PROGRESS.md` 与 `outputs/`；可复跑的测量值见 `pnpm facts`。
 
 ## 当前工作
@@ -23,9 +23,9 @@ rev: 56cb24e4
   `send` 返回 `steered/queued/started/failed`，⌘↩ 只在 `queued` 时打断，`/goal` 失败把命令与附件还回输入框。
 - **2026-11-15 证据面**：四支真机判卷共用同一份 renderer 摘要；`pnpm --filter cairn-desktop smoke` 真实 IPC
   回环 PASS（不运行模型）；后台任务退出前汇进 `settleAllBackgroundTasks()`，SIGINT/强杀仍是硬边界。
-- **2026-11-15 会话 metadata 按根分卷**（第 1238 页，工作树）：`workspaceScoped` 标记、按根懒建卷、
+- **2026-11-15 会话 metadata 按根分卷**（第 1238–1239 页，`fb5a034`）：`workspaceScoped` 标记、按根懒建卷、
   唯一归属才回退旧全局卷；同 id 的标题/置顶/归档/审计不再共卷。核心 682 文件 / 8186 条绿、桌面
-  396 文件 / 2574 条绿，均为工作树读数；重复 id 的历史旧卷归属仍待裁决。
+  396 文件 / 2574 条绿；HEAD 认证 682 文件 / 8187 条绿、25/25 门面绿；重复 id 的历史旧卷归属仍待裁决。
 - **2026-11-15 macOS 打包资产**（第 1235–1237 页，工作树）：从品牌 SVG 生成 `cairn.icns`/`cairn.png`；
   `package.mjs` 完成 DMG、打包态冒烟与拖出安装冒烟。产物在本机 `/tmp`，`sourceDirty: true`、ad-hoc、
   未公证，不能当作 HEAD、跨机器或正式签名证据。
