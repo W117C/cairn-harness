@@ -9,7 +9,9 @@ import { describe, expect, it } from "vitest";
 const DIR = fileURLToPath(new URL("../scripts", import.meta.url));
 
 describe("冒烟脚本语法哨兵", () => {
-  it("scripts/*.cjs 全部通过 node --check（≥90 支，不许空跑）", () => {
+  // 95 支脚本串行起 95 次 node；闲置机 3.8s，全量套件并跑时实测 5.4–6.4s ⇒ 缺省 5s 会
+  // 把「慢」读成「语法错」（2026-11-15 两趟全量均红、单跑均绿）。给足预算，判据一条不改。
+  it("scripts/*.cjs 全部通过 node --check（≥90 支，不许空跑）", { timeout: 30_000 }, () => {
     const files = readdirSync(DIR).filter((f) => f.endsWith(".cjs")).sort();
     expect(files.length, "脚本面一支都没扫到（取料坏了）").toBeGreaterThanOrEqual(90);
     const bad: string[] = [];
