@@ -361,7 +361,7 @@ export const MUTATIONS = [
     src: "src/agent/goal.ts",
     test: "tests/goal-price.test.ts",
     desc: "worker 回执里已入账的表价不再累加 ⇒ 闸只看主会话那一段，派多少活都不涨钱（上限形同虚设）",
-    apply: (s) => s.replace("      if (typeof s === \"number\" && Number.isFinite(s) && s > 0) booked += s;", "      if (typeof s === \"number\" && Number.isFinite(s) && s > 0) booked += 0;"),
+    apply: (s) => s.replace("        booked += s;", "        booked += 0;"),
     expectFail: "正向那一格：worker 跑贵档并已入账 ⇒ 闸按入账的钱停，不按会话的便宜档低估",
   },
   {

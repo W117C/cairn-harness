@@ -305,7 +305,7 @@ export const MUTATIONS = [
     // 而可选参数后面加不了必填，编译器也接不了这格。改由那条生产入口形状断言守住
     // （与 `decision.hint` 同一处、同一手法），这条才有了可杀的靶子。
     desc: "调用点不递第 6 个实参 ⇒ 提醒块永远不提「本拍的美元里还没有在途 worker 那一段」",
-    apply: (s) => s.replace("goalReminder(view.spec, turn, spentUsd, view.evidence, decision.hint, unbookedWorkers)", "goalReminder(view.spec, turn, spentUsd, view.evidence, decision.hint)"),
+    apply: (s) => s.replace("goalReminder(view.spec, turn, spentUsd, view.evidence, decision.hint, unbookedWorkers, priceCalibrated)", "goalReminder(view.spec, turn, spentUsd, view.evidence, decision.hint, 0, priceCalibrated)"),
     expectFail: "生产入口真的把 decision.hint 传进去（拆分后住 goal-handlers，仍只能钉这一行的形状）",
   },
   {
@@ -700,7 +700,7 @@ export const MUTATIONS = [
     src: "src/main/goal-handlers.ts",
     test: "tests/goal-stop-decision.test.ts",
     desc: "生产入口不传 decision.hint ⇒ 被收走的那一轮仍收到「针对红字继续」（算了没人读的第 10 次）",
-    apply: (s) => s.replace("goalReminder(view.spec, turn, spentUsd, view.evidence, decision.hint, unbookedWorkers)", "goalReminder(view.spec, turn, spentUsd, view.evidence, undefined, unbookedWorkers)"),
+    apply: (s) => s.replace("goalReminder(view.spec, turn, spentUsd, view.evidence, decision.hint, unbookedWorkers, priceCalibrated)", "goalReminder(view.spec, turn, spentUsd, view.evidence, undefined, unbookedWorkers, priceCalibrated)"),
     expectFail: "生产入口真的把 decision.hint 传进去（拆分后住 goal-handlers，仍只能钉这一行的形状）",
   },
   {

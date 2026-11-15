@@ -99,11 +99,12 @@ export async function goalNextTurn(args: {
   // 计量窗口 = view.window（本目标之后那段），与证据/写盘同轴：设 $0.5 之前会话已花多少与这个闸无关。
   // **worker 那一段用回执里已入账的表价**，不再按会话那一档估：会话档与 worker 档在本仓价表里
   // 差到 40 倍，一乘就把闸与同一屏的回执弄成两个数（能力 39 修的是成本闸，这一支是同一族的第二支）。
-  const { spentUsd, unbookedWorkers } = goalWindowSpend(view.window, model);
+  const { spentUsd, unbookedWorkers, priceCalibrated } = goalWindowSpend(view.window, model);
   const decision = goalStopDecision({
     turn: view.turn,
     spec: view.spec,
     spentUsd,
+    priceCalibrated,
     evidence: view.evidence,
     wrote: view.wrote,
     truncated: view.truncated,
@@ -117,7 +118,7 @@ export async function goalNextTurn(args: {
   const turn = view.turn + 1;
   return {
     // hint 只有「上一轮被收走」那一支会给；默认那一子句（针对红字继续）在本轮没有红字时会指错方向。
-    message: goalReminder(view.spec, turn, spentUsd, view.evidence, decision.hint, unbookedWorkers),
+    message: goalReminder(view.spec, turn, spentUsd, view.evidence, decision.hint, unbookedWorkers, priceCalibrated),
     origin: { kind: "goal", turn, max_turns: view.spec.maxTurns },
   };
 }

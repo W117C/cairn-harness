@@ -22,6 +22,8 @@ export { GOAL_TURN_CAP_DEFAULT, GOAL_TURN_CAP_MAX, GOAL_TURN_CAP_MIN };
 const GOAL_OBJECTIVE_TOKEN_CAP = 400;
 /** 整块帽。这块**每轮重送** ⇒ 整会话付 maxTurns 次，所以按"最坏 8 倍"估：帽值本身就是成本上限。 */
 export const GOAL_REMINDER_TOKEN_CAP = 700;
+/** 读数含未标定占位价时的固定说法：判卷与文案共用一份，避免各抄一遍。 */
+export const UNCALIBRATED_UPPER_BOUND_NOTE = "未标定上界";
 
 export interface GoalParseResult {
   spec: GoalSpec | null;
@@ -36,6 +38,8 @@ export interface GoalDecisionInput {
   spec: GoalSpec;
   /** 已花美元；**null = 价格不可知**（不是 0，也不是"没花钱"）。 */
   spentUsd: number | null;
+  /** false = 这笔读数含有未标定行的占位价 ⇒ 它是上界，不是实付（缺省 true）。 */
+  priceCalibrated?: boolean;
   evidence: WorkerEvidence;
   /** 本会话写过盘吗（write_file/edit_file 成功过）。 */
   wrote: boolean;
@@ -103,6 +107,7 @@ export function parseGoalSpec(raw: unknown): GoalParseResult {
  *  done 只由绿证据成立——散文自述不算数（顶尖与普通差在「能证明代码真的能跑」）。 */
 export function goalStopDecision(input: GoalDecisionInput): GoalStop {
   const { turn, spec, spentUsd, evidence, wrote, truncated } = input;
+  const priceCalibrated = input.priceCalibrated !== false;
 
   if (evidence === "verified") return { kind: "done" };
 
@@ -118,7 +123,8 @@ export function goalStopDecision(input: GoalDecisionInput): GoalStop {
     return {
       kind: "stop",
       reason:
-        "美元上限 " + usd(spec.maxUsd) + " 已花到（实花 " + usd(spentUsd) + "，证据 " + evidence + "）⇒ 停，不再自动续跑",
+        "美元上限 " + usd(spec.maxUsd) + " 已花到（实花 " + usd(spentUsd) +
+        (priceCalibrated ? "" : "（含" + UNCALIBRATED_UPPER_BOUND_NOTE + "，不是实付）") + "，证据 " + evidence + "）⇒ 停，不再自动续跑",
     };
   }
 
@@ -165,10 +171,10 @@ export function lastTurnWasTruncated(events: AgentEvent[]): boolean {
 
 /** 钱的一句话：没设闸 / 价格不可知 / 正常读数，三种分开说。**不可知那一支必须自己出现**，
  *  否则"没提美元"会被读成"还没花"。 */
-function budgetLine(spec: GoalSpec, spentUsd: number | null): string {
+function budgetLine(spec: GoalSpec, spentUsd: number | null, priceCalibrated = true): string {
   if (spec.maxUsd <= 0) return "美元闸未设（只按轮次闸停）";
   if (spentUsd === null) return "花费价格未知 ⇒ 美元闸本次不生效（不把不可知记成免费），只按轮次闸停";
-  return "已花 " + usd(spentUsd) + "，美元上限 " + usd(spec.maxUsd);
+  return "已花 " + usd(spentUsd) + (priceCalibrated ? "" : "（含" + UNCALIBRATED_UPPER_BOUND_NOTE + "，不是实付）") + "，美元上限 " + usd(spec.maxUsd);
 }
 
 /** 块里那句「下一步该干什么」按**证据态**给，不写死一句。
@@ -196,6 +202,8 @@ export function goalReminder(
   /** 窗口里还没到终态的 worker 数：它们的钱要等回执才入账 ⇒ 本拍这个数**偏小**。
    *  不写出来的话，下一轮数字突然跳升会被模型（和人）读成"上一轮什么都没花"。0 = 不提。 */
   pendingWorkerSpend = 0,
+  /** false = 读数含未标定占位价 ⇒ 提醒里必须写成「上界」，不能读成实付。 */
+  priceCalibrated = true,
 ): string {
   const lag = pendingWorkerSpend > 0
     ? "（另有 " + String(pendingWorkerSpend) + " 个 worker 的花费要等终态回执才入账，本拍未计）"
@@ -205,7 +213,7 @@ export function goalReminder(
     clampToTokenBudget(spec.objective, GOAL_OBJECTIVE_TOKEN_CAP, "目标") +
     "\n上一轮终态：证据 " + EVIDENCE_TEXT[evidence] +
     "（" + (hint ?? FOLLOW[evidence]) + "）。" +
-    "\n预算：" + budgetLine(spec, spentUsd) + lag + "；轮次上限 " + String(spec.maxTurns) + "。" +
+    "\n预算：" + budgetLine(spec, spentUsd, priceCalibrated) + lag + "；轮次上限 " + String(spec.maxTurns) + "。" +
     "\n收束条件：只有 verify 通过且之后不再写盘才算完成；认为已达成就调用 verify 拿绿证据再收束。";
   return clampToTokenBudget(body, GOAL_REMINDER_TOKEN_CAP, "goal 提醒");
 }
@@ -272,10 +280,12 @@ export function projectGoal(events: AgentEvent[]): GoalView | null {
 export function goalWindowSpend(
   window: readonly AgentEvent[],
   sessionPriceModel: string,
-): { spentUsd: number | null; unbookedWorkers: number } {
+): { spentUsd: number | null; unbookedWorkers: number; priceCalibrated: boolean } {
   let mainIn = 0;
   let mainOut = 0;
   let booked = 0;
+  /** 任一段用了未标定行的占位价 ⇒ 整笔是上界（不是实付）。 */
+  let priceCalibrated = true;
   const spawnedIds: string[] = [];
   const settledIds = new Set<string>();
   for (const e of window) {
@@ -289,17 +299,22 @@ export function goalWindowSpend(
     } else if (e.type === "agent_result") {
       settledIds.add(e.agent_id);
       const s = e.artifacts?.spent_usd;
-      if (typeof s === "number" && Number.isFinite(s) && s > 0) booked += s;
+      if (typeof s === "number" && Number.isFinite(s) && s > 0) {
+        // worker 回执自报标定态；旧日志/缺字段按「未标定」处理（宁可标上界，不冒充实付）。
+        if (e.artifacts?.price_calibrated !== true) priceCalibrated = false;
+        booked += s;
+      }
     }
   }
   let mainUsd: number | null = 0;
   if (mainIn + mainOut > 0) {
     const r = bucketsSpendUsd([{ usage: { inputTokens: mainIn, outputTokens: mainOut }, price: priceForModel(sessionPriceModel) }]);
     mainUsd = r === null ? null : r.usd;
+    if (r !== null && !r.calibrated) priceCalibrated = false;
   }
   const unbookedWorkers = spawnedIds.filter((id) => !settledIds.has(id)).length;
-  if (mainUsd === null && booked === 0) return { spentUsd: null, unbookedWorkers };
-  return { spentUsd: roundUsd((mainUsd ?? 0) + booked), unbookedWorkers };
+  if (mainUsd === null && booked === 0) return { spentUsd: null, unbookedWorkers, priceCalibrated };
+  return { spentUsd: roundUsd((mainUsd ?? 0) + booked), unbookedWorkers, priceCalibrated };
 }
 
 /** 窗口累计 token（从 `usage` 事件重算，不留第二份账）。provider 没上报 ⇒ 0/0，

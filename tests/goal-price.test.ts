@@ -7,7 +7,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { priceForModel, spentUsdFor } from "../src/agent/orchestrator-join";
-import { goalReminder, goalStopDecision, goalWindowSpend } from "../src/agent/goal";
+import { goalReminder, goalStopDecision, goalWindowSpend, UNCALIBRATED_UPPER_BOUND_NOTE } from "../src/agent/goal";
 import { DEFAULT_MODEL_TABLE } from "../src/providers/registry";
 import type { AgentEvent } from "../src/events";
 
@@ -142,5 +142,33 @@ describe("goalWindowSpend（主会话一档 + worker 已入账表价）", () => 
     const withLag = goalReminder(spec, 2, 0, "absent", undefined, 2);
     expect(withLag).toContain("另有 2 个 worker 的花费要等终态回执才入账");
     expect(goalReminder(spec, 2, 0, "absent")).not.toContain("终态回执才入账");
+  });
+});
+
+/* 2026-11-15：占位价不许冒充实付。GLM 三行仍是 uncalibrated；读数可以照算（上界），
+   但续跑提醒与停止理由必须写明「未标定上界」，否则同一屏的「省了钱」是假的。 */
+describe("价表标定态：占位价只当上界", () => {
+  const mainUse = (i: number, o: number): AgentEvent => ({ type: "usage", inputTokens: i, outputTokens: o } as AgentEvent);
+
+  it("GLM 占位行 ⇒ priceCalibrated=false；Anthropic 实测行 ⇒ true", () => {
+    const glm = goalWindowSpend([mainUse(100_000, 1_000)], "glm-5.2");
+    expect(glm.spentUsd).not.toBeNull();
+    expect(glm.priceCalibrated, "GLM 行未标定，读数只能是上界").toBe(false);
+    const anth = goalWindowSpend([mainUse(100_000, 1_000)], "claude-sonnet-5");
+    expect(anth.spentUsd).not.toBeNull();
+    expect(anth.priceCalibrated).toBe(true);
+  });
+
+  it("续跑提醒与美元停止理由都写明「未标定上界」", () => {
+    const spec = { objective: "把失败测试修到绿", maxTurns: 8, maxUsd: 0.05 };
+    const text = goalReminder(spec, 2, 0.12, "absent", undefined, 0, false);
+    expect(text).toContain(UNCALIBRATED_UPPER_BOUND_NOTE);
+    expect(goalReminder(spec, 2, 0.12, "absent")).not.toContain(UNCALIBRATED_UPPER_BOUND_NOTE);
+    const d = goalStopDecision({
+      turn: 1, spec, spentUsd: 0.12, priceCalibrated: false,
+      evidence: "absent", wrote: true, truncated: false,
+    });
+    expect(d.kind).toBe("stop");
+    if (d.kind === "stop") expect(d.reason).toContain(UNCALIBRATED_UPPER_BOUND_NOTE);
   });
 });

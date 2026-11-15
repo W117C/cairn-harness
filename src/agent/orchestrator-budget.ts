@@ -39,6 +39,8 @@ export class BudgetCascadeBandit {
   private budgetInertWarned = false;
   /** 「上限设了却有一部分算不出价」只出声一次（闸晚触发的程度用户必须知道，但不刷屏）。 */
   private budgetPartialWarned = false;
+  /** 价表含未标定行（占位价）只出声一次：读数是上界，不是实付。 */
+  private budgetUncalibratedWarned = false;
   /** 级联前提不成立（开关开了但 routing 关着）只出声一次，不每环刷一遍。 */
   private cascadeWarned = false;
   /** M5b 步骤 9：bandit 在线学习状态（懒加载；routing+banditStatePath 双开才激活）。 */
@@ -60,13 +62,13 @@ export class BudgetCascadeBandit {
 
   /** 花费读数：`null` = 一桶都算不出（⇒ 闸惰掉但必须出声）；否则给出算得出的美元与**算不出的 token 数**
    *  （后者不折成 $0，也不静默吞：见 `bucketsSpendUsd` 的口径）。 */
-  private budgetSpendReading(): { usd: number; unpricedTokens: number } | null {
+  private budgetSpendReading(): { usd: number; unpricedTokens: number; calibrated: boolean } | null {
     const b = this.deps.budget;
     if (!b) return null;
     if (b.pricePerMTok > 0) {
       // ① 手填单价：粗口径「一份单价 × 全部 token」，填这个数的人声明的就是"我这儿每百万 token 值这么多钱"
       const usage = { inputTokens: this.deps.sessionUsage.inputTokens, outputTokens: this.deps.sessionUsage.outputTokens };
-      return { usd: ((usage.inputTokens + usage.outputTokens) / 1_000_000) * b.pricePerMTok, unpricedTokens: 0 };
+      return { usd: ((usage.inputTokens + usage.outputTokens) / 1_000_000) * b.pricePerMTok, unpricedTokens: 0, calibrated: true };
     }
     // ② 唯一给钱的那一行
     return bucketsSpendUsd(this.budgetBuckets());
@@ -105,6 +107,12 @@ export class BudgetCascadeBandit {
         );
       }
       return false;
+    }
+    if (!spend.calibrated && !this.budgetUncalibratedWarned) {
+      this.budgetUncalibratedWarned = true;
+      console.warn(
+        "[budget] 价表含未标定行 ⇒ 成本读数按上界计（不是实付），闸可能早于或晚于真实花费",
+      );
     }
     if (spend.unpricedTokens > 0 && !this.budgetPartialWarned) {
       this.budgetPartialWarned = true;

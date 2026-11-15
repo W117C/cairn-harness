@@ -167,3 +167,14 @@ describe("bucketsSpendUsd（每桶按自己那一档折）", () => {
     expect(s!.unpricedTokens).toBe(0);
   });
 });
+
+/* 2026-11-15：桶读数带上标定态——硬上限可以照上界拦，但「省了钱」的证据不能拿占位价说。 */
+describe("bucketsSpendUsd 的标定态", () => {
+  const USAGE = { inputTokens: 100_000, outputTokens: 1_000 };
+  it("GLM 占位行 false；Anthropic 实测行 true", () => {
+    const glm = bucketsSpendUsd([{ usage: USAGE, price: priceForModel("glm-5.2") }]);
+    expect(glm?.calibrated).toBe(false);
+    const anth = bucketsSpendUsd([{ usage: USAGE, price: priceForModel("claude-sonnet-5") }]);
+    expect(anth?.calibrated).toBe(true);
+  });
+});

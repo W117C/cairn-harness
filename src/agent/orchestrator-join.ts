@@ -104,10 +104,12 @@ export interface SpendBucket {
  *  而同一屏的 worker 回执报的却是真价——**限制类判据与它要限制的那个读数分叉**。
  *  姿态沿用既有那条：真实但算不出的部分**不折成 $0** ⇒ 计入 `unpricedTokens` 由调用方出声；
  *  一桶都算不出 ⇒ 返回 null（= 「这道闸本次不生效」，不拿 $0 冒充实付）。 */
-export function bucketsSpendUsd(buckets: readonly SpendBucket[]): { usd: number; unpricedTokens: number } | null {
+export function bucketsSpendUsd(buckets: readonly SpendBucket[]): { usd: number; unpricedTokens: number; calibrated: boolean } | null {
   let usd = 0;
   let unpricedTokens = 0;
   let realButUnknown = false;
+  /** 只要有一桶的价来自未标定行，整笔读数就是「上界」而不是实付。 */
+  let calibrated = true;
   for (const b of buckets) {
     if (b.realMoney === false) continue;
     const tokens = Math.max(0, b.usage.inputTokens) + Math.max(0, b.usage.outputTokens);
@@ -117,10 +119,11 @@ export function bucketsSpendUsd(buckets: readonly SpendBucket[]): { usd: number;
       unpricedTokens += tokens;
       continue;
     }
+    if (s.calibrated !== true) calibrated = false;
     usd += s.usd;
   }
   if (realButUnknown && usd === 0) return null;
-  return { usd: roundUsd(usd), unpricedTokens };
+  return { usd: roundUsd(usd), unpricedTokens, calibrated };
 }
 
 /** 三种「算不出钱」共用一句话：脚本回放 / 档位没注册 / 两张表漂移。 */
