@@ -27,18 +27,13 @@ rev: 907deda7
 - **2026-11-15 ADR 0015（bot 团队调研裁决，Proposed）**：落点 A（核心内建）＋骨架三件（成员档案/
   成员线程/团队会话）＋数据模型 B3/G2/P2/R1/S1/C2/L1＋五条不变量；12 面在 HEAD `8d552446` 复核。
   文件 `docs/adr/0015-ds-bot-benchmark.md`；待业主批准后进 Phase 4 spec，批准前不写实现代码。
-- **2026-11-15 判卷面收束与证据保质期**（第 1200 页，工作树）：后台任务四条终止路径（close /
-  timeout / stop / 会话取消）汇进一条 `settle` 链，`done` 只在跑后复查之后置真，`task_stop`
-  回执当场带守卫结论；`fs_ops` 拒收「含冻结文件的目录整树搬走」；桌面四支真机判卷共用一份
-  renderer 摘要 + 同构建判据，queue-key 冒烟改到 11-04 形制（点第二条「立即」才真正量改序）。
+- **2026-11-15 判卷面收束与证据保质期**（第 1200 页，工作树）：后台四条终止路径汇进 `settle` 链；
+  `fs_ops` 拒收含冻结文件的整树搬走；桌面四支真机判卷共用 renderer 摘要 + 同构建判据。
 - **2026-11-15 依赖与路由标定闸**（`4240634c` / `962548a9`，第 1198 页）：主包摘掉未使用的
-  `@radix-ui/themes`（预览侧保留）；`routing-check` F2d 不再要求线上留占位行，改用合成表自证；
-  GLM 官方价与价梯冲突写成裁决输入 `docs/glm-pricing-decision-2026-11-15.md`（未改价表）。
-- **2026-11-15 判卷面 shell 绕过收口**（`01d2ae2`，第 1195 页）：词法取料搬成
-  `src/permissions/shell-write-targets.ts`（16 条形状 14 deny，解释器与变量间接交给执行层）；
-  Seatbelt profile 为每个冻结文件追加 literal 写拒绝（真机 20 形状全拒）；`run_shell` 跑前基线 +
-  跑后逐字节复原（无沙箱宿主的地板）；冻结表自身进集合。取证件
-  `outputs/judge-integrity-2026-11-15/`。
+  `@radix-ui/themes`；`routing-check` F2d 改用合成表自证；GLM 价梯冲突写成裁决输入（未改价表）。
+- **2026-11-15 判卷面 shell 绕过收口**（`01d2ae2`，第 1195 页）：词法取料抽成
+  `shell-write-targets.ts`；Seatbelt 对每个冻结文件 literal 写拒绝；`run_shell` 跑前基线 + 跑后复原。
+  取证件 `outputs/judge-integrity-2026-11-15/`。
 - **2026-11-14 全仓普查**（`b8cefbb3`，第 1194 页）：八条发现；F2/F5 已收口，F3/F4/F6 待业主裁决。
 - **2026-11-15 壁纸 CSP 批**（`8d278985`，第 1193 页）：真 Electron 冒烟 23/23，修掉三个真机缺陷。
 - 更早的死代码清理、扫描收口、fs-race、变异与 HEAD 认证见第 1183–1192 页。
