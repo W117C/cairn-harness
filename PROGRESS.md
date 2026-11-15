@@ -40151,3 +40151,25 @@ require 生产模块 `src/main/wallpaper.ts`；合成面只有 AgentApi（preloa
 
 **边界**：只修「模型名不存在」这一格；没有标定价、没有改 `standard`、没有改美元闸。强档的价格
 仍是 8/8 占位（比真实价 1.20/4.20 高约 6.7 倍），这是第 1198 页登记的待裁决项。
+
+## 2026-11-15 · 第 1205 页：GLM 强档修复的认证收口（三红一绿；`d8bf4c6` 25/25）
+
+**链路（每一笔都留了凭证，不隐去红）**：
+
+| 提交 | 认证读数 | 红在哪 | 处置 |
+|---|---|---|---|
+| `ade6568` | 25 门绿，核心 2 红 / 8142 | `session-provider` 与 `worker-budget` 仍拿 `glm-5.2-pro`/256k 当大窗口样板 | 改 `glm-standard`（1M）与 1_000_000（`9061caf`） |
+| `9061caf` | 23/25 | `mutate-needles-check`：`context-budget-ignores-model-window` 的 `expectFail` 还指旧标题；`desktop-test`：`scripts-syntax` 5s 超时（6.7s） | 锚点改新标题（`d1cd45b`） |
+| `d1cd45b` | 24/25 | `desktop-test` 仍红（5.35s > 5s；同一条 95 支 `node --check` 哨兵） | 30s 预算（`d8bf4c6`；并发会话工作树里的同一修法提入库，判据不变） |
+| `d8bf4c6` | **25/25 门绿，核心 678 文件 / 8142 条（`--maxWorkers=2`），exit 0** | — | 六维全过；凭证 `outputs/head-cert-d8bf4c6-2026-11-15-0456/` |
+
+**事实**：`scripts-syntax` 的空闲读数是 3.8s，全量套件并跑时 5.3–6.7s ⇒ 5s 缺省把「慢」读成
+「语法错」。30s 预算只改超时，不断言（仍要求 ≥90 支逐支通过）。三笔失败认证的 provenance
+（`ade6568` / `9061caf` / `d1cd45b`）随本页一并入库。
+
+**读数**：`mutate-anchor-titles` + `mutate-verify-gates` 190 条绿；`pnpm mutate-needles-check` 绿
+（1677 条针脚，killer 指针失效 0）；`routing-check` 40/40；认证门面 25/25。
+
+**边界**：`desktop-test` 17.0s 与 `evidence-typecheck-check` 5.7s 超预算只出声、不判红。
+认证树是复用的共享树（本次不是新建）⇒ 脚本未回收；失败日志已在认证树 `.tmp/gate-failures/` 与
+`/tmp/dsh-head-cert-<rev>` 留档。
