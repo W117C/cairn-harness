@@ -42,6 +42,9 @@
    但行为要复用原语或统一封装。
 4. **判据**：新增 `ui-primitive-boundary.test.ts`（页面不得直接 import `@radix-ui/react-*`，只能从
    `components/ui` 进）；`cds-parity.test.ts` 继续钉视觉；每个迁移补一条键盘/Esc/焦点用例。
+**2026-11-15 第一步已落**：`components/ui/dropdown-menu.tsx` 唯一入口 + boundary 判据（`de5e1d16`，第 1223 页）；
+8 个页面 import 归一；Dialog/Select/Tooltip 未迁，Themes 未引。
+
 5. **与「自研」的关系**：ADR 0003 的原始要求是「组件不要手写，找优秀组件库」；UI 原语用 Radix 不违背
    「核心功能自研」。若业主把「自研」解释为「UI 也不许第三方」，那就只能选 C，代价是 a11y 维护回到手写；
    这个口径要单独回答。

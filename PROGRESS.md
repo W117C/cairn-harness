@@ -40464,3 +40464,24 @@ exit 0**；`desktop-test` 20.0s 超 10s 预算只出声。凭证：
 超 10s 预算只出声（并发套件撞窗）。凭证：`outputs/head-cert-68305ca-2026-11-15-0717/`。
 
 **边界**：仍是既有 HTML 回退的解析质量；A2 默认页、C3 自有索引未做，无新 provider/依赖。
+
+## 2026-11-15 · 第 1223 页：DropdownMenu 收进 components/ui（`de5e1d16`；认证 `de5e1d1` 25/25）
+
+**背景**：F3 推荐 B（Radix Primitives + CDS），第一步是给原语一个唯一入口；主应用 8 个 renderer 文件
+各自直接 import `@radix-ui/react-dropdown-menu`，没有 boundary。
+
+### 改动
+
+- 新增 `apps/desktop/src/renderer/components/ui/dropdown-menu.tsx`：唯一 re-export 点。
+- 8 个页面组件改从 `./ui/dropdown-menu` 进；Sidebar/PaneDock 的并发工作树改动保留，只把 import 行进本笔。
+- 新增 `apps/desktop/tests/ui-primitive-boundary.test.ts`：页面再直连 Radix 即红；只允许 `ui/dropdown-menu.tsx`。
+- 无视觉/行为变化，未引 Themes，未迁 Dialog/Select/Tooltip。
+
+### 读数
+
+- boundary 测试 1 条绿；`typecheck` 0。
+- HEAD 认证 `de5e1d1`：**25/25 门绿，核心 678 文件 / 8159 条（`--maxWorkers=2`），exit 0**；
+  `desktop-test` 26.3s 超 10s 预算只出声。凭证：`outputs/head-cert-de5e1d1-2026-11-15-0732/`。
+- 共享工作树的全量 desktop 套件因并发 workspace-chain 改动红；HEAD 认证树独立跑绿，以上以 HEAD 为准。
+
+**边界**：F3 的 A/B/C/D 仍未裁决；本页只落 B 的入口层，不改视觉、不迁其余原语。
