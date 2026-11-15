@@ -40381,3 +40381,18 @@ NUL/ESC 等控制字符，直接进入模型面会破坏可读性；无 url 的�
   `outputs/head-cert-df5016d-2026-11-15-0609/` 一并入库。
 
 **边界**：这是 A1 的 provider 层；没有默认搜索页（A2）、没有新依赖、没有改 Brave/Tavily/SearXNG。
+
+## 2026-11-15 · 第 1217 页：html provider 的测试连接接受 HTML 结果（`42050518`；认证 `4205051` 25/25）
+
+**问题**：设置页「测试连接」走 `requireResults: true`，该闸只认 JSON `results` 数组；html provider 的
+有效 HTML 结果页会被判成「服务未返回有效的检索结果 JSON」，用户看到测试失败，但实际搜索可用。
+
+**改动**：在 `requireResults` 判据前先跑同一份保守 HTML 抽取；接受「JSON results 数组（含空数组）」或
+「非空 HTML 抽取结果」，登录页/坏 JSON/无效 URL 仍失败。抽取器与阈值不变，无新依赖。
+
+**读数**：`web-search` + `providers` + `pinning` + `search-settings` **72 条绿**（26 + 9 + 18 + 19）；
+`typecheck` 0。HEAD 认证 `4205051`：**25/25 门绿，核心 678 文件 / 8157 条（`--maxWorkers=2`），
+exit 0**；`desktop-test` 20.0s 超 10s 预算只出声。凭证：
+`outputs/head-cert-4205051-2026-11-15-0639/`。
+
+**边界**：这是 html provider 的连接测试修正；A2 默认搜索页仍未做，没有默认厂商/端点。
