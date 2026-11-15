@@ -40317,3 +40317,29 @@ CDS parity 判据不动。
 预算只出声。凭证：`outputs/head-cert-6cd6947-2026-11-15-0535/`。
 
 **边界**：仍是既有 JSON 结果契约的卫生，不是 F6 的 provider/默认页决策；没有新增依赖、没有改端点。
+
+## 2026-11-15 · 第 1212 页：web_search 的 HTML 结果抽取（`8927d23f`；认证 `8927d23` 25/25）
+
+**背景**：工具一直接受 HTML 端点（custom/SearXNG），但响应不是 JSON 时只回有界原文，HTML 搜索页
+从来没有变成结果清单。第 1210/1211 页修的是结果卫生，本页补的是「HTML 回退也能出清单」。
+
+### 实现
+
+- 新增纯函数 `extractHtmlResults(html, baseUrl)`：先删注释与 `script/style/noscript/template` 整段；
+  抽 `<a href>` 的标题与后随摘要；相对链接按端点 URL 解析；复用 http(s)/无凭据的 URL 闸；
+  同 URL 去重，10 条帽。
+- **保守门**：至少 3 条、至少 2 个主机、每条都有摘要，才认成结果页；否则返回空数组，继续走原来的
+  有界原文降级——导航页/登录页不会被硬说成检索结果。
+- HTML 抽取成功时直接 `renderResults`，不再输出「不是结果 JSON」的原文；设置页的
+  `requireResults`（测试连接只认 JSON）不受影响。
+
+### 读数
+
+- `web-search` 三份 **48 条绿**（21 + 9 + 18）；`typecheck` 0。
+- HEAD 认证 `8927d23`：**25/25 门绿，核心 678 文件 / 8150 条（`--maxWorkers=2`），exit 0**；
+  `desktop-test` 11.6s 超 10s 预算只出声。凭证：`outputs/head-cert-8927d23-2026-11-15-0550/`。
+
+### 边界
+
+- 没有新增 provider、默认端点或依赖；F6 的 A1（独立 html provider）与 A2（默认搜索页）仍未批准。
+- 抽取是启发式：同主机 3 条或没有摘要的页面会回退原文；不承诺所有搜索页都能抽。
