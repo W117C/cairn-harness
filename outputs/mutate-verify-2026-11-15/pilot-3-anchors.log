@@ -1,0 +1,18 @@
+$ node --import tsx scripts/mutate-verify.mjs --in-worktree=.worktrees/gate-mutate-verify orphan-scan-drops-owned-wiring desktop-create-session-workspace-whitelist-dropped session-end-timeout-cap-removed
+[mutate-verify] worktree add exit=0：.worktrees/gate-mutate-verify @ e22e71f
+[mutate-verify] cp -al node_modules exit=0
+[mutate-verify] cp -al apps/desktop/node_modules exit=0
+[mutate-verify] 锁=本进程持有（/Users/ze/Downloads/Cairn/cairn/.git/dsh-tool-locks/mutate-verify-gate-mutate-verify.lock）
+变异验证：3 条
+✅ orphan-scan-drops-owned-wiring — 扫描入口不把归属集合接进去 ⇒ 纯函数那一格写对了但这一格永远传空集：跨会话活 worker 照样进清理面板（规则 230：只写纯函数不接＝没有读数） ｜本机实测 2.3s／2 拍
+✅ session-end-timeout-cap-removed — 去掉 SessionEnd 的 30s 短帽 ⇒ 收尾回落到缺省 600s，一个挂死的钩子能把「退出」拖住十分钟 ｜本机实测 1.3s／2 拍
+✅ desktop-create-session-workspace-whitelist-dropped — createSession 不再校验 workspace ∈ workspaces ⇒ renderer 可指任意路径，会话目录被凭空 mkdir（IPC 任意路径注入面；正常路径两种实现都建得出会话，只有注入路径分得开） ｜本机实测 1.9s／2 拍
+
+全部变异被正确杀死（断言非恒真）
+[mutate-verify] 本次耗时 6.1s · 跑了 3/3 条 · 未设预算（外层超时会在中途杀我，见 --budget-ms）
+成本分母：判卷 spawn 6 次／3 条（每条次数分布 2×3）· 单次中位 第1次 1.3s／第2次 0.5s· 最贵一条 orphan-scan-drops-owned-wiring 2.3s
+跑法单价：selector 6 拍·中位 0.82s·坏拍（选中≠1） 0 vs whole 0 拍·这一支本次没有 spawn ⇒ 没有分母
+锁=本进程持有（/Users/ze/Downloads/Cairn/cairn/.git/dsh-tool-locks/mutate-verify-gate-mutate-verify.lock）
+real 19.83
+user 7.43
+sys 11.96

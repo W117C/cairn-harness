@@ -51,6 +51,8 @@ rev: 85361296
 
 ## 下一步
 
+- 改动面 280 条 `mutate-verify` 已跑（第 1244 页）：279 杀 / 1 条 map 域存量存活，
+  经 `56cb24e4` 基线对照确认非本轮引入；补那条反向观测者属独立任务。
 - 共享工作树已在第 1243 页按业主授权「全清」：`git status` 空；3 个旧证据目录与 4 个陈旧锁的
   可回退副本在 `/tmp/cairn-cleanup-20261115-2134/`。
 - 重复 id 历史 metadata 归属已按 [ADR 0016](docs/adr/0016-legacy-session-metadata-ownership.md) 裁决（第 1241 页）：

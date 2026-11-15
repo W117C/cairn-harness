@@ -41411,3 +41411,44 @@ desktop boundary 绿。核心仍为 `pnpm test:capped` **681 文件 / 8179 条�
 
 **边界**：`/tmp` 回收站不入库、重启后可能被系统清掉；若要长期留存需另找位置。工作区外的
 `~/.codex/worktrees/*`、Alma worktree 与其它分支本次一律未动。
+
+## 2026-11-15 · 第 1244 页：改动面 280 条变异复验（含基线对照归因）
+
+**背景**：第 1240 / 1242 页两轮都把 `mutate-verify` 记为「未跑，280 条锚点单独排期」。
+业主令「跑一下」，本页把这笔账关掉。`--changed-since=85361296^`（只看 ADR 0016 那一笔）
+派生 **0 条**锚点 ⇒ 按脚本纪律「筛出空 ≠ 通过」，不能拿它当验收；有意义的面是
+`--changed-since=fb5a0344^`（整个 codex 轮次，183 文件）派生的 **280/1677 条**。
+
+### 读数（提交态；取料 `outputs/mutate-verify-2026-11-15/`）
+
+- 试跑 3 条代表锚点（core / desktop 路径注入闸 / session 收尾帽）：**3/3 被杀死**，
+  单条约 2s（`outputs/mutate-verify-2026-11-15/pilot-3-anchors.log`）。
+- 正式跑 `pnpm mutate-verify --changed-since=fb5a0344^`：**280/280 条跑到**，
+  **279 条变异被正确杀死、1 条存活**，退出码 **1**（不冒充 0）。
+  墙钟 **455.8s**、判卷 spawn 560 次（每条 2 拍）、最贵一条 `wait-timeout-gate-removed` 33.6s；
+  `REDKINDS=survived:1,misattributed:0,baseline-red:0,no-effect:0,syntax:0,restore-mismatch:0,vacuous:0`
+  ⇒ 还原零残留、无假绿、无基线红（`outputs/mutate-verify-2026-11-15/full-280.log`）。
+- 唯一存活：`map-payload-exclusion-as-abs-glob`（map 域：往 `rg` 的 glob 塞 fixtures 模式，
+  绝对路径匹配会把「夹具当工作区」的靶子掏空，边集判卷在空图上打分）。
+
+### 归因：这条红不是本轮改动引入（两路独立证据）
+
+1. **历史登记**：台账第 1178 页附近的整表复核已写明「只有 1 条是真变异存活，
+   `map-payload-exclusion-as-abs-glob`（map 域）」，是已知存量判据缺口。
+2. **本次基线对照（可复现）**：新建 detached 基线树 `56cb24e4`（=`fb5a0344^`），
+   硬链接依赖后单跑同一条锚点 ⇒ **同样 `survived:1`**、其余六类全 0
+   （`outputs/mutate-verify-2026-11-15/baseline-56cb24e4-anchor.log`）。
+   本轮 `fb5a0344` 对 `src/agent/map/build.ts` 的唯一改动是 stderr 排空（防管道写满卡死），
+   不碰 `NOISE_GLOBS` / `isPayloadPath` / 载荷排除逻辑；同族另两条
+   `map-payload-first-segment-lost` / `map-payload-filter-not-wired` 均被杀死。
+   ⇒ 存活是**改动前就存在**的判据缺口，与本轮任何一笔改动无因果。
+
+### 处理与边界
+
+- **不改**：不动冻结变异表、不改 fixtures 让门变绿（AGENTS.md 明禁）、不加登记豁免、
+  不把 exit 1 重写成「通过」。缺的那条观测者（`tests/map-build.test.ts` 需补「夹具自己当
+  workspace 时不被掏空」的反向用例，锚点 `expectFail` 已写明）是独立任务，单独排期。
+- **可引用的结论**：本轮 280 条改动面派生锚点里，除已登记存量缺口外**全部被杀死**，
+  说明这一轮的判卷不是恒真式；`mutate-needles-check` 绿不等于变异复验通过，本页才是那把尺。
+- 主树与隔离树跑完均 `git status` 空、无 `.mutbak` 残留；基线对照树已 `git worktree remove` 回收。
+- 这仍是**变异复验**，不替代真实模型验收、跨机器桌面、签名/公证或发版证据。
