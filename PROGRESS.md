@@ -41452,3 +41452,47 @@ desktop boundary 绿。核心仍为 `pnpm test:capped` **681 文件 / 8179 条�
   说明这一轮的判卷不是恒真式；`mutate-needles-check` 绿不等于变异复验通过，本页才是那把尺。
 - 主树与隔离树跑完均 `git status` 空、无 `.mutbak` 残留；基线对照树已 `git worktree remove` 回收。
 - 这仍是**变异复验**，不替代真实模型验收、跨机器桌面、签名/公证或发版证据。
+
+## 2026-11-15 · 第 1245 页：补上 abs-glob 变异的观测者，280 条全杀
+
+**背景**：第 1244 页那趟 280 条变异复验留了 1 条存量存活
+（`map-payload-exclusion-as-abs-glob`），并经 `56cb24e4` 基线对照确认非本轮引入。
+业主令「补跑」：补观测者 + 重跑整表。本页取代第 1244 页「缺的观测者属独立任务」那句。
+
+### 病灶不是「没有用例」，是「指针指到了测不出的形状」
+
+- `tests/map-build.test.ts` 早有一条标题与锚点 `expectFail` 逐字相同的反向用例：
+  「把夹具自己当工作区时，它不被掏空」。但它以 `ws/fixtures/mini` 本身为 workspace，
+  而产品用的是 `@vscode/ripgrep` 的二进制——**它对 `--glob '!**/fixtures/**'` 的行为与裸 `rg` 不同形**：
+  变异注入后该用例仍全绿（`-t` 选中 1 条、断言不红），故 runner 判 `survived`。
+- 两次直接探针（隔离树里注入锚点 `apply`，分别调 `scanSourceFilesAll`）：
+  · 以夹具目录为 workspace：正常与变异**都**回 `["app.ts","helper.ts"]`（原来那条用例测不出差别）；
+  · 以 `ws` 为根且含 `src/fixtures/truth.ts`：正常回 `["src/alpha.ts","src/fixtures/truth.ts"]`，
+    **变异只剩 `["src/alpha.ts"]`** ⇒ 绝对路径 glob 会连深层同名目录一起掏空，正是锚点 `desc` 的机理。
+  ⇒ 补的是「可观察后果」的断言，不是改判据让它变绿。
+
+### 改动（代码笔 `96560569`）
+
+- 在**原有**反向用例里追加两格：`scanSourceFilesAll(ws)` 必须含 `src/fixtures/truth.ts`
+  （变异红），且不含根级 `fixtures/mini/app.ts`（政策那一半仍成立）。
+  标题一字不改 ⇒ 冻结变异表里 `expectFail` 指针仍逐字有效；**没动变异表、没动 fixture、没加豁免**。
+- 教训按仓规记账：`mutate-verify` 量的是提交，不是工作树——改动未提交时复跑那一条仍报存活
+  （隔离树 checkout 到 HEAD 看不到在飞判据），提交后单跑立刻 `exit 0`、变异被杀死。
+
+### 读数（取料 `outputs/mutate-observer-fix-2026-11-15/`）
+
+- 单条锚点（提交后）：**exit 0，变异被正确杀死**（`outputs/mutate-observer-fix-2026-11-15/anchor-after-fix.log`）。
+- 整表 `pnpm mutate-verify --changed-since=fb5a0344^`（提交后重跑）：
+  **280/280 条全部被正确杀死，exit 0**、墙钟 **414.0s**、判卷 spawn 560 次、
+  最贵一条 `wait-timeout-gate-removed` 32.3s、坏拍 0
+  （`outputs/mutate-observer-fix-2026-11-15/full-280-after-fix.log`）。
+  对照第 1244 页：279 杀 / 1 存活 / exit 1 ⇒ 本笔把存量缺口真正关掉。
+- 核心 `pnpm test:capped`：**682 文件 / 8194 条绿，exit 0**
+  （`outputs/mutate-observer-fix-2026-11-15/core-test-capped.log`）；
+  根与桌面 typecheck 0、`docs-check` 全绿、针脚体检 1677 条可判定 / killer 指针失效 0
+  （`outputs/mutate-observer-fix-2026-11-15/mutate-needles-check.log`）、`git diff --check` 0。
+- 主树与隔离树跑完均 `git status` 空、无 `.mutbak` 残留。
+
+**边界**：本页读数仍是工作树/隔离树读数；代码笔 `96560569` 的完整提交态 HEAD 认证
+另立一页（第 1246 页），按第 1240 页纪律由这次**代码**改动承担。变异复验依然不替代
+真实模型验收、跨机器桌面、签名/公证或发版证据。
