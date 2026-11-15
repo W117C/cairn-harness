@@ -1,6 +1,6 @@
 # Cairn / DSH —— 现态
 
-rev: de5e1d16
+rev: 70f232d0
 
 核对日期 2026-11-15（Asia/Shanghai）。`rev` 是开发线现役基线；第 1200 / 1203 / 1204 页的判卷面与桌面改动在
 它之上的工作树里，尚未提交。分支与门禁状态见[仓库状态与分支](docs/REPOSITORY-STATUS.md)，历史证据见
@@ -10,8 +10,8 @@ rev: de5e1d16
 
 - **2026-11-15 web_search HTML 解析**（`68305ca5`）：`html` provider + HTML 抽取（`<base href>`、`result__snippet`、
   测试连接接受 HTML）；A2 默认页仍未做。第 1222 页；认证 `68305ca` 25/25、678/8159。
-- **2026-11-15 F3 组件栈**（`de5e1d16`）：`components/ui/dropdown-menu` 唯一入口 + boundary；8 个 import 归一；
-  其余原语未迁，A/B/C/D 待选。第 1223 页；认证 `de5e1d1` 25/25、678/8159。
+- **2026-11-15 F3 组件栈**（`70f232d0`）：`components/ui/{dropdown-menu,command}` 唯一入口 + boundary；10 个 import
+  归一；其余原语未迁，A/B/C/D 待选。第 1224 页；认证 `70f232d` 25/25、678/8159。
 - **2026-11-15 F6 自研搜索裁决输入**：`docs/web-search-self-host-2026-11-15.md` 区分 C1 代码自研 / C2
   自托管 / C3 自有索引；建议 A1（自研 HTML 适配器）+ B（SearXNG 运维文档），C3 另立项；待业主回答四问。
   第 1208 页。

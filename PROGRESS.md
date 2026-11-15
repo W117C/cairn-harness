@@ -40485,3 +40485,23 @@ exit 0**；`desktop-test` 20.0s 超 10s 预算只出声。凭证：
 - 共享工作树的全量 desktop 套件因并发 workspace-chain 改动红；HEAD 认证树独立跑绿，以上以 HEAD 为准。
 
 **边界**：F3 的 A/B/C/D 仍未裁决；本页只落 B 的入口层，不改视觉、不迁其余原语。
+
+## 2026-11-15 · 第 1224 页：cmdk 也收进 components/ui（`70f232d0`；认证 `70f232d` 25/25）
+
+**背景**：F3 B 的第一个入口是 DropdownMenu（第 1223 页）；`CommandPalette` 与 `SessionSearchResults` 仍
+直接 `import { Command } from "cmdk"`，是同一类「页面直连原语」的缺口。
+
+### 改动
+
+- 新增 `apps/desktop/src/renderer/components/ui/command.tsx`：cmdk 的唯一 re-export 点。
+- 两个页面文件改从 `./ui/command` 进。
+- `ui-primitive-boundary.test.ts` 扩展为同时禁止页面直连 Radix 与 cmdk；只允许各自 `ui/` 入口。
+- 无视觉/行为变化，无新依赖。
+
+### 读数
+
+- boundary 测试 1 条绿；`typecheck` 0。
+- HEAD 认证 `70f232d`：**25/25 门绿，核心 678 文件 / 8159 条（`--maxWorkers=2`），exit 0**；
+  `desktop-test` 16.9s 超 10s 预算只出声。凭证：`outputs/head-cert-70f232d-2026-11-15-0739/`。
+
+**边界**：仍是 F3 B 的入口层；Dialog/Select/Tooltip 未迁，A/B/C/D 未裁决。
