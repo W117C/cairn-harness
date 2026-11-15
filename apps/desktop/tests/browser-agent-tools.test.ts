@@ -27,7 +27,7 @@ function hostMock(overrides: Partial<{
   pick: (selector: string, max: number) => Promise<{ ok: boolean; matches?: { text: string; tag: string }[]; error?: string }>;
 }> = {}) {
   return {
-    agentNavigate: overrides.navigate ?? ((url: string) => ({ ok: true })),
+    agentNavigate: overrides.navigate ?? (() => ({ ok: true })),
     snapshot: overrides.snapshot ?? (async () => ({ ok: true, url: "https://example.com/a", title: "示例页", text: "正文".repeat(4000) })),
     pickBySelector: overrides.pick ?? (async () => ({ ok: true, matches: [{ text: "按钮一", tag: "button" }, { text: "按钮二", tag: "a" }] })),
   } as never;

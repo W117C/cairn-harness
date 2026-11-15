@@ -7,7 +7,7 @@ import { goalReminder, goalStopDecision, goalWindowSpend, parseGoalSpec, project
 import { scanStreamEvent } from "../agent/worker-projection";
 import type { MainModelSelection } from "./provider-runtime";
 import { pathOf } from "./sessions";
-import { requireSessionsDir } from "./session-handlers";
+import { resolveSessionRoot } from "./session-handlers";
 import { store } from "./settings-handlers";
 
 export interface GoalHandlerDeps {
@@ -142,6 +142,8 @@ async function goalViewOf(logPath: string): Promise<GoalView | null> {
  *  所以不能复用 `goal_stopped`——那会退化成「清除」，把暂停变成不可逆。 */
 export async function handleGoalSet(req: {
   sessionId?: string;
+  /** 显式会话目录（桌面按目标工作区算，与 `handleCompact` 同口径）；缺省按会话归属解析。 */
+  sessionsRoot?: string;
   objective?: unknown;
   maxTurns?: unknown;
   maxUsd?: unknown;
@@ -150,9 +152,15 @@ export async function handleGoalSet(req: {
   resume?: unknown;
 }): Promise<{ ok: boolean; error?: string; clamped?: string[] }> {
   try {
-    const dir = requireSessionsDir();
     const sessionId = req.sessionId ?? (await store().get()).currentSession;
     if (typeof sessionId !== "string" || sessionId === "") return { ok: false, error: "没有当前会话，目标无处可挂" };
+    // 目标必须落进**这个会话自己的**日志：显式根优先，否则问会话归属解析器，不读单例根。
+    // 单例根 = 启动时的 activeWorkspace；多工作区下它会把项目会话的 `goal_set` 写进默认工作区
+    // ⇒ 侧栏多一个幽灵会话，而真会话从未被武装（续跑判据读的是真会话，live 事件却按 id 归给了
+    // 真会话 ⇒ 界面说「续跑中」、盘上没目标，正是本仓点名的两路不一致）。
+    const explicit = typeof req.sessionsRoot === "string" && req.sessionsRoot !== "" ? req.sessionsRoot : null;
+    const dir = explicit ?? await resolveSessionRoot(sessionId);
+    if (dir === null) return { ok: false, error: `会话不存在或归属未知，目标无处可挂：${sessionId}` };
     const logPath = pathOf(dir, sessionId);
     if (req.clear === true) {
       const view = await goalViewOf(logPath);

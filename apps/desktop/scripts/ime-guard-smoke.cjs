@@ -10,6 +10,7 @@
 // 不运行模型，不使用或清空产品用户数据（独立 userData 临时目录）。
 const { app, BrowserWindow, nativeTheme } = require("electron");
 const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
+const { evidenceEnvelope } = require("./lib/renderer-evidence.cjs");
 const { mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
 const { join, resolve } = require("node:path");
 const { tmpdir } = require("node:os");
@@ -168,7 +169,7 @@ async function main() {
 
   check("渲染过程无控制台错误", errors.length === 0, errors);
 
-  writeFileSync(join(out, "checks.json"), JSON.stringify(checks, null, 2));
+  writeFileSync(join(out, "checks.json"), JSON.stringify(evidenceEnvelope(checks, join(__dirname, "../src/renderer"), join(__dirname, "../dist")), null, 2));
   const failed = checks.filter((c) => !c.ok);
   console.log(`读数：${checks.length} 条，${checks.length - failed.length} 绿 / ${failed.length} 红 → ${out}`);
   if (failed.length > 0) process.exitCode = 1;

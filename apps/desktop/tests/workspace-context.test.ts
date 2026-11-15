@@ -43,14 +43,17 @@ describe("活动工作区上下文（override）", () => {
     expect(main).toContain("const loaded = current === null ? null : loadCustomProviders(current);");
     expect(main).toContain('installCustomProviders(loaded?.kind === "ok" ? loaded.derived : []);');
     const app = readAppSurface();
-    expect(app).toContain("applyWorkspaceContext(activeWorkspace)");
-    expect(app).toContain("void applyWorkspaceContext(sessionWs)");
+    // 切换工作区与上报必须同拍：effect 会晚于子组件的挂载读，切项目后的第一屏仍读旧根。
+    expect(app).toMatch(/const setActiveWorkspace = useCallback\(\(workspace: string \| null\): void => \{[\s\S]{0,80}?applyWorkspaceContext\(workspace\);/);
+    expect(app).not.toContain("useEffect(() => { applyWorkspaceContext(activeWorkspace); }");
+    expect(app).toContain("if (sessionWs !== null) setActiveWorkspace(sessionWs);");
+    expect(app).toContain("else applyWorkspaceContext(null);");
     // 空屏默认工作区：createSession 回包带回实际归属，渲染层采纳它（否则 activeWorkspace 恒 null，
     // 文件/终端/diff/回滚整路「工作区未知」，侧栏也不高亮新会话）。
     expect(read("src/main/ipc-protocol.ts")).toContain("createSession(name?: string): Promise<{ id: string; workspace: string }>");
     expect(app).toContain("if (activeWorkspace === null) setActiveWorkspace(created.workspace);");
     // 选择被拒时不许沿用旧根：显式清空并把原因说出来。
-    expect(app).toContain("void window.agent.setWorkspaceContext(\"\");");
+    expect(app).toContain("void noteWorkspaceContext(window.agent.setWorkspaceContext(\"\"))");
   });
 });
 

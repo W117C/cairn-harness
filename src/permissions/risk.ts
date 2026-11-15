@@ -313,7 +313,6 @@ export function modelRisk(args: Record<string, unknown>): RiskFinding {
 /** 沙箱通道：沙箱装不下 → 审批。available === false 表示自检过但降级（未接线 null 不触发，与 M1b 语义一致）。 */
 export function sandboxRisk(
   sandboxAvailable: boolean | null,
-  tool: ToolName,
   isSideEffect: boolean,
 ): RiskFinding {
   if (sandboxAvailable !== false || !isSideEffect) return NONE;

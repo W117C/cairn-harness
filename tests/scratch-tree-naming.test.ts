@@ -218,7 +218,17 @@ describe("真仓面：注册表里的暂存树名字都没说谎", () => {
   });
 
   it("porcelain 解析与 git 自己给的分母同数（少一条就是解析漏了某种形状）", () => {
-    expect(rows.length).toBe(git(["worktree", "list"]).trim().split("\n").filter(Boolean).length);
-    for (const r of rows) expect(r.head).toMatch(/^[0-9a-f]{7,40}$/u);
+    // worktree 注册表是共享状态：认证/复跑会在**别的进程**里同时增删（本轮实测 10 vs 9，
+    // 差的正是别的会话收掉的那棵认证树）。快照与分母必须在紧邻时刻取；仍差就再取一对，
+    // 解析器真漏形状时两对都对不上，不会被并发窗口放过。
+    const pair = (): { parsed: ReturnType<typeof parseWorktreePorcelain>; plain: number } => {
+      const parsed = parseWorktreePorcelain(git(["worktree", "list", "--porcelain"]));
+      const plain = git(["worktree", "list"]).trim().split("\n").filter(Boolean).length;
+      return { parsed, plain };
+    };
+    let p = pair();
+    if (p.parsed.length !== p.plain) p = pair();
+    expect(p.parsed.length).toBe(p.plain);
+    for (const r of p.parsed) expect(r.head).toMatch(/^[0-9a-f]{7,40}$/u);
   });
 });

@@ -4,6 +4,7 @@
 //   electron scripts/cds-values-probe.cjs <输出 JSON>
 const { app, BrowserWindow, nativeTheme } = require("electron");
 const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
+const { rendererDigest, buildState } = require("./lib/renderer-evidence.cjs");
 const { mkdtempSync, readFileSync, writeFileSync, mkdirSync } = require("node:fs");
 const { join, resolve, dirname } = require("node:path");
 const { tmpdir } = require("node:os");
@@ -12,6 +13,9 @@ const profile = mkdtempSync(join(tmpdir(), "cairn-cds-probe-"));
 app.setPath("userData", profile);
 app.on("quit", () => scheduleProfileCleanup(profile));
 const out = process.argv[2] ? resolve(process.argv[2]) : join(tmpdir(), "cds-values.json");
+
+// 证据也要有「保质期」：renderer 源摘要与「源不晚于产物」两个字段，规格与判卷侧共用
+// `lib/renderer-evidence.cjs`（三个真机冒烟同用这一份），旧 values.json 不再能冒充当前构建。
 
 async function main() {
   await app.whenReady();
@@ -65,8 +69,22 @@ async function main() {
       codeBlock: paint(".md-code"),
     };
     out.probe = { bodyColor: probe.color, bodyBg: probe.backgroundColor };
-    };
     const mk = (tag, cls, attrs) => { const el = document.createElement(tag); el.className = cls; for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, v); return el; };
+    // 判卷要的是**算出来的几何**，不是样式表文本：缺元素回 null，让判卷明说取不到，
+    // 而不是把 undefined 读成空串。字段与 cds-components.test.ts 的断言一一对应。
+    const geom = (sel) => {
+      const el = document.querySelector(sel);
+      if (el === null) return null;
+      const cs = getComputedStyle(el);
+      return {
+        borderRadius: cs.borderRadius,
+        paddingTop: cs.paddingTop, paddingRight: cs.paddingRight, paddingBottom: cs.paddingBottom, paddingLeft: cs.paddingLeft,
+        fontSize: cs.fontSize, lineHeight: cs.lineHeight, maxWidth: cs.maxWidth,
+        backgroundColor: cs.backgroundColor, borderInlineStartWidth: cs.borderInlineStartWidth,
+        animationName: cs.animationName, animationDuration: cs.animationDuration,
+        marginBottom: cs.marginBottom,
+      };
+    };
     const bubbleRow = mk("div", "row user", { "data-cds": "UserMessage" });
     const bubble = mk("span", "t", {}); bubble.textContent = "probe"; bubbleRow.appendChild(bubble);
     const asstRow = mk("div", "row assistant", { "data-cds": "AssistantMessage", "data-cds-reply-type": "true" });
@@ -102,7 +120,7 @@ async function main() {
     return { gray20, gray900 };
   })()`);
   const rendered = await js(`document.querySelector(".side") !== null && document.querySelector("[data-composer-card]") !== null`);
-  const result = { appRendered: rendered, officialSheetLoaded: officialsPresent.gray20 === "rgb(249, 249, 247)" && officialsPresent.gray900 === "rgb(11, 11, 11)", officialsPresent, light: await read("light"), dark: await read("dark"), errors };
+  const result = { appRendered: rendered, officialSheetLoaded: officialsPresent.gray20 === "rgb(249, 249, 247)" && officialsPresent.gray900 === "rgb(11, 11, 11)", officialsPresent, rendererDigest: rendererDigest(join(__dirname, "../src/renderer")), generatedAt: new Date().toISOString(), ...buildState(join(__dirname, "../src/renderer"), join(__dirname, "../dist")), light: await read("light"), dark: await read("dark"), errors };
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, JSON.stringify(result, null, 2));
   console.log(JSON.stringify({ out, errors: errors.length }));

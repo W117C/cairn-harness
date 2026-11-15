@@ -3,7 +3,7 @@
 // 为什么不直接 readFile：长会话的 JSONL 可能有几十 MB，而「看日志」只看最近的失败上下文。
 // 这里从文件尾部读至多 256 KiB，再按行裁到调用方要的行数；从中间切开的那一行（以及可能
 // 被切开的 UTF-8 多字节序列）一并丢掉，不把半行/乱码当正文展示。
-import { open, stat } from "node:fs/promises";
+import { open } from "node:fs/promises";
 
 export interface SessionLogTail {
   /** 尾部正文（已去尾随空行；行间以 \n 连接）。 */

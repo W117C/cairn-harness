@@ -130,8 +130,18 @@ export type { SearchProvider } from "../tools/web-search";
  *  v50 = 会话运行控制携带 workspace；目标校验拒绝带 code，不触发陈旧旗自动续发。
  *  v51 = RunResponse.accepted 区分未接收的请求和已接收后的执行失败，供队列安全恢复。
  *  v52 = 读 LSP 状态（lspStatus；第 996 页那份跨进程可读的运行态第一次进桌面——只读、不起进程、不改授权）。
- *  v53 = 子 Agent 角色、配置迁移、闲时队列与会话后台命令管理。 */
-export const IPC_PROTOCOL_VERSION = 54;
+ *  v53 = 子 Agent 角色、配置迁移、闲时队列与会话后台命令管理。
+ *  v54 = 壁纸设置行（wallpaperPick——外观分段里选本机图片，校验后落设置）。
+ *  v55 = goal 写入与旁路（sidechat 新建/提问/提升/清单）携带 workspace——都落目标会话自己的
+ *        工作区日志/目录；只带 sessionId 会写进启动工作区的单例根 ⇒ 幽灵会话、跨项目串内容。
+ *  v56 = 会话组织与只读日志携带 workspace：pin/archive/项目归属的存在性检查按显式根走
+ *        （同 id 跨工作区不再因归属歧义整条拒绝）；sessionLog 与 sessionWorktree 的请求带
+ *        workspace，日志/隔离动作落在会话自己的工作区，不再回落启动工作区。
+ *  v57 = 置顶清单读取带 workspace：listMessagePins 与写入路径共用显式根存在性检查，
+ *        同 id 跨工作区不再拿另一根的结果冒充。
+ *  v58 = AskPayload 显式携带 workspace：审批卡/等门计数与推送队列按目标根寻址，
+ *        同 id 跨工作区的卡不再互相覆盖。 */
+export const IPC_PROTOCOL_VERSION = 58;
 
 export type SettingsMigrationSource = "claude-code" | "codex";
 export interface SettingsMigrationItem {
@@ -327,11 +337,12 @@ export interface RunNotificationPayload {
   sessionId: string;
   workspace?: string;
 }
-/** 会话级 worktree 动作（§3.7 · G4）。`sessionId` 由调用方给——main 侧按会话归属解析工作区。 */
+/** 会话级 worktree 动作（§3.7 · G4）。`workspace` 缺省时 main 侧按会话归属解析；
+ *  同 id 跨工作区必须显式给，否则归属歧义 fail-closed（不猜树在哪）。 */
 export type SessionWorktreeRequest =
-  | { kind: "create"; sessionId: string; title?: string }
-  | { kind: "merge"; sessionId: string }
-  | { kind: "discard"; sessionId: string };
+  | { kind: "create"; sessionId: string; title?: string; workspace?: string }
+  | { kind: "merge"; sessionId: string; workspace?: string }
+  | { kind: "discard"; sessionId: string; workspace?: string };
 
 export interface SessionWorktreeResult {
   ok: boolean;
@@ -348,6 +359,8 @@ export interface SessionWorktreeResult {
 
 export interface AskPayload {
   askId: string;
+  /** 这张卡所属工作区（run 的显式根优先；headless/旧载荷缺省 = 未知）。 */
+  workspace?: string;
   // M2d：remember 等运行时注入工具不进 ToolName 静态键域，审批卡只作展示串
   tool: ToolName | string;
   args: Record<string, unknown>;
@@ -495,8 +508,10 @@ export interface AgentApi {
   /** goal 模式：给某个会话设定/改设目标（轮次上限 + 美元上限），或 `clear:true` 清除。
    *  不发 = 会话不自动续跑。`clamped` 回条 = 入参被钳制过的字段点名（不静默改用户的预算）。
    *  v2.16：`pause:true` 挂起（停自动续跑、目标仍武装）、`resume:true` 恢复（只清挂起位，
-   *  不重置窗口/轮次）。挂起 ≠ 清除：清除落 `goal_stopped`（终态、不可复活）。 */
-  setGoal(req: { sessionId?: string; objective?: string; maxTurns?: number; maxUsd?: number; clear?: boolean; pause?: boolean; resume?: boolean }): Promise<{ ok: boolean; error?: string; clamped?: string[] }>;
+   *  不重置窗口/轮次）。挂起 ≠ 清除：清除落 `goal_stopped`（终态、不可复活）。
+   *  v55：`workspace` 显式指定目标会话的归属工作区（同 `run` / `compact` 的消歧）——
+   *  只带 sessionId 时主进程会按归属解析器定位；两个工作区同名 id 必须显式指定，歧义拒绝。 */
+  setGoal(req: { sessionId?: string; workspace?: string; objective?: string; maxTurns?: number; maxUsd?: number; clear?: boolean; pause?: boolean; resume?: boolean }): Promise<{ ok: boolean; error?: string; clamped?: string[] }>;
   /** P3（审查）：取消当前交互 run——信号沿 runLoop 轮界/门等待/长驻工具透传。
    *  M3-5：补可选 sessionId 走会话级取消（kernel-host cancel(sessionId)，T2 per-session controller）；
    *  workspace 显式指定时必须匹配执行归属；旧调用省略 workspace 时会话 id 须无歧义。 */
@@ -569,7 +584,7 @@ export interface AgentApi {
   orchestrationSubmit(request: OrchestrationSubmitRequest): Promise<OrchestrationResponse>;
   orchestrationControl(request: OrchestrationControlRequest): Promise<OrchestrationResponse>;
   /** v15：读该会话日志的尾部（只读；`tailLines` 缺省 400，上限 2000）。 */
-  sessionLog(id: string, tailLines?: number): Promise<SessionLogPayload>;
+  sessionLog(id: string, tailLines?: number, workspace?: string): Promise<SessionLogPayload>;
   /** 新建会话；`workspace` = 该会话实际落点的规范工作区（缺省 = host 的 activeWorkspace）。
    *  回传归属：渲染层空屏直接发任务时 activeWorkspace 仍是 null，不回传就只能靠猜。 */
   createSession(name?: string): Promise<{ id: string; workspace: string }>;
@@ -705,7 +720,7 @@ export interface AgentApi {
    *  `pinned:false` = 取消置顶（追加一条撤销行，读时取最后一条生效）。 */
   setMessagePinned(req: { sessionId: string; eventId: number; pinned: boolean; workspace?: string; eventRef?: EventRef }): Promise<{ ok: boolean; error?: string }>;
   /** 某会话当前生效的置顶锚点（eventId 升序）。 */
-  listMessagePins(sessionId: string): Promise<{ eventId: number; eventRef?: EventRef }[]>;
+  listMessagePins(sessionId: string, workspace?: string): Promise<{ eventId: number; eventRef?: EventRef }[]>;
   /** 会话级 worktree 隔离（§3.7 · G4）：一条会话可以在自己的 git worktree 里跑，做完合并回来。
    *  三动作一个通道——它们共用同一条事实（磁盘上那棵树在不在），拆成三条只是把同一份状态抄三遍。 */
   sessionWorktree(req: SessionWorktreeRequest): Promise<SessionWorktreeResult>;
@@ -713,9 +728,9 @@ export interface AgentApi {
   worktreeClean(name: string, workspace?: string): Promise<{ ok: boolean; error?: string }>;
   /** 读 worker worktree 的 diff（`diff_ref` = `<worktree>@<baseCommit>`）：只认 .agents/wt-* 与 hex 基线。 */
   worktreeDiff(ref: string, workspace?: string): Promise<{ ok: true; stat: string; patch: string; files: string[] } | { ok: false; error: string }>;
-  setSessionPinned(sessionId: string, pinned: boolean): Promise<SessionMetadataRecord>;
-  setSessionArchived(sessionId: string, archived: boolean): Promise<SessionMetadataRecord>;
-  assignSessionProject(sessionId: string, projectId: string | null): Promise<SessionMetadataRecord>;
+  setSessionPinned(sessionId: string, pinned: boolean, workspace?: string): Promise<SessionMetadataRecord>;
+  setSessionArchived(sessionId: string, archived: boolean, workspace?: string): Promise<SessionMetadataRecord>;
+  assignSessionProject(sessionId: string, projectId: string | null, workspace?: string): Promise<SessionMetadataRecord>;
   // ---- M2g：preload 清账（六条通道全部桥接完成，`?` 按实际**收紧**为必选）----
   // 收紧理由：preload 现已无条件暴露这六条，optional 只会掩盖「桥接被删」的回归——
   // 收紧后谁删桥接行 typecheck 即红（静态兜住，不再靠运行时 typeof 探测）。
@@ -746,17 +761,19 @@ export interface AgentApi {
   /** v28：卸载 registry 拥有的包并清掉对应信任记录；手工目录不受影响。 */
   pluginUninstall(entryId: string, scope: PluginInstallScope, workspace?: string): Promise<{ ok: boolean; error?: string }>;
   pluginsInstalled(): Promise<InstalledPluginRecord[]>;
-  /** M2f：辅助对话（sidechat）+ /promote。 */
-  sidechatCreate(parentSessionId: string, name?: string): Promise<{ id: string }>;
-  sidechatAsk(sidechatId: string, message: string, parentSessionId?: string): Promise<{ ok: boolean; error?: string; events?: AgentEvent[] }>;
+  /** M2f：辅助对话（sidechat）+ /promote。v55：`workspace` 指名父会话的归属工作区——
+   *  旁路档案、提问、清单三处必须与父会话同根，否则换项目会读到另一个项目的旁路内容。 */
+  sidechatCreate(parentSessionId: string, name?: string, workspace?: string): Promise<{ id: string }>;
+  sidechatAsk(sidechatId: string, message: string, parentSessionId?: string, workspace?: string): Promise<{ ok: boolean; error?: string; events?: AgentEvent[] }>;
   /** /promote：把 sidechat 结论提升进主会话（渲染为主会话一条 user_message + origin）。 */
   sidechatPromote(req: {
     sidechatId: string;
     parentSessionId: string;
     sourceEventIds: number[];
     note?: string;
+    workspace?: string;
   }): Promise<{ ok: boolean; error?: string }>;
-  sidechatState(parentSessionId?: string): Promise<SidechatPanelSnapshot>;
+  sidechatState(parentSessionId?: string, workspace?: string): Promise<SidechatPanelSnapshot>;
   /** M3a：card_action 回写协议（§10.3）——worker 审批应答 / agent 取消的唯一事件流入口。 */
   cardAction(req: {
     cardId: string;

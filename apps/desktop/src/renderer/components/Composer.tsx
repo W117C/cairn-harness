@@ -2,7 +2,7 @@
 // 沿革（行为语义按代际保留）：
 //  · 2026-10-15（第二十遍业主裁「上下文环 → 带上百分数」）：用量环照 v3-lite .ring——环心带上下文百分数、
 //    环钉在发送/中断钮左侧；未知窗口/本会话未跑=「—」（不假报 0，title 分口径说清）。
-//  · v2.17 运行中可沟通：运行中不禁输入——回车=入队、⌘/Ctrl+↩=入队并打断；权限档运行中禁用；
+//  · v2.17 运行中可沟通：运行中不禁输入——回车=入队（队尾）、⌘/Ctrl+↩=插到队首并打断；权限档运行中禁用；
 //    模型档位菜单内锁定而思考档可调（C-21）。
 //  · 第二十四遍业主裁 A②「Tab 想下一条」：建议只在按 Tab 时出手；空框空闲右侧一枚 Tab 键帽。
 // P2 契约（plan 2026-10-16）：
@@ -40,7 +40,7 @@ import { DRAFTS_KEY, HOME_DRAFT_KEY, draftKeyFor, sessionIdOfDraftKey } from "..
 import { pickedElementContext, type PickedElement, type PickedElementSignal } from "../picked-element";
 import { ElementPill } from "./ElementPill";
 import "./composer-plan.css";
-import type { ComposerLockReason } from "../send-queue";
+import { interruptAfterSend,type ComposerLockReason,type SendDisposition } from "../send-queue";
 
 /** @ 模糊搜索的 debounce（P2-4：输入停顿 120ms 才发通道查询）。 */
 const MENTION_DEBOUNCE_MS = 120;
@@ -103,7 +103,7 @@ export function Composer(props: {
   /** 会话重命名换 id：把草稿/附件桶从旧 id 迁到新 id。 */
   draftRemap?: { from: string; to: string; seq: number };
   /** 发送失败回滚：把原文与附件还给对应会话的输入框（用户已切走则只存桶，切回可见）。 */
-  restoreDraft?: { forSession: string | null; text: string; attachments: readonly RunAttachmentReference[]; seq: number };
+  restoreDraft?: { forSession: string | null; forWorkspace: string | null; text: string; attachments: readonly RunAttachmentReference[]; seq: number };
   /** 已发提示历史（2026-10-18）：打开旧会话时从投影行回填；本实例发过的会覆盖本地桶。 */
   promptHistory?: readonly string[];
   /** v7 附件注入（§2.3 路径右键「附为上下文」）：seq 递增触发一次 append；与 injectedText 同式。 */
@@ -113,8 +113,9 @@ export function Composer(props: {
   /** 第三个参数 `forceQueue`：**只入队、不插话**。
    *  为什么需要它：运行中的回车现在默认插话到本轮（第 9 点），但「加入队列」那颗钮点下去
    *  必须**真的排队**——按钮写着「加入队列」却把话插进当前轮，按钮就在说谎。
-   *  缺省 undefined = 走默认语义（先试插话、不在跑则回落排队）。 */
-  onSend: (text: string, attachments: RunAttachmentReference[], forceQueue?: boolean) => void;
+   *  缺省 undefined = 走默认语义（先试插话、不在跑则回落排队）。
+   *  第四个参数 `front`：入队时插到队首（⌘↩「打断并发送」——现在要发的就是这一条）。 */
+  onSend: (text: string, attachments: RunAttachmentReference[], forceQueue?: boolean, front?: boolean) => void | Promise<SendDisposition>;
   onCancel: () => void;
   onModeChange: (mode: PermissionMode) => void;
   onModelChange: (registryId: string | null) => void;
@@ -290,7 +291,7 @@ export function Composer(props: {
     const r = props.restoreDraft;
     if (r === undefined || r.seq === lastRestore.current) return;
     lastRestore.current = r.seq;
-    const key = r.forSession === null ? HOME_DRAFT_KEY : draftKeyFor(props.workspacePath, r.forSession);
+    const key = r.forSession === null ? HOME_DRAFT_KEY : draftKeyFor(r.forWorkspace, r.forSession);
     if (key !== draftKeyRef.current) {
       if (r.text !== "") draftsRef.current.set(key, r.text);
       if (r.attachments.length > 0) attachByKey.current.set(key, [...r.attachments]);
@@ -560,8 +561,8 @@ export function Composer(props: {
     ta.style.height = `${String(Number.isFinite(cap) ? Math.min(ta.scrollHeight, cap) : ta.scrollHeight)}px`;
   };
   // v2.17 运行中可沟通：运行中 onSend 走 App 的按会话队列（回车=入队）；
-  // interrupt=true（⌘/Ctrl+Enter）时先入队再打断本轮——收束在轮界，队列随即派发（App 侧语义）。
-  const submit = (opts?: { interrupt?: boolean; forceQueue?: boolean }) => {
+  // interrupt=true（⌘/Ctrl+Enter）时先插到队首再打断本轮——收束在轮界，队列随即派发（App 侧语义）。
+  const submit = (opts?: { interrupt?: boolean; forceQueue?: boolean; front?: boolean }) => {
     if (!canSend) return;
     // 元素选择：完整选择器/HTML 只在这里拼到消息前，输入框里从头到尾只有一枚短 chip。
     // 用户删掉 chip = 这次不带元素上下文；不存在「删了半行选择器，发出去的是半截」的中间态。
@@ -569,15 +570,18 @@ export function Composer(props: {
     const typed = text.trim();
     const outgoing = context === "" ? typed : typed === "" ? context : `${context}\n\n${typed}`;
     // 打断并发送必须先入队：onSend 在运行中默认会尝试「插话」进当前轮，随后 onCancel 把
-    // 这一轮打断——插进去的那句话跟着这轮一起消失。forceQueue 让这句话排到轮后，由收束链派发。
-    props.onSend(outgoing, stripRenderFields(attachments), opts?.forceQueue === true || opts?.interrupt === true);
+    // 这一轮打断——插进去的那句话跟着这轮一起消失。forceQueue 让这句话排到轮后，由收束链派发；
+    // front 再把它插到队首（「打断并发送」＝现在发这一条，不是排在之前排的老消息后面）。
+    // `/goal` 还要等 setGoal 落定才入队（onSend 返回 Promise）：打断时点交给 interruptAfterSend，
+    // 早打断会让收束链先派走老队首，这条反而排在后面。
+    const dispatched = props.onSend(outgoing, stripRenderFields(attachments), opts?.forceQueue === true || opts?.interrupt === true, opts?.front === true);
     const sent = typed;
     if (sent !== "") {
       const hist = historyRef.current.get(draftKeyRef.current) ?? [];
       historyRef.current.set(draftKeyRef.current, [sent, ...hist].slice(0, 50));
     }
     histIndexRef.current = -1;
-    if (opts?.interrupt === true && props.running) props.onCancel();
+    if (opts?.interrupt === true && props.running) interruptAfterSend(dispatched, props.onCancel);
     setText("");
     draftsRef.current.delete(draftKeyRef.current);
     attachByKey.current.delete(draftKeyRef.current);
@@ -947,8 +951,8 @@ export function Composer(props: {
               if (e.key !== "Enter" || e.shiftKey || e.altKey) return;
               if (composing.current) return;
               e.preventDefault();
-              // ⌘/Ctrl+Enter：运行中=打断并发送（入队后打断）；空闲时与回车同义。
-              submit(e.metaKey || e.ctrlKey ? { interrupt: true, forceQueue: true } : undefined);
+              // ⌘/Ctrl+Enter：运行中=打断并发送（插到队首后打断）；空闲时与回车同义。
+              submit(e.metaKey || e.ctrlKey ? { interrupt: true, forceQueue: true, front: true } : undefined);
             }}
           />
           </div>

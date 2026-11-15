@@ -88,7 +88,7 @@ function hunkNearHint(lines: string[], expect: string): string {
     `修补丁里这一段的缩进，或核对 @@ 旧侧行号是否声明在漂移前的版本上；别改文件去凑补丁。`;
 }
 
-function mismatchError(f: PatchFile, h: PatchHunk, seq: number, at: number, actual: string | undefined, lines: string[]): string {
+function mismatchError(f: PatchFile, h: PatchHunk, seq: number, actual: string | undefined, lines: string[]): string {
   const expect = beforeOf(h)[0] ?? afterOf(h)[0] ?? "";
   const where = actual === undefined ? "文件到这里已经结束了" : `实际是 ${JSON.stringify(clip(actual))}`;
   return (
@@ -116,7 +116,7 @@ function locate(f: PatchFile, h: PatchHunk, seq: number, lines: string[]): Place
     // 中间插入都整体早一行（往文件尾追加时甚至插到末行之前），而回执照报 `ok: true`：
     // 静默改错地方比改不动危险得多。`@@ -0,0`（新建）两式都落到 0，行为不变。
     const at = Math.min(Math.max(h.oldStart, 0), lines.length);
-    if (h.oldStart > lines.length) return mismatchError(f, h, seq, at, undefined, lines);
+    if (h.oldStart > lines.length) return mismatchError(f, h, seq, undefined, lines);
     return { hunk: h, at, offset: 0 };
   }
   if (matches(declared)) return { hunk: h, at: declared, offset: 0 };
@@ -131,7 +131,7 @@ function locate(f: PatchFile, h: PatchHunk, seq: number, lines: string[]): Place
   }
   if (found === -1) {
     const actual = lines[declared] === undefined ? undefined : lines[declared];
-    return mismatchError(f, h, seq, declared, actual, lines);
+    return mismatchError(f, h, seq, actual, lines);
   }
   // 多处一样：不猜。上下文本就不足以唯一定位，猜中是运气，猜错是静默改错地方。
   if (ambiguous > 1) {

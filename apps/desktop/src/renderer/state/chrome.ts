@@ -43,9 +43,9 @@ export const INSPECTOR_AUTO_OPEN_MIN = 1600;
 
 export interface ChromeDeps {
   /** 错误条（预览启动失败等）。载荷：一句话，或结构化的 SurfaceError（2026-11-02 真机订正）。 */
-  setLastError: (message: string | SurfaceError, sessionId?: string) => void;
+  setLastError: (message: string | SurfaceError, sessionId?: string, workspace?: string | null) => void;
   /** 提示条（导出回执等）。 */
-  setLastNotice: (message: string, sessionId?: string) => void;
+  setLastNotice: (message: string, sessionId?: string, workspace?: string | null) => void;
   /** 元素选择信号（⌘⇧S）——草稿簇持有，这里只推它。 */
   setPickSignal: React.Dispatch<React.SetStateAction<number>>;
   /** 当前会话（宽屏首进自动展开检查器的判据）。 */
@@ -162,7 +162,7 @@ export function useChrome(deps: ChromeDeps): ChromeState {
     const startX = e.clientX;
     const startW = sidebarWidthRef.current;
     let last = startW;
-    // 拖拽期间关掉宽度过渡（2026-10-18）：.side-wrap 上挂着 `transition: width var(--t-fast)`
+    // 拖拽期间关掉宽度过渡（2026-10-18）：.side-wrap 上挂着一层 `--t-fast` 宽度过渡
     // （⌘B 收/开要它），而拖拽是同一个 width 属性逐 pointermove 重写 ⇒ 每次移动都被插值 140ms，
     // 把手肉眼可见地落后于光标、松手又补一段。收/开要过渡、拖拽要即时，靠 data-resizing 分流。
     document.body.dataset.resizing = "sidebar";

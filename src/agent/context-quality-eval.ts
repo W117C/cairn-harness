@@ -104,7 +104,7 @@ function fixtureEmbedder(testCase: ContextQualityMemoryCase): EmbeddingProvider 
   return {
     id: "context-quality-fixture",
     async embed(texts) {
-      return texts.map((text, index) => {
+      return texts.map((_text, index) => {
         if (index === 0) return testCase.queryVector;
         return testCase.candidates[index - 1]?.vector ?? [0, 1];
       });

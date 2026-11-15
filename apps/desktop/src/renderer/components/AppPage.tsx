@@ -3,6 +3,7 @@
 // 本模块只负责快照拉取（getState / scheduleSnapshot）、局部错误隔离与分区派发，并保持原公开导出契约。
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { defaultPageFilter } from "../navigation";
+import { windowWorkspaceApplied } from "../state/window-workspace";
 import {
   appPageSnapshotReducer,
   createAppPageSnapshotState,
@@ -53,7 +54,7 @@ export function AppPageBody(props: {
   const [snapshotState, dispatch] = useReducer(
     appPageSnapshotReducer,
     props.page,
-    createAppPageSnapshotState,
+    (page) => createAppPageSnapshotState(page, props.workspace),
   );
   const [operationError, setOperationError] = useState<string | null>(null);
   const requestGeneration = useRef(0);
@@ -72,30 +73,35 @@ export function AppPageBody(props: {
   const refresh = useCallback(() => {
     const page = props.page;
     const generation = ++requestGeneration.current;
-    dispatch({ type: "start", page, generation });
+    dispatch({ type: "start", page, generation, workspace: props.workspace });
     const resolve = (snapshot: Parameters<typeof appPageSnapshotReducer>[0]["snapshot"]): void => {
       if (snapshot !== null) dispatch({ type: "resolve", page, generation, snapshot });
     };
     const reject = (message: string): void => {
       dispatch({ type: "reject", page, generation, message });
     };
-    // 自动化页只需要 schedule：走专用的 scheduleSnapshot 通道，不再用整份 getState
-    // （那条整份快照还要算插件/记忆/工作树；也为 invoke 消费面留下一处真实调用点）。
-    if (page === "automation") {
-      void window.agent.scheduleSnapshot().then((schedule) => resolve({ schedule })).catch((err: unknown) => {
-        reject(`调度快照读取失败：${err instanceof Error ? err.message : String(err)}`);
+    // 快照读的是窗口工作区指针（getState / scheduleSnapshot）：切换与读常在同一拍发出。
+    // 不等上报落定，切项目后的第一次刷新拿到的是上一个项目的插件 / 记忆——而删除、信任写的是新项目。
+    void windowWorkspaceApplied().then(() => {
+      if (requestGeneration.current !== generation) return; // 等待期间又刷新 / 切页：这次作废
+      // 自动化页只需要 schedule：走专用的 scheduleSnapshot 通道，不再用整份 getState
+      // （那条整份快照还要算插件/记忆/工作树；也为 invoke 消费面留下一处真实调用点）。
+      if (page === "automation") {
+        void window.agent.scheduleSnapshot().then((schedule) => resolve({ schedule })).catch((err: unknown) => {
+          reject(`调度快照读取失败：${err instanceof Error ? err.message : String(err)}`);
+        });
+        return;
+      }
+      void window.agent.getState().then((snapshot) => resolve(snapshot)).catch((err: unknown) => {
+        reject(`快照读取失败：${err instanceof Error ? err.message : String(err)}`);
       });
-      return;
-    }
-    void window.agent.getState().then((snapshot) => resolve(snapshot)).catch((err: unknown) => {
-      reject(`快照读取失败：${err instanceof Error ? err.message : String(err)}`);
     });
-  }, [props.page]);
+  }, [props.page, props.workspace]);
   useEffect(() => {
     if (props.page === "plugins") return;
     refresh();
     return () => { requestGeneration.current += 1; };
-  }, [props.page, refresh]);
+  }, [props.page, props.workspace, refresh]);
   useEffect(() => { setOperationError(null); }, [props.page]);
 
   const snapshot = snapshotState.page === props.page ? snapshotState.snapshot : null;
@@ -138,7 +144,7 @@ export function AppPageBody(props: {
           {loadError === null && snapshot !== null && props.page === "skills" && (
             snapshot.plugins === undefined
               ? stateFrame("插件运行时未加载")
-              : <SkillsPane snap={snapshot.plugins} onError={reportError} refresh={refresh} filter={activeFilter} onFilter={setActiveFilter} />
+              : <SkillsPane snap={snapshot.plugins} onError={reportError} refresh={refresh} workspace={props.workspace ?? null} filter={activeFilter} onFilter={setActiveFilter} />
           )}
           {loadError === null && snapshot !== null && props.page === "memory" && (
             snapshot.memory === undefined

@@ -581,8 +581,9 @@ const PlanPane = memo(function PlanPane(props: { events: readonly AgentEvent[] }
   );
 });
 
-/** 任务窗格：多 agent 状态（worker 簇）。 */
-const TasksPane = memo(function TasksPane(props: { events: readonly AgentEvent[] }): React.JSX.Element {
+/** 任务窗格：多 agent 状态（worker 簇）。workspace 必须给：worker 的隔离树在**会话自己的**工作区里，
+ *  缺了它主进程按构造期的 activeWorkspace 找，读到的会是启动工作区（或干脆 ENOENT）。 */
+const TasksPane = memo(function TasksPane(props: { events: readonly AgentEvent[]; workspace: string | null }): React.JSX.Element {
   const workers = projectWorkers(props.events);
   const [ask, setAsk] = useState<{ w: WorkerPaneItem; action: "merge" | "reject" } | null>(null);
   const [diff, setDiff] = useState<{ agentId: string; text: string; hunks: ReturnType<typeof parseUnifiedPatch>; truncated: boolean } | null>(null);
@@ -600,7 +601,7 @@ const TasksPane = memo(function TasksPane(props: { events: readonly AgentEvent[]
     v === "verified" ? "验证通过" : v === "failed" ? "验证失败" : v === "stale" ? "证据过期" : "无验证";
   const showDiff = async (w: WorkerPaneItem): Promise<void> => {
     if (w.diffRef === undefined) return;
-    const r = await window.agent.worktreeDiff(w.diffRef);
+    const r = await window.agent.worktreeDiff(w.diffRef, props.workspace ?? undefined);
     if (!r.ok) toast.error(`读取改动失败：${r.error}`);
     else {
       const clipped = clipDiff(r.patch.trim() === "" ? r.stat : r.patch);
@@ -938,7 +939,7 @@ export function PaneDock(props: {
                 />
               )}
               {kind === "plan" && <PlanPane events={props.events} />}
-              {kind === "tasks" && <><OrchestrationPane workspace={props.workspace ?? null} sessionId={props.sessionId ?? null} active={kind === active} /><TasksPane events={props.events} /></>}
+              {kind === "tasks" && <><OrchestrationPane workspace={props.workspace ?? null} sessionId={props.sessionId ?? null} active={kind === active} /><TasksPane events={props.events} workspace={props.workspace ?? null} /></>}
               {kind === "file" && (
                 <FilePane
                   onPathMenu={openPathMenu}
@@ -958,8 +959,8 @@ export function PaneDock(props: {
                   {...(props.onPickResult !== undefined ? { onPickResult: props.onPickResult } : {})}
                 />
               )}
-              {kind === "sidechat" && <SidechatPane sessionId={props.sessionId ?? null} />}
-              {kind === "plugins" && <PluginSurface />}
+              {kind === "sidechat" && <SidechatPane sessionId={props.sessionId ?? null} workspace={props.workspace ?? null} />}
+              {kind === "plugins" && <PluginSurface workspace={props.workspace ?? null} />}
               {kind === "session" && (
                 <SessionPreviewPane
                   target={props.sessionPreview ?? null}

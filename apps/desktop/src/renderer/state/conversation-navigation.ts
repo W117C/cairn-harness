@@ -9,6 +9,7 @@ import { foldAllButLast } from "../fold-rounds";
 import { roundOfEvent } from "../projections";
 import { scrollBehavior } from "../useStickyScroll";
 import { nextViewMode,VIEW_LABEL } from "../view-mode";
+import { runKey } from "./session-identity";
 
 interface ConversationNavigationDeps {
   viewRef: MutableRefObject<ViewMode>;
@@ -18,6 +19,7 @@ interface ConversationNavigationDeps {
   viewToastTimer: MutableRefObject<number | null>;
   foldedBySession: MutableRefObject<Map<string, ReadonlySet<number>>>;
   activeId: string | null;
+  activeWorkspace: string | null;
   setFoldedRounds: Dispatch<SetStateAction<ReadonlySet<number>>>;
   outlineTurns: { round: number; text: string; }[];
   setFlashRound: Dispatch<SetStateAction<number | null>>;
@@ -25,6 +27,7 @@ interface ConversationNavigationDeps {
   flashRound: number | null;
   events: AgentEvent[];
   activeIdRef: MutableRefObject<string | null>;
+  activeWorkspaceRef: MutableRefObject<string | null>;
   stick: StickyScroll;
   setOutlineOpen: Dispatch<SetStateAction<boolean>>;
   setOutlineCurrent: Dispatch<SetStateAction<number | null>>;
@@ -34,7 +37,9 @@ interface ConversationNavigationDeps {
 }
 
 export function useConversationNavigation(deps: ConversationNavigationDeps) {
-  const { viewRef, hasThinking, setViewMode, setViewToast, viewToastTimer, foldedBySession, activeId, setFoldedRounds, outlineTurns, setFlashRound, streamEl, flashRound, events, activeIdRef, stick, setOutlineOpen, setOutlineCurrent, outlineOpen, streamRows, foldedRounds } = deps;
+  const { viewRef, hasThinking, setViewMode, setViewToast, viewToastTimer, foldedBySession, activeId, activeWorkspace, setFoldedRounds, outlineTurns, setFlashRound, streamEl, flashRound, events, activeIdRef, activeWorkspaceRef, stick, setOutlineOpen, setOutlineCurrent, outlineOpen, streamRows, foldedRounds } = deps;
+  // 同一会话 id 在两个已登记工作区是两场会话：折叠与滚动记忆都必须按限定键存。
+  const activeKey = runKey(activeWorkspace, activeId ?? "");
   // Ctrl+O 循环视图三档（§3.4）：toast 一闪即走，不留常驻态。
   const cycleView = useCallback(() => {
     const next = nextViewMode(viewRef.current, hasThinking);
@@ -45,17 +50,17 @@ export function useConversationNavigation(deps: ConversationNavigationDeps) {
   }, [hasThinking]);
   // ── 长对话导航（v7.2）：折叠开合 / 目录跳转 / 折叠全部。折叠按会话记忆（切回还是原样）。──
   const rememberFolds = useCallback((next: ReadonlySet<number>) => {
-    foldedBySession.current.set(activeId ?? "", next);
+    foldedBySession.current.set(activeKey, next);
     setFoldedRounds(next);
-  }, [activeId]);
+  }, [activeKey]);
   const toggleFoldRound = useCallback((round: number) => {
     setFoldedRounds((prev) => {
       const next = new Set(prev);
       if (next.has(round)) next.delete(round); else next.add(round);
-      foldedBySession.current.set(activeId ?? "", next);
+      foldedBySession.current.set(activeKey, next);
       return next;
     });
-  }, [activeId]);
+  }, [activeKey]);
   const foldAllTurns = useCallback(() => {
     rememberFolds(foldAllButLast(outlineTurns.map((t) => t.round)));
   }, [outlineTurns, rememberFolds]);
@@ -66,7 +71,7 @@ export function useConversationNavigation(deps: ConversationNavigationDeps) {
       if (!prev.has(round)) return prev;
       const next = new Set(prev);
       next.delete(round);
-      foldedBySession.current.set(activeId ?? "", next);
+      foldedBySession.current.set(activeKey, next);
       return next;
     });
     setFlashRound(round);
@@ -76,7 +81,7 @@ export function useConversationNavigation(deps: ConversationNavigationDeps) {
       // 但一旦祖先可横向滚动，默认会把祖先也横向拖走（对话列左缘的字被拦腰切掉，2026-11-01 真机目验）。
       (el instanceof HTMLElement ? (el.closest(".row") ?? el) : null)?.scrollIntoView({ behavior: scrollBehavior("smooth"), block: "start", inline: "nearest" });
     }));
-  }, [activeId, streamEl]);
+  }, [activeKey, streamEl]);
   // 闪光一跳一闪即走（不留常驻高亮）。
   useEffect(() => {
     if (flashRound === null) return;
@@ -92,7 +97,7 @@ export function useConversationNavigation(deps: ConversationNavigationDeps) {
         if (!prev.has(round)) return prev;
         const next = new Set(prev);
         next.delete(round);
-        foldedBySession.current.set(activeIdRef.current ?? "", next);
+        foldedBySession.current.set(runKey(activeWorkspaceRef.current, activeIdRef.current ?? ""), next);
         return next;
       });
       setFlashRound(round);
@@ -107,7 +112,7 @@ export function useConversationNavigation(deps: ConversationNavigationDeps) {
       });
     }));
   }, [events, streamEl]);
-  // ── P3-1 滚动记忆：Map(sessionId → scrollTop) 存 App 内存——切走存、切回取；回底钮逻辑不动。──
+  // ── P3-1 滚动记忆：Map(runKey(workspace, sessionId) → scrollTop) 存 App 内存——切走存、切回取；回底钮逻辑不动。──
   const scrollMemory = useRef(new Map<string, number>());
   const lastScrollTop = useRef(0);
   const lastScrollOwner = useRef<string | null>(null);
@@ -117,7 +122,7 @@ export function useConversationNavigation(deps: ConversationNavigationDeps) {
     if (streamEl === null) return;
     const onScroll = (): void => {
       lastScrollTop.current = streamEl.scrollTop;
-      lastScrollOwner.current = activeIdRef.current;
+      lastScrollOwner.current = runKey(activeWorkspaceRef.current, activeIdRef.current ?? "");
     };
     streamEl.addEventListener("scroll", onScroll, { passive: true });
     return () => streamEl.removeEventListener("scroll", onScroll);
@@ -137,7 +142,7 @@ export function useConversationNavigation(deps: ConversationNavigationDeps) {
     // 回场取：会话内容异步载入——目标位「可达」（scrollHeight 容纳得下）前逐帧等，早落会被空流
     // clamp 成 0（P3 真机抓到的竞态）；至多 30 帧仍不可达则贴可达上限。instant——不排 smooth
     // 动画队列（与粘底口径一致）；restoreTo 按落点重判贴底，跟底观察器不把回场视口拽回底部。
-    const restore = activeId === null ? undefined : scrollMemory.current.get(activeId);
+    const restore = activeId === null ? undefined : scrollMemory.current.get(activeKey);
     if (restore === undefined || streamEl === null) return;
     let frames = 0;
     let raf = requestAnimationFrame(function step() {
@@ -149,14 +154,14 @@ export function useConversationNavigation(deps: ConversationNavigationDeps) {
       raf = requestAnimationFrame(step);
     });
     return () => cancelAnimationFrame(raf);
-  }, [activeId, streamEl, restoreTo]);
+  }, [activeId, activeKey, streamEl, restoreTo]);
   // 切会话：折叠记忆随会话换（读回该会话的折叠集）；目录/高亮/闪光复位。
   useEffect(() => {
-    setFoldedRounds(foldedBySession.current.get(activeId ?? "") ?? new Set<number>());
+    setFoldedRounds(foldedBySession.current.get(activeKey) ?? new Set<number>());
     setOutlineOpen(false);
     setOutlineCurrent(null);
     setFlashRound(null);
-  }, [activeId]);
+  }, [activeKey]);
   // scrollspy（目录开着才算）：随滚动算"当前读到第几轮"（rAF 节流）。
   useEffect(() => {
     if (!outlineOpen) return;

@@ -40046,6 +40046,46 @@ require 生产模块 `src/main/wallpaper.ts`；合成面只有 AgentApi（preloa
 **代价与改正**：认证树回收会把唯一失败日志带走；下一笔认证若再红，先 `--keep-tree` 留树再回收。
 凭证：`outputs/head-cert-97b24a8-2026-11-14-1806/provenance.md`（只有汇总，没有逐条失败）。
 
+## 2026-11-15 · 第 1197 页：CDS 证据可重跑且带同代/同构建判据；MCP 钩子超时落地；TS 未用绑定棘轮
+
+**事实**（修前，工作树）：
+- `apps/desktop/scripts/cds-values-probe.cjs` 在 HEAD 上跑不起来：注入脚本里多一个 `};`（SyntaxError），
+  且 `geom` 未定义（`cds-components` 的真机几何断言取不到值）。旧 `values.json`（00:43）与旧构建
+  一直绿：第 1053 页把暗色输入卡从 gray-830 `#1a1a19` 提到 `hsl(60 2.4% 18.4%)`（实测 `#30302e`）之后，
+  `cds-parity` 仍按 `#1a1a19` 通过——真机证据与判卷脱钩，属于「量过但量的不是现在」。
+- `HookMcpCallFn` 只有四个实参：mcp_tool 钩子里写的 `timeout` 被静默丢弃（manager 自带的
+  callTimeoutMs 是另一条独立预算），到点回执还会被读成「对面拒了」。
+- 两棵 TS 树未开 `noUnusedLocals` / `noUnusedParameters`；实测一批死绑定（含 `sandboxRisk` 的 `tool`、
+  `mismatchError` 的 `at`、`waitWith` 的 `label`、orchestrator 的死方法 `statusOf`）。
+- 桌面 `scripts-syntax.test.ts` 串行 `node --check` 95 支脚本，全量并跑超过缺省 5s 超时 ⇒ 假红。
+
+**改动**：
+- 探针：删多余 `};`；补 `geom()`（字段与 `cds-components` 的断言一一对应）；新增
+  `rendererDigest()`（递归 `src/renderer` 的 `.css/.ts/.tsx`，POSIX 相对路径排序，路径\0内容 sha256\n）
+  与 `buildFresh`（源最晚 mtime ≤ dist 最晚 mtime）。两条一起封住两个方向的陈旧：
+  量完后源又变（摘要对不上）、改了源没重建（构建不新）。
+- `cds-parity`：暗色输入卡期望改为真机实测 `#30302e`（第 1053 页业主裁）；新增两条判卷——
+  「证据与当前 renderer 源同一代」「证据量的是当前构建」，缺席/过期都红，不 skip 冒充通过。
+- `hooks`：`mcpCall` 接受 `signal`，`dispatchMcp` 用 `AbortSignal.timeout(budgetMs)` 透传；到点回执
+  「MCP 调用超时（Nms 内未完成）」而不是「未被受理」；`dispatchPrompt` 去掉未用的 `h`。
+- tsconfig ×2：开 `noUnusedLocals` / `noUnusedParameters`；清掉本批死绑定与死参数（清单见 git diff）。
+- `scripts-syntax`：30s 超时，判据不变（95 支仍须逐支通过）。
+
+**读数**（工作树，未提交）：
+- 核心 `pnpm test:capped`（= `vitest run --config tests/vitest.config.ts --maxWorkers=2`，并发 2）：
+  **678 文件 / 8143 条全绿，exit 0**（169.9s）。
+- 桌面 `pnpm --filter cairn-desktop test`：**390 文件 / 2520 条全绿**（含 cds 54 条、边界检查绿）。
+- 探针实跑：`errors: 0`、`appRendered: true`、`officialSheetLoaded: true`、
+  `rendererDigest 8ce6693c…`、`buildFresh: true`；三条独立实现（探针/判卷/临时脚本）复算摘要一致。
+- `node --import tsx scripts/typecheck.ts`：0 条报错；`pnpm docs-check`：受检项全绿（本页给出 1197→1198）。
+
+**边界**：
+- 本页改动未提交；`pnpm gates` / `mutate-verify` / `head-cert-check` 量的是提交，未引用为本页证据。
+- `apps/desktop/outputs/cds-parity-verify/values.json` 受版本控制且现在带摘要与构建时刻 ⇒ 以后改
+  `src/renderer` 任何 `.css/.ts/.tsx` 都必须先 build、再重跑探针，否则桌面判卷以「证据过期」红。
+- 仍待业主裁的两条视觉项未动：fluid stop 的作用层级、分段控件的强调色边界（前页已登记）。
+
+
 ## 2026-11-15 · 第 1198 页：桌面死依赖摘除、路由标定闸修形与 GLM 价表裁决输入（`4240634c` / `962548a9`）
 
 **背景**：第 1194 页 F3（`@radix-ui/themes` 死依赖）与 F4（GLM 三档未标定、占位价进美元闸）都标注
@@ -40095,6 +40135,63 @@ require 生产模块 `src/main/wallpaper.ts`；合成面只有 AgentApi（preloa
 - F3 的 ADR 0003 组件栈裁决未做；预览仍用 Radix Themes，主包只是不再声明它。
 - 并行会话的未提交改动（`src/agent/**`、plugins、desktop 测试等）未触碰。
 
+## 2026-11-15 · 第 1200 页：后台任务收束链收口、`fs_ops` 整树搬走闸、桌面真机证据带保质期章
+
+**背景**：第 1195 页登记的两条判卷面边界（后台 `timeout`/`stop` 不收跑后复查；`fs_ops` 的整树
+move 未普查），加上第 1197 页给 cds 证据加的保质期章只覆盖了一支探针。本页把三处一起收口，
+并让另外三支真机冒烟第一次真正量到 11-04 改版后的队列形制。
+
+### 一、后台任务：所有终止路径汇进一条收束链
+
+- 旧形：`close` 走「先复查、后 done」，`timeout`/`stop`/会话取消/`disposeAll` 直接 `finish` ⇒
+  `task_stop` 的停止回执先返回、守卫说明在 `close` 之后才补进输出环；`close` 若因孙进程占管道
+  永不触发，复查整条丢失。
+- 新形（`src/tools/background-tasks.ts`）：`settle(code, why)` 是唯一收束入口，`done` 只在
+  复查之后置真；`stop()` 返回 Promise 并等链跑完，`task_stop` 的回执当场带守卫结论；
+  未 `close` 时最多等 `EXIT_GRACE_MS`（1s，SIGKILL 已发）再读盘；`disposeAll` 先摘表但链照跑。
+- 判卷：`tests/frozen-shell-guard.test.ts` ⑧——后台命令先改判卷面再挂住，`task_stop` 返回的
+  output 必须已含守卫标签与污染说明、盘上已复原；旧实现下这条红（回执早于 close）。
+- 读口径：`done=true` 现在等于「进程已收、跑后复查已完」，不再等于「进程 close 了」。
+
+### 二、`fs_ops`：含冻结文件的目录不许整树搬走
+
+- 旧形：move/rename 只做精确键匹配。`mv fixtures fixtures-old` 的源是目录，闸看不见目录里的
+  冻结文件，判卷面被整体搬走（后续按缺失红，但判据面已被拆）。
+- 新形：源是目录时按工作区相对路径做前缀匹配，命中即拒并点名前三个文件 + 换判据出口
+  （`BLOCKED.md`）；精确键闸保留（冻结文件本身仍不许单独搬）。
+- 判卷：`tests/fs-ops.test.ts` 新增——含冻结文件的目录拒、冻结文件本身仍拒、普通目录照常可搬
+  （证明闸不是恒红）。
+
+### 三、桌面真机证据：四支判卷共用一份保质期章，队列冒烟改到现形制
+
+- 规格收拢：`apps/desktop/scripts/lib/renderer-evidence.cjs`（探针侧）与
+  `apps/desktop/tests/helpers/renderer-evidence.ts`（判卷侧）实现同一摘要与「源不晚于产物」；
+  `queue-key` / `overlay-mutex` / `ime-guard` 三支冒烟的 `checks.json` 从裸数组换成
+  `{checks, rendererDigest, buildFresh, generatedAt}`，三支判卷各加一条「证据是当前源/当前构建」。
+- **抓到真漂移**：queue-key 冒烟按 textContent 找「打断并发送」，而 11-04 截图形制把每行按钮
+  改成「立即」（aria-label `立即发送：…`）⇒ 重跑当场红（按钮点不到）。旧证据从 10-28 一直绿，
+  正是保质期章要堵的洞。判卷改为点**第二条**的「立即」，真正量到 promoteQueued 的改序：
+  第四条被提前派出去、第三条留在队列。
+- overlay-mutex 冒烟的合成 AgentApi 成员表还在用旧正则 `/Promise<[^>]*[\]>]/`（把所有 Promise
+  成员都判成数组），与 `layout-smoke`/cds 探针的 `/Promise<[^>]*\[\]>/` 不一致；同步修正
+  （`same-id-workspace-smoke.cjs` 同病同修）。
+- 重跑取证：queue-key 6/6、overlay-mutex 5/5、ime-guard 6/6；四份证据同摘要、`buildFresh=true`。
+
+### 四、读数（证据覆盖工作树，非提交）
+
+- 核心：`pnpm test:capped`（= `--maxWorkers=2`）678 文件 / 8145 条绿（199.66s）。
+- 桌面：`pnpm --filter cairn-desktop test` 390 文件 / 2523 条绿（含 boundary 绿）。
+- 定向：四支真机判卷 + cds-components 5 文件 / 82 条绿；`scripts/tools-check.ts` 57 条绿。
+- `node --import tsx scripts/typecheck.ts`：0 报错。`pnpm docs-check`：本页落库后复跑。
+
+### 五、边界
+
+- 桌面 `will-quit` / CLI 二次 Ctrl-C 走 `killAllTrackedChildren` 同步杀组，不等异步复查；
+  下次门禁按哈希会红，不会静默绿。要「退出前也复原」得给退出路径加异步收束，留待下一轮。
+- `apps/desktop/scripts/_diag13.cjs` / `_diag14.cjs` 仍是旧成员表正则；一次性诊断、无判卷消费，未动。
+- 多支冒烟各自复制一份 AgentApi 成员提取；本页只修漂移的两支，未做统一抽取（避免大范围改动）。
+
+
 ## 2026-11-15 · 第 1199 页：776c026 的 HEAD 认证（25/25；F3 / 标定闸 / GLM 裁决输入）
 
 **对象**：`776c026`（第 1198 页的代码与文档；`4240634c` 摘依赖、`962548a9` 修 F2d、`776c026` 落裁决文件）。
@@ -40110,6 +40207,7 @@ require 生产模块 `src/main/wallpaper.ts`；合成面只有 AgentApi（preloa
 
 **边界**：F4 的价表仍是占位；本页只证明「摘依赖 + 标定闸修形 + 裁决文件」这一笔的 HEAD 绿。
 认证树回收后失败日志不保留，下一笔若红先 `--keep-tree`（第 1196 页的教训）。
+
 
 ## 2026-11-15 · 第 1201 页：ADR 0015（bot 团队调研裁决，Proposed）落库
 
@@ -40135,6 +40233,7 @@ require 生产模块 `src/main/wallpaper.ts`；合成面只有 AgentApi（preloa
 - 本页不改冻结表、不改事件种类、不改权限档；只新增 ADR 文件与 STATE/ROADMAP 指针。
 - 上游 DS-Bot 只作参考材料（Apache-2.0，不复制代码/命名/数据结构/文案/界面）。
 
+
 ## 2026-11-15 · 第 1202 页：GLM 强档模型名修正（`18495794`）
 
 **事实**：`src/providers/registry.ts` 的 `glm-strong` 指向 `glm-5.2-pro`。2026-11-15 对照官方模型总览
@@ -40151,6 +40250,61 @@ require 生产模块 `src/main/wallpaper.ts`；合成面只有 AgentApi（preloa
 
 **边界**：只修「模型名不存在」这一格；没有标定价、没有改 `standard`、没有改美元闸。强档的价格
 仍是 8/8 占位（比真实价 1.20/4.20 高约 6.7 倍），这是第 1198 页登记的待裁决项。
+
+## 2026-11-15 · 第 1203 页：⌘↩「打断并发送」真的先发这一条（工作树）
+
+**事实**：速查表里 ⌘↩ 的名字是「运行中 = 入队并打断本轮」，但 `send()` 的运行中分支一律
+`[...队列表, 新消息]`——队列里有老消息时，打断后先派出去的是**更早排的那条**，用户刚打的字
+排在队尾。队列条每行的「立即」反而会先 `promoteQueued` 再打断：同一个语义，两个入口两套次序。
+
+**改动**：`send-queue.ts` 新增纯函数 `enqueueQueued(list, item, front)`（缺省队尾，`front` 插队首，
+不改入参）；`send` / `sendWithGoal` 多第四个参数 `front`（`/goal` 两条派发路径一起透传）；
+`Composer.submit` 收 `front` 并交给 `onSend`，⌘↩ 传 `{ interrupt: true, forceQueue: true, front: true }`；
+`WorkbenchView` 的 `onSend`/`sendWithGoal` 类型与接线同步。文案同步为「运行中 = 打断本轮，先发这条」
+（旧文案已不描述实际次序）。
+
+**判卷（先红后绿）**：`send-queue.test.ts` 新增 `enqueueQueued` 四断言（队尾/队首/空表/不改入参）
+与一条接线哨兵（`sendWithGoal(t, attachments, forceQueue ?? false, front ?? false)` →
+`enqueueQueued(...)` → 两处 `send(..., forceQueue, front)` 必须同时在场）；`run-queue-session.test.tsx`
+新增两条行为判卷：运行中 `send("现在就要发", [], true, true)` 后内存表与 `queueSet` 的落盘次序
+都是**新消息在前**，配对用例证明普通「加入队列」仍排队尾；`composer-steer.test.tsx` 钉住
+`opts?.front === true` 确实作为第四参传给 `onSend`；`shortcuts-drift.test.ts` 的 ⌘↩ 证人改为新字面量。
+
+**读数**：桌面全量 390 文件 / 2528 条绿（新增 5 条；`pnpm --filter cairn-desktop test`，含 boundary 绿）；
+四支真机证据因 renderer 源变化按保质期章重跑：cds-values 0 errors、ime-guard 6/6、overlay-mutex 5/5、
+queue-key 6/6（「立即」路径仍是被派出的那条在队首）；`typecheck` 0；`renderer-layer-check` 绿。
+
+**边界**：工作树读数，未提交。⌘↩ 打在 `/goal …` 上的极窄竞态未收：`setGoal` IPC 未回时先打断，
+objective 的入队/起跑由收束链兜（最坏回落草稿），不丢消息但不保证「先发」；`will-quit`/二次 Ctrl-C
+仍是同步杀组、不等异步复查（与第 1200 页同一边界）。
+
+## 2026-11-15 · 第 1204 页：应用退出也等后台任务的跑后复查（工作树）
+
+**事实**：第 1200 页登记的边界——桌面 `will-quit` 的 `killAllTrackedChildren()` 是同步组杀，
+后台任务的收束链（组杀 → 等退出 → 判卷面复查）还没跑完，进程就退了。退出瞬间有后台命令改过
+判卷面，盘上就没人复原，只能等下次门禁按哈希红。
+
+**改动**：`BackgroundTaskRegistry` 新增 `settleAll()`（本表在跑任务并行走同一条 `settle` 链，
+全部完成才返回）；模块级 `allRegistries` 在 `start()` 登记、`disposeAll()` 摘除（不随会话数泄漏）；
+导出 `settleAllBackgroundTasks()`。`disposeAll` 改为复用 `settleAll`。桌面 `before-quit` 的
+`Promise.all` 加第三项 `settleAllBackgroundTasks()`——收完三件事（持久执行器、安装任务、后台任务）
+才 `app.quit()`；`will-quit` 的同步杀组退化成第二次清扫（幂等）。
+
+**判卷（先红后绿）**：`frozen-shell-guard.test.ts` 新增 ⑨：后台命令改判卷面后挂住，等盘上变
+`hacked`，`await settleAllBackgroundTasks()` 返回时断言盘上已复原、任务 `done`/`stopped`、
+输出环里有守卫标记；`marketplace-install-wiring.test.ts` 的退出序列证人从两名成员升级为三名
+（少接一支当场红）。
+
+**读数**：定向 2 个核心文件 23 条绿（frozen-shell-guard 9 + background-command-scope 14）；
+桌面全量 390 文件 / 2528 条绿（`pnpm --filter cairn-desktop test`，含 boundary 绿）；`typecheck` 0；
+`renderer-layer-check` 绿；核心全量 `pnpm test:capped`（`--maxWorkers=2`）678/678 文件绿。
+首轮同命令曾报 2 条红（`mutate-anchor-titles` 与 `mutate-verify-gates` 的「真表」各 1 条），
+两个文件单独跑 190/190 绿、紧接着同命令重跑 678/678 全绿——记为并发/负载下的瞬时假红
+（与 AGENTS 记录的负载假红同族，不是逻辑回归）。
+
+**边界**：工作树读数，未提交。正常退出（`before-quit`）已等复查；SIGINT/强杀仍是硬边界，
+`will-quit` 的同步杀组保留为最后清扫。四支真机证据的 digest 不含 main 进程文件，无需重跑。
+
 
 ## 2026-11-15 · 第 1205 页：GLM 强档修复的认证收口（三红一绿；`d8bf4c6` 25/25）
 
@@ -40173,6 +40327,63 @@ require 生产模块 `src/main/wallpaper.ts`；合成面只有 AgentApi（preloa
 **边界**：`desktop-test` 17.0s 与 `evidence-typecheck-check` 5.7s 超预算只出声、不判红。
 认证树是复用的共享树（本次不是新建）⇒ 脚本未回收；失败日志已在认证树 `.tmp/gate-failures/` 与
 `/tmp/dsh-head-cert-<rev>` 留档。
+
+
+## 2026-11-15 · 第 1206 页：`/goal` 配 ⌘↩ 的打断时点收口；「真表」瞬时红定位为共享工作树上的外部写入（工作树）
+
+**背景**：第 1203 页登记 `/goal` 配 ⌘↩ 的窄竞态未处理；第 1204 页把核心全量首轮 2 条「真表」红记为
+「并发/负载下的瞬时假红」。本页前者修掉，后者给出根因与取证。
+
+### 一、`/goal` 配 ⌘↩：先入队，后打断
+
+- 旧形：Composer 在 `onSend` 返回后**立即** `onCancel()`；`sendWithGoal` 的 `/goal` 分支却要
+  `await setGoal` 才 `send`。于是打断落在消息入队之前——收束链把**老队首**派出去，用户刚打的这条
+  反而排在后面；空闲时旧 run 自然收束、这条已起跑，打断就是把它自己杀掉。
+- 新形：`send` 返回去向 `SendDisposition`（`steered` / `queued` / `started` / `failed`）；
+  `sendWithGoal` 只在 `/goal` 分支返回准备 Promise；Composer 交给 `interruptAfterSend(dispatched, cancel)`
+  ——只有 `queued` 才打断，`started` / `steered` / `failed` 都不打断。
+- `setGoal` 失败时整条 `/goal …` 原文与附件还回输入框（已有会话与首页建会话两条路径都算），
+  不再当普通消息跑掉，也不丢消息。
+- 剩余窄窗：`/goal` 等 `setGoal` 时旧轮可能自然收束，收束链会把老队首先派出去。现在 ⌘↩ 分支
+  **先占住队首**（`blocked` 占位；`takeQueued` 见占位头返回 null 且不出队，收束链停一拍），落定后
+  清旗：旧轮还在跑 ⇒ 返回 `queued`（调用方才打断）；旧轮已收束 ⇒ 自己续派并返回 `started`（不打断
+  自己）；失败 ⇒ 撤占位、续派老队首、整条命令回草稿。占位不落盘——重启后不能把一条没设过目标的
+  消息派出去。
+- 判据：`send-queue` 6 条纯函数（同步入队当场打断；未落定不打断、`queued` 才打断一次；起跑/插话/
+  失败都不打断；准备 Promise 拒绝不打断；占位头不派也不出队；占位不落盘）+ `run-queue-session`
+  5 条集成（占位挡住老队首、落定后续派顺序不颠倒；并行时返回 `queued`；等待期间别的轮接上 ⇒ 不打断；
+  失败撤占位并把老队首续上；空闲失败不替用户点「继续发送」）+ `goal-chip` 两处接线字面量。
+  发送队列三文件 75 条绿。
+
+### 二、「真表」瞬时红：判据对着共享工作树读数，写入者在别的会话
+
+- 事实：`mutate-anchor-titles` 的 `realFindings()` 与 `mutate-verify-gates` 的 `listAnchorRows()` 都读
+  **当前工作树**的表（`readMutationTableText` / `mutate-verify.mjs --list`）与 `.test.ts` 正文；
+  两者之间没有共享进程内状态。
+- 取证①（写入者存在）：本批的核心全量绿跑在 13:07:23–13:11:30；`907deda7`（13:09:14）正改
+  `scripts/lib/mutations/agent-runtime.mjs` 与 `scripts/lib/mutations/main.mjs`；更早的瞬时红窗口同样
+  与 `d1cd45b2`（12:41，改 `agent-runtime.mjs`）以及 02:30–02:35 的 `18495794` / `ade65686` /
+  `9061caf0` 重叠。判据读的正是这些文件。
+- 取证②（不是判据自己写）：`tests/` 的写盘全部落在 mkdtemp/临时树；没有测试在运行时改写
+  `tests/**/*.test.ts` 或 `scripts/lib/mutations/*.mjs`。
+- 取证③（旁路探针）：`/tmp/cairn-drift-probe.mjs`（不入库）每 400ms 用两把尺重读表与当场 283 份
+  判卷文件，覆盖整轮绿跑：约 3000 拍，`FINDINGS` 0、`TABLE-READ-FAIL` 0、`FILE-READ-FAIL` 0。
+- 结论：不是判据间共享状态/隔离缺陷，而是「判据对着共享工作树读数」的固有语义——别的会话在某两次
+  读数之间改了表，那一拍就能红。
+- 处置：**不**改成读 HEAD 快照（会漏掉提交前漂移，判据反而更弱）；**不**加稳定性重试（只把别人的
+  编辑窗口翻译成「有时红」）。规矩：先问是否在飞（`git status` / 最近提交），再重跑。
+
+**读数**（工作树，未提交）：桌面全量以 `--maxWorkers=2` 跑 `pnpm exec vitest run` 390 文件 / 2543 条绿
+（32.07s；默认并发下 `terminal-size` 曾 5s 超时，单跑 293ms 绿，属本仓已记录的负载假红）；
+`desktop-boundary-check` 绿；`node --import tsx scripts/typecheck.ts` 0 报错；`pnpm renderer-layer-check`
+绿（244 个渲染层源文件）；核心全量 `pnpm test:capped`（`--maxWorkers=2`）678 文件 / 8149 条绿（227.07s）；
+`pnpm docs-check` 受检项全绿（D-1 / D-2 / D-4 / D-5 等）。
+四支真机探针（CDS / IME / OVERLAY / QUEUE）因 renderer 源变动重建后重跑，全部 exit 0，
+新 envelope 带 `rendererDigest` 与 `buildFresh: true`。
+
+**边界**：工作树读数，未提交；本轮未改判卷面与变异表。探针只在 `/tmp`，不入库。真机证据在最后一次
+renderer 重建后重跑，盖住当前 renderer 源与当前构建。SIGINT/强杀仍是后台任务收束的硬边界。
+
 
 ## 2026-11-15 · 第 1207 页：占位价只当上界（`907deda7`；认证 `907deda` 25/25）
 
@@ -40205,6 +40416,7 @@ require 生产模块 `src/main/wallpaper.ts`；合成面只有 AgentApi（preloa
 
 - 价表未改：GLM 三行仍是占位；美元闸仍按上界拦（宁可早停，不超支）。
 - F4 的 standard/strong 映射仍待裁决；本页只改「读数怎么说」，不改「哪一档填什么价」。
+
 
 ## 2026-11-15 · 第 1208 页：F6 自研联网搜索的裁决输入（区分 C1/C2/C3）
 
@@ -40250,6 +40462,7 @@ require 生产模块 `src/main/wallpaper.ts`；合成面只有 AgentApi（preloa
 **边界**：本页只写裁决输入；未改 provider、未加依赖、未改默认。文件
 `docs/web-search-self-host-2026-11-15.md`；批准后按 §五 判据先写判据再写实现。
 
+
 ## 2026-11-15 · 第 1209 页：F3 组件栈的裁决输入（ADR 0003 的 D2 与现状分叉）
 
 **背景**：ADR 0003 状态仍是「原则已接受；具体库选型待业主确认」，D2 推荐 `@radix-ui/themes`；
@@ -40285,6 +40498,7 @@ CDS parity 判据不动。
 **边界**：本页只写裁决输入；未改 ADR 0003 的 D2、未加/删依赖、未迁组件。文件
 `docs/component-stack-decision-2026-11-15.md`；批准后按 §四 顺序先写判据再迁移。
 
+
 ## 2026-11-15 · 第 1210 页：web_search 丢弃非 http(s) 结果 URL（`ddc2e023`；认证 `ddc2e02` 25/25）
 
 **问题**：`extractResults` 只判「url 与 title 是否都空」，任何字符串都收；不可信搜索端点返回
@@ -40302,6 +40516,7 @@ CDS parity 判据不动。
 **边界**：F6 的 A1/A2（HTML 适配器 / 默认页）仍未批准；本页只修「结果清单里出现非 http(s) 协议」。
 凭证：`outputs/head-cert-ddc2e02-2026-11-15-0529/`。
 
+
 ## 2026-11-15 · 第 1211 页：web_search 结果去重与凭据 URL 过滤（`6cd6947f`；认证 `6cd6947` 25/25）
 
 **背景**：第 1210 页堵了非 http(s) 协议；同一份外部结果里还有两类噪声：同一 URL 的重复条目、带
@@ -40317,6 +40532,43 @@ CDS parity 判据不动。
 预算只出声。凭证：`outputs/head-cert-6cd6947-2026-11-15-0535/`。
 
 **边界**：仍是既有 JSON 结果契约的卫生，不是 F6 的 provider/默认页决策；没有新增依赖、没有改端点。
+
+
+## 2026-11-15 · 第 1212 页：`/goal` 与旁路的写入落点收口（工作树；协议 v55）
+
+**背景**：多工作区会话允许同名 id（`same-id-workspace-smoke.cjs`）；`run`/`compact`/`runCancel` 早已带
+workspace 消歧，但 `setGoal` 与 sidechat 四通道只带 sessionId，主进程读 `requireSessionsDir()`——那是
+**启动时 activeWorkspace 的单例根**。两条真实后果：
+1. 在项目工作区发 `/goal`，`goal_set` 落进默认工作区 `<id>.jsonl`：侧栏多一个只含目标的幽灵会话；
+   真会话从未被武装（自动续跑读真会话的日志），而 live 事件按 session id 归给真会话 ⇒ 界面像已续跑。
+   芯片的暂停/继续/清除走同一条错根。
+2. 旁路新建/提问/提升/清单四处同根：换项目打开面板会看到另一个项目的旁路内容（跨项目串数据），
+   同 id 时提升也可能落到错误会话。
+
+**收口**：
+- core `handleGoalSet` 收 `sessionsRoot`；落点 = 显式根 ?? 归属解析器；解析不到就拒绝，**不回落单例根**
+  （回落 = 往别人的日志里写）。
+- sidechat 新建/提问/提升按父会话根（显式优先）；`sidechatState` 收根或按父会话归属；`handleAgentState`
+  的旁路面板传窗口工作区的根。`handleSidechatAsk` 不再二次解析父根，避免显式根被解析器覆盖。
+- 桌面 `wired`：`setGoal`/四个 sidechat 通道先过 `explicitSessionsRoot(workspace)`（已登记根闸）；
+  goal 失败回 `{ok:false}`（调用方还回草稿），sidechat 失败照常 reject（面板已上屏）。
+- renderer 全量带上工作区：`sendWithGoal`（既有会话）、首页 `/goal`（新建会话用 `createSession` 回的工作区）、
+  `goalAct`（暂停/继续/清除）、`SidechatPane`（`PaneDock` 透传 `workspace`）。
+- 协议 54 → 55（只加可选字段）。`tests/ipc-protocol-version.test.ts` 与七支桌面钉版判据同步。
+
+**判据**：`tests/goal-workspace-routing.test.ts` 5 条（项目根落盘、显式根优先、未知/歧义拒绝、clear 同根）；
+`tests/sidechat-workspace-routing.test.ts` 6 条（新建/清单隔离/按父会话/显式根/未知拒绝/提升同根）；
+桌面 run-queue 新首页 `/goal` 一条并把 setGoal 期望加上 workspace；goal-chip 源码面钉住两处 `workspace`。
+
+**读数（工作树）**：桌面 390 文件 / 2544 条绿（`--maxWorkers=2`，24.14s）；核心 680 文件 / 8165 条绿
+（`--maxWorkers=2`，172.94s；首轮唯一红是 `tests/ipc-protocol-version.test.ts` 仍钉 54，同步后绿）；
+`desktop-boundary-check` 绿；`renderer-layer-check` 绿（244 文件）；typecheck 0；`docs-check` 全绿。
+四支真机探针在重建后重跑全部 exit 0，证据带 `rendererDigest` 与 `buildFresh`（同一构建）。
+
+**未动 / 边界**：M2F 旁路演示（`runSidechatDemo`）仍用单例根（演示通道，不接工作区）；旧版把旁路写在
+启动工作区，升级后这些文件留在原处、只在那个工作区可见（内容不迁移，也不删）；SIGINT/强杀与
+「旧轮恰好收束」窗口不在本页范围。
+
 
 ## 2026-11-15 · 第 1213 页：web_search 的 HTML 结果抽取（`8927d23f`；认证 `8927d23` 25/25）
 
@@ -40344,6 +40596,7 @@ CDS parity 判据不动。
 - 没有新增 provider、默认端点或依赖；F6 的 A1（独立 html provider）与 A2（默认搜索页）仍未批准。
 - 抽取是启发式：同主机 3 条或没有摘要的页面会回退原文；不承诺所有搜索页都能抽。
 
+
 ## 2026-11-15 · 第 1214 页：web_search 结果面控制字符与无链接占位（`a5a6954b`；认证 `a5a6954` 25/25）
 
 **背景**：第 1213 页的 HTML 抽取会把外部标题/摘要带进结果清单；JSON 端点同样。外部字符串可含
@@ -40359,6 +40612,54 @@ NUL/ESC 等控制字符，直接进入模型面会破坏可读性；无 url 的�
 超 10s 预算只出声。凭证：`outputs/head-cert-a5a6954-2026-11-15-0556/`。
 
 **边界**：仍是结果面卫生；F6 的独立 html provider / 默认页未做。
+
+
+## 2026-11-15 · 第 1215 页：会话作用域的工作区链在渲染层断点（工作树；协议 v56）
+
+**背景**：第 1212 页把 goal/sidechat 的写入落点收到目标会话自己的工作区，但同一族缺陷还有四处
+「渲染层知道工作区、却没带到底」的断点。同 id 跨工作区是既有语义（`same-id-workspace-smoke.cjs`），
+此时主进程只能按归属解析，歧义即 fail-closed——用户看到的是一次没有解释的失败：
+1. `PopoutApp` 从 URL hash 拿到 `workspace`，只喂给 `openSession`/`reportViewing`，`PaneDock` 没拿到。
+   弹出窗的任务窗格 `address=null`，永远停在「先选择工作区并打开一个会话」；旁路面板回落启动
+   工作区的单例根，列出的是别的项目的旁路。
+2. worker 改动的 diff（`worktreeDiff`）不带工作区：主进程按构造期的 activeWorkspace（启动工作区）
+   找隔离树，项目会话的 worker diff 读不到（ENOENT / 错根）。
+3. `sessionWorktree` 请求与「查看日志」通道没有 workspace：同 id 跨工作区时归属歧义，
+   隔离动作与日志查看整条不可用。
+4. 置顶/归档/项目归属只按归属解析器做存在性检查；反馈/置顶的写路径在渲染层丢掉了协议里已有的
+   `workspace`。同 id 时这些动作全被拒，而侧栏行上明明带着 `workspace`。
+5. 设置页与插件侧栏的技能正文：快照按窗口工作区取，正文读取却退回最近一轮 run 的工作区——
+   列出来的技能点开可能读成别的项目，或直接「未找到技能」。
+
+**收口**：
+- `PopoutApp` 把 `ws` 递给 `PaneDock`；`TasksPane` 收 `workspace` 并传给 `worktreeDiff`。
+- `SessionWorktreeRequest` 三动作增可选 `workspace`；`kernel-host` 用
+  `resolveSessionWs(sessionId, req.workspace)`（显式优先，仍过已登记工作区闸）。
+  `sessionLog` 同一形制：协议加第三个可选形参，`SessionLogDialog` 由 overlays 递入当前工作区。
+- `handleSessionSetPinned/SetArchived/AssignProject` 收 `sessionsRoot`，只用于存在性检查；
+  sidecar 仍是 host 单例（读侧 `listSessions` 同源合并，见 kernel-host 头注）——本页不把
+  组织记录分家，只让「指定」不再被「歧义」挡住。
+- 桌面 wired 表三通道过 `explicitSessionsRoot(workspace)`；renderer 侧栏行把 `s.workspace` 随
+  pin/archive/assign 递出；`useMessageAnnotations` 收当前工作区，反馈/置顶的读写都带上。
+- 技能正文也读同一个根：`SkillsPane` / `PluginsPane` 的快照按窗口工作区取，正文却退回最近一轮 run
+  的工作区；两处 `skillBody` 与 `PluginSurface`/`PluginSidebar`/`PaneDock` 的透传补齐。
+- 协议 55 → 56（只加可选字段/可选形参）；`tests/ipc-protocol-version.test.ts` 与七支桌面钉版判据同步。
+- 顺带修掉上一个提交 `df5016d8` 引入的红：设置页网络段的 `"HTML 页面"` 是裸中文，`strings.test`
+  的「重做面不写裸中文」判据因此转红；文案移进 `STR.network.htmlSearch`（仍被消费，不是死键）。
+
+**判据**：`apps/desktop/tests/workspace-routing.test.ts` 7 条（隔离请求带根、kernel-host 显式解析、
+diff 同根、标记写路径带根、侧栏动作带根、技能正文同根、会话日志同根）；`popout-event-scope` +1（`PaneDock` 收 `ws`）；
+`tests/session-organization.test.ts` +1（歧义下不给根拒绝、给根可用、根里没有仍拒绝）；
+`pane-browser-memo` / `plugin-trust-wiring` / `plugin-sidebar` / `plugins-pane` 的源码面断言同步新形参。
+
+**读数（工作树）**：桌面 391 文件 / 2552 条绿（`--maxWorkers=2`）；核心 680 文件 / 8171 条绿
+（`--maxWorkers=2`，exit 0）；四支真机探针重建后重跑全部 exit 0（同一 `rendererDigest` 与
+`buildFresh: true`）；typecheck 0；`renderer-layer-check` 绿；`desktop-boundary-check` 绿。
+
+**未动 / 边界**：组织记录与反馈/置顶 sidecar 仍是 host 级单文件（不按工作区分家，也不迁移旧记录）；
+`listMessagePins` 仍是 host 级清单通道（写路径才有 workspace）；弹出窗的会话事件面沿用
+`PopoutApp` 自己的加载路径，不在本页。
+
 
 ## 2026-11-15 · 第 1216 页：web_search 的 html provider 端到端（`9b1a50d4`；认证 `9b1a50d` 25/25）
 
@@ -40381,6 +40682,7 @@ NUL/ESC 等控制字符，直接进入模型面会破坏可读性；无 url 的�
   `outputs/head-cert-df5016d-2026-11-15-0609/` 一并入库。
 
 **边界**：这是 A1 的 provider 层；没有默认搜索页（A2）、没有新依赖、没有改 Brave/Tavily/SearXNG。
+
 
 ## 2026-11-15 · 第 1217 页：html provider 的测试连接接受 HTML 结果（`42050518`；认证 `4205051` 25/25）
 
@@ -40415,6 +40717,54 @@ exit 0**；`desktop-test` 20.0s 超 10s 预算只出声。凭证：
 **边界**：纯文档；没有新增依赖、provider 或默认端点。文件
 `docs/searxng-self-host-2026-11-15.md`。
 
+## 2026-11-15 · 第 1219 页：工作区链的断点（重命名 / 上报 → 读因果 / 换项目丢旧快照 / 重载归零）（工作树；协议形制不变）
+
+**背景**：会话清单按工作区分组后，行级动作都拿得到行自己的 `workspace`；重命名是唯一还没递出去的
+（协议 v19 起就收第三参，渲染层只传两参 ⇒ 同 id 跨工作区时改名被归属歧义整条拒掉）。
+另一半是时序：`setWorkspaceContext` 在主进程**异步校验后才落**窗口指针，而空屏三查里的目录 /
+`package.json` 读的就是那个指针；两者在同一拍发出 ⇒ 切项目后的第一屏读到上一个项目的 README /
+test 脚本，并按新项目缓存下来（`gitStatus` 用的是显式根，于是同一屏上分支与快捷入口互相矛盾）。
+同一指针还有两类读：应用页（技能 / 记忆 / 自动化）与聊天右列插件面在挂载、刷新时取 `getState()`，
+页面停留期间切项目，清单仍是旧项目的——而删除记忆、信任决策写进的却是新项目（可能删错同名对象）。
+更隐蔽的一层：React 的**子组件 effect 先于父组件跑**，上报若挂在 `activeWorkspace` 的 effect 上，
+页面挂载期的读仍会先发车；而主窗 ⌘R / 崩溃后重载会让渲染层状态归零，主进程却还停在上一个项目。
+
+**改动**：
+- `renameSessionById` 收可选 `workspace`；侧栏行传 `s.workspace`；顶栏只绑 id，按「当前会话的根 →
+  清单里那一行的根」补齐。`SessionOpsState` / `WorkspaceView` / `AppToolbar` 的声明补 `workspace?`
+  （此前接口写两参、实现收第三参，契约被类型面藏掉）。
+- `state/window-workspace.ts`（新）：`noteWorkspaceContext` 登记上报，`windowWorkspaceApplied` 让读侧等它
+  落定（失败也算落定——坏项目不许把 UI 卡死）；`applyWorkspaceContext` 登记，空屏三查先 await。
+- 同一目标的并发上报并成一次（`contextInflight`），且只让**最新**那次报结果（`contextSeq`）：切一次
+  跨项目会话不再吃「工作区选择已过期」这条内部错误、窗口上下文也不再被误清一遍。
+- `AppPageBody.refresh`、`PluginSurface.load`、插件市场三读先等上报落定再取快照，`props.workspace`
+  进 effect 依赖；等待期间又刷新 / 切页 / 连切两次的那次按请求代号作废，旧响应不覆盖新结果。
+- 切工作区**收口**在 `setActiveWorkspace`（与上报同拍发出），删掉 `activeWorkspace` effect 上的上报；
+  `projects` / `WorkbenchView` / `WorkbenchOverlays` 的 `Dispatch<SetStateAction>` 收窄为
+  `(workspace: string | null) => void`（只收值）。打开归属未知的会话只把窗口指针归位，不动当前项目。
+- 换项目**丢旧快照**：`appPageSnapshotReducer.start` 记下快照所属工作区，换了就清空（旧行上的删除 /
+  信任不能写进新项目；同页手动刷新仍保留旧内容不闪）；`PluginSurface` 换项目同时 `setSnap(null)`。
+- 信任决议把行自己的根递给主进程：`pluginDecide(plugin, trusted, workspace?)` 的两处调用点都带上
+  `props.workspace`（主进程 `resolveProvidedWorkspace` 已有显式优先）。
+- 主窗 `did-navigate` ⇒ `windowWorkspaces.forget`：重载后渲染层归零，主进程不能还停在上一个项目；
+  只挂主窗（弹窗的上下文是打开时继承的，重载后仍应停在同一个项目）。
+
+**判据**（`workspace-routing.test.ts` 8 → 15 条，`app-page-snapshot.test.ts` 1 → 2 条）：重命名把根带出去
+（行根 / 当前会话根 / 清单行根）；上报 → 读因果（门闩等落定、失败放行、与状态同拍、effect 上不许再报）；
+空屏三查在 `windowWorkspaceApplied()` 之后；并发上报并成一次、过期不报；应用页 / 插件面 / 插件市场换
+工作区重取；换项目丢旧快照、同页刷新保留；`pluginDecide` 带行根；主窗重载归零。
+
+**读数（工作树）**：桌面 `npx vitest run --config vitest.config.ts --maxWorkers=2` **391 文件 / 2557 条绿，
+exit 0**；核心 `pnpm test:capped`（`--maxWorkers=2`）**680 文件 / 8173 passed + 1 failed**——红点是
+`tests/web-search.test.ts` 的 `<base href>` 用例，属其他会话在飞（跑期间 HEAD 已推进到 `c8b4cde2`、
+同文件用例数 8173 → 8174），单跑该文件 **27/27 绿**，未改他人代码；四支真机探针重建后 exit 0，
+`buildFresh: true`，同一 `rendererDigest ad068c76…`；`typecheck` 0；`renderer-layer-check` 绿（245 源文件）；
+`desktop-boundary-check` 绿。
+
+**边界**：只包同一拍里**自动发起**的读（空屏装配、页面挂载）；用户点出来的读（文件树、diff、路径动作）
+发生在切换落定之后，不排队。组织/反馈/置顶 sidecar 仍是 host 级单文件；记忆删除仍走窗口指针
+（面板在换项目时已丢旧快照，不存在按旧行删新项目的可点窗口）。
+
 ## 2026-11-15 · 第 1220 页：四项待裁决的一页索引（文档；无代码）
 
 **背景**：F4/F6/F3/ADR 0015 各有独立裁决输入，分散在四份文档里；本页只做索引，把「选什么、推荐什么、
@@ -40435,6 +40785,7 @@ exit 0**；`desktop-test` 20.0s 超 10s 预算只出声。凭证：
 先答 F4：只动价表与标定闸，影响面最小、最容易验证。F6 的 A1/B 已落；F3/ADR 0015 可以稍后。
 
 **边界**：纯索引，不做任何裁决；文件 `docs/decision-queue-2026-11-15.md`。
+
 
 ## 2026-11-15 · 第 1221 页：HTML 抽取认 <base href>（`c8b4cde2`；认证 `c8b4cde` 25/25）
 
@@ -40560,3 +40911,317 @@ standard/strong 1.1991/4.1967/cache 0.2998，均 `calibrated: true`），**不�
   `desktop-test` 19.7s 超 10s 预算只出声。凭证：`outputs/head-cert-df30402-2026-11-15-0802/`。
 
 **边界**：这是 memo 的 A 方案；若业主改判 B，只需改 standard/strong 两行价与 F2c 的同价分支。
+
+## 2026-11-15 · 第 1228 页：同 id 运行态隔离、占位续派与标记读取收口（工作树；协议 v56 内延伸）
+
+**背景**：第 1215 / 1219 页把工作区带进了会话组织、日志与页面读取，但渲染层的运行态仍有裸
+sessionId 键：同 id 跨工作区的两场 run 会互相顶掉代际号，先收束的一场永远清不掉自己的 running
+旗；秒表、停止态与增量时间戳也会读另一场的值。队列的 `/goal` 占位解除只在 8 个 microtask 内等
+收束链退出，持久化写盘跨越事件循环时会把消息永久留在队首。置顶 / 反馈的读取虽然已有 workspace
+形参，主进程却只拿它做装饰，不验证显式根里是否真有这条会话。
+
+### 改动
+
+- `runGen`、`runStartBySession`、`stoppedIds`、`lastDeltaAt` 全部改按 `runKey(workspace, sessionId)`
+  存取；同 id 两场 run 各领自己的代际、秒表、停止态与「正文停笔」时间。新增同 id 并发行为判据：
+  先收束的那场摘自己的旗，另一场仍在跑。
+- `/goal` 占位解除后的续派改为登记 `drainWaiters`，由 `runOn` 的 finally 唤醒；不再用有限
+  microtask 重试，写盘跨事件循环也不会把队首留成死角。
+- `listMessagePins` 增可选 workspace；`handlePinList` / `handleFeedbackList` 读取前走与写入同一
+  条显式根存在性判据。同 id 跨工作区、显式根里没有该会话时拒绝，不拿另一根的结果冒充。
+- 画廊夹具补齐默认 `wallpaper`，设置页首帧不再因缺字段触发错误边界；响应式审计记录被裁标签的
+  选择器与宽度，并排除已收起的侧栏过渡态，避免把不可见元素当缺陷。
+
+**判据**：核心 `pin-workspace-routing` 3 条（置顶 / 反馈的显式根与歧义拒绝）；桌面同 id 并发
+run 1 条、drain 续派源码守卫 1 条；`run-generation` / `run-elapsed-per-session` /
+`send-queue` / `workspace-routing` 的旧锚同步到限定键与 `drainWaiters`。
+
+**读数（工作树）**：核心 `pnpm test:capped` **681 文件 / 8179 条绿，exit 0**；桌面全量
+**392 文件 / 2564 条绿，exit 0**；`typecheck` 0；`renderer-layer-check` 绿（247 源文件）；
+`desktop-boundary-check` 绿；`evidence-typecheck-check` 危险码 **12 / 帽 12**；`docs-check` 绿。
+四支真机探针同一 `rendererDigest 39f5cf46…`、`buildFresh: true`：CDS 0 错、IME 6/6、浮层 5/5、
+队列 6/6。布局冒烟 **22/22**；响应式 **14 档 + 3 档检查器打开态**硬失败 0、console 0；UI 画廊
+全部截图完成且无 renderer console error。
+
+**边界**：置顶 / 反馈 sidecar 仍是 host 级单文件、按 sessionId 索引；本页只让显式根的存在性检查
+与写入同源，没有把历史记录按工作区分家或迁移。布局 / 响应式读数在 `/tmp`，未作为长期证据入库。
+
+## 2026-11-15 · 第 1229 页：协议 v57 与标记读取的同 id 首帧隔离（工作树）
+
+**背景**：第 1228 页给 `listMessagePins` 增加了可选 `workspace`，但 `IPC_PROTOCOL_VERSION`
+仍是 56。协议形状已经变化，旧 renderer 配新 main 必须在挂载时 fail-closed，不能靠两边看起来
+都能启动。另一处同 id 缺口在标记状态本身：`useMessageAnnotations` 只按 `sessionId` 认当前
+快照，切到另一个工作区的同名会话时，React 首帧仍可能继续显示上一根的置顶/反馈，直到 effect
+重新拉取。
+
+### 改动
+
+- `IPC_PROTOCOL_VERSION` 56 → **57**：v56 只保留会话组织、只读日志与隔离动作；v57 记录
+  `listMessagePins` 的 workspace 形参与显式根存在性判据。核心与桌面协议判据、七支接线判据同步。
+- `useMessageAnnotations` 的状态身份改为 `runKey(workspace, sessionId)`：同 id 换工作区时旧
+  快照当帧不可见、旧身份上的提交被拒绝，新根读数回来后才放行。新增真 `createRoot` 行为判据，
+  验证 `/a` 的置顶不会在 `/b` 加载期间露出。
+- 桌面产物以 v57 重建；四支真机探针因 renderer 摘要变化先按预期红了 4 条证据保质期判据，
+  重建并重跑后恢复全绿。
+
+### 读数（工作树）
+
+- 核心 `pnpm test:capped`：**681 文件 / 8179 条绿，exit 0**（`--maxWorkers=2`）。
+- 桌面 `VITEST_MAX_WORKERS=2 pnpm --filter cairn-desktop test`：**393 文件 / 2565 条绿，
+  exit 0**；desktop boundary 绿。
+- `typecheck` 0；`renderer-layer-check` 绿（247 源文件）；`evidence-typecheck-check` 危险码
+  **12 / 帽 12**；`repo-hygiene-check` 四面绿（`outputs/` 5784 / 8936 = 64.7%，帽 70%）。
+- 四支真机探针同一 `rendererDigest 9713594b…`、`buildFresh: true`：CDS 0 错、IME 6/6、
+  浮层 5/5、队列 6/6。布局冒烟 **22/22**；响应式 **14 档 + 3 档检查器打开态**硬失败 0、
+  console 0；UI 画廊 21 张截图与硬自查完成，协议版本读到 57；机械设计 detector 0 条。
+
+**边界**：以上全部是共享工作树读数，不是提交、HEAD 认证、变异复验或跨机器证据。置顶 / 反馈
+sidecar 仍是 host 级单文件、按 `sessionId` 索引；本页只修 renderer 的同 id 首帧隔离，没有迁移
+历史记录或改变存储布局。布局 / 响应式 / 画廊产物在 `/tmp`，未作为长期证据入库。
+
+## 2026-11-15 · 第 1230 页：审批卡、错误条与侧栏忙碌点的同 id 限定键（工作树）
+
+**背景**：第 1228 / 1229 页把运行旗、秒表、队列与标记快照改成限定键后，仍有三类用户可见状态按
+裸 `sessionId` 读写：审批卡/等门计数、错误与提示条、项目组忙碌点。两个工作区存在同名会话时，
+甲项目的审批卡会占住乙项目的门位，甲的失败条会出现在乙的界面上，项目组圆点也可能明明在跑却
+不亮。
+
+### 改动
+
+- 审批卡、ask 的等待计数与错误/提示条统一按 `runKey(workspace, sessionId)` 存取；`onAsk` 的
+  工作区取推送载荷的显式值，缺省才回落到当前窗口。沉淀审批的“队列在场即拒”守卫同步读同一键。
+- `setLastError` / `setLastNotice` 增加可选 `workspace` 实参：行级会话操作、后台 run、队列持久化
+  与标记提交把目标根带到错误条，不再借当前项目猜归属。
+- 侧栏项目组忙碌点改按每个会话自己的 `runKey` 读运行/等门集合；新增真 `createRoot` 审批卡行为
+  判据和 SSR 侧栏组点判据，覆盖同 id `/a`、`/b` 两张卡与两个根。
+- 既有源码哨兵同步到新键位；未改 wire 通道，无新依赖。
+
+### 读数（工作树）
+
+- 桌面 `VITEST_MAX_WORKERS=2 pnpm --filter cairn-desktop test`：**394 文件 / 2567 条绿，
+  exit 0**；desktop boundary 绿。
+- `pnpm --filter cairn-desktop typecheck` 0；`typecheck` 0；`renderer-layer-check` 绿（247 源文件）。
+- 四支真机探针同一 `rendererDigest dee575a4…`、`buildFresh: true`：CDS 0 错、IME 6/6、
+  浮层 5/5、队列 6/6。布局冒烟 **22/22**；响应式 **14 档 + 3 档检查器打开态**硬失败 0、
+  console 0；UI 画廊 21 张截图与硬自查完成，协议版本读到 57；同 id 工作区冒烟 **8/8**。
+
+**边界**：以上全部是共享工作树读数，不是提交、HEAD 认证、变异复验或跨机器证据。错误/提示条
+是窗口内进程态，重启不保留；本轮没有改 sidecar 历史归属。布局 / 响应式 / 画廊 / 冒烟产物在
+`/tmp` 或诊断输出，未作为长期证据入库。
+
+## 2026-11-15 · 第 1231 页：设计 detector 的注释误报清理与最终证据摘要（工作树）
+
+**背景**：机械设计 detector 对本轮改动面报了一条 `layout-transition`，落点是
+`state/chrome.ts` 中解释侧栏拖拽的源码注释：注释里引用了 `transition: width` 这一串文本，
+并不是实际的过渡声明。保留字面量会让机械面永远留一条假红，因此改述注释，不动代码、DOM、
+CSS 或交互。
+
+### 读数（工作树）
+
+- 机械 detector 对本轮全部改动 renderer 文件：**0 条**。
+- 重建后四支真机探针同一 `rendererDigest c4ca2a5b…`、`buildFresh: true`：CDS 0 错、IME 6/6、
+  浮层 5/5、队列 6/6。
+- 桌面 `VITEST_MAX_WORKERS=2 pnpm --filter cairn-desktop test`：**394 文件 / 2567 条绿，
+  exit 0**；`typecheck` 0；`renderer-layer-check` 绿（247 源文件）；`evidence-typecheck-check`
+  危险码 **12 / 帽 12**；`repo-hygiene-check` 四面绿；`docs-check` 绿。
+
+**边界**：本次只改注释，产物逻辑与上一页相同；上页的四支摘要因 renderer 源摘要包含注释而换代，
+以本页 `c4ca2a5b…` 为准。仍是共享工作树读数，不是提交、HEAD 认证或跨机器证据。
+
+## 2026-11-15 · 第 1232 页：真实主进程 IPC 冒烟（工作树）
+
+**读数**：`pnpm --filter cairn-desktop smoke` **PASS in 1467 ms**。真实 Electron 入口依次完成
+loader → main → app ready → secure storage / provider / scheduler → renderer 挂载；真实
+`window.agent` 回环创建并打开会话、`queueGet` 恢复 `恢复探针` 后清空、产品链 `created/ready/pageOk/stopped`
+全齐、23 条 run 事件与收束状态上屏，最终 UI 侧栏可见 1 条会话。该跑不产生真实模型调用，使用
+临时工作区，未触碰产品用户数据。
+
+**边界**：这是本机开发态入口冒烟，不是打包安装、跨机器或真实模型验收；共享工作树仍未提交，
+HEAD 认证与变异复验未由本页声称。
+
+## 2026-11-15 · 第 1233 页：AskPayload.workspace 进协议 v58 与最终验收（工作树）
+
+**背景**：审批卡的推送载荷已经由 kernel-host 盖上 `workspace`，但 `AskPayload` 类型未声明，
+渲染层只能靠强转读取；同 id 跨工作区的卡和队列守卫因此缺少可检查的协议面。该字段先作为类型
+契约补齐，再以 v58 重建桌面，避免把隐式推送字段留成下一轮的暗礁。
+
+### 改动
+
+- `AskPayload` 增可选 `workspace`；`session-subscription` 直接读 `p.workspace`，与审批卡、
+  等门计数和推送队列共用 `runKey`，不再强转。
+- `IPC_PROTOCOL_VERSION` 57 → **58**；核心/桌面协议与七支接线判据同步，桌面注入版本为 58。
+
+### 读数（工作树）
+
+- 核心 `pnpm test:capped`：**681 文件 / 8179 条绿，exit 0**（`--maxWorkers=2`）。
+- 桌面 `VITEST_MAX_WORKERS=2 pnpm --filter cairn-desktop test`：**394 文件 / 2567 条绿，
+  exit 0**；`typecheck` 0；`renderer-layer-check` 绿（247 源文件）；`evidence-typecheck-check`
+  危险码 **12 / 帽 12**；`repo-hygiene-check` 四面绿；`docs-check` 绿。
+- 四支真机探针同一 `rendererDigest 24151911…`、`buildFresh: true`：CDS 0 错、IME 6/6、
+  浮层 5/5、队列 6/6。布局 **22/22**；响应式 **14+3 档**硬失败 0、console 0；UI 画廊 21 张
+  截图与硬自查完成，协议版本读到 58；同 id 工作区冒烟 **8/8**。
+- `pnpm --filter cairn-desktop smoke` 单跑 **PASS in 1734 ms**，真实 IPC 回环建立会话、恢复并
+  清空队列、产品链与 23 条 run 事件上屏。并行首跑在 secure storage 超时，按失败诊断保留，
+  不作为通过证据。
+
+**边界**：以上是共享工作树与开发态 Electron 读数，不是提交、HEAD 认证、变异复验、打包安装
+或真实模型验收。协议 v58 的判据覆盖工作树；未把任何未提交改动写成 HEAD 结果。
+
+## 2026-11-15 · 第 1234 页：同 id 跨工作区的会话现场收口（工作树）
+
+**背景**：协议 v58 已把运行态、队列、审批卡和错误条按 `runKey(workspace, sessionId)` 分家，
+但渲染层仍有一组“会话现场”只看裸 id：目标隐藏记录、折叠集、滚动位置、最近引用、交付展开、
+Stream/Inspector 的重挂边界，以及发送失败回滚的目标草稿桶。两个工作区存在同名会话时，甲项目的
+折叠状态、滚动位置或隐藏目标会出现在乙项目；读盘缓冲与通知打开也可能把同名会话当成同一场。
+
+### 改动
+
+- `goal-dismiss` 的读写改为“工作区 + 会话 id”；旧版裸 id 记录只在归属唯一时迁移到限定键，
+  工作区已知时不再拿裸 id 记录顶替另一棵根。
+- `conversation-navigation` 的折叠记忆与滚动记忆改按 `runKey`；`recentRefsBySession`、交付轨迹
+  展开态与 `deliveryExpandedFor`、Stream/Inspector 重挂键同步限定，切同 id 工作区不再复用上一场的
+  行内展开、滚动或引用历史。
+- `draftRestore` 新增 `forWorkspace`：后台会话失败时把原文/附件还回**目标根**的草稿桶，而不是
+  当前窗口的桶；Composer 的恢复效果按目标键落盘。
+- `openPending` 带 `workspace`，读盘窗口只合并同一根的事件；`knownSessionIds` 同时登记限定键
+  与旧 host 的裸 id 兼容键；通知打开、重命名、归档、侧栏预览与 workspace worktree 动作在
+  同 id 跨根时都要求“id + 根”对上才认当前会话。
+- `kernel-host` 的 `sessionWorktree` 在跑检查改为只拒同一根的 run；`forgetSession` 清理
+  `ownAppends` 时改用日志路径键（旧代码按裸会话 id 删，实际清不掉）。
+- 新增 `session-memory-workspace`、`session-subscription-workspace` 等判据；相关源码哨兵同步到
+  新键位，未降低断言。
+
+### 读数（工作树）
+
+- 核心 `pnpm test:capped`：**681 文件 / 8179 条绿，exit 0**（`--maxWorkers=2`；首跑
+  `tests/schedule.test.ts` 一条 30s 超时为机器负载，单跑 53/53 绿，复跑全量 8179 绿）。
+- 桌面 `VITEST_MAX_WORKERS=2 pnpm --filter cairn-desktop test`：**395 文件 / 2571 条绿，
+  exit 0**；desktop boundary 绿。`pnpm --filter cairn-desktop typecheck` 0。
+- `node --import tsx scripts/typecheck.ts` 0；`renderer-layer-check` 绿（247 源文件）；
+  `evidence-typecheck-check` 危险码 **12 / 帽 12**；`repo-hygiene-check` 四面绿
+  （`outputs/` 5784 / 8936 = 64.7%，帽 70%）；`docs-check` 绿。
+- 四支真机探针同一 `rendererDigest 3edfb3e8…`、`buildFresh: true`：CDS 0 错、IME **6/6**、
+  浮层 **5/5**、队列 **6/6**。布局冒烟 **22/22**；响应式 **14 档 + 3 档检查器打开态**硬失败 0、
+  console 0；UI 画廊 21 张截图与硬自查完成，协议版本读到 58；同 id 工作区冒烟 **8/8**。
+
+**边界**：以上是共享工作树与开发态 Electron 读数，不是提交、HEAD 认证、变异复验、打包安装或
+真实模型验收。置顶/反馈/会话 metadata 的 host 级 sidecar 仍按裸 sessionId 索引，本轮没有改变
+存储布局或迁移历史；这是下一批需要单独裁决的存储面。
+
+## 2026-11-15 · 第 1235 页：macOS 应用图标与打包态验收（工作树）
+
+**背景**：打包脚本会复制 `apps/desktop/src/renderer/public/brand/cairn.icns`，但仓库里只有
+32px `favicon.png` 与两份 SVG，没有 ICNS。首次跑 `package.mjs` 在 `lstat .../cairn.icns`
+直接失败——这是发版路径上的真断点，不是环境噪声。开发态入口另有一套 `cairn.png`/
+`favicon.png` 回退，所以日常启动掩盖了该缺口。
+
+### 改动
+
+- 以既有 `cairn-mark.svg` 为唯一图形源，生成 1024px 圆角暖白底 `cairn.png` 与完整尺寸组
+  `cairn.icns`（16–1024，`iconutil` 生成）；不引入外部图标素材。
+- `apps/desktop/tests/package-assets.test.ts` 新增 ICNS 魔数、PNG 1024 尺寸与打包脚本引用判据，
+  防止「开发能启动、发版缺图标」再次静默回归。
+
+### 读数（工作树）
+
+- `pnpm --filter cairn-desktop exec node scripts/package.mjs --out /tmp/cairn-release-v58b-20261115`
+  完成：打包态进程冒烟 **PASS in 1554 ms**，DMG 拖出安装冒烟 **PASS**，产出 `Cairn.dmg`
+  **145 MB**、`release.json` 与 `SHA256SUMS`；DMG sha256
+  `253c4d669932925e3768f4cd94eb3443955eba7c07010f039b2ab8b2dc6ab66d`。
+- 同一工作树的开发态 `pnpm --filter cairn-desktop smoke` **PASS in 1415 ms**。
+- `release.json` 如实写 `sourceCommit 56cb24e4`、`sourceDirty: true`、`signing: ad-hoc`、
+  `notarized: false`——这是脏工作树构建，不是 HEAD 认证、公证或跨机器验收。
+
+**边界**：产物在 `/tmp`，未入库；打包态冒烟与安装冒烟都只在本机 arm64 跑过，未做 Intel、
+Windows 或干净机器升级/回滚验收。图标是新生成的品牌资产，正式分发前仍需做一次业主目验。
+
+## 2026-11-15 · 第 1236 页：打包资产判据加入后的最终桌面读数（工作树）
+
+**读数**：`apps/desktop/tests/package-assets.test.ts` 加入后，桌面
+`VITEST_MAX_WORKERS=2 pnpm --filter cairn-desktop test` 为 **396 文件 / 2573 条绿，exit 0**；
+desktop boundary 绿。核心仍为 `pnpm test:capped` **681 文件 / 8179 条绿，exit 0**；
+四支真机探针摘要仍为 `3edfb3e8…`、`buildFresh: true`，CDS 0 错、IME 6/6、浮层 5/5、队列 6/6；
+布局 **22/22**、响应式 **14+3 档**硬失败 0、同 id 工作区 **8/8**。`docs-check` 绿。
+
+**边界**：共享工作树与开发态/本机打包读数，不是 HEAD 认证、正式签名、公证、跨机器或真实模型
+验收；`release.json` 的 `sourceDirty: true` 仍如实保留。
+
+## 2026-11-15 · 第 1237 页：反馈/置顶 sidecar 按会话根分卷（工作树）
+
+**背景**：`FeedbackStore` / `PinStore` 是 host 级单文件，按裸 sessionId 索引。两个工作区存在
+同 id 时，显式根只用于存在性检查，A 的赞踩与置顶仍会在 B 的同一卷里被读出来。第 1234 页的
+渲染层限定键只挡住了窗口态，挡不住磁盘上的记录串根。
+
+### 改动
+
+- `session-handlers` 增加按会话根懒建的 `FeedbackStore` / `PinStore`：显式项目根写自己的
+  `<root>/feedback.jsonl` / `<root>/pins.jsonl`；装配根继续复用全局实例（保留自定义路径与单根
+  CLI/测试形态）。
+- 读、写、删三条路径都过同一个 `storeFor(root)`；删除项目会话只清该根的卷，装配根的旧全局卷
+  仍只在没有同名兄弟时清理，避免误删另一根的旧记录。
+- `pin-workspace-routing` 增加“两工作区都有同 id，A 的置顶/反馈不出现在 B”的判据；现有单根
+  feedback/annotation 判据保持通过。`src` 类型检查 0。
+
+### 读数（工作树）
+
+- 核心 `pnpm test:capped`：**681 文件 / 8181 条绿，exit 0**（`--maxWorkers=2`）。
+- 桌面 `VITEST_MAX_WORKERS=2 pnpm --filter cairn-desktop test`：**396 文件 / 2573 条绿，
+  exit 0**；desktop boundary 绿；`node --import tsx scripts/typecheck.ts` 0。
+- 重新打包 `/tmp/cairn-release-v58c-20261115`：打包态冒烟 **PASS in 1542 ms**，DMG 拖出安装
+  冒烟 **PASS**；`Cairn.dmg` 152124416 bytes，sha256
+  `24635cc323473466201f3ab990670806f038992a892fdc235251fc0a3eb52eed`。`release.json` 仍为
+  `sourceCommit 56cb24e4`、`sourceDirty: true`、ad-hoc、未公证。
+- renderer 未改，四支真机探针摘要仍为 `3edfb3e8…`；布局 **22/22**、响应式 **14+3 档**硬失败 0、
+  同 id 工作区 **8/8**。
+
+**边界**：反馈/置顶的新记录按会话根分卷；旧全局卷不自动搬入项目根，历史记录仍留在装配根。
+会话 metadata sidecar（pin/archive/project/审计字段）仍是 host 级单文件、按裸 sessionId 索引；
+本页没有改变 metadata 的存储布局或历史记录。
+
+## 2026-11-15 · 第 1238 页：会话 metadata sidecar 按会话根分卷与断点续跑（工作树）
+
+**背景**：第 1237 页只把反馈/置顶搬到会话根，`session-metadata.json`（标题、置顶、归档、项目归属、审计字段）
+仍是装配根的 host 级单文件、按裸 sessionId 索引。两个工作区有同 id 会话时，A 的组织动作会在 B 里被读出来。
+本页接续 18:04 被模型限流打断的那一轮：断点前核心全量曾报一条红
+（`tests/session-prefs-routing.test.ts` 仍在装配根断言偏好），随后判据改为在项目根断言并加
+「旧卷应为 undefined」，定向 7 文件 / 47 条绿；**全量复跑与桌面复跑是本次续跑补上的**。
+
+### 改动
+
+- `SessionMetadataRepository` 新增 `workspaceScoped?: true` 标记（校验、创建、改名、mutate、adopt 都写）；
+  新增 `adoptIfAbsent()` 把唯一归属的旧全局记录复制进项目根，缺失标记的历史记录不能冒充任一工作区的组织事实。
+- `session-handlers` 按会话根懒建 metadata 卷；`listSessionMetadataForRoot` / `readSessionMetadataForSession`
+  的读面与 `requireSessionMetadataForMutation` 的写面统一：本地卷优先，旧全局卷只在该 id **唯一归属**此根时回退，
+  重复 id 绝不替它选边；首次写入项目根时搬迁并清除旧记录。偏好、改名、删除、分叉、置顶/归档/项目归属逐条接线。
+- `handleSessionDelete` 项目根只清本根卷；装配根旧全局卷仍只在没有同名兄弟时清（旧行为不回退）。
+- 判据面：新增 `tests/session-metadata-workspace-routing.test.ts`（两工作区同 id 的标题/置顶/归档分卷、
+  改名只迁显式根、删除只清一根、旧卷唯一归属回退与首次写入搬迁、**旧卷清理失败留残留时再次写入不复活旧值**、
+  审计字段落点）；
+  `session-organization` 与 `session-prefs-routing` 同步到限定根断言；桌面 `kernel-host` 的清单/审计/
+  偏好/组织动作改走 `listSessionMetadataForRoot` 与显式根。
+
+### 读数（工作树；取料 `outputs/session-metadata-root-scoping-2026-11-15/`）
+
+- 核心 `pnpm test:capped`：**682 文件 / 8186 条绿，exit 0**（`--maxWorkers=2`，
+  `outputs/session-metadata-root-scoping-2026-11-15/core-test-capped.log`）；断点那条红不再出现。
+- 桌面 `VITEST_MAX_WORKERS=2 pnpm --filter cairn-desktop test`：**396 文件 / 2574 条绿，exit 0**，
+  desktop boundary 绿（`outputs/session-metadata-root-scoping-2026-11-15/desktop-test.log`）。
+- 资产面：续跑首轮桌面 2 文件 / 3 条红均为共享工作树 18:42 的成片误删所致（`cairn.icns`、
+  `InterVariable.woff2`、`JetBrainsMonoVariable.ttf`），不是本轮代码回归；首份失败日志保留在
+  `outputs/session-metadata-root-scoping-2026-11-15/desktop-test-first-failure.log`。字体从 HEAD 原样取回，
+  `cairn.icns` 由同轮 `/tmp/cairn-final.iconset` 重建且与 `dist/brand/cairn.icns` sha256 一致
+  （`a2323a11f2461b33bee68c5936c15c43da1a8d78a01fe15167231ac24340b75c`）；其余 outputs 截图删除保持现场不动。
+- `node --import tsx scripts/typecheck.ts` 0；`pnpm --filter cairn-desktop typecheck` 0；`git diff --check` 0；
+  `docs-check` 受检项全绿（`outputs/session-metadata-root-scoping-2026-11-15/docs-check-final.log`）；
+  `gate-check` 绿（`outputs/session-metadata-root-scoping-2026-11-15/gate-check.log`，暗卷无 key 跳过记 UNVERIFIED）。
+
+**复审**：独立复审会话未产出有效结论（上下文丢失后给的是通用模板，未采信）；当前 agent 逐面复核：
+`SessionMetadataRepository.enqueue` 单卷串行 + `session-mutation-lock.ts` 根级临界区覆盖并发；
+`adoptIfAbsent` 幂等且 remove 旧卷失败只出声（残留由本地卷优先的读面挡住，新增判据覆盖）；
+删除只指向本根卷且 `sharedId && !scopedRecord` 保守不清旧卷；回退不吞坏档；
+13 值断言 + 正反例配对，非空判据；`handleSessionList` 是 CLI 单根形态，桌面 kernel-host 明确不用它。
+
+**边界**：全部是工作树读数，不是提交、HEAD 认证、变异复验、真实模型或打包态验收；第 1235–1237 页的
+真机探针与 DMG 证据仍对应更早的 renderer 摘要，本轮只改主进程/核心 sidecar 面，未重跑四支真机探针、
+未重新打包。旧全局卷不批量迁移：只有唯一归属且被读到/写到时才搬进项目根；重复 id 的历史记录仍留在装配根，
+需业主裁决后再定归属。

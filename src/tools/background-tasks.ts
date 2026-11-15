@@ -12,6 +12,9 @@ import { ToolError, type Tool, type ToolContext, type ToolResult } from "./base.
 const BG_OUTPUT_LIMIT = 32 * 1024;
 /** 后台任务没有 run_shell 的 60s 墙：给一个宽松总时长（30 分钟），超时组杀并明说。 */
 export const BG_TIMEOUT_MS = 30 * 60_000;
+/** 收束后等进程真正退出的宽限。守卫要在进程死后读盘，但孙进程可能占着管道让 'close' 迟到；
+ *  SIGKILL 已经发出，到点就不再等，直接复查（复查本身会按基线复原）。 */
+const EXIT_GRACE_MS = 1000;
 
 export interface BackgroundTaskStatus {
   id: string;
@@ -33,8 +36,13 @@ interface TaskEntry {
   timedOut: boolean;
   stopped: boolean;
   done: boolean;
-  finish: (code: number | null, why?: "timedOut" | "stopped") => void;
+  /** 收束链：所有终止路径（close / timeout / stop / 会话取消 / 整表回收）都汇到这里，只跑一次；
+   *  done 在跑后复查之后才置真——读到的 done 一定意味着守卫结论已经进了输出环。 */
+  settle: (code: number | null, why?: "timedOut" | "stopped") => Promise<void>;
 }
+
+/** 所有会话可见任务域（退出收束整表用；dispose 后摘除，不随会话数泄漏）。 */
+const allRegistries = new Set<BackgroundTaskRegistry>();
 
 /** 一个实例是一个会话的可见任务域。 */
 export class BackgroundTaskRegistry {
@@ -61,44 +69,61 @@ export class BackgroundTaskRegistry {
       timedOut: false,
       stopped: false,
       done: false,
-      finish: () => undefined,
+      settle: async () => undefined,
     };
-    const finish = (code: number | null, why?: "timedOut" | "stopped"): void => {
-      if (entry.done) return;
-      entry.done = true;
+    /** 'close' 是否已发生：已发生就不再等，否则最多等 EXIT_GRACE_MS（孙进程占管道时 'close' 可能永不到）。 */
+    let exited = false;
+    let resolveExit: () => void = () => undefined;
+    const exitSeen = new Promise<void>((resolve) => { resolveExit = resolve; });
+    let chain: Promise<void> | null = null;
+    const settle = (code: number | null, why?: "timedOut" | "stopped"): Promise<void> => {
+      // 只跑一次：先到的终止原因说了算（close 之后才到的 stop 不会把「已退出」改写成「已停止」）。
+      if (chain !== null) return chain;
       entry.exitCode = code;
       entry.timedOut = why === "timedOut";
       entry.stopped = why === "stopped";
       entry.handle?.dispose();
+      chain = (async (): Promise<void> => {
+        if (!exited) await Promise.race([exitSeen, new Promise<void>((resolve) => setTimeout(resolve, EXIT_GRACE_MS))]);
+        if (onExit !== undefined) {
+          try {
+            const note = await onExit();
+            if (note !== null && note !== "") collect(Buffer.from("\n" + note + "\n"));
+          } catch (err: unknown) {
+            collect(Buffer.from("\n[后台任务收尾校验失败] " + (err instanceof Error ? err.message : String(err)) + "\n"));
+          }
+        }
+        entry.done = true;
+      })();
+      return chain;
     };
-    entry.finish = finish;
+    entry.settle = settle;
     const collect = (chunk: Buffer): void => { entry.ring.push(chunk); };
     const handle = spawnTracked(launch?.executable ?? "bash", launch?.args ?? ["--norc", "-c", command], {
       cwd: workspace,
       env: launch?.env ?? sanitizedEnv(),
       timeoutMs: BG_TIMEOUT_MS,
-      onTimeout: () => { finish(null, "timedOut"); },
+      // 超时也走同一条收束链：spawnTracked 随后组杀，settle 等 close（有宽限）再跑复查。
+      onTimeout: () => { void settle(null, "timedOut"); },
     });
     entry.handle = handle;
     handle.child.stdout?.on("data", collect);
     handle.child.stderr?.on("data", collect);
     handle.child.on("error", (err) => {
       collect(Buffer.from("[后台命令启动失败] " + err.message + "\n"));
-      finish(null);
+      exited = true;
+      resolveExit();
+      void settle(null);
     });
     handle.child.on("close", (code) => {
-      if (onExit === undefined) { finish(code); return; }
-      // 先校验再标记 done：task_output 读到 done 时，判卷面要么没被动过，要么那句守卫说明已经进环。
-      void onExit()
-        .then((note) => { if (note !== null && note !== "") collect(Buffer.from("\n" + note + "\n")); })
-        .catch((err: unknown) => {
-          collect(Buffer.from("\n[后台任务收尾校验失败] " + (err instanceof Error ? err.message : String(err)) + "\n"));
-        })
-        .finally(() => { finish(code); });
+      exited = true;
+      resolveExit();
+      // 先复查再标记 done：task_output 读到 done 时，判卷面要么没被动过，要么那句守卫说明已经进环。
+      void settle(code);
     });
     // 会话取消 → 这一任务组杀（监听配对摘除，同 run_shell 的 C12 口径）。
     if (signal) {
-      const onAbort = (): void => { if (!entry.done) { killGroup(handle.child); finish(null, "stopped"); } };
+      const onAbort = (): void => { if (!entry.done) { killGroup(handle.child); void settle(null, "stopped"); } };
       if (signal.aborted) onAbort();
       else {
         signal.addEventListener("abort", onAbort, { once: true });
@@ -109,6 +134,7 @@ export class BackgroundTaskRegistry {
       }
     }
     this.tasks.set(id, entry);
+    allRegistries.add(this);
     return { id };
   }
 
@@ -127,13 +153,14 @@ export class BackgroundTaskRegistry {
     };
   }
 
-  /** 组杀一个任务；返回杀之前那一下的输出快照（模型据此收尾）。 */
-  stop(id: string): BackgroundTaskStatus | null {
+  /** 组杀一个任务；返回杀之前那一下的输出快照（模型据此收尾）。
+   *  收束链跑完才返回：停止回执里的守卫说明不能落在「已停止」之后才到。 */
+  async stop(id: string): Promise<BackgroundTaskStatus | null> {
     const entry = this.tasks.get(id);
     if (entry === undefined) return null;
     if (!entry.done && entry.handle !== null) {
       killGroup(entry.handle.child);
-      entry.finish(entry.exitCode, "stopped");
+      await entry.settle(entry.exitCode, "stopped");
     }
     return this.output(id);
   }
@@ -143,16 +170,31 @@ export class BackgroundTaskRegistry {
     return [...this.tasks.keys()];
   }
 
-  /** 整表回收（run 清理口子调用；幂等）。 */
+  /** 整表回收（run 清理口子调用；幂等）。表先摘掉，但每个任务的收束链照跑——
+   *  判卷面复查是盘面责任，不因「没人再读这个任务了」而跳过。 */
   disposeAll(): void {
+    void this.settleAll();
+    this.tasks.clear();
+    allRegistries.delete(this);
+  }
+
+  /** 收束本表所有在跑任务：组杀 → 等退出（有宽限）→ 跑后复查，全部完成才返回。
+   *  应用退出用它：`will-quit` 的同步杀组会抢在复查前面，判卷面就没人复原了。 */
+  async settleAll(): Promise<void> {
+    const waits: Promise<void>[] = [];
     for (const [, entry] of this.tasks) {
       if (!entry.done && entry.handle !== null) {
         killGroup(entry.handle.child);
-        entry.finish(entry.exitCode, "stopped");
+        waits.push(entry.settle(entry.exitCode, "stopped"));
       }
     }
-    this.tasks.clear();
+    await Promise.all(waits);
   }
+}
+
+/** 退出前的整表收束：杀组并等每个任务的跑后复查落盘，再让进程退。 */
+export async function settleAllBackgroundTasks(): Promise<void> {
+  await Promise.all([...allRegistries].map((registry) => registry.settleAll()));
 }
 
 const sessionTasks = new Map<string, BackgroundTaskRegistry>();
@@ -177,8 +219,8 @@ export function listBackgroundTasks(logPath: string): BackgroundTaskStatus[] {
   return registry === undefined ? [] : registry.ids().flatMap((id) => registry.output(id) ?? []);
 }
 
-export function stopBackgroundTask(logPath: string, id: string): BackgroundTaskStatus | null {
-  return sessionTasks.get(logPath)?.stop(id) ?? null;
+export function stopBackgroundTask(logPath: string, id: string): Promise<BackgroundTaskStatus | null> {
+  return sessionTasks.get(logPath)?.stop(id) ?? Promise.resolve(null);
 }
 
 export function forgetBackgroundTasks(logPath: string, renamedLogPath?: string): void {
@@ -225,7 +267,7 @@ export const task_stop: Tool = {
       throw new ToolError("task_stop: task_id 参数必须是非空字符串（如 bg_1）");
     }
     const backgroundTasks = backgroundTasksFor(ctx);
-    const t = backgroundTasks.stop(id.trim());
+    const t = await backgroundTasks.stop(id.trim());
     if (t === null) {
       const known = backgroundTasks.ids();
       throw new ToolError(

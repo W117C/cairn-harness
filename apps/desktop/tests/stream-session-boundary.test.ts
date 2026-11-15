@@ -10,10 +10,10 @@ const view = readRendererFile("panes/WorkbenchView.tsx");
 const stream = readFileSync(fileURLToPath(new URL("../src/renderer/components/Stream.tsx", import.meta.url)), "utf8");
 
 describe("Stream 的会话边界", () => {
-  it("按 activeId 重挂（.stream 滚动容器不在 key 内）", () => {
+  it("按工作区 + activeId 重挂（.stream 滚动容器不在 key 内）", () => {
     // 位置敏感：Stream 的重挂在 WorkbenchView 单文件里（Inspector 也有同名 key，面拼接会先命中它）。
-    expect(view).toContain("key={activeId ?? \"home\"}");
-    const at = view.indexOf("key={activeId ?? \"home\"}");
+    expect(view).toContain("key={activeId === null ? \"home\" : runKey(activeWorkspace, activeId)}");
+    const at = view.indexOf("key={activeId === null ? \"home\" : runKey(activeWorkspace, activeId)}");
     expect(view.slice(Math.max(0, at - 400), at)).toContain("<Stream");
   });
 

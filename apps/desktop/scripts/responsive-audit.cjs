@@ -72,8 +72,16 @@ async function main() {
       return { label: (e.getAttribute('aria-label') || e.textContent || '').trim().slice(0, 26),
         cls: String(e.className || e.tagName).slice(0, 30), w: Math.round(r.width), h: Math.round(r.height) };
     }).filter((x) => x.w > 0 && x.h > 0 && (x.w < 24 || x.h < 24));
-    const clipped = [...document.querySelectorAll('.s-title,.tb-title,.sp-nav-item,.cc-phase')].filter(vis)
-      .filter((e) => e.scrollWidth > e.clientWidth + 2).length;
+    const clippedEls = [...document.querySelectorAll('.s-title,.tb-title,.sp-nav-item,.cc-phase')].filter(vis)
+      .filter((e) => !(sideHidden && e.closest('.side-wrap') !== null))
+      .filter((e) => e.scrollWidth > e.clientWidth + 2)
+      .map((e) => ({
+        cls: String(e.className || e.tagName).slice(0, 40),
+        text: (e.textContent ?? "").trim().slice(0, 48),
+        scrollW: e.scrollWidth,
+        clientW: e.clientWidth,
+      }));
+    const clipped = clippedEls.length;
     return {
       vw: innerWidth, scrollW: document.documentElement.scrollWidth,
       overflow: document.documentElement.scrollWidth > innerWidth + 1,
@@ -82,6 +90,7 @@ async function main() {
       inspectorVisible: (rect('.inspector-col')?.w ?? 0) > 1 && !document.querySelector('.inspector-col')?.hasAttribute('inert'),
       composerInView: (() => { const c = rect('.composer-card'); return c !== null && c.l >= 0 && c.r <= innerWidth; })(),
       smallCount: small.length, smallTargets: small.slice(0, 10), clippedLabels: clipped,
+      clippedTargets: clippedEls.slice(0, 10),
     };
   })()`;
 

@@ -63,7 +63,7 @@ describe("CRLF 文件：拒绝，且报错要说清差在 \\r", () => {
   });
 
   it("报错正文要把 \\r 点出来（模型据此知道是行尾差异，不是内容不符）", async () => {
-    await withFile("f.txt", "line one\r\nline two\r\nline three\r\n", async (_ws, abs) => {
+    await withFile("f.txt", "line one\r\nline two\r\nline three\r\n", async (_ws) => {
       const err = await runIn(_ws, patch).then(() => null, (e: Error) => e);
       expect(err).not.toBeNull();
       // 期望值里没有 \r、实际值里有 ⇒ 这正是模型要的那条线索

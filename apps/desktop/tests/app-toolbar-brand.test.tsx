@@ -22,6 +22,7 @@ const deps: ToolbarDeps = {
   dismissedGoals: new Map<string, number>(),
   goalAct: () => undefined,
   activeIdRef: { current: null },
+  activeWorkspaceRef: { current: null },
   setDismissedGoals: () => undefined,
   outlineTurns: [],
   outlineOpen: false,

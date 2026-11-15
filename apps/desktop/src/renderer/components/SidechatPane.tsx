@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MessageCirclePlus, Send } from "lucide-react";
 import type { SidechatPanelSnapshot } from "../../../../../src/main/ipc-protocol";
 
-export function SidechatPane(props: { sessionId: string | null }): React.JSX.Element {
+export function SidechatPane(props: { sessionId: string | null; workspace?: string | null }): React.JSX.Element {
   const [snap, setSnap] = useState<SidechatPanelSnapshot | null>(null);
   const [stateError, setStateError] = useState<string | null>(null);
   const [active, setActive] = useState<string | null>(null);
@@ -21,14 +21,18 @@ export function SidechatPane(props: { sessionId: string | null }): React.JSX.Ele
   const [note, setNote] = useState("");
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
+  // 旁路档案跟着父会话的**工作区**走：main 侧单例根是启动工作区，不带 workspace 会读写
+  // 另一个项目的旁路内容（跨项目串数据）。
+  const workspace = props.workspace ?? undefined;
+
   const refresh = useCallback(() => {
-    void window.agent.sidechatState(props.sessionId ?? undefined).then((s) => {
+    void window.agent.sidechatState(props.sessionId ?? undefined, workspace).then((s) => {
       setSnap(s);
       setStateError(null);
     }, (err: unknown) => {
       setStateError(err instanceof Error ? err.message : String(err));
     });
-  }, [props.sessionId]);
+  }, [props.sessionId, workspace]);
   useEffect(() => {
     setActive(null);
     setPicked(new Set());
@@ -46,7 +50,7 @@ export function SidechatPane(props: { sessionId: string | null }): React.JSX.Ele
   const create = (): void => {
     if (props.sessionId === null) return;
     setNotice(null);
-    void window.agent.sidechatCreate(props.sessionId).then((r) => {
+    void window.agent.sidechatCreate(props.sessionId, undefined, workspace).then((r) => {
       setActive(r.id);
       refresh();
       setNotice("旁路会话已建（读主线程上下文；不回写主会话）");
@@ -59,7 +63,7 @@ export function SidechatPane(props: { sessionId: string | null }): React.JSX.Ele
     if (text === "" || busy || currentId === null) return;
     setBusy(true);
     setNotice(null);
-    void window.agent.sidechatAsk(currentId, text, props.sessionId ?? undefined).then((r) => {
+    void window.agent.sidechatAsk(currentId, text, props.sessionId ?? undefined, workspace).then((r) => {
       setBusy(false);
       if (!r.ok) { setNotice(r.error ?? "旁路提问失败"); return; }
       setDraft("");
@@ -77,6 +81,7 @@ export function SidechatPane(props: { sessionId: string | null }): React.JSX.Ele
       parentSessionId: props.sessionId,
       sourceEventIds: [...picked],
       ...(note.trim() !== "" ? { note: note.trim() } : {}),
+      ...(workspace !== undefined ? { workspace } : {}),
     }).then((r) => {
       if (!r.ok) { setNotice(r.error ?? "提升失败"); return; }
       setPicked(new Set());

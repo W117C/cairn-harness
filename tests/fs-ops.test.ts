@@ -127,6 +127,26 @@ describe("fs_ops", () => {
     expect(await readFile(join(dir, "t.txt"), "utf8")).toBe("new");
   });
 
+  it("move 目录：含判卷冻结文件 ⇒ 拒（整树搬走判卷面）；不含的目录照常可搬", async () => {
+    await mkdir(join(dir, "fixtures", "mock"), { recursive: true });
+    await writeFile(join(dir, "fixtures", "mock", "judge.ts"), "judge", "utf8");
+    await mkdir(join(dir, "scripts"), { recursive: true });
+    await writeFile(
+      join(dir, "scripts", "frozen-sha256.json"),
+      JSON.stringify({ "fixtures/mock/judge.ts": "0".repeat(64) }),
+      "utf8",
+    );
+    const msg = await err({ action: "move", path: "fixtures", target: "fixtures-old" });
+    expect(msg).toContain("判卷冻结文件");
+    expect(msg).toContain("fixtures/mock/judge.ts");
+    // 冻结文件本身（精确键）也拒——与目录前缀闸互补，不是同一条判据。
+    expect(await err({ action: "move", path: "fixtures/mock/judge.ts", target: "judge-old.ts" })).toContain("判卷文件冻结");
+    // 配对：判卷区之外的目录不受影响（闸不是恒红）。
+    await mkdir(join(dir, "docs"), { recursive: true });
+    await writeFile(join(dir, "docs", "a.md"), "a", "utf8");
+    expect((await fs_ops.run({ action: "move", path: "docs", target: "docs-old" }, ctx())).ok).toBe(true);
+  });
+
   it("move/delete 源 rel 越出 workspace 词法拒", async () => {
     expect(await err({ action: "move", path: "../outside", target: "in" })).toContain("越出 workspace 边界");
     expect(await err({ action: "delete", path: "../outside" })).toContain("越出 workspace 边界");

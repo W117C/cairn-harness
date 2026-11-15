@@ -20,6 +20,9 @@ export function PluginsPane(props: {
   snap: PluginPanelSnapshot;
   onError: (m: string) => void;
   refresh: () => void;
+  /** 快照是按窗口工作区取的；正文也读同一个根——少了它主进程会按最近一轮 run 的工作区找，
+   *  点开项目技能时可能读成别的项目（或直接「未找到技能」）。 */
+  workspace?: string | null;
   filter?: string;
   onFilter?: (filter: string) => void;
   onInvoke?: (invoke: string) => void;
@@ -41,7 +44,7 @@ export function PluginsPane(props: {
     setBodyFor(invoke);
     if (bodies[invoke] !== undefined) return;
     setBodies((prev) => ({ ...prev, [invoke]: { loading: true } }));
-    void window.agent.skillBody(invoke).then((r) => {
+    void window.agent.skillBody(invoke, props.workspace ?? undefined).then((r) => {
       setBodies((prev) => ({ ...prev, [invoke]: r.ok ? { loading: false, text: r.body ?? "" } : { loading: false, error: r.error ?? "读取失败" } }));
     }).catch((err: unknown) => {
       setBodies((prev) => ({ ...prev, [invoke]: { loading: false, error: err instanceof Error ? err.message : String(err) } }));
@@ -224,7 +227,7 @@ export function PluginsPane(props: {
                 offText="未信任"
                 onChange={(next) => {
                   setTrustBusy(selected.name);
-                  void window.agent.pluginDecide(selected.name, next).then((r) => {
+                  void window.agent.pluginDecide(selected.name, next, props.workspace ?? undefined).then((r) => {
                     if (!r.ok) props.onError(r.error ?? "信任决议失败");
                     else props.refresh();
                   }).catch((err: unknown) => props.onError(`信任决议失败：${err instanceof Error ? err.message : String(err)}`))

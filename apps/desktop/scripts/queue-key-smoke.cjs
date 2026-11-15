@@ -8,6 +8,7 @@
 //   ./node_modules/.bin/electron scripts/queue-key-smoke.cjs outputs/queue-key-750
 const { app, BrowserWindow, nativeTheme } = require("electron");
 const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
+const { evidenceEnvelope } = require("./lib/renderer-evidence.cjs");
 const { mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
 const { join, resolve } = require("node:path");
 const { tmpdir } = require("node:os");
@@ -146,28 +147,34 @@ async function main() {
   const two = await queueState();
   check("两条排队在场", q3?.clicked === true && q4?.clicked === true && two?.items?.length === 2, { q3, q4, two });
 
+  // 点**第二条**的「立即」（2026-11-04 截图形制：按钮文案是「立即」，位置在每个队列行、
+  // aria-label 带正文；旧脚本按 textContent 找「打断并发送」，改版后一个都点不到）。
+  // 点第二条才真的走 promoteQueued 的改序：它必须被提到队首并被派出去。
   const promoted = await js(`(() => {
-    const btn = Array.from(document.querySelectorAll('.queue-item button')).find((b) => (b.textContent ?? '').includes('打断并发送'));
-    if (!btn) return { clicked: false };
+    const btn = document.querySelectorAll('.queue-item button[aria-label^="立即发送"]')[1];
+    if (!btn) return { clicked: false, why: 'no send-now button' };
+    if (btn.disabled) return { clicked: false, why: 'disabled' };
     btn.click();
     return { clicked: true };
   })()`);
   await pause(600);
   const afterPromote = await queueState();
   // 「打断并发送」＝ 提到队首 + 打断本轮 ⇒ 收束时队首被**派出去**（这是既有语义，
-  // 不是缺陷）。所以条上少掉的是**被派出的那一条**，另一条必须**留在队列里**
-  // （修前：写回空表 ⇒ 整条队列消失 ⇒ 用户另一条排队消息静默丢失）。
+  // 不是缺陷）。所以条上少掉的是**被派出的那一条**（点的是第二条），第一条必须
+  // **留在队列里**（修前：写回空表 ⇒ 整条队列消失 ⇒ 用户另一条排队消息静默丢失）。
+  const chosen = two?.items?.[1];
+  const remaining = two?.items?.[0];
   const runsNow = await js(`JSON.stringify((window.__cairnRuns ? window.__cairnRuns() : []).map((r) => r.message))`);
-  const dispatched = String(runsNow).includes(two?.items?.[0] ?? "\u0000");
+  const dispatched = chosen !== undefined && String(runsNow).includes(chosen);
   check(
     "打断并发送：被选中的那条被派出去，另一条仍留在队列（队列不被清空）",
-    promoted?.clicked === true && dispatched === true && afterPromote?.items?.length === 1 && afterPromote?.items?.[0] === two?.items?.[1],
-    { promoted, before: two, after: afterPromote, runs: runsNow },
+    promoted?.clicked === true && dispatched === true && afterPromote?.items?.length === 1 && afterPromote?.items?.[0] === remaining,
+    { promoted, chosen, remaining, before: two, after: afterPromote, runs: runsNow },
   );
 
   check("渲染过程无控制台错误", errors.length === 0, errors);
 
-  writeFileSync(join(out, "checks.json"), JSON.stringify(checks, null, 2));
+  writeFileSync(join(out, "checks.json"), JSON.stringify(evidenceEnvelope(checks, join(__dirname, "../src/renderer"), join(__dirname, "../dist")), null, 2));
   const failed = checks.filter((c) => !c.ok);
   console.log(`读数：${checks.length} 条，${checks.length - failed.length} 绿 / ${failed.length} 红 → ${out}`);
   if (failed.length > 0) process.exitCode = 1;

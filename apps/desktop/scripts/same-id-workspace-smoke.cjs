@@ -30,7 +30,7 @@ async function main() {
   const starts = [...body.matchAll(/^\s{2}(\w+)\??\s*[(<]/gm)];
   const members = starts.map((s, i) => ({
     name: s[1],
-    isArray: /Promise<[^>]*[\]>]/.test(body.slice(s.index, starts[i + 1]?.index ?? body.length)),
+    isArray: /Promise<[^>]*\[\]/.test(body.slice(s.index, starts[i + 1]?.index ?? body.length)),
   }));
   const win = new BrowserWindow({
     width: 1440, height: 900, show: false,

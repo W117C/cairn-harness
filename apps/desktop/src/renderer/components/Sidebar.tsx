@@ -17,7 +17,7 @@ import { relativeTime } from "../projections";
 import { keysOf } from "../shortcuts";
 import { countSessionsByFilter, filterSessions, groupByWorkspace, projectMenuItems, projectSections, sessionFilterInfo, sessionStatus, sessionTime, splitArchived, workspaceLabel, OTHER_WORKSPACE, SESSION_FILTERS, type SessionFilterId, type TimeBucket, type WorkspaceSession } from "../sessions-view";
 import { draftKeyFor } from "../drafts";
-import { sessionKeyOf } from "../state/session-identity";
+import { runKey, sessionKeyOf } from "../state/session-identity";
 import { parseSidebarDensity, SIDEBAR_DENSITY_KEY, type SidebarDensity } from "../state/sidebar-density";
 import { usePinnedOrder } from "../state/use-pinned-order";
 import type { PinnedDragProps, PinnedRowAttrs } from "../state/use-pinned-order";
@@ -379,13 +379,14 @@ export interface SidebarProps {
   onRelocateProject: (p: ProjectRecord, nextPath: string) => Promise<void>;
   onRemoveProject: (p: ProjectRecord) => Promise<void>;
   onRevealProject: (p: ProjectRecord) => void;
-  onRenameSession?: (id: string, name: string) => Promise<void>;
-  onPinSession?: (id: string, pinned: boolean) => Promise<void>;
+  onRenameSession?: (id: string, name: string, workspace?: string) => Promise<void>;
+  onPinSession?: (id: string, pinned: boolean, workspace?: string) => Promise<void>;
   onArchiveSession?: (s: WorkspaceSession, archived: boolean) => void;
   onOpenInCliSession?: (s: WorkspaceSession) => void;
   /** 把会话归到某个项目 / 取消归属（null = 取消）。归属要**看得见**（行上的标签），
-   *  否则用户改完什么都不知道——那是「算出来不接」那一族。 */
-  onAssignSessionProject?: (sessionId: string, projectId: string | null) => void;
+   *  否则用户改完什么都不知道——那是「算出来不接」那一族。workspace 跟着行走：同 id 跨工作区
+   *  时主进程按显式根做存在性检查，不让归属歧义把动作整条拒掉。 */
+  onAssignSessionProject?: (sessionId: string, projectId: string | null, workspace?: string) => void;
   /** §3.7 · G4：丢弃由 App 侧先弹确认卡（未提交改动会消失）。 */
   onSessionWorktree?: (kind: "create" | "merge" | "discard", s: WorkspaceSession) => void;
   onDeleteSession?: (s: WorkspaceSession) => void;
@@ -572,19 +573,19 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
                         setRenaming((cur) => {
                           if (cur === null || cur.id !== s.id) return cur;
                           const next = cur.value.trim();
-                          if (next !== "" && next !== (s.title ?? s.id)) void props.onRenameSession?.(s.id, next);
+                          if (next !== "" && next !== (s.title ?? s.id)) void props.onRenameSession?.(s.id, next, s.workspace);
                           return null;
                         });
                       }}
                       onRenameCancel={() => { setRenaming(null); }}
                       actions={hasRowActions ? {
-                        onPin: (pinned) => { void props.onPinSession?.(s.id, pinned); },
+                        onPin: (pinned) => { void props.onPinSession?.(s.id, pinned, s.workspace); },
                         onFork: () => { props.onForkSession?.(s); },
                         onArchive: (archived) => { props.onArchiveSession?.(s, archived); },
                         onDelete: () => { props.onDeleteSession?.(s); },
                         onOpenInCli: () => { props.onOpenInCliSession?.(s); },
                         onWorktree: (kind) => { props.onSessionWorktree?.(kind, s); },
-                        onAssignProject: (projectId) => { props.onAssignSessionProject?.(s.id, projectId); },
+                        onAssignProject: (projectId) => { props.onAssignSessionProject?.(s.id, projectId, s.workspace); },
                       } : null}
                     />
   );
@@ -740,7 +741,10 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
           const isTemp = project === null;
           const isCollapsed = !searchOpen && collapsed.has(key);
           const activeGroup = !isTemp && g.workspace === props.activeWorkspace;
-          const busyDot = g.sessions.some((s) => props.running.has(s.id) || props.waitingIds.has(s.id));
+          const busyDot = g.sessions.some((s) => {
+            const key = runKey(s.workspace ?? g.workspace, s.id);
+            return props.running.has(key) || props.waitingIds.has(key);
+          });
           const sections = sectionsByGroup.get(g.workspace) ?? [];
           const isRenaming = renamingProject !== null && project !== null && renamingProject.id === project.id;
           return (

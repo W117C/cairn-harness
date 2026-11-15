@@ -7,14 +7,19 @@ import { createRoot, type Root } from "react-dom/client";
 import type { ElementNode } from "./helpers/dom-host";
 import { fire } from "./helpers/dom-host";
 import { useSessionNotices } from "../src/renderer/state/session-notices";
+import { runKey } from "../src/renderer/state/session-identity";
 
-function Probe(props: { idRef: { current: string | null } }): React.JSX.Element {
-  const { sessionErrors, setLastError, clearLastError, sessionNotices, setLastNotice, clearLastNotice } = useSessionNotices(props.idRef);
+function Probe(props: {
+  idRef: { current: string | null };
+  workspaceRef: { current: string | null };
+}): React.JSX.Element {
+  const { sessionErrors, setLastError, clearLastError, sessionNotices, setLastNotice, clearLastNotice } = useSessionNotices(props.idRef, props.workspaceRef);
   return (
     <div>
       <span data-errors>{JSON.stringify([...sessionErrors.entries()])}</span>
       <span data-notices>{JSON.stringify([...sessionNotices.entries()])}</span>
       <button data-set-error onClick={() => setLastError("err")}>set err</button>
+      <button data-set-row-error onClick={() => setLastError("row", "same", "/c")}>set row err</button>
       <button data-clear-error onClick={clearLastError}>clear err</button>
       <button data-set-notice onClick={() => setLastNotice("notice")}>set notice</button>
       <button data-clear-notice onClick={clearLastNotice}>clear notice</button>
@@ -40,14 +45,15 @@ afterEach(() => {
 });
 
 describe("useSessionNotices", () => {
-  it("按 activeIdRef 当前 key 写入/清除；切会话不清别人的条", async () => {
+  it("按 workspace + session 的限定键写入/清除；同 id 切项目不串，行级写入可显式给根", async () => {
     const idRef = { current: "s1" } as { current: string | null };
+    const workspaceRef = { current: "/a" } as { current: string | null };
     const host = globalThis.document.createElement("div") as unknown as ElementNode;
     (globalThis.document.body as unknown as ElementNode).appendChild(host);
     let root: Root = null as unknown as Root;
     await act(async () => {
       root = createRoot(host as unknown as HTMLElement);
-      root.render(<Probe idRef={idRef} />);
+      root.render(<Probe idRef={idRef} workspaceRef={workspaceRef} />);
     });
     try {
       const button = (attr: string): ElementNode => {
@@ -56,16 +62,39 @@ describe("useSessionNotices", () => {
         return found;
       };
       await act(async () => { fire(button("data-set-error"), "onClick"); });
-      expect(button("data-errors").textContent ?? "").toBe('[["s1","err"]]');
+      expect(button("data-errors").textContent ?? "").toBe(JSON.stringify([[runKey("/a", "s1"), "err"]]));
+      workspaceRef.current = "/b";
+      await act(async () => { fire(button("data-set-error"), "onClick"); });
+      expect(button("data-errors").textContent ?? "").toBe(JSON.stringify([
+        [runKey("/a", "s1"), "err"],
+        [runKey("/b", "s1"), "err"],
+      ]));
+      await act(async () => { fire(button("data-clear-error"), "onClick"); });
+      expect(button("data-errors").textContent ?? "").toBe(JSON.stringify([[runKey("/a", "s1"), "err"]]));
+      await act(async () => { fire(button("data-set-row-error"), "onClick"); });
+      expect(button("data-errors").textContent ?? "").toBe(JSON.stringify([
+        [runKey("/a", "s1"), "err"],
+        [runKey("/c", "same"), "row"],
+      ]));
       await act(async () => { fire(button("data-set-notice"), "onClick"); });
-      expect(button("data-notices").textContent ?? "").toBe('[["s1","notice"]]');
+      expect(button("data-notices").textContent ?? "").toBe(JSON.stringify([[runKey("/b", "s1"), "notice"]]));
       idRef.current = "s2";
       await act(async () => { fire(button("data-clear-error"), "onClick"); });
-      expect(button("data-errors").textContent ?? "").toBe('[["s1","err"]]');
+      expect(button("data-errors").textContent ?? "").toBe(JSON.stringify([
+        [runKey("/a", "s1"), "err"],
+        [runKey("/c", "same"), "row"],
+      ]));
       await act(async () => { fire(button("data-set-error"), "onClick"); });
-      expect(button("data-errors").textContent ?? "").toBe('[["s1","err"],["s2","err"]]');
+      expect(button("data-errors").textContent ?? "").toBe(JSON.stringify([
+        [runKey("/a", "s1"), "err"],
+        [runKey("/c", "same"), "row"],
+        [runKey("/b", "s2"), "err"],
+      ]));
       await act(async () => { fire(button("data-clear-notice"), "onClick"); });
-      expect(button("data-notices").textContent ?? "").toBe('[["s1","notice"]]');
+      expect(button("data-notices").textContent ?? "").toBe(JSON.stringify([[runKey("/b", "s1"), "notice"]]));
+      idRef.current = "s1";
+      await act(async () => { fire(button("data-clear-notice"), "onClick"); });
+      expect(button("data-notices").textContent ?? "").toBe("[]");
     } finally {
       act(() => { root.unmount(); });
       host.parentNode?.removeChild(host);

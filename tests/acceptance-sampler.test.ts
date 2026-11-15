@@ -66,7 +66,7 @@ describe("reviewFailHealRate（review-fail 自愈率）", () => {
 });
 
 describe("routingDecisionCoverage（生产 spawn 的路由决策覆盖率）", () => {
-  const spawn = (withDecision: boolean): AgentEvent =>
+  const spawn = (): AgentEvent =>
     ev({
       type: "agent_spawned",
       agent_id: "w" + String(Math.random()),
@@ -78,8 +78,8 @@ describe("routingDecisionCoverage（生产 spawn 的路由决策覆盖率）", (
     ev({ type: "routing_decision", agent_id: agentId, candidates: [], picked: "m1", reason: "tier-default" });
 
   it("带决策的 spawn / 全部 spawn", () => {
-    const a = spawn(false);
-    const b = spawn(false);
+    const a = spawn();
+    const b = spawn();
     expect(routingDecisionCoverage([decision((a as { agent_id: string }).agent_id), a, b])).toEqual({
       hits: 1, total: 2, unmeasurable: false,
     });
@@ -100,13 +100,13 @@ describe("routingDecisionCoverage（生产 spawn 的路由决策覆盖率）", (
   });
 
   it("决策与 spawn 按 agent_id 对上，不是 spawn 上的字段（恒 0 那把尺就是这么来的）", () => {
-    const s = spawn(false);
+    const s = spawn();
     // 只有一条决策、且它归在**另一条** spawn 上 ⇒ 这一格分母 1、分子 0：是可测的 0%，不是不可测。
     expect(routingDecisionCoverage([s, decision("someone-else")])).toEqual({ hits: 0, total: 1, unmeasurable: false });
   });
 
   it("同一 id 多条决策只算一次（分母是 spawn 数，不是事件数）", () => {
-    const s = spawn(false);
+    const s = spawn();
     const id = (s as { agent_id: string }).agent_id;
     expect(routingDecisionCoverage([decision(id), decision(id), s])).toEqual({ hits: 1, total: 1, unmeasurable: false });
   });

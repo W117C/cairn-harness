@@ -51,7 +51,8 @@ describe("打开会话：先清旧流，读盘期间的增量要合并", () => {
 
   it("回包用 mergeSessionSnapshot（快照 + 增量），不在读盘窗口丢流式文本", () => {
     expect(app).toContain("setEvents(mergeSessionSnapshot(r.events, pending.events));");
-    expect(app).toContain("openPending.current.events.push(e);");
+    expect(app).toContain("shouldBufferOpenEvent({ sessionId: sid, eventWorkspace, open })");
+    expect(app).toContain("open.events.push(e);");
   });
 
   it("分叉 / 编辑走 openSession（裸 activate 会把旧转录留在屏上）；回放已撤（2026-10-24）", () => {
@@ -66,9 +67,9 @@ describe("打开会话：先清旧流，读盘期间的增量要合并", () => {
 });
 
 describe("审批卡按会话键控：并发门互不覆盖", () => {
-  it("卡存 Map<sessionId, 卡>，渲染只取当前会话那张", () => {
+  it("卡按 workspace + session 的限定键存，渲染只取当前会话那张", () => {
     expect(app).toContain("const [askBySid, setAskBySid] = useState<ReadonlyMap<string, AskPayload>>(new Map());");
-    expect(app).toContain("askBySid.get(activeId) ?? askBySid.get(\"\")");
+    expect(read("../src/renderer/state/run-readings.ts")).toContain("askBySid.get(activeKey) ?? askBySid.get(\"\")");
   });
 
   it("onAskDone 只删这一张 askId，不再清空整张表", () => {
@@ -95,11 +96,11 @@ describe("Esc 不被常驻侧栏 listbox 短路", () => {
 
 describe("Composer：失败回滚 / 重命名迁移 / 建议与注入的序号守卫", () => {
   it("发送失败把原文与附件还给对应会话（切走只存桶）", () => {
-    expect(app).toContain("setDraftRestore({ forSession: id ?? null, text, attachments");
+    expect(app).toContain("setDraftRestore({ forSession: id ?? null, forWorkspace: noticeWorkspace, text, attachments");
     expect(composer).toContain("props.restoreDraft");
     const effect = between(composer, "const lastRestore = useRef(0);", "const lastInjectedAttachment");
     expect(effect).toContain("key !== draftKeyRef.current");
-    expect(effect).toContain("draftKeyFor(props.workspacePath, r.forSession)");
+    expect(effect).toContain("draftKeyFor(r.forWorkspace, r.forSession)");
     expect(effect).toContain("draftsRef.current.set(key, r.text)");
   });
 

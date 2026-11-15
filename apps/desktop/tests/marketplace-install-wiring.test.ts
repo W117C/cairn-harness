@@ -32,8 +32,8 @@ const INSTALL_CHANNELS = {
 } as const;
 
 describe("plugin install IPC wiring", () => {
-  it("exposes the backend install surface at protocol v51", () => {
-    expect(IPC_PROTOCOL_VERSION).toBe(54);
+  it("exposes the backend install surface at protocol v58", () => {
+    expect(IPC_PROTOCOL_VERSION).toBe(58);
     const channels = INVOKE_CHANNELS as Record<string, string>;
     for (const [key, channel] of Object.entries(INSTALL_CHANNELS)) {
       expect(channels[key]).toBe(channel);
@@ -92,7 +92,11 @@ describe("plugin install IPC wiring", () => {
     expect(main).toMatch(/pluginInstallJobs\.status\(String\(jobId(?:\s*\?\?\s*"")?\)\)/u);
     expect(main).toMatch(/pluginInstallJobs\.commit\(String\(jobId(?:\s*\?\?\s*"")?\)\)/u);
     expect(main).toMatch(/pluginInstallJobs\.cancel\(String\(jobId(?:\s*\?\?\s*"")?\)\)/u);
-    expect(main).toContain("void Promise.all([host.orchestrationClose(), pluginInstallJobs.shutdown()])");
+    // 退出进程序列：持久执行器、安装任务、后台任务三件事都要「收完再退」——少一个就有进程被
+    // will-quit 的同步组杀抢走（后台任务的跑后复查会来不及跑）。
+    expect(main).toContain(
+      "void Promise.all([host.orchestrationClose(), pluginInstallJobs.shutdown(), settleAllBackgroundTasks()])",
+    );
   });
 
   it("shares effective roots and blocks mutation while a run is active", () => {

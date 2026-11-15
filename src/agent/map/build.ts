@@ -81,8 +81,8 @@ export async function scanSourceFilesAll(workspace: string): Promise<ScannedFile
     let out = "";
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (d: string) => (out += d));
-    child.stderr.setEncoding("utf8");
-    child.stderr.on("data", (d: string) => (out += "")); // stderr 只影响退出码路径
+    // stderr 只影响退出码路径；resume 把它排空，避免管道写满后子进程卡住。
+    child.stderr.resume();
     child.on("error", reject);
     child.on("close", (code) => {
       if (code !== 0 && code !== 1) reject(new Error(`map: rg 退出码 ${String(code)}`));

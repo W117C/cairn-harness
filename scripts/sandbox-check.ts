@@ -160,7 +160,7 @@ if (!degraded) {
   // 链：checkSandbox()=false → sandboxRisk 判写工具 high → auto 档送审 → 非交互 fail-closed 拒绝且不落盘。
   assert(!status.available, "B1 沙箱自检结论 = 不可用（降级分支的前提成立）");
 
-  const sr = sandboxRisk(false, "write_file", true);
+  const sr = sandboxRisk(false, true);
   assert(sr.level === "high", "B2 sandboxRisk(不可用, 写工具) = high", "实际 " + sr.level);
 
   // 档位层本身不拦（auto → allow）；送审来自**风险层**——证明 ask 是沙箱降级导致的，不是档位策略

@@ -1,6 +1,6 @@
 
 import { describe, expect, it } from "vitest";
-import { dismissedFrom } from "../src/renderer/goal-dismiss";
+import { dismissedFrom, dismissedGoalAt, dismissedGoalKey, writeDismissedGoals } from "../src/renderer/goal-dismiss";
 import { readAppSurface } from "./helpers/app-surface";
 
 describe("dismissedFrom", () => {
@@ -15,5 +15,22 @@ describe("dismissedFrom", () => {
     const app = readAppSurface();
     expect(app).toContain("useState<Map<string, number>>(() => readDismissedGoals())");
     expect(app).toContain("writeDismissedGoals(next);");
+  });
+
+  it("隐藏记录按工作区限定；裸 id 只在工作区未知时兼容", () => {
+    const goals = new Map([
+      [dismissedGoalKey("/a", "same"), 3],
+      [dismissedGoalKey("/b", "same"), 8],
+      ["legacy", 5],
+    ]);
+    expect(dismissedGoalAt(goals, "/a", "same")).toBe(3);
+    expect(dismissedGoalAt(goals, "/b", "same")).toBe(8);
+    expect(dismissedGoalAt(goals, "/c", "same")).toBeUndefined();
+    expect(dismissedGoalAt(goals, "/a", "legacy")).toBeUndefined();
+    expect(dismissedGoalAt(goals, null, "legacy")).toBe(5);
+    expect(dismissedGoalKey("/a", "same")).not.toBe(dismissedGoalKey("/b", "same"));
+    const stored = new Map<string, number>();
+    writeDismissedGoals(stored);
+    expect(stored.size).toBe(0);
   });
 });

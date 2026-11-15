@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { ComponentProps } from "react";
 import { Sidebar } from "../src/renderer/components/Sidebar";
 import { WorkbenchSidebar } from "../src/renderer/panes/WorkbenchSidebar";
+import { runKey } from "../src/renderer/state/session-identity";
 
 // 页脚账户位在侧栏（只在 chat 目的地渲染）⇒ 这里给一份最小可渲染的 props。
 const CHAT_SIDEBAR = {
@@ -15,7 +16,12 @@ const CHAT_SIDEBAR = {
   outcomes: new Map(),
 } as unknown as ComponentProps<typeof Sidebar>;
 
-function renderSidebar(destination: "chat" | "plugins", collapsed = false, focus = false): string {
+function renderSidebar(
+  destination: "chat" | "plugins",
+  collapsed = false,
+  focus = false,
+  chat: ComponentProps<typeof Sidebar> = CHAT_SIDEBAR,
+): string {
   return renderToStaticMarkup(
     <WorkbenchSidebar
       destination={destination}
@@ -23,7 +29,7 @@ function renderSidebar(destination: "chat" | "plugins", collapsed = false, focus
       focusMode={focus}
       showChatSidebar={destination === "chat" && !collapsed && !focus}
       sidebarWidth={200}
-      chatSidebar={CHAT_SIDEBAR}
+      chatSidebar={chat}
       pageItems={[{ id: "all", label: "全部" }]}
       activeFilter="all"
       onFilter={() => undefined}
@@ -53,6 +59,27 @@ describe("WorkbenchSidebar", () => {
     expect(renderSidebar("chat")).toContain('class="side-wrap"');
     expect(renderSidebar("chat", true)).not.toContain('class="side-wrap"');
     expect(renderSidebar("chat", false, true)).not.toContain('class="side-wrap"');
+  });
+
+  it("项目组忙碌点按 workspace + session 的限定键读运行/等门态", () => {
+    const project = { id: "p", name: "A", path: "/a", createdAt: 0 };
+    const session = { id: "same", workspace: "/a", title: "A", mtimeMs: 0, lines: 1 };
+    const base = {
+      ...CHAT_SIDEBAR,
+      projects: [project],
+      sessions: [session],
+    } as unknown as ComponentProps<typeof Sidebar>;
+    for (const state of [
+      { running: new Set([runKey("/a", "same")]), waitingIds: new Set<string>() },
+      { running: new Set<string>(), waitingIds: new Set([runKey("/a", "same")]) },
+    ]) {
+      expect(renderSidebar("chat", false, false, { ...base, ...state })).toContain('class="g-dot"');
+    }
+    expect(renderSidebar("chat", false, false, {
+      ...base,
+      running: new Set(["same"]),
+      waitingIds: new Set<string>(),
+    })).not.toContain('class="g-dot"');
   });
 });
 

@@ -565,7 +565,7 @@ export function microPruneDigest(
       return "- " + name + " ×" + String(v.count) + (targets === "" ? "" : " → " + targets);
     });
   const prunedIdsSet = new Set(prunedIds);
-  const prunedEvents = events.filter((e, i) => prunedIdsSet.has(eventIdAt(i)));
+  const prunedEvents = events.filter((_e, i) => prunedIdsSet.has(eventIdAt(i)));
   const tried = triedRejectedNote(prunedEvents);
   const files = extractFilePaths(prunedEvents);
   // Touched Files 同样收口：一行一文件不设帽，会把 digest 顶过输出帽——让硬塞的事实把压缩

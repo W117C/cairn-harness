@@ -8,9 +8,9 @@
         "同名会话 · 项目乙刚刚"
       ],
       "groups": [
-        "demo-ws今天1同名会话 · 项目甲",
+        "demo-ws今天同名会话 · 项目甲刚",
         "demo-ws",
-        "demo-ws-other今天1同名会话",
+        "demo-ws-other今天同名会话 ",
         "demo-ws-other"
       ]
     }
@@ -60,13 +60,19 @@
     }
   },
   {
-    "name": "队列写回带的是限定键（workspace 随会话走，不是裸 id）",
+    "name": "队列写回按 workspace 区分（两个同名会话各写一次 ⇒ 侧车两条、workspace 不同）",
     "ok": true,
     "detail": {
       "removed": {
         "clicked": true
       },
-      "setCalls": "[{\"sessionId\":\"dup\",\"workspace\":\"/tmp/demo-ws\",\"items\":[]}]"
+      "removedB": {
+        "clicked": true
+      },
+      "openB2": {
+        "clicked": true
+      },
+      "calls": "[{\"sessionId\":\"dup\",\"workspace\":\"/tmp/demo-ws\",\"items\":[]},{\"sessionId\":\"dup\",\"workspace\":\"/tmp/demo-ws-other\",\"items\":[]}]"
     }
   },
   {

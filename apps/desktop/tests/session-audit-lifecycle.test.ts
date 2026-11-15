@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createKernelHost, type KernelHost } from "../src/main/kernel-host";
-import { requireSessionMetadata } from "../../../src/main/session-handlers";
+import { requireSessionMetadata, requireSessionMetadataFor } from "../../../src/main/session-handlers";
 import { SessionMetadataRepository } from "../../../src/main/session-metadata";
 import { createSession, pathOf } from "../../../src/main/sessions";
 
@@ -172,7 +172,7 @@ describe("SessionMetadata audit through the real KernelHost", () => {
     expect(host.runningCount()).toBe(0);
   });
 
-  it("same-id sessions in different workspaces do not inherit an ambiguous sidecar audit", async () => {
+  it("same-id sessions in different workspaces keep audit state in their own root", async () => {
     const { id } = await host.createSession();
     const repo = readMetadata();
     await repo.markViewed(id);
@@ -185,9 +185,25 @@ describe("SessionMetadata audit through the real KernelHost", () => {
     await createSession(join(other, ".agent", "sessions"), id);
     const sameId = (await host.listSessions()).filter((entry) => entry.id === id);
     expect(sameId).toHaveLength(2);
-    for (const entry of sameId) {
-      for (const field of ["viewedAt", "idleSince", "resumeAttempts", "archivedAt"]) expect(entry).not.toHaveProperty(field);
+    const otherPath = await realpath(other);
+    const owner = sameId.find((entry) => entry.workspace === workspace);
+    const otherRow = sameId.find((entry) => entry.workspace === otherPath);
+    expect(owner).toMatchObject({
+      viewedAt: expect.any(String),
+      idleSince: expect.any(String),
+      resumeAttempts: 1,
+      archived: true,
+    });
+    for (const field of ["viewedAt", "idleSince", "resumeAttempts", "archivedAt"]) {
+      expect(otherRow).not.toHaveProperty(field);
     }
+
+    await host.openSession(id, otherPath);
+    expect(await requireSessionMetadataFor(join(other, ".agent", "sessions")).get(id)).toMatchObject({
+      resumeAttempts: 1,
+      viewedAt: expect.any(String),
+    });
+    expect((await readMetadata().get(id)).resumeAttempts).toBe(1);
   });
 
   it("a real provider-script failure after the user turn still settles the accepted run as idle", async () => {

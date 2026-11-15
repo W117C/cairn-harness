@@ -29,6 +29,7 @@ import {
   type ToolResult,
 } from "./base.js";
 import { snapshotBeforeOverwrite, snapshotNote } from "./snapshot.js";
+import { frozenJudgePathSet } from "../frozen.js";
 
 const ACTIONS = ["mkdir", "move", "rename", "delete"] as const;
 
@@ -111,6 +112,19 @@ export const fs_ops: Tool = {
     // 误报成「已移动目录」。与 delete 的「删的是名字本身」同一格纪律（C3/P0-6 软链族教训）。
     const srcSt = await lstat(abs).catch(() => null);
     if (srcSt === null) throw new ToolError(`${label}: 源不存在: ${rel}`);
+    // 整树搬走判卷面（第 1195 页登记的同族格）：rename 不是逐文件遍历，精确键闸看不见目录里的
+    // 冻结文件。判卷文件被搬走会让完整性校验读成「缺失」（红），但判据面不该由一条移动工具拆掉；
+    // 这里按工作区相对路径做前缀匹配，命中就拒并给换判据的出口。
+    if (srcSt.isDirectory()) {
+      const srcRel = relative(resolve(ctx.workspace), abs).split("\\").join("/");
+      const inside = [...frozenJudgePathSet(ctx.workspace)].filter(
+        (key) => key === srcRel || key.startsWith(srcRel + "/"),
+      );
+      if (inside.length > 0) {
+        const named = inside.slice(0, 3).join("、") + (inside.length > 3 ? ` 等 ${String(inside.length)} 个` : "");
+        throw new ToolError(`${label}: 目录里有判卷冻结文件（${named}）——判卷面不许整树搬走；要换判据请写 BLOCKED.md`);
+      }
+    }
     // 软链源的回执要点名原指向：rename 之后 readlink(abs) 就拿不到了（名字已搬走）。
     const srcLinkTarget = srcSt.isSymbolicLink() ? await readlink(abs).catch(() => "?") : null;
     const targetSt = await stat(landed).catch(() => null);

@@ -118,7 +118,7 @@ describe("verify 超时是配置项，不是 60s 硬编码", () => {
   it("语言探测档自带 300s：冷编译 cargo/go 不该被 60s 掐死", async () => {
     await repo({ "Cargo.toml": "[package]\n" });
     const seen: number[] = [];
-    const stub = async (c: string, d: string, t?: number): Promise<VerifyCommandResult> => {
+    const stub = async (c: string, _d: string, t?: number): Promise<VerifyCommandResult> => {
       seen.push(t ?? -1);
       return { command: c, ok: true, output: "" };
     };
@@ -130,7 +130,7 @@ describe("verify 超时是配置项，不是 60s 硬编码", () => {
   it("npm 侧不带 timeoutMs ⇒ 仍按 60s（e2e / gym 的既有口径零回归）", async () => {
     await repo({ "package.json": JSON.stringify({ scripts: { test: "vitest run" } }) });
     const seen: number[] = [];
-    await runVerifyOutcome(dir, async (c, d, t) => {
+    await runVerifyOutcome(dir, async (c, _d, t) => {
       seen.push(t ?? -1);
       return { command: c, ok: true, output: "" };
     });
@@ -142,7 +142,7 @@ describe("verify 超时是配置项，不是 60s 硬编码", () => {
     await mkdir(join(dir, ".agent"), { recursive: true });
     await writeFile(join(dir, ".agent", "config.json"), JSON.stringify({ verify: { test: ["true"], timeoutMs: 15_000 } }), "utf8");
     const seen: number[] = [];
-    await runVerifyOutcome(dir, async (c, d, t) => {
+    await runVerifyOutcome(dir, async (c, _d, t) => {
       seen.push(t ?? -1);
       return { command: c, ok: true, output: "" };
     });

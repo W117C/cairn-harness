@@ -371,9 +371,9 @@ describe("接线：既有那个取料口真吃得下这份留档（spawn 真脚�
 
 describe("接线面：跑器真的走这一跳（脚本形状，照 tests/loop-eval-invocation-face.test.ts 的先例）", () => {
   const src = require$(["scripts", "loop-eval.ts"]);
-  const pkg = JSON.parse(require$(["package.json"], "utf8") as unknown as string) as { scripts: Record<string, string> };
+  const pkg = JSON.parse(require$(["package.json"]) as unknown as string) as { scripts: Record<string, string> };
 
-  function require$(rel: string[], enc?: "utf8"): string {
+  function require$(rel: string[]): string {
     // eslint-disable-next-line no-undef
     return readFileSync(join(HERE, ...rel), "utf8") as string;
   }

@@ -30,7 +30,17 @@ it("lists independent saved choices after a fresh host boot", async () => {
 });
 
 it("does not assign ambiguous legacy preferences to both same-id sessions", async () => {
-  await requireSessionMetadata().setPrefs("same", { model: "unknown-owner", thinking: "high" });
+  // 迁移前的全局卷没有 workspaceScoped 标记；同 id 同时住两棵树时无法判断它属于谁。
+  const stamp = "2026-01-01T00:00:00.000Z";
+  await writeFile(join(a, ".agent", "sessions", "session-metadata.json"), JSON.stringify({
+    version: 1,
+    sessions: {
+      same: {
+        id: "same", title: "same", pinned: false, archived: false,
+        model: "unknown-owner", thinking: "high", createdAt: stamp, updatedAt: stamp,
+      },
+    },
+  }) + "\n", "utf8");
   const rows = await host.listSessions();
   expect(rows).toHaveLength(2);
   for (const row of rows) { expect(row.model).toBeUndefined(); expect(row.thinking).toBeUndefined(); }

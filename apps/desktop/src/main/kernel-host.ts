@@ -53,7 +53,15 @@ import {
   setAppHooks,
   updateScheduleCap,
 } from "../../../../src/main/agent-runner";
-import { applyCrashRecovery, handleSessionPrefsSet, initSessionsDir, requireSessionMetadata, setSessionRootResolver } from "../../../../src/main/session-handlers";
+import {
+  applyCrashRecovery,
+  handleSessionPrefsSet,
+  initSessionsDir,
+  listSessionMetadataForRoot,
+  requireSessionMetadataForMutation,
+  setSessionRootResolver,
+  setSessionRootsProvider,
+} from "../../../../src/main/session-handlers";
 import { readSessionPreferences, type SessionPreferences } from "../../../../src/main/session-preferences";
 import { initSettingsStore, setSettingsHostDeps, store } from "../../../../src/main/settings-handlers";
 
@@ -77,7 +85,7 @@ import {
   type SessionQueueEntry,
 } from "../../../../src/main/sessions";
 import { searchSessions } from "../../../../src/main/session-search";
-import type { SessionMetadataRepository } from "../../../../src/main/session-metadata";
+import type { SessionMetadataRecord, SessionMetadataRepository } from "../../../../src/main/session-metadata";
 import { addUsageTotals, emptyUsageTotals } from "../../../../src/main/usage-ledger";
 import { scanUsageFile, type UsageFileCache } from "../../../../src/main/usage-ledger-scan";
 import { emptyUsageAnalytics, mergeUsageAnalytics, usageAnalyticsSnapshot } from "../../../../src/main/usage-analytics";
@@ -119,7 +127,7 @@ export interface KernelHost {
   /** 读 worker worktree 的 diff（`diff_ref`）：路径/基线先过形状闸，绝不接受任意路径。 */
   worktreeDiff(ref: string, workspace?: string): Promise<{ ok: true; stat: string; patch: string; files: string[] } | { ok: false; error: string }>;
   /** 全工作区合并的会话清单，每条带 workspace 归组标记（T3 分组侧栏的数据源）；
-   *  并合并单例 sidecar 的 pinned/archived/projectId（与写路径同源，见实现处注释）。 */
+   *  并按每个会话自己的根合并 pinned/archived/projectId（见实现处注释）。 */
   listSessions(): Promise<(SessionInfoPayload & { workspace: string })[]>;
   sessionPrefsSet(sessionId: unknown, prefs: unknown, workspace?: unknown): Promise<{ ok: boolean; error?: string }>;
   /** v14：跨全部已登记工作区的用量账本（只读；不触发 openSession 的恢复/漂移副作用）。
@@ -129,8 +137,9 @@ export interface KernelHost {
   orchestrationSubmit(request: OrchestrationSubmitRequest): Promise<OrchestrationResponse>;
   orchestrationControl(request: OrchestrationControlRequest): Promise<OrchestrationResponse>;
   orchestrationClose(): Promise<void>;
-  /** v15：读该会话日志尾部（只读；会话归属由本 host 解析——不接受渲染层传路径）。 */
-  sessionLog(id: string, tailLines?: number): Promise<SessionLogPayload>;
+  /** v15：读该会话日志尾部（只读；会话归属由本 host 解析——不接受渲染层传路径）。
+   *  v56：显式 workspace 优先（同 id 跨工作区时归属歧义 fail-closed）。 */
+  sessionLog(id: string, tailLines?: number, workspace?: string): Promise<SessionLogPayload>;
   /** v18：会话正文全文检索（只读；工作区归属由本 host 解析——渲染层不传路径）。
    *  结果是三态（ok / partial / unavailable）：「没量到」不许被折成「没有匹配」。 */
   sessionSearch(
@@ -348,17 +357,19 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
   });
   // 会话根按工作区解析（spec §4.1）：与 CLI 同根 <ws>/.agent/sessions。
   // 单例 initSessionsDir 仍指 activeWorkspace：core 里 requireSessionsDir 的兜底路径
-  // （压缩/调度器等未接线通道）需要一个 coherent 根；本文件的所有会话 IO 都显式传 root，不依赖它。
+  // （压缩/调度器等未接线通道）需要一个 coherent 根；本文件的所有会话 IO 都显式传 root，
+  // metadata 也按 root 取各自卷，装配根只是其中一卷。
   const wsRoot = (ws: string) => join(ws, ".agent", "sessions");
   initSessionsDir(wsRoot(activeWorkspace));
-  const sessionMetadata = requireSessionMetadata();
+  setSessionRootsProvider(() => workspaces.map(wsRoot));
   // 审计是 sidecar，不是主任务：写失败明确出声，不把已成功的打开/run 反签为失败。
   // 读侧仍由 repository 抛错，坏档不能被折成空数据。
   const writeSessionAudit = async (
     id: string,
+    sessionsRoot: string,
     method: "recordResumeAttempt" | "markViewed" | "markActive" | "markIdle",
   ): Promise<void> => {
-    try { await sessionMetadata[method](id); }
+    try { await (await requireSessionMetadataForMutation(id, sessionsRoot))[method](id); }
     catch (error) {
       console.warn(`[session-audit] ${id} ${method} 写入失败（主任务继续，审计未记录）:`, error instanceof Error ? error.message : String(error));
     }
@@ -621,7 +632,8 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
         return { ok: false, accepted: false, error: OTHER_WORKSPACE_RUN };
       }
       const ws = await resolveSessionWs(sessionId, req.workspace);
-      const logPath = pathOf(wsRoot(ws), sessionId);
+      const root = wsRoot(ws);
+      const logPath = pathOf(root, sessionId);
       // 会话级 worktree 隔离（§3.7 · G4）：隔离会话的 run 工作区 = 它自己那棵 worktree
       // （工具 cwd / 写面 / 验证全在里面，主 checkout 不被并行会话踩）。会话存储**不受影响**：
       // logPath 已显式钉在主 checkout 侧，而 worktree 里的 `.agent` 是指回主 checkout 的 symlink
@@ -656,7 +668,7 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
             if (!accepted && event.type === "user_message" &&
               (!("agent_id" in event) || event.agent_id === undefined) && runControllers.get(sessionId)?.controller === controller) {
               accepted = true;
-              activeAudit = writeSessionAudit(sessionId, "markActive");
+              activeAudit = writeSessionAudit(sessionId, root, "markActive");
               // 第十八遍：首条消息自动命名——空会话（wasEmptySession，run 前拍下）才出手。
               // **落名时机（2026-11-07 真机实证改）**：挪到「run 真正接收用户轮」这一拍异步落，
               // 不再在起跑前抢先落名——此前请求校验/模型解析失败（resolveRunModel 抛
@@ -665,7 +677,8 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
               // 与原纪律同式）。落名后 push-only 合成事件（同收束终态先例，不落 JSONL）让渲染层
               // 秒级刷新侧栏标题。controller 注册时序不动（demo 剧本 21ms 收束的观察窗约束仍成立：
               // user_message 是 run 的第一拍，早于任何模型输出）。
-              titlePromise = autoTitleFirstMessage(requireSessionMetadata(), sessionId, wasEmptySession, req.message)
+              titlePromise = requireSessionMetadataForMutation(sessionId, root)
+                .then((metadataForRun) => autoTitleFirstMessage(metadataForRun, sessionId, wasEmptySession, req.message))
                 .then((titled) => {
                   if (titled !== null) {
                     deps.outbox("onEvent", withWorkspace({ type: "session_titled", session_id: sessionId, title: titled, ts: Date.now() }, sessionId));
@@ -682,7 +695,7 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
         if (runControllers.get(sessionId)?.controller === controller) {
           await activeAudit;
           if (titlePromise !== undefined) await titlePromise;
-          if (accepted) await writeSessionAudit(sessionId, "markIdle");
+          if (accepted) await writeSessionAudit(sessionId, root, "markIdle");
           runControllers.delete(sessionId);
           runStartedAt.delete(sessionId);
           runSteering.delete(sessionId); // 未取走的插话随 run 一起丢弃（不跨 run 变成「首条任务」）
@@ -735,21 +748,19 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       }
     },
     listSessions: async () => {
-      // pinned/archived/projectId 合并（第三遍真机复检勘定）：core listSessions 只在传 metadataById
-      // 时合并 sidecar 组织字段；此前这里不传 ⇒ 固定/归档**写入成功但清单读回永久丢**——真机实证：
-      // 行菜单点「固定」后 sidecar 已写 pinned:true，菜单文案不翻、「已固定」筛选恒空。
-      // sidecar 单例根 = 装配根（上方 initSessionsDir；写路径 setPinned/setArchived 同指此根），
-      // 读侧同源合并即闭环；id 为 host 级唯一（createSession 秒级定名），跨根误命中不可能。
-      // 边界如实记：写入路径仍走单例根（T3 工作区切换前的既有形态），非装配根会话的组织动作在
-      // 写路径 fail-loud（requireExistingSession 拒「会话不存在」），不在读侧静默造数。
-      const records = await requireSessionMetadata().list();
-      const metadataById = new Map(records.map((record) => [record.id, record]));
+      // 组织字段按各自会话根读取：每个根一份 `session-metadata.json`，同 id 不再共用记录。
+      // 旧版装配根全局卷只在 id 唯一归属某个根时回退；无 `workspaceScoped` 标记的重复 id
+      // 仍保持不确定，不能把旧记录冒充给任一新根。
       const out: (SessionInfoPayload & { workspace: string })[] = [];
       const scopedPrefs = new Map<SessionInfoPayload, SessionPreferences>();
+      const recordByRow = new Map<SessionInfoPayload, SessionMetadataRecord>();
       for (const ws of workspaces) {
+        const root = wsRoot(ws);
+        const records = await listSessionMetadataForRoot(root);
+        const metadataById = new Map(records.map((record) => [record.id, record]));
         // 隔离标记读侧现算（目录存在即真）：不落 sidecar、不进事件流 ⇒ 也不会有第二份会漂的状态。
         const isolated = new Set(await listIsolatedSessions(ws));
-        const infos = await listSessionsInRoot(wsRoot(ws), metadataById);
+        const infos = await listSessionsInRoot(root, metadataById);
         // 有界并发读偏好 sidecar（上限 32），防止数百条会话同时 open 撞上 macOS GUI 进程默认 fd 软限。
         const prefs: (SessionPreferences | null)[] = new Array(infos.length).fill(null);
         const concurrency = Math.min(32, infos.length);
@@ -758,28 +769,29 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
           Array.from({ length: concurrency }, async () => {
             while (nextIdx < infos.length) {
               const cur = nextIdx++;
-              prefs[cur] = await readSessionPreferences(pathOf(wsRoot(ws), infos[cur]!.id));
+              prefs[cur] = await readSessionPreferences(pathOf(root, infos[cur]!.id));
             }
           }),
         );
         for (const [index, info] of infos.entries()) {
           const row = { ...info, workspace: ws, ...(isolated.has(info.id) ? { isolated: true } : {}) };
           out.push(row);
+          const record = metadataById.get(info.id);
+          if (record !== undefined) recordByRow.set(row, record);
           if (prefs[index] !== null && prefs[index] !== undefined) scopedPrefs.set(row, prefs[index]!);
         }
       }
-      // 同 id 跨工作区（秒级时间戳撞名）：无法判断这份 sidecar 属于哪一边 ⇒ 两边都不套组织字段，
-      // 而不是把 A 的 pinned/title 套到 B（也不能因此让所有项目会话都失去标题）。
+      // 同 id 跨工作区：已按根落卷的记录各归各行；只有迁移前没有 root 标记的旧记录仍是
+      // 不确定来源，此时宁可隐去组织字段，也不把 A 的 pinned/title 套到 B。
       const counts = new Map<string, number>();
       for (const s of out) counts.set(s.id, (counts.get(s.id) ?? 0) + 1);
       for (const s of out) {
-        if ((counts.get(s.id) ?? 0) > 1 || scopedPrefs.has(s)) {
-          delete s.model;
-          delete s.thinking;
-          Object.assign(s, scopedPrefs.get(s));
-        }
-        if ((counts.get(s.id) ?? 0) > 1) {
+        const duplicate = (counts.get(s.id) ?? 0) > 1;
+        const record = recordByRow.get(s);
+        if (duplicate && record !== undefined && record.workspaceScoped !== true) {
           const mutable = s as unknown as Record<string, unknown>;
+          delete mutable.model;
+          delete mutable.thinking;
           delete mutable.title;
           delete mutable.pinned;
           delete mutable.archived;
@@ -788,6 +800,11 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
           delete mutable.archivedAt;
           delete mutable.idleSince;
           delete mutable.resumeAttempts;
+        }
+        if (scopedPrefs.has(s)) {
+          delete s.model;
+          delete s.thinking;
+          Object.assign(s, scopedPrefs.get(s));
         }
       }
       return out;
@@ -848,7 +865,7 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       if (known === undefined) {
         return { kind: "unavailable", reason: "workspace-unknown", detail: `工作区未登记：${workspace}` };
       }
-      const records = await requireSessionMetadata().list();
+      const records = await listSessionMetadataForRoot(wsRoot(known));
       const metadataById = new Map(records.map((record) => [record.id, record]));
       return await searchSessions({
         root: wsRoot(known),
@@ -858,9 +875,10 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
         ...(options?.maxSessions !== undefined ? { maxSessions: options.maxSessions } : {}),
       });
     },
-    sessionLog: async (id, tailLines) => {
+    sessionLog: async (id, tailLines, workspace) => {
       try {
-        const ws = await resolveSessionWs(id);
+        // 显式 workspace 优先：同 id 跨工作区时不让「查看日志」因归属歧义变成一条无解释的错误。
+        const ws = await resolveSessionWs(id, workspace);
         const root = wsRoot(ws);
         // 只认**真会话**：只读该文件首行判 sidecar（评审修：不要为看一眼日志扫全目录数行）。
         if (!(await isSessionInRoot(root, id))) return { ok: false, error: `会话不存在: ${id}` };
@@ -874,11 +892,13 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
     sessionWorktree: async (req) => {
       const kind = req.kind;
       const sessionId = req.sessionId;
+      // 显式 workspace 优先：同 id 跨工作区时归属解析会歧义 fail-closed，而侧栏知道这一行属于哪。
+      const ws = await resolveSessionWs(sessionId, req.workspace);
       // 在跑就拒（fail-visible）：合并/丢弃会动这棵树与主 checkout，run 正在里面写。
-      if (runControllers.has(sessionId)) {
+      // 只拒**这条根里的这一场**：同 id 在另一工作区跑，不能挡住这里的工作区操作。
+      if (runControllers.get(sessionId)?.workspace === ws) {
         return { ok: false, error: "这条会话正在运行——先等它收束或取消，再动它的工作区" };
       }
-      const ws = await resolveSessionWs(sessionId);
       if (kind === "create") {
         const r = await createSessionWorktree(ws, sessionId, req.title?.trim() || sessionId);
         if (r.ok) console.log(`[worktree] 会话 ${sessionId} 已隔离：${r.path ?? "?"}（分支 ${r.branch ?? "?"}）`);
@@ -997,14 +1017,14 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       const ws = await resolveSessionWs(id, workspace);
       const root = wsRoot(ws);
       if (!(await sessionExists(root, id))) throw new Error(`会话不存在: ${id}`);
-      await writeSessionAudit(id, "recordResumeAttempt");
+      await writeSessionAudit(id, root, "recordResumeAttempt");
       const logPath = pathOf(root, id);
       // M3c 崩溃恢复随开随扫（M2 handleSessionOpen 同语义，显式 logPath 化——补发的 failed(interrupted)
       // 不经 onEvent 通道，但在下面的基线刷新之后落盘 ⇒ 计入基线，不污染归因）。
       await applyCrashRecovery(logPath);
       const events = await readSessionEvents(root, id);
       await refreshSnapshot(logPath); // open 即基线（含补发行）
-      await writeSessionAudit(id, "markViewed");
+      await writeSessionAudit(id, root, "markViewed");
       // running 实况（desktop 扩展字段）：渲染层开会对账——换实例后的新渲染层靠这条把陈旧的
       // 「运行中」标记收敛到 main 真值（真在跑 ⇒ 补上；已收束 ⇒ 摘掉）。收束补发终态是正路，
       // 这条是开一条会话就自愈一次的兜底（两者互不依赖）。
@@ -1040,19 +1060,16 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
         forgetBackgroundTasks(logPath, renamedTo === undefined ? undefined : pathOf(wsRoot(ws), renamedTo));
         drift.delete(logPath);
         usageCache.delete(logPath);
-        // 其他工作区的同名会话可能仍用这个计数做漂移归因。
-        if (!workspaces.some((other) => drift.has(pathOf(wsRoot(other), sessionId)))) {
-          ownAppends.delete(sessionId);
-        }
+        ownAppends.delete(logPath);
         return;
       }
       owner.delete(sessionId);
-      ownAppends.delete(sessionId);
       for (const ws of workspaces) {
         const logPath = pathOf(wsRoot(ws), sessionId);
         forgetBackgroundTasks(logPath, renamedTo === undefined ? undefined : pathOf(wsRoot(ws), renamedTo));
         drift.delete(logPath);
         usageCache.delete(logPath);
+        ownAppends.delete(logPath);
       }
     },
   };

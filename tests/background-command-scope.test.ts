@@ -13,14 +13,14 @@ it("shares the shell tool registry with the desktop controls only for the owning
     await vi.waitFor(() => expect(listBackgroundTasks(owning.sessionLogPath)[0]?.output).toBe("scoped-output"));
     expect(listBackgroundTasks(otherSession.sessionLogPath)).toEqual([]);
     expect(listBackgroundTasks(otherWorkspace.sessionLogPath)).toEqual([]);
-    expect(stopBackgroundTask(otherWorkspace.sessionLogPath, "bg_1")).toBeNull();
+    expect(await stopBackgroundTask(otherWorkspace.sessionLogPath, "bg_1")).toBeNull();
     await expect(task_output.run({ task_id: "bg_1" }, otherSession)).rejects.toThrow("没有这个任务号");
     await expect(task_stop.run({ task_id: "bg_1" }, otherWorkspace)).rejects.toThrow("没有这个任务号");
     await expect(task_output.run({ task_id: "bg_1" }, owning)).resolves.toMatchObject({ output: expect.stringContaining("scoped-output") });
-    expect(stopBackgroundTask(owning.sessionLogPath, "bg_1")).toMatchObject({ done: true, stopped: true, output: "scoped-output" });
+    expect(await stopBackgroundTask(owning.sessionLogPath, "bg_1")).toMatchObject({ done: true, stopped: true, output: "scoped-output" });
     await expect(task_output.run({ task_id: "bg_1" }, owning)).resolves.toMatchObject({ output: expect.stringContaining("已被 task_stop 停止") });
   } finally {
-    if (typeof stopBackgroundTask === "function") stopBackgroundTask(owning.sessionLogPath, "bg_1");
+    await stopBackgroundTask(owning.sessionLogPath, "bg_1").catch(() => undefined);
   }
 });
 

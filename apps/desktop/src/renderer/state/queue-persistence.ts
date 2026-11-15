@@ -8,7 +8,7 @@ export function createQueuePersistence(deps: {
   queueWrites: MutableRefObject<Map<string, Promise<unknown>>>;
   queueDirty: MutableRefObject<Set<string>>;
   setQueueLocal: (key: string, list: QueuedSend[]) => void;
-  setLastError: (message: string, sid?: string) => void;
+  setLastError: (message: string, sid?: string, workspace?: string | null) => void;
   changed: () => void;
 }) {
   const failed = new Set<string>();
@@ -38,7 +38,7 @@ export function createQueuePersistence(deps: {
       return true;
     } catch (error) {
       failed.add(key);
-      deps.setLastError(`发送队列保存失败，未保存的更改已保留在本窗口：${error instanceof Error ? error.message : String(error)}`, sid);
+      deps.setLastError(`发送队列保存失败，未保存的更改已保留在本窗口：${error instanceof Error ? error.message : String(error)}`, sid, workspace);
       return false;
     }
   };

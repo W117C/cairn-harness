@@ -14,12 +14,27 @@ export interface QueuedSend {
   id: number;
   text: string;
   attachments: RunAttachmentReference[];
+  /** 占位（第 1206 页）：`/goal` 的 setGoal 还没落定，这条已经在队首但**还不能派**。
+   *  不占位的话，setGoal 等待期间旧轮自然收束，收束链会把老队首先派出去——⌘↩ 要发的这条
+   *  反而排在后面。占位只在内存里，不落盘（落盘后标志会丢，重启后会把没设目标的消息派出去）。 */
+  blocked?: boolean;
 }
 
-/** 本轮收束后出队：队首派下一轮，rest 回写。空队列 head=null。 */
+/** 本轮收束后出队：队首派下一轮，rest 回写。空队列 head=null。
+ *  队首是占位（`blocked`）时给 null 且**不出队**：收束链在这里停一拍，等 setGoal 落定后
+ *  由 sendWithGoal 清掉占位并显式续派（第 1206 页）。 */
 export function takeQueued(list: readonly QueuedSend[]): { head: QueuedSend | null; rest: QueuedSend[] } {
   if (list.length === 0) return { head: null, rest: [] };
+  if (list[0]?.blocked === true) return { head: null, rest: [...list] };
   return { head: list[0] ?? null, rest: list.slice(1) };
+}
+
+/** 入队：默认排到队尾（「加入队列」/运行中回车）；`front` 插到队首。
+ *  为什么需要这个分岔：⌘↩ 的标签是「打断并发送」——用户要发的是**手里这一条**，
+ *  旧实现一律追加到队尾，打断后先派出去的是之前排的老消息（用户看到自己刚打的字没动）。
+ *  与队列条的「立即」同一条语义：先把它放队首，再打断。 */
+export function enqueueQueued(list: readonly QueuedSend[], item: QueuedSend, front = false): QueuedSend[] {
+  return front ? [item, ...list] : [...list, item];
 }
 
 /** 「打断并发送」：把第 index 条提到队首。越界原样返回（调用点按 index 渲染，越界=坏拍不放大）。 */
@@ -57,9 +72,9 @@ export function moveQueued(list: readonly QueuedSend[], index: number, delta: -1
   return out;
 }
 
-/** 落盘载荷只保留用户消息本身；id 是渲染态，不进磁盘。 */
+/** 落盘载荷只保留用户消息本身；id 与占位旗是渲染态，不进磁盘。 */
 export function toSessionQueueEntries(list: readonly QueuedSend[]): SessionQueueEntry[] {
-  return list.map((item) => ({ text: item.text, attachments: [...item.attachments] }));
+  return list.filter((item) => item.blocked !== true).map((item) => ({ text: item.text, attachments: [...item.attachments] }));
 }
 
 /** 读回 sidecar 时重建渲染 id；nextId 由 App 的会话内单调序号提供。 */
@@ -120,6 +135,21 @@ export function steerAccepted(res: { ok?: boolean }): boolean {
   // 只认 `ok === true`：协议兜底/桩兜底给 `{}` 时是 `undefined`，
   // 那必须当成"没送进去"并回落入队——把 undefined 读成成功就是**吞消息**。
   return res.ok === true;
+}
+
+/** 一条消息的去向：插话 / 入队 / 起跑 / 没能派出去。 */
+export type SendDisposition = "steered" | "queued" | "started" | "failed";
+
+/** ⌘↩「打断并发送」的打断时点（第 1206 页）：**这条消息真的排进队列之后**才打断。
+ *
+ *  普通发送在 onSend 返回前就已同步入队（返回 undefined）⇒ 当场打断，和以前一样。
+ *  `/goal` 要先 `await setGoal` 才能入队（返回 Promise）⇒ 等它落定，且只在 `queued` 时打断：
+ *   · 早打断（旧行为）：收束链先把**老队首**派出去，用户刚打的这条反而排在后面；
+ *   · 空闲时 setGoal 期间旧 run 自然收束、这条已起跑：再打断就是把它自己杀掉。
+ *  失败（`failed`）不打断：消息没出去，草稿已还回输入框，没有理由再毁掉在跑的活。 */
+export function interruptAfterSend(dispatched: void | Promise<SendDisposition>, cancel: () => void): void {
+  if (dispatched === undefined) { cancel(); return; }
+  void dispatched.then((disposition) => { if (disposition === "queued") cancel(); }, () => undefined);
 }
 
 /** 一轮 run 收束后是否继续派队列：用户打断是正常收束，真实失败才停表。 */

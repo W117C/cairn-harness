@@ -79,6 +79,12 @@ describe("协议版本握手接线（§3.5/§12）", () => {
     // v49 → v50：runCancel/runSteer 携带 workspace，目标校验拒绝不触发自动续发。
     // v51 → v52：＋lspStatus（桌面读 LSP 状态；只读、不 spawn、不写授权）。
     // v50 → v51：RunResponse.accepted 区分接收前拒绝与执行失败。
-    expect(IPC_PROTOCOL_VERSION).toBe(54);
+    // v54 → v55：setGoal 请求增可选 workspace（目标写进目标会话自己的工作区日志）。
+    // v55 → v56：sessionWorktree 请求增可选 workspace；setSessionPinned/setSessionArchived/
+    //   assignSessionProject 增可选 workspace——同 id 跨工作区时按显式根做存在性检查，
+    //   隔离树建在会话自己的工作区，不再回落构造期的启动工作区。
+    // v56 → v57：listMessagePins 增可选 workspace，置顶读取按显式根做存在性检查。
+    // v57 → v58：AskPayload 增可选 workspace，审批卡/等门计数按目标根寻址。
+    expect(IPC_PROTOCOL_VERSION).toBe(58);
   });
 });

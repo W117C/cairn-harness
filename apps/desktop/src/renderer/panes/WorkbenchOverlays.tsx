@@ -39,7 +39,7 @@ export interface WorkbenchOverlaysProps {
   doRemoveProject: (p: ProjectRecord) => Promise<void>;
   archiveConfirm: SessionConfirmTarget | null;
   setArchiveConfirm: Dispatch<SetStateAction<SessionConfirmTarget | null>>;
-  doArchiveSession: (id: string, archived: boolean) => Promise<void>;
+  doArchiveSession: (id: string, archived: boolean, workspace?: string) => Promise<void>;
   deleteConfirm: DeleteConfirmTarget | null;
   setDeleteConfirm: Dispatch<SetStateAction<DeleteConfirmTarget | null>>;
   doDeleteSession: (id: string, target?: WorkspaceSession) => Promise<void>;
@@ -54,7 +54,8 @@ export interface WorkbenchOverlaysProps {
   sessions: WorkspaceSession[];
   projects: ProjectRecord[];
   openSession: (id: string, workspace?: string | undefined) => void;
-  setActiveWorkspace: Dispatch<SetStateAction<string | null>>;
+  /** 收口在 workbench 的切换入口：它同时把状态与窗口工作区上报发出去（只收值，不收 updater）。 */
+  setActiveWorkspace: (workspace: string | null) => void;
   activeWorkspaceRef: MutableRefObject<string | null>;
   touchWorkspace: (path: string | null) => void;
   newSession: () => void;
@@ -78,7 +79,7 @@ export interface WorkbenchOverlaysProps {
   refreshProviderKeys: () => Promise<void>;
   mode: PermissionMode;
   setMode: Dispatch<SetStateAction<PermissionMode>>;
-  setLastNotice: (message: string, sessionId?: string | undefined) => void;
+  setLastNotice: (message: string, sessionId?: string | undefined, workspace?: string | null) => void;
   setThemePref: Dispatch<SetStateAction<ThemePref>>;
   setTextSize: Dispatch<SetStateAction<TextSizeSetting>>;
   setUiSize: Dispatch<SetStateAction<UiSizeSetting>>;
@@ -211,6 +212,7 @@ export function WorkbenchOverlays(props: WorkbenchOverlaysProps): React.JSX.Elem
         <SessionLogDialog
           id={logTarget}
           title={logTitle}
+          workspace={activeWorkspace}
           onClose={() => { setLogTarget(null); }}
         />
       )}

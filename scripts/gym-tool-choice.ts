@@ -56,7 +56,7 @@ const has = (n: string): boolean => argv.includes("--" + n);
 // （手动一条条跑单臂），从没有人把 `--ab` 的失败和那批数对上。
 // 这正是「不把代理量当读数」的同款：一个没跑过的开关，看上去和有读数的开关长得一样。
 const FLAGS = ["case", "arm", "ab", "model", "events"] as const;
-const unknown = argv.filter((a, i) => a.startsWith("--") && !(FLAGS as readonly string[]).includes(a.slice(2)));
+const unknown = argv.filter((a) => a.startsWith("--") && !(FLAGS as readonly string[]).includes(a.slice(2)));
 if (unknown.length > 0) {
   console.error("[gym-tool-choice] 未知参数：" + unknown.join(" ") + "（不把拼错的 flag 静默当成缺省）");
   process.exit(2);

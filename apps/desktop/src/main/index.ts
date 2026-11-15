@@ -48,6 +48,7 @@ import { handleMemoryDelete } from "../../../../src/main/memory-handlers";
 import { runDoctorForWorkspace } from "../../../../src/main/doctor";
 import { closeAllLspClients, killAllLspClientsSync, lspServerStatus } from "../../../../src/tools/lsp";
 import { killAllTrackedChildren } from "../../../../src/tools/process";
+import { settleAllBackgroundTasks } from "../../../../src/tools/background-tasks";
 import {
   getAppVersion,
   getSettings,
@@ -599,8 +600,8 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   orchestrationView: address => host.orchestrationView(address as never),
   orchestrationSubmit: request => host.orchestrationSubmit(request as never),
   orchestrationControl: request => host.orchestrationControl(request as never),
-  // v15：会话日志尾部（只读；会话归属由 host 解析，renderer 不传路径）。
-  sessionLog: (id, tailLines) => host.sessionLog(id as string, typeof tailLines === "number" ? tailLines : undefined),
+  // v15：会话日志尾部（只读；会话归属由 host 解析，renderer 不传路径）。v56：显式工作区透传。
+  sessionLog: (id, tailLines, workspace) => host.sessionLog(id as string, typeof tailLines === "number" ? tailLines : undefined, workspace as string | undefined),
   // createSession 首参 M3 起是工作区（原 name 槽位被 M3 接口接管）；渲染层现不传 ⇒ 缺省 activeWorkspace
   createSession: (workspace) => host.createSession(workspace as string | undefined),
   openSession: (id, workspace) => host.openSession(id as string, workspace as string | undefined),
@@ -871,7 +872,17 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     const root = await explicitSessionsRoot(workspace);
     return handleCompact({ sessionId: sessionId as string | undefined, ...(root !== undefined ? { sessionsRoot: root } : {}) });
   },
-  setGoal: (req) => handleGoalSet(req as never),
+  // 目标写入与 run/compact 同一条消歧：显式 workspace 过「已登记根」闸，缺省交给会话归属解析器
+  // （唯一才认、歧义即拒）。不给 workspace 又落回单例根 = 把项目会话的目标写进启动工作区。
+  setGoal: async (req) => {
+    try {
+      const { workspace, ...rest } = (req ?? {}) as { workspace?: string; [key: string]: unknown };
+      const root = await explicitSessionsRoot(workspace);
+      return await handleGoalSet({ ...rest, ...(root !== undefined ? { sessionsRoot: root } : {}) } as never);
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  },
   cardAction: (req) => handleCardAction(req as never),
   renameSession: (oldId, newName, workspace) => mutateSession(oldId as string, workspace,
     (root) => handleSessionRename(oldId as string, newName as string, root), (result) => result.id),
@@ -1005,14 +1016,18 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   listFeedback: async (sessionId, workspace) => handleFeedbackList(sessionId as string, await explicitSessionsRoot(workspace)),
   // 2026-10-20 消息置顶（销 G6）：sidecar pins.jsonl，append-only、不进事件流。
   setMessagePinned: async (req) => handlePinSet(req as never, await explicitSessionsRoot((req as { workspace?: unknown } | null)?.workspace)),
-  listMessagePins: (sessionId) => handlePinList(sessionId as string),
-  setSessionPinned: (sessionId, pinned) => handleSessionSetPinned(sessionId as string, pinned as boolean),
-  setSessionArchived: (sessionId, archived) => handleSessionSetArchived(sessionId as string, archived as boolean),
+  listMessagePins: async (sessionId, workspace) =>
+    handlePinList(sessionId as string, await explicitSessionsRoot(workspace)),
+  setSessionPinned: async (sessionId, pinned, workspace) =>
+    handleSessionSetPinned(sessionId as string, pinned as boolean, await explicitSessionsRoot(workspace)),
+  setSessionArchived: async (sessionId, archived, workspace) =>
+    handleSessionSetArchived(sessionId as string, archived as boolean, await explicitSessionsRoot(workspace)),
   // §3.7 · G4 会话级 worktree 隔离：解析归属/在跑拒绝/创建合并清理全在 kernel-host 与 core 侧。
   sessionWorktree: (req) => host.sessionWorktree(req as never),
   worktreeClean: (name, workspace) => host.worktreeClean(name as string, workspace as string | undefined),
   worktreeDiff: (ref, workspace) => host.worktreeDiff(ref as string, workspace as string | undefined),
-  assignSessionProject: (sessionId, projectId) => handleSessionAssignProject(sessionId as string, projectId as string | null),
+  assignSessionProject: async (sessionId, projectId, workspace) =>
+    handleSessionAssignProject(sessionId as string, projectId as string | null, await explicitSessionsRoot(workspace)),
   deleteMemory: (scope, topic) => handleMemoryDelete(scope as never, topic as string, scope === "project" ? resolveWorkspace() : workspaceContext()),
   pluginDecide: pluginHandlers.pluginDecide,
   pluginUserConfigSet: pluginHandlers.pluginUserConfigSet,
@@ -1029,11 +1044,24 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   pluginSetEnabled: pluginHandlers.pluginSetEnabled,
   pluginUninstall: pluginHandlers.pluginUninstall,
   pluginsInstalled: pluginHandlers.pluginsInstalled,
-  sidechatCreate: (parentSessionId, name) => handleSidechatCreate(parentSessionId as string, name as string | undefined),
-  sidechatAsk: (sidechatId, message, parentSessionId) =>
-    handleSidechatAsk(sidechatId as string, message as string, { parentSessionId: parentSessionId as string | undefined }),
-  sidechatPromote: (req) => handleSidechatPromote(req as never),
-  sidechatState: (parentSessionId) => handleSidechatState(parentSessionId as string | undefined),
+  // 旁路档案跟父会话的工作区走（与 run/compact/setGoal 同一条消歧）：单例根是启动工作区，
+  // 缺了这一步，在其他项目新建/提问/提升会读写默认工作区里的另一份旁路。
+  sidechatCreate: async (parentSessionId, name, workspace) =>
+    handleSidechatCreate(parentSessionId as string, name as string | undefined, await explicitSessionsRoot(workspace)),
+  sidechatAsk: async (sidechatId, message, parentSessionId, workspace) => {
+    const root = await explicitSessionsRoot(workspace);
+    return handleSidechatAsk(sidechatId as string, message as string, {
+      parentSessionId: parentSessionId as string | undefined,
+      ...(root !== undefined ? { sessionsRoot: root } : {}),
+    });
+  },
+  sidechatPromote: async (req) => {
+    const { workspace, ...rest } = (req ?? {}) as { workspace?: string; [key: string]: unknown };
+    const root = await explicitSessionsRoot(workspace);
+    return handleSidechatPromote({ ...rest, ...(root !== undefined ? { sessionsRoot: root } : {}) } as never);
+  },
+  sidechatState: async (parentSessionId, workspace) =>
+    handleSidechatState(parentSessionId as string | undefined, await explicitSessionsRoot(workspace)),
   scheduleSnapshot: () => handleScheduleSnapshot(),
   scheduleUpsert: (def, form) => handleScheduleUpsert(def, form as boolean | undefined),
   scheduleDelete: (id) => handleScheduleDelete(id as string),
@@ -1376,6 +1404,10 @@ const createWindow = () => {
   win.on("close", persistBounds);
   mainWindow = win;
   win.on("closed", () => { if (mainWindow === win) mainWindow = null; });
+  // ⌘R / 崩溃后「重新载入」会让渲染层状态归零（activeWorkspace 从 null 起），主进程的窗口指针
+  // 必须同步归零：否则界面显示「没开项目」，插件/快照读却仍按重载前的项目取。
+  // 只挂主窗——弹窗的上下文是打开时继承的，重载后仍应停在同一个项目。
+  win.webContents.on("did-navigate", () => { windowWorkspaces.forget(win.webContents); });
   // 渲染层的 console 错误也进主日志：打包态没有 devtools 时，这是用户能带走的唯一现场。
   win.webContents.on("console-message", (event) => {
     if (event.level === "error") {
@@ -1624,7 +1656,9 @@ app.on("before-quit", (event) => {
   event.preventDefault();
   if (orchestrationClosing) return;
   orchestrationClosing = true;
-  void Promise.all([host.orchestrationClose(), pluginInstallJobs.shutdown()]).then(() => {
+  // 后台任务和持久执行器一样要「收完再退」：will-quit 的同步组杀会抢在跑后复查前面，
+  // 那样判卷面被后台命令改过就没人复原（只能等下次门禁按哈希红）。这里等收束链跑完。
+  void Promise.all([host.orchestrationClose(), pluginInstallJobs.shutdown(), settleAllBackgroundTasks()]).then(() => {
     orchestrationClosed = true;
     app.quit();
   }).catch(error => {

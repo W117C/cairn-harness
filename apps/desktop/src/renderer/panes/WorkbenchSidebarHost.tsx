@@ -52,7 +52,7 @@ export function WorkbenchSidebarHost({ deps, chatSidebarVisible, pageItems, plug
         onRetryLoad: retrySessions,
         onOpen: openSession,
         onPreviewSession: (s) => {
-          if (s.id === activeId) return;
+          if (s.id === activeId && s.workspace === activeWorkspace) return;
           openPane("session");
           setSessionPreview((prev) => ({
             id: s.id,
@@ -76,8 +76,8 @@ export function WorkbenchSidebarHost({ deps, chatSidebarVisible, pageItems, plug
         onForkSession: forkSessionFromMenu,
         onArchiveSession: requestArchiveSession,
         onOpenInCliSession: openSessionInCli,
-        onAssignSessionProject: (id, projectId) => {
-          void window.agent.assignSessionProject(id, projectId).then(
+        onAssignSessionProject: (id, projectId, workspace) => {
+          void window.agent.assignSessionProject(id, projectId, workspace).then(
             () => { void refreshSessions(); },
             (err: unknown) => { toast.error("归项目失败：" + (err instanceof Error ? err.message : String(err))); },
           );

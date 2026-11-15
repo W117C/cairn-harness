@@ -9,7 +9,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createKernelHost, canonicalWorkspacePath } from "../src/main/kernel-host";
-import { handleSessionSetArchived, handleSessionSetPinned } from "../../../src/main/session-handlers";
+import {
+  handleSessionSetArchived,
+  handleSessionSetPinned,
+  requireSessionMetadataFor,
+} from "../../../src/main/session-handlers";
 
 const dir = mkdtempSync(join(tmpdir(), "cairn-host-md-"));
 const workspace = join(dir, "ws");
@@ -60,10 +64,10 @@ describe("listSessions × 会话 metadata 合并（第三遍真机复检勘定�
   });
 });
 
-// 2026-10-19：sidecar 是单例根（装配根）的仓库，旧实现把同一份 metadataById 套到所有工作区；
-// id 是秒级时间戳，两工作区同秒外部创建的会话可同名 ⇒ A 的 pinned/title 套到 B。
-describe("跨工作区同 id 不串 sidecar", () => {
-  it("只对装配根的会话合并组织字段", async () => {
+// 2026-11-15：metadata 已按会话根分卷。同 id 一样有两条会话，但组织事实各归各的卷；
+// 迁移前没有 workspaceScoped 标记的旧全局记录仍是唯一例外：归属不明时两边都不套。
+describe("跨工作区同 id 的 metadata 按根隔离", () => {
+  it("显式根写入只影响这一行", async () => {
     const root2 = mkdtempSync(join(tmpdir(), "cairn-host-md2-"));
     const wsA = join(root2, "a");
     const wsB = join(root2, "b");
@@ -76,12 +80,50 @@ describe("跨工作区同 id 不串 sidecar", () => {
       writeFileSync(join(ws, ".agent", "sessions", id + ".jsonl"), JSON.stringify({ type: "user_message", content: "x" }) + "\n");
     }
     const h2 = createKernelHost({ workspaces: [wsA, wsB], activeWorkspace: wsA, userDataDir: userData2, outbox: () => undefined });
-    // 同名 id 两个登记根都有 ⇒ 归属解析必须拒绝（不猜第一个根，也就不写任何一边的 sidecar）。
+    const metaA = requireSessionMetadataFor(join(wsA, ".agent", "sessions"));
+    const metaB = requireSessionMetadataFor(join(wsB, ".agent", "sessions"));
+    await metaA.setTitle(id, "A 的标题");
+    await metaB.setTitle(id, "B 的标题");
+    // 同名 id 两个登记根都有 ⇒ 不带 workspace 的归属解析必须拒绝（不猜第一个根）。
     await expect(handleSessionSetPinned(id, true)).rejects.toThrow(/多个工作区/);
+    await handleSessionSetPinned(id, true, join(wsA, ".agent", "sessions"));
+    await handleSessionSetArchived(id, true, join(wsB, ".agent", "sessions"));
+
     const listed = await h2.listSessions();
     const a = listed.find((s) => s.workspace === canonicalWorkspacePath(wsA) && s.id === id);
     const b = listed.find((s) => s.workspace === canonicalWorkspacePath(wsB) && s.id === id);
-    expect(a?.pinned).toBeUndefined(); // 同 id 无法归属 ⇒ 两边都不套 sidecar（fail-safe）
-    expect(b?.pinned).toBeUndefined();
+    expect(a).toMatchObject({ title: "A 的标题", pinned: true, archived: false });
+    expect(b).toMatchObject({ title: "B 的标题", pinned: false, archived: true });
+  });
+
+  it("迁移前的重复 id 记录没有根标记 ⇒ 两边都不套", async () => {
+    const root2 = mkdtempSync(join(tmpdir(), "cairn-host-md3-"));
+    const wsA = join(root2, "a");
+    const wsB = join(root2, "b");
+    const userData2 = join(root2, "userData");
+    for (const ws of [wsA, wsB]) mkdirSync(join(ws, ".agent", "sessions"), { recursive: true });
+    mkdirSync(userData2, { recursive: true });
+    writeFileSync(join(userData2, "settings.json"), JSON.stringify({ provider: "demo", model: "" }));
+    const id = "legacy-same-id";
+    for (const ws of [wsA, wsB]) {
+      writeFileSync(join(ws, ".agent", "sessions", id + ".jsonl"), JSON.stringify({ type: "user_message", content: "x" }) + "\n");
+    }
+    const stamp = "2026-01-01T00:00:00.000Z";
+    writeFileSync(join(wsA, ".agent", "sessions", "session-metadata.json"), JSON.stringify({
+      version: 1,
+      sessions: {
+        [id]: {
+          id, title: "归属不明", pinned: true, archived: false, createdAt: stamp, updatedAt: stamp,
+        },
+      },
+    }) + "\n");
+    const h2 = createKernelHost({ workspaces: [wsA, wsB], activeWorkspace: wsA, userDataDir: userData2, outbox: () => undefined });
+    const listed = await h2.listSessions();
+    const a = listed.find((s) => s.workspace === canonicalWorkspacePath(wsA) && s.id === id);
+    const b = listed.find((s) => s.workspace === canonicalWorkspacePath(wsB) && s.id === id);
+    expect(a).not.toHaveProperty("pinned");
+    expect(a).not.toHaveProperty("title");
+    expect(b).not.toHaveProperty("pinned");
+    expect(b).not.toHaveProperty("title");
   });
 });

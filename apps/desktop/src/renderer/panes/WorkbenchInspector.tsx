@@ -5,6 +5,7 @@ import type { WorkbenchViewDeps } from "./WorkbenchView";
 import { Inspector } from "../components/Inspector";
 import { movePane, type PaneKind } from "../components/panes";
 import type { ChangesFocus } from "../components/ChangesPane";
+import { runKey } from "../state/session-identity";
 
 const PaneDock = lazy(() => import("../components/PaneDock").then((m) => ({ default: m.PaneDock })));
 
@@ -28,7 +29,7 @@ export function WorkbenchInspector({ deps, paneTarget, changesFocus, fileTarget,
     <div className="inspector-col" ref={inspectorColRef} {...(paneTabs.length > 0 ? { "data-panes-open": "true" } : {})}>
 
   <Inspector
-    key={activeId ?? "home"} // 切会话即重挂：内部 openKey/diff 状态不能跨会话复用
+    key={activeId === null ? "home" : runKey(activeWorkspace, activeId)} // 切会话/切根即重挂：内部 openKey/diff 状态不能跨会话复用
     events={events}
     onJump={jumpToEvent}
     onOpenPane={openPane}

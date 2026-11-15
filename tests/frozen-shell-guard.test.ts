@@ -8,7 +8,7 @@ import { mkdtemp, mkdir, readdir, readFile, realpath, rm, symlink, writeFile } f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { listBackgroundTasks } from "../src/tools/background-tasks";
+import { listBackgroundTasks, settleAllBackgroundTasks, task_stop } from "../src/tools/background-tasks";
 import { run_shell } from "../src/tools/run_shell";
 import type { ToolContext } from "../src/tools/base";
 import { SNAPSHOT_ROOT } from "../src/tools/snapshot";
@@ -102,5 +102,54 @@ describe("run_shell 判卷面执行层闸（无沙箱地板）", () => {
     expect(status?.done, "后台任务必须在预算内收束").toBe(true);
     expect(status?.output).toContain(FROZEN_GUARD_TAG);
     expect(await judge()).toBe("original");
+  }, 20_000);
+
+  it("⑧ task_stop 收束：停止回执返回前已跑完复查，守卫说明就在回执里", async () => {
+    const logPath = join(ws, "events-stop.jsonl");
+    const bgCtx: ToolContext = { workspace: ws, callId: "frozen-bg-stop", sessionLogPath: logPath };
+    const started = await run_shell.run(
+      // 先改判卷面、再挂住：stop 时命令仍在跑，收束必须走 kill → 等退出 → 复查这条链。
+      { command: `python3 -c "open('${JUDGE}','w').write('hacked')"; exec sleep 30`, background: true },
+      bgCtx,
+    );
+    expect(started.ok).toBe(true);
+    const id = (started.output.match(/后台任务已启动：(\S+)/) ?? [])[1];
+    expect(id, "后台任务号必须能读出来").toBeTruthy();
+    const deadline = Date.now() + 10_000;
+    while ((await judge()) !== "hacked" && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    expect(await judge(), "命令必须先把判卷面改掉，否则这条判卷量不到收束链").toBe("hacked");
+    const stopped = await task_stop.run({ task_id: id! }, bgCtx);
+    // 停止回执当场就要带守卫结论：旧实现先报 done、复查在 close 后异步补进输出环，
+    // 模型读到的「已停止」里没有那句污染说明（顺序反了 = 把一次越界读成一次普通停止）。
+    expect(stopped.ok).toBe(true);
+    expect(stopped.output).toContain(FROZEN_GUARD_TAG);
+    expect(stopped.output).toContain(FROZEN_GUARD_TAINT);
+    expect(await judge(), "停止返回时盘上必须已复原").toBe("original");
+    expect(listBackgroundTasks(logPath)[0]?.done).toBe(true);
+  }, 20_000);
+
+  it("⑨ 退出收束：settleAllBackgroundTasks 返回时盘上已复原、任务已收束", async () => {
+    const logPath = join(ws, "events-quit.jsonl");
+    const bgCtx: ToolContext = { workspace: ws, callId: "frozen-bg-quit", sessionLogPath: logPath };
+    const started = await run_shell.run(
+      // 改完判卷面就挂住：退出收束必须先组杀、等退出、再复查，一步都不能跳。
+      { command: `python3 -c "open('${JUDGE}','w').write('hacked')"; exec sleep 30`, background: true },
+      bgCtx,
+    );
+    expect(started.ok).toBe(true);
+    const deadline = Date.now() + 10_000;
+    while ((await judge()) !== "hacked" && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    expect(await judge(), "命令必须先把判卷面改掉，否则这条判卷量不到退出收束").toBe("hacked");
+    // 桌面会在 before-quit 等这一个；它返回之后才让进程退，`will-quit` 的同步组杀才不会抢在前面。
+    await settleAllBackgroundTasks();
+    expect(await judge(), "返回时盘上必须已复原").toBe("original");
+    const status = listBackgroundTasks(logPath)[0];
+    expect(status?.done, "返回时任务必须已收束").toBe(true);
+    expect(status?.stopped).toBe(true);
+    expect(status?.output).toContain(FROZEN_GUARD_TAG);
   }, 20_000);
 });

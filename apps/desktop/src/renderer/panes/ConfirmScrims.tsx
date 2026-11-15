@@ -27,7 +27,7 @@ export interface ConfirmScrimsProps {
   /** 归档必问闸。 */
   archiveConfirm: SessionConfirmTarget | null;
   setArchiveConfirm: (v: SessionConfirmTarget | null) => void;
-  doArchiveSession: (id: string, archived: boolean) => void;
+  doArchiveSession: (id: string, archived: boolean, workspace?: string) => void;
   /** 删除会话闸（running = 请求确认时这条会话在跑，文案与按钮据此变化）。 */
   deleteConfirm: DeleteConfirmTarget | null;
   setDeleteConfirm: (v: DeleteConfirmTarget | null) => void;
@@ -99,7 +99,7 @@ export function ConfirmScrims(props: ConfirmScrimsProps) {
                 onClick={() => {
                   const target = archiveConfirm;
                   setArchiveConfirm(null);
-                  void doArchiveSession(target.id, true);
+                  void doArchiveSession(target.id, true, target.workspace);
                 }}
               >归档</button>
             </div>

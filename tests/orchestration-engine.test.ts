@@ -52,7 +52,7 @@ it("producer success cannot become done when verifier rejects", async () => {
 });
 it("cancel waits until the running backend acknowledges abort", async () => {
   let started!: () => void; const began = new Promise<void>(r => { started = r; });
-  const { engine } = await setup(backend(async r => { started(); await new Promise<void>((resolve, reject) => { r.signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true }); }); }));
+  const { engine } = await setup(backend(async r => { started(); await new Promise<void>((_resolve, reject) => { r.signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true }); }); }));
   await engine.submit(orchestrationPlan(), "submit"); await engine.control({ request_id: "approve", plan_id: "plan", version: 1, action: "approve_plan" });
   await engine.tick(); await began;
   await engine.control({ request_id: "cancel", plan_id: "plan", version: 1, action: "cancel_plan" });

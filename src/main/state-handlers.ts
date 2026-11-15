@@ -4,6 +4,7 @@
 // 路径），由装配根启动时 `setStateHandlerDeps` 注入；插件面板留档快照随本面搬进来，装配根写完
 // 一场 run 的快照经 `setPluginSnapshot` 交回（原先那行是直接写装配根的同名变量）。
 import { homedir } from "node:os";
+import { join } from "node:path";
 import { projectAgentPath } from "../app-data";
 import { replay } from "../events";
 import {
@@ -129,7 +130,9 @@ export async function handleAgentState(workspaceOverride: string | null = null):
     if (pluginSnapshot !== null && pluginSnapshotWorkspace === ws) return pluginSnapshot;
     return pluginSnapshotLite(ws);
   });
-  const sidechat = await optionalPanel(handleSidechatState);
+  // 旁路面板按**调用窗口的工作区**列：单例根是启动工作区，换项目后会把别的项目的旁路内容列进来。
+  const sidechatRoot = workspaceOverride !== null && workspaceOverride !== "" ? join(workspaceOverride, ".agent", "sessions") : undefined;
+  const sidechat = await optionalPanel(() => handleSidechatState(undefined, sidechatRoot));
   // M3b 孤儿 worktree 扫描（§4.4.9：启动/会话重开语义 = state 拉取时现算；只列不自动删）
   const worktree = await optionalPanel(async () => {
     const ws = workspaceOverride ?? (await currentWorkspace());

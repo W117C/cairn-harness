@@ -157,10 +157,10 @@ describe("⑧ App 接线哨兵（滚动记忆）", () => {
   it("滚动记忆：Map(sessionId → scrollTop) 离场存回场取；owner 守卫 + 可达等帧（回底钮逻辑不动）", () => {
     expect(appSrc).toContain("const scrollMemory = useRef(new Map<string, number>())");
     // owner 守卫：没滚动过的会话不落盘（lastScrollTop 揣着上个会话的数，直接存会记错人头）。
-    expect(appSrc).toContain("lastScrollOwner.current = activeIdRef.current");
+    expect(appSrc).toContain("lastScrollOwner.current = runKey(activeWorkspaceRef.current, activeIdRef.current ?? \"\")");
     expect(appSrc).toContain("lastScrollOwner.current === lastScrollSession.current");
     expect(appSrc).toContain("scrollMemory.current.set(lastScrollSession.current, lastScrollTop.current)");
-    expect(appSrc).toContain("scrollMemory.current.get(activeId)");
+    expect(appSrc).toContain("scrollMemory.current.get(activeKey)");
     // 可达等帧：会话内容异步载入——等 scrollHeight 容纳目标位再落（早落被空流 clamp 成 0，
     // P3 真机抓到的竞态）；至多 N 帧仍不可达则贴可达上限。
     expect(appSrc).toContain("streamEl.scrollHeight - streamEl.clientHeight >= restore");

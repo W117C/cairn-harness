@@ -17,6 +17,8 @@ export function SkillsPane(props: {
   snap: PluginPanelSnapshot;
   onError: (m: string) => void;
   refresh: () => void;
+  /** 快照按窗口工作区取；正文也读同一个根（缺省会退回最近一轮 run 的工作区）。 */
+  workspace?: string | null;
   filter?: string;
   onFilter?: (filter: string) => void;
 }): React.JSX.Element {
@@ -42,7 +44,7 @@ export function SkillsPane(props: {
     if (selectedName === null) { setBody(null); return; }
     let alive = true;
     setBody({ loading: true });
-    void window.agent.skillBody(selectedName).then((r) => {
+    void window.agent.skillBody(selectedName, props.workspace ?? undefined).then((r) => {
       if (!alive) return;
       setBody(r.ok
         ? { loading: false, text: r.body ?? "", truncated: r.truncated === true, path: r.path }
@@ -119,7 +121,7 @@ export function SkillsPane(props: {
                 onText="已信任"
                 offText="未信任"
                 onChange={(next) => {
-                  void window.agent.pluginDecide(selected.name, next).then((r) => {
+                  void window.agent.pluginDecide(selected.name, next, props.workspace ?? undefined).then((r) => {
                     if (!r.ok) props.onError(r.error ?? "信任决议失败"); else props.refresh();
                   }).catch((err: unknown) => props.onError(`信任决议失败：${err instanceof Error ? err.message : String(err)}`));
                 }}

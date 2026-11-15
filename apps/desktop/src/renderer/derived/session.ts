@@ -43,7 +43,7 @@ export function popoutEventBelongsTo(
   return true;
 }
 
-/** 运行秒表读数：起点按**会话**存，读的时候只读**当前会话**那一格。
+/** 运行秒表读数：起点按**限定会话键**（工作区 + 会话 id）存，读的时候只读当前那一格。
  *
  *  旧实现是**一个** ref（谁起跑就盖谁）+ 读的时候无条件取它 ⇒ A 起跑、切 B、B 起跑、
  *  切回 A（A 还在跑）时，秒表算的是 `now − B 的起点`：A 真实跑了 3600s 会显示成 0s。
@@ -53,11 +53,11 @@ export function popoutEventBelongsTo(
  *  不必退化成源码断言。缺起点（这一格还没盖）按"现在起算"⇒ 0s，不编一个假起点。 */
 export function elapsedSecondsFor(
   startBySession: ReadonlyMap<string, number>,
-  sessionId: string | null,
+  runKey: string | null,
   now: number,
 ): number {
-  if (sessionId === null) return 0;
-  const t0 = startBySession.get(sessionId);
+  if (runKey === null) return 0;
+  const t0 = startBySession.get(runKey);
   if (t0 === undefined) return 0;
   return Math.max(0, Math.floor((now - t0) / 1000));
 }

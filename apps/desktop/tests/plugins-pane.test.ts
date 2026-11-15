@@ -22,7 +22,7 @@ describe("插件窗格", () => {
     const dock = read("PaneDock.tsx");
     const surface = read("PluginSurface.tsx");
     // 2026-10-25：单窗格改常驻挂载后，按 kind 渲染（只切可见性，不卸载内容）。
-    expect(dock).toContain("{kind === \"plugins\" && <PluginSurface />}");
+    expect(dock).toContain("{kind === \"plugins\" && <PluginSurface workspace={props.workspace ?? null} />}");
     expect(surface).toContain("window.agent.getState()");
     expect(surface).toContain("s.plugins === undefined");
     expect(surface).toContain("<PluginsPane snap={snap}");

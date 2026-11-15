@@ -14,8 +14,8 @@ import type { SessionEditContext } from "../sessions-view";
 
 /** 钩子需要的外部动作（错误条/提示条住在 App 的会话键控面上，状态簇不自己持一份）。 */
 export interface ComposerDraftsDeps {
-  setLastError: (message: string, sessionId?: string) => void;
-  setLastNotice: (message: string, sessionId?: string) => void;
+  setLastError: (message: string, sessionId?: string, workspace?: string | null) => void;
+  setLastNotice: (message: string, sessionId?: string, workspace?: string | null) => void;
 }
 
 export interface ComposerDraftsState {
@@ -30,9 +30,9 @@ export interface ComposerDraftsState {
   draftRemapSeq: React.MutableRefObject<number>;
   setDraftRemap: (v: { from: string; to: string; seq: number } | undefined) => void;
   // 发送失败回滚：Composer 提交即清空输入框，失败时把原文/附件还回去（按会话归属，切走了只存桶）。
-  draftRestore: { forSession: string | null; text: string; attachments: RunAttachmentReference[]; seq: number } | undefined;
+  draftRestore: { forSession: string | null; forWorkspace: string | null; text: string; attachments: RunAttachmentReference[]; seq: number } | undefined;
   draftRestoreSeq: React.MutableRefObject<number>;
-  setDraftRestore: (v: { forSession: string | null; text: string; attachments: RunAttachmentReference[]; seq: number } | undefined) => void;
+  setDraftRestore: (v: { forSession: string | null; forWorkspace: string | null; text: string; attachments: RunAttachmentReference[]; seq: number } | undefined) => void;
   // 有草稿的会话（2026-10-18）：启动从 localStorage 读一次，之后 Composer 防抖上报；侧栏画铅笔。
   // 键是草稿桶键（draftKeyFor：工作区引用键，首页 null 不记），不是裸会话 id。
   draftIds: Set<string>;
@@ -73,7 +73,7 @@ export function useComposerDrafts(deps: ComposerDraftsDeps): ComposerDraftsState
   const [draftRemap, setDraftRemap] = useState<{ from: string; to: string; seq: number } | undefined>(undefined);
   const draftRemapSeq = useRef(0);
   // 发送失败回滚：Composer 提交即清空输入框，失败时把原文/附件还回去（按会话归属，切走了只存桶）。
-  const [draftRestore, setDraftRestore] = useState<{ forSession: string | null; text: string; attachments: RunAttachmentReference[]; seq: number } | undefined>(undefined);
+  const [draftRestore, setDraftRestore] = useState<{ forSession: string | null; forWorkspace: string | null; text: string; attachments: RunAttachmentReference[]; seq: number } | undefined>(undefined);
   const draftRestoreSeq = useRef(0);
   // 有草稿的会话（2026-10-18）：启动从 localStorage 读一次，之后 Composer 防抖上报；侧栏画铅笔。
   const [draftIds, setDraftIds] = useState<Set<string>>(() => readDraftIds());

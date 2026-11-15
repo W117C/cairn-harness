@@ -320,7 +320,7 @@ export class PluginRuntime {
       ...(opts.sessionId ? { sessionId: opts.sessionId } : {}),
       // mcp_tool 档的钩子走这一个口子：与模型可见的工具调用共享连接态、include/exclude 裁剪、
       // 超时与取消纪律。钩子不另开一条 MCP 通道（两条通道必漂，且第二条没有闸）。
-      mcpCall: (plugin, server, tool, args) => this.mcp.callTool(plugin, server, tool, args),
+      mcpCall: (plugin, server, tool, args, signal) => this.mcp.callTool(plugin, server, tool, args, signal),
       mcpToolGrade: (plugin, server, tool) =>
         this.mcpTools.get(scopedToolName(plugin, server, tool))?.grade,
       // §9.5 userConfig 的取值面：exec form 的 ${user_config.*} 展开与 PLUGIN_OPTION_* 共用这一份解析结果。

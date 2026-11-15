@@ -85,7 +85,7 @@ describe("好配置：解析通过并派生", () => {
   it("保留名拒收：自定义家占用内置家名（deepseek 等）是判错，不是提示", () => {
     // 2026-10-25 起深求是一等内置家；同名自定义家会被 registry 的 switch 先命中内置分支、
     // 自定义配置被静默忽略——所以这道门必须在配置校验期就关上。
-    const kinds = kindsOf(mutate((f, p) => {
+    const kinds = kindsOf(mutate((_f, p) => {
       p.id = "deepseek";
     }));
     expect(kinds).toContain("provider-id");

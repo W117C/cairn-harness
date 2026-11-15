@@ -80,4 +80,12 @@ describe("弹出窗接线：归属判据走纯函数 + 读盘期间的增量要�
     expect(src).toContain("链接打开失败：{linkError}");
     expect(src).toContain('className="popout-notices"');
   });
+
+  // 第 1213 页：URL hash 里的 workspace 到了 PopoutApp 却止步于此——openSession/reportViewing 用了它，
+  // PaneDock 没拿到。后果两条：① 编排窗格的 address 需要 workspace+session，缺一个就是 null，
+  // 弹出后永远停在"先选择工作区并打开一个会话"；② 旁路面板按父会话/单例根列，弹出窗里列出的是
+  // 启动工作区的旁路，不是这个会话的。工作区必须整条链传到底，不能在壳组件里断掉。
+  it("工作区递给 PaneDock（编排窗格与旁路面板靠它寻址）", () => {
+    expect(src).toMatch(/<PaneDock[\s\S]*?workspace=\{ws\}/);
+  });
 });

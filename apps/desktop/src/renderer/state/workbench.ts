@@ -3,6 +3,7 @@ import { useConversationNavigation } from "./conversation-navigation";
 import { useEmptySurfaceEffects } from "./empty-surface";
 import { useProjectActions } from "./projects";
 import { useRunQueue } from "./run-queue";
+import { noteWorkspaceContext } from "./window-workspace";
 import { useSessionPrefsHydration } from "./session-prefs";
 import { useRunReadings } from "./run-readings";
 import { inheritedDisplayIndexes, mergeViewEvents, refsByDisplayIndex } from "../derived/event-reference";
@@ -24,7 +25,7 @@ import type { StreamActions } from "../stream-actions";
 import { traceGoal } from "../../../../../src/agent/goal-trace";
 import type { PaletteAction, SectionId } from "../app-controls";
 import { type FindBarHandle } from "../app-controls";
-import { readDismissedGoals } from "../goal-dismiss";
+import { dismissedGoalKey, readDismissedGoals, writeDismissedGoals } from "../goal-dismiss";
 import { decideLastSessionRestore,parseLastSession,serializeLastSession,type LastSessionRef } from "../last-session";
 import { changedFileCount } from "../changed-files";
 import { nextPermissionMode } from "../permission-labels";
@@ -117,12 +118,12 @@ export function useWorkbenchModel() {
   // M3-3 工作区面：注册清单＋新任务归属（null＝host 缺省，未显式切换）。
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
   const [registryNotice, setRegistryNotice] = useState<string | null>(null);
-  const [activeWorkspace, setActiveWorkspace] = useState<string | null>(null);
+  const [activeWorkspace, setActiveWorkspaceState] = useState<string | null>(null);
   // v12 导入诊断（ADR 0004 §4）：最近一次导入/克隆的目录先给三态诊断卡——只提示不阻断，
   // 卡上带项目名（诊断结论自身不带名字，防止与当前激活项目混淆）；点「知道了」才收。
   const [importDiagnosis, setImportDiagnosis] = useState<{ name: string; diagnosis: ProjectDiagnosis } | null>(null);
   // P1 侧栏诚实状态面（只取本进程可见态；会话终态不落盘，重启归零如实）：
-  //   waitingCounts：ask 的 sessionId 计数（onAsk 加、onAskDone 凭 askId 反查减）；
+  //   waitingCounts：ask 的 runKey 计数（onAsk 加、onAskDone 凭 askId 反查减）；
   //   outcomes：agent_status 终态记账（done ⇒ ok；failed ⇒ failed；cancelled ⇒ 清位不冒充完成）。
   const waitingByAsk = useRef(new Map<string, string>());
   const waitingCounts = useRef(new Map<string, number>());
@@ -153,10 +154,10 @@ export function useWorkbenchModel() {
   // M1 T3 deferred 收口（onOpen 竞态守卫）。
   const openSeq = useRef(0);
   /** 打开会话期间到达的 live 事件先落这里，读盘快照回来后再合并（见 mergeSessionSnapshot）。 */
-  const openPending = useRef<{ id: string; events: AgentEvent[] } | null>(null);
+  const openPending = useRef<{ id: string; workspace: string | null; events: AgentEvent[] } | null>(null);
   // 第 1111 页：会话键控错误/提示条拆到 state/session-notices.ts（同一套按会话 key 的读写）。
-  const { sessionErrors, setLastError, clearLastError, sessionNotices, setLastNotice, clearLastNotice } = useSessionNotices(activeIdRef);
-  const { feedback, feedbackBusy, onFeedback: handleFeedback, pinnedEventIds, pinBusy, annotationPending, onPin: handlePin } = useMessageAnnotations(activeId, setLastError);
+  const { sessionErrors, setLastError, clearLastError, sessionNotices, setLastNotice, clearLastNotice } = useSessionNotices(activeIdRef, activeWorkspaceRef);
+  const { feedback, feedbackBusy, onFeedback: handleFeedback, pinnedEventIds, pinBusy, annotationPending, onPin: handlePin } = useMessageAnnotations(activeId, activeWorkspace, setLastError);
   /** 打开用户消息附件（2026-10-18）：只接受当前工作区内的路径；外部引用一律明说打不开，
    *  不让 workspacePathAction 在 main 侧静默拒绝成一个没人看见的 no-op。 */
   // 第 1115 页：附件打开/复制回执拆到 state/message-clipboard.ts（消息级动作，不占 workbench 主体）。
@@ -331,18 +332,70 @@ export function useWorkbenchModel() {
   // 打开旧会话看改动会报「没有已知的工作区」，切项目后还可能拿上一个项目的根去解析路径。
   // 选择被拒（项目已从注册表移除等）⇒ 主进程仍停在上一个项目；留着就是跨项目读，
   // 显式清空并把原因说出来（fail closed，不静默沿用旧根）。
+  // 同一目标的上报可能在同一拍来两次（连续两次切到同一个项目）。
+  // 主进程的 select 带版本号：两次并发时前一次必定回「工作区选择已过期」——照单全收的话，
+  // 用户切一次跨项目会话就吃一条内部错误、窗口上下文还被清一遍。并成一次，且只让**最新**那次报结果。
+  const contextSeq = useRef(0);
+  const contextInflight = useRef<{ workspace: string | null; promise: Promise<{ ok: boolean; error?: string }> } | null>(null);
   const applyWorkspaceContext = useCallback((workspace: string | null): void => {
-    void window.agent.setWorkspaceContext(workspace ?? "").then((r) => {
+    // 状态与 ref 同拍：滚动记忆/迟到事件/发送目标都读 ref，不能等下一帧的 effect 才换根。
+    activeWorkspaceRef.current = workspace;
+    const inflight = contextInflight.current;
+    const same = inflight !== null && inflight.workspace === workspace ? inflight : null;
+    const promise = same !== null ? same.promise : window.agent.setWorkspaceContext(workspace ?? "");
+    if (same === null) {
+      const entry = { workspace, promise };
+      contextInflight.current = entry;
+      const clear = (): void => { if (contextInflight.current === entry) contextInflight.current = null; };
+      void promise.then(clear, clear);
+    }
+    const token = ++contextSeq.current;
+    void noteWorkspaceContext(promise).then((r) => {
       if (r.ok) return;
-      void window.agent.setWorkspaceContext("");
+      // 更晚的一次上报已经接手：过期不是用户错误，结果由接手的那个报。
+      if (token !== contextSeq.current) return;
+      void noteWorkspaceContext(window.agent.setWorkspaceContext("")).catch(() => undefined);
       toast.error(r.error ?? "工作区不可用，已清空窗口上下文");
     });
   }, []);
-  useEffect(() => { applyWorkspaceContext(activeWorkspace); }, [activeWorkspace, applyWorkspaceContext]);
+  // 切工作区必须与上报**同拍**：React 的子组件 effect 先于父组件跑（自底向上），
+  // 挂在 `activeWorkspace` effect 上的上报会晚于页面挂载期的读 ⇒ 读仍落到旧指针上
+  // （切项目后的技能/记忆/插件页第一次刷新拿到上一个项目的清单）。所以收口在一个入口里。
+  const setActiveWorkspace = useCallback((workspace: string | null): void => {
+    applyWorkspaceContext(workspace);
+    setActiveWorkspaceState(workspace);
+  }, [applyWorkspaceContext]);
   // v33：上报窗口可见会话（通知判「你不在看那个会话」；主页/无会话报 null）。
   useEffect(() => { void window.agent.reportViewing(activeId, activeWorkspace ?? ""); }, [activeId, activeWorkspace]);
   useEffect(() => {
-    knownSessionIds.current = new Set(sessions.map((s) => s.id));
+    const keys = new Set<string>();
+    for (const s of sessions) {
+      keys.add(s.id); // 旧 host 事件不带 workspace 时的兼容键
+      keys.add(runKey(s.workspace, s.id));
+    }
+    knownSessionIds.current = keys;
+  }, [sessions]);
+  // 旧版按裸会话 id 落盘的已停目标隐藏记录：只在归属唯一时迁移到「工作区 + id」键。
+  // 同名 id 还横跨多个根时宁可留着旧键（工作区已知的读取不会回退裸键），也不猜归属。
+  useEffect(() => {
+    setDismissedGoals((prev) => {
+      let changed = false;
+      const next = new Map(prev);
+      for (const [key, at] of prev) {
+        if (key.startsWith("[")) continue;
+        const owners = sessions.filter((s) => s.id === key);
+        if (owners.length !== 1) continue;
+        const workspace = owners[0]!.workspace;
+        if (workspace === "") continue;
+        const qualified = dismissedGoalKey(workspace, key);
+        if (!next.has(qualified)) next.set(qualified, at);
+        next.delete(key);
+        changed = true;
+      }
+      if (!changed) return prev;
+      writeDismissedGoals(next);
+      return next;
+    });
   }, [sessions]);
 
   useEmptySurfaceEffects({ showEmpty, activeWorkspace, setEmptyData, emptyCache, sessionsLoaded, sessionsRef, composerZoneRef, prevEmptyRect });
@@ -387,8 +440,9 @@ export function useWorkbenchModel() {
   const noteRecentRef = useCallback((path: string): void => {
     const sid = activeIdRef.current;
     if (sid === null) return;
-    const prev = recentRefsBySession.current.get(sid) ?? [];
-    recentRefsBySession.current.set(sid, [path, ...prev.filter((p) => p !== path)].slice(0, 8));
+    const key = runKey(activeWorkspaceRef.current, sid);
+    const prev = recentRefsBySession.current.get(key) ?? [];
+    recentRefsBySession.current.set(key, [path, ...prev.filter((p) => p !== path)].slice(0, 8));
     force((n) => n + 1); // Composer 经 props 消费 ⇒ 需要一次渲染把新清单递下去
   }, []);
 
@@ -404,16 +458,17 @@ export function useWorkbenchModel() {
     // 工作区上下文跟着「正在看的会话」走（2026-10-17）：从侧栏直接打开旧会话时 activeWorkspace
     // 可能仍是 null（没有选项目），此前 diff/文件窗格会因「没有已知的工作区」整块不可用。
     // 2026-10-18：**渲染层状态也要跟**——此前只通知了主进程，activeWorkspace 仍停在旧项目：
-    // 空屏项目 chip、预览、斜杠技能清单都会读错工作区。会话归属已知即以它为准。
+    // 空屏项目 chip、预览、斜杠技能清单都会读错工作区。会话归属已知即以它为准；
+    // 未知（host 缺省根里的会话）只把窗口指针归位，当前浏览的项目不动。
     if (sessionWs !== null) setActiveWorkspace(sessionWs);
-    void applyWorkspaceContext(sessionWs);
+    else applyWorkspaceContext(null);
     const seq = ++openSeq.current;
     const failures: string[] = [];
     setSessionLoadIssue(null);
     // 立刻清掉上一会话的转录/门卡数据面：此前要等 openSession 回包才整体替换，窗口内
     // B 的标题下仍挂着 A 的转录、A 的澄清/方案门与行内「重试/还原」——用户可操作且会发错会话。
     // 读盘期间到达的 B 增量进 openPending，回包时合并（不丢流式文本）。
-    const pending = { id, events: [] as AgentEvent[] };
+    const pending = { id, workspace: sessionWs, events: [] as AgentEvent[] };
     openPending.current = pending;
     setEvents([]);
     setSessionView(null);
@@ -427,8 +482,8 @@ export function useWorkbenchModel() {
       if (openPending.current === pending) openPending.current = null;
       setSessionView(r.view ?? null);
       setEvents(mergeSessionSnapshot(r.events, pending.events));
+      const runId = runKey(r.session?.workspace ?? sessionWs ?? activeWorkspace, id);
       if (typeof r.running === "boolean") {
-        const runId = runKey(r.session?.workspace ?? sessionWs ?? activeWorkspace, id);
         const was = runningSet.current.has(runId);
         if (r.running) runningSet.current.add(runId); else runningSet.current.delete(runId);
         if (was !== r.running) force((n) => n + 1);
@@ -437,8 +492,8 @@ export function useWorkbenchModel() {
       // 那个 send 属于旧实例）⇒ 用 main 报的真起点补上（2026-10-20 独立评审追出，LOW-MEDIUM：
       // 旧形状此处什么都没有 ⇒ 秒表恒读 "0s"，而 `setElapsedSec(0)` 是同值更新 ⇒ React 不重渲染
       // ⇒ 那个 0 永远冻在那儿，用户以为任务刚开始）。
-      if (r.running === true && !runStartBySession.current.has(id)) {
-        runStartBySession.current.set(id, r.startedAt ?? Date.now());
+      if (r.running === true && !runStartBySession.current.has(runId)) {
+        runStartBySession.current.set(runId, r.startedAt ?? Date.now());
       }
     }).catch((err: unknown) => {
       if (openPending.current === pending) openPending.current = null;
@@ -479,11 +534,10 @@ export function useWorkbenchModel() {
       const target = payload as { sessionId?: unknown; workspace?: unknown } | null;
       if (target === null || typeof target !== "object") return;
       if (typeof target.sessionId !== "string" || target.sessionId.trim() === "") return;
-      if (activeIdRef.current === target.sessionId) return;
-      openSessionRef.current(
-        target.sessionId,
-        typeof target.workspace === "string" ? target.workspace : undefined,
-      );
+      const targetWorkspace = typeof target.workspace === "string" ? target.workspace : undefined;
+      // 同 id 跨工作区是两场会话：只有「id 与根都对上」才算已经在看目标。
+      if (activeIdRef.current === target.sessionId && (targetWorkspace === undefined || activeWorkspaceRef.current === targetWorkspace)) return;
+      openSessionRef.current(target.sessionId, targetWorkspace);
     });
   }, []);
 
@@ -757,7 +811,7 @@ export function useWorkbenchModel() {
   );
   // 会话条标题（§2.2 会话名 13px）：取会话真实标题；索引未到时退 id（不编名字）。
   const sessionTitle = activeId === null ? "" : (findSessionByRef(sessions, activeId, activeWorkspace ?? undefined)?.title ?? activeId);
-  const { cycleView, toggleFoldRound, foldAllTurns, unfoldAllTurns, jumpToRound, jumpToEvent } = useConversationNavigation({ viewRef, hasThinking, setViewMode, setViewToast, viewToastTimer, foldedBySession, activeId, setFoldedRounds, outlineTurns, setFlashRound, streamEl, flashRound, events, activeIdRef, stick, setOutlineOpen, setOutlineCurrent, outlineOpen, streamRows, foldedRounds });
+  const { cycleView, toggleFoldRound, foldAllTurns, unfoldAllTurns, jumpToRound, jumpToEvent } = useConversationNavigation({ viewRef, hasThinking, setViewMode, setViewToast, viewToastTimer, foldedBySession, activeId, activeWorkspace, setFoldedRounds, outlineTurns, setFlashRound, streamEl, flashRound, events, activeIdRef, activeWorkspaceRef, stick, setOutlineOpen, setOutlineCurrent, outlineOpen, streamRows, foldedRounds });
 
     // 切会话 ⇒ **取消改名**（2026-10-20 独立评审追出，MEDIUM 的第二道保险）：
   // 改名输入框不该跨会话活着——切过去之后它还聚焦着、显示的还是**上一条**会话的标题，

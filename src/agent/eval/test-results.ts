@@ -257,7 +257,7 @@ function looksLikeSpec(lines: readonly string[]): boolean {
   return lines.some((l) => SPEC_TRAILER.test(l));
 }
 
-function parseNodeTestSpec(text: string, lines: readonly string[]): ParsedResults {
+function parseNodeTestSpec(lines: readonly string[]): ParsedResults {
   const tests: ParsedTest[] = [];
   const reasons: string[] = [];
   const trailer = new Map<string, number>();
@@ -412,7 +412,7 @@ function looksLikePytest(lines: readonly string[]): boolean {
     PYTEST_VERBOSE.test(l) || PYTEST_SUMMARY.test(l));
 }
 
-function parsePytest(text: string, lines: readonly string[]): ParsedResults {
+function parsePytest(lines: readonly string[]): ParsedResults {
   const reasons: string[] = [];
   /** nodeid → 这条的最终读数（同一 nodeid 在 verbose 与短汇总里各出现一次，必须并成一条）。 */
   const seen = new Map<string, ParsedTest>();
@@ -504,9 +504,9 @@ export function parseTestResults(raw: string): ParsedResults {
   const vitest = parseVitestJson(text);
   if (vitest !== null) return vitest;
   const lines = text.split("\n");
-  if (looksLikeSpec(lines)) return parseNodeTestSpec(text, lines);
+  if (looksLikeSpec(lines)) return parseNodeTestSpec(lines);
   if (looksLikeTap(lines)) return parseNodeTestTap(text, lines);
-  if (looksLikePytest(lines)) return parsePytest(text, lines);
+  if (looksLikePytest(lines)) return parsePytest(lines);
   return unknownResults([`认不出格式：既不是 vitest 的 JSON 报告，也没有 node --test 的 spec/TAP 结果行，也没有 pytest 的逐名行（开头：${snippet(text)}）`]);
 }
 

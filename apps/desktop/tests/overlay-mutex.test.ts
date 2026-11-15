@@ -18,6 +18,7 @@ import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { readRendererFile } from "./helpers/app-surface";
+import { staleEvidenceReason } from "./helpers/renderer-evidence";
 
 const composer = readRendererFile("components/Composer.tsx");
 const picker = readRendererFile("components/ModelPicker.tsx");
@@ -75,9 +76,11 @@ describe("浮层互斥 · 接线层", () => {
 describe("浮层互斥 · 真机层（取料面）", () => {
   const evidence = fileURLToPath(new URL("../outputs/overlay-mutex-752/checks.json", import.meta.url));
   const hasMeasured = existsSync(evidence);
-  const measured = (hasMeasured ? JSON.parse(readFileSync(evidence, "utf8")) : []) as {
-    name: string; ok: boolean; detail: unknown;
-  }[];
+  const measured = (hasMeasured ? JSON.parse(readFileSync(evidence, "utf8")) : { checks: [], rendererDigest: undefined, buildFresh: undefined }) as {
+    checks: { name: string; ok: boolean; detail: unknown }[];
+    rendererDigest?: string;
+    buildFresh?: boolean;
+  };
 
   it("真机脚本存在（量两个浮层是否同屏 + 几何是否重叠）", () => {
     const smoke = readFileSync(fileURLToPath(new URL("../scripts/overlay-mutex-smoke.cjs", import.meta.url)), "utf8");
@@ -85,8 +88,12 @@ describe("浮层互斥 · 真机层（取料面）", () => {
     expect(smoke).toContain("overlay-mutex-");
   });
 
+  it.skipIf(!hasMeasured)("证据盖的是当前 renderer 源与当前构建（旧读数不许冒充通过）", () => {
+    expect(staleEvidenceReason(measured)).toBeNull();
+  });
+
   it.skipIf(!hasMeasured)("真机读数：模型菜单开着点用量环 ⇒ 只有一个浮层在屏上", () => {
-    const byName = (needle: string) => measured.find((c) => c.name.includes(needle));
+    const byName = (needle: string) => measured.checks.find((c) => c.name.includes(needle));
     expect(byName("只剩一个浮层")?.ok).toBe(true);
     expect(byName("不重叠")?.ok).toBe(true);
     expect(byName("反向同样互斥")?.ok).toBe(true);

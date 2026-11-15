@@ -35,7 +35,7 @@ export interface MessageActionsDeps {
   cancelRunHealRef: React.MutableRefObject<((sid: string) => void) | null>;
   injectText: (text: string) => void;
   setEditCtx: (v: SessionEditContext | null) => void;
-  setLastError: (message: string, sessionId?: string) => void;
+  setLastError: (message: string, sessionId?: string, workspace?: string | null) => void;
   setEvents: React.Dispatch<React.SetStateAction<AgentEvent[]>>;
 }
 
@@ -64,13 +64,13 @@ export function useMessageActions(deps: MessageActionsDeps): MessageActionsState
     if (sid === null) return;
     const workspace = activeWorkspaceRef.current;
     void window.agent.forkSession(sid, round, true, workspace ?? undefined).then((r) => {
-      if (r.ok !== true || r.id === undefined) { setLastError(`分叉失败：${r.error ?? "未知原因"}`, sid); return; }
+      if (r.ok !== true || r.id === undefined) { setLastError(`分叉失败：${r.error ?? "未知原因"}`, sid, workspace); return; }
       void refreshSessions();
       if (activeIdRef.current === sid && activeWorkspaceRef.current === workspace) {
         openSession(r.id, workspace ?? undefined);
       }
     }, (err: unknown) => {
-      setLastError(`分叉失败：${err instanceof Error ? err.message : String(err)}`, sid);
+      setLastError(`分叉失败：${err instanceof Error ? err.message : String(err)}`, sid, workspace);
     });
   }, [activeIdRef, activeWorkspaceRef, refreshSessions, openSession, setLastError]);
   /** 手动压缩（2026-10-18）：斜杠 /compact、上下文菜单、命令面板三处共用这一条——
@@ -78,22 +78,25 @@ export function useMessageActions(deps: MessageActionsDeps): MessageActionsState
   const compactNow = useCallback((): void => {
     const sid = activeIdRef.current;
     if (sid === null) { toast.error(STR.composer.compactNoSession); return; }
+    const workspace = activeWorkspaceRef.current;
     const compact = window.agent.compact;
     if (compact === undefined) { toast.error(STR.composer.compactUnavailable); return; }
-    void compact(sid, activeWorkspaceRef.current ?? undefined).then((r) => {
-      if (!r.ok) { setLastError(r.error ?? "压缩失败", sid); return; }
+    void compact(sid, workspace ?? undefined).then((r) => {
+      if (!r.ok) { setLastError(r.error ?? "压缩失败", sid, workspace); return; }
       toast.success(STR.composer.compactDone);
     }, (err: unknown) => {
-      setLastError(STR.composer.compactFail.replace("{reason}", err instanceof Error ? err.message : String(err)), sid);
+      setLastError(STR.composer.compactFail.replace("{reason}", err instanceof Error ? err.message : String(err)), sid, workspace);
     });
-  }, [setLastError, toast]);
-  /** 目标动作（暂停/继续/清除）：只发 IPC；事件由主进程推回，芯片读同一份事件流自更新。 */
+  }, [activeIdRef, activeWorkspaceRef, setLastError, toast]);
+  /** 目标动作（暂停/继续/清除）：只发 IPC；事件由主进程推回，芯片读同一份事件流自更新。
+   *  带当前工作区：主进程按它定位会话日志（单例根是启动工作区，项目会话会被写错）。 */
   const goalAct = useCallback((req: { pause?: boolean; resume?: boolean; clear?: boolean }): void => {
     const sid = activeIdRef.current;
     if (sid === null) return;
-    void window.agent.setGoal({ sessionId: sid, ...req }).then((r) => {
-      if (!r.ok) setLastError(r.error ?? "目标操作失败", sid);
-    }, (err: unknown) => setLastError(err instanceof Error ? err.message : String(err), sid));
+    const ws = activeWorkspaceRef.current;
+    void window.agent.setGoal({ sessionId: sid, ...(ws !== null ? { workspace: ws } : {}), ...req }).then((r) => {
+      if (!r.ok) setLastError(r.error ?? "目标操作失败", sid, ws);
+    }, (err: unknown) => setLastError(err instanceof Error ? err.message : String(err), sid, ws));
   }, [setLastError]);
   const handleEditUser = useCallback((round: number, text: string): void => {
     const sid = activeIdRef.current;
@@ -114,15 +117,15 @@ export function useMessageActions(deps: MessageActionsDeps): MessageActionsState
       void window.agent.createSession(workspace ?? undefined).then((r) => {
         inject(r.id, r.workspace ?? workspace);
       }, (err: unknown) => {
-        setLastError(`编辑失败：${err instanceof Error ? err.message : String(err)}`, sid);
+        setLastError(`编辑失败：${err instanceof Error ? err.message : String(err)}`, sid, workspace);
       });
       return;
     }
     void window.agent.forkSession(sid, round - 1, true, workspace ?? undefined).then((r) => {
-      if (r.ok !== true || r.id === undefined) { setLastError(`编辑失败：${r.error ?? "未知原因"}`, sid); return; }
+      if (r.ok !== true || r.id === undefined) { setLastError(`编辑失败：${r.error ?? "未知原因"}`, sid, workspace); return; }
       inject(r.id);
     }, (err: unknown) => {
-      setLastError(`编辑失败：${err instanceof Error ? err.message : String(err)}`, sid);
+      setLastError(`编辑失败：${err instanceof Error ? err.message : String(err)}`, sid, workspace);
     });
   }, [refreshSessions, openSession, injectText, setLastError, sessions, cancelRunHealRef]);
   /** P3-2 检查器「撤销此文件改动」：snapshotRestore（v11 通道，渲染层首个消费者）。

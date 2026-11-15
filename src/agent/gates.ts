@@ -14,7 +14,6 @@ function waitWith<T>(
   pending: Map<string, (v: T) => void>,
   callId: string,
   opts: GateWaitOptions,
-  label: string,
   onAbortReject: () => Error,
   onTimeoutReject: (ms: number) => Error,
 ): Promise<T> {
@@ -60,7 +59,6 @@ export class ClarifyGate {
       this.pending,
       callId,
       opts,
-      "clarify",
       () => new ToolError("clarify 等待随会话中止而取消（fail-closed）"),
       (ms) => new ToolError(`clarify 等待超时（${String(ms)}ms，fail-closed）`),
     );
@@ -96,7 +94,6 @@ export class PlanGate {
       this.pending,
       callId,
       opts,
-      "propose_plan",
       () => new ToolError("propose_plan 等待随会话中止而取消（fail-closed）"),
       (ms) => new ToolError(`propose_plan 等待超时（${String(ms)}ms，fail-closed）`),
     );

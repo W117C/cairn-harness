@@ -9,7 +9,7 @@ import type { GoalTrace } from "../../../../../src/agent/goal-trace";
 import type { ClarifyQuestion,PlanProposal } from "../../../../../src/events";
 import type { DeliveryTrailItem,RunPhase,StreamRow,UsageSummary } from "../projections";
 import type { ThinkingEffort } from "../../../../../src/providers/capabilities";
-import type { ComposerLockReason } from "../send-queue";
+import type { ComposerLockReason,SendDisposition } from "../send-queue";
 import type { StickyScroll } from "../useStickyScroll";
 import { renderAppToolbar } from "./AppToolbar";
 // WorkbenchView: extracted without changing event or callback behavior.
@@ -87,7 +87,7 @@ export interface WorkbenchViewDeps {
   barRenaming: { id: string; text: string; } | null;
   setBarRenaming: Dispatch<SetStateAction<{ id: string; text: string; } | null>>;
   sessions: WorkspaceSession[];
-  renameSessionById: (id: string, name: string) => Promise<void>;
+  renameSessionById: (id: string, name: string, workspace?: string) => Promise<void>;
   sessionTitle: string;
   goalTrace: GoalTrace | null;
   dismissedGoals: Map<string, number>;
@@ -127,7 +127,8 @@ export interface WorkbenchViewDeps {
   retrySessions: () => void;
   providerOk: boolean | null;
   openSession: (id: string, workspace?: string | undefined) => void;
-  setActiveWorkspace: Dispatch<SetStateAction<string | null>>;
+  /** 收口在 workbench 的切换入口：它同时把状态与窗口工作区上报发出去（只收值，不收 updater）。 */
+  setActiveWorkspace: (workspace: string | null) => void;
   activeWorkspaceRef: MutableRefObject<string | null>;
   touchWorkspace: (path: string | null) => void;
   handleAddProject: (path: string) => Promise<void>;
@@ -173,7 +174,7 @@ export interface WorkbenchViewDeps {
   chipRecent: ProjectRecord[] | null;
   chipList: ProjectRecord[];
   closeChip: () => void;
-  setLastError: (message: string, sessionId?: string | undefined) => void;
+  setLastError: (message: string, sessionId?: string | undefined, workspace?: string | null) => void;
   setStreamEl: Dispatch<SetStateAction<HTMLDivElement | null>>;
   stick: StickyScroll;
   streamRows: StreamRow[];
@@ -198,7 +199,7 @@ export interface WorkbenchViewDeps {
   foldAllTurns: () => void;
   askForActive: AskPayload | null;
   setMode: Dispatch<SetStateAction<PermissionMode>>;
-  setLastNotice: (message: string, sessionId?: string | undefined) => void;
+  setLastNotice: (message: string, sessionId?: string | undefined, workspace?: string | null) => void;
   pendingClarify: { callId: string; questions: ClarifyQuestion[]; } | null;
   pendingPlan: { callId: string; plan: PlanProposal; } | null;
   composerZoneRef: MutableRefObject<HTMLDivElement | null>;
@@ -239,9 +240,10 @@ export interface WorkbenchViewDeps {
   injectedText: string | undefined;
   injectedTextSeq: number;
   draftRemap: { from: string; to: string; seq: number; } | undefined;
-  draftRestore: { forSession: string | null; text: string; attachments: RunAttachmentReference[]; seq: number; } | undefined;
-  /** 第三参 `forceQueue`（第 9 点）：只入队、不插话（「加入队列」钮专用）。 */
-  sendWithGoal: (text: string, attachments: RunAttachmentReference[], forceQueue?: boolean) => void;
+  draftRestore: { forSession: string | null; forWorkspace: string | null; text: string; attachments: RunAttachmentReference[]; seq: number; } | undefined;
+  /** 第三参 `forceQueue`（第 9 点）：只入队、不插话（「加入队列」钮专用）。
+   *  返回值只给 ⌘↩ 判打断时点：`/goal` 要先落目标再入队（Promise），普通消息同步入队（undefined）。 */
+  sendWithGoal: (text: string, attachments: RunAttachmentReference[], forceQueue?: boolean, front?: boolean) => void | Promise<SendDisposition>;
   configuredProviders: Set<string> | undefined;
   thinkingBySession: MutableRefObject<Map<string, string>>;
   /** 空屏上选的思考档（下一条新会话起点）；activeId 为 null 时 Composer 显示它。 */
@@ -270,7 +272,7 @@ export interface WorkbenchViewDeps {
   handlePickResult: (r: { selector: string; snippet: string; url: string; }) => void;
   preview: PreviewSnapshot | null;
   closePane: (kind: PaneKind) => void;
-  send: (text: string, attachments?: RunAttachmentReference[]) => Promise<void>;
+  send: (text: string, attachments?: RunAttachmentReference[]) => Promise<SendDisposition>;
   setPaneTabs: Dispatch<SetStateAction<PaneKind[]>>;
   pluginSidebarWidth: number;
   setPluginSidebarWidthPersist: (width: number) => void;
@@ -287,7 +289,7 @@ export interface WorkbenchViewDeps {
   doRemoveProject: (p: ProjectRecord) => Promise<void>;
   archiveConfirm: SessionConfirmTarget | null;
   setArchiveConfirm: Dispatch<SetStateAction<SessionConfirmTarget | null>>;
-  doArchiveSession: (id: string, archived: boolean) => Promise<void>;
+  doArchiveSession: (id: string, archived: boolean, workspace?: string) => Promise<void>;
   deleteConfirm: DeleteConfirmTarget | null;
   setDeleteConfirm: Dispatch<SetStateAction<DeleteConfirmTarget | null>>;
   doDeleteSession: (id: string, target?: WorkspaceSession) => Promise<void>;
@@ -397,7 +399,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
   // 侧栏 brandline 与工具栏品牌补位共用这一条判据（2026-11-07 第 1041 页）：两处各写
   // 一遍布尔式，任何一处漏改就会同屏两枚品牌标或一枚都没有。
   const chatSidebarVisible = destination === "chat" && !sidebarCollapsed && !focusMode;
-  const { toolbarContext, toolbarCenter, toolbarAside, toolbarRight } = renderAppToolbar({ settingsOpen: settingsOpen || destination !== "chat", sidebarBrandVisible: chatSidebarVisible, activeId, activeWorkspace, activeProjectLabel, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, onOpenPane: openToolbarPane, inspectorOpen: !inspectorCollapsed, onToggleInspector: toggleInspector, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode, demo: providerInfo?.kind === "demo", onOpenProviderSettings: () => { setSettingsSection("provider"); setSettingsOpen(true); }, running: runningActive, phaseLabel, elapsedSec, runSteps, todos: workTodos });
+  const { toolbarContext, toolbarCenter, toolbarAside, toolbarRight } = renderAppToolbar({ settingsOpen: settingsOpen || destination !== "chat", sidebarBrandVisible: chatSidebarVisible, activeId, activeWorkspace, activeProjectLabel, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, activeWorkspaceRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, onOpenPane: openToolbarPane, inspectorOpen: !inspectorCollapsed, onToggleInspector: toggleInspector, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode, demo: providerInfo?.kind === "demo", onOpenProviderSettings: () => { setSettingsSection("provider"); setSettingsOpen(true); }, running: runningActive, phaseLabel, elapsedSec, runSteps, todos: workTodos });
 
     return (
     <div className="app" data-sidebar={sidebarCollapsed ? "collapsed" : "expanded"}>
@@ -603,7 +605,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                       // 不能跨会话复用——真机 A 展开 read_file 后切 B，B 的第一条工具行也展开；
                       // 只给行 key 加前缀会让 React 留下旧行（实测 31→57 并出现重复 event id），
                       // 重挂 Stream 本体是可靠边界（.stream 滚动容器与 sticky 观察对象都不动）。
-                      key={activeId ?? "home"}
+                      key={activeId === null ? "home" : runKey(activeWorkspace, activeId)}
                       rows={streamRows}
                       refs={rowRefs}
                       inherited={inheritedSeqs}
@@ -622,7 +624,8 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                     const lastIdx = deliveryTrailItems.length - 1;
                     const tailItems = lastIdx >= 0 ? deliveryTrailItems.slice(lastIdx) : [];
                     const olderItems = lastIdx >= 0 ? deliveryTrailItems.slice(0, lastIdx) : [];
-                    const showEarlier = activeId !== null && deliveryExpandedFor === activeId;
+                    const deliveryKey = activeId === null ? null : runKey(activeWorkspace, activeId);
+                    const showEarlier = deliveryKey !== null && deliveryExpandedFor === deliveryKey;
                     const renderItem = (item: (typeof deliveryTrailItems)[number]): React.ReactNode => (
                       <ChangeSummaryCard
                         key={`d${String(item.delivery.round)}`}
@@ -643,7 +646,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                             type="button"
                             className="delivery-earlier"
                             aria-expanded={showEarlier}
-                            onClick={() => { setDeliveryExpandedFor(showEarlier ? null : activeId); }}
+                            onClick={() => { setDeliveryExpandedFor(showEarlier ? null : deliveryKey); }}
                           >
                             {showEarlier
                               ? "收起早期交付"
@@ -756,7 +759,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                       // 另起一条直写 localStorage 的路会被它的内存桶盖回去（等于没搬）。
                       setDraftRemap({ from: ctx.forkId, to: ctx.originId, seq: ++draftRemapSeq.current });
                       void window.agent.deleteSession(ctx.forkId, ctx.workspace ?? undefined).then(() => { void refreshSessions(); }, (err: unknown) => {
-                        setLastError(`空分支清理失败：${err instanceof Error ? err.message : String(err)}`, ctx.originId);
+                        setLastError(`空分支清理失败：${err instanceof Error ? err.message : String(err)}`, ctx.originId, ctx.workspace);
                       });
                     }
                   }}
@@ -794,7 +797,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
               runSteps={runSteps}
               {...(chosenCtx !== undefined ? { ctxWindow: chosenCtx } : {})}
               workspacePath={activeWorkspace}
-              recentRefs={activeId !== null ? recentRefsBySession.current.get(activeId) ?? [] : []}
+              recentRefs={activeId !== null ? recentRefsBySession.current.get(runKey(activeWorkspace, activeId)) ?? [] : []}
               onReferenceAdded={noteRecentRef}
               promptHistory={promptHistory}
               onDraftPresence={noteDraft}
@@ -802,7 +805,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
               injectedTextSeq={injectedTextSeq}
               draftRemap={draftRemap}
               {...(draftRestore !== undefined ? { restoreDraft: draftRestore } : {})}
-              onSend={(t, attachments, forceQueue) => { sendWithGoal(t, attachments, forceQueue ?? false); }}
+              onSend={(t, attachments, forceQueue, front) => sendWithGoal(t, attachments, forceQueue ?? false, front ?? false)}
               onCancel={() => { if (activeId !== null) cancelRunHeal(activeId); }}
               onPickDirectory={() => window.agent.pickDirectory()}
               onPickFiles={() => window.agent.pickFiles()}
@@ -909,7 +912,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
           </Panel>
         </Group>
         </DestinationWorkspace>
-        {destination === "chat" && pluginSidebarOpen && <PluginSidebar width={pluginSidebarWidth} onWidth={setPluginSidebarWidthPersist} onClose={closePluginSidebar} onInvoke={fillPluginCommand} />}
+        {destination === "chat" && pluginSidebarOpen && <PluginSidebar width={pluginSidebarWidth} onWidth={setPluginSidebarWidthPersist} onClose={closePluginSidebar} onInvoke={fillPluginCommand} workspace={activeWorkspace} />}
       </div>
       {/* 视图三档 toast（§3.4）：Ctrl+O 切换时一闪即走 */}
       {viewToast !== null && (

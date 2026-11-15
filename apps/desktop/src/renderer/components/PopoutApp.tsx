@@ -69,6 +69,9 @@ export function PopoutApp(props: { kind: PaneKind; sessionId: string | null; wor
         tabs={[props.kind]}
         events={events}
         sessionId={props.sessionId}
+        // 工作区必须跟着下来：编排窗格只用 workspace+session 寻址（缺一个就 address=null，
+        // 永远停在"先选择工作区"），旁路面板缺它则回落启动工作区的单例根。
+        workspace={ws}
         onClose={() => { window.close(); }}
         inPopout
       />

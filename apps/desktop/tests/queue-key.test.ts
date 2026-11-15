@@ -18,6 +18,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { runKey, sessionKeyOf } from "../src/renderer/state/session-identity";
 import { appSurfaceFiles, readRendererFile } from "./helpers/app-surface";
+import { staleEvidenceReason } from "./helpers/renderer-evidence";
 
 /** 找出所有「按裸 id 读队列表」的调用点。 */
 function bareIdQueueReads(): { file: string; line: number; text: string }[] {
@@ -74,7 +75,8 @@ describe("发送队列键一致性 · 接线层", () => {
     expect(strip).toContain("sendQueue.current.get(runKey(activeWorkspace, ctx.forkId))");
     expect(strip).not.toContain("sendQueue.current.get(sid)");
     // 订阅：沉淀跳过守卫（同样按限定键读，否则那条守卫永远不触发）
-    expect(sub).toContain("sendQueue.current.get(runKey(");
+    expect(sub).toContain("const askKey = sid === \"\" ? \"\" : runKey(askWorkspace, sid);");
+    expect(sub).toContain("sendQueue.current.get(askKey)");
     expect(sub).not.toContain("sendQueue.current.get(sid)");
   });
 });
@@ -82,9 +84,11 @@ describe("发送队列键一致性 · 接线层", () => {
 describe("发送队列键一致性 · 真机层（取料面）", () => {
   const evidence = fileURLToPath(new URL("../outputs/queue-key-750/checks.json", import.meta.url));
   const hasMeasured = existsSync(evidence);
-  const measured = (hasMeasured ? JSON.parse(readFileSync(evidence, "utf8")) : []) as {
-    name: string; ok: boolean; detail: unknown;
-  }[];
+  const measured = (hasMeasured ? JSON.parse(readFileSync(evidence, "utf8")) : { checks: [], rendererDigest: undefined, buildFresh: undefined }) as {
+    checks: { name: string; ok: boolean; detail: unknown }[];
+    rendererDigest?: string;
+    buildFresh?: boolean;
+  };
 
   it("真机脚本存在（跑队列的两条交互路径）", () => {
     const smoke = readFileSync(fileURLToPath(new URL("../scripts/queue-key-smoke.cjs", import.meta.url)), "utf8");
@@ -94,8 +98,12 @@ describe("发送队列键一致性 · 真机层（取料面）", () => {
   });
 
   // 取料缺席时 skip 并明说「跳过 ≠ 通过」（与 cds-parity 判卷同一口径）。
+  it.skipIf(!hasMeasured)("证据盖的是当前 renderer 源与当前构建（旧读数不许冒充通过）", () => {
+    expect(staleEvidenceReason(measured)).toBeNull();
+  });
+
   it.skipIf(!hasMeasured)("真机读数：队列不被清空、被选中的那条真的被派出去", () => {
-    const byName = (needle: string) => measured.find((c) => c.name.includes(needle));
+    const byName = (needle: string) => measured.checks.find((c) => c.name.includes(needle));
     expect(byName("第二条进入队列")?.ok).toBe(true);
     expect(byName("移出队列只删这一条")?.ok).toBe(true);
     expect(byName("两条排队在场")?.ok).toBe(true);

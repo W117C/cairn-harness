@@ -240,7 +240,7 @@ describe("返修那一格（verifyRecovery）：六态分开印，闸补的绿�
     ];
     const got = cases.map(([, b]) => verifyRecovery(b));
     expect(new Set(got).size, got.join(",")).toBe(6);
-    cases.forEach(([want, b], i) => expect(verifyRecovery(b)).toBe(want));
+    cases.forEach(([want, b]) => expect(verifyRecovery(b)).toBe(want));
   });
 
   it("每一态的措辞互不相同且都不空（读数行与失败原因共用这一份，抄成同一句就等于没分态）", () => {

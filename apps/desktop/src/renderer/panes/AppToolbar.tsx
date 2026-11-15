@@ -7,7 +7,7 @@ import { GoalChip } from "../components/GoalChip";
 import { CairnMark } from "../components/CairnMark";
 import { WorkbenchTools } from "../components/WorkbenchTools";
 import { type PaneKind } from "../components/panes";
-import { writeDismissedGoals } from "../goal-dismiss";
+import { dismissedGoalAt, dismissedGoalKey, writeDismissedGoals } from "../goal-dismiss";
 import { WorkStatusPill } from "../components/WorkStatusPanel";
 import type { TodoProjection } from "../derived/todo";
 import type { WorkspaceSession } from "../sessions-view";
@@ -22,12 +22,13 @@ interface AppToolbarProps {
   barRenaming: { id: string; text: string; } | null;
   setBarRenaming: Dispatch<SetStateAction<{ id: string; text: string; } | null>>;
   sessions: WorkspaceSession[];
-  renameSessionById: (id: string, name: string) => Promise<void>;
+  renameSessionById: (id: string, name: string, workspace?: string) => Promise<void>;
   sessionTitle: string;
   goalTrace: GoalTrace | null;
   dismissedGoals: Map<string, number>;
   goalAct: (req: { pause?: boolean | undefined; resume?: boolean | undefined; clear?: boolean | undefined; }) => void;
   activeIdRef: MutableRefObject<string | null>;
+  activeWorkspaceRef: MutableRefObject<string | null>;
   setDismissedGoals: Dispatch<SetStateAction<Map<string, number>>>;
   outlineTurns: { round: number; text: string; }[];
   outlineOpen: boolean;
@@ -55,7 +56,7 @@ interface AppToolbarProps {
 }
 
 export function renderAppToolbar(deps: AppToolbarProps) {
-  const { settingsOpen, activeId, activeWorkspace, activeProjectLabel, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, onOpenPane, inspectorOpen, onToggleInspector, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode, sidebarBrandVisible, demo, onOpenProviderSettings } = deps;
+  const { settingsOpen, activeId, activeWorkspace, activeProjectLabel, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, activeWorkspaceRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, onOpenPane, inspectorOpen, onToggleInspector, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode, sidebarBrandVisible, demo, onOpenProviderSettings } = deps;
   // 第 1156 页：重命名提交/失焦共用同一原始标题，别在两次事件里各 find 一遍会话表。
   const renameOriginalTitle = barRenaming === null ? "" : sessions.find((s) => s.id === barRenaming.id)?.title ?? "";
   const toolbarContext = !settingsOpen && activeId !== null && activeWorkspace !== null && activeProjectLabel !== null ? (
@@ -117,7 +118,7 @@ export function renderAppToolbar(deps: AppToolbarProps) {
 
   // 统一工具栏 · 目标芯片（批 129）：单独占「标题右侧的翼」，
   // 不与标题同槽 ⇒ 芯片的宽度不会把标题挤偏（标题恒对中栏居中）。
-  const toolbarAside = goalTrace !== null && (goalTrace.stopped === null || dismissedGoals.get(activeId ?? "") !== goalTrace.at) ? (
+  const toolbarAside = goalTrace !== null && (goalTrace.stopped === null || dismissedGoalAt(dismissedGoals, activeWorkspace, activeId) !== goalTrace.at) ? (
     <GoalChip
       trace={goalTrace}
       onPause={() => { goalAct({ pause: true }); }}
@@ -126,8 +127,9 @@ export function renderAppToolbar(deps: AppToolbarProps) {
       onDismiss={() => {
         const sid = activeIdRef.current;
         if (sid === null) return;
+        const ws = activeWorkspaceRef.current;
         setDismissedGoals((prev) => {
-          const next = new Map(prev).set(sid, goalTrace.at);
+          const next = new Map(prev).set(dismissedGoalKey(ws, sid), goalTrace.at);
           writeDismissedGoals(next);
           return next;
         });

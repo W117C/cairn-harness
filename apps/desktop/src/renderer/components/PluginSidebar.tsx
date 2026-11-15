@@ -5,7 +5,7 @@ import { X } from "lucide-react";
 import { STR } from "../strings";
 import { PluginSurface } from "./PluginSurface";
 
-export function PluginSidebar(props: { width: number; onWidth: (width: number) => void; onClose: () => void; onInvoke: (invoke: string) => void }): React.JSX.Element {
+export function PluginSidebar(props: { width: number; onWidth: (width: number) => void; onClose: () => void; onInvoke: (invoke: string) => void; workspace?: string | null }): React.JSX.Element {
   const closeRef = useRef<HTMLButtonElement>(null);
   const rootRef = useRef<HTMLElement>(null);
   const dragRef = useRef<{ x: number; width: number } | null>(null);
@@ -69,7 +69,7 @@ export function PluginSidebar(props: { width: number; onWidth: (width: number) =
           <X size={14} />
         </button>
       </div>
-      <div className="mod-sidebar-body"><PluginSurface className="mod-plugin-surface" onInvoke={props.onInvoke} /></div>
+      <div className="mod-sidebar-body"><PluginSurface className="mod-plugin-surface" workspace={props.workspace ?? null} onInvoke={props.onInvoke} /></div>
     </aside>
   );
 }

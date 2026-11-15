@@ -239,7 +239,7 @@ describe("replay() 保持哑：逐字、控制记录原样", () => {
     );
     const events = await replay(p);
     expect(events).toHaveLength(3);
-    expect(events.map((e, i) => i + 1)).toEqual([1, 2, 3]);
+    expect(events.map((_e, i) => i + 1)).toEqual([1, 2, 3]);
     // 回退到第 1 条 ⇒ 有效历史只剩第 1 条（第 2 条是控制记录本身，第 3 条被丢弃）。
     expect(effectiveEvents(events)).toHaveLength(1);
   });

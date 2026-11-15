@@ -42,17 +42,17 @@ describe("运行秒表接线：起点按会话存，不用单个 ref", () => {
 
   it("起点存在**按会话**的表里（与 runGen 同一形状）", () => {
     expect(app).toContain("const runStartBySession = useRef(new Map<string, number>());");
-    expect(app).toContain("runStartBySession.current.set(sid, Date.now());");
+    expect(app).toContain("runStartBySession.current.set(key, Date.now());");
     // 反面对照：单个 ref 那种形状不许回来
     expect(app).not.toContain("runStartRef");
   });
 
-  it("秒表读数走 elapsedSecondsFor（当前会话那一格），依赖里带 activeId（切会话要重算）", () => {
-    expect(app).toContain("elapsedSecondsFor(runStartBySession.current, activeId, Date.now())");
-    expect(app).toContain("}, [runningActive, activeId]);");
+  it("秒表读数走 elapsedSecondsFor（当前限定会话键那一格），依赖带 activeKey（切会话/工作区要重算）", () => {
+    expect(app).toContain("elapsedSecondsFor(runStartBySession.current, activeKey, Date.now())");
+    expect(app).toContain("}, [runningActive, activeKey]);");
   });
 
   it("这一轮收掉时起点跟着收（收之前判代际：新 run 已起跑时不许删它的起点）", () => {
-    expect(app).toContain("if ((runGen.current.get(sid) ?? 0) === myGen) runStartBySession.current.delete(sid);");
+    expect(app).toContain("if ((runGen.current.get(key) ?? 0) === myGen) runStartBySession.current.delete(key);");
   });
 });

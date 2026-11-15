@@ -17,6 +17,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { isCompositionEnter } from "../src/renderer/ime";
 import { appSurfaceFiles, readRendererFile } from "./helpers/app-surface";
+import { staleEvidenceReason } from "./helpers/renderer-evidence";
 
 const composer = readRendererFile("components/Composer.tsx");
 const smoke = readFileSync(fileURLToPath(new URL("../scripts/ime-guard-smoke.cjs", import.meta.url)), "utf8");
@@ -116,9 +117,11 @@ describe("IME 组字守卫 · 真机层（取料面）", () => {
   const outDir = fileURLToPath(new URL("../outputs/ime-guard-749", import.meta.url));
   const evidence = `${outDir}/checks.json`;
   const hasMeasured = existsSync(evidence);
-  const measured = (hasMeasured ? JSON.parse(readFileSync(evidence, "utf8")) : []) as {
-    name: string; ok: boolean; detail: unknown;
-  }[];
+  const measured = (hasMeasured ? JSON.parse(readFileSync(evidence, "utf8")) : { checks: [], rendererDigest: undefined, buildFresh: undefined }) as {
+    checks: { name: string; ok: boolean; detail: unknown }[];
+    rendererDigest?: string;
+    buildFresh?: boolean;
+  };
 
   it("真机脚本存在且断言了「组字期间 Enter 不改写输入框」", () => {
     expect(smoke).toContain("compositionstart");
@@ -126,17 +129,21 @@ describe("IME 组字守卫 · 真机层（取料面）", () => {
     expect(smoke).toContain("ime-guard-");
   });
 
+  it.skipIf(!hasMeasured)("证据盖的是当前 renderer 源与当前构建（旧读数不许冒充通过）", () => {
+    expect(staleEvidenceReason(measured)).toBeNull();
+  });
+
   // 真机读数是**实测产物**（真实 renderer + 真实 dist）。缺席时按本仓既有约定
   // （cds-parity 判卷的 `it.skipIf(!hasMeasured)`）skip 并明说「跳过 ≠ 通过」——
   // 缺证据是「没验」，不是「验过没过」。
   it.skipIf(!hasMeasured)("真机读数在场：组字回车后输入框原文不变、菜单未被吃掉", () => {
-    const guard = measured.find((c) => c.name.includes("组字"));
+    const guard = measured.checks.find((c) => c.name.includes("组字"));
     expect(guard).toBeDefined();
     expect(guard?.ok).toBe(true);
   });
 
   it.skipIf(!hasMeasured)("真机读数里两条对照都在：组字被挡、非组字仍走菜单", () => {
-    const byName = (needle: string) => measured.find((c) => c.name.includes(needle));
+    const byName = (needle: string) => measured.checks.find((c) => c.name.includes(needle));
     expect(byName("不被斜杠菜单吃掉")?.ok).toBe(true);
     expect(byName("不发消息")?.ok).toBe(true);
     expect(byName("守卫只挡组字那一次")?.ok).toBe(true);
@@ -145,7 +152,7 @@ describe("IME 组字守卫 · 真机层（取料面）", () => {
   it.skipIf(!hasMeasured)("候选确认顺序（compositionend 先于 keydown）也不发送半成品拼音", () => {
     // 这一条是「只维护 composition 引用」那个口径的漏网处：Chromium 的「回车确认候选词」
     // 是 compositionend **先于** keydown ⇒ 引用已复位 ⇒ 只看引用会漏挡 ⇒ 半成品拼音被发出去。
-    const byName = (needle: string) => measured.find((c) => c.name.includes(needle));
+    const byName = (needle: string) => measured.checks.find((c) => c.name.includes(needle));
     expect(byName("候选确认顺序")?.ok).toBe(true);
   });
 });

@@ -222,7 +222,7 @@ describe("#96 写向悬挂：卡在哪一格", () => {
     const gate = new AskGate({
       timeoutMs: 1_000,
       notify: (req) => { delivered.push(String(req.tool)); },
-      notifyOutcome: (askId, outcome, reason) => { outcomes.push(outcome + "/" + reason); },
+      notifyOutcome: (_askId, outcome, reason) => { outcomes.push(outcome + "/" + reason); },
       hasAnswerer: () => false,
     });
     const t0 = Date.now();

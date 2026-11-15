@@ -12,7 +12,7 @@ const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, im
 describe("技能信任接线", () => {
   it("设置页开关传 name（不是 invoke）", () => {
     const pane = readAppPageSurface();
-    expect(pane).toContain("window.agent.pluginDecide(selected.name, next)");
+    expect(pane).toContain("window.agent.pluginDecide(selected.name, next, props.workspace ?? undefined)");
     expect(pane).not.toContain("pluginDecide(selected.invoke");
   });
 
@@ -35,7 +35,7 @@ describe("技能信任接线", () => {
 
   it("技能抽屉按名字读正文，不再摆「待接」", () => {
     const pane = read("../src/renderer/components/SkillsPane.tsx");
-    expect(pane).toContain("window.agent.skillBody(selectedName)");
+    expect(pane).toContain("window.agent.skillBody(selectedName, props.workspace ?? undefined)");
     expect(pane).toContain('className="skill-body"');
     expect(pane).not.toContain("快照不含正文");
     expect(read("../src/renderer/styles.css")).toMatch(/\.skill-body\s*{/);
@@ -45,7 +45,7 @@ describe("技能信任接线", () => {
 
   it("插件技能行可读正文（按 /plugin:skill 拉，展开/收起）", () => {
     const pane = read("../src/renderer/components/PluginsPane.tsx");
-    expect(pane).toContain("window.agent.skillBody(invoke)");
+    expect(pane).toContain("window.agent.skillBody(invoke, props.workspace ?? undefined)");
     expect(pane).toContain('className="plugin-skill"');
     expect(pane).toContain("读正文");
     expect(read("../src/renderer/styles.css")).toMatch(/\.plugin-skill \.skill-body/);

@@ -1024,7 +1024,7 @@ interface LspToolArgs {
   symbol?: unknown;
 }
 
-function requirePos(v: unknown, label: string, fallback: number): number {
+function requirePos(v: unknown, fallback: number): number {
   if (typeof v === "number" && Number.isInteger(v) && v >= 1) return v;
   return fallback;
 }
@@ -1413,8 +1413,8 @@ export const lsp: Tool = {
     const client = await getLspClient(ctx.workspace, cfg, serverId);
     requireProvider(client, serverId, queryOp);
     await client.openFile(abs);
-    const line = requirePos(args.line, "line", 1);
-    const column = requirePos(args.column, "column", 1);
+    const line = requirePos(args.line, 1);
+    const column = requirePos(args.column, 1);
     const position = { line: line - 1, character: column - 1 };
     const textDocument = { uri: pathToFileURL(abs).href };
 

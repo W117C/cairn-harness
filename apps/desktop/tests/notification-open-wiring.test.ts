@@ -10,9 +10,9 @@ import { readRendererFile } from "./helpers/app-surface";
 
 const repo = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 
-it("推送通道与协议版本：v21 增 onNotificationOpen，当前 v51（… / v47 撤销全局经验 / v48 全局冻结开关 / v49 恢复全局经验）", () => {
+it("推送通道与协议版本：v21 增 onNotificationOpen，当前 v58", () => {
   expect(PUSH_CHANNELS.onNotificationOpen).toBe("agent:notification-open");
-  expect(IPC_PROTOCOL_VERSION).toBe(54);
+  expect(IPC_PROTOCOL_VERSION).toBe(58);
   const protocol = repo("../../../src/main/ipc-protocol.ts");
   expect(protocol).toContain("export interface RunNotificationPayload");
   expect(protocol).toContain("onNotificationOpen(cb: (p: RunNotificationPayload) => void)");
@@ -57,7 +57,7 @@ it("preload / renderer：薄转发 + 校验载荷 + 同会话不重载 + workspa
   const workbench = readRendererFile("state/workbench.ts");
   expect(workbench).toContain("window.agent.onNotificationOpen");
   expect(workbench).toContain("typeof target.sessionId !== \"string\"");
-  expect(workbench).toContain("activeIdRef.current === target.sessionId");
+  expect(workbench).toContain("activeIdRef.current === target.sessionId && (targetWorkspace === undefined || activeWorkspaceRef.current === targetWorkspace)");
   expect(workbench).toContain("typeof target.workspace === \"string\"");
   expect(workbench).toContain("openSessionRef.current(");
 });

@@ -13,6 +13,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { rendererDigest } from "./helpers/renderer-evidence";
 
 const officialPath = fileURLToPath(new URL("../src/renderer/vendor/cds-official/tokens.css", import.meta.url));
 const upstreamPath = fileURLToPath(new URL("../src/renderer/vendor/cds-official/UPSTREAM.json", import.meta.url));
@@ -33,9 +34,14 @@ const hasMeasured = existsSync(measuredPath);
 const measured = (hasMeasured ? JSON.parse(readFileSync(measuredPath, "utf8")) : {}) as {
   appRendered?: boolean;
   officialSheetLoaded: boolean;
+  rendererDigest?: string;
+  buildFresh?: boolean;
   light: { tokens: Record<string, string>; paint?: Record<string, string | null> };
   dark: { tokens: Record<string, string>; paint?: Record<string, string | null> };
 };
+
+// 摘要规格住在 tests/helpers/renderer-evidence.ts（与 scripts/lib/renderer-evidence.cjs
+// 同一份）：四个真机判卷共用一处复算，漂移会以「证据过期」红出来，不会静默放绿。
 
 const official = readFileSync(officialPath, "utf8");
 const adapter = readFileSync(adapterPath, "utf8");
@@ -237,9 +243,20 @@ describe("画出来的颜色 = 官方档位（2026-10-28 补：令牌对但元�
     expect(hex(m.light.paint?.composerCard as string)).toBe("#ffffff");
   });
 
-  it.skipIf(!hasMeasured)("暗色：页面 gray-850 / 侧栏 gray-870 / 卡片 gray-830（页面与侧栏对真机实测）", () => {
+  it.skipIf(!hasMeasured)("暗色：页面 gray-850 / 侧栏 gray-870 / 输入卡 surface-card（第 1053 页业主裁，真机实测）", () => {
     expect(hex(m.dark.paint?.body as string)).toBe("#151515");
     expect(hex(m.dark.paint?.sidebar as string)).toBe("#111111");
-    expect(hex(m.dark.paint?.composerCard as string)).toBe("#1a1a19");
+    // 第 1053 页业主裁「A 轻度」：输入卡从 gray-830(#1a1a19) 提到 hsl(60 2.4% 18.4%)。
+    expect(hex(m.dark.paint?.composerCard as string)).toBe("#30302e");
+  });
+
+  it.skipIf(!hasMeasured)("证据与当前 renderer 源同一代（旧证据必须重跑探针，不许冒充通过）", () => {
+    expect(measured.rendererDigest, "旧证据没有摘要或缺席：重跑 electron scripts/cds-values-probe.cjs outputs/cds-parity-verify/values.json").toBe(rendererDigest());
+  });
+
+  it.skipIf(!hasMeasured)("证据量的是当前构建（源改了没 build 时，探针不许冒充通过）", () => {
+    // 摘要只能证明「量完之后源没再变」。反方向的洞：先改源、不重建就跑探针，
+    // 量到的是旧 dist，摘要却按新源写。探针记下源与产物的最晚修改时刻，这里要求源不晚于产物。
+    expect(measured.buildFresh, "renderer 源比 dist 新：先 pnpm --filter cairn-desktop build，再重跑探针").toBe(true);
   });
 });

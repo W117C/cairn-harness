@@ -18,8 +18,8 @@ export function usePermissionConfirm(input: {
   activeId: string | null;
   activeWorkspace: string | null;
   runningSet: { readonly current: ReadonlySet<string> };
-  setLastNotice: (message: string, sessionId?: string) => void;
-  setLastError: (message: string, sessionId?: string) => void;
+  setLastNotice: (message: string, sessionId?: string, workspace?: string | null) => void;
+  setLastError: (message: string, sessionId?: string, workspace?: string | null) => void;
 }): PermissionConfirmApi {
   const [permissionConfirm, setPermissionConfirm] = useState<PermissionMode | null>(null);
 

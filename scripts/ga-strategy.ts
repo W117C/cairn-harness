@@ -147,7 +147,7 @@ async function runArm(arm: string, c: GymCase, budget: { left: number }): Promis
     emit: (e: AgentEvent) => log.append(e),
   });
   const metered = {
-    stream(messages: Parameters<typeof provider.stream>[0], tools: Parameters<typeof provider.stream>[1], call?: { signal?: AbortSignal }) {
+    stream(messages: Parameters<typeof provider.stream>[0], tools: Parameters<typeof provider.stream>[1]) {
       requests++;
       if (requests > budget.left) { capped = true; abort.abort(); }
       return provider.stream(messages, tools, { signal: abort.signal });

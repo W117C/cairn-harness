@@ -43,7 +43,7 @@ describe("流本体的 memo 边界", () => {
   });
 
   it("③ 切会话仍重挂（memo 化不许把这条既有修法吃掉）", () => {
-    expect(appSrc).toMatch(/<Stream[\s\S]{0,400}?key=\{activeId \?\? "home"\}/);
+    expect(appSrc).toMatch(/<Stream[\s\S]{0,400}?key=\{activeId === null \? "home" : runKey\(activeWorkspace, activeId\)\}/);
   });
 
   it("④ 流里自己跳的计时器留在子组件里（memo 化不许把它冻住）", () => {

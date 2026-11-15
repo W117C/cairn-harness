@@ -172,3 +172,4 @@ fixtures/gym/drafts/
 
 # python 编译缓存不入库（py_compile 曾把一个 .pyc 扫进过提交）。
 __pycache__/
+.alma-snapshots

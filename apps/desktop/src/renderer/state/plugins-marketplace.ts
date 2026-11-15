@@ -28,6 +28,7 @@ import {
   type PluginUpdateRow,
   type PluginView,
 } from "../derived/plugins";
+import { windowWorkspaceApplied } from "./window-workspace";
 
 export type PluginDataStatus = "idle" | "loading" | "ready" | "error";
 export type PluginLoadSurface = "catalog" | "installed" | "runtime";
@@ -424,10 +425,18 @@ export function usePluginsMarketplace(input: {
     });
   }, []);
 
+  const refreshSeq = useRef(0);
   const refresh = useCallback((): void => {
-    loadCatalog();
-    loadInstalled();
-    loadRuntime();
+    // 三个读取面都按窗口工作区取（runtime 直接走 getState）：切换与读在同一拍发出时，
+    // 主进程的 select 还在异步校验，读会落到上一个项目上——而安装/信任写进新项目。
+    // 等最后一次上报落定；等待期间又刷新（连切两次项目）则只让最新那次发车。
+    const id = ++refreshSeq.current;
+    void windowWorkspaceApplied().then(() => {
+      if (id !== refreshSeq.current) return;
+      loadCatalog();
+      loadInstalled();
+      loadRuntime();
+    });
   }, [loadCatalog, loadInstalled, loadRuntime]);
 
   const pollJob = useCallback(async (

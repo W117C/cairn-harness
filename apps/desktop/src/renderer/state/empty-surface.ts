@@ -3,6 +3,7 @@ import type { Dispatch,MutableRefObject,SetStateAction } from 'react';
 import { useEffect,useLayoutEffect } from "react";
 import { buildQuickStarts,type QuickStartInput } from "../quick-starts";
 import { appMotionReduced } from "./motion-pref";
+import { windowWorkspaceApplied } from "./window-workspace";
 import type { WorkspaceSession } from "../sessions-view";
 interface EmptySurface {
   quickStarts: string[];
@@ -45,6 +46,10 @@ export function useEmptySurfaceEffects(deps: EmptySurfaceEffectsDeps) {
     if (!sessionsLoaded) return;
     let alive = true;
     void (async () => {
+      // 三查里的目录/package.json 走窗口工作区指针（主进程侧异步校验后才落）。不等它，
+      // 切项目后的第一屏会读到上一个项目的 README / test 脚本，并按新项目缓存下来。
+      await windowWorkspaceApplied();
+      if (!alive) return;
       const [git, list, pkg] = await Promise.all([
         window.agent.gitStatus(ws).catch(() => null),
         window.agent.workspaceListDir("").catch(() => null),

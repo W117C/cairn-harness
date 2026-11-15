@@ -12,6 +12,7 @@ describe("BrowserPane memo（第 1099 页）", () => {
     // 反面对照：旧的裸 function 形态不许回来
     expect(src).not.toContain("\nfunction BrowserPane(props: {");
     expect(src).toContain("const PlanPane = memo(function PlanPane(props: { events: readonly AgentEvent[] }): React.JSX.Element {");
-    expect(src).toContain("const TasksPane = memo(function TasksPane(props: { events: readonly AgentEvent[] }): React.JSX.Element {");
+    // 第 1213 页：TasksPane 增 workspace（worker 改动的 diff 要读会话自己的工作区），仍是 memo。
+    expect(src).toContain("const TasksPane = memo(function TasksPane(props: { events: readonly AgentEvent[]; workspace: string | null }): React.JSX.Element {");
   });
 });

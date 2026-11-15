@@ -27,6 +27,8 @@ async function tempRoot(): Promise<string> {
 function harness(opts: Partial<HookEngineOptions> & {
   fetchResponses?: Array<{ status: number; body: string } | { error: string; errorName?: string }>;
   mcpResponses?: Array<{ ok: boolean; output: string }>;
+  /** 永不返回，只在信号中止时失败：量「钩子自己的超时帽」是否真落到 mcp 档。 */
+  mcpHangs?: boolean;
 } = {}) {
   const calls: FetchCall[] = [];
   const mcpCalls: { plugin: string; server: string; tool: string; args: Record<string, unknown> }[] = [];
@@ -47,9 +49,14 @@ function harness(opts: Partial<HookEngineOptions> & {
       if ("error" in r) throw Object.assign(new Error(r.error), r.errorName === undefined ? {} : { name: r.errorName });
       return r;
     },
-    mcpCall: mcpResponses === undefined ? undefined : async (plugin, server, tool, args) => {
+    mcpCall: mcpResponses === undefined && opts.mcpHangs !== true ? undefined : async (plugin, server, tool, args, signal) => {
       mcpCalls.push({ plugin, server, tool, args });
-      const r = mcpResponses[Math.min(m, mcpResponses.length - 1)];
+      if (opts.mcpHangs === true) {
+        return await new Promise<never>((_, reject) => {
+          signal?.addEventListener("abort", () => reject(signal.reason instanceof Error ? signal.reason : new Error("aborted")), { once: true });
+        });
+      }
+      const r = mcpResponses![Math.min(m, mcpResponses!.length - 1)];
       m++;
       return r;
     },
@@ -256,6 +263,19 @@ describe("mcp_tool handler：只走本插件、已连接、裁剪后那张表", 
     expect(r.skipped).toBe(1);
     expect(r.errors.join(" ")).toContain("MCP");
   });
+
+  it("handler 的 timeout 也落到 mcp 档：到点是「中止」，不是「对面拒了」", async () => {
+    const { engine, mcpCalls } = harness({
+      hooks: [mk("PostToolUse", { type: "mcp_tool", server: "slow", tool: "wait", timeout: 1 })],
+      mcpHangs: true,
+    });
+    const t0 = Date.now();
+    const r = await engine.run("PostToolUse", { event: "PostToolUse", tool_name: "glob", tool_args: {} });
+    expect(Date.now() - t0).toBeLessThan(4_000);
+    expect(mcpCalls.length).toBe(1); // 调用确实发出去了，不是装载期被拒
+    expect(r.errors.join(" ")).toContain("超时被中止");
+    expect(r.errors.join(" ")).not.toContain("未被受理");
+  }, 10_000);
 
   it("只读档只放过标注了 readOnly 的工具，其余拒跑（钩子不是特权通道）", async () => {
     const handler = { type: "mcp_tool", server: "lint", tool: "check" } as HookHandlerDef;

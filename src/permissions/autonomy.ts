@@ -435,7 +435,7 @@ function collectRisk(
     modelRisk(args),
     // 沙箱通道仍按静态表判：它说的是「本仓 Seatbelt 罩不住的本地写面」，MCP 调用根本不经过那层，
     // 无注解的 MCP 写在下面 L0/档位层按写处理（不是靠这条通道抬风险）。
-    sandboxRisk(s.sandboxAvailable, tool, isSideEffectTool(tool)),
+    sandboxRisk(s.sandboxAvailable, isSideEffectTool(tool)),
     ann,
   ];
   let risk: RiskLevel = "none";

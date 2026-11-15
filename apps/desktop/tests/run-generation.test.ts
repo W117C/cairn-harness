@@ -6,9 +6,9 @@ const app = readAppSurface();
 
 describe("run 代际守卫", () => {
   it("起跑领代际号；finally 只在号未变时摘旗", () => {
-    expect(app).toContain("const myGen = (runGen.current.get(sid) ?? 0) + 1;");
-    expect(app).toContain("runGen.current.set(sid, myGen);");
-    expect(app).toContain("if ((runGen.current.get(sid) ?? 0) === myGen) runningSet.current.delete(key);");
+    expect(app).toContain("const myGen = (runGen.current.get(key) ?? 0) + 1;");
+    expect(app).toContain("runGen.current.set(key, myGen);");
+    expect(app).toContain("if ((runGen.current.get(key) ?? 0) === myGen) runningSet.current.delete(key);");
   });
 
   it("停止态写入同样按代际守卫（旧 run 的 aborted 不能改新 run 的 stopped）", () => {
@@ -16,11 +16,11 @@ describe("run 代际守卫", () => {
     // 第 4 轮把这段守卫搬进 `drainQueue(initial, async (msg) => {…})` 的回调里，缩进多一层就红了，
     // 而「号还是自己的才写 stopped」一字没变。改成按**词序**判：空白随缩进走，守卫条件、
     // 函数式更新与 `res.aborted` 的语义仍在同一块里。
-    expect(app).toMatch(/if \(\(runGen\.current\.get\(sid\) \?\? 0\) === myGen\) \{\s*setStoppedIds\(\(prev\) => \{/);
+    expect(app).toMatch(/if \(\(runGen\.current\.get\(key\) \?\? 0\) === myGen\) \{\s*setStoppedIds\(\(prev\) => \{/);
     expect(app).toContain("const want = res.aborted === true;");
   });
 
   it("起点删除同样按代际守卫（旧 run 收尾不能删掉新 run 的起点）", () => {
-    expect(app).toContain("if ((runGen.current.get(sid) ?? 0) === myGen) runStartBySession.current.delete(sid);");
+    expect(app).toContain("if ((runGen.current.get(key) ?? 0) === myGen) runStartBySession.current.delete(key);");
   });
 });

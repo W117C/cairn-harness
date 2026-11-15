@@ -52,7 +52,7 @@ describe("换渲染层实例后接管在跑的会话：秒表接着真值算", (
   it("main 报这一轮的起点；渲染层拿它补上本机没有的起点", () => {
     expect(kernel).toContain("runStartedAt");
     expect(kernel).toContain("startedAt: runStartedAt.get(id)");
-    expect(app).toContain("runStartBySession.current.set(id, r.startedAt ?? Date.now());");
+    expect(app).toContain("runStartBySession.current.set(runId, r.startedAt ?? Date.now());");
   });
 });
 

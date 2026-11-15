@@ -5,6 +5,11 @@
     "gray20": "rgb(249, 249, 247)",
     "gray900": "rgb(11, 11, 11)"
   },
+  "rendererDigest": "3edfb3e8ef0e871e40c7f232133765fb97543b4fbe330f564957e65f431e8c39",
+  "generatedAt": "2026-11-15T09:24:06.166Z",
+  "buildFresh": true,
+  "srcMtime": "2026-11-15T09:23:15.812Z",
+  "distMtime": "2026-11-15T09:23:45.533Z",
   "light": {
     "theme": "light",
     "tokens": {
@@ -50,16 +55,14 @@
         "paddingRight": "16px",
         "paddingBottom": "12px",
         "paddingLeft": "16px",
-        "maxWidth": "85%",
-        "width": "75.8516px",
-        "marginBottom": "0px",
         "fontSize": "16px",
         "lineHeight": "24px",
+        "maxWidth": "85%",
+        "backgroundColor": "rgb(240, 239, 236)",
         "borderInlineStartWidth": "0px",
         "animationName": "none",
         "animationDuration": "0s",
-        "backgroundColor": "rgb(240, 239, 236)",
-        "backdropFilter": "none"
+        "marginBottom": "0px"
       },
       "assistantText": {
         "borderRadius": "0px",
@@ -67,16 +70,14 @@
         "paddingRight": "0px",
         "paddingBottom": "0px",
         "paddingLeft": "0px",
-        "maxWidth": "none",
-        "width": "20px",
-        "marginBottom": "0px",
         "fontSize": "14px",
-        "lineHeight": "23.8px",
+        "lineHeight": "22.68px",
+        "maxWidth": "none",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
         "borderInlineStartWidth": "0px",
         "animationName": "none",
         "animationDuration": "0s",
-        "backgroundColor": "rgba(0, 0, 0, 0)",
-        "backdropFilter": "none"
+        "marginBottom": "0px"
       },
       "assistantProse": {
         "borderRadius": "0px",
@@ -84,16 +85,14 @@
         "paddingRight": "0px",
         "paddingBottom": "0px",
         "paddingLeft": "0px",
-        "maxWidth": "none",
-        "width": "20px",
-        "marginBottom": "0px",
         "fontSize": "16px",
         "lineHeight": "24px",
+        "maxWidth": "none",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
         "borderInlineStartWidth": "4px",
         "animationName": "none",
         "animationDuration": "0s",
-        "backgroundColor": "rgba(0, 0, 0, 0)",
-        "backdropFilter": "none"
+        "marginBottom": "0px"
       },
       "skeleton": {
         "borderRadius": "7px",
@@ -101,33 +100,29 @@
         "paddingRight": "0px",
         "paddingBottom": "0px",
         "paddingLeft": "0px",
-        "maxWidth": "none",
-        "width": "1424px",
-        "marginBottom": "0px",
         "fontSize": "14px",
         "lineHeight": "23.8px",
+        "maxWidth": "none",
+        "backgroundColor": "color(srgb 0.988235 0.988235 0.984314)",
         "borderInlineStartWidth": "0px",
         "animationName": "cds-skeleton-breathe",
         "animationDuration": "2s",
-        "backgroundColor": "color(srgb 0.988235 0.988235 0.984314)",
-        "backdropFilter": "none"
+        "marginBottom": "0px"
       },
       "queueStrip": {
-        "borderRadius": "0px",
+        "borderRadius": "12px 12px 0px 0px",
         "paddingTop": "0px",
         "paddingRight": "0px",
         "paddingBottom": "0px",
         "paddingLeft": "0px",
-        "maxWidth": "none",
-        "width": "1440px",
-        "marginBottom": "8px",
         "fontSize": "14px",
         "lineHeight": "23.8px",
-        "borderInlineStartWidth": "0px",
+        "maxWidth": "none",
+        "backgroundColor": "color(srgb 1 1 1)",
+        "borderInlineStartWidth": "1px",
         "animationName": "fade-in",
         "animationDuration": "0.12s",
-        "backgroundColor": "rgba(0, 0, 0, 0)",
-        "backdropFilter": "none"
+        "marginBottom": "8px"
       },
       "titlebarGround": {
         "backgroundColor": "color(srgb 0.988235 0.988235 0.984314 / 0.85)",
@@ -139,16 +134,14 @@
         "paddingRight": "16px",
         "paddingBottom": "12px",
         "paddingLeft": "16px",
-        "maxWidth": "85%",
-        "width": "75.8516px",
-        "marginBottom": "0px",
         "fontSize": "16px",
         "lineHeight": "24px",
+        "maxWidth": "85%",
+        "backgroundColor": "rgb(240, 239, 236)",
         "borderInlineStartWidth": "0px",
         "animationName": "none",
         "animationDuration": "0s",
-        "backgroundColor": "rgb(240, 239, 236)",
-        "backdropFilter": "none"
+        "marginBottom": "0px"
       }
     }
   },
@@ -169,7 +162,7 @@
     },
     "triplets": {
       "--bg-000": "color(srgb 0.101961 0.101961 0.0980392)",
-      "--bg-100": "color(srgb 0.0823529 0.0823529 0.0823529)",
+      "--bg-100": "rgb(27, 27, 27)",
       "--bg-200": "color(srgb 0.0431373 0.0431373 0.0431373)",
       "--bg-300": "color(srgb 0.0823529 0.0823529 0.0823529)",
       "--bg-elevated": "color(srgb 0.12549 0.12549 0.121569)",
@@ -183,7 +176,7 @@
     "paint": {
       "body": "rgb(21, 21, 21)",
       "sidebar": "rgb(17, 17, 17)",
-      "composerCard": "rgb(26, 26, 25)",
+      "composerCard": "rgb(48, 48, 46)",
       "codeBlock": null
     },
     "probe": {
@@ -197,16 +190,14 @@
         "paddingRight": "16px",
         "paddingBottom": "12px",
         "paddingLeft": "16px",
-        "maxWidth": "85%",
-        "width": "75.8516px",
-        "marginBottom": "0px",
         "fontSize": "16px",
         "lineHeight": "24px",
+        "maxWidth": "85%",
+        "backgroundColor": "rgb(44, 44, 42)",
         "borderInlineStartWidth": "0px",
         "animationName": "none",
         "animationDuration": "0s",
-        "backgroundColor": "rgb(44, 44, 42)",
-        "backdropFilter": "none"
+        "marginBottom": "0px"
       },
       "assistantText": {
         "borderRadius": "0px",
@@ -214,16 +205,14 @@
         "paddingRight": "0px",
         "paddingBottom": "0px",
         "paddingLeft": "0px",
-        "maxWidth": "none",
-        "width": "20px",
-        "marginBottom": "0px",
         "fontSize": "14px",
-        "lineHeight": "23.8px",
+        "lineHeight": "22.68px",
+        "maxWidth": "none",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
         "borderInlineStartWidth": "0px",
         "animationName": "none",
         "animationDuration": "0s",
-        "backgroundColor": "rgba(0, 0, 0, 0)",
-        "backdropFilter": "none"
+        "marginBottom": "0px"
       },
       "assistantProse": {
         "borderRadius": "0px",
@@ -231,16 +220,14 @@
         "paddingRight": "0px",
         "paddingBottom": "0px",
         "paddingLeft": "0px",
-        "maxWidth": "none",
-        "width": "20px",
-        "marginBottom": "0px",
         "fontSize": "16px",
         "lineHeight": "24px",
+        "maxWidth": "none",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
         "borderInlineStartWidth": "4px",
         "animationName": "none",
         "animationDuration": "0s",
-        "backgroundColor": "rgba(0, 0, 0, 0)",
-        "backdropFilter": "none"
+        "marginBottom": "0px"
       },
       "skeleton": {
         "borderRadius": "7px",
@@ -248,36 +235,32 @@
         "paddingRight": "0px",
         "paddingBottom": "0px",
         "paddingLeft": "0px",
-        "maxWidth": "none",
-        "width": "1424px",
-        "marginBottom": "0px",
         "fontSize": "14px",
         "lineHeight": "23.8px",
+        "maxWidth": "none",
+        "backgroundColor": "color(srgb 0.0823529 0.0823529 0.0823529)",
         "borderInlineStartWidth": "0px",
         "animationName": "cds-skeleton-breathe",
         "animationDuration": "2s",
-        "backgroundColor": "color(srgb 0.0823529 0.0823529 0.0823529)",
-        "backdropFilter": "none"
+        "marginBottom": "0px"
       },
       "queueStrip": {
-        "borderRadius": "0px",
+        "borderRadius": "12px 12px 0px 0px",
         "paddingTop": "0px",
         "paddingRight": "0px",
         "paddingBottom": "0px",
         "paddingLeft": "0px",
-        "maxWidth": "none",
-        "width": "1440px",
-        "marginBottom": "8px",
         "fontSize": "14px",
         "lineHeight": "23.8px",
-        "borderInlineStartWidth": "0px",
+        "maxWidth": "none",
+        "backgroundColor": "color(srgb 0.101961 0.101961 0.0980392)",
+        "borderInlineStartWidth": "1px",
         "animationName": "fade-in",
         "animationDuration": "0.12s",
-        "backgroundColor": "rgba(0, 0, 0, 0)",
-        "backdropFilter": "none"
+        "marginBottom": "8px"
       },
       "titlebarGround": {
-        "backgroundColor": "color(srgb 0.0823529 0.0823529 0.0823529 / 0.85)",
+        "backgroundColor": "color(srgb 0.105 0.105 0.105 / 0.85)",
         "backdropFilter": "blur(12px)"
       },
       "realUserBubble": {
@@ -286,16 +269,14 @@
         "paddingRight": "16px",
         "paddingBottom": "12px",
         "paddingLeft": "16px",
-        "maxWidth": "85%",
-        "width": "75.8516px",
-        "marginBottom": "0px",
         "fontSize": "16px",
         "lineHeight": "24px",
+        "maxWidth": "85%",
+        "backgroundColor": "rgb(44, 44, 42)",
         "borderInlineStartWidth": "0px",
         "animationName": "none",
         "animationDuration": "0s",
-        "backgroundColor": "rgb(44, 44, 42)",
-        "backdropFilter": "none"
+        "marginBottom": "0px"
       }
     }
   },

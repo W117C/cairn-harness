@@ -61,7 +61,7 @@ function allSymbols(g: ImpactGraph): string[] {
   return [...new Set([...g.defs.keys(), ...g.refs.keys()])].sort();
 }
 
-async function indexArtifact(indexDir: string, sha: string, ws: string): Promise<string | null> {
+async function indexArtifact(indexDir: string, sha: string): Promise<string | null> {
   const names = (await readdir(indexDir)).filter((f) => f.endsWith(".json"));
   if (names.length === 0) return null;
   expect(names.length).toBe(1); // 同 sha＋同 workspace 只有一份 artifact（覆写不堆积）
@@ -114,7 +114,7 @@ describe("影响面·索引持久化", () => {
   it("④ 截断 JSON 损坏 ⇒ 自动重建且不抛，artifact 重新完整落盘", async () => {
     const { ws, cacheDir, indexDir, sha } = await freshGitRepo();
     const g1 = await build(ws, cacheDir, indexDir, true);
-    const raw = await indexArtifact(indexDir, sha, ws);
+    const raw = await indexArtifact(indexDir, sha);
     if (raw === null) throw new Error("artifact 未落盘");
     const artifactName = (await readdir(indexDir)).find((f) => f.endsWith(".json"))!;
     await writeFile(join(indexDir, artifactName), raw.slice(0, Math.floor(raw.length / 2)), "utf8");
@@ -184,7 +184,7 @@ describe("影响面·索引持久化", () => {
   it("⑨ artifact 字段齐全：schemaVersion=1、commitSha=真 sha、files/defs/refs/edges/fingerprints 与图对得上", async () => {
     const { ws, cacheDir, indexDir, sha } = await freshGitRepo();
     const g = await build(ws, cacheDir, indexDir, true);
-    const raw = await indexArtifact(indexDir, sha, ws);
+    const raw = await indexArtifact(indexDir, sha);
     if (raw === null) throw new Error("artifact 未落盘");
     const a = JSON.parse(raw) as {
       schemaVersion: number; commitSha: string; files: string[]; candidates: number; cap: number;

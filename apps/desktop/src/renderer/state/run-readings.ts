@@ -26,30 +26,31 @@ interface RunReadingsDeps {
 
 export function useRunReadings(deps: RunReadingsDeps) {
   const { sessionErrors, activeId, sessionNotices, runningSet, setElapsedSec, runStartBySession, events, askBySid, stoppedIds, lastDeltaAt, selections, providerInfo, activeWorkspace } = deps;
-  const lastError = sessionErrors.get(activeId ?? "") ?? null;
-  const lastNotice = sessionNotices.get(activeId ?? "") ?? null;
-  const runningActive = activeId !== null && runningSet.current.has(runKey(activeWorkspace, activeId));
-  // 运行秒表：起点在 send() 里按会话盖；这里只负责 interval 的开与关（终态由 runningActive 翻假收掉）。
-  // 依赖里有 activeId：切会话时重算起点（否则切回一个还在跑的会话，秒表会接着别人的起点算）。
+  const activeKey = activeId === null ? null : runKey(activeWorkspace, activeId);
+  const lastError = sessionErrors.get(activeKey ?? "") ?? null;
+  const lastNotice = sessionNotices.get(activeKey ?? "") ?? null;
+  const runningActive = activeKey !== null && runningSet.current.has(activeKey);
+  // 运行秒表：起点在 send() 里按 runKey 盖；这里只负责 interval 的开与关（终态由 runningActive 翻假收掉）。
+  // 依赖带 activeKey：切会话或切工作区时重算起点（同 id 跨工作区不能用另一场的起点）。
   useEffect(() => {
-    if (!runningActive || activeId === null) return;
-    setElapsedSec(elapsedSecondsFor(runStartBySession.current, activeId, Date.now()));
+    if (!runningActive || activeKey === null) return;
+    setElapsedSec(elapsedSecondsFor(runStartBySession.current, activeKey, Date.now()));
     const id = setInterval(
-      () => setElapsedSec(elapsedSecondsFor(runStartBySession.current, activeId, Date.now())),
+      () => setElapsedSec(elapsedSecondsFor(runStartBySession.current, activeKey, Date.now())),
       1000,
     );
     return () => clearInterval(id);
-  }, [runningActive, activeId]);
+  }, [runningActive, activeKey]);
   const pendingClarify = pendingClarifyOf(events);
   const pendingPlan = pendingPlanOf(events);
   // 只认当前会话那张卡（判定唯一处在 send-queue.askBelongsToSession）；归属未知落 "" 键，照旧显示。
-  const askForActive = activeId !== null
-    ? askBySid.get(activeId) ?? askBySid.get("") ?? null
+  const askForActive = activeKey !== null
+    ? askBySid.get(activeKey) ?? askBySid.get("") ?? null
     : askBySid.get("") ?? null;
   const phase = deriveRunPhase(events, askForActive !== null, pendingClarify !== null, pendingPlan !== null);
-  const stopped = activeId !== null && stoppedIds.has(activeId) && !runningActive;
+  const stopped = activeKey !== null && stoppedIds.has(activeKey) && !runningActive;
   const hasAnswerText = hasAssistantTextThisRun(events);
-  const lastDelta = activeId !== null ? (lastDeltaAt.current.get(activeId) ?? 0) : 0;
+  const lastDelta = activeKey !== null ? (lastDeltaAt.current.get(activeKey) ?? 0) : 0;
   // 正文已停 >1.5s，run 还没回 ⇒ 主进程在跑收尾（Stop hook / 安全报告 / 记忆沉淀等），
   // 不是模型还在想。没有时间戳（如重载后接管在跑会话）就不猜，按生成中显示。
   const answerQuiet = hasAnswerText && lastDelta > 0 && Date.now() - lastDelta > 1500;
@@ -63,7 +64,7 @@ export function useRunReadings(deps: RunReadingsDeps) {
   const steps = countToolSteps(events);
   const runSteps = countRunSteps(events);
 
-  const startedAt = runStartBySession.current.get(activeId ?? "");
+  const startedAt = runStartBySession.current.get(activeKey ?? "");
   const blocked = askForActive !== null || pendingClarify !== null || pendingPlan !== null;
   const modelWaiting = useMemo(() => waitingForModel({ events, running: runningActive, startedAt, blocked }), [events, runningActive, startedAt, blocked]);
   return { lastError, lastNotice, runningActive, modelWaiting, pendingClarify, pendingPlan, askForActive, phase, stopped, phaseLabel, chosen, pickerValue, chosenCtx, steps, runSteps };

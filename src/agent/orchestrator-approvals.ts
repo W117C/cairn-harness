@@ -197,7 +197,7 @@ export class ApprovalsChainsSupervise {
       "stages 全表: " + stages.map((s, i) => String(i + 1) + "." + s.role + "：" + s.task.slice(0, 40)).join(" → "),
       ...(conflicts.length > 0 ? ["链内写租约相交：" + conflicts.map((c) => c.resource).join("、") + "（合并冲突预测）"] : []),
     ];
-    const approved = await this.requestChainApproval(callId, reasons);
+    const approved = await this.requestChainApproval(reasons);
     if (!approved) {
       return { ok: false, output: "spawn_agent(pipeline): 未获批准（整链一个审批，fail-closed）" };
     }
@@ -247,7 +247,7 @@ export class ApprovalsChainsSupervise {
     const ringResources = parseStringList(args.resources);
     const budget = this.deps.opts.budget?.maxUsd ?? 0;
     // 审批双轨：批准 {goal, budget, forbidden, maxStages}（§5.1：与 pipeline stages 全表分开）
-    const approved = await this.requestSuperviseApproval(callId, { goal, budget, forbidden, maxStages });
+    const approved = await this.requestSuperviseApproval({ goal, budget, forbidden, maxStages });
     if (!approved) {
       return { ok: false, output: "spawn_agent(supervise): 未获批准（受限循环授权，fail-closed）" };
     }
@@ -420,7 +420,6 @@ export class ApprovalsChainsSupervise {
 
   /** supervise 整链审批（§5.1 双轨：批准 {goal, budget, forbidden, maxStages}；agent_id 缺省——链没有 worker 身份）。 */
   private async requestSuperviseApproval(
-    callId: string,
     contract: { goal: string; budget: number; forbidden: string[]; maxStages: number },
   ): Promise<boolean> {
     const id = this.nextApprovalId("supervise");
@@ -448,7 +447,7 @@ export class ApprovalsChainsSupervise {
   }
 
   /** 整链审批（§4.4.3 与 turn 解耦；agent_id 缺省——链没有 worker 身份，审批以 id 路由）。 */
-  private async requestChainApproval(callId: string, reasons: string[]): Promise<boolean> {
+  private async requestChainApproval(reasons: string[]): Promise<boolean> {
     const id = this.nextApprovalId("pipeline");
     const outcomePromise = this.waitForApproval(id, ""); // 链没有 worker 身份，agentId 空串
     await this.deps.opts.emit({

@@ -11,7 +11,7 @@ describe("mod 侧栏", () => {
     const app = readAppSurface();
     expect(app).toContain('localStorage.getItem("cairn.pluginSidebar")');
     expect(app).toContain("h.togglePluginSidebar()");
-    expect(app).toContain("{destination === \"chat\" && pluginSidebarOpen && <PluginSidebar width={pluginSidebarWidth} onWidth={setPluginSidebarWidthPersist} onClose={closePluginSidebar} onInvoke={fillPluginCommand} />}");
+    expect(app).toContain("{destination === \"chat\" && pluginSidebarOpen && <PluginSidebar width={pluginSidebarWidth} onWidth={setPluginSidebarWidthPersist} onClose={closePluginSidebar} onInvoke={fillPluginCommand} workspace={activeWorkspace} />}");
     expect(app).toContain('aria-label="插件侧栏"');
     expect(app).toContain('aria-controls="mod-sidebar"');
     expect(app).toContain('checked={props.pluginSidebarOpen}');

@@ -47,14 +47,15 @@ describe("接线哨兵（源码级）", () => {
     // ⇒ 本该被快销的沉淀审批卡照样弹出来，挡住用户已经排队的下一条消息。
     // 哨兵因此从「裸 id 读」升到「限定键读」：钉住的是**意图**（守卫要读对那张表），
     // 不是某一行写法。
-    expect(appSrc).toContain("(sendQueue.current.get(runKey(");
+    expect(appSrc).toContain("const askKey = sid === \"\" ? \"\" : runKey(askWorkspace, sid);");
+    expect(appSrc).toContain("sendQueue.current.get(askKey)");
     expect(appSrc).not.toContain("sendQueue.current.get(sid)");
     expect(appSrc).toContain("window.agent.decide(p.askId, false)");
     expect(appSrc).toContain("已跳过本轮全局记忆写入（你在继续对话；下次收尾再试）");
   });
 
   it("send：运行中发送时挂起的沉淀审批先拒（fire-and-forget，随后同拍入队不 await）", () => {
-    expect(appSrc).toContain("askById.current.get(sid)");
+    expect(appSrc).toContain("askById.current.get(sendKey!)");
     expect(appSrc).toContain("isSessionEndDistillAsk(pendingAsk)");
     expect(appSrc).toContain("window.agent.decide(pendingAsk.askId, false)");
   });

@@ -55,7 +55,7 @@ describe("壁纸媒体", () => {
 
   it("协议只服务当前选中的那一个文件", async () => {
     const p = await tempFile("a.mp4", 32);
-    const open = (path: string, start: number, end: number): ReadableStream<Uint8Array> =>
+    const open = (_path: string, start: number, end: number): ReadableStream<Uint8Array> =>
       Readable.toWeb(Readable.from([Buffer.alloc(end - start + 1, 3)])) as ReadableStream<Uint8Array>;
     const none = await handleWallpaperMedia({ currentPath: null, range: null, open });
     expect(none.status).toBe(404);

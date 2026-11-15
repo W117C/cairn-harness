@@ -12,7 +12,8 @@ describe("交付轨迹只留最新", () => {
   it("默认渲染最新卡；早期记录在「查看早期交付」后面，按会话展开", () => {
     expect(app).toContain("查看早期交付（${String(olderItems.length)} 张卡）");
     expect(app).toContain("收起早期交付");
-    expect(app).toContain("const showEarlier = activeId !== null && deliveryExpandedFor === activeId;");
+    expect(app).toContain("const deliveryKey = activeId === null ? null : runKey(activeWorkspace, activeId);");
+    expect(app).toContain("const showEarlier = deliveryKey !== null && deliveryExpandedFor === deliveryKey;");
     expect(app).toContain("{showEarlier && olderItems.map(renderItem)}");
     // 流尾只留最新一张卡（2026-10-24：空轮弱行已整体撤下，卡后不再有别种条目要保）
     expect(app).toContain("const tailItems = lastIdx >= 0 ? deliveryTrailItems.slice(lastIdx) : [];");

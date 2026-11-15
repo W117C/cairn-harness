@@ -63,7 +63,7 @@ export function SessionLogBody(props: {
   );
 }
 
-export function SessionLogDialog(props: { id: string; title: string; onClose: () => void }): React.JSX.Element {
+export function SessionLogDialog(props: { id: string; title: string; onClose: () => void; workspace?: string | null }): React.JSX.Element {
   const [state, setState] = useState<SessionLogState>({ status: "loading" });
   const seqRef = useRef(0);
 
@@ -71,7 +71,7 @@ export function SessionLogDialog(props: { id: string; title: string; onClose: ()
     const seq = ++seqRef.current;
     setState((prev) => (prev.status === "ready" ? prev : { status: "loading" }));
     void Promise.resolve()
-      .then(() => window.agent.sessionLog(props.id, 400))
+      .then(() => window.agent.sessionLog(props.id, 400, props.workspace ?? undefined))
       .then(
         (r) => {
           if (seq !== seqRef.current) return;

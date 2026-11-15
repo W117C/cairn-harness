@@ -63,7 +63,7 @@ function previousTaskUser(events: readonly AgentEvent[], before: number, exclude
  *  `offset` 用于把每个来源文件里的物理行号折进一份合成事件表。 */
 export function declarationExcludedIds(events: readonly AgentEvent[], offset = 0): Set<number> {
   const out = new Set<number>();
-  events.forEach((e, i) => {
+  events.forEach((e) => {
     if (e.type === "compaction" && isNumericCompaction(e) && !hasWorkerId(e)) {
       for (const id of e.compressed_event_ids) out.add(offset + id);
     }

@@ -9,9 +9,10 @@ interface ProjectActionsDeps {
   setProjects: Dispatch<SetStateAction<ProjectRecord[]>>;
   setRegistryNotice: Dispatch<SetStateAction<string | null>>;
   setImportDiagnosis: Dispatch<SetStateAction<{ name: string; diagnosis: ProjectDiagnosis; } | null>>;
-  setLastError: (message: string, sessionId?: string | undefined) => void;
+  setLastError: (message: string, sessionId?: string | undefined, workspace?: string | null) => void;
   refreshSessions: () => Promise<void>;
-  setActiveWorkspace: Dispatch<SetStateAction<string | null>>;
+  /** 收口在 workbench 的切换入口：它同时把状态与窗口工作区上报发出去（只收值，不收 updater）。 */
+  setActiveWorkspace: (workspace: string | null) => void;
   activeWorkspaceRef: MutableRefObject<string | null>;
   setProjectRemoveConfirm: Dispatch<SetStateAction<ProjectRecord | null>>;
   newSessionRef: MutableRefObject<(() => void) | null>;

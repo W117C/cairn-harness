@@ -5,7 +5,7 @@ import { useCallback,useMemo,useRef } from "react";
 import type { AgentEvent,AskPayload,RunAttachmentReference,RunResponse } from "../../../../../src/main/ipc-protocol";
 import { parseGoalCommand,type GoalCommand } from "../goal-command";
 import { userTextOfRound } from "../projections";
-import { continueAfterRun,drainQueue,isSessionEndDistillAsk,shouldHealStaleRun,steerAccepted,steerRouteOf,type QueuedSend } from "../send-queue";
+import { continueAfterRun,drainQueue,enqueueQueued,isSessionEndDistillAsk,shouldHealStaleRun,steerAccepted,steerRouteOf,type QueuedSend,type SendDisposition } from "../send-queue";
 import { STR } from "../strings";
 import { toast } from "../toast";
 import { runKey } from "./session-identity";
@@ -25,7 +25,7 @@ interface RunQueueDeps {
   setQueueLocal: (sid: string, list: QueuedSend[]) => void;
   queueWrites: MutableRefObject<Map<string, Promise<unknown>>>;
   queueDirty: MutableRefObject<Set<string>>;
-  setLastError: (message: string, sessionId?: string | undefined) => void;
+  setLastError: (message: string, sessionId?: string | undefined, workspace?: string | null) => void;
   sendQueue: MutableRefObject<Map<string, QueuedSend[]>>;
   setStoppedIds: Dispatch<SetStateAction<ReadonlySet<string>>>;
   runningSet: MutableRefObject<Set<string>>;
@@ -42,14 +42,14 @@ interface RunQueueDeps {
   editCtxRef: MutableRefObject<SessionEditContext | null>;
   setEditCtx: (v: SessionEditContext | null) => void;
   askById: MutableRefObject<Map<string, AskPayload>>;
-  setLastNotice: (message: string, sessionId?: string | undefined) => void;
+  setLastNotice: (message: string, sessionId?: string | undefined, workspace?: string | null) => void;
   queueSeq: MutableRefObject<number>;
   setPendingSend: Dispatch<SetStateAction<boolean>>;
   activeWorkspace: string | null;
   setActiveWorkspace: (workspace: string) => void;
   activate: (id: string | null) => void;
   refreshSessions: () => Promise<void>;
-  setDraftRestore: (v: { forSession: string | null; text: string; attachments: RunAttachmentReference[]; seq: number; } | undefined) => void;
+  setDraftRestore: (v: { forSession: string | null; forWorkspace: string | null; text: string; attachments: RunAttachmentReference[]; seq: number; } | undefined) => void;
   draftRestoreSeq: MutableRefObject<number>;
   compactNow: () => void;
   activeIdRef: MutableRefObject<string | null>;
@@ -69,6 +69,9 @@ export function useRunQueue(deps: RunQueueDeps) {
     persistence.setQueueFor(sid, list, workspace === undefined ? workspaceRef.current : workspace), [persistence]);
   const takeQueuedHead = persistence.takeQueuedHead;
   const draining = useRef(new Set<string>());
+  /** 收束链退出时唤醒等它让路的续派。键与 runningSet/sendQueue 同为 runKey，
+   *  同 id 跨工作区的两场 run 各等各的，不会互相叫醒。 */
+  const drainWaiters = useRef(new Map<string, Set<() => void>>());
 
   /** 一条消息 → 一轮 run；收束后自动派队列下一条（顺序派发唯一实现在 send-queue.drainQueue）。
    *  不重入 send：send 要判 activeId，后台会话的续发必须显式钉住 sid。
@@ -88,19 +91,21 @@ export function useRunQueue(deps: RunQueueDeps) {
       let firstResponse: (RunResponse & { aborted?: boolean }) | null = null;
       await drainQueue(initial, async (msg) => {
         setStoppedIds((prev) => {
-          if (!prev.has(sid)) return prev;
+          if (!prev.has(key)) return prev;
           const fresh = new Set(prev);
-          fresh.delete(sid);
+          fresh.delete(key);
           return fresh;
         });
         runningSet.current.add(key);
-        lastDeltaAt.current.delete(sid);
+        lastDeltaAt.current.delete(key);
         // 代际号（2026-10-18 真机：打断并发送后新 run 在跑、running 却为 false）：旧 run 的
         // finally 会把**新 run**刚置上的旗摘掉——经典“旧清理清掉新状态”。每次起跑领一个号，
         // 清理/停止态写入只在“号还是自己的”时生效。
-        const myGen = (runGen.current.get(sid) ?? 0) + 1;
-        runGen.current.set(sid, myGen);
-        runStartBySession.current.set(sid, Date.now());
+        // 号必须按 runKey 存：同 id 跨工作区是两场独立 run；按裸 id 存时后起的那场会把
+        // 前一场的代际顶掉，前一场收束时便永远清不掉自己的 running 旗。
+        const myGen = (runGen.current.get(key) ?? 0) + 1;
+        runGen.current.set(key, myGen);
+        runStartBySession.current.set(key, Date.now());
         force((n) => n + 1);
         try {
           const thinking = thinkingBySession.current.get(key);
@@ -115,33 +120,39 @@ export function useRunQueue(deps: RunQueueDeps) {
             setQueueFor(sid, [{ id: msg.id, text: msg.text, attachments: msg.attachments }, ...(sendQueue.current.get(key) ?? [])], runWs);
           }
           if (firstResponse === null) firstResponse = res;
-          if ((runGen.current.get(sid) ?? 0) === myGen) {
+          if ((runGen.current.get(key) ?? 0) === myGen) {
             setStoppedIds((prev) => {
               const want = res.aborted === true;
-              if (prev.has(sid) === want) return prev;
+              if (prev.has(key) === want) return prev;
               const fresh = new Set(prev);
-              if (want) fresh.add(sid); else fresh.delete(sid);
+              if (want) fresh.add(key); else fresh.delete(key);
               return fresh;
             });
           }
           const keepGoing = res.ok === false && res.accepted === false ? false : continueAfterRun(res);
-          if (!keepGoing) setLastError(res.error ?? "本轮运行失败", sid);
+          if (!keepGoing) setLastError(res.error ?? "本轮运行失败", sid, runWs);
           return keepGoing;
         }
         catch (err) {
-          setLastError(`本轮运行失败：${err instanceof Error ? err.message : String(err)}`, sid);
+          setLastError(`本轮运行失败：${err instanceof Error ? err.message : String(err)}`, sid, runWs);
           return false;
         }
         finally {
-          if ((runGen.current.get(sid) ?? 0) === myGen) runningSet.current.delete(key);
+          if ((runGen.current.get(key) ?? 0) === myGen) runningSet.current.delete(key);
           // 起点随这一轮一起收掉（收之前先判代际：新 run 已经起跑时不能把它的起点删了）。
-          if ((runGen.current.get(sid) ?? 0) === myGen) runStartBySession.current.delete(sid);
+          if ((runGen.current.get(key) ?? 0) === myGen) runStartBySession.current.delete(key);
           force((n) => n + 1);
         }
       }, () => takeQueuedHead(sid, runWs));
       return firstResponse;
     } finally {
-      draining.current.delete(key); force((n) => n + 1);
+      draining.current.delete(key);
+      const waiters = drainWaiters.current.get(key);
+      if (waiters !== undefined) {
+        drainWaiters.current.delete(key);
+        for (const wake of waiters) wake();
+      }
+      force((n) => n + 1);
     }
   }, [setLastError, setQueueFor, takeQueuedHead]);
 
@@ -184,8 +195,10 @@ export function useRunQueue(deps: RunQueueDeps) {
   }, [queueSeq, runOn, setQueueFor]);
 
   /** `forceQueue`（第 9 点）：只入队、不插话。运行中那颗「加入队列」钮点下去必须真的排队——
-   *  按钮写着「加入队列」却把话插进当前轮，就是按钮在说谎。 */
-  const send = useCallback(async (text: string, attachments: RunAttachmentReference[] = [], forceQueue = false) => {
+   *  按钮写着「加入队列」却把话插进当前轮，就是按钮在说谎。
+   *  `front`：入队时插到队首（⌘↩「打断并发送」：现在要发的就是这一条，不是排在老消息后面）。
+   *  返回值只描述**这一句话**的去向：⌘↩ 的打断靠它判「已经排进去了才打断」（见 interruptAfterSend）。 */
+  const send = useCallback(async (text: string, attachments: RunAttachmentReference[] = [], forceQueue = false, front = false): Promise<SendDisposition> => {
     const sid = activeId;
     // 会话与工作区是一对目标；插话 await 期间切窗口上下文也不能改写消息归属。
     const sendWorkspace = activeWorkspace;
@@ -200,10 +213,10 @@ export function useRunQueue(deps: RunQueueDeps) {
       // 队列开派；否则这条消息会排在记忆审批后面（distill 在 runAgent 尾部，run 不 settle
       // 队列不动）。拒是 fire-and-forget + 随后同拍同步入队：若 await 审批收束后再入队，
       // run 可能先 settle、drain 读到空队列收摊，这条消息就孤在表里再没人派。
-      const pendingAsk = askById.current.get(sid);
+      const pendingAsk = askById.current.get(sendKey!);
       if (pendingAsk !== undefined && isSessionEndDistillAsk(pendingAsk)) {
         void window.agent.decide(pendingAsk.askId, false).catch(() => undefined);
-        setLastNotice("已跳过本轮全局记忆写入（你在继续对话；下次收尾再试）", sid);
+        setLastNotice("已跳过本轮全局记忆写入（你在继续对话；下次收尾再试）", sid, sendWorkspace);
       }
       // ---- 第 9 点·轮中插话：先试着**送进正在跑的那一轮** ----
       // 顺序很重要：先入队再快速失败没有意义（用户会看到「等待发送」却其实已经送达）。
@@ -219,16 +232,19 @@ export function useRunQueue(deps: RunQueueDeps) {
         const steered = await window.agent.runSteer(sid, text, sendWorkspace ?? undefined).catch(() => ({ ok: false as const }));
         if (steerAccepted(steered)) {
           // 回执必须说清是「已插话」还是「已排队」：两种后果差一整轮的工作。
-          setLastNotice(STR.composer.steerSent, sid);
-          return;
+          setLastNotice(STR.composer.steerSent, sid, sendWorkspace);
+          return "steered";
         }
       }
-      setQueueFor(sid, [...(sendQueue.current.get(sendKey!) ?? []), { id: ++queueSeq.current, text, attachments }], sendWorkspace);
-      return;
+      setQueueFor(sid, enqueueQueued(sendQueue.current.get(sendKey!) ?? [], { id: ++queueSeq.current, text, attachments }, front), sendWorkspace);
+      return "queued";
     }
     const isNew = sid === null;
     if (isNew) setPendingSend(true);
     let id = sid;
+    // 抛错也要落到**这条消息真正的目标根**：首页首发在 createSession 之后已知道新根，
+    // 不能继续拿发起时的 null 当前工作区做错误条键。
+    let noticeWorkspace = sendWorkspace;
     try {
       let newId = sid;
       let runWorkspace = sendWorkspace;
@@ -238,13 +254,14 @@ export function useRunQueue(deps: RunQueueDeps) {
         newId = created.id;
         id = newId;
         runWorkspace = created.workspace ?? activeWorkspace;
+        noticeWorkspace = runWorkspace;
         // 空屏首发采纳主进程实际使用的默认工作区。
         if (activeWorkspace === null) setActiveWorkspace(created.workspace);
         // 空屏上选的思考档必须落在**这条**新会话上；否则芯片显示「思考 强」、请求里没有 thinking。
         seedNewSessionThinking(newId, pendingThinking, thinkingBySession.current, runWorkspace);
         if (pendingThinking !== "off") {
           try { await saveSessionPrefs(newId, { thinking: pendingThinking }, runWorkspace ?? undefined); }
-          catch (error) { setLastError(`会话思考档保存失败：${error instanceof Error ? error.message : String(error)}`, newId); }
+          catch (error) { setLastError(`会话思考档保存失败：${error instanceof Error ? error.message : String(error)}`, newId, runWorkspace); }
         }
         activate(newId);
         refreshSessions();
@@ -252,8 +269,14 @@ export function useRunQueue(deps: RunQueueDeps) {
       const goalCmd = pendingGoal.current;
       if (goalCmd !== null) {
         pendingGoal.current = null;
-        const g = await window.agent.setGoal({ sessionId: newId, objective: goalCmd.objective, ...(goalCmd.maxTurns !== undefined ? { maxTurns: goalCmd.maxTurns } : {}), ...(goalCmd.maxUsd !== undefined ? { maxUsd: goalCmd.maxUsd } : {}) });
-        if (!g.ok) setLastError(STR.goal.setFail.replace("{reason}", g.error ?? "未知原因"), newId);
+        const g = await window.agent.setGoal({ sessionId: newId, ...(runWorkspace !== null ? { workspace: runWorkspace } : {}), objective: goalCmd.cmd.objective, ...(goalCmd.cmd.maxTurns !== undefined ? { maxTurns: goalCmd.cmd.maxTurns } : {}), ...(goalCmd.cmd.maxUsd !== undefined ? { maxUsd: goalCmd.cmd.maxUsd } : {}) });
+        if (!g.ok) {
+          // 目标没落上就别把目标原文当普通消息跑掉（那会静默换一种语义）；整条 `/goal …`
+          // 命令原样还给输入框，用户改完可重发。
+          setLastError(STR.goal.setFail.replace("{reason}", g.error ?? "未知原因"), newId, runWorkspace);
+          setDraftRestore({ forSession: newId, forWorkspace: runWorkspace, text: goalCmd.raw, attachments, seq: ++draftRestoreSeq.current });
+          return "failed";
+        }
       }
       // 这一轮显式携带来源工作区；迟到的发送不能重写用户后来切到的窗口上下文。
       setPendingSend(false);
@@ -263,14 +286,17 @@ export function useRunQueue(deps: RunQueueDeps) {
       // 自己按 id 回队，首条消息没有 id，只能在这里补。`accepted` 缺席 = 未知，不回滚
       // （旧主进程/协议兜底时消息可能已经送达，回滚会变成重复发送）。
       if (firstRes !== null && firstRes.ok === false && firstRes.accepted === false) {
-        setDraftRestore({ forSession: newId, text, attachments, seq: ++draftRestoreSeq.current });
+        setDraftRestore({ forSession: newId, forWorkspace: runWorkspace, text, attachments, seq: ++draftRestoreSeq.current });
+        return "failed";
       }
+      return "started";
     }
     catch (err) {
-      setLastError(`本轮运行失败：${err instanceof Error ? err.message : String(err)}`, id ?? "");
+      setLastError(`本轮运行失败：${err instanceof Error ? err.message : String(err)}`, id ?? "", noticeWorkspace);
       // 这条消息没能派出去：把原文与附件还给输入框（Composer 提交时已清空）。
       // 只回滚「抛出」这一支——run 返回 {ok:false} 时消息已经送达，回滚会造成重复发送。
-      setDraftRestore({ forSession: id ?? null, text, attachments, seq: ++draftRestoreSeq.current });
+      setDraftRestore({ forSession: id ?? null, forWorkspace: noticeWorkspace, text, attachments, seq: ++draftRestoreSeq.current });
+      return "failed";
     }
     finally {
       pendingGoal.current = null; // 建会话失败时别把旧目标挂到下一次 send 上
@@ -279,10 +305,13 @@ export function useRunQueue(deps: RunQueueDeps) {
     }
   }, [activeId, activeWorkspace, activate, refreshSessions, runOn, setQueueFor, setLastError, setLastNotice, pendingThinking]);
   /** /goal <目标>（2026-10-18）：先把目标写进会话（setGoal），再用目标原文起第一轮。
-   *  此前斜杠项只往输入框塞字，发出去就是一条普通消息，目标从未被设过。 */
+   *  此前斜杠项只往输入框塞字，发出去就是一条普通消息，目标从未被设过。
+   *  返回值只给「打断并发送」判时点（见 send-queue 的 interruptAfterSend）：普通消息返回 undefined
+   *  （入队已同步发生，调用方当场打断）；`/goal` 返回准备 Promise，setGoal 落定并入队后才算数。 */
   // 首页发 /goal 时还没有会话可挂目标：先记下来，等 send 建好会话、拿到 id 再 setGoal。
-  const pendingGoal = useRef<GoalCommand | null>(null);
-  const sendWithGoal = useCallback((text: string, attachments: RunAttachmentReference[], forceQueue = false): void => {
+  // raw 是用户打进来的整条命令（含 `/goal`），setGoal 失败时原样还回输入框。
+  const pendingGoal = useRef<{ cmd: GoalCommand; raw: string } | null>(null);
+  const sendWithGoal = useCallback((text: string, attachments: RunAttachmentReference[], forceQueue = false, front = false): void | Promise<SendDisposition> => {
     // /compact 是**命令**，不是消息（2026-10-18 同 /goal 病）：此前斜杠项把字塞进输入框，
     // 发出去只是一条普通消息，从没调用过 compact 通道；菜单里的「压缩历史…」才是真入口。
     if (text.trim() === "/compact") {
@@ -290,22 +319,75 @@ export function useRunQueue(deps: RunQueueDeps) {
       return;
     }
     const cmd = parseGoalCommand(text);
-    if (cmd === null) { void send(text, attachments, forceQueue); return; }
+    if (cmd === null) { void send(text, attachments, forceQueue, front); return; }
     const sid = activeIdRef.current;
     if (cmd.objective === "") { toast.error(STR.goal.emptyObjective); return; }
     if (sid === null) {
       // 首页：先让 send 建会话，建好后再落目标（见 send 里的 pendingGoal 分支）。
-      pendingGoal.current = cmd;
-      void send(cmd.objective, attachments);
+      pendingGoal.current = { cmd, raw: text };
+      void send(cmd.objective, attachments, forceQueue, front);
       return;
     }
-    void window.agent.setGoal({ sessionId: sid, objective: cmd.objective, ...(cmd.maxTurns !== undefined ? { maxTurns: cmd.maxTurns } : {}), ...(cmd.maxUsd !== undefined ? { maxUsd: cmd.maxUsd } : {}) }).then((r) => {
-      if (!r.ok) { setLastError(STR.goal.setFail.replace("{reason}", r.error ?? "未知原因"), sid); return; }
-      void send(cmd.objective, attachments);
-    }, (err: unknown) => {
-      setLastError(STR.goal.setFail.replace("{reason}", err instanceof Error ? err.message : String(err)), sid);
-    });
-  }, [send, setLastError, toast]);
+    // 第 1206 页：⌘↩ 且正在跑 ⇒ 先把队首**占住**再等 setGoal。
+    // 只占不派（takeQueued 见 blocked 头返回 null）：否则 setGoal 等待期间旧轮自然收束，
+    // 收束链先派走老队首，用户按 ⌘↩ 要发的这条反而排到后面。
+    const runWs = workspaceRef.current;
+    const key = runKey(runWs, sid);
+    const interrupt = front && (runningSet.current.has(key) || draining.current.has(key));
+    const reserveId = interrupt ? ++queueSeq.current : null;
+    // 占位期间用户可能手动「立即」发了别的消息（或收束链接上了这条）：那一轮不是 ⌘↩ 该杀的。
+    const genAtReserve = runGen.current.get(key) ?? 0;
+    if (reserveId !== null) {
+      const reserved: QueuedSend = { id: reserveId, text: cmd.objective, attachments, blocked: true };
+      setQueueFor(sid, enqueueQueued(sendQueue.current.get(key) ?? [], reserved, true), runWs);
+    }
+    const startReserved = (): void => {
+      if (runningSet.current.has(key)) return; // 已经起跑（收束链先接上了）
+      if (draining.current.has(key)) {
+        // 收束链可能正卡在「队首是占位」那一拍：登记到它退出时再起跑。
+        // 旧实现重试 8 个 microtask 就放弃；持久化写盘跨越事件循环时会把这条永久留在队首。
+        const waiters = drainWaiters.current.get(key) ?? new Set<() => void>();
+        const wake = (): void => {
+          waiters.delete(wake);
+          startReserved();
+        };
+        waiters.add(wake);
+        drainWaiters.current.set(key, waiters);
+        return;
+      }
+      void runOn(sid, null, runWs).catch((err: unknown) => setLastError(`本轮运行失败：${err instanceof Error ? err.message : String(err)}`, sid, runWs));
+    };
+    const settle = (r: { ok: boolean; error?: string }): SendDisposition | Promise<SendDisposition> => {
+      if (!r.ok) {
+        if (reserveId !== null) setQueueFor(sid, (sendQueue.current.get(key) ?? []).filter((item) => !(item.id === reserveId && item.blocked === true)), runWs);
+        setLastError(STR.goal.setFail.replace("{reason}", r.error ?? "未知原因"), sid, runWs);
+        setDraftRestore({ forSession: sid, forWorkspace: runWs, text, attachments, seq: ++draftRestoreSeq.current });
+        // 只有占位过才需要续派（占位把收束链挡在了队首）；没占位就别替用户点「继续发送」。
+        if (reserveId !== null && !runningSet.current.has(key)) startReserved();
+        return "failed";
+      }
+      if (reserveId !== null) {
+        // 清占位（只清旗，保留用户在等待期间对正文的编辑）。
+        setQueueFor(sid, (sendQueue.current.get(key) ?? []).map((item) => item.id === reserveId && item.blocked === true
+          ? { id: item.id, text: item.text, attachments: item.attachments }
+          : item), runWs);
+        if ((runGen.current.get(key) ?? 0) !== genAtReserve) {
+          // 等待期间已经有别的轮接上了（用户手动「立即」/收束链）：它不是这条 ⌘↩ 该杀的。
+          return "started";
+        }
+        if (!runningSet.current.has(key)) {
+          // 旧轮已在等待期间收束（占位把收束链挡在队首）⇒ 自己续派，返回 started，不打断自己。
+          startReserved();
+          return "started";
+        }
+        return "queued";
+      }
+      return send(cmd.objective, attachments, forceQueue, front);
+    };
+    // 目标写进**这条会话自己的工作区**：主进程的单例会话根是启动工作区，只带 sessionId 会把项目
+    // 会话的目标写进默认工作区（幽灵会话 + 真会话没目标）。工作区在调用时定格，之后切窗口不反写。
+    return window.agent.setGoal({ sessionId: sid, ...(runWs !== null ? { workspace: runWs } : {}), objective: cmd.objective, ...(cmd.maxTurns !== undefined ? { maxTurns: cmd.maxTurns } : {}), ...(cmd.maxUsd !== undefined ? { maxUsd: cmd.maxUsd } : {}) }).then(settle, (err: unknown): SendDisposition | Promise<SendDisposition> => settle({ ok: false, error: err instanceof Error ? err.message : String(err) }));
+  }, [send, setQueueFor, runOn, setLastError, setDraftRestore, draftRestoreSeq, toast]);
 
   /** 错误行「重试」（brief 六）：拿最后一轮的用户输入再跑一轮——**追加为新轮，不改写历史**
    *  （本仓事件日志只追加；改写要另开覆盖通道，不在本轮范围）。运行中不动作：Stream 已按
@@ -326,7 +408,7 @@ export function useRunQueue(deps: RunQueueDeps) {
     const runWs = workspace === undefined ? workspaceRef.current : workspace;
     if (runningSet.current.has(runKey(runWs, sid))) return;
     void runOn(sid, null, runWs).catch((err: unknown) => {
-      setLastError(`恢复发送失败：${err instanceof Error ? err.message : String(err)}`, sid);
+      setLastError(`恢复发送失败：${err instanceof Error ? err.message : String(err)}`, sid, runWs);
     });
   }, [runOn, setLastError]);
   const resumeQueue = useCallback(() => {
@@ -341,16 +423,16 @@ export function useRunQueue(deps: RunQueueDeps) {
   const cancelRunHeal = useCallback((sid: string, workspace?: string | null) => {
     const runWs = workspace === undefined ? workspaceRef.current : workspace;
     const key = runKey(runWs, sid);
-    const genAtClick = runGen.current.get(sid) ?? 0;
+    const genAtClick = runGen.current.get(key) ?? 0;
     void window.agent.runCancel(sid, runWs ?? undefined).then((res) => {
       if (!res.ok && res.code !== undefined) {
-        setLastError(res.error ?? "停止失败：会话目标校验未通过", sid);
+        setLastError(res.error ?? "停止失败：会话目标校验未通过", sid, runWs);
         return;
       }
       const heal = shouldHealStaleRun({
         cancelOk: res.ok,
         genAtClick,
-        genNow: runGen.current.get(sid) ?? 0,
+        genNow: runGen.current.get(key) ?? 0,
         flagPresent: runningSet.current.has(key),
       });
       if (!heal) return;
@@ -360,7 +442,7 @@ export function useRunQueue(deps: RunQueueDeps) {
     }).catch((err: unknown) => {
       // 拒绝（通道异常/窗口销毁/main 抛错）与 resolve-{ok:false} 同口径：停止失败要说出来，
       // 不续队列、不派发（第 1082 页；同文件 resumeQueueFor 的 reject 早已接 setLastError）。
-      setLastError(`停止失败：${err instanceof Error ? err.message : String(err)}`, sid);
+        setLastError(`停止失败：${err instanceof Error ? err.message : String(err)}`, sid, runWs);
     });
   }, [resumeQueueFor, setLastError]);
 

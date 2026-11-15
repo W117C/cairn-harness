@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   handleSessionCreate, handleSessionPrefsSet, initSessionsDir,
-  requireSessionMetadata, setSessionRootResolver,
+  requireSessionMetadata, requireSessionMetadataFor, setSessionRootResolver,
 } from "../src/main/session-handlers";
 import { createSession } from "../src/main/sessions";
 
@@ -26,7 +26,10 @@ describe("session preferences root resolution", () => {
     setSessionRootResolver(async (sessionId) => sessionId === id ? otherRoot : null);
     const result = await handleSessionPrefsSet({ sessionId: id, prefs: { model: "deepseek-chat", thinking: "high" } });
     expect(result).toEqual({ ok: true });
-    expect(await metadata.find(id)).toMatchObject({ model: "deepseek-chat", thinking: "high" });
+    expect(await requireSessionMetadataFor(otherRoot).find(id)).toMatchObject({
+      model: "deepseek-chat", thinking: "high",
+    });
+    expect(await metadata.find(id)).toBeUndefined();
   });
 
   it("refuses an unresolved session instead of writing to the default root", async () => {

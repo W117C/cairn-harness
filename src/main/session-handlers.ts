@@ -43,6 +43,12 @@ let projects: ProjectRegistry | null = null;
 let metadata: SessionMetadataRepository | null = null;
 let feedback: FeedbackStore | null = null;
 let pins: PinStore | null = null;
+// 多根桌面：显式会话根有自己的 sidecar；装配根仍复用带自定义路径的全局实例。
+// 同名 id 在两个项目里必须各有各的 pins/feedback 卷，不能因为文件名相同就共卷。
+const feedbackByRoot = new Map<string, FeedbackStore>();
+const pinsByRoot = new Map<string, PinStore>();
+const metadataByRoot = new Map<string, SessionMetadataRepository>();
+let sessionRootsProvider: (() => readonly string[]) | null = null;
 
 export interface SessionRepositoryPaths {
   projectRegistryPath?: string;
@@ -56,6 +62,10 @@ export interface SessionRepositoryPaths {
 /** shell 启动时初始化会话目录与 CX-01 组织仓库。生产路径由 userData 显式传入。 */
 export function initSessionsDir(dir: string, paths: SessionRepositoryPaths = {}): void {
   sessionsDir = dir;
+  feedbackByRoot.clear();
+  pinsByRoot.clear();
+  metadataByRoot.clear();
+  sessionRootsProvider = null;
   projects = new ProjectRegistry(paths.projectRegistryPath ?? join(dir, "projects.json"));
   metadata = new SessionMetadataRepository(paths.sessionMetadataPath ?? join(dir, "session-metadata.json"));
   feedback = new FeedbackStore(paths.feedbackPath ?? join(dir, "feedback.jsonl"));
@@ -111,6 +121,90 @@ export function requireSessionMetadata(): SessionMetadataRepository {
   return metadata;
 }
 
+/** 宿主登记全部会话根，供旧全局 metadata 的唯一归属回退判定使用。 */
+export function setSessionRootsProvider(fn: (() => readonly string[]) | null): void {
+  sessionRootsProvider = fn;
+}
+
+/** 显式会话根对应的 metadata 卷。装配根复用全局实例以保留自定义路径与单根形态。 */
+export function requireSessionMetadataFor(sessionsRoot: string): SessionMetadataRepository {
+  if (sessionsRoot === sessionsDir) return requireSessionMetadata();
+  let repository = metadataByRoot.get(sessionsRoot);
+  if (repository === undefined) {
+    repository = new SessionMetadataRepository(join(sessionsRoot, "session-metadata.json"));
+    metadataByRoot.set(sessionsRoot, repository);
+  }
+  return repository;
+}
+
+function knownSessionRoots(): string[] {
+  const roots = new Set<string>();
+  if (sessionsDir !== null) roots.add(sessionsDir);
+  for (const root of sessionRootsProvider?.() ?? []) roots.add(root);
+  return [...roots];
+}
+
+/** 这条会话是否只住在一个根里。旧全局卷没有 root 标记，只有唯一归属才可回退。 */
+async function hasUniqueSessionOwner(sessionId: string, owner: string): Promise<boolean> {
+  let owners = 0;
+  let ownerMatched = false;
+  for (const root of new Set([...knownSessionRoots(), owner])) {
+    if (!(await sessionExists(root, sessionId))) continue;
+    owners += 1;
+    if (root === owner) ownerMatched = true;
+  }
+  return owners === 1 && ownerMatched;
+}
+
+/**
+ * 一个会话根的 metadata 读面：本地卷优先；旧版装配根全局卷只在该 id 唯一归属此根时回退。
+ * 同 id 在两个根同时存在时绝不把旧卷套到任一边。
+ */
+export async function listSessionMetadataForRoot(sessionsRoot: string): Promise<SessionMetadataRecord[]> {
+  const repository = requireSessionMetadataFor(sessionsRoot);
+  const records = await repository.list();
+  if (sessionsRoot === sessionsDir) return records;
+  const localIds = new Set(records.map((record) => record.id));
+  for (const record of await requireSessionMetadata().list()) {
+    if (localIds.has(record.id)) continue;
+    if (!(await sessionExists(sessionsRoot, record.id))) continue;
+    if (await hasUniqueSessionOwner(record.id, sessionsRoot)) records.push(record);
+  }
+  return records;
+}
+
+/** 单条 metadata 的读面（偏好迁移等只读调用）：本地记录优先，唯一归属时回退旧全局卷。 */
+export async function readSessionMetadataForSession(
+  sessionId: string,
+  sessionsRoot: string,
+): Promise<SessionMetadataRecord | undefined> {
+  const local = await requireSessionMetadataFor(sessionsRoot).find(sessionId);
+  if (local !== undefined || sessionsRoot === sessionsDir) return local;
+  const legacy = await requireSessionMetadata().find(sessionId);
+  if (legacy === undefined) return undefined;
+  return await hasUniqueSessionOwner(sessionId, sessionsRoot) ? legacy : undefined;
+}
+
+/**
+ * 写前面的落点解析：项目根第一次组织一条旧会话时，把唯一归属的旧记录复制进本根并移出旧卷。
+ * 无唯一归属 ⇒ 不搬、不猜；后续写入只影响显式指定的这一根。
+ */
+export async function requireSessionMetadataForMutation(
+  sessionId: string,
+  sessionsRoot: string,
+): Promise<SessionMetadataRepository> {
+  const repository = requireSessionMetadataFor(sessionsRoot);
+  if (sessionsRoot === sessionsDir) return repository;
+  if (await repository.find(sessionId)) return repository;
+  const legacy = await requireSessionMetadata().find(sessionId);
+  if (legacy === undefined || !(await hasUniqueSessionOwner(sessionId, sessionsRoot))) return repository;
+  await repository.adoptIfAbsent(legacy);
+  await requireSessionMetadata().remove(sessionId).catch((error: unknown) => {
+    console.warn("[session-metadata] 旧记录迁移后清理失败:", error instanceof Error ? error.message : String(error));
+  });
+  return repository;
+}
+
 export function requireFeedbackStore(): FeedbackStore {
   if (!feedback) throw new Error("反馈仓库未初始化（shell 未启动？）");
   return feedback;
@@ -120,6 +214,28 @@ export function requireFeedbackStore(): FeedbackStore {
 export function requirePinStore(): PinStore {
   if (pins === null) throw new Error("置顶仓库未初始化（shell 未启动？）");
   return pins;
+}
+
+/** 显式根对应的反馈仓库：装配根复用全局实例（保留测试/自定义路径），项目根按需建。 */
+function feedbackStoreFor(sessionsRoot?: string): FeedbackStore {
+  if (sessionsRoot === undefined || sessionsRoot === sessionsDir) return requireFeedbackStore();
+  let store = feedbackByRoot.get(sessionsRoot);
+  if (store === undefined) {
+    store = new FeedbackStore(join(sessionsRoot, "feedback.jsonl"));
+    feedbackByRoot.set(sessionsRoot, store);
+  }
+  return store;
+}
+
+/** 同上：置顶 sidecar 跟着会话根走。 */
+function pinStoreFor(sessionsRoot?: string): PinStore {
+  if (sessionsRoot === undefined || sessionsRoot === sessionsDir) return requirePinStore();
+  let store = pinsByRoot.get(sessionsRoot);
+  if (store === undefined) {
+    store = new PinStore(join(sessionsRoot, "pins.jsonl"));
+    pinsByRoot.set(sessionsRoot, store);
+  }
+  return store;
 }
 
 export async function handleSessionList(): Promise<SessionInfo[]> {
@@ -159,11 +275,11 @@ export async function handleSessionPrefsSet(
     }
     if (patch.model === undefined && patch.thinking === undefined) return { ok: false, error: "prefs 至少要给 model 或 thinking" };
     if (scope === undefined) {
-      await requireSessionMetadata().setPrefs(id, patch);
+      await (await requireSessionMetadataForMutation(id, dir)).setPrefs(id, patch);
     } else {
       await withSessionMutation(dir, async () => {
         if (!(await sessionExists(dir, id))) throw new Error(`会话不存在: ${id}`);
-        const legacy = scope.inheritLegacy ? await requireSessionMetadata().find(id) : undefined;
+        const legacy = scope.inheritLegacy ? await readSessionMetadataForSession(id, dir) : undefined;
         await writeSessionPreferences(pathOf(dir, id), patch, legacy);
       });
     }
@@ -230,7 +346,8 @@ export async function handleSessionRename(oldId: string, newName: string, sessio
   if (dir === null) throw new Error(`会话不存在: ${oldId}`);
   return await withSessionMutation(dir, async () => {
     await assertNoDependents({ workspace: workspaceOfSessionsRoot(dir) ?? dir, sessionId: oldId }, dir);
-    const id = await renameSession(dir, oldId, newName, requireSessionMetadata());
+    const metadata = await requireSessionMetadataForMutation(oldId, dir);
+    const id = await renameSession(dir, oldId, newName, metadata);
     const cur = await store().get();
     if (cur.currentSession === oldId) await store().set({ currentSession: id });
     return { id };
@@ -248,7 +365,8 @@ export async function handleSessionDelete(
   const logPath = pathOf(dir, id);
   return await withSessionMutation(dir, async () => {
     await assertNoDependents({ workspace: workspaceOfSessionsRoot(dir) ?? dir, sessionId: id }, dir);
-    // 旧组织信息、反馈和置顶只按 id 存。同名日志还在别处时，不能把这些共享记录一并删掉。
+    // 旧全局卷里没有 root 标记；同名日志还在别处时，装配根这条记录仍可能属于另一边，
+    // 不能替它选边。项目根的新卷则永远只属于这一根，与 sibling 无关。
     const siblingChecks = registeredSessionRoots.filter((root) => root !== dir).map(async (root) => {
       try {
         await stat(pathOf(root, id));
@@ -260,7 +378,15 @@ export async function handleSessionDelete(
       }
     });
     const sharedId = (await Promise.all(siblingChecks)).includes(true);
-    await deleteSession(dir, id, sharedId ? undefined : requireSessionMetadata());
+    const metadataRepository = requireSessionMetadataFor(dir);
+    // 读坏档时保持旧行为：同名 sibling 在别处时仍允许删这一根，不拿坏档把删除也锁死；
+    // 非共享根照旧把坏档交给 deleteSession 的事务面 fail-loud。
+    const scopedRecord = await metadataRepository.find(id).then(
+      (record) => record?.workspaceScoped === true,
+      () => false,
+    );
+    const metadata = dir === sessionsDir && sharedId && !scopedRecord ? undefined : metadataRepository;
+    await deleteSession(dir, id, metadata);
     // 删除会话要连私有观测数据 / 反馈 / 裁剪附件一起清：它们都以会话 id 为锚，留着会让同 id
     // 新会话继承旧反馈（eventId 指向不存在的转录），且隐私面残留在盘上。
     // 清理失败不把已完成的删除反签成失败（与 deleteSession 的队列清理同口径），但要出声。
@@ -273,6 +399,21 @@ export async function handleSessionDelete(
       });
       await requirePinStore().removeSession(id).catch((err: unknown) => {
         console.warn("[session-delete] 置顶清理失败:", err instanceof Error ? err.message : String(err));
+      });
+    }
+    // 项目根自己的 sidecar 永远只清这一根；装配根的旧全局卷只在没有同名兄弟时清（旧行为）。
+    if (dir !== sessionsDir) {
+      await feedbackStoreFor(dir).removeSession(id).catch((err: unknown) => {
+        console.warn("[session-delete] 项目根反馈清理失败:", err instanceof Error ? err.message : String(err));
+      });
+      await pinStoreFor(dir).removeSession(id).catch((err: unknown) => {
+        console.warn("[session-delete] 项目根置顶清理失败:", err instanceof Error ? err.message : String(err));
+      });
+    }
+    // 唯一归属的旧全局 metadata 记录随这条会话一起清；有 sibling 时不猜它属于谁。
+    if (dir !== sessionsDir && !sharedId) {
+      await requireSessionMetadata().remove(id).catch((err: unknown) => {
+        console.warn("[session-delete] 旧全局 metadata 清理失败:", err instanceof Error ? err.message : String(err));
       });
     }
     try {
@@ -343,7 +484,7 @@ export async function handleSessionFork(
   // ⇒ 整体失败、文件未动，与「已存在」同向 fail-visible）；fork 物理落位失败则回滚 sidecar
   // （对称 createSession 的 sidecar 回滚纪律）。源 sidecar 读取失败（损坏）不阻断 fork——
   // 降级为无标题分叉，比拿 fork 当人质强。
-  const meta = requireSessionMetadata();
+  const meta = await requireSessionMetadataForMutation(sessionId, dir);
   const srcRecord = await meta.find(sessionId).catch(() => undefined);
   const baseTitle =
     srcRecord !== undefined && srcRecord.title !== sessionId ? `${srcRecord.title}-f${String(effective)}` : null;
@@ -435,8 +576,8 @@ export async function handleFeedbackSubmit(req: {
   eventRef?: EventRef;
 }, sessionsRoot?: string): Promise<{ ok: boolean; error?: string }> {
   try {
-    await requireExistingSession(req.sessionId, sessionsRoot);
-    await requireFeedbackStore().append({
+    const root = await requireExistingSession(req.sessionId, sessionsRoot);
+    await feedbackStoreFor(root).append({
       sessionId: req.sessionId,
       eventId: req.eventId,
       rating: req.rating,
@@ -449,9 +590,10 @@ export async function handleFeedbackSubmit(req: {
   }
 }
 
-/** 某会话当前生效的反馈（界面据此点亮赞/踩）。 */
-export async function handleFeedbackList(sessionId: string, _sessionsRoot?: string): Promise<ResolvedFeedback[]> {
-  return await requireFeedbackStore().listForSession(sessionId);
+/** 某会话当前生效的反馈（界面据此点亮赞/踩）。读取与写入共用存在性判据。 */
+export async function handleFeedbackList(sessionId: string, sessionsRoot?: string): Promise<ResolvedFeedback[]> {
+  const root = await requireExistingSession(sessionId, sessionsRoot);
+  return await feedbackStoreFor(root).listForSession(sessionId);
 }
 
 // ---- 消息置顶（2026-10-20 · 销 G6）：操作条 pin 的沉淀面（sidecar，不进事件流）----
@@ -464,8 +606,8 @@ export async function handlePinSet(req: {
   eventRef?: EventRef;
 }, sessionsRoot?: string): Promise<{ ok: boolean; error?: string }> {
   try {
-    await requireExistingSession(req.sessionId, sessionsRoot);
-    await requirePinStore().append({
+    const root = await requireExistingSession(req.sessionId, sessionsRoot);
+    await pinStoreFor(root).append({
       sessionId: req.sessionId, eventId: req.eventId, pinned: req.pinned,
       ...(req.eventRef !== undefined ? { eventRef: req.eventRef } : {}),
     });
@@ -475,9 +617,11 @@ export async function handlePinSet(req: {
   }
 }
 
-/** 某会话当前生效的置顶锚点（界面据此点亮 pin 钮、大纲里置顶项排前）。 */
-export async function handlePinList(sessionId: string): Promise<{ eventId: number; eventRef?: EventRef }[]> {
-  return await requirePinStore().listForSessionWithRefs(sessionId);
+/** 某会话当前生效的置顶锚点（界面据此点亮 pin 钮、大纲里置顶项排前）。
+ *  读取与写入同一条存在性判据：显式根优先，缺省才问归属解析器。 */
+export async function handlePinList(sessionId: string, sessionsRoot?: string): Promise<{ eventId: number; eventRef?: EventRef }[]> {
+  const root = await requireExistingSession(sessionId, sessionsRoot);
+  return await pinStoreFor(root).listForSessionWithRefs(sessionId);
 }
 
 // ---- CX-01：项目注册表 + Session-plane 组织记录 ----
@@ -496,28 +640,32 @@ export async function handleProjectRemove(id: string): Promise<ProjectRecord> {
   return await requireProjectRegistry().remove(id);
 }
 
-async function requireExistingSession(id: string, sessionsRoot?: string): Promise<void> {
+async function requireExistingSession(id: string, sessionsRoot?: string): Promise<string> {
   // 归属根由解析器给（多根面）；**存在性仍然当场查**——解析器只说"去哪儿找"，
   // 不替它说"存在"（否则解析器的一次误判就变成一次静默放行）。
   // `sessionsRoot` = 调用方已过登记根闸的显式根（同名 id 精确寻址）。
   const root = sessionsRoot ?? await resolveSessionRoot(id);
   if (root === null || !(await sessionExists(root, id))) throw new Error(`会话不存在: ${id}`);
+  return root;
 }
 
-export async function handleSessionSetPinned(id: string, pinned: boolean): Promise<SessionMetadataRecord> {
-  await requireExistingSession(id);
-  return await requireSessionMetadata().setPinned(id, pinned);
+/** 会话平面组织动作的落点：显式根优先（已过登记根闸），否则问归属解析器。
+ *  metadata 与 feedback/pin 一样按会话根落卷；旧全局记录只在唯一归属时搬迁，
+ *  显式根同时用于存在性检查与写入定位，同 id 跨工作区不再共用一条记录。 */
+export async function handleSessionSetPinned(id: string, pinned: boolean, sessionsRoot?: string): Promise<SessionMetadataRecord> {
+  const root = await requireExistingSession(id, sessionsRoot);
+  return await (await requireSessionMetadataForMutation(id, root)).setPinned(id, pinned);
 }
 
-export async function handleSessionSetArchived(id: string, archived: boolean): Promise<SessionMetadataRecord> {
-  await requireExistingSession(id);
-  return await requireSessionMetadata().setArchived(id, archived);
+export async function handleSessionSetArchived(id: string, archived: boolean, sessionsRoot?: string): Promise<SessionMetadataRecord> {
+  const root = await requireExistingSession(id, sessionsRoot);
+  return await (await requireSessionMetadataForMutation(id, root)).setArchived(id, archived);
 }
 
-export async function handleSessionAssignProject(id: string, projectId: string | null): Promise<SessionMetadataRecord> {
-  await requireExistingSession(id);
+export async function handleSessionAssignProject(id: string, projectId: string | null, sessionsRoot?: string): Promise<SessionMetadataRecord> {
+  const root = await requireExistingSession(id, sessionsRoot);
   if (projectId !== null) await requireProjectRegistry().getActive(projectId);
-  return await requireSessionMetadata().assignProject(id, projectId);
+  return await (await requireSessionMetadataForMutation(id, root)).assignProject(id, projectId);
 }
 
 // ---- v4 变更审阅（diff 窗格逐 hunk）----

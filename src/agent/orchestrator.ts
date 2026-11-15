@@ -290,10 +290,6 @@ export class Orchestrator {
     return this.workers.size > 0;
   }
 
-  statusOf(agentId: string): AgentEvent | null {
-    return null; // 状态一律由事件流投影（§3.1），编排器不设第二事实源
-  }
-
   /** 协议事件落流口（card_action 等与 turn 解耦的写入走编排器绑定的主管线——
    *  父 turn 结束后 session.emit 已不可达，worker 审批应答仍须可落流，§4.4.3）。 */
   async appendProtocol(e: AgentEvent): Promise<void> {

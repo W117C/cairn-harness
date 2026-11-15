@@ -499,7 +499,7 @@ export const STR = {
     scrollEdge: "回到对话顶部 / 底部（输入框聚焦时不劫持）",
     suggest: "空输入框想下一条（按上下文，填入不发送）",
     send: "发送；运行中 = 排队（不打断）",
-    sendInterrupt: "运行中 = 入队并打断本轮",
+    sendInterrupt: "运行中 = 打断本轮，先发这条",
     stop: "停止本轮生成",
     esc: "先关浮层；决策卡在场时让路；无浮层停止本轮",
   },
@@ -743,6 +743,7 @@ export const STR = {
   },
   network: {
     customSearch: "自定义搜索接口",
+    htmlSearch: "HTML 页面",
     loadFailedPrefix: "无法读取搜索设置：",
     saveFailedPrefix: "保存失败：",
     testFailedPrefix: "测试失败：",

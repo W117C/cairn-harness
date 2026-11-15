@@ -35,8 +35,8 @@ export interface SessionOpsDeps {
   activate: (id: string | null) => void;
   /** 开会话（切 + 载转录 + 载队列）。 */
   openSession: (id: string, workspace?: string) => void;
-  setLastError: (message: string, sessionId?: string) => void;
-  setLastNotice: (message: string, sessionId?: string) => void;
+  setLastError: (message: string, sessionId?: string, workspace?: string | null) => void;
+  setLastNotice: (message: string, sessionId?: string, workspace?: string | null) => void;
   /** 改名换 id 时搬草稿桶。 */
   setDraftRemap: (v: { from: string; to: string; seq: number } | undefined) => void;
   draftRemapSeq: React.MutableRefObject<number>;
@@ -67,12 +67,13 @@ export interface SessionOpsState {
   cycleSessionOrToast: (dir: 1 | -1) => void;
   /** 关闭当前会话回主页（⌘W 与菜单「关闭会话」同一出口）。 */
   closeSessionToHome: () => void;
-  renameSessionById: (id: string, name: string) => Promise<void>;
-  pinSessionById: (id: string, pinned: boolean) => Promise<void>;
+  /** 第三参是**行自己的**工作区：同 id 跨工作区时主进程按显式根定位，归属歧义不该把改名拒掉。 */
+  renameSessionById: (id: string, name: string, workspace?: string) => Promise<void>;
+  pinSessionById: (id: string, pinned: boolean, workspace?: string) => Promise<void>;
   forkSessionFromMenu: (s: WorkspaceSession) => Promise<void>;
   openSessionInCli: (s: WorkspaceSession) => void;
   sessionWorktreeOp: (kind: "create" | "merge" | "discard", s: WorkspaceSession) => Promise<void>;
-  doArchiveSession: (id: string, archived: boolean) => Promise<void>;
+  doArchiveSession: (id: string, archived: boolean, workspace?: string) => Promise<void>;
   requestArchiveSession: (s: WorkspaceSession, archived: boolean) => void;
   requestDeleteSession: (s: WorkspaceSession) => void;
   doDeleteSession: (id: string, target?: WorkspaceSession) => Promise<void>;
@@ -132,24 +133,28 @@ export function useSessionOps(deps: SessionOpsDeps): SessionOpsState {
   }, [newSession]);
 
   // 行级会话操作（蓝本 §2.1）：重命名 / 置顶 / 分叉 / 归档——通道已存在，这里只做编排与 fail-visible。
-  const renameSessionById = useCallback(async (id: string, name: string) => {
+  // 行内改名带行自己的根；顶栏改名只绑 id（切换过会话也不改到别人头上），这里按
+  // 「当前会话的根 → 清单里那一行的根」补齐——让归属解析只在真的没线索时才需要猜。
+  const renameSessionById = useCallback(async (id: string, name: string, workspace?: string) => {
+    const activeMatches = activeIdRef.current === id && (workspace === undefined || activeWorkspaceRef.current === workspace);
+    const ws = workspace ?? (activeMatches ? activeWorkspaceRef.current ?? undefined : sessions.find((s) => s.id === id)?.workspace);
     try {
-      const r = await window.agent.renameSession(id, name);
-      if (activeIdRef.current === id) {
+      const r = await window.agent.renameSession(id, name, ws);
+      if (activeMatches) {
         if (r.id !== id) setDraftRemap({ from: id, to: r.id, seq: ++draftRemapSeq.current });
         activate(r.id); // 改名换 id：当前会话与新 id 同步（含 ref）
       }
       void refreshSessions();
     } catch (err) {
-      setLastError(`重命名失败：${err instanceof Error ? err.message : String(err)}`);
+      setLastError(`重命名失败：${err instanceof Error ? err.message : String(err)}`, id, ws);
     }
-  }, [refreshSessions, activate]);
-  const pinSessionById = useCallback(async (id: string, pinned: boolean) => {
+  }, [refreshSessions, activate, activeIdRef, activeWorkspaceRef, sessions]);
+  const pinSessionById = useCallback(async (id: string, pinned: boolean, workspace?: string) => {
     try {
-      await window.agent.setSessionPinned(id, pinned);
+      await window.agent.setSessionPinned(id, pinned, workspace);
       void refreshSessions();
     } catch (err) {
-      setLastError(`置顶失败：${err instanceof Error ? err.message : String(err)}`);
+      setLastError(`置顶失败：${err instanceof Error ? err.message : String(err)}`, id, workspace);
     }
   }, [refreshSessions]);
   /** 对话菜单「分叉…」（第十四遍对齐原型 v3-lite 五项菜单）：全量分叉——round=0 是 desktop 侧
@@ -160,13 +165,13 @@ export function useSessionOps(deps: SessionOpsDeps): SessionOpsState {
     try {
       const r = await window.agent.forkSession(s.id, 0, true, s.workspace);
       if (r.ok !== true || r.id === undefined) {
-        setLastError(`分叉失败：${r.error ?? "未知原因"}`, s.id);
+        setLastError(`分叉失败：${r.error ?? "未知原因"}`, s.id, s.workspace);
         return;
       }
       void refreshSessions();
       openSession(r.id, s.workspace);
     } catch (err) {
-      setLastError(`分叉失败：${err instanceof Error ? err.message : String(err)}`, s.id);
+      setLastError(`分叉失败：${err instanceof Error ? err.message : String(err)}`, s.id, s.workspace);
     }
   }, [refreshSessions, openSession]);
   /** 跨面接力（规范 §3.9 · 必抄 #6）：桌面与 CLI 是**同一个 sessions 存储的两个面**。
@@ -175,8 +180,8 @@ export function useSessionOps(deps: SessionOpsDeps): SessionOpsState {
   const openSessionInCli = useCallback((s: WorkspaceSession) => {
     const cmd = `cairn --session ${s.id}`;
     void navigator.clipboard.writeText(cmd).then(
-      () => { setLastNotice(`已复制：${cmd}——在终端粘贴后续跑（CLI 还需要一句任务描述）`); },
-      (err: unknown) => { setLastError(`复制失败：${err instanceof Error ? err.message : String(err)}`); },
+      () => { setLastNotice(`已复制：${cmd}——在终端粘贴后续跑（CLI 还需要一句任务描述）`, s.id, s.workspace); },
+      (err: unknown) => { setLastError(`复制失败：${err instanceof Error ? err.message : String(err)}`, s.id, s.workspace); },
     );
   }, []);
   /** 会话级 worktree 隔离（§3.7 · G4）：三个动作共用一条 IPC。成功/失败都落到流尾那一行——
@@ -184,7 +189,9 @@ export function useSessionOps(deps: SessionOpsDeps): SessionOpsState {
   const sessionWorktreeOp = useCallback(async (kind: "create" | "merge" | "discard", s: WorkspaceSession) => {
     try {
       const r = await window.agent.sessionWorktree(
-        kind === "create" ? { kind, sessionId: s.id, ...(s.title !== undefined ? { title: s.title } : {}) } : { kind, sessionId: s.id },
+        kind === "create"
+          ? { kind, sessionId: s.id, workspace: s.workspace, ...(s.title !== undefined ? { title: s.title } : {}) }
+          : { kind, sessionId: s.id, workspace: s.workspace },
       );
       if (!r.ok) {
         // 冲突单独说：主 checkout 已被 abort 回干净态，用户的活还在隔离树里，不是丢了。
@@ -193,6 +200,7 @@ export function useSessionOps(deps: SessionOpsDeps): SessionOpsState {
             ? `合并冲突：${(r.conflictedFiles ?? []).join("、")}——主工作区已恢复干净态，改动仍在隔离工作区里`
             : `${kind === "create" ? "隔离" : kind === "merge" ? "合并" : "丢弃"}失败：${r.error ?? "未知原因"}`,
           s.id,
+          s.workspace,
         );
         void refreshSessions();
         return;
@@ -204,26 +212,28 @@ export function useSessionOps(deps: SessionOpsDeps): SessionOpsState {
             ? `已合并回主工作区${r.branch !== undefined ? `（${r.branch}）` : ""}`
             : "隔离工作区已丢弃",
         s.id,
+        s.workspace,
       );
-      if (r.warnings !== undefined && r.warnings.length > 0) setLastNotice(`隔离已建成，但有降级：${r.warnings.join("；")}`, s.id);
+      if (r.warnings !== undefined && r.warnings.length > 0) setLastNotice(`隔离已建成，但有降级：${r.warnings.join("；")}`, s.id, s.workspace);
       void refreshSessions();
     } catch (err) {
-      setLastError(`隔离工作区操作失败：${err instanceof Error ? err.message : String(err)}`, s.id);
+      setLastError(`隔离工作区操作失败：${err instanceof Error ? err.message : String(err)}`, s.id, s.workspace);
     }
   }, [refreshSessions, setLastError, setLastNotice]);
-  const doArchiveSession = useCallback(async (id: string, archived: boolean) => {
+  const doArchiveSession = useCallback(async (id: string, archived: boolean, workspace?: string) => {
     try {
-      await window.agent.setSessionArchived(id, archived);
-      if (archived && activeIdRef.current === id) newSession(); // 归档的是当前会话 ⇒ 回主页
+      await window.agent.setSessionArchived(id, archived, workspace);
+      // 同 id 跨工作区时，只有「id 与根都对上」才是把用户正在看的这一场归档。
+      if (archived && activeIdRef.current === id && (workspace === undefined || activeWorkspaceRef.current === workspace)) newSession();
       void refreshSessions();
     } catch (err) {
-      setLastError(`归档失败：${err instanceof Error ? err.message : String(err)}`);
+      setLastError(`归档失败：${err instanceof Error ? err.message : String(err)}`, id, workspace);
     }
   }, [refreshSessions, newSession]);
   /** 归档必问（§3.3 硬闸：「归档任何会话前必问」，与权限档无关）；取消归档不问。
    *  在跑的会话照样能归档（可逆），但确认卡要前置「本轮继续在后台跑」——不把运行藏起来。 */
   const requestArchiveSession = useCallback((s: WorkspaceSession, archived: boolean) => {
-    if (!archived) { void doArchiveSession(s.id, false); return; }
+    if (!archived) { void doArchiveSession(s.id, false, s.workspace); return; }
     setArchiveConfirm(runningSet.current.has(runKey(s.workspace, s.id)) ? { ...s, running: true } : s);
   }, [doArchiveSession, runningSet, setArchiveConfirm]);
   // §6.3 删除会话：必问（不可撤销）→ 真删；删的是当前会话 ⇒ 回 settings.currentSession 指定的最近一个（core 已回退），无则回主页。
@@ -253,7 +263,7 @@ export function useSessionOps(deps: SessionOpsDeps): SessionOpsState {
       }
       void refreshSessions();
     } catch (err) {
-      setLastError(`删除失败：${err instanceof Error ? err.message : String(err)}`);
+      setLastError(`删除失败：${err instanceof Error ? err.message : String(err)}`, id, workspace);
     }
   }, [activeIdRef, activeWorkspaceRef, openSession, newSession, refreshSessions, runningSet, sessions, setLastError]);
 

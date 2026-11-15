@@ -1,9 +1,9 @@
 // v2.17 运行中可沟通：发送队列的纯函数判卷。
-// 队列语义只有三条且都在这里钉住——FIFO 出队、把某条提到队首（「打断并发送」用）、按位移除。
-// 组件与 App 只消费这三个出口，不各算一份。
+// 队列语义都在这里钉住——FIFO 出队、入队（队尾/队首）、把某条提到队首（「打断并发送」用）、按位移除。
+// 组件与 App 只消费这几个出口，不各算一份。
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { askBelongsToSession, composerLockReason, composerLocked, continueAfterRun, drainQueue, dropQueued, editQueued, fromSessionQueueEntries, moveQueued, promoteQueued, shouldHealStaleRun, steerAccepted, steerRouteOf, takeQueued, toSessionQueueEntries, type QueuedSend } from "../src/renderer/send-queue";
+import { askBelongsToSession, composerLockReason, composerLocked, continueAfterRun, drainQueue, dropQueued, editQueued, enqueueQueued, fromSessionQueueEntries, interruptAfterSend, moveQueued, promoteQueued, shouldHealStaleRun, steerAccepted, steerRouteOf, takeQueued, toSessionQueueEntries, type QueuedSend, type SendDisposition } from "../src/renderer/send-queue";
 import { readAppSurface } from "./helpers/app-surface";
 
 const item = (id: number): QueuedSend => ({ id, text: `消息${String(id)}`, attachments: [] });
@@ -17,8 +17,26 @@ describe("发送队列纯函数", () => {
     expect(takeQueued([]).rest).toEqual([]);
   });
 
+  it("takeQueued：队首是 /goal 占位（blocked）时不给、也不出队——收束链停一拍，等目标落定", () => {
+    const blocked: QueuedSend = { ...item(1), blocked: true };
+    const { head, rest } = takeQueued([blocked, item(2)]);
+    expect(head).toBeNull();
+    // 占位仍留在表里（等 sendWithGoal 清旗后由它显式续派），老消息不许抢先出队。
+    expect(rest.map((i) => i.id)).toEqual([1, 2]);
+  });
+
   it("promoteQueued：把指定项提到队首，其余相对次序不变", () => {
     expect(promoteQueued([item(1), item(2), item(3)], 2).map((i) => i.id)).toEqual([3, 1, 2]);
+  });
+
+  it("enqueueQueued：缺省排队尾；front=true 插队首（⌘↩ 打断并发送：现在发的是这一条）", () => {
+    expect(enqueueQueued([item(1), item(2)], item(3)).map((i) => i.id)).toEqual([1, 2, 3]);
+    expect(enqueueQueued([item(1), item(2)], item(3), true).map((i) => i.id)).toEqual([3, 1, 2]);
+    expect(enqueueQueued([], item(1), true).map((i) => i.id)).toEqual([1]);
+    // 不改入参（调用方可能正持有同一份快照）
+    const before = [item(1)];
+    enqueueQueued(before, item(2), true);
+    expect(before.map((i) => i.id)).toEqual([1]);
   });
 
   it("dropQueued：删除指定项，其余次序不变", () => {
@@ -153,6 +171,11 @@ describe("发送队列持久化载荷", () => {
       { id: 2, text: "带引用", attachments: [{ path: "src/a.ts", kind: "file", explicit: true }] },
     ]);
   });
+
+  it("占位的 /goal 不落盘：重启后不能把一条没设过目标的消息派出去", () => {
+    const entries = toSessionQueueEntries([{ ...item(1), blocked: true }, item(2)]);
+    expect(entries).toEqual([{ text: "消息2", attachments: [] }]);
+  });
 });
 
 describe("shouldHealStaleRun（「打断/停止」陈旧旗自愈，第十三遍）", () => {
@@ -190,6 +213,21 @@ describe("打断接线哨兵（源码级，第十三遍）", () => {
     expect(appSrc).not.toContain("void window.agent.runCancel(id)");
   });
 
+  it("⌘↩ 的 front 一路传到底：Composer → sendWithGoal → send → enqueueQueued(front)", () => {
+    // 只把字面量写进 submit、不往下传＝消息仍排到队尾（打断后先发的还是老消息）。
+    expect(appSrc).toContain("sendWithGoal(t, attachments, forceQueue ?? false, front ?? false)");
+    expect(appSrc).toContain("enqueueQueued(sendQueue.current.get(sendKey!) ?? []");
+    expect(appSrc).toContain("void send(text, attachments, forceQueue, front);");
+    expect(appSrc).toContain("return send(cmd.objective, attachments, forceQueue, front);");
+  });
+
+  it("⌘↩ 的打断时点接线：onSend 的返回值交给 interruptAfterSend，不再拿到就打断", () => {
+    // /goal 要先 await setGoal 才入队；早打断会让收束链先派走老队首（第 1206 页）。
+    expect(appSrc).toContain("const dispatched = props.onSend(");
+    expect(appSrc).toContain("interruptAfterSend(dispatched, props.onCancel)");
+    expect(appSrc).not.toContain("if (opts?.interrupt === true && props.running) props.onCancel();");
+  });
+
   it("三处入口全走 cancelRunHeal：打断并发送 / 停止钮 / Esc 智慧停止（hotkeysRef 两联）", () => {
     // 函数定义、两次快捷键赋值、两个 UI 调用分别计数；注释和模块间传参都不算入口。
     expect(appSrc.match(/const cancelRunHeal = useCallback/g)).toHaveLength(1);
@@ -202,8 +240,49 @@ describe("打断接线哨兵（源码级，第十三遍）", () => {
 
   it("真派活代号：runOn 的 drain 回调每发一轮 +1（自愈竞态守卫的唯一供数口）", () => {
     // 2026-10-18：代际号先落到局部 myGen（finally / stopped 写入按它守卫），再写回表。
-    expect(appSrc).toContain("const myGen = (runGen.current.get(sid) ?? 0) + 1;");
-    expect(appSrc).toContain("runGen.current.set(sid, myGen);");
+    expect(appSrc).toContain("const myGen = (runGen.current.get(key) ?? 0) + 1;");
+    expect(appSrc).toContain("runGen.current.set(key, myGen);");
+  });
+});
+
+describe("⌘↩ 的打断时点（第 1206 页：先入队，后打断）", () => {
+  it("普通发送同步入队（onSend 返回 undefined）⇒ 当场打断", () => {
+    let cancels = 0;
+    interruptAfterSend(undefined, () => { cancels += 1; });
+    expect(cancels).toBe(1);
+  });
+
+  it("/goal 的准备 Promise 未落定 ⇒ 打断不发生；落定为 queued 才打断（只一次）", async () => {
+    let release: (d: SendDisposition) => void = () => undefined;
+    const prepared = new Promise<SendDisposition>((resolve) => { release = resolve; });
+    let cancels = 0;
+    interruptAfterSend(prepared, () => { cancels += 1; });
+    await Promise.resolve();
+    expect(cancels, "setGoal 未回就打断 ⇒ 收束链先派走老队首，新消息反而排后面").toBe(0);
+    release("queued");
+    await prepared;
+    expect(cancels).toBe(1);
+  });
+
+  it("起跑/插话/失败都不打断：没排队就没有该打断的旧轮，自己刚起跑的那轮更不能杀", async () => {
+    for (const disposition of ["started", "steered", "failed"] as const) {
+      let cancels = 0;
+      await interruptAfterSend(Promise.resolve(disposition), () => { cancels += 1; });
+      expect(cancels, `${disposition} 不该触发打断`).toBe(0);
+    }
+  });
+
+  it("准备 Promise 拒绝 ⇒ 不打断（失败那一支已把原文还回输入框）", async () => {
+    let cancels = 0;
+    await interruptAfterSend(Promise.reject(new Error("setGoal failed")), () => { cancels += 1; });
+    expect(cancels).toBe(0);
+  });
+
+  it("占位解除后的续派等 drain 真正退出，不用有限 microtask 重试（写盘可跨事件循环）", () => {
+    const appSrc = readAppSurface();
+    expect(appSrc).toContain("drainWaiters.current.get(key)");
+    expect(appSrc).toContain("for (const wake of waiters) wake();");
+    expect(appSrc).not.toContain("queueMicrotask(() => kick(8))");
   });
 });
 

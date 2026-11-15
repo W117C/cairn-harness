@@ -123,37 +123,43 @@ function sidechatToolTable(workspace: string): {
   };
 }
 
-export async function handleSidechatCreate(parentSessionId: string, name?: string): Promise<{ id: string }> {
-  return { id: await createSidechatSession(requireSessionsDir(), parentSessionId, name) };
+export async function handleSidechatCreate(parentSessionId: string, name?: string, sessionsRoot?: string): Promise<{ id: string }> {
+  // 旁路会话跟着**父会话**的工作区走（显式根优先，否则问归属解析器）：单例根是启动工作区，
+  // 在其他项目里新建旁路会把内容写进默认工作区，面板/清单跟着串项目。
+  const dir = sessionsRoot ?? await resolveSessionRoot(parentSessionId);
+  if (dir === null) throw new Error(`父会话不存在或归属未知，旁路无处新建：${parentSessionId}`);
+  return { id: await createSidechatSession(dir, parentSessionId, name) };
 }
 
 /** 跑一轮 sidechat（own loop）。事件只落 sidechat 自己的 JSONL；主会话文件字节不变。 */
 export async function handleSidechatAsk(
   sidechatId: string,
   message: string,
-  over: { parentSessionId?: string; model?: SidechatModel; summarizer?: Summarizer; onEvent?: (e: AgentEvent) => void } = {},
+  over: { parentSessionId?: string; sessionsRoot?: string; model?: SidechatModel; summarizer?: Summarizer; onEvent?: (e: AgentEvent) => void } = {},
 ): Promise<{ ok: boolean; error?: string; events?: AgentEvent[] }> {
   try {
-    const dir = requireSessionsDir();
     const parentId = over.parentSessionId ?? (await store().get()).currentSession ?? "";
+    // 旁路档案与父会话同根：留档、提问、清单三处必须落在同一个工作区，否则换个项目打开
+    // 面板看到的是另一个项目的旁路内容。
+    const parentRoot = parentId !== "" ? (over.sessionsRoot ?? await resolveSessionRoot(parentId)) : null;
+    if (parentId !== "" && (parentRoot === null || !(await sessionExists(parentRoot, parentId)))) {
+      return { ok: false, error: `父会话不存在: ${parentId}` };
+    }
+    const dir = parentRoot ?? requireSessionsDir();
     const picked = resolveSidechatModel(over.model);
     if (picked.error) return { ok: false, error: picked.error };
     // 旁路的工作区必须跟**父会话**走。旧实现用 `currentWorkspace()`（= 最近一次 run 的工作区）：
     // 在 B 打开会话却没在 B 跑过 run 时，规则库、@ 引用与投影仍读 A——一个项目的问题被另一个
-    // 项目的文件回答。父会话根由宿主解析器给出（单例形态缺省就是唯一根）；解析不到 = 显式失败。
+    // 项目的文件回答。父会话根已由上面解析（显式根 / 归属解析器），解析不到 = 显式失败。
     let workspace = await D().currentWorkspace();
     let mainLogPath = parentId !== "" ? pathOf(dir, parentId) : (D().lastLogPath() ?? "");
-    if (parentId !== "") {
-      const root = await resolveSessionRoot(parentId);
-      if (root === null || !(await sessionExists(root, parentId))) {
-        return { ok: false, error: `父会话不存在: ${parentId}` };
-      }
-      const derivedWorkspace = workspaceOfSessionsRoot(root);
+    if (parentRoot !== null) {
+      const derivedWorkspace = workspaceOfSessionsRoot(parentRoot);
       if (derivedWorkspace === null) {
-        return { ok: false, error: `父会话根不是标准 <workspace>/.agent/sessions 布局，拒绝猜测工作区: ${root}` };
+        return { ok: false, error: `父会话根不是标准 <workspace>/.agent/sessions 布局，拒绝猜测工作区: ${parentRoot}` };
       }
       workspace = derivedWorkspace;
-      mainLogPath = pathOf(root, parentId);
+      mainLogPath = pathOf(parentRoot, parentId);
     }
     // 规则库读不出/解析不了 ⇒ readOnlyGateSession 抛错，这一轮显式失败（fail-closed）。
     const face = sidechatToolTable(workspace);
@@ -182,6 +188,8 @@ export async function handleSidechatPromote(req: {
   sourceEventRefs?: EventRef[];
   note?: string;
   content?: string;
+  /** 显式父会话根（桌面按目标工作区算）；缺省按归属解析器定位。 */
+  sessionsRoot?: string;
 }): Promise<{ ok: boolean; error?: string; event?: AgentEvent }> {
   try {
     const hasIds = Array.isArray(req.sourceEventIds) && req.sourceEventIds.length > 0;
@@ -190,13 +198,13 @@ export async function handleSidechatPromote(req: {
     if (hasRefs && !req.sourceEventRefs!.every((ref) => isEventRef(ref))) {
       return { ok: false, error: "promote: 来源引用形状非法" };
     }
-    const dir = requireSessionsDir();
-    // 提升是**写主会话**：必须落父会话自己的根。用单例根会在启动工作区造一条同 id 幽灵会话，
-    // 真父会话里看不到这次提升（2026-10-21 独立评审实测）。
-    const root = await resolveSessionRoot(req.parentSessionId);
+    // 提升是**写主会话**，旁路档案与主会话必须同根：只读单例根会在启动工作区找旁路文件，
+    // 真父会话（别的项目）里要么找不到、要么读到同 id 的另一份。
+    const root = req.sessionsRoot ?? await resolveSessionRoot(req.parentSessionId);
     if (root === null || !(await sessionExists(root, req.parentSessionId))) {
       return { ok: false, error: `父会话不存在: ${req.parentSessionId}` };
     }
+    const dir = root;
     const mainLogPath = pathOf(root, req.parentSessionId);
     const res = await promoteToMain({
       mainLogPath,
@@ -217,8 +225,12 @@ export async function handleSidechatPromote(req: {
 }
 
 /** sidechat 面板快照（纯投影）：会话清单 + 各自最近消息 + 已提升记录（由主会话 origin 反向投影）。 */
-export async function handleSidechatState(parentSessionId?: string): Promise<SidechatPanelSnapshot> {
-  const dir = getSessionsDir();
+export async function handleSidechatState(parentSessionId?: string, sessionsRoot?: string): Promise<SidechatPanelSnapshot> {
+  // 面板清单按**这一扇窗口的工作区**列：单例根是启动工作区，换项目后会把别的项目的旁路
+  // 会话（以及它们的对话内容）列进来。显式根优先；否则按父会话归属；都没有才退回单例根。
+  const dir = sessionsRoot
+    ?? (parentSessionId !== undefined && parentSessionId !== "" ? await resolveSessionRoot(parentSessionId).catch(() => null) : null)
+    ?? getSessionsDir();
   if (!dir) return { parentSessionId: null, sessions: [], promoted: [] };
   const parent = parentSessionId ?? (await store().get()).currentSession ?? null;
   const infos = await listSidechatSessions(dir, parent ?? undefined);

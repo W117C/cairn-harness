@@ -53,6 +53,12 @@ export interface SessionAuditFields {
 export interface SessionMetadataRecord extends SessionAuditFields {
   /** 与主会话 JSONL 的 id 一致；这里不存事件内容。 */
   id: string;
+  /**
+   * 本记录是否已按会话根写入自己的 sidecar。
+   * 旧版桌面把所有工作区的记录写进装配根的同一卷，迁移前无法从裸 id 判断归属；
+   * 缺少此标记的重复 id 记录保持不确定，不能冒充任一工作区的组织事实。
+   */
+  workspaceScoped?: true;
   title: string;
   pinned: boolean;
   archived: boolean;
@@ -126,6 +132,9 @@ function validateMetadata(raw: unknown, key: string): SessionMetadataRecord {
   if (!isRecord(raw)) throw new Error(`sessions.${key} 不是对象`);
   assertSessionId(raw.id);
   if (raw.id !== key) throw new Error(`sessions.${key}.id 与键不一致`);
+  if (raw.workspaceScoped !== undefined && raw.workspaceScoped !== true) {
+    throw new Error(`sessions.${key}.workspaceScoped 非法`);
+  }
   assertTitle(raw.title);
   if (typeof raw.pinned !== "boolean") throw new Error(`sessions.${key}.pinned 非法`);
   if (typeof raw.archived !== "boolean") throw new Error(`sessions.${key}.archived 非法`);
@@ -147,6 +156,7 @@ function validateMetadata(raw: unknown, key: string): SessionMetadataRecord {
 
   return {
     id: raw.id,
+    ...(raw.workspaceScoped === true ? { workspaceScoped: true } : {}),
     title: raw.title,
     pinned: raw.pinned,
     archived: raw.archived,
@@ -223,6 +233,7 @@ export class SessionMetadataRepository {
       const now = this.timestamp();
       const record: SessionMetadataRecord = {
         id,
+        workspaceScoped: true,
         title,
         pinned: false,
         archived: false,
@@ -276,8 +287,10 @@ export class SessionMetadataRepository {
       const now = this.timestamp();
       const current: SessionMetadataRecord = Object.prototype.hasOwnProperty.call(state.sessions, id)
         ? state.sessions[id]
-        : { id, title: id, pinned: false, archived: false, createdAt: now, updatedAt: now };
-      const next: SessionMetadataRecord = current.title === id ? { ...current, title, updatedAt: now } : current;
+        : { id, workspaceScoped: true, title: id, pinned: false, archived: false, createdAt: now, updatedAt: now };
+      const next: SessionMetadataRecord = current.title === id
+        ? { ...current, title, updatedAt: now, workspaceScoped: true }
+        : current;
       if (next !== current) {
         state.sessions[id] = next;
         await this.persist(state);
@@ -388,7 +401,9 @@ export class SessionMetadataRepository {
         throw new Error(`会话 metadata 目标已存在: ${newId}`);
       }
       const now = this.timestamp();
-      const renamed: SessionMetadataRecord = { ...existing, id: newId, title, updatedAt: now };
+      const renamed: SessionMetadataRecord = {
+        ...existing, id: newId, workspaceScoped: true, title, updatedAt: now,
+      };
       delete state.sessions[oldId];
       state.sessions[newId] = renamed;
       await this.persist(state);
@@ -425,6 +440,26 @@ export class SessionMetadataRepository {
     });
   }
 
+  /**
+   * 把一条唯一归属的旧全局记录复制进当前工作区的卷。
+   * 已存在当前记录时原样返回当前记录，不覆盖更新的组织事实；标记为 `workspaceScoped`
+   * 后才允许在重复 id 的清单里作为本工作区的权威记录展示。
+   */
+  async adoptIfAbsent(record: SessionMetadataRecord): Promise<SessionMetadataRecord> {
+    return await this.enqueue(async () => {
+      const validated = validateMetadata(record, record?.id);
+      const state = await this.load();
+      const existing = Object.prototype.hasOwnProperty.call(state.sessions, validated.id)
+        ? state.sessions[validated.id]
+        : undefined;
+      if (existing !== undefined) return cloneMetadata(existing);
+      const adopted: SessionMetadataRecord = { ...validated, workspaceScoped: true };
+      state.sessions[validated.id] = adopted;
+      await this.persist(state);
+      return cloneMetadata(adopted);
+    });
+  }
+
   private async mutate(
     id: string,
     update: (record: SessionMetadataRecord, now: string) => SessionMetadataRecord,
@@ -437,6 +472,7 @@ export class SessionMetadataRepository {
         ? state.sessions[id]
         : {
             id,
+            workspaceScoped: true,
             title: id,
             pinned: false,
             archived: false,
@@ -445,7 +481,9 @@ export class SessionMetadataRepository {
           };
       // 同一笔写入里的时刻只有一个（`now` 透传给 update）：两处各取一次时钟会差一毫秒，
       // 于是 archivedAt 与 updatedAt 互相矛盾（读的人得猜哪个是真的）。
-      const next = { ...update(current, now), updatedAt: now };
+      const next: SessionMetadataRecord = {
+        ...update(current, now), workspaceScoped: true, updatedAt: now,
+      };
       state.sessions[id] = next;
       await this.persist(state);
       return cloneMetadata(next);

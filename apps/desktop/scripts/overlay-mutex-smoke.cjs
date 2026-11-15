@@ -9,6 +9,7 @@
 //   ./node_modules/.bin/electron scripts/overlay-mutex-smoke.cjs outputs/overlay-mutex-752
 const { app, BrowserWindow, nativeTheme } = require("electron");
 const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
+const { evidenceEnvelope } = require("./lib/renderer-evidence.cjs");
 const { mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
 const { join, resolve } = require("node:path");
 const { tmpdir } = require("node:os");
@@ -29,7 +30,7 @@ async function main() {
   const starts = [...body.matchAll(/^\s{2}(\w+)\??\s*[(<]/gm)];
   const members = starts.map((s, i) => ({
     name: s[1],
-    isArray: /Promise<[^>]*[\]>]/.test(body.slice(s.index, starts[i + 1]?.index ?? body.length)),
+    isArray: /Promise<[^>]*\[\]/.test(body.slice(s.index, starts[i + 1]?.index ?? body.length)),
   }));
   const win = new BrowserWindow({
     width: 1440, height: 900, show: false,
@@ -110,7 +111,7 @@ async function main() {
 
   check("渲染过程无控制台错误", errors.length === 0, errors);
 
-  writeFileSync(join(out, "checks.json"), JSON.stringify(checks, null, 2));
+  writeFileSync(join(out, "checks.json"), JSON.stringify(evidenceEnvelope(checks, join(__dirname, "../src/renderer"), join(__dirname, "../dist")), null, 2));
   const failed = checks.filter((c) => !c.ok);
   console.log(`读数：${checks.length} 条，${checks.length - failed.length} 绿 / ${failed.length} 红 → ${out}`);
   if (failed.length > 0) process.exitCode = 1;

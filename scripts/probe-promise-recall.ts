@@ -888,9 +888,10 @@ export function pruneStubMatrix(source?: string): PruneStubColumn[] {
  *  （第一版这里只断言 `原文已存` 一个标记，而它有两个分支，于是栏三差点被读成"路不通"——
  *  标记选窄了＝量法缺陷本身，`classifyPruneStub` 就是为修它而抽出来的。） */
 export function hopMapDemo(source?: string): Verdict {
-  // 栏一照**源码里那个调用点的实参**跑（不再手写一个形状当假设）：读不到源码时尺退回
-  // 只给 events，那种情形 `detail` 里会写着「源码取不到」，不许静默按绿处理。
-  const src = loadSrcFiles().files.find((f) => f.path.endsWith("src/main/agent-runner.ts"))?.text;
+  // 栏一照**源码里那个调用点的实参**跑（不再手写一个形状当假设）：调用方可直接把源码喂进来；
+  // 没喂才回落到读盘。读不到源码时尺退回只给 events，那种情形 `detail` 里会写着「源码取不到」，
+  // 不许静默按绿处理。
+  const src = source ?? loadSrcFiles().files.find((f) => f.path.endsWith("src/main/agent-runner.ts"))?.text;
   const [asCalled, dirOnly, inWorkspace] = pruneStubMatrix(src);
   const lied = asCalled.why === "saved" && asCalled.wrote === 0;
   return {

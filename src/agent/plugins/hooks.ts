@@ -238,7 +238,7 @@ export type HookFetchFn = (url: string, init: {
 
 /** mcp_tool 档的调用面：与模型可见的 MCP 工具走同一个 `McpManager.callTool`，
  *  因此 include/exclude 裁剪、超时、取消、失败态都是同一份纪律。 */
-export type HookMcpCallFn = (plugin: string, server: string, tool: string, args: Record<string, unknown>) =>
+export type HookMcpCallFn = (plugin: string, server: string, tool: string, args: Record<string, unknown>, signal?: AbortSignal) =>
   Promise<{ ok: boolean; output: string }>;
 
 /** prompt 档的模型面：`(system, user, timeoutMs) → 文本`。由装配层注入（`createHookModelCall`），
@@ -617,7 +617,7 @@ export class HookEngine {
   private async dispatch(h: LoadedHookDef, payload: HookPayload, timeoutSec: number): Promise<HookExecOutcome> {
     if (h.handler.type === "http") return await this.dispatchHttp(h, h.handler, payload, timeoutSec);
     if (h.handler.type === "mcp_tool") return await this.dispatchMcp(h, h.handler, payload, timeoutSec);
-    if (h.handler.type === "prompt") return await this.dispatchPrompt(h, h.handler, payload, timeoutSec);
+    if (h.handler.type === "prompt") return await this.dispatchPrompt(h.handler, payload, timeoutSec);
     return await this.dispatchCommand(h, payload, timeoutSec);
   }
 
@@ -627,7 +627,7 @@ export class HookEngine {
    *     只脱敏后照发等于把"这条钩子会外泄"变成常态；剥了几处必须让读者看见，否则他以为模型看到了原文。
    *  ② `turn_truncated` 那种"没写完"不许当完整结论（同 `createSessionSummarizer` 里那句
    *     「收下但不声张就等于没收」）。 */
-  private async dispatchPrompt(h: LoadedHookDef, handler: PromptHookHandler, payload: HookPayload, timeoutSec: number): Promise<HookExecOutcome> {
+  private async dispatchPrompt(handler: PromptHookHandler, payload: HookPayload, timeoutSec: number): Promise<HookExecOutcome> {
     const call = this.opts.modelCall;
     if (!call) return { code: null, stdout: "", stderr: "", killed: false, wording: "model", error: "运行时未注入模型调用面" };
     const source = hookPayloadJson(payload, this.opts.workspace, this.opts.sessionId);
@@ -741,8 +741,19 @@ export class HookEngine {
     if (expanded.missing.length > 0) {
       return { code: null, stdout: "", stderr: "", killed: false, wording: "mcp", error: "args 里的 ${" + expanded.missing[0] + "} 在本次 payload 里取不到（不把它当字面量发出去）" };
     }
+    // 每档传输都吃同一顶超时帽（`timeoutSecFor`）。mcpCall 从前只有四个实参，钩子里写的
+    // `timeout` 在这一档被静默丢掉：manager 自己的 callTimeoutMs 是另一条独立预算，不是钩子的。
+    const budgetMs = Math.max(1, timeoutSec) * 1000;
+    const budget = AbortSignal.timeout(budgetMs);
+    const timedOut = (): HookExecOutcome => ({
+      code: null, stdout: "", stderr: "", killed: true, wording: "mcp",
+      error: "MCP 调用超时（" + String(budgetMs) + "ms 内未完成）",
+    });
     try {
-      const res = await this.opts.mcpCall(h.plugin, handler.server, handler.tool, expanded.value as Record<string, unknown>);
+      const res = await this.opts.mcpCall(h.plugin, handler.server, handler.tool, expanded.value as Record<string, unknown>, budget);
+      // 超时会让 manager 带着取消态收口（ok:false + "[cancelled]"）；那不是 server 拒了，
+      // 按「对面拒了」回执会把排查的人送去查 server 日志。
+      if (budget.aborted) return timedOut();
       return {
         code: res.ok ? 0 : 1,
         stdout: res.ok ? res.output : "",
@@ -752,6 +763,7 @@ export class HookEngine {
         ...(res.ok ? {} : { error: res.output.slice(0, 200) }),
       };
     } catch (err) {
+      if (budget.aborted) return timedOut();
       return { code: null, stdout: "", stderr: "", killed: false, wording: "mcp", error: "MCP 调用异常：" + (err instanceof Error ? err.message : String(err)).slice(0, 200) };
     }
   }

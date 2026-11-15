@@ -110,6 +110,9 @@ const SETTINGS = {
   // 字号档 / 尺寸档同理缺不得：真主进程装载时会把非法值兜回 md/2（settings.ts:282·284），
   // 夹具缺这两个键会让设置·通用页的两排分段控件**一档都不亮**（分段控件自查当场红）。
   textSize: "md", uiSize: "2",
+  // 壁纸与真 DEFAULT_SETTINGS 对齐：通用页读取 wallpaper.kind/opacity/scrim/glassAlpha，
+  // 缺这一格时画廊打开设置会先渲染失败（壁纸探针只在专用夹具里补，不能替所有冒烟兜底）。
+  wallpaper: { kind: "none", path: null, opacity: 1, scrim: 0.35, glassAlpha: 0.25, revision: 0 },
   // 个性化（2026-11-05）：迁移/个性化两页都读这一格；缺键会让「已保存」回读成 undefined。
   customInstructions: "",
 };

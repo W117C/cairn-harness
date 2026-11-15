@@ -28,10 +28,11 @@ describe("GoalChip", () => {
     const app = readAppSurface();
     expect(app).toContain("const goalTrace = useMemo(() => traceGoal(events), [events]);");
     expect(app).toContain("const cmd = parseGoalCommand(text);");
-    expect(app).toContain("pendingGoal.current = cmd;");
-    expect(app).toContain("window.agent.setGoal({ sessionId: newId, objective: goalCmd.objective");
-    expect(app).toContain("const next = new Map(prev).set(sid, goalTrace.at);");
+    expect(app).toContain("pendingGoal.current = { cmd, raw: text };");    expect(app).toContain("window.agent.setGoal({ sessionId: newId, ...(runWorkspace !== null ? { workspace: runWorkspace } : {}), objective: goalCmd.cmd.objective");
+    // 芯片动作（暂停/继续/清除）与 /goal 同一条落点：都要带当前工作区，否则主进程按启动工作区找会话。
+    expect(app).toContain("window.agent.setGoal({ sessionId: sid, ...(ws !== null ? { workspace: ws } : {}), ...req })");
+    expect(app).toContain("const next = new Map(prev).set(dismissedGoalKey(ws, sid), goalTrace.at);");
     expect(app).toContain("writeDismissedGoals(next);");
-    expect(app).toContain("dismissedGoals.get(activeId ?? \"\") !== goalTrace.at");
+    expect(app).toContain("dismissedGoalAt(dismissedGoals, activeWorkspace, activeId) !== goalTrace.at");
   });
 });

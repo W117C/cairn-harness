@@ -84,8 +84,9 @@ describe("通道名表完整性", () => {
     type Expect<T extends true> = T;
     type Equal<X, Y> = (<T>() => T extends X ? 1 : 2) extends (<T>() => T extends Y ? 1 : 2) ? true : false;
     // 双向钉死：AgentApi 增删方法或 PushChannel 漂移 ⇒ 此 Equal 破 ⇒ typecheck 红。
-    type _invokeKeysAreExact = Expect<Equal<keyof typeof INVOKE_CHANNELS, Exclude<keyof AgentApi, PushChannel>>>;
-    expect(true).toBe(true);
+    // 绑到值上而不是悬空别名：悬空类型别名在 noUnusedLocals 下本身就是一条死声明。
+    const invokeKeysAreExact: Expect<Equal<keyof typeof INVOKE_CHANNELS, Exclude<keyof AgentApi, PushChannel>>> = true;
+    expect(invokeKeysAreExact).toBe(true);
   });
 
   it("wired 覆盖守卫：INVOKE_CHANNELS 每条通道要么接真、要么在带理由的 fail-loud 白名单（防漏行三连复发）", () => {

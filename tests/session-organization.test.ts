@@ -19,6 +19,8 @@ import {
   handleSessionSetPinned,
   initSessionsDir,
   requireSessionMetadata,
+  requireSessionMetadataFor,
+  setSessionRootResolver,
 } from "../src/main/session-handlers";
 import { initSettingsStore, store } from "../src/main/settings-handlers";
 import { setRunWorkspace } from "../src/main/runner-workspace";
@@ -301,5 +303,29 @@ describe("CX-01 session/project organization handlers", () => {
     await expect(handleSessionDelete(id)).rejects.toThrow();
     expect((await stat(logPath)).isFile()).toBe(true);
     expect((await store().get()).currentSession).toBeNull();
+  });
+
+  it("显式根让组织动作在同 id 跨工作区时可用：归属歧义只影响「猜」，不影响「指定」", async () => {
+    const projectRoot = join(root, "project", ".agent", "sessions");
+    const otherRoot = join(root, "other", ".agent", "sessions");
+    const shared = await createSession(projectRoot, "shared");
+    await createSession(otherRoot, shared);
+    setSessionRootResolver(async () => {
+      throw new Error(`会话 id 在多个工作区同时存在，必须显式指定 workspace：${shared}`);
+    });
+    try {
+      // 不给根 ⇒ 归属歧义必须拒（不替用户选一条）
+      await expect(handleSessionSetPinned(shared, true)).rejects.toThrow(/多个工作区/);
+      // 给根 ⇒ 动作可用，metadata 只落这个根的卷，不碰另一条同 id 会话。
+      await expect(handleSessionSetPinned(shared, true, projectRoot)).resolves.toMatchObject({ id: shared, pinned: true });
+      await expect(handleSessionSetArchived(shared, true, projectRoot)).resolves.toMatchObject({ id: shared, archived: true });
+      await expect(handleSessionAssignProject(shared, null, projectRoot)).resolves.toMatchObject({ id: shared });
+      expect(await requireSessionMetadataFor(projectRoot).find(shared)).toMatchObject({ pinned: true, archived: true });
+      expect(await requireSessionMetadataFor(otherRoot).find(shared)).toBeUndefined();
+      // 显式根不等于放行：根里没有这条会话仍然拒
+      await expect(handleSessionSetPinned("missing", true, projectRoot)).rejects.toThrow(/不存在/);
+    } finally {
+      setSessionRootResolver(null);
+    }
   });
 });
