@@ -40205,3 +40205,47 @@ require 生产模块 `src/main/wallpaper.ts`；合成面只有 AgentApi（preloa
 
 - 价表未改：GLM 三行仍是占位；美元闸仍按上界拦（宁可早停，不超支）。
 - F4 的 standard/strong 映射仍待裁决；本页只改「读数怎么说」，不改「哪一档填什么价」。
+
+## 2026-11-15 · 第 1208 页：F6 自研联网搜索的裁决输入（区分 C1/C2/C3）
+
+**背景**：第 1194 页 F6 记「`web_search` 仅付费第三方后端（brave/tavily），无自研」。本页不写实现，
+把「自研」拆成三种口径并把代价摆出来，供业主选。
+
+### 事实（有代码证据）
+
+- 四个 provider：`src/tools/web-search.ts:35` 为 `searxng | brave | tavily | custom`；只有 Brave/Tavily
+  有默认端点（`:37-39`），两者都要 API Key（`:63-67`、`:220-222`）。
+- 没有默认后端：SearXNG/custom 的 `endpoint` 为空时 `parseSearchConfig` 返回 null（`:57-58`）；
+  未配置时工具回「不做默认厂商，没配即 fail-closed」（`:200-204`）。
+- 解析只认 JSON：`extractResults` 吃 `{results:[...]}`（`:121-138`）；端点是 HTML 时只降级为有界原文，
+  不抽结果（`:295-303`）。
+- SSRF/pinned transport/manual redirect/脱敏/出网审批已自研（`:9-12`、`:225-238`），不是 F6 的缺口。
+- 设置面：`apps/desktop/src/renderer/components/settings/NetworkSection.tsx:11-16` 的四个选项。
+- 测试面：`tests/web-search.test.ts`（16 条）＋ `web-search-providers`＋ `web-search-pinning`。
+
+### 三种「自研」口径
+
+| 口径 | 含义 | 现状 |
+|---|---|---|
+| C1 代码自研 | 请求/解析/排序/回执本仓写，数据来自第三方 | JSON、SSRF、回执已自研；缺 HTML 解析与无 key provider |
+| C2 自托管 | 自己跑 SearXNG 等，本仓只做客户端 | 客户端已支持；缺部署/运维文档与默认地址 |
+| C3 自有索引 | 自己爬/存/排，不依赖第三方检索结果 | 完全没有；是独立项目，不是加一个 provider |
+
+### 选项与建议
+
+- **A1（推荐先做）**：新增 `provider: "html"`，自研 HTML 结果抽取（标题/URL/摘要/去重/同源/10 条帽），
+  端点由用户填，无 key、无新依赖、默认仍 fail-closed。约 150–250 行实现 + 100–200 行判卷。
+- **A2**：再加一个默认 HTML 搜索页——涉及供应商/ToS/可用性，**单独裁决**，不顺手选。
+- **B**：SearXNG 自托管运维文档（代码已支持 `/search?format=json`，`:89-92`），0.5 天文档量级。
+- **C3**：自有 crawler + 本地索引；周/月级、新存储面、后台抓取、离线判卷冲突，暂不塞进这一轮。
+- **D**：保留 Brave/Tavily 作为可选连接器，但不作默认；与「自研」冲突的部分不粉饰。
+
+### 裁决问题（四个）
+
+1. 「自研」指 C1、C2 还是 C3？
+2. 若 A1：接受用户自填搜索页地址吗？还是要 A2 的默认页（默认页选谁、ToS 谁担）？
+3. 若 B：仓库带 compose/运维文档，还是只写 README 链接？
+4. 若 C3：接受独立项目（新存储面、后台抓取、非离线判卷）吗？
+
+**边界**：本页只写裁决输入；未改 provider、未加依赖、未改默认。文件
+`docs/web-search-self-host-2026-11-15.md`；批准后按 §五 判据先写判据再写实现。
