@@ -40539,3 +40539,24 @@ standard/strong 1.1991/4.1967/cache 0.2998，均 `calibrated: true`），**不�
 超 10s 预算只出声。凭证：`outputs/head-cert-ac5870b-2026-11-15-0748/`。
 
 **边界**：仍是 HTML 回退的解析质量；A2 默认页、C3 自有索引未做。
+
+## 2026-11-15 · 第 1227 页：F4 A 落价表与标定闸（`df304025`；认证 `df30402` 25/25）
+
+**背景**：第 1225 页的复核证明 A 不是「改三个数字」；本页把 A 连同 F2c 与五个测试文件一起收口。
+
+### 改动
+
+- `DEFAULT_PRICE_TABLE` 的 GLM 三行按 2026-11-15 官方价（1 USD=6.6719 CNY）：flash 0.1199/0.4197/
+  cache 0.0345；standard/strong 1.1991/4.1967/cache 0.2998，均 `calibrated: true`；缓存写价官方未列，
+  保持 null（仍进 `uncalibratedCachePrices`）。
+- `routing-check` F2c：从「三档两两不等」改为「cheap 严格最便宜；standard/strong 同价必须两侧已标定」。
+- 7 个测试文件从旧占位数值/「未标定」断言迁到官方值与 `calibrated: true`；未标定回执的机制仍有测试。
+- 变异锚点 `pricing-unpriced-audit-always-empty` 改指新测试标题。
+
+### 读数
+
+- 7 文件 / **73 条绿**；`routing-check` **40/40**；`typecheck` 0；`pnpm mutate-needles-check` 绿。
+- HEAD 认证 `df30402`：**25/25 门绿，核心 678 文件 / 8160 条（`--maxWorkers=2`），exit 0**；
+  `desktop-test` 19.7s 超 10s 预算只出声。凭证：`outputs/head-cert-df30402-2026-11-15-0802/`。
+
+**边界**：这是 memo 的 A 方案；若业主改判 B，只需改 standard/strong 两行价与 F2c 的同价分支。
