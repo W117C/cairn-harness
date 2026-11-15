@@ -1,6 +1,6 @@
 # Cairn / DSH —— 现态
 
-rev: 907deda7
+rev: ddc2e023
 
 核对日期 2026-11-15（Asia/Shanghai）。`rev` 是开发线现役基线；第 1200 / 1203 / 1204 页的判卷面与桌面改动在
 它之上的工作树里，尚未提交。分支与门禁状态见[仓库状态与分支](docs/REPOSITORY-STATUS.md)，历史证据见
@@ -8,6 +8,8 @@ rev: 907deda7
 
 ## 当前工作
 
+- **2026-11-15 web_search 非 http(s) 结果过滤**（`ddc2e023`）：`extractResults` 丢弃 `javascript:`/`data:` 等
+  非 http(s) 非空 URL，保留空 URL 占位；F6 provider 决策未动。第 1210 页；认证 `ddc2e02` 25/25、核心 678/8146。
 - **2026-11-15 F3 组件栈裁决输入**：`docs/component-stack-decision-2026-11-15.md`；现状 Radix 原语
   ＋手写＋CDS，非 ADR D2 的 Themes；建议 B（Primitives + CDS），待选 A/B/C/D。第 1209 页。
 - **2026-11-15 F6 自研搜索裁决输入**：`docs/web-search-self-host-2026-11-15.md` 区分 C1 代码自研 / C2
@@ -24,11 +26,9 @@ rev: 907deda7
 - **2026-11-15 退出也等后台任务复查**（第 1204 页，工作树）：`settleAllBackgroundTasks()` 在
   `before-quit` 与持久执行器、安装任务一起等完才 `app.quit()`；`will-quit` 的同步组杀退化为
   第二次清扫。SIGINT/强杀仍是硬边界。
-- **2026-11-15 GLM 强档模型名修正**（`18495794`）：`glm-strong` 从不存在的 `glm-5.2-pro` 改为官方旗舰
-  `glm-5.3`（1M 上下文）；价表仍占位，F4 的价梯映射仍待裁决（`docs/glm-pricing-decision-2026-11-15.md`）。
-- **2026-11-15 ADR 0015（bot 团队调研裁决，Proposed）**：落点 A（核心内建）＋骨架三件（成员档案/
-  成员线程/团队会话）＋数据模型 B3/G2/P2/R1/S1/C2/L1＋五条不变量；12 面在 HEAD `8d552446` 复核。
-  文件 `docs/adr/0015-ds-bot-benchmark.md`；待业主批准后进 Phase 4 spec，批准前不写实现代码。
+- **2026-11-15 GLM 强档模型名修正**（`18495794`）：`glm-strong` 改为官方旗舰 `glm-5.3`（1M）；价表仍占位，F4 映射待裁决。
+- **2026-11-15 ADR 0015（bot 团队调研裁决，Proposed）**：落点 A（核心内建）＋骨架三件＋数据模型
+  B3/G2/P2/R1/S1/C2/L1＋五条不变量；文件 `docs/adr/0015-ds-bot-benchmark.md`；待批准后进 Phase 4 spec。
 - **2026-11-15 判卷面收束与证据保质期**（第 1200 页，工作树）：后台四条终止路径汇进 `settle` 链；
   `fs_ops` 拒收含冻结文件的整树搬走；桌面四支真机判卷共用 renderer 摘要 + 同构建判据。
 - **2026-11-15 依赖与路由标定闸**（`4240634c` / `962548a9`，第 1198 页）：主包摘掉未使用的

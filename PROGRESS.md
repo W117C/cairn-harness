@@ -40284,3 +40284,20 @@ CDS parity 判据不动。
 
 **边界**：本页只写裁决输入；未改 ADR 0003 的 D2、未加/删依赖、未迁组件。文件
 `docs/component-stack-decision-2026-11-15.md`；批准后按 §四 顺序先写判据再迁移。
+
+## 2026-11-15 · 第 1210 页：web_search 丢弃非 http(s) 结果 URL（`ddc2e023`；认证 `ddc2e02` 25/25）
+
+**问题**：`extractResults` 只判「url 与 title 是否都空」，任何字符串都收；不可信搜索端点返回
+`javascript:` / `data:` 时，模型会在结果清单里看到它们。这不是 F6 的 provider 决策，是既有 JSON
+契约的收口。
+
+**改动**：非空 url 必须能解析成 `http:`/`https:`，否则整条丢掉；空 url 的无链接占位仍保留
+（`tests/web-search.test.ts` 新增 4 种形状：javascript、data、正常 https、无链接占位）。
+没有新增 provider、没有默认端点、没有新依赖。
+
+**读数**：`web-search` 三份 44 条绿（17 + 9 + 18）；`typecheck` 0；`web-fetch-check` 7/7
+（反例 26 / 正例 12，零网络）。HEAD 认证 `ddc2e02`：**25/25 门绿，核心 678 文件 / 8146 条
+（`--maxWorkers=2`），exit 0**；`desktop-test` 12.7s 超 10s 预算只出声。
+
+**边界**：F6 的 A1/A2（HTML 适配器 / 默认页）仍未批准；本页只修「结果清单里出现非 http(s) 协议」。
+凭证：`outputs/head-cert-ddc2e02-2026-11-15-0529/`。
