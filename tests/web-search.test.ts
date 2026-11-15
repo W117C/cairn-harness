@@ -185,6 +185,23 @@ describe("web_search 传输层（注入 fetchImpl / resolveHost）", () => {
     expect(r.output).toContain("https://search.example/a");
   });
 
+  it("requireResults 也接受 HTML 结果页（测试连接不把有效 HTML 判成失败）", async () => {
+    const html = '<html><body>' +
+      '<div><a href="/a">Alpha result</a><p>Alpha snippet</p></div>' +
+      '<div><a href="https://b.example/b">Beta result</a><p>Beta snippet</p></div>' +
+      '<div><a href="/c">Gamma result</a><p>Gamma snippet</p></div>' +
+      '</body></html>';
+    const tool = makeWebSearch({
+      config: { provider: "html", endpoint: "https://search.example/html" },
+      resolveHost: publicResolver,
+      requireResults: true,
+      fetchImpl: async () => new Response(html, { headers: { "content-type": "text/html" } }) as unknown as Response,
+    });
+    const r = await tool.run({ query: "x" }, ctx());
+    expect(r.ok).toBe(true);
+    expect(r.output).toContain("Alpha result");
+  });
+
   it("结果条数有帽：25 条只列前 10，并如实报出总数", async () => {
     const many = { results: Array.from({ length: 25 }, (_, i) => ({ title: `t${String(i)}`, url: `https://e.example/${String(i)}` })) };
     const tool = makeWebSearch({

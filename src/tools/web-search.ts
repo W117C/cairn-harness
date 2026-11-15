@@ -347,13 +347,18 @@ export function makeWebSearch(deps: WebSearchDeps = {}): Tool {
         const payload = cfg.provider === "brave" && typeof json === "object" && json !== null ? (json as { web?: unknown }).web : json;
         let results = payload === null ? [] : extractResults(payload);
         const rawResults = typeof payload === "object" && payload !== null ? (payload as { results?: unknown }).results : undefined;
+        const htmlResults = (ct.toLowerCase().includes("html") || body.text.trimStart().startsWith("<"))
+          ? extractHtmlResults(body.text, u.href)
+          : [];
         if (deps.requireResults === true) {
           results = results.filter((entry) => {
             try { return ["http:", "https:"].includes(new URL(entry.url).protocol); } catch { return false; }
           });
-          if (!Array.isArray(rawResults) || (rawResults.length > 0 && results.length === 0)) {
-            return { ok: false, output: "web_search: 服务未返回有效的检索结果 JSON；请检查服务地址、接口类型和 JSON API 是否启用" };
+          const jsonOk = Array.isArray(rawResults) && (rawResults.length === 0 || results.length > 0);
+          if (!jsonOk && htmlResults.length === 0) {
+            return { ok: false, output: "web_search: 服务未返回有效的检索结果 JSON 或 HTML 结果；请检查服务地址、接口类型和页面形状" };
           }
+          if (results.length === 0 && htmlResults.length > 0) results = htmlResults;
         }
         if (results.length > 0 || deps.requireResults === true) {
           deps.onResults?.(results.length);
@@ -362,12 +367,9 @@ export function makeWebSearch(deps: WebSearchDeps = {}): Tool {
         }
         // HTML 结果页：在「有界原文」之前先试一次保守抽取（≥3 条、≥2 主机、每条有摘要）。
         // 抽不出就继续走原文降级，不把导航页硬说成检索结果。
-        if (ct.toLowerCase().includes("html") || body.text.trimStart().startsWith("<")) {
-          const htmlResults = extractHtmlResults(body.text, u.href);
-          if (htmlResults.length > 0) {
-            deps.onResults?.(htmlResults.length);
-            return { ok: true, output: redact(renderResults(query, u.href, htmlResults)) };
-          }
+        if (htmlResults.length > 0) {
+          deps.onResults?.(htmlResults.length);
+          return { ok: true, output: redact(renderResults(query, u.href, htmlResults)) };
         }
         // 没拿到结果 JSON：降级为**有界原文**（HTML 先还原），并如实标注降级原因——不假装搜到了。
         const why = json === null ? "端点未返回 JSON" : "JSON 里没有 results 数组";

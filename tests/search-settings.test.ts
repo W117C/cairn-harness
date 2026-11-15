@@ -114,6 +114,20 @@ describe("search settings form service", () => {
     await expect(readFile(config)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it("html provider 的测试连接接受 HTML 结果页，不要求结果 JSON", async () => {
+    const html = '<html><body>' +
+      '<div><a href="/a">Alpha</a><p>alpha snippet</p></div>' +
+      '<div><a href="https://b.example/b">Beta</a><p>beta snippet</p></div>' +
+      '<div><a href="/c">Gamma</a><p>gamma snippet</p></div>' +
+      '</body></html>';
+    const r = await testSearchSettings(dir, input({ provider: "html", endpoint: "https://search.example/html" }), {
+      resolveHost: async () => ["8.8.8.8"],
+      fetchImpl: async () => new Response(html, { headers: { "content-type": "text/html" } }),
+    });
+    expect(r).toMatchObject({ ok: true, resultCount: 3 });
+    expect(r.error).toBeUndefined();
+  });
+
   it.each([
     ["login HTML", "<html>Please log in</html>"],
     ["error JSON", '{"error":"denied"}'],
