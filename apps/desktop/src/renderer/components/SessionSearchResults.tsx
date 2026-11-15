@@ -1,4 +1,4 @@
-import { Command } from "cmdk";
+import { Command } from "./ui/command";
 import { MessageSquare } from "lucide-react";
 import type { SessionSearchResult } from "../../../../../src/main/ipc-protocol";
 

@@ -2,7 +2,7 @@
 // 键盘优先（cmdk 默认 ↑↓/⏎；Esc 由 Radix Dialog 收）。操作条目全部复用 App 既有能力（不另起炉灶）。
 // 键位提示从 SHORTCUTS 表取（keysOf——单一事实源，防漂移）。
 // 技能分组（2026-10-21 批 136）：与斜杠菜单共用 App 的 skills 数据面；空则整组缺席，不摆空组。
-import { Command } from "cmdk";
+import { Command } from "./ui/command";
 import { useNow } from "../useNow";
 import { Archive, Brain, Clock3, Copy, Download, FileText, Folder, FolderOpen, FolderPlus, MessageSquare, PanelLeft, PanelRight, Pencil, Plus, Puzzle, Search, Shield, Sun, Trash2, Wand2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";

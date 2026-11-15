@@ -15,7 +15,7 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 describe("UI 原语边界：页面组件不得直连 Radix", () => {
-  it("只有 components/ui/dropdown-menu.tsx 可以 import @radix-ui/react-dropdown-menu", () => {
+  it("Radix/cmdk 只能从 components/ui 进，页面不得直连", () => {
     const all = walk(DIR);
     const offenders = all.filter((p) => {
       if (relative(DIR, p) === "ui/dropdown-menu.tsx") return false;
@@ -23,5 +23,12 @@ describe("UI 原语边界：页面组件不得直连 Radix", () => {
     }).map((p) => relative(DIR, p));
     expect(offenders, "页面组件绕过 components/ui 直连了 Radix").toEqual([]);
     expect(readFileSync(join(DIR, "ui/dropdown-menu.tsx"), "utf8")).toContain("@radix-ui/react-dropdown-menu");
+
+    const commandOffenders = all.filter((p) => {
+      if (relative(DIR, p) === "ui/command.tsx") return false;
+      return /from\s+["']cmdk["']/u.test(readFileSync(p, "utf8"));
+    }).map((p) => relative(DIR, p));
+    expect(commandOffenders, "页面组件绕过 components/ui 直连了 cmdk").toEqual([]);
+    expect(readFileSync(join(DIR, "ui/command.tsx"), "utf8")).toContain("cmdk");
   });
 });
