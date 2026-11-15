@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { extractResults, loadSearchConfig, makeWebSearch, webSearchSpec } from "../src/tools/web-search";
+import { extractHtmlResults, extractResults, loadSearchConfig, makeWebSearch, webSearchSpec } from "../src/tools/web-search";
 import { sessionToolSpecs } from "../src/agent/session-provider";
 import { isNetworkCommandCall, isSideEffectTool } from "../src/permissions";
 import { staticRisk } from "../src/permissions/risk";
@@ -86,6 +86,23 @@ describe("extractResults：认 SearxNG 形状，别名与缺字段逐条钉", ()
       ],
     });
     expect(r.map((x) => x.title)).toEqual(["a", "b"]);
+  });
+
+  it("HTML 结果页：相对链接按端点解析、脚本里的假链接不进来、同 URL 去重", () => {
+    const html = '<html><head><style>.x{}</style><script>var a = "<a href=\'/evil\'>Evil</a>";</script></head><body>' +
+      '<div><a href="/a">Alpha result</a><p>Alpha snippet</p></div>' +
+      '<div><a href="https://b.example/b">Beta result</a><p>Beta snippet</p></div>' +
+      '<div><a href="/c">Gamma result</a><p>Gamma snippet</p></div>' +
+      '<div><a href="/a">Alpha duplicate</a><p>dup</p></div>' +
+      '</body></html>';
+    const r = extractHtmlResults(html, "https://search.example/api?q=x");
+    expect(r.map((x) => x.title)).toEqual(["Alpha result", "Beta result", "Gamma result"]);
+    expect(r[0]!.url).toBe("https://search.example/a");
+    expect(r.every((x) => !x.url.includes("/evil"))).toBe(true);
+  });
+
+  it("HTML 结果页抽不出（同主机/无摘要）⇒ 空数组，交给原文降级", () => {
+    expect(extractHtmlResults('<a href="/a">A</a><a href="/b">B</a><a href="/c">C</a>', "https://s.example/")).toEqual([]);
   });
 
   it("非对象 / 没有 results 数组 ⇒ 空数组（不抛，由调用方按降级处理）", () => {
@@ -174,6 +191,24 @@ describe("web_search 传输层（注入 fetchImpl / resolveHost）", () => {
     const r = await tool.run({ query: "x" }, ctx());
     expect(r.ok).toBe(false);
     expect(r.output).toContain("HTTP 500");
+  });
+
+  it("HTML 结果页抽成清单：不再降级为原文，相对链接按端点展开", async () => {
+    const html = '<html><body>' +
+      '<div><a href="/a">Alpha result</a><p>Alpha snippet</p></div>' +
+      '<div><a href="https://b.example/b">Beta result</a><p>Beta snippet</p></div>' +
+      '<div><a href="/c">Gamma result</a><p>Gamma snippet</p></div>' +
+      '</body></html>';
+    const tool = makeWebSearch({
+      resolveHost: publicResolver,
+      fetchImpl: async () => new Response(html, { headers: { "content-type": "text/html" } }) as unknown as Response,
+    });
+    const r = await tool.run({ query: "x" }, ctx());
+    expect(r.ok).toBe(true);
+    expect(r.output).toContain("Alpha result");
+    expect(r.output).toContain("https://search.example/a");
+    expect(r.output).toContain("Beta snippet");
+    expect(r.output).not.toContain("不是结果 JSON");
   });
 
   it("非结果 JSON（HTML 端点）降级为有界原文：如实标注「不是检索结果」，不假装搜到了", async () => {

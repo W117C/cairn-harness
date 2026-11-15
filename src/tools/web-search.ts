@@ -152,6 +152,51 @@ export function extractResults(payload: unknown): SearchResult[] {
   return out;
 }
 
+const HTML_ANCHOR_RE = /<a\b[^>]*\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>([\s\S]*?)<\/a>/gi;
+
+function decodeHtmlEntities(s: string): string {
+  return s
+    .replace(/&amp;/giu, "&")
+    .replace(/&lt;/giu, "<")
+    .replace(/&gt;/giu, ">")
+    .replace(/&quot;/giu, "\"")
+    .replace(/&#0*39;|&#x0*27;/giu, "'")
+    .replace(/&nbsp;/giu, " ");
+}
+
+const stripHtml = (raw: string): string => decodeHtmlEntities(htmlToText(raw)).replace(/\s+/gu, " ").trim();
+
+/** 从**非结果 JSON**的 HTML 页里抽结果：只认同时满足「≥3 条、≥2 个主机、每条有摘要」的形状。
+ *  这是保守启发式：导航/登录页通常同主机且没有摘要 ⇒ 返回空数组，调用方继续走有界原文降级。
+ *  纯函数，无网络；相对链接按端点 base 解析，脚本/样式先整段删除。 */
+export function extractHtmlResults(html: string, baseUrl: string): SearchResult[] {
+  const cleaned = html
+    .replace(/<!--[\s\S]*?-->/gu, "")
+    .replace(/<(script|style|noscript|template)\b[^>]*>[\s\S]*?<\/\1>/giu, "");
+  const out: SearchResult[] = [];
+  const seen = new Set<string>();
+  const matches = [...cleaned.matchAll(HTML_ANCHOR_RE)];
+  for (let i = 0; i < matches.length; i++) {
+    const m = matches[i]!;
+    const href = decodeHtmlEntities((m[1] ?? m[2] ?? m[3] ?? "").trim());
+    if (href === "" || href.startsWith("#")) continue;
+    let url: URL;
+    try { url = new URL(href, baseUrl); } catch { continue; }
+    if (!isHttpUrl(url.href) || seen.has(url.href)) continue;
+    const title = stripHtml(m[4] ?? "").slice(0, TITLE_CAP);
+    if (title.length < 2) continue;
+    const start = (m.index ?? 0) + m[0].length;
+    const next = i + 1 < matches.length ? (matches[i + 1]!.index ?? cleaned.length) : cleaned.length;
+    const snippet = stripHtml(cleaned.slice(start, Math.min(next, start + 800))).slice(0, SNIPPET_CAP);
+    if (snippet === "") continue;
+    seen.add(url.href);
+    out.push({ title, url: url.href, snippet });
+    if (out.length >= RESULTS_CAP) break;
+  }
+  const hosts = new Set(out.map((r) => { try { return new URL(r.url).host; } catch { return ""; } }));
+  return out.length >= 3 && hosts.size >= 2 ? out : [];
+}
+
 const clip = (s: string, cap: number): string => (s.length > cap ? s.slice(0, cap) + "…" : s);
 
 /** 外部内容信封（第二层；第一层是投影面的 escapeControlTags）。措辞与 web_fetch 同一纪律：
@@ -306,6 +351,15 @@ export function makeWebSearch(deps: WebSearchDeps = {}): Tool {
           deps.onResults?.(results.length);
           const output = renderResults(query, u.href, results);
           return { ok: true, output: redact(output) };
+        }
+        // HTML 结果页：在「有界原文」之前先试一次保守抽取（≥3 条、≥2 主机、每条有摘要）。
+        // 抽不出就继续走原文降级，不把导航页硬说成检索结果。
+        if (ct.toLowerCase().includes("html") || body.text.trimStart().startsWith("<")) {
+          const htmlResults = extractHtmlResults(body.text, u.href);
+          if (htmlResults.length > 0) {
+            deps.onResults?.(htmlResults.length);
+            return { ok: true, output: redact(renderResults(query, u.href, htmlResults)) };
+          }
         }
         // 没拿到结果 JSON：降级为**有界原文**（HTML 先还原），并如实标注降级原因——不假装搜到了。
         const why = json === null ? "端点未返回 JSON" : "JSON 里没有 results 数组";
