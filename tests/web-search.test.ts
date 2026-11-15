@@ -106,6 +106,17 @@ describe("extractResults：认 SearxNG 形状，别名与缺字段逐条钉", ()
     expect(r.every((x) => !x.url.includes("/evil"))).toBe(true);
   });
 
+  it("HTML 的 <base href> 优先于端点 URL 解析相对链接", () => {
+    const html = '<html><head><base href="https://cdn.example/base/"></head><body>' +
+      '<div><a href="a">Alpha</a><p>alpha snippet</p></div>' +
+      '<div><a href="https://b.example/b">Beta</a><p>beta snippet</p></div>' +
+      '<div><a href="c">Gamma</a><p>gamma snippet</p></div>' +
+      '</body></html>';
+    const r = extractHtmlResults(html, "https://search.example/search?q=x");
+    expect(r[0]!.url).toBe("https://cdn.example/base/a");
+    expect(r[2]!.url).toBe("https://cdn.example/base/c");
+  });
+
   it("HTML 结果页抽不出（同主机/无摘要）⇒ 空数组，交给原文降级", () => {
     expect(extractHtmlResults('<a href="/a">A</a><a href="/b">B</a><a href="/c">C</a>', "https://s.example/")).toEqual([]);
   });

@@ -183,13 +183,20 @@ export function extractHtmlResults(html: string, baseUrl: string): SearchResult[
     .replace(/<(script|style|noscript|template)\b[^>]*>[\s\S]*?<\/\1>/giu, "");
   const out: SearchResult[] = [];
   const seen = new Set<string>();
+  // 页面自己的 <base href> 优先于端点 URL（搜索页常把静态资源/链接放在 CDN 基址下）。
+  const baseTag = cleaned.match(/<base\b[^>]*\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/iu);
+  const declaredBase = baseTag === null ? "" : decodeHtmlEntities((baseTag[1] ?? baseTag[2] ?? baseTag[3] ?? "").trim());
+  let resolveBase = baseUrl;
+  if (declaredBase !== "") {
+    try { resolveBase = new URL(declaredBase, baseUrl).href; } catch { /* 坏 base 不拖垮整页，退回端点 */ }
+  }
   const matches = [...cleaned.matchAll(HTML_ANCHOR_RE)];
   for (let i = 0; i < matches.length; i++) {
     const m = matches[i]!;
     const href = decodeHtmlEntities((m[1] ?? m[2] ?? m[3] ?? "").trim());
     if (href === "" || href.startsWith("#")) continue;
     let url: URL;
-    try { url = new URL(href, baseUrl); } catch { continue; }
+    try { url = new URL(href, resolveBase); } catch { continue; }
     if (!isHttpUrl(url.href) || seen.has(url.href)) continue;
     const title = stripHtml(m[4] ?? "").slice(0, TITLE_CAP);
     if (title.length < 2) continue;
