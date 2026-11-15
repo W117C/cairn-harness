@@ -117,6 +117,17 @@ describe("extractResults：认 SearxNG 形状，别名与缺字段逐条钉", ()
     expect(r[2]!.url).toBe("https://cdn.example/base/c");
   });
 
+  it("DuckDuckGo 形状：摘要放在下一个 a.result__snippet，不把摘要当结果", () => {
+    const html = '<html><body>' +
+      '<div><h2><a class="result__a" href="https://a.example/">Alpha</a></h2><a class="result__snippet" href="https://a.example/">Alpha snippet</a></div>' +
+      '<div><h2><a class="result__a" href="https://b.example/">Beta</a></h2><a class="result__snippet" href="https://b.example/">Beta snippet</a></div>' +
+      '<div><h2><a class="result__a" href="https://c.example/">Gamma</a></h2><a class="result__snippet" href="https://c.example/">Gamma snippet</a></div>' +
+      '</body></html>';
+    const r = extractHtmlResults(html, "https://search.example/html");
+    expect(r.map((x) => x.title)).toEqual(["Alpha", "Beta", "Gamma"]);
+    expect(r.map((x) => x.snippet)).toEqual(["Alpha snippet", "Beta snippet", "Gamma snippet"]);
+  });
+
   it("HTML 结果页抽不出（同主机/无摘要）⇒ 空数组，交给原文降级", () => {
     expect(extractHtmlResults('<a href="/a">A</a><a href="/b">B</a><a href="/c">C</a>', "https://s.example/")).toEqual([]);
   });

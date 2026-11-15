@@ -198,11 +198,26 @@ export function extractHtmlResults(html: string, baseUrl: string): SearchResult[
     let url: URL;
     try { url = new URL(href, resolveBase); } catch { continue; }
     if (!isHttpUrl(url.href) || seen.has(url.href)) continue;
+    const tag = m[0].slice(0, m[0].indexOf(">") + 1);
     const title = stripHtml(m[4] ?? "").slice(0, TITLE_CAP);
     if (title.length < 2) continue;
     const start = (m.index ?? 0) + m[0].length;
     const next = i + 1 < matches.length ? (matches[i + 1]!.index ?? cleaned.length) : cleaned.length;
-    const snippet = stripHtml(cleaned.slice(start, Math.min(next, start + 800))).slice(0, SNIPPET_CAP);
+    let snippet = stripHtml(cleaned.slice(start, Math.min(next, start + 800))).slice(0, SNIPPET_CAP);
+    // DuckDuckGo 一类页面把摘要放在**下一个 a.result__snippet** 里；它是摘要不是结果。
+    const snippetClass = /class\s*=\s*["'][^"']*(?:result__snippet|snippet)[^"']*["']/iu.test(tag);
+    if (snippetClass) {
+      if (out.length > 0 && out[out.length - 1]!.snippet === undefined) {
+        out[out.length - 1]!.snippet = title;
+      }
+      continue;
+    }
+    if (snippet === "" && i + 1 < matches.length) {
+      const nextTag = matches[i + 1]![0].slice(0, matches[i + 1]![0].indexOf(">") + 1);
+      if (/class\s*=\s*["'][^"']*(?:result__snippet|snippet)[^"']*["']/iu.test(nextTag)) {
+        snippet = stripHtml(matches[i + 1]![4] ?? "").slice(0, SNIPPET_CAP);
+      }
+    }
     if (snippet === "") continue;
     seen.add(url.href);
     out.push({ title, url: url.href, snippet });
