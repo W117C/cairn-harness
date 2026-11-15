@@ -327,7 +327,7 @@ export const MUTATIONS = [
     test: "tests/session-provider.test.ts",
     desc: "预算基线退回硬编码 128k（高档位模型提前压缩 = 多烧一次摘要 + 白丢冷细节；误拒合法请求）",
     apply: (s) => s.replace("{ ...withModelBudget(DEFAULT_COMPACTION_CONFIG, window), ...opts.compaction?.config }", "{ ...DEFAULT_COMPACTION_CONFIG, ...opts.compaction?.config }"),
-    expectFail: "同一份历史：缺省 128k 帽下 fail-closed 拒发，换 256k 窗口模型后照常发出",
+    expectFail: "同一份历史：缺省 128k 帽下 fail-closed 拒发，换 1M 窗口模型后照常发出",
   },
   // ---- 能力 5 的假完成：goal 的证据取料只认父流（worker 子流的 verify_result 带 agent_id 落同一份 JSONL）----
   {
