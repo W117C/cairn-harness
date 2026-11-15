@@ -13,6 +13,7 @@ const PROVIDERS: Record<SearchProvider, { label: string; endpoint: string; key: 
   brave: { label: "Brave Search", endpoint: "https://api.search.brave.com/res/v1/web/search", key: true },
   searxng: { label: "SearXNG", endpoint: "", key: false },
   custom: { label: STR.network.customSearch, endpoint: "", key: false },
+  html: { label: STR.network.htmlSearch, endpoint: "", key: false },
 };
 
 const draftOf = (s: SearchSettingsSnapshot): Draft => ({ enabled: s.enabled, provider: s.provider, endpoint: s.endpoint, allowLocalEndpoint: s.allowLocalEndpoint });
@@ -95,7 +96,7 @@ export function NetworkSection(props: { onSaved?: () => void }): React.JSX.Eleme
   );
 
   const preset = PROVIDERS[draft.provider];
-  const customEndpoint = draft.provider === "searxng" || draft.provider === "custom";
+  const customEndpoint = draft.provider === "searxng" || draft.provider === "custom" || draft.provider === "html";
   const sameService = saved.provider === draft.provider && saved.endpoint === draft.endpoint;
   const hasSavedKey = sameService && saved.hasKey && !clearKey;
   const endpointField = (

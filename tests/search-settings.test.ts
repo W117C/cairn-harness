@@ -38,6 +38,13 @@ describe("search settings form service", () => {
     expect(loadSearchConfig(dir)).toMatchObject({ provider: "searxng", endpoint: "https://search.example/" });
   });
 
+  it("html provider：保存端点即可，无需 API Key", async () => {
+    const saved = await saveSearchSettings(dir, input({ provider: "html", endpoint: "https://search.example/html" }));
+    expect(saved.ok).toBe(true);
+    expect(loadSearchConfig(dir)).toMatchObject({ provider: "html", endpoint: "https://search.example/html" });
+    expect((await getSearchSettings(dir)).provider).toBe("html");
+  });
+
   it("refuses corrupt JSON without overwriting it or storing the submitted key", async () => {
     await mkdir(join(dir, ".agent"));
     await writeFile(config, "{broken secret-dont-echo");

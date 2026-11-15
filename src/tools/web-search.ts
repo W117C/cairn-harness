@@ -32,7 +32,7 @@ const RESULTS_CAP = 10;
 const TITLE_CAP = 120;
 const SNIPPET_CAP = 240;
 
-export type SearchProvider = "searxng" | "brave" | "tavily" | "custom";
+export type SearchProvider = "searxng" | "brave" | "tavily" | "custom" | "html";
 export const SEARCH_DEFAULT_ENDPOINTS = {
   brave: "https://api.search.brave.com/res/v1/web/search",
   tavily: "https://api.tavily.com/search",
@@ -52,7 +52,7 @@ export function parseSearchConfig(s: unknown): SearchConfig | null {
   if (value.enabled === false) return null;
   if (value.enabled !== undefined && typeof value.enabled !== "boolean") return null;
   const provider = value.provider;
-  if (provider !== undefined && !["searxng", "brave", "tavily", "custom"].includes(String(provider))) return null;
+  if (provider !== undefined && !["searxng", "brave", "tavily", "custom", "html"].includes(String(provider))) return null;
   const endpoint = typeof value.endpoint === "string" ? value.endpoint.trim() : "";
   const effective = endpoint || (provider === "brave" || provider === "tavily" ? SEARCH_DEFAULT_ENDPOINTS[provider] : "");
   if (effective === "" || (provider === undefined && !effective.includes("{query}"))) return null;

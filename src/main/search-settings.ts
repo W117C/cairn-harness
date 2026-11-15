@@ -13,7 +13,7 @@ import { isRecord } from "../is-record";
 
 const SECRET_OWNER = "web-search";
 const CONFIG_LABEL = "搜索配置";
-const isProvider = (v: unknown): v is SearchProvider => ["searxng", "brave", "tavily", "custom"].includes(String(v));
+const isProvider = (v: unknown): v is SearchProvider => ["searxng", "brave", "tavily", "custom", "html"].includes(String(v));
 const message = (error: unknown): string => error instanceof SettingsError ? error.message : "搜索设置操作失败，请检查文件权限或系统安全存储后重试";
 class SettingsError extends Error {}
 

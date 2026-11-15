@@ -46,6 +46,11 @@ describe("loadSearchConfig：没配=null（fail-closed），坏了=抛（fail lo
     expect(loadSearchConfig(dir)).toBeNull();
   });
 
+  it("html provider：端点必填、无需 key", async () => {
+    await writeCfg(JSON.stringify({ search: { provider: "html", endpoint: "https://search.example/html" } }));
+    expect(loadSearchConfig(dir)).toMatchObject({ provider: "html", endpoint: "https://search.example/html" });
+  });
+
   it("合法端点取回；坏 JSON 抛（不在配置层静默吞）", async () => {
     await writeCfg(JSON.stringify({ search: { endpoint: "https://s.example/search?q={query}&format=json" } }));
     expect(loadSearchConfig(dir)).toEqual({ endpoint: "https://s.example/search?q={query}&format=json" });
@@ -161,6 +166,23 @@ describe("web_search 传输层（注入 fetchImpl / resolveHost）", () => {
     const r = await tool.run({ query: "x" }, ctx());
     expect(r.ok).toBe(true);
     expect(r.output).toContain("1. No link\n   (无链接)");
+  });
+
+  it("html provider 走同一条 HTML 抽取：配置无需 API Key", async () => {
+    const html = '<html><body>' +
+      '<div><a href="/a">Alpha result</a><p>Alpha snippet</p></div>' +
+      '<div><a href="https://b.example/b">Beta result</a><p>Beta snippet</p></div>' +
+      '<div><a href="/c">Gamma result</a><p>Gamma snippet</p></div>' +
+      '</body></html>';
+    const tool = makeWebSearch({
+      config: { provider: "html", endpoint: "https://search.example/html" },
+      resolveHost: publicResolver,
+      fetchImpl: async () => new Response(html, { headers: { "content-type": "text/html" } }) as unknown as Response,
+    });
+    const r = await tool.run({ query: "x" }, ctx());
+    expect(r.ok).toBe(true);
+    expect(r.output).toContain("Alpha result");
+    expect(r.output).toContain("https://search.example/a");
   });
 
   it("结果条数有帽：25 条只列前 10，并如实报出总数", async () => {
