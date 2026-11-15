@@ -128,6 +128,17 @@ describe("extractResults：认 SearxNG 形状，别名与缺字段逐条钉", ()
     expect(r.map((x) => x.snippet)).toEqual(["Alpha snippet", "Beta snippet", "Gamma snippet"]);
   });
 
+  it("HTML 数值实体（&#x2F; / &#39;）在 URL 与标题里被解码", () => {
+    const html = '<html><body>' +
+      '<div><a href="https://a.example/&#x2F;x">Alpha &#x27;quoted&#x27;</a><p>one</p></div>' +
+      '<div><a href="https://b.example/b">Beta</a><p>two</p></div>' +
+      '<div><a href="https://c.example/c">Gamma</a><p>three</p></div>' +
+      '</body></html>';
+    const r = extractHtmlResults(html, "https://search.example/html");
+    expect(r[0]!.url).toBe("https://a.example//x");
+    expect(r[0]!.title).toBe("Alpha 'quoted'");
+  });
+
   it("HTML 结果页抽不出（同主机/无摘要）⇒ 空数组，交给原文降级", () => {
     expect(extractHtmlResults('<a href="/a">A</a><a href="/b">B</a><a href="/c">C</a>', "https://s.example/")).toEqual([]);
   });

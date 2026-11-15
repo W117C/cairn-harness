@@ -163,12 +163,17 @@ const cleanText = (s: string): string => s.replace(CONTROL_CHARS, "");
 const HTML_ANCHOR_RE = /<a\b[^>]*\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>([\s\S]*?)<\/a>/gi;
 
 function decodeHtmlEntities(s: string): string {
+  const fromCodePoint = (n: number): string => {
+    if (!Number.isInteger(n) || n < 0 || n > 0x10ffff || (n >= 0xd800 && n <= 0xdfff)) return "";
+    try { return String.fromCodePoint(n); } catch { return ""; }
+  };
   return s
+    .replace(/&#x([0-9a-f]+);/giu, (_, hex: string) => fromCodePoint(Number.parseInt(hex, 16)))
+    .replace(/&#([0-9]+);/gu, (_, dec: string) => fromCodePoint(Number.parseInt(dec, 10)))
     .replace(/&amp;/giu, "&")
     .replace(/&lt;/giu, "<")
     .replace(/&gt;/giu, ">")
     .replace(/&quot;/giu, "\"")
-    .replace(/&#0*39;|&#x0*27;/giu, "'")
     .replace(/&nbsp;/giu, " ");
 }
 
