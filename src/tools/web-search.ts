@@ -147,10 +147,18 @@ export function extractResults(payload: unknown): SearchResult[] {
     if (url !== "" && seen.has(url)) continue;
     if (url !== "") seen.add(url);
     const snippet = [o.snippet, o.content, o.description].find((v): v is string => typeof v === "string");
-    out.push({ title: title === "" ? "(无标题)" : title, url, ...(snippet !== undefined ? { snippet } : {}) });
+    out.push({
+      title: cleanText(title === "" ? "(无标题)" : title),
+      url,
+      ...(snippet !== undefined ? { snippet: cleanText(snippet) } : {}),
+    });
   }
   return out;
 }
+
+const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/gu;
+/** 外部标题/摘要里的 NUL/ESC 等控制字符不进入结果面（保留 \t/\n/\r 这些可读空白）。 */
+const cleanText = (s: string): string => s.replace(CONTROL_CHARS, "");
 
 const HTML_ANCHOR_RE = /<a\b[^>]*\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>([\s\S]*?)<\/a>/gi;
 
@@ -164,7 +172,7 @@ function decodeHtmlEntities(s: string): string {
     .replace(/&nbsp;/giu, " ");
 }
 
-const stripHtml = (raw: string): string => decodeHtmlEntities(htmlToText(raw)).replace(/\s+/gu, " ").trim();
+const stripHtml = (raw: string): string => cleanText(decodeHtmlEntities(htmlToText(raw))).replace(/\s+/gu, " ").trim();
 
 /** 从**非结果 JSON**的 HTML 页里抽结果：只认同时满足「≥3 条、≥2 个主机、每条有摘要」的形状。
  *  这是保守启发式：导航/登录页通常同主机且没有摘要 ⇒ 返回空数组，调用方继续走有界原文降级。
@@ -216,7 +224,7 @@ function renderResults(query: string, source: string, all: readonly SearchResult
   const lines = shown.map((r, i) => {
     const head = `${String(i + 1)}. ${clip(r.title, TITLE_CAP)}`;
     const sn = r.snippet !== undefined ? "\n   " + clip(r.snippet, SNIPPET_CAP) : "";
-    return head + "\n   " + r.url + sn;
+    return head + "\n   " + (r.url === "" ? "(无链接)" : r.url) + sn;
   });
   const tail = all.length > shown.length ? `（共 ${String(all.length)} 条，只列前 ${String(shown.length)} 条）` : `（共 ${String(all.length)} 条）`;
   return envelope("search-results", query, source, lines.join("\n") + "\n" + tail);

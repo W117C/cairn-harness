@@ -105,6 +105,12 @@ describe("extractResults：认 SearxNG 形状，别名与缺字段逐条钉", ()
     expect(extractHtmlResults('<a href="/a">A</a><a href="/b">B</a><a href="/c">C</a>', "https://s.example/")).toEqual([]);
   });
 
+  it("标题/摘要里的 NUL/ESC 控制字符被清掉", () => {
+    const r = extractResults({ results: [{ title: "a\u0000b", url: "https://x.example/", snippet: "s\u001b[31m" }] });
+    expect(r[0]!.title).toBe("ab");
+    expect(r[0]!.snippet).toBe("s[31m");
+  });
+
   it("非对象 / 没有 results 数组 ⇒ 空数组（不抛，由调用方按降级处理）", () => {
     expect(extractResults(null)).toEqual([]);
     expect(extractResults({ items: [{ title: "x", url: "y" }] })).toEqual([]);
@@ -145,6 +151,16 @@ describe("web_search 传输层（注入 fetchImpl / resolveHost）", () => {
     expect(r.output).toContain("1. Config | Vitest");
     expect(r.output).toContain("https://vitest.dev/config/");
     expect(r.output).toContain("（共 3 条）");
+  });
+
+  it("无链接结果在清单里显示 (无链接)，不留空行", async () => {
+    const tool = makeWebSearch({
+      resolveHost: publicResolver,
+      fetchImpl: async () => new Response(JSON.stringify({ results: [{ title: "No link" }] }), { headers: { "content-type": "application/json" } }) as unknown as Response,
+    });
+    const r = await tool.run({ query: "x" }, ctx());
+    expect(r.ok).toBe(true);
+    expect(r.output).toContain("1. No link\n   (无链接)");
   });
 
   it("结果条数有帽：25 条只列前 10，并如实报出总数", async () => {
