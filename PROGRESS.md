@@ -40249,3 +40249,38 @@ require 生产模块 `src/main/wallpaper.ts`；合成面只有 AgentApi（preloa
 
 **边界**：本页只写裁决输入；未改 provider、未加依赖、未改默认。文件
 `docs/web-search-self-host-2026-11-15.md`；批准后按 §五 判据先写判据再写实现。
+
+## 2026-11-15 · 第 1209 页：F3 组件栈的裁决输入（ADR 0003 的 D2 与现状分叉）
+
+**背景**：ADR 0003 状态仍是「原则已接受；具体库选型待业主确认」，D2 推荐 `@radix-ui/themes`；
+主应用实际没有这个包，只有 `@radix-ui/react-dropdown-menu` + 手写控件 + CDS token。F3 要回答选型，
+不是再写原则。
+
+### 事实
+
+- `docs/adr/0003-desktop-ui-component-stack.md:3` 状态未决；D2 主库是 `@radix-ui/themes`（同文件 `:34-36`）。
+- 主应用 `apps/desktop/package.json:26` 只有 `@radix-ui/react-dropdown-menu`；`@radix-ui/themes` 只在
+  `apps/desktop/preview/package.json:12`，预览 6 个文件 import 它。
+- 主应用 14 个 renderer 文件 import DropdownMenu；`components/` 下 140 个文件，没有 `components/ui/`
+  统一原语层。
+- 视觉契约独立于组件库：CDS token 逐字节 vendored，`apps/desktop/tests/cds-parity.test.ts` 钉实测值。
+
+### 选项
+
+| 选项 | 含义 | 代价 |
+|---|---|---|
+| A | Radix Themes 进主应用 | 140 个组件视觉迁移；新主题层与 CDS 抢同一层 |
+| **B（推荐）** | Radix Primitives + CDS，建 `components/ui/` 薄封装 | 增量迁移；按需加小包；无新主题层 |
+| C | 全手写 + CDS | 键盘/焦点/ARIA 每处自补；与「组件不要手写」原要求相反 |
+| D | Ant/MUI 整套库 | 与 CDS/Claude 视觉冲突；ADR 0003 已排除 |
+
+**建议 B**：不把 Radix Themes 引进主应用（预览包保留做设计沙盘）；先迁 Dialog / Select / Tooltip，
+DropdownMenu 收进同一层；新增 boundary 判据（页面不得直接 import `@radix-ui/react-*`），
+CDS parity 判据不动。
+
+**与自研的关系**：ADR 0003 的原始要求就是「组件不要手写，找优秀组件库」；UI 原语用 Radix 不违背
+核心功能自研。若业主把自研解释为 UI 也必须全手写，则只能选 C，代价是 a11y 维护回到手写——这个口径
+要单独回答。
+
+**边界**：本页只写裁决输入；未改 ADR 0003 的 D2、未加/删依赖、未迁组件。文件
+`docs/component-stack-decision-2026-11-15.md`；批准后按 §四 顺序先写判据再迁移。

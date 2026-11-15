@@ -8,6 +8,8 @@ rev: 907deda7
 
 ## 当前工作
 
+- **2026-11-15 F3 组件栈裁决输入**：`docs/component-stack-decision-2026-11-15.md`；现状 Radix 原语
+  ＋手写＋CDS，非 ADR D2 的 Themes；建议 B（Primitives + CDS），待选 A/B/C/D。第 1209 页。
 - **2026-11-15 F6 自研搜索裁决输入**：`docs/web-search-self-host-2026-11-15.md` 区分 C1 代码自研 / C2
   自托管 / C3 自有索引；建议 A1（自研 HTML 适配器）+ B（SearXNG 运维文档），C3 另立项；待业主回答四问。
   第 1208 页。
