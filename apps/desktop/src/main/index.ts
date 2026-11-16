@@ -12,6 +12,7 @@ import { appendTeamPatch, readTeamRoster, teamLogPath } from "./team-store";
 import { listSessions, readSessionEvents } from "../../../../src/main/sessions";
 import { openSegmentForSession } from "./session-segments";
 import { defaultStartDeps, dispatchToMember, startToMember } from "./team-dispatch";
+import { createTeamGroup } from "./team-group";
 import { planRound } from "../../../../src/orchestration/speech";
 import { memberPatch } from "../../../../src/agent/team/members";
 import { TEAM_USAGE_SESSION_CAP, memoryScopes, permissionRows, usageAcrossSessions } from "../../../../src/agent/team/insights";
@@ -865,6 +866,12 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
         ...(typeof workspace === "string" ? { workspace } : {}) },
       defaultStartDeps(async (req) => await (wired.run as (x: unknown) => Promise<{ ok?: boolean; error?: string }>)(req)),
     );
+  },
+  // v64 建团队会话：一条带 `group=1` 标记的会话（共享流＝它自己的事件流）。
+  teamGroupCreate: async (name, workspace) => {
+    const root = await explicitSessionsRoot(typeof workspace === "string" ? workspace : undefined);
+    if (root === undefined) return { ok: false, error: "没有可用的会话根" };
+    return await createTeamGroup({ sessionsRoot: root, ...(typeof name === "string" && name.trim() !== "" ? { name } : {}) });
   },
   // v60 一轮的发言秩序（发言权的第一个调用方）：名单从团队事件日志读，秩序由核心纯函数算。
   teamRoundPlan: async (raw) => {

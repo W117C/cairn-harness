@@ -1688,6 +1688,12 @@ stub.teamMemberStart = (memberId, task) => {
   return Promise.resolve({ ok: true, sessionId: "s-run-" + String(teamStarts.length) });
 };
 contextBridge.exposeInMainWorld("__cairnStarts", () => teamStarts.map((d) => ({ ...d })));
+const teamGroups = [];
+stub.teamGroupCreate = (name) => {
+  teamGroups.push({ name: name || "" });
+  return Promise.resolve({ ok: true, sessionId: "s-group-" + String(teamGroups.length) });
+};
+contextBridge.exposeInMainWorld("__cairnGroups", () => teamGroups.map((g) => ({ ...g })));
 let segmentCounter = 1;
 stub.sessionSegmentOpen = () => {
   segmentCounter += 1;

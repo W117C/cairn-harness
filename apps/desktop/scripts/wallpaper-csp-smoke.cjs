@@ -869,6 +869,29 @@ async function main() {
     startFlow.step === "done" && startFlow.calls.length === 1
       && startFlow.calls[0].task === "开跑给我看" && String(startFlow.text).includes("s-run-1"),
     { step: startFlow.step, calls: startFlow.calls });
+  // ⑮d 群会话（v64）：填名字 → 点「新建群会话」⇒ 真调到 teamGroupCreate，回执显示会话 id。
+  const groupFlow = await pjs(`(async () => {
+    const input = document.querySelector('.team-pane-group .ss-input');
+    if (!input) return { step: "no-input" };
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    setter.call(input, "壁纸攻坚");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 120));
+    const btn = [...document.querySelectorAll('.team-pane-group .mini-btn')].find((b) => (b.textContent || "").includes("新建群会话"));
+    if (!btn) return { step: "no-group-button" };
+    btn.click();
+    await new Promise((r) => setTimeout(r, 500));
+    return {
+      step: "done",
+      calls: window.__cairnGroups ? window.__cairnGroups() : [],
+      text: (document.querySelector('[data-team-pane="true"]') || {}).textContent || "",
+    };
+  })()`);
+  readings.teamGroup = groupFlow;
+  check("「新建群会话」真的调到 teamGroupCreate，并把会话 id 画出来",
+    groupFlow.step === "done" && groupFlow.calls.length === 1
+      && groupFlow.calls[0].name === "壁纸攻坚" && String(groupFlow.text).includes("s-group-1"),
+    { step: groupFlow.step, calls: groupFlow.calls });
   await shot(paneWin, "12-team-pane-1440x900");
   paneWin.destroy();
 

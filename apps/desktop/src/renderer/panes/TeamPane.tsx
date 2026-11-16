@@ -16,6 +16,9 @@ export function TeamPane(props: { initialRoster?: TeamRosterPayload; initialPlan
   const [dispatchTo, setDispatchTo] = useState<string | null>(null);
   const [dispatchTask, setDispatchTask] = useState("");
   const [dispatched, setDispatched] = useState<{ member: string; sessionId: string } | null>(null);
+  // 群会话（v64）：建一条带 group=1 的会话；共享流是它自己的事件流。
+  const [groupName, setGroupName] = useState("");
+  const [groupCreated, setGroupCreated] = useState<string | null>(null);
 
   const load = useCallback(async (): Promise<void> => {
     try {
@@ -33,6 +36,18 @@ export function TeamPane(props: { initialRoster?: TeamRosterPayload; initialPlan
   useEffect(() => { if (props.initialRoster === undefined) void load(); }, [load, props.initialRoster]);
 
   const members = roster?.members ?? [];
+
+  const createGroup = async (): Promise<void> => {
+    try {
+      const result = await window.agent.teamGroupCreate(groupName.trim());
+      if (result.ok !== true) { setIssue(result.error ?? STR.team.writeFailed); return; }
+      setGroupCreated(String(result.sessionId ?? ""));
+      setGroupName("");
+      setIssue(null);
+    } catch (error) {
+      setIssue(error instanceof Error ? error.message : String(error));
+    }
+  };
 
   const startMember = async (): Promise<void> => {
     if (dispatchTo === null) return;
@@ -98,6 +113,20 @@ export function TeamPane(props: { initialRoster?: TeamRosterPayload; initialPlan
             ? <span className="team-pane-plan-value">{STR.team.roundPaused}</span>
             : plan.batches.map((b) => `${String(b.order)}. ${b.speakers.map(nameOf).join("、")}`).join("　")}
       </div>
+      <div className="team-pane-group">
+        <input
+          className="ss-input"
+          aria-label={STR.team.groupName}
+          placeholder={STR.team.groupName}
+          value={groupName}
+          onChange={(e) => { setGroupName(e.target.value); }}
+        />
+        <button type="button" className="mini-btn" onClick={() => { void createGroup(); }}>
+          {STR.team.groupCreate}
+        </button>
+      </div>
+      {groupCreated !== null && <div className="team-pane-hint">{`${STR.team.groupCreated}${groupCreated}`}</div>}
+
       <div className="team-pane-dispatch">
         <input
           className="ss-input"

@@ -2,7 +2,7 @@
   "version": 1,
   "date": "2026-11-16",
   "rule": "范围内的条目按 covered=1 / partial=0.5 / absent=0 计分；范围外必须在 outOfScopeReason 里写清理由。覆盖分必须 ≥ 0.8，且每条 covered/partial 都要有本仓可跑的证人（测试文件或真机冒烟脚本），否则判红。",
-  "threshold": 0.8,
+  "threshold": 0.85,
   "items": [
     {
       "id": "bot.replay-authority",
@@ -107,9 +107,13 @@
       "id": "bot.group-chat",
       "capability": "群聊共享流与轮次",
       "reference": "room + round + 共享日志",
-      "ours": "未做",
-      "status": "absent",
-      "evidence": []
+      "ours": "群会话（group=1 标记）+ 建群入口；共享流＝会话自身事件流；轮次仲裁未接",
+      "status": "partial",
+      "evidence": [
+        "apps/desktop/tests/team-group.test.ts",
+        "apps/desktop/tests/team-pane.test.tsx",
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs"
+      ]
     },
     {
       "id": "bot.secrets-cards",
@@ -205,5 +209,5 @@
       "evidence": []
     }
   ],
-  "thresholdNote": "目标 0.9；现读 0.833（缺群聊共享流与密钥卡两格 absent + 两格 partial）。棘轮：只准上调。"
+  "thresholdNote": "目标 0.95；现读 0.861（缺密钥卡 + 面板族/原生点选的 partial）。棘轮：只准上调。"
 }

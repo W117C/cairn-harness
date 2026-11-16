@@ -55,6 +55,12 @@ describe("团队会话窗格", () => {
     expect(html).toContain("放进他的线程");
   });
 
+  it("群会话入口在：名字输入 + 「新建群会话」", () => {
+    const html = renderToStaticMarkup(<TeamPane initialRoster={roster} initialPlan={plan} />);
+    expect(html).toContain("新建群会话");
+    expect(html).toContain("群会话名字");
+  });
+
   it("空名单说「空名单」", () => {
     const html = renderToStaticMarkup(
       <TeamPane initialRoster={{ ...roster, members: [], records: 0 }} initialPlan={{ ...plan, batches: [], roster: [] }} />,

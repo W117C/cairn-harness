@@ -163,7 +163,7 @@
           "label": "压暗",
           "columns": "78px 240px",
           "display": "grid",
-          "top": 462,
+          "top": 461,
           "labelWidth": 78,
           "labelLines": 1,
           "rangeWidth": 240,
@@ -222,7 +222,7 @@
         "label": "压暗",
         "columns": "78px 240px",
         "display": "grid",
-        "top": 462,
+        "top": 461,
         "labelWidth": 78,
         "labelLines": 1,
         "rangeWidth": 240,
@@ -264,7 +264,7 @@
         "label": "压暗",
         "columns": "78px 240px",
         "display": "grid",
-        "top": 462,
+        "top": 461,
         "labelWidth": 78,
         "labelLines": 1,
         "rangeWidth": 240,
@@ -493,7 +493,7 @@
       "has": true,
       "src": "cairn-wallpaper://media/current?v=0",
       "paused": false,
-      "t": 0.03,
+      "t": 0.04,
       "ready": 4,
       "duration": 2,
       "focused": true,
@@ -507,7 +507,7 @@
       "has": true,
       "src": "cairn-wallpaper://media/current?v=0",
       "paused": true,
-      "t": 0.31,
+      "t": 0.32,
       "ready": 4,
       "duration": 2,
       "focused": false,
@@ -521,7 +521,7 @@
       "has": true,
       "src": "cairn-wallpaper://media/current?v=0",
       "paused": false,
-      "t": 0.31,
+      "t": 0.32,
       "ready": 4,
       "duration": 2,
       "focused": true,
@@ -535,7 +535,7 @@
       "has": true,
       "src": "cairn-wallpaper://media/current?v=0",
       "paused": true,
-      "t": 0.31,
+      "t": 0.32,
       "ready": 4,
       "duration": 2,
       "focused": true,
@@ -549,7 +549,7 @@
       "has": true,
       "src": "cairn-wallpaper://media/current?v=0",
       "paused": false,
-      "t": 0.31,
+      "t": 0.32,
       "ready": 4,
       "duration": 2,
       "focused": true,
@@ -612,7 +612,7 @@
         "rows": [
           "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
           "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-          "新来的成员 · mmwisol0wread-onlydefaultguidedautofull-accessteammemberproject移除",
+          "新来的成员 · mmwisz49iread-onlydefaultguidedautofull-accessteammemberproject移除",
           "本轮发言秩序主持优先按名单轮排一轮",
           "当前会话的段—开新段",
           "权限（成员维）团队档 default · 无裁剪",
@@ -636,7 +636,7 @@
       "rows": [
         "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
         "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-        "新来的成员 · mmwisol0wread-onlydefaultguidedautofull-accessteammemberproject移除",
+        "新来的成员 · mmwisz49iread-onlydefaultguidedautofull-accessteammemberproject移除",
         "本轮发言秩序主持优先按名单轮排一轮",
         "当前会话的段—开新段",
         "权限（成员维）团队档 default · 无裁剪",
@@ -656,7 +656,7 @@
         "rows": [
           "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
           "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-          "新来的成员 · mmwisol0wread-onlydefaultguidedautofull-accessteammemberproject移除",
+          "新来的成员 · mmwisz49iread-onlydefaultguidedautofull-accessteammemberproject移除",
           "本轮发言秩序主持优先按名单轮排一轮",
           "排出来的秩序1. 示例成员　2. 新来的",
           "当前会话的段—开新段",
@@ -722,7 +722,7 @@
         "canceled": false,
         "filePaths": []
       },
-      "elapsedMs": 2400,
+      "elapsedMs": 2157,
       "options": {
         "title": "选择壁纸",
         "properties": [
@@ -803,7 +803,7 @@
       "paneState": {
         "found": true,
         "rows": 1,
-        "text": "团队成员1示例成员调研read-only派活排出来的秩序1. 示例成员放进他的线程派活并开跑在 设置 › 团队 里管理",
+        "text": "团队成员1示例成员调研read-only派活排出来的秩序1. 示例成员新建群会话放进他的线程派活并开跑在 设置 › 团队 里管理",
         "plan": "排出来的秩序1. 示例成员"
       },
       "roundCalls": 1
@@ -831,6 +831,18 @@
         {
           "memberId": "m-seed",
           "task": "开跑给我看"
+        }
+      ]
+    }
+  },
+  {
+    "name": "「新建群会话」真的调到 teamGroupCreate，并把会话 id 画出来",
+    "ok": true,
+    "detail": {
+      "step": "done",
+      "calls": [
+        {
+          "name": "壁纸攻坚"
         }
       ]
     }
