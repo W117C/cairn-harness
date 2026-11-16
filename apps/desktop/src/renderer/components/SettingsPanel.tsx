@@ -40,7 +40,7 @@ import { MigrationSection } from "./settings/MigrationSection";
 import { PersonalizationSection } from "./settings/PersonalizationSection";
 import { SubagentsSection } from "./settings/SubagentsSection";
 import { TeamSection } from "./settings/TeamSection";
-import { SETTINGS_PAGE_ORDER, SECTIONS, filterSections, sectionById, sectionLabel, type SectionId } from "./settings-nav";
+import { NAV_GROUP_LABEL, SETTINGS_PAGE_ORDER, SECTIONS, filterSections, sectionById, sectionLabel, type SectionId } from "./settings-nav";
 import { destinationForSection } from "../navigation";
 import { STR } from "../strings";
 import "./settings-refinement.css";
@@ -572,10 +572,12 @@ export function SettingsPanel(props: {
             items[next]?.focus();
           }}>
           {navGroups.map(({ group, ids: groupIds }) => {
+            // 三组各一枚分组标签（纯标记，不可点），词表在 settings-nav 的导航元数据单源里
+            // （SettingsPanel 在「重做面不写裸中文」收编名单，文案不能在这里写字面量）。
+            // 判卷钉「工作台」在导航里恰好出现一次、位置在快捷键与技能中心之间——词面保持不变。
             return (
               <div className="sp-nav-group" data-group={group} key={group}>
-                {/* 分组标签：工作台分区与「设置」本分区在导航上分开（纯标记，不可点）。 */}
-                {group === "workspace" && groupIds.length > 0 && <div className="sp-nav-label" aria-hidden="true">工作台</div>}
+                <div className="sp-nav-label" aria-hidden="true">{NAV_GROUP_LABEL[group]}</div>
                 {groupIds.map((id) => {
                   const s = sectionById(id);
                   if (s === undefined) return null;

@@ -312,7 +312,7 @@ export function AboutSection(props: {
           <button type="button" className="mini-btn ghost" disabled={prefBusy} onClick={() => { void importPreferences(); }}>
             {STR.about.importPreferences}
           </button>
-          <button type="button" className="mini-btn ghost" disabled={prefBusy} onClick={() => { setResetOpen(true); }}>
+          <button type="button" className="mini-btn danger-text" disabled={prefBusy} onClick={() => { setResetOpen(true); }}>
             {STR.about.resetPreferences}
           </button>
           {prefMsg !== null && <span className="sp-dim" role="status">{prefMsg}</span>}
@@ -393,6 +393,7 @@ export function AboutSection(props: {
           title={STR.about.resetTitle}
           note={STR.about.resetNote}
           confirmLabel={STR.about.resetConfirm}
+          danger
           onConfirm={() => { void resetPreferences(); }}
           onClose={() => { setResetOpen(false); }}
         />

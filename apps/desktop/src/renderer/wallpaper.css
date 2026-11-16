@@ -111,11 +111,12 @@ body[data-we-wallpaper] :is(.side) {
   flex-wrap: wrap;
 }
 
-/* 一行一个滑杆：标签定宽、滑杆吃余量。标签列按最长那条（六个汉字）算且不许换行——
-   5.5em 实测会把「壁纸不透明度」折成两行；短标签靠右对齐，三行滑杆左缘才齐。 */
+/* 一行一个滑杆：标签定宽、滑杆吃余量、右缘数值回显（tabular-nums 不跳宽）。
+   标签列按最长那条（六个汉字）算且不许换行——5.5em 实测会把「壁纸不透明度」折成两行；
+   短标签靠右对齐，三行滑杆左缘才齐。 */
 .cw-slider {
   display: grid;
-  grid-template-columns: 6.5em minmax(0, 1fr);
+  grid-template-columns: 6.5em minmax(0, 1fr) 3.5em;
   align-items: center;
   gap: var(--space-sm);
   min-width: 0;
@@ -126,6 +127,12 @@ body[data-we-wallpaper] :is(.side) {
 .cw-slider > span {
   min-width: 0;
   text-align: right;
+  white-space: nowrap;
+}
+
+.cw-slider > .cw-slider-value {
+  font-variant-numeric: tabular-nums;
+  color: hsl(var(--text-400));
   white-space: nowrap;
 }
 
@@ -146,7 +153,7 @@ body[data-we-wallpaper] :is(.side) {
 /* 窄容器（设置页 .sp-body 是 @container）：标签与滑杆上下叠，标签左对齐。 */
 @container (max-width: 640px) {
   .cw-slider {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) 3.5em;
     gap: 2px;
   }
   .cw-slider > span {

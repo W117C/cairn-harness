@@ -1,5 +1,5 @@
 // 设置导航的轻量单源：命令面板只需要分区 id/标签，不应因此把设置页正文与工作台一起拉进首屏。
-import { BarChart3, BookOpen, Brain, Bot, Users, Clock, FolderInput, GitBranch, Globe, KeyRound, Keyboard, Plug, Puzzle, Shield, SlidersHorizontal, Sparkles, UserRound, Webhook, Wrench } from "lucide-react";
+import { BarChart3, BookOpen, Brain, Bot, Users, Clock, FolderInput, GitBranch, Globe, KeyRound, Keyboard, Plug, Puzzle, RotateCw, Shield, SlidersHorizontal, Sparkles, UserRound, Webhook, Wrench } from "lucide-react";
 
 import type { PageId } from "../app-controls";
 export type { PageId } from "../app-controls";
@@ -44,8 +44,18 @@ export const SECTIONS: readonly { id: SectionId; label: string; icon: React.JSX.
   { id: "shortcuts", label: "快捷键", icon: <Keyboard size={14} /> },
   ...PAGE_SECTIONS,
   { id: "migration", label: "迁移导入", icon: <FolderInput size={14} /> },
-  { id: "about", label: "关于与更新", icon: <Globe size={14} /> },
+  // 2026-11-17：about 从 Globe 换成 RotateCw（19 区里唯一一对撞图标：与「联网搜索」键盘上下扫
+  // 时两行视觉不可分；RotateCw 呼应「更新」）。
+  { id: "about", label: "关于与更新", icon: <RotateCw size={14} /> },
 ];
+
+/** 导航分组标签（分组与分区标签同住这份导航元数据单源）：三组各一枚，纯标记不可点。
+ *  此前 19 个分区只有中组有标签，首尾组语义读不出。 */
+export const NAV_GROUP_LABEL: Record<"settings" | "workspace" | "system", string> = {
+  settings: "设置",
+  workspace: "工作台",
+  system: "系统",
+};
 
 // 第 1137 页：分区 id → 元数据一次建表；导航/标题/页头不再各自 find。
 const SECTION_BY_ID = new Map(SECTIONS.map((s) => [s.id, s] as const));

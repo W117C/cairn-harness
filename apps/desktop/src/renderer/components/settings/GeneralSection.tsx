@@ -77,6 +77,9 @@ export function GeneralSection(props: {
   const [weatherNow, setWeatherNow] = useState<{ kind: string; source: string } | null>(null);
   const [weatherKey, setWeatherKey] = useState("");
   const [webUrl, setWebUrl] = useState("");
+  // 壁纸滑杆草稿（2026-11-17）：拖动过程只改本地预览，松手/失焦/键盘松键才落盘——此前
+  // onChange 每个事件都走一次 setSettings IPC 并重置右下「已保存 ✓」闪条，拖一格连写 N 次盘。
+  const [sliderDraft, setSliderDraft] = useState<{ opacity: number; scrim: number; glassAlpha: number } | null>(null);
 
   useEffect(() => {
     const w = props.settings.wallpaper.rotation.weather;
@@ -490,42 +493,74 @@ export function GeneralSection(props: {
             </div>
           </SettingsRow>
         )}
-        {/* 三个滑杆是同一件事（壁纸怎么压）⇒ 一行三档，各自带标签；不拆成三条重复的「壁纸」行。 */}
+        {/* 三个滑杆是同一件事（壁纸怎么压）⇒ 一行三档，各自带标签；不拆成三条重复的「壁纸」行。
+            落盘走松手（onPointerUp / onKeyUp / onBlur），拖动中只动本地草稿 + 数值回显。 */}
         <SettingsRow label={STR.general.wallpaperBlock}>
           <div className="cw-settings">
-            <label className="cw-slider">
-              <span>{STR.general.wallpaperOpacity}</span>
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={props.settings.wallpaper.opacity}
-                onChange={(e) => { props.onWallpaperOpacity(Number(e.target.value)); }}
-              />
-            </label>
-            <label className="cw-slider">
-              <span>{STR.general.wallpaperScrim}</span>
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={props.settings.wallpaper.scrim}
-                onChange={(e) => { props.onWallpaperScrim(Number(e.target.value)); }}
-              />
-            </label>
-            <label className="cw-slider">
-              <span>{STR.general.wallpaperGlass}</span>
-              <input
-                type="range"
-                min={0}
-                max={0.6}
-                step={0.05}
-                value={props.settings.wallpaper.glassAlpha}
-                onChange={(e) => { props.onWallpaperGlass(Number(e.target.value)); }}
-              />
-            </label>
+            {(() => {
+              const wp = sliderDraft ?? {
+                opacity: props.settings.wallpaper.opacity,
+                scrim: props.settings.wallpaper.scrim,
+                glassAlpha: props.settings.wallpaper.glassAlpha,
+              };
+              const pct = (v: number): string => `${String(Math.round(v * 100))}%`;
+              const commit = (): void => {
+                if (sliderDraft === null) return;
+                props.onWallpaperOpacity(sliderDraft.opacity);
+                props.onWallpaperScrim(sliderDraft.scrim);
+                props.onWallpaperGlass(sliderDraft.glassAlpha);
+                setSliderDraft(null);
+              };
+              return (
+                <>
+                  <label className="cw-slider">
+                    <span>{STR.general.wallpaperOpacity}</span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={wp.opacity}
+                      onChange={(e) => { setSliderDraft({ ...wp, opacity: Number(e.target.value) }); }}
+                      onPointerUp={commit}
+                      onKeyUp={commit}
+                      onBlur={commit}
+                    />
+                    <span className="cw-slider-value">{pct(wp.opacity)}</span>
+                  </label>
+                  <label className="cw-slider">
+                    <span>{STR.general.wallpaperScrim}</span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={wp.scrim}
+                      onChange={(e) => { setSliderDraft({ ...wp, scrim: Number(e.target.value) }); }}
+                      onPointerUp={commit}
+                      onKeyUp={commit}
+                      onBlur={commit}
+                    />
+                    <span className="cw-slider-value">{pct(wp.scrim)}</span>
+                  </label>
+                  <label className="cw-slider">
+                    <span>{STR.general.wallpaperGlass}</span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={0.6}
+                      step={0.05}
+                      value={wp.glassAlpha}
+                      onChange={(e) => { setSliderDraft({ ...wp, glassAlpha: Number(e.target.value) }); }}
+                      onPointerUp={commit}
+                      onKeyUp={commit}
+                      onBlur={commit}
+                    />
+                    <span className="cw-slider-value">{pct(wp.glassAlpha)}</span>
+                  </label>
+                </>
+              );
+            })()}
           </div>
         </SettingsRow>
 

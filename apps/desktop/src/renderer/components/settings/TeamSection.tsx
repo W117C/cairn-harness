@@ -226,7 +226,7 @@ export function TeamSection(
             >
               {MEMORY_SCOPES.map((scope) => <option key={scope} value={scope}>{MEMORY_LABEL[scope]}</option>)}
             </select>
-            <button type="button" className="mini-btn" disabled={busy} onClick={() => { void write({ id: m.id, remove: true }); }}>
+            <button type="button" className="mini-btn danger-text" disabled={busy} onClick={() => { void write({ id: m.id, remove: true }); }}>
               {STR.team.remove}
             </button>
           </div>
