@@ -5,8 +5,15 @@
 //   ② 允许集缺席 = 不过滤（老调用方逐字不变）；空允许集 = 什么都读不到（不是全读）；
 //   ③ 过滤器真的接在 `selectRecall` 上：被排除的候选不会出现在结果里；
 //   ④ 认不出的作用域值按 project 处理，不猜成更宽的 team。
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { filterByScope, memberMemoryDir, scopeAllowed, scopeDirs, scopeOf } from "../src/agent/memory/scope";
+import { buildMemoryInjection } from "../src/agent/memory/inject";
+import { writeTopic } from "../src/agent/memory/store";
+
+const NOW = "2026-11-16T00:00:00.000Z";
+import { filterByScope, memberMemoryDir, scopeAllowed, scopeDirs, scopeOf, scopesForAgent } from "../src/agent/memory/scope";
 import { selectRecall, type RecallInput } from "../src/agent/memory/retrieval";
 import { selectRecallHybrid } from "../src/agent/memory/semantic";
 
@@ -70,5 +77,43 @@ describe("作用域目录解析", () => {
       { scope: "team", dir: "/home/mem" },
       { scope: "member", dir: "/home/mem/members/m1" },
     ]);
+  });
+});
+
+describe("运行身份 → 允许集", () => {
+  it("成员线程读三档；其余读 project/team（集合由身份推，模型不能自己指定）", () => {
+    expect(scopesForAgent("member:m1")).toEqual(["project", "team", "member"]);
+    expect(scopesForAgent("worker-a")).toEqual(["project", "team"]);
+    expect(scopesForAgent(undefined)).toEqual(["project", "team"]);
+    // 形似但不是成员的 id 不给成员档（前缀必须精确）
+    expect(scopesForAgent("member")).toEqual(["project", "team"]);
+    expect(scopesForAgent("members:m1")).toEqual(["project", "team"]);
+  });
+});
+
+describe("作用域接进注入层（运行期过滤）", () => {
+  it("scopes=[project] ⇒ 全局层的条目不会被召回；不给 scopes ⇒ 两层的都能召回", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cairn-memory-scope-"));
+    try {
+      const workspace = join(root, "ws");
+      const globalRoot = join(root, "global");
+      const projMemory = join(workspace, ".agent", "memory");
+      await mkdir(projMemory, { recursive: true });
+      await mkdir(globalRoot, { recursive: true });
+      await writeTopic(projMemory, "proj-topic", "project", "wallpaper contrast floor is 4.5 to 1\nproject fact", NOW);
+      await writeTopic(globalRoot, "glob-topic", "project", "wallpaper contrast floor measured on device\nglobal fact", NOW);
+
+      const both = await buildMemoryInjection({ workspace, globalRoot, queryText: "wallpaper contrast floor" });
+      expect(both.project).toContain("proj-topic");
+      expect(both.global).toContain("glob-topic");
+
+      const projectOnly = await buildMemoryInjection({
+        workspace, globalRoot, queryText: "wallpaper contrast floor", scopes: ["project"],
+      });
+      expect(projectOnly.project).toContain("proj-topic");
+      expect(projectOnly.global ?? "").not.toContain("glob-topic");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

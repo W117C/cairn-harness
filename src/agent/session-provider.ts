@@ -23,6 +23,7 @@ import { SUPERVISE_MODEL_FIELDS } from "./supervise-contract";
 import { effectiveModelTable, findSpecByNameOrId } from "../providers/registry";
 import type { ModelOutput, Provider, ProviderCall } from "../providers";
 import { projectContext, type ContextMessage } from "./context";
+import { scopesForAgent } from "./memory/scope";
 import { buildMemoryInjectionSafe, type MemoryInjection } from "./memory/inject";
 import { REMEMBER_DESCRIPTION } from "../tools/remember";
 import { READ_IMAGE_DESCRIPTION } from "../tools/read_image";
@@ -1419,7 +1420,8 @@ export function createSessionProvider(
       // 出口在 `buildMemoryInjectionSafe` 那一道（第 315 页）：这里从前是自己的 catch ＋ `console.debug`
       // ⇒ 一次异常把整段 LESSONS/索引变成**无痕**丢失，而模型读到的"没有记忆"与"这仓库没写过记忆"同形。
       // M7：带上本轮问话做词面检索（RECALL 段）——问句取料与符号地图共用 `lastUserContent` 这一支。
-      const mem = await buildMemoryInjectionSafe({ workspace, queryText: lastUserContent(events) });
+      // 主会话没有成员身份 ⇒ 只读 project/team（把默认口径显式化，而不是靠「没传=不过滤」）。
+      const mem = await buildMemoryInjectionSafe({ workspace, queryText: lastUserContent(events), scopes: scopesForAgent(undefined) });
       const memory = mem.injection;
       const memoryNote = mem.unavailable;
       const memoryChars = (memory.project?.length ?? 0) + (memory.global?.length ?? 0);

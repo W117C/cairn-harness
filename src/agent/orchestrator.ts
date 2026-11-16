@@ -1260,7 +1260,8 @@ export class Orchestrator {
             + (err instanceof Error ? err.message : String(err)));
         }
       }
-      const system = await buildWorkerSystemMessages(w, this.opts.workspace, startContext, experienceNote); // 记忆注入恒读主 checkout（裁决 2）
+      // 记忆注入恒读主 checkout（裁决 2）；`w.agentId` 决定记忆作用域（成员线程读三档）。
+      const system = await buildWorkerSystemMessages(w, this.opts.workspace, startContext, experienceNote, w.agentId);
       const provider = createWorkerProvider({
         readEvents: () => w.events,
         system,

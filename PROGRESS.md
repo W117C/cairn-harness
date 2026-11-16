@@ -42005,3 +42005,34 @@ wallpaper-engine，逐行写「它怎么做 / 我们怎么做 / 证据在哪 / *
 - 目录有了，**写入口还没接**：`remember` 工具的 scope 仍是 `project|global`。要不要给模型开 `member` 档，
   是产品/契约裁决（改的是模型可见签名），不替业主拍板。
 - 检索侧同理：`scopes` 参数已通到注入层，但谁传「成员身份」要等成员线程接进 run。
+
+## 2026-11-16 · 第 1259 页：记忆作用域真正接进运行期（按运行身份推允许集）（`pending`）
+
+**背景**：第 1256–1258 页把作用域的**判据**与**目录**落下来了，但参数一直没人传。本页把它接到运行期：
+允许集由**运行身份**推出来，不是模型自己挑。
+
+### 一、接法（三处）
+
+1. `memory/scope.ts#scopesForAgent(agentId)`：`agent:id = member:<id>` ⇒ `["project","team","member"]`，
+   其余 ⇒ `["project","team"]`。前缀必须精确（`member`、`members:m1` 都不给成员档）。
+2. `worker-prompt`：`buildWorkerSystemMessages(..., agentId)` 把身份递进 `buildMemoryInjectionSafe`；
+   编排器传 `w.agentId`。主会话（没身份）显式传 `scopesForAgent(undefined)`——默认值写出来，不靠「没传=不过滤」。
+3. `inject`：注入层按层打**作用域标签**（项目层 = project、全局层 = team），并按允许集过滤。
+
+### 二、过滤语义补严了一处（判卷当场咬住）
+
+第一版只过滤 RECALL，**索引段照旧列出被挡层**——等于告诉读侧「有这么一条，只是不给你看」，
+与私密语义冲突。改成：不允许的层**连索引都不给**（`layerAllowed`）。
+判据（`tests/memory-scope.test.ts` 新增 2 条）：`scopes=["project"]` ⇒ 全局层的召回与索引同时消失；
+不传 `scopes` ⇒ 两层都在（老路径逐字不变）。
+
+### 三、门禁读数（工作树）
+
+- 核心 `pnpm test:capped`：**689 文件 / 8244 条全绿**，exit 0；`typecheck` 0 报错。
+- 桌面与本机冒烟本轮未动（无 renderer / 主进程改动）⇒ 沿用第 1258 页读数。
+
+### 四、边界（仍是待裁的那一件）
+
+- **写入**还没分目录：`remember` 的 scope 仍是 `project|global`。目录（`memberMemoryDir`）与
+  id 校验已备好；要不要给模型开 `member` 档（改模型可见签名）仍等业主一句。
+- 「一个团队包含哪些会话」的口径也仍等业主（当前默认 `TEAM_USAGE_SESSION_CAP = 10`）。

@@ -54,3 +54,11 @@ export function scopeDirs(memoryHome: string, projectDir: string, memberId?: str
   if (memberId !== undefined) out.push({ scope: "member", dir: memberMemoryDir(memoryHome, memberId) });
   return out;
 }
+
+/**
+ * 按运行身份给允许集：成员线程（`agent_id = member:<id>`）能读三档；其余只能读 project/team。
+ * 这条是「作用域接入运行期」的那一步——调用方只需把 `ctx.agentId` 递进来，不用自己拼集合。
+ */
+export function scopesForAgent(agentId: string | undefined): string[] {
+  return typeof agentId === "string" && agentId.startsWith("member:") ? ["project", "team", "member"] : ["project", "team"];
+}
