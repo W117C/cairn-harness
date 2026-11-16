@@ -41532,3 +41532,50 @@ desktop boundary 绿。核心仍为 `pnpm test:capped` **681 文件 / 8179 条�
 - 真实模型验收、跨机器桌面、正式签名/公证、真机四探针与 DMG 重打包仍未做；
   本机 ad-hoc DMG 仍是第 1237 页读数。变异复验不等于这些验收。
 - 工作树保持干净；3 个旧残留目录的可回退副本仍在 `/tmp/cairn-cleanup-20261115-2134/`。
+
+## 2026-11-16 · 第 1247 页：bot 团队 spec 第一篇 ＋ 壁纸首帧底色（`049fff94`）
+
+**背景**：业主「接着完善优化 bot 内容和玻璃壁纸内容」。两条线各取一处**能验的**推进，
+不动别人的在飞改动（本页之前工作树干净，`git status` 空）。
+
+### 一、bot：Phase 4 第一篇，只补未决口
+
+`docs/superpowers/specs/2026-11-16-bot-team-core-design.md`。ADR 0015 的裁决一项不动，
+**状态仍是 Proposed、仍不写实现代码**；本规格只把它「§九 未决」的五个口答掉：
+
+| 未决口 | 本规格的答法 | 判据 |
+|---|---|---|
+| Q11 段 | 段＝**事件行号**：开新段只是追加一条 `session_meta_update`，`patch` 带 `segment` 与 `segment_reason` 两个键。投影只从有效集合累积补丁 ⇒ 回退会把段一起回滚；分界列表从日志本身可读 | 重放两次段切片逐字相同；回退后段序数回退；未知 `reason` 不阻断 |
+| Q12 长文本 | L1 定稿：热层截断 ≤ 2,000 字（量纲取自 `history-search` 的既有上限）＋ 全文只存一份；升级触发放两个默认阈值（单条 > 256 KiB、会话日志 > 扫描预算一半） | 500 万字仍逐字重放；热层字节不随原文增长；探针读数进证据 |
+| Q17 命名 | 11 行对照表：每个上游概念都指回本仓既有词/字段；新造词只有 ADR 已授权的三个（成员档案 / 发言权 / 段） | 新代码零上游命名（源码文本断言，读整个核心面） |
+| Q18 差异点 | 四处（私密性强度 / 派活总量闸 / 长文本冷存储 / 群分叉语义），每处写「上游怎么做 → 我们怎么解 → 判卷」 | 逐条断言（含 gate 留痕断言） |
+| UI 定价 | 按面板给价：实测 247 个渲染层源文件、`App.tsx` 17 行、`Sidebar.tsx` **928/1200**、`PaneDock` 992/1200、`PaneKind` 9 个 | 新面板族 ≤ 9 个新文件；触帽先拆不放宽 |
+
+**两条硬事实**（写进规格、也写进这里，因为它们是约束而不是偏好）：
+`session_meta_update.patch` 是 `Record<string, string>` 且按键最后写入生效 ⇒ 它能给出**当前段**，
+段列表必须靠扫事件；`Sidebar.tsx` 已 928 行 ⇒ 成员区**必须**另开文件，不许塞进侧栏本体。
+
+### 二、壁纸：首帧底色（规格 §10 的 v1.1 项）
+
+`apps/desktop/src/main/wallpaper-tint.ts`（换算与回落，纯函数）＋ `main/index.ts` 接线：
+图片壁纸时用 `nativeImage` 的 1×1 平均色当 `BrowserWindow.backgroundColor`，把「先闪一块画布色」
+降级成「闪壁纸的平均色调」；读不出就回落主题底色（与今天逐字节一致），视频不走近路。
+判卷 7 条在 `apps/desktop/tests/wallpaper-tint.test.ts`，注入假 `TintSource`，不启动 Electron。
+
+### 三、门禁读数（工作树；提交 `049fff94`）
+
+- `node --import tsx scripts/typecheck.ts`：0 条报错。
+- 桌面 `vitest run --config vitest.config.ts`：**397 文件 / 2581 条全绿**，exit 0；`desktop-boundary-check` 绿。
+- `renderer-layer-check` 绿（247 个渲染层源文件）；`docs-check` 全绿。
+- 取证件：`outputs/bot-spec-and-tint-2026-11-16/`（README.md 与 `readings.log` 原始输出，非 TS）。
+
+### 四、边界与一次回滚（如实记）
+
+- **回滚**：本批一度实现了规格 §7 的「设置里标记文件不可用」（改 `state/wallpaper.ts` ＋ 设置行），
+  实测撞到 `apps/desktop/tests/helpers/renderer-evidence.ts#rendererDigest`——它对整个 `src/renderer`
+  取摘要，四份密封证据（cds-parity / ime-guard / overlay-mutex / queue-key）当场转红；
+  重封密封证据要真机跑探针，而**本机没有 Electron 二进制**。⇒ 整批回滚 renderer，只留主进程那一条。
+  教训：本仓「改 renderer」等于「必须能跑真机探针」，不能跑就别改 renderer。
+- **未验证**：真实首帧闪烁的量化（无 Electron）；壁纸规格 §10 的两格老账（视频失焦暂停、亮色主题真机截图）仍未验。
+- **未跑**：核心套件（改动面只有桌面主进程与文档，核心零触碰）；提交态 HEAD 认证与变异复验（本页不宣称提交态结论）。
+- 长文本分布数字：本机三个候选 sessions 目录都不存在 ⇒ 只定帽与探针，不填数。
