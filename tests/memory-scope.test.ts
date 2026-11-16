@@ -6,7 +6,7 @@
 //   ③ 过滤器真的接在 `selectRecall` 上：被排除的候选不会出现在结果里；
 //   ④ 认不出的作用域值按 project 处理，不猜成更宽的 team。
 import { describe, expect, it } from "vitest";
-import { filterByScope, scopeAllowed, scopeOf } from "../src/agent/memory/scope";
+import { filterByScope, memberMemoryDir, scopeAllowed, scopeDirs, scopeOf } from "../src/agent/memory/scope";
 import { selectRecall, type RecallInput } from "../src/agent/memory/retrieval";
 import { selectRecallHybrid } from "../src/agent/memory/semantic";
 
@@ -50,5 +50,25 @@ describe("记忆作用域", () => {
     const outcome = await selectRecallHybrid("wallpaper contrast floor", candidates, { k: 3, scopes: ["member"] });
     expect(outcome.mode).toBe("lexical");
     expect(outcome.picks.map((p) => p.topic)).toEqual(["c-member"]);
+  });
+});
+
+describe("作用域目录解析", () => {
+  it("成员私有目录：只收合法 id，路径不再拼接别的段", () => {
+    expect(memberMemoryDir("/home/mem", "m1")).toBe("/home/mem/members/m1");
+    for (const bad of ["../逃", "a/b", "a.b", "", "x".repeat(65)]) {
+      expect(() => memberMemoryDir("/home/mem", bad)).toThrow(/成员 id/);
+    }
+  });
+
+  it("三档目录：没给成员就只给 project/team（不猜成员的路径）", () => {
+    const withoutMember = scopeDirs("/home/mem", "/ws/.agent/memory");
+    expect(withoutMember.map((d) => d.scope)).toEqual(["project", "team"]);
+    const withMember = scopeDirs("/home/mem", "/ws/.agent/memory", "m1");
+    expect(withMember).toEqual([
+      { scope: "project", dir: "/ws/.agent/memory" },
+      { scope: "team", dir: "/home/mem" },
+      { scope: "member", dir: "/home/mem/members/m1" },
+    ]);
   });
 });

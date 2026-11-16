@@ -41979,3 +41979,29 @@ wallpaper-engine，逐行写「它怎么做 / 我们怎么做 / 证据在哪 / *
 
 - 核心 `pnpm test:capped`：**689 文件 / 8240 条全绿**，exit 0。
 - 桌面 **405 文件 / 2619 条**；壁纸真机冒烟 **49/49**；`typecheck` 0 报错；`docs-check` 全绿。
+
+## 2026-11-16 · 第 1258 页：记忆落点解析（三档目录）＋ 一处类型回归收口（`pending`）
+
+**背景**：第 1257 页之后仍被点名「记忆写入未按作用域分目录」。本页落**目录解析**这一半；
+「让模型自己选成员档」那半属工具契约，仍需业主裁（见第 1257 页 §三）。
+
+### 一、这批改了什么
+
+- `memory/scope.ts` 增 `memberMemoryDir(home, id)`：`<home>/members/<id>`，id 只收 `[A-Za-z0-9_-]{1,64}`
+  （`.` `/` 与超长一律拒——路径穿越与分隔歧义在入口挡掉）；`scopeDirs(home, projectDir, memberId?)`
+  一次给出三档落点，面板与文档共用这一份，不各自拼路径。
+- 判卷 `tests/memory-scope.test.ts` 增 2 条（合法/非法 id、三档目录；没给成员时**不猜**成员路径）。
+- **顺手收口一处类型回归**：`tests/orchestration-round-arbiter.test.ts` 里 `teamRoundArbiter` 的返回是
+  `RoundDecision | Promise<RoundDecision>`，先前直接读属性 ⇒ `tsc` 红 3 条（HEAD 里就带着）。
+  改成 `await`，typecheck 恢复 0 报错。
+
+### 二、门禁读数（工作树）
+
+- 核心 `pnpm test:capped`：**689 文件 / 8242 条全绿**，exit 0；`typecheck` 0 报错。
+- 桌面与真机冒烟本轮未动（无 renderer / 主进程改动），沿用第 1257 页读数（405 文件 / 2619 条、49/49）。
+
+### 三、边界
+
+- 目录有了，**写入口还没接**：`remember` 工具的 scope 仍是 `project|global`。要不要给模型开 `member` 档，
+  是产品/契约裁决（改的是模型可见签名），不替业主拍板。
+- 检索侧同理：`scopes` 参数已通到注入层，但谁传「成员身份」要等成员线程接进 run。

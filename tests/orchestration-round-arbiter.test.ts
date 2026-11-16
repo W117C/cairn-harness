@@ -81,11 +81,11 @@ it("仲裁器抛错 ⇒ fail-open：这一轮照常派", async () => {
 });
 
 it("teamRoundArbiter：空转到阈值 ⇒ 停机；否则主持先派", async () => {
-  const paused = teamRoundArbiter({ members: [{ id: "m1", role: "主持" }], idleRounds: 6 })(
+  const paused = await teamRoundArbiter({ members: [{ id: "m1", role: "主持" }], idleRounds: 6 })(
     { plan_id: "p", version: 1, task_ids: ["a", "b"] },
   );
   expect(paused.paused).toBe(true);
-  const normal = teamRoundArbiter({ members: [{ id: "b", role: "主持" }, { id: "a", role: "实现" }] })(
+  const normal = await teamRoundArbiter({ members: [{ id: "b", role: "主持" }, { id: "a", role: "实现" }] })(
     { plan_id: "p", version: 1, task_ids: ["a", "b"] },
   );
   expect(normal.paused).toBe(false);

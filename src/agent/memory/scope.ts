@@ -32,3 +32,25 @@ export function filterByScope<T extends { scope?: string }>(
   if (allowed === undefined) return [...items];
   return items.filter((item) => scopeAllowed(item.scope, allowed));
 }
+
+/**
+ * 成员私有记忆的落点：`<memory-home>/members/<id>`。
+ * id 只收 `[A-Za-z0-9_-]`（与成员档案的 id 规则同口径，不许带`.`/`/`——路径穿越与分隔歧义都在这里挡）。
+ * 目录本身不存在也算合法（第一次写入时创建）。
+ */
+export function memberMemoryDir(memoryHome: string, memberId: string): string {
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(memberId)) {
+    throw new Error(`成员 id 只收字母/数字/下划线/连字符（1-64 位），收到 ${JSON.stringify(memberId)}`);
+  }
+  return `${memoryHome}/members/${memberId}`;
+}
+
+/** 三个档位各自的落点描述（面板与文档共用一份，不各自拼路径）。 */
+export function scopeDirs(memoryHome: string, projectDir: string, memberId?: string): { scope: MemoryScopeName; dir: string }[] {
+  const out: { scope: MemoryScopeName; dir: string }[] = [
+    { scope: "project", dir: projectDir },
+    { scope: "team", dir: memoryHome },
+  ];
+  if (memberId !== undefined) out.push({ scope: "member", dir: memberMemoryDir(memoryHome, memberId) });
+  return out;
+}
