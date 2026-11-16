@@ -44,6 +44,7 @@ const occurrencesAfter = masked.split(SAMPLE_SECRET).length - 1;
 
 const rows = buildConformanceReport({
   isolation: (raw as { rendererIsolation?: unknown } | undefined)?.rendererIsolation,
+  csp: typeof (raw as { builtCsp?: unknown } | undefined)?.builtCsp === "string" ? (raw as { builtCsp: string }).builtCsp : null,
   // 键盘路径：冒烟里真有 Tab/Enter 走通并把设置写进去，才记 1。
   keyboardPick: (() => {
     const kb = (raw as { keyboardPick?: { path?: unknown; kind?: unknown } } | undefined)?.keyboardPick;

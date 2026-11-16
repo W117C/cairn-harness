@@ -43137,3 +43137,42 @@ standard-report: pass
 - 核心 `pnpm test:capped`：**699 文件 / 8299 条全绿**，exit 0
 - 桌面 415 文件 / 2666 条全绿；真机冒烟 **62/62**；四包密封证据有效（渲染层未改）
 - `typecheck` 0 报错；`docs-check` 全绿
+
+## 2026-11-16 · 第 1286 页：标准对照扩到**八条**，CSP 按实际下发的头判（`pending`）
+
+**背景**：对照里 CSP 只有一条「越权取图被拦」。这一页把 CSP 拆成**读实际头**的两条，
+顺便把「部分标准」这个说法挤掉一截。
+
+### 一、新增两条（都读冒烟里真下发的头，不读文档）
+
+| 标准条款 | 判法 | 现读 |
+|---|---|---|
+| CSP 硬化指令 | `object-src 'none'` / `base-uri 'none'` / `form-action 'none'` 三条都在 | **3/3** |
+| CSP `script-src` 无 `unsafe-inline` | 从实际头里截 `script-src` 段找 `unsafe-inline` | **0 次** |
+
+判据是纯函数：`cspHardeningCount` / `scriptUnsafeInline`——头里读不到就是 `missing`，不许默认绿。
+
+### 二、报告全貌（八条，全部实测）
+
+```
+standard-report: pass
+  pass  WCAG 2.2 SC 1.4.3 Contrast Minimum｜4.526 ratio｜阈值 4.5
+  pass  CSP Level 3 越权取图被拦｜1 violations｜阈值 1
+  pass  CSP Level 3 硬化指令（object-src/base-uri/form-action）｜3 directives｜阈值 3
+  pass  CSP Level 3 script-src 不含 unsafe-inline｜0 occurrences｜阈值 0
+  pass  Electron 安全清单（4 项）｜4 checks｜阈值 4
+  pass  WCAG 2.2 SC 2.1.1 Keyboard｜1 flows｜阈值 1
+  pass  OWASP Top 10 2021 A09 脱敏残留｜0 occurrences｜阈值 0
+  pass  本方对表 covered 比例｜1.000｜阈值 1
+```
+
+### 三、判卷
+
+`tests/conformance-report.test.ts` → **10 条**（新增 2）：三条硬化指令缺一 ⇒ fail、没头 ⇒ missing；
+`unsafe-inline` 出现 ⇒ fail。
+
+### 四、门禁读数（工作树）
+
+- 核心 `pnpm test:capped`：**699 文件 / 8301 条全绿**，exit 0
+- 桌面 415 文件 / 2666 条全绿；真机冒烟 **62/62**；四包密封证据有效（渲染层未改）
+- `typecheck` 0 报错；`docs-check` 全绿

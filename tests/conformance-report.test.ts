@@ -87,6 +87,7 @@ describe("公开标准对照报告", () => {
       isolation: { hasRequire: "undefined", hasProcess: "undefined", hasAgent: "object", hasNodeGlobals: "undefined,undefined,undefined" },
       redaction: { occurrencesAfter: 0 },
       keyboardPick: { picked: true },
+      csp: "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'",
     });
     expect(reportVerdict(rows)).toBe("pass");
   });
@@ -107,5 +108,30 @@ describe("键盘可达（WCAG 2.1.1）", () => {
       .find((r) => r.clause.includes("2.1.1"))!.verdict).toBe("fail");
     expect(buildConformanceReport({ ...base, keyboardPick: null })
       .find((r) => r.clause.includes("2.1.1"))!.verdict).toBe("missing");
+  });
+});
+
+describe("CSP 硬化指令（读实际头，不读文档）", () => {
+  const base = {
+    readingsPath: "/tmp/r.json",
+    parity,
+    readings: { dark: { worst: 5 }, light: { worst: 5 }, negativeControl: { cspViolations: 1 } },
+    isolation: { hasRequire: "undefined", hasProcess: "undefined", hasAgent: "object", hasNodeGlobals: "none" },
+    redaction: { occurrencesAfter: 0 },
+    keyboardPick: { picked: true },
+  };
+  it("三条硬化指令都在 ⇒ pass；少一条 ⇒ fail；没 CSP ⇒ missing", () => {
+    const good = "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'";
+    expect(buildConformanceReport({ ...base, csp: good }).find((r) => r.clause.includes("硬化指令"))!.verdict).toBe("pass");
+    const weak = "default-src 'self'; script-src 'self'; object-src 'none'";
+    expect(buildConformanceReport({ ...base, csp: weak }).find((r) => r.clause.includes("硬化指令"))!.verdict).toBe("fail");
+    expect(buildConformanceReport({ ...base, csp: null }).find((r) => r.clause.includes("硬化指令"))!.verdict).toBe("missing");
+  });
+
+  it("script-src 里有 unsafe-inline ⇒ fail", () => {
+    const bad = "default-src 'self'; script-src 'self' 'unsafe-inline'";
+    expect(buildConformanceReport({ ...base, csp: bad }).find((r) => r.clause.includes("unsafe-inline"))!.verdict).toBe("fail");
+    const ok = "default-src 'self'; script-src 'self'";
+    expect(buildConformanceReport({ ...base, csp: ok }).find((r) => r.clause.includes("unsafe-inline"))!.verdict).toBe("pass");
   });
 });

@@ -161,10 +161,11 @@
       "id": "wallpaper.csp",
       "capability": "CSP 白名单承重（含反证臂）",
       "reference": "未提",
-      "ours": "反证臂：摘 scheme 必须加载失败",
+      "ours": "反证臂：摘 scheme 必须加载失败；另按**实际下发的头**判：对象/基址/表单三条硬化为 none、script-src 无 unsafe-inline",
       "status": "covered",
       "evidence": [
-        "apps/desktop/scripts/wallpaper-csp-smoke.cjs"
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs",
+        "scripts/standard-report.ts"
       ]
     },
     {
@@ -257,5 +258,5 @@
       "evidence": []
     }
   ],
-  "thresholdNote": "目标 0.95；现读 1.000（评分面 20 格全 covered；阈值 0.96）。两格 out 各带理由：scene-engine 不做、native-click 需人工点一次。标准对照报告由真机读数生成：六条全 pass（WCAG 1.4.3 / WCAG 2.1.1 / CSP / Electron / OWASP / 对表）。"
+  "thresholdNote": "目标 0.95；现读 1.000（评分面 20 格全 covered；阈值 0.96）。两格 out 各带理由：scene-engine 不做、native-click 需人工点一次。标准对照报告由真机读数生成：八条全 pass（WCAG 1.4.3 / 2.1.1、CSP 三条、Electron、OWASP、对表）。"
 }

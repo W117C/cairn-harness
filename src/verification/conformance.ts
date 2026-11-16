@@ -50,6 +50,8 @@ export interface ConformanceInput {
   redaction?: { occurrencesAfter: number } | null;
   /** WCAG 2.1.1：键盘能否走到可选文件并选中（真机 keyDown 事件）。 */
   keyboardPick?: { picked: boolean } | null;
+  /** 冒烟里读到的实际 CSP 头（字符串）。 */
+  csp?: string | null;
 }
 
 export function buildConformanceReport(input: ConformanceInput): ConformanceRow[] {
@@ -69,6 +71,24 @@ export function buildConformanceReport(input: ConformanceInput): ConformanceRow[
       standard: "CSP Level 3", clause: "越权取图必须被 CSP 拦下",
       threshold: 1, unit: "violations", measured: typeof cspBlocked === "number" ? cspBlocked : null,
       verdict: typeof cspBlocked !== "number" ? "missing" : cspBlocked >= 1 ? "pass" : "fail",
+      source: input.readingsPath,
+    },
+    {
+      standard: "CSP Level 3", clause: "硬化指令（object-src / base-uri / form-action）",
+      threshold: 3, unit: "directives",
+      measured: cspHardeningCount(input.csp),
+      verdict: cspHardeningCount(input.csp) === null
+        ? "missing"
+        : cspHardeningCount(input.csp)! >= 3 ? "pass" : "fail",
+      source: input.readingsPath,
+    },
+    {
+      standard: "CSP Level 3", clause: "script-src 不含 unsafe-inline",
+      threshold: 0, unit: "occurrences",
+      measured: scriptUnsafeInline(input.csp),
+      verdict: scriptUnsafeInline(input.csp) === null
+        ? "missing"
+        : scriptUnsafeInline(input.csp) === 0 ? "pass" : "fail",
       source: input.readingsPath,
     },
     {
@@ -121,6 +141,22 @@ export function isolationChecks(isolation: unknown): number | null {
   if (typeof i.hasNodeGlobals === "string" && !i.hasNodeGlobals.includes("object")) ok += 1;
   // 四项里 hasNodeGlobals 是加分项；阈值按前三项 + 没有 node 全局 = 4 项算
   return ok;
+}
+
+/** CSP 硬化指令清单：这三条在「只加载自己的资源」语境下是硬要求。 */
+export const CSP_HARDENING = ["object-src 'none'", "base-uri 'none'", "form-action 'none'"] as const;
+
+export function cspHardeningCount(csp: string | null | undefined): number | null {
+  if (typeof csp !== "string" || csp.trim() === "") return null;
+  return CSP_HARDENING.filter((d) => csp.includes(d)).length;
+}
+
+/** `script-src` 里有没有 `unsafe-inline`（有 ⇒ 1，没有 ⇒ 0；读不到 script-src ⇒ null）。 */
+export function scriptUnsafeInline(csp: string | null | undefined): number | null {
+  if (typeof csp !== "string") return null;
+  const m = /script-src([^;]*)/.exec(csp);
+  if (m === null) return null;
+  return m[1]!.includes("unsafe-inline") ? 1 : 0;
 }
 
 export function reportVerdict(rows: readonly ConformanceRow[]): "pass" | "fail" | "incomplete" {
