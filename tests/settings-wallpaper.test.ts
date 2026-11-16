@@ -41,6 +41,8 @@ describe("壁纸设置", () => {
       scrim: 0.2,
       glassAlpha: 0.3,
       revision: 3,
+      // 2026-11-16：定时轮换随壁纸设置一起校验（缺省 = 关 / 60 分钟 / 空候选）
+      rotation: { enabled: false, everyMinutes: 60, paths: [], lastAt: 0 },
     });
   });
 

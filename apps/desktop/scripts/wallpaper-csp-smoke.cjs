@@ -391,6 +391,33 @@ async function main() {
     row.found && row.buttons.length >= 1 && row.buttons.every((b) => b.width > 0 && b.bg !== "rgba(0, 0, 0, 0)"), row.buttons);
   await shot(win, "02-settings-wallpaper-row-1440x900");
 
+  // ④b 定时轮换（2026-11-16）：勾上开关 + 把当前壁纸加入轮换 ⇒ 设置里落 rotation。
+  // 注意：每次点击后 React 会重渲染，节点会换掉——所以每一步都重新查，别攥着旧引用。
+  const rotationFlow = await js(`(async () => {
+    const q = (sel) => document.querySelector(sel);
+    if (q('[data-wallpaper-rotation="true"]') === null) return { step: "no-box" };
+    q('[data-wallpaper-rotation="true"] input[type="checkbox"]').click();
+    await new Promise((r) => setTimeout(r, 250));
+    const afterToggle = await window.agent.getSettings();
+    const add = q('[data-wallpaper-rotation-add="true"]');
+    if (add === null) return { step: "no-add", enabled: afterToggle.wallpaper.rotation.enabled };
+    if (add.disabled) return { step: "add-disabled", enabled: afterToggle.wallpaper.rotation.enabled, path: afterToggle.wallpaper.path };
+    add.click();
+    await new Promise((r) => setTimeout(r, 400));
+    const s2 = await window.agent.getSettings();
+    return {
+      step: "done",
+      enabled: s2.wallpaper.rotation.enabled,
+      paths: s2.wallpaper.rotation.paths.length,
+      countText: (q('[data-wallpaper-rotation-count="true"]') || {}).textContent || "",
+    };
+  })()`);
+  readings.rotation = rotationFlow;
+  check("定时轮换：勾开关 + 加入当前壁纸 ⇒ rotation 落进设置（候选 1 张）",
+    rotationFlow.step === "done" && rotationFlow.enabled === true && rotationFlow.paths === 1
+      && String(rotationFlow.countText).includes("1"),
+    rotationFlow);
+
   // ⑤ 真指针可达 + 真点击改值（脚本 .click() 不算）。
   const sliderProbe = await pointerClick(win, ".cw-slider:nth-of-type(1) input[type='range']", 0.2);
   const afterSlider = await js(`(() => {

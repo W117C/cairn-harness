@@ -62,7 +62,23 @@ export interface WallpaperSettings {
   glassAlpha: number;
   /** 主进程单调自增，用于给媒体 URL 破缓存；**只在 path 变化时自增**（滑杆不得重载媒体）。 */
   revision: number;
+  /** 定时轮换（2026-11-16）：到点换下一张。`paths` 为空时轮换无意义（保持原样）。 */
+  rotation: WallpaperRotation;
 }
+
+export interface WallpaperRotation {
+  enabled: boolean;
+  /** 轮换间隔（分钟，1..1440）。 */
+  everyMinutes: number;
+  /** 候选绝对路径（最多 32 条；不存在的由主进程跳过并出声）。 */
+  paths: string[];
+  /** 上次轮换时间（毫秒时间戳；0 = 还没轮换过）。 */
+  lastAt: number;
+}
+
+export const ROTATION_MIN_MINUTES = 1;
+export const ROTATION_MAX_MINUTES = 1440;
+export const ROTATION_MAX_PATHS = 32;
 
 export const WALLPAPER_KINDS: readonly WallpaperKind[] = ["none", "image", "video"];
 
@@ -216,7 +232,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   textSize: "md",
   uiSize: "2",
   // 壁纸层默认关：功耗敏感项（视频解码持续耗电），不主动开（设计规格 §6）。
-  wallpaper: { kind: "none", path: null, opacity: 1, scrim: 0.35, glassAlpha: 0.25, revision: 0 },
+  wallpaper: {
+    kind: "none", path: null, opacity: 1, scrim: 0.35, glassAlpha: 0.25, revision: 0,
+    rotation: { enabled: false, everyMinutes: 60, paths: [], lastAt: 0 },
+  },
 };
 
 export const SAFE_MODES = ["off", "report", "gate"] as const;
@@ -273,7 +292,24 @@ function validateWallpaper(raw: unknown): WallpaperSettings {
     scrim: unitInterval(r.scrim, d.scrim),
     glassAlpha: glassAlphaOf(r.glassAlpha, d.glassAlpha),
     revision,
+    rotation: validateRotation(r.rotation, d.rotation),
   };
+}
+
+/** 轮换字段：间隔夹在 1..1440、路径去空且上限 32、时间戳非负整数。 */
+function validateRotation(raw: unknown, fallback: WallpaperRotation): WallpaperRotation {
+  if (typeof raw !== "object" || raw === null) return { ...fallback, paths: [...fallback.paths] };
+  const r = raw as Record<string, unknown>;
+  const minutes = typeof r.everyMinutes === "number" && Number.isFinite(r.everyMinutes)
+    ? Math.min(ROTATION_MAX_MINUTES, Math.max(ROTATION_MIN_MINUTES, Math.round(r.everyMinutes)))
+    : fallback.everyMinutes;
+  const paths = Array.isArray(r.paths)
+    ? r.paths
+      .filter((p): p is string => typeof p === "string" && p.trim() !== "" && p.length <= 4096)
+      .slice(0, ROTATION_MAX_PATHS)
+    : [...fallback.paths];
+  const lastAt = typeof r.lastAt === "number" && Number.isFinite(r.lastAt) && r.lastAt >= 0 ? r.lastAt : fallback.lastAt;
+  return { enabled: r.enabled === true, everyMinutes: minutes, paths, lastAt };
 }
 
 /** 逐字段校验：合法取原值，非法/缺失取默认（验收②：非法布局值回退默认）。

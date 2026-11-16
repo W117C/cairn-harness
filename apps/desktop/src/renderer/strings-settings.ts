@@ -90,6 +90,11 @@ export const settingsStrings = {
     // 2026-11-14（设计规格 §3.4/§5.4）：壁纸层——用户自选本地图片/视频，
     // 铺在对话界面背后；三个滑杆（不透明度 / 压暗 / 玻璃透明度）。
     wallpaper: "壁纸",
+    wallpaperRotation: "定时轮换",
+    wallpaperRotationMinutes: "轮换间隔（分钟）",
+    wallpaperRotationUnit: "分钟",
+    wallpaperRotationAdd: "把当前壁纸加入轮换",
+    wallpaperRotationCount: "候选：",
     wallpaperBrowse: "浏览本机…",
     wallpaperBrowseDir: "目录路径",
     wallpaperBrowseUp: "上一级",

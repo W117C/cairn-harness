@@ -1586,6 +1586,8 @@ if (wallpaperFixturePath !== "") {
   settingsState.wallpaper = {
     kind: "image", path: wallpaperFixturePath,
     opacity: 1, scrim: 0.35, glassAlpha: 0.25, revision: 0,
+    // 定时轮换（2026-11-16）：夹具里也给一份真形状，缺它渲染层会读到 undefined。
+    rotation: { enabled: false, everyMinutes: 60, paths: [], lastAt: 0 },
   };
   const wallpaperPicks = [];
   stub.wallpaperPick = () => {

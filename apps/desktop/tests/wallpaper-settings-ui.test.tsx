@@ -29,6 +29,7 @@ function markup(over: Partial<AppSettings["wallpaper"]> = {}, unavailable = fals
       onWallpaperGlass={noop}
       onWallpaperClear={noop}
       wallpaperUnavailable={unavailable}
+        onWallpaperRotation={() => {}}
     />,
   );
 }

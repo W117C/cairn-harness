@@ -8,6 +8,7 @@ import { parseBootWallpaper, bootBackgroundForWallpaper, createTintMemo, NO_WALL
 import type { TintSource } from "./wallpaper-tint";
 import { installSuspendPause } from "./wallpaper-suspend";
 import { installActivePush, WALLPAPER_ACTIVE_CHANNEL } from "./wallpaper-active";
+import { installWallpaperRotation } from "./wallpaper-rotation";
 import { pickWallpaper } from "./wallpaper-pick";
 import { browseDirectory } from "./wallpaper-browse";
 import { appendTeamPatch, readTeamRecords, readTeamRoster, teamLogPath } from "./team-store";
@@ -1854,6 +1855,23 @@ app.whenReady().then(() => {
   // 系统休眠/锁屏 ⇒ 暂停视频壁纸（设计规格 §6 的「系统休眠」行）。
   // 真事件测不了（真休眠会把宿主一起睡掉），所以装配写成可注入的纯函数，由单测判卷；
   // 这里只把 Electron 的真事件源与真窗口递进去。
+  // 定时轮换（2026-11-16）：每 30s 问一次「该不该换」；决定在核心纯函数里。
+  installWallpaperRotation({
+    read: async () => (await getSettings()).wallpaper,
+    apply: async ({ kind, path }) => {
+      const cur = await getSettings();
+      await setSettings({
+        wallpaper: {
+          ...cur.wallpaper, kind, path,
+          revision: cur.wallpaper.revision + 1,
+          rotation: { ...cur.wallpaper.rotation, lastAt: Date.now() },
+        },
+      } as never);
+    },
+    exists: (p) => existsSync(p),
+    onError: () => undefined,
+  });
+
   // v72 活跃信号：每个窗口都挂真 focus/blur → 推 `{active}`（渲染层媒体门只认这一个信号）。
   const pushActiveFor = (win: Electron.BrowserWindow): void => {
     const send = (channel: string, payload: { active: boolean }): void => {

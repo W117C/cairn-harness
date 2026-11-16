@@ -630,6 +630,10 @@ export function SettingsPanel(props: {
                 onNotify={(next) => { void saveSettingKey("notifyOnComplete", next); }}
                 onWallpaperPick={() => { void pickWallpaper(); }}
                 onWallpaperPickPath={(path) => { void applyWallpaperPath(path); }}
+                onWallpaperRotation={(rotation) => {
+                  if (settings === null) return;
+                  void window.agent.setSettings({ wallpaper: { ...settings.wallpaper, rotation } }).then((next) => { setS(next); });
+                }}
                 onWallpaperOpacity={(next) => { void saveWallpaper({ opacity: next }); }}
                 onWallpaperScrim={(next) => { void saveWallpaper({ scrim: next }); }}
                 onWallpaperGlass={(next) => { void saveWallpaper({ glassAlpha: next }); }}

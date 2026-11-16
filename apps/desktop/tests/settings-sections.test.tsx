@@ -34,7 +34,8 @@ const VISION = { state: "undeclared" as const, modelId: "cn:hy3", declaredModali
 describe("批 6：通用段（外观 / 语言 / 字号 / 快捷键 四卡）", () => {
   const menu = (over: Partial<AppSettings> = {}, textSize: TextSizeSetting = "md", uiSize: UiSizeSetting = "2"): string =>
     renderToStaticMarkup(<GeneralSection settings={S(over)} textSize={textSize} uiSize={uiSize} onSave={noop} onCtrlTab={noop} onTextSize={noop} onUiSize={noop} onWindowVibrancy={noop} onNotify={noop} onWallpaperPick={noop} onWallpaperOpacity={noop} onWallpaperScrim={noop} onWallpaperGlass={noop} onWallpaperClear={noop}
-          wallpaperUnavailable={false} />);
+          wallpaperUnavailable={false}
+        onWallpaperRotation={() => {}} />);
 
   it("外观控件合并为一组，使用习惯独立成组；保留重启与未支持提示", () => {
     const h = menu();
@@ -524,7 +525,7 @@ describe("通用设置移除首启检查", () => {
       onWindowVibrancy: noop, onNotify: noop, onShowOnboarding: noop,
       onWallpaperPick: noop, onWallpaperOpacity: noop, onWallpaperScrim: noop,
       onWallpaperGlass: noop, onWallpaperClear: noop,
-      wallpaperUnavailable: false,
+      wallpaperUnavailable: false, onWallpaperRotation: noop,
     };
     const html = renderToStaticMarkup(<GeneralSection {...legacyProps} />);
     expect(html).not.toContain("首启检查");

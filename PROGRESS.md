@@ -43208,3 +43208,40 @@ standard-report: pass
 - 核心 `pnpm test:capped`：**700 文件 / 8306 条全绿**，exit 0
 - 桌面 415 文件 / 2666 条全绿；真机冒烟 **62/62**；四包密封证据有效
 - `typecheck` 0 报错；`docs-check` 全绿
+
+## 2026-11-16 · 第 1288 页：定时轮换（把差距表里一条「未做」变成「已做」）（`pending`）
+
+**背景**：差距表列了「定时切换 = 未做」。这一页把它做掉——不是改表，是补功能。
+
+### 一、实现（决定与执行分开）
+
+| 层 | 落点 | 判据 |
+|---|---|---|
+| 设置 | `wallpaper.rotation = {enabled, everyMinutes(1..1440), paths(≤32), lastAt}` | `tests/settings-rotation.test.ts` 4 条 |
+| 决定（纯） | `src/wallpaper/rotation.ts`：`rotationDue` / `decideRotation` | `tests/wallpaper-rotation.test.ts` 5 条 |
+| 执行 | `apps/desktop/src/main/wallpaper-rotation.ts`：30s 一问，写设置；读不到的候选跳过并点名 | `apps/desktop/tests/wallpaper-rotation.test.ts` 4 条 |
+| UI | 设置 › 外观：定时轮换开关 / 间隔 / 把当前壁纸加入轮换 / 候选数 | `apps/desktop/tests/settings-rotation-row.test.tsx` 2 条 + 冒烟 1 条 |
+
+口径（写在纯函数注释里）：候选 <2 不轮换（1 张「轮换」是自欺）；`lastAt=0` 算从未轮换；
+当前壁纸不在候选里 ⇒ 取第一条并说明原因；读不到的候选跳过但**在返回值里点名**。
+
+### 二、真机读数
+
+```
+PASS 定时轮换：勾开关 + 加入当前壁纸 ⇒ rotation 落进设置（候选 1 张）
+     {"step":"done","enabled":true,"paths":1,"countText":"候选：1"}
+⇒ 冒烟 63/63
+```
+
+### 三、门禁读数（工作树）
+
+- 核心 `pnpm test:capped`：**702 文件 / 8315 条全绿**，exit 0
+- 桌面 **417 文件 / 2672 条全绿**；真机冒烟 **63/63**；四包密封证据**已重签**（渲染层改了）
+- `typecheck` 0 报错；`docs-check` 全绿
+
+### 四、差距表变化（如实）
+
+| 行 | 前 | 后 |
+|---|---|---|
+| 定时切换（固定间隔） | 未做 | **已做**（2026-11-16，证据：纯函数 + 执行层 + 冒烟） |
+| 日出日落 / 按天气切换 | 未做 | 仍**未做**（只做固定间隔，无地理位置/天文计算） |

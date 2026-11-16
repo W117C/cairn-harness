@@ -159,9 +159,9 @@
       "sliders": [
         {
           "label": "壁纸不透明度",
-          "columns": "78px 240px",
+          "columns": "78px 310.57px",
           "display": "grid",
-          "top": 437,
+          "top": 461,
           "labelWidth": 78,
           "labelLines": 1,
           "rangeWidth": 240,
@@ -171,9 +171,9 @@
         },
         {
           "label": "压暗",
-          "columns": "78px 240px",
+          "columns": "78px 310.57px",
           "display": "grid",
-          "top": 461,
+          "top": 485,
           "labelWidth": 78,
           "labelLines": 1,
           "rangeWidth": 240,
@@ -183,9 +183,9 @@
         },
         {
           "label": "玻璃透明度",
-          "columns": "78px 240px",
+          "columns": "78px 310.57px",
           "display": "grid",
-          "top": 486,
+          "top": 510,
           "labelWidth": 78,
           "labelLines": 1,
           "rangeWidth": 240,
@@ -214,7 +214,7 @@
           "color": "color(srgb 0.764706 0.760784 0.717647)"
         }
       ],
-      "rowWidth": 326,
+      "rowWidth": 397,
       "containerWidth": 1232
     }
   },
@@ -224,9 +224,9 @@
     "detail": [
       {
         "label": "壁纸不透明度",
-        "columns": "78px 240px",
+        "columns": "78px 310.57px",
         "display": "grid",
-        "top": 437,
+        "top": 461,
         "labelWidth": 78,
         "labelLines": 1,
         "rangeWidth": 240,
@@ -236,9 +236,9 @@
       },
       {
         "label": "压暗",
-        "columns": "78px 240px",
+        "columns": "78px 310.57px",
         "display": "grid",
-        "top": 461,
+        "top": 485,
         "labelWidth": 78,
         "labelLines": 1,
         "rangeWidth": 240,
@@ -248,9 +248,9 @@
       },
       {
         "label": "玻璃透明度",
-        "columns": "78px 240px",
+        "columns": "78px 310.57px",
         "display": "grid",
-        "top": 486,
+        "top": 510,
         "labelWidth": 78,
         "labelLines": 1,
         "rangeWidth": 240,
@@ -266,9 +266,9 @@
     "detail": [
       {
         "label": "壁纸不透明度",
-        "columns": "78px 240px",
+        "columns": "78px 310.57px",
         "display": "grid",
-        "top": 437,
+        "top": 461,
         "labelWidth": 78,
         "labelLines": 1,
         "rangeWidth": 240,
@@ -278,9 +278,9 @@
       },
       {
         "label": "压暗",
-        "columns": "78px 240px",
+        "columns": "78px 310.57px",
         "display": "grid",
-        "top": 461,
+        "top": 485,
         "labelWidth": 78,
         "labelLines": 1,
         "rangeWidth": 240,
@@ -290,9 +290,9 @@
       },
       {
         "label": "玻璃透明度",
-        "columns": "78px 240px",
+        "columns": "78px 310.57px",
         "display": "grid",
-        "top": 486,
+        "top": 510,
         "labelWidth": 78,
         "labelLines": 1,
         "rangeWidth": 240,
@@ -351,6 +351,16 @@
     ]
   },
   {
+    "name": "定时轮换：勾开关 + 加入当前壁纸 ⇒ rotation 落进设置（候选 1 张）",
+    "ok": true,
+    "detail": {
+      "step": "done",
+      "enabled": true,
+      "paths": 1,
+      "countText": "候选：1"
+    }
+  },
+  {
     "name": "第一个滑杆真指针命中本体",
     "ok": true,
     "detail": {
@@ -371,7 +381,15 @@
           "opacity": 0.2,
           "scrim": 0.35,
           "glassAlpha": 0.25,
-          "revision": 0
+          "revision": 0,
+          "rotation": {
+            "enabled": true,
+            "everyMinutes": 60,
+            "paths": [
+              "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/fixture-wallpaper.png"
+            ],
+            "lastAt": 0
+          }
         }
       }
     }
@@ -603,7 +621,7 @@
       "has": true,
       "src": "cairn-wallpaper://media/current?v=0",
       "paused": false,
-      "t": 0.6,
+      "t": 0.59,
       "ready": 4,
       "duration": 2,
       "focused": false,
@@ -625,7 +643,7 @@
     "ok": true,
     "detail": {
       "found": true,
-      "text": "壁纸选择图片或视频浏览本机…清除文件不可用壁纸不透明度压暗玻璃透明度"
+      "text": "壁纸选择图片或视频浏览本机…清除文件不可用定时轮换分钟把当前壁纸加入轮换候选：0壁纸不透明度压暗玻璃透明度"
     }
   },
   {
@@ -666,7 +684,7 @@
         "rows": [
           "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
           "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-          "新来的成员 · mmwiyeg42read-onlydefaultguidedautofull-accessteammemberproject移除",
+          "新来的成员 · mmwiz3fcwread-onlydefaultguidedautofull-accessteammemberproject移除",
           "本轮发言秩序主持优先按名单轮排一轮",
           "当前会话的段—开新段",
           "权限（成员维）团队档 default · 无裁剪",
@@ -690,7 +708,7 @@
       "rows": [
         "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
         "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-        "新来的成员 · mmwiyeg42read-onlydefaultguidedautofull-accessteammemberproject移除",
+        "新来的成员 · mmwiz3fcwread-onlydefaultguidedautofull-accessteammemberproject移除",
         "本轮发言秩序主持优先按名单轮排一轮",
         "当前会话的段—开新段",
         "权限（成员维）团队档 default · 无裁剪",
@@ -710,7 +728,7 @@
         "rows": [
           "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
           "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-          "新来的成员 · mmwiyeg42read-onlydefaultguidedautofull-accessteammemberproject移除",
+          "新来的成员 · mmwiz3fcwread-onlydefaultguidedautofull-accessteammemberproject移除",
           "本轮发言秩序主持优先按名单轮排一轮",
           "排出来的秩序1. 示例成员　2. 新来的",
           "当前会话的段—开新段",
@@ -806,7 +824,7 @@
         "canceled": false,
         "filePaths": []
       },
-      "elapsedMs": 2091,
+      "elapsedMs": 2083,
       "options": {
         "title": "选择壁纸",
         "properties": [

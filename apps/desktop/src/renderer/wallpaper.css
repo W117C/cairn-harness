@@ -172,3 +172,8 @@ body[data-we-wallpaper] :is(.side) {
 .cw-browser-row:hover { background: var(--accent); }
 .cw-browser-row.dir { color: var(--muted-foreground); }
 .cw-browser-issue { color: var(--destructive); }
+
+/* 定时轮换（2026-11-16）：开 / 间隔 / 把当前加入 / 候选数 */
+.cw-rotation { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0; font-size: 12px; }
+.cw-rotation-toggle { display: inline-flex; gap: 6px; align-items: center; }
+.cw-rotation-minutes { width: 72px; }

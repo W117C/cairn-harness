@@ -62,6 +62,8 @@ export function GeneralSection(props: {
   onWallpaperClear: () => void;
   /** 设计规格 §7 降级链：媒体读不出时设置行点名「文件不可用」（运行期状态，不是设置字段）。 */
   wallpaperUnavailable: boolean;
+  /** 定时轮换（2026-11-16）：整块 rotation 交给上层写（走 setSettings 的 wallpaper 合并，不走 panelPatch 白名单）。 */
+  onWallpaperRotation: (next: AppSettings["wallpaper"]["rotation"]) => void;
 }): React.JSX.Element {
   const [browsing, setBrowsing] = useState(false);
   return (
@@ -154,6 +156,52 @@ export function GeneralSection(props: {
               {props.wallpaperUnavailable && props.settings.wallpaper.kind !== "none" && (
                 <span className="ss-static">{STR.general.wallpaperUnavailable}</span>
               )}
+            </div>
+            {/* 定时轮换（2026-11-16）：到点换下一张；候选少于两张时按纯函数口径不轮换。 */}
+            <div className="cw-rotation" data-wallpaper-rotation="true">
+              <label className="cw-rotation-toggle">
+                <input
+                  type="checkbox"
+                  aria-label={STR.general.wallpaperRotation}
+                  checked={props.settings.wallpaper.rotation.enabled}
+                  onChange={(e) => {
+                    props.onWallpaperRotation({ ...props.settings.wallpaper.rotation, enabled: e.target.checked });
+                  }}
+                />
+                {STR.general.wallpaperRotation}
+              </label>
+              <input
+                className="ss-input cw-rotation-minutes"
+                type="number"
+                min={1}
+                max={1440}
+                aria-label={STR.general.wallpaperRotationMinutes}
+                value={props.settings.wallpaper.rotation.everyMinutes}
+                onChange={(e) => {
+                  const minutes = Number(e.target.value);
+                  if (!Number.isFinite(minutes)) return;
+                  props.onWallpaperRotation({ ...props.settings.wallpaper.rotation, everyMinutes: minutes });
+                }}
+              />
+              <span className="ss-static">{STR.general.wallpaperRotationUnit}</span>
+              <button
+                type="button"
+                className="mini-btn"
+                data-wallpaper-rotation-add="true"
+                disabled={props.settings.wallpaper.path === null}
+                onClick={() => {
+                  const path = props.settings.wallpaper.path;
+                  if (path === null) return;
+                  const paths = props.settings.wallpaper.rotation.paths;
+                  if (paths.includes(path)) return;
+                  props.onWallpaperRotation({ ...props.settings.wallpaper.rotation, paths: [...paths, path].slice(0, 32) });
+                }}
+              >
+                {STR.general.wallpaperRotationAdd}
+              </button>
+              <span className="ss-static" data-wallpaper-rotation-count="true">
+                {`${STR.general.wallpaperRotationCount}${String(props.settings.wallpaper.rotation.paths.length)}`}
+              </span>
             </div>
             {browsing && props.onWallpaperPickPath !== undefined && (
               <WallpaperBrowser onPickPath={props.onWallpaperPickPath} {...(props.initialBrowser === undefined ? {} : { initial: props.initialBrowser })} />
