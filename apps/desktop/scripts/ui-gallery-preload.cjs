@@ -1,6 +1,6 @@
 // UI 画廊的假 AgentApi（contextBridge 注入；形状与 src/main/ipc-protocol.ts 的 AgentApi 对齐）。
 // 只为离屏截图服务——真桥在 src/preload/index.ts，别把这文件接进产品链路。
-const { contextBridge } = require("electron");
+const { contextBridge, ipcRenderer } = require("electron");
 
 const reply = (v) => () => new Promise((res) => setTimeout(() => res(typeof v === "function" ? v() : v), 30));
 // 第 9 点冒烟的断言面：渲染层调过 runSteer 的**原始参数**。走 contextBridge 暴露
@@ -1615,7 +1615,18 @@ if (wallpaperVideoPath !== "") {
 // v59 壁纸系统暂停：桩里**真收集**订阅（与 onAsk 同式），主进程用 executeJavaScript 调
 // `__cairnPushWallpaperSuspend` 推进来。判的是「锁屏时窗口既没失焦也没隐藏」那一格。
 const wallpaperSuspendListeners = new Set();
-stub.onWallpaperSuspend = (fn) => { wallpaperSuspendListeners.add(fn); return () => wallpaperSuspendListeners.delete(fn); };
+// 与产品同一条真通道：`ipcRenderer.on("agent:wallpaper-suspend")`。
+// 这样主进程 `webContents.send` 能直接投进来（真 IPC），而 `__cairnPushWallpaperSuspend`
+// 只是本地直投的旁路，用来单独验渲染层那一跳。
+stub.onWallpaperSuspend = (fn) => {
+  const handler = (_event, payload) => { try { fn(payload); } catch { /* 一个订阅者抛了不该挡住别人 */ } };
+  ipcRenderer.on("agent:wallpaper-suspend", handler);
+  wallpaperSuspendListeners.add(fn);
+  return () => {
+    ipcRenderer.removeListener("agent:wallpaper-suspend", handler);
+    wallpaperSuspendListeners.delete(fn);
+  };
+};
 contextBridge.exposeInMainWorld("__cairnPushWallpaperSuspend", (payload) => {
   for (const fn of wallpaperSuspendListeners) { try { fn(payload); } catch { /* 一个订阅者抛了不该挡住别人 */ } }
 });
@@ -1645,6 +1656,25 @@ stub.teamMemberSave = (input) => {
     });
   }
   return Promise.resolve({ ok: true, roster: teamRosterPayload() });
+};
+
+// v60 发言权与会话开段：桩按真形状回包（`planRound` 的结果与「下一段」的序数）。
+const teamRoundPlans = [];
+stub.teamRoundPlan = (input) => {
+  const mode = input && input.mode === "chairFirst" ? "chairFirst" : "turnOrder";
+  const ids = teamMembers.map((m) => m.id);
+  const batches = mode === "chairFirst" && ids.length > 0
+    ? [{ order: 1, speakers: [ids[0]] }, ...ids.slice(1).map((id, i) => ({ order: i + 2, speakers: [id] }))]
+    : ids.map((id, i) => ({ order: i + 1, speakers: [id] }));
+  const plan = { batches, paused: false, pausedReason: null, silent: [], unknown: [], roster: teamMembers.map((m) => ({ id: m.id, name: m.name, tier: m.tier })) };
+  teamRoundPlans.push({ mode, plan });
+  return Promise.resolve({ ok: true, plan });
+};
+contextBridge.exposeInMainWorld("__cairnRoundPlans", () => teamRoundPlans.map((p) => ({ mode: p.mode, plan: p.plan })));
+let segmentCounter = 1;
+stub.sessionSegmentOpen = () => {
+  segmentCounter += 1;
+  return Promise.resolve({ ok: true, segment: segmentCounter });
 };
 
 contextBridge.exposeInMainWorld("agent", stub);

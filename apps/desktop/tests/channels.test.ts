@@ -75,7 +75,8 @@ describe("通道名表完整性", () => {
     // v53：角色 4 项、迁移 2 项、闲时任务 3 项、后台命令 2 项。
     // v54：＋wallpaperPick（桌面端壁纸选文件；单选 + 扩展名过滤）。
     // v59：＋teamRoster / teamMemberSave（团队成员档案：名单投影 + 单一写入口）。
-    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(159);
+    // v60：＋teamRoundPlan（发言权调用方）/ sessionSegmentOpen（段写入点）。
+    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(161);
     const keys = Object.keys(INVOKE_CHANNELS) as (keyof typeof INVOKE_CHANNELS)[];
     expect(keys.length).toBeGreaterThan(0);
     for (const key of keys) expect(INVOKE_CHANNELS[key]).toBeTruthy();
@@ -328,6 +329,8 @@ describe("通道名表完整性", () => {
       "wallpaperPick",
       "teamRoster",
       "teamMemberSave",
+      "teamRoundPlan",
+      "sessionSegmentOpen",
     ];
     // ④ fail-loud 白名单（带理由的未接）：B3 修复后为空——39 条全部接真。要留白须在此
     //    逐条列名并注记理由，且 index.ts 的 UNWIRED_FAIL_LOUD 同步加键（下方断言钉死两者一致）。

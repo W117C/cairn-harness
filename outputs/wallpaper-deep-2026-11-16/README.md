@@ -17,8 +17,11 @@
 | 团队存储（真主进程） | 写→读→墓碑闭环 | 写入 1 人 / 1 条补丁；墓碑后名单空、补丁 2 条 |
 | 真·系统选文件面板 | 真 `dialog.showOpenDialog` 被调起，关窗即取消 | 面板攥住 Promise 2.6s 后结算 `{canceled:false, filePaths:[]}`；参数与产品同一份 |
 | 侧栏成员区 | 名单在**主导航面**也看得见（写入口仍在设置） | 侧栏底部出现「团队成员 1 · 示例成员 · read-only」 |
+| 发言权的调用方 | 面板「排一轮」调 `teamRoundPlan`，秩序由核心纯函数算 | 回包批次渲染成「1. 示例成员　2. 新来的」 |
+| 段的写入点 | 面板「开新段」调 `sessionSegmentOpen` | 回包序数 `2` 直接画在该行 |
+| 真 `powerMonitor` | 装配挂在**真对象**上，`emit` 走真实监听链 → 真 IPC → 渲染层 | suspend ⇒ paused；resume ⇒ 续播；listener 数 ≥1 |
 
-合计 **44/44** 条真机检查全绿（`checks.json` / `readings.json` 是原始读数）。
+合计 **47/47** 条真机检查全绿（`checks.json` / `readings.json` 是原始读数）。
 
 ## 二、这批抓到并修掉的一个真缺陷
 

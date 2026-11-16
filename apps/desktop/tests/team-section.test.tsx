@@ -23,8 +23,8 @@ describe("团队成员面板", () => {
     expect(html).toContain("小北");
     expect(html).toContain("调研");
     expect(html).toContain("m1");
-    // 每个成员一个档位选择器 + 一个移除按钮（外加新增行的那个选择器）
-    expect((html.match(/<select/g) ?? []).length).toBe(3);
+    // 每个成员一个档位选择器 + 新增行一个 + 发言秩序一个（v60）
+    expect((html.match(/<select/g) ?? []).length).toBe(4);
     expect((html.match(/移除/g) ?? []).length).toBeGreaterThanOrEqual(2);
   });
 
@@ -45,6 +45,45 @@ describe("团队成员面板", () => {
     );
     expect(html).toContain("full-access→guided");
     expect(html).toContain("未知字段");
+  });
+
+  it("发言权：排出来的批序按「1. 名字」渲染（名字从 roster 翻，不显示裸 id）", () => {
+    const html = renderToStaticMarkup(
+      <TeamSection
+        initialRoster={roster()}
+        initialPlan={{
+          batches: [{ order: 1, speakers: ["m1"] }, { order: 2, speakers: ["m2"] }],
+          paused: false,
+          pausedReason: null,
+          silent: [],
+          unknown: [],
+          roster: [
+            { id: "m1", name: "阿岚", tier: "guided" },
+            { id: "m2", name: "小北", tier: "read-only" },
+          ],
+        }}
+      />,
+    );
+    expect(html).toContain("1. 阿岚");
+    expect(html).toContain("2. 小北");
+    // 裸 id 不该出现在秩序那一行里（id 只在成员行的副标题）
+    expect(html).not.toContain("1. m1");
+  });
+
+  it("空转停机时显示「整体停机等人」，不是一张空名单", () => {
+    const html = renderToStaticMarkup(
+      <TeamSection
+        initialRoster={roster()}
+        initialPlan={{ batches: [], paused: true, pausedReason: "idle", silent: [], unknown: [], roster: [] }}
+      />,
+    );
+    expect(html).toContain("整体停机等人");
+  });
+
+  it("段的序数如实显示（写入点回包为 3 就画 3）", () => {
+    const html = renderToStaticMarkup(<TeamSection initialRoster={roster()} initialSegment={3} />);
+    expect(html).toContain("当前会话的段");
+    expect(/>3</.test(html)).toBe(true);
   });
 
   it("补丁条数如实显示（历史只增不减）", () => {

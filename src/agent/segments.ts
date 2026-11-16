@@ -118,6 +118,17 @@ export function segmentSlices(events: readonly AgentEvent[]): { segment: number;
 }
 
 /**
+ * 写侧 helper：**下一条**分界的补丁（当前段 + 1）。
+ * 读现有日志算序数，避免写侧自己记状态——「当前段」永远只有一个来源（日志）。
+ */
+export function openSegmentPatch(
+  events: readonly AgentEvent[],
+  reason: Exclude<SegmentReason, "unknown">,
+): Record<string, string> {
+  return segmentPatch(currentSegment(events) + 1, reason);
+}
+
+/**
  * 写侧 helper：开新段的补丁。理由必须是三值之一（写侧不给 `unknown`——那是读侧的兜底）。
  * 只返回 patch；落盘仍走既有 `session_meta_update` 的追加路径（单一写者、单一真源都不变）。
  */

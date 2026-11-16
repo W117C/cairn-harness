@@ -493,7 +493,7 @@
       "has": true,
       "src": "cairn-wallpaper://media/current?v=0",
       "paused": false,
-      "t": 0.04,
+      "t": 0.02,
       "ready": 4,
       "duration": 2,
       "focused": true,
@@ -507,7 +507,7 @@
       "has": true,
       "src": "cairn-wallpaper://media/current?v=0",
       "paused": true,
-      "t": 0.31,
+      "t": 0.29,
       "ready": 4,
       "duration": 2,
       "focused": false,
@@ -521,7 +521,7 @@
       "has": true,
       "src": "cairn-wallpaper://media/current?v=0",
       "paused": false,
-      "t": 0.31,
+      "t": 0.29,
       "ready": 4,
       "duration": 2,
       "focused": true,
@@ -535,7 +535,7 @@
       "has": true,
       "src": "cairn-wallpaper://media/current?v=0",
       "paused": true,
-      "t": 0.31,
+      "t": 0.29,
       "ready": 4,
       "duration": 2,
       "focused": true,
@@ -549,7 +549,7 @@
       "has": true,
       "src": "cairn-wallpaper://media/current?v=0",
       "paused": false,
-      "t": 0.31,
+      "t": 0.29,
       "ready": 4,
       "duration": 2,
       "focused": true,
@@ -585,9 +585,11 @@
       "rows": [
         "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
         "示例成员调研 · m-seedread-onlydefaultguidedautofull-access移除",
+        "本轮发言秩序主持优先按名单轮排一轮",
+        "当前会话的段—开新段",
         "档案补丁条数日志里的补丁条数（历史只追加；移除不解绑旧补丁）。1"
       ],
-      "selects": 2,
+      "selects": 3,
       "inputs": 2,
       "add": {
         "typed": {
@@ -600,7 +602,9 @@
         "rows": [
           "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
           "示例成员调研 · m-seedread-onlydefaultguidedautofull-access移除",
-          "新来的成员 · mmwiojpcxread-onlydefaultguidedautofull-access移除",
+          "新来的成员 · mmwioyvhhread-onlydefaultguidedautofull-access移除",
+          "本轮发言秩序主持优先按名单轮排一轮",
+          "当前会话的段—开新段",
           "档案补丁条数日志里的补丁条数（历史只追加；移除不解绑旧补丁）。2"
         ]
       }
@@ -620,9 +624,45 @@
       "rows": [
         "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
         "示例成员调研 · m-seedread-onlydefaultguidedautofull-access移除",
-        "新来的成员 · mmwiojpcxread-onlydefaultguidedautofull-access移除",
+        "新来的成员 · mmwioyvhhread-onlydefaultguidedautofull-access移除",
+        "本轮发言秩序主持优先按名单轮排一轮",
+        "当前会话的段—开新段",
         "档案补丁条数日志里的补丁条数（历史只追加；移除不解绑旧补丁）。2"
       ]
+    }
+  },
+  {
+    "name": "「排一轮」真的调到 teamRoundPlan，并把批序渲染出来（发言权有调用方）",
+    "ok": true,
+    "detail": {
+      "planClicked": {
+        "found": true
+      },
+      "planShown": {
+        "rows": [
+          "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
+          "示例成员调研 · m-seedread-onlydefaultguidedautofull-access移除",
+          "新来的成员 · mmwioyvhhread-onlydefaultguidedautofull-access移除",
+          "本轮发言秩序主持优先按名单轮排一轮",
+          "排出来的秩序1. 示例成员　2. 新来的",
+          "当前会话的段—开新段",
+          "档案补丁条数日志里的补丁条数（历史只追加；移除不解绑旧补丁）。2"
+        ],
+        "calls": 1
+      }
+    }
+  },
+  {
+    "name": "「开新段」真的调到 sessionSegmentOpen，并显示新序数（段有写入点）",
+    "ok": true,
+    "detail": {
+      "segClicked": {
+        "found": true
+      },
+      "segShown": {
+        "found": true,
+        "text": "当前会话的段2开新段"
+      }
     }
   },
   {
@@ -664,7 +704,7 @@
         "canceled": false,
         "filePaths": []
       },
-      "elapsedMs": 2427,
+      "elapsedMs": 2738,
       "options": {
         "title": "选择壁纸",
         "properties": [
@@ -713,6 +753,29 @@
           ]
         }
       ]
+    }
+  },
+  {
+    "name": "真 powerMonitor 对象上 emit suspend ⇒ 视频暂停；emit resume ⇒ 续播（装配挂的是真事件源）",
+    "ok": true,
+    "detail": {
+      "beforeSuspend": {
+        "has": true,
+        "paused": false,
+        "focused": true
+      },
+      "listenerCount": 1,
+      "afterRealSuspend": {
+        "has": true,
+        "paused": true,
+        "focused": true
+      },
+      "afterRealResume": {
+        "has": true,
+        "paused": false,
+        "focused": true
+      },
+      "errors": []
     }
   }
 ]

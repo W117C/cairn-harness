@@ -142,8 +142,10 @@ export type { SearchProvider } from "../tools/web-search";
  *  v58 = AskPayload 显式携带 workspace：审批卡/等门计数与推送队列按目标根寻址，
  *        同 id 跨工作区的卡不再互相覆盖。
  *  v59 = 壁纸媒体暂停推送（onWallpaperSuspend）：系统休眠/锁屏时主进程推一次
- *        `{paused:true, reason}`，唤醒/解锁推 `{paused:false}`——视频壁纸不必靠猜 document 可见性。 */
-export const IPC_PROTOCOL_VERSION = 59;
+ *        `{paused:true, reason}`，唤醒/解锁推 `{paused:false}`——视频壁纸不必靠猜 document 可见性。
+ *  v60 = 团队一轮的发言秩序（teamRoundPlan，发言权的第一个调用方）与会话开新段
+ *        （sessionSegmentOpen，段的第一个写入点）。 */
+export const IPC_PROTOCOL_VERSION = 60;
 
 /** 团队名单（v59）：成员档案是投影，`records` 是补丁条数（面板据此说「有几条历史」）。 */
 export interface TeamRosterPayload {
@@ -163,6 +165,25 @@ export interface TeamMemberInput {
   role?: string;
   tier?: string;
   remove?: boolean;
+}
+
+/** 一轮的发言秩序（v60）：`mode` 决定主持优先还是按序，点名为解析后的成员 id。 */
+export interface TeamRoundInput {
+  mode: "chairFirst" | "turnOrder";
+  mentioned?: string[];
+  silent?: string[];
+  idleRounds?: number;
+  idleLimit?: number;
+}
+
+export interface TeamRoundPlanPayload {
+  batches: { order: number; speakers: string[] }[];
+  paused: boolean;
+  pausedReason: "idle" | null;
+  silent: string[];
+  unknown: string[];
+  /** 参与这一轮的全部成员 id（按声明顺序）；UI 用它把 id 翻成名字。 */
+  roster: { id: string; name: string; tier: string }[];
 }
 
 /** 壁纸媒体的系统级暂停信号（v59）。`reason` 只描述「为什么停」，不描述渲染层怎么做。 */
@@ -570,6 +591,10 @@ export interface AgentApi {
   teamRoster(): Promise<TeamRosterPayload>;
   /** v59：写一条成员档案（新增/改档/删人都是同一条通道；删＝写墓碑，不删历史）。 */
   teamMemberSave(input: TeamMemberInput): Promise<{ ok: boolean; error?: string; roster?: TeamRosterPayload }>;
+  /** v60：算一轮的发言秩序（发言权的第一个调用方；名单从团队事件日志读，UI 只渲染结果）。 */
+  teamRoundPlan(input: TeamRoundInput): Promise<{ ok: boolean; error?: string; plan?: TeamRoundPlanPayload }>;
+  /** v60：给会话开新段（段的第一个写入点：追加一条 `session_meta_update`，序数由日志算）。 */
+  sessionSegmentOpen(sessionId?: string, workspace?: string): Promise<{ ok: boolean; segment?: number; error?: string }>;
   getState(): Promise<StateResponse>;
   /** Provider/model/capability catalog derived from the same registry used by workers. */
   getProviderInfo(): Promise<ProviderInfo>;

@@ -41727,3 +41727,44 @@ bot 的接线与面板。本页把三格一起关掉，代价是协议从 v58 �
 
 - 侧栏成员区**只读**：这是刻意的（设置拥有写入），不是没做完。
 - 仍未接线：发言权的调用方、段的写入点（触发条件属产品裁决，见第 1250 页）。
+
+## 2026-11-16 · 第 1252 页：协议 v60 —— 发言权的调用方、段的写入点、真 powerMonitor（`pending`）
+
+**背景**：第 1250 / 1251 页之后，评估点名的三处仍是空的：发言权没有调用方、段没有写入点、
+系统休眠那一格只验了「注入的假事件源」。本页把三处一起补上，协议 v59 → **v60**。
+
+### 一、发言权的第一个调用方
+
+- 新 invoke `teamRoundPlan`：主进程从**团队事件日志**读名单 → 核心 `planRound` 算秩序 → 回批次。
+  渲染层只渲染结果，自己不实现「谁先说」（名单与秩序都不下沉到 UI）。
+- 面板新增「本轮发言秩序」行：秩序档（主持优先 / 按名单轮）+「排一轮」→「1. 示例成员　2. 新来的」。
+- 判卷：`team-section.test.tsx` 两条（批序按名字渲染、空转停机显示「整体停机等人」）＋真机冒烟一条。
+
+### 二、段的第一个写入点
+
+- 新 invoke `sessionSegmentOpen` → `apps/desktop/src/main/session-segments.ts`：
+  `readSessionEvents` 读现状 → `openSegmentPatch`（序数 = 当前段 + 1）→ `withSessionMutation` 里
+  `createEventLog.append(session_meta_update)`。**序数由日志算**，写侧不记状态。
+- 坏输入：非法会话 id、空会话都拒，且错误说得出原因（`sessionIdProblem` 复用既有校验）。
+- 判卷：`session-segments.test.ts` 4 条（连开两次 ⇒ 2、3；空会话拒；非法 id 拒；同一份日志算出同一个数）；
+  真机冒烟一条（点「开新段」后该行显示 `2`）。
+
+### 三、真 `powerMonitor`
+
+- 冒烟 ⑭：把装配挂到**真 `powerMonitor` 对象**上，`emit("suspend")` → 真 `webContents.send`
+  → 画廊 preload 用**真 `ipcRenderer.on("agent:wallpaper-suspend")`** 收 → 渲染层暂停；`emit("resume")` 续播。
+  读数：`listenerCount ≥ 1`、suspend 后 `paused=true`（窗口仍聚焦）、resume 后 `paused=false`、错误 0。
+- 仍未覆盖的只有一跳：macOS/Electron 内部的「OS → powerMonitor 投递」——那不是本仓的代码。
+
+### 四、门禁读数（工作树）
+
+- 桌面 **404 文件 / 2614 条全绿**，exit 0；壁纸真机冒烟 **47/47**。
+- 四份密封证据（renderer 变动）用真机探针重签后全绿；`typecheck` 0 报错。
+- 版本钉同步：`protocol-version` / `ipc-protocol-version` / `channel-domains`（invoke 161、19 域）/
+  `channels`（mustWire ＋2）/ README 的 invoke 计数（159 → 161）/ 五处 `marketplace/*-wiring`。
+
+### 五、边界
+
+- 段与发言权现在都有真调用方，但**还没有自动触发**：开段仍由人点（`segment_reason=user`），
+  发言权仍由人点「排一轮」。自动触发（压缩后自动开段、一轮开始自动仲裁）需要把会话历史接进
+  `loop` 与编排引擎，属下一批；本页不把「手动调用方」说成「自动编排」。

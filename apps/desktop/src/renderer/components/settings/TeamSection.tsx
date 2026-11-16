@@ -5,7 +5,7 @@
 //  ② 写入口只有一条（`teamMemberSave`）：新增、改档、移除都走它；移除是**墓碑**，历史不删；
 //  ③ 拒绝要看得见：被拒的补丁与被裁剪的档位都在页面上点名，不糊成一句「保存失败」。
 import { useCallback, useEffect, useState } from "react";
-import type { TeamMemberInput, TeamRosterPayload } from "../../../../../../src/main/ipc-protocol";
+import type { TeamMemberInput, TeamRosterPayload, TeamRoundPlanPayload } from "../../../../../../src/main/ipc-protocol";
 import { AGENT_PERMISSION_MODES } from "../../../../../../src/events/types";
 import { SettingsRow, SettingsSection } from "../settings-ui";
 import { STR } from "../../strings";
@@ -15,14 +15,19 @@ function newMemberId(): string {
   return `m${Date.now().toString(36)}`;
 }
 
-/** `initialRoster` 只给判卷用（SSR 不跑 effect，注入一份名单就能判渲染面）。 */
-export function TeamSection(props: { initialRoster?: TeamRosterPayload } = {}): React.JSX.Element {
+/** `initialRoster` / `initialPlan` 只给判卷用（SSR 不跑 effect，注入读数就能判渲染面）。 */
+export function TeamSection(
+  props: { initialRoster?: TeamRosterPayload; initialPlan?: TeamRoundPlanPayload; initialSegment?: number } = {},
+): React.JSX.Element {
   const [roster, setRoster] = useState<TeamRosterPayload | null>(props.initialRoster ?? null);
   const [issue, setIssue] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState("");
   const [role, setRole] = useState("");
   const [tier, setTier] = useState<string>("read-only");
+  const [plan, setPlan] = useState<TeamRoundPlanPayload | null>(props.initialPlan ?? null);
+  const [segment, setSegment] = useState<number | null>(props.initialSegment ?? null);
+  const [roundMode, setRoundMode] = useState<"chairFirst" | "turnOrder">("chairFirst");
 
   const load = useCallback(async (): Promise<void> => {
     try {
@@ -59,6 +64,38 @@ export function TeamSection(props: { initialRoster?: TeamRosterPayload } = {}): 
   };
 
   const members = roster?.members ?? [];
+
+  /** 发言权的调用点：把「谁这一轮说」交给主进程算（名单与秩序都不在渲染层实现）。 */
+  const planRound = async (): Promise<void> => {
+    setBusy(true);
+    try {
+      const result = await window.agent.teamRoundPlan({ mode: roundMode });
+      if (result.ok !== true) { setIssue(result.error ?? STR.team.writeFailed); return; }
+      if (result.plan !== undefined) setPlan(result.plan);
+      setIssue(null);
+    } catch (error) {
+      setIssue(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** 段的写入点：给当前会话开新段（序数由日志算，渲染层不猜）。 */
+  const openSegment = async (): Promise<void> => {
+    setBusy(true);
+    try {
+      const result = await window.agent.sessionSegmentOpen();
+      if (result.ok !== true) { setIssue(result.error ?? STR.team.writeFailed); return; }
+      if (typeof result.segment === "number") setSegment(result.segment);
+      setIssue(null);
+    } catch (error) {
+      setIssue(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const nameOf = (id: string): string => plan?.roster.find((r) => r.id === id)?.name ?? id;
 
   return (
     <SettingsSection title={STR.team.title}>
@@ -132,6 +169,42 @@ export function TeamSection(props: { initialRoster?: TeamRosterPayload } = {}): 
           </span>
         </SettingsRow>
       )}
+
+      <SettingsRow label={STR.team.roundTitle}>
+        <div className="team-member">
+          <select
+            className="ss-select"
+            aria-label={STR.team.roundMode}
+            value={roundMode}
+            onChange={(e) => { setRoundMode(e.target.value === "chairFirst" ? "chairFirst" : "turnOrder"); }}
+          >
+            <option value="chairFirst">{STR.team.roundChairFirst}</option>
+            <option value="turnOrder">{STR.team.roundTurnOrder}</option>
+          </select>
+          <button type="button" className="mini-btn" disabled={busy} onClick={() => { void planRound(); }}>
+            {STR.team.roundAction}
+          </button>
+        </div>
+      </SettingsRow>
+
+      {plan !== null && (
+        <SettingsRow label={STR.team.roundPlan}>
+          <span className="ss-static">
+            {plan.paused
+              ? STR.team.roundPaused
+              : plan.batches.map((b) => `${String(b.order)}. ${b.speakers.map(nameOf).join("、")}`).join("　")}
+          </span>
+        </SettingsRow>
+      )}
+
+      <SettingsRow label={STR.team.segmentTitle}>
+        <div className="team-member">
+          <span className="ss-static">{segment === null ? "—" : String(segment)}</span>
+          <button type="button" className="mini-btn" disabled={busy} onClick={() => { void openSegment(); }}>
+            {STR.team.segmentAction}
+          </button>
+        </div>
+      </SettingsRow>
 
       <SettingsRow label={STR.team.records} desc={STR.team.recordsDesc}>
         <span className="ss-static">{roster === null ? "—" : String(roster.records)}</span>

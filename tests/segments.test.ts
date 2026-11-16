@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import type { AgentEvent } from "../src/events";
 import {
   currentSegment,
+  openSegmentPatch,
   segmentBoundaries,
   segmentOf,
   segmentPatch,
@@ -105,5 +106,18 @@ describe("段", () => {
     expect(segmentPatch(2, "compaction")).toEqual({ segment: "2", segment_reason: "compaction" });
     expect(() => segmentPatch(0, "user")).toThrow();
     expect(() => segmentPatch(2, "unknown" as never)).toThrow();
+  });
+});
+
+describe("开新段的写侧 helper", () => {
+  it("序数由日志算：没有分界 ⇒ 2；已有两段 ⇒ 3", () => {
+    expect(openSegmentPatch([msg("a")], "user")).toEqual({ segment: "2", segment_reason: "user" });
+    const two = [msg("a"), metaUpdate(segmentPatch(2, "user")), msg("b")];
+    expect(openSegmentPatch(two, "compaction")).toEqual({ segment: "3", segment_reason: "compaction" });
+  });
+
+  it("回退之后按**有效**序数算（不按被砍掉的那条）", () => {
+    const events = [msg("a"), metaUpdate(segmentPatch(2, "user")), msg("b"), rewind(1)];
+    expect(openSegmentPatch(events, "user")).toEqual({ segment: "2", segment_reason: "user" });
   });
 });

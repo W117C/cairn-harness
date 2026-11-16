@@ -10,7 +10,7 @@
 //
 // 跑法：pnpm --filter cairn-desktop build
 //       pnpm --filter cairn-desktop exec electron scripts/wallpaper-csp-smoke.cjs [输出目录]
-const { app, BrowserWindow, dialog, nativeImage, nativeTheme, net, protocol } = require("electron");
+const { app, BrowserWindow, dialog, nativeImage, nativeTheme, net, powerMonitor, protocol } = require("electron");
 const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
 const { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
 const { join, resolve } = require("node:path");
@@ -23,10 +23,12 @@ require(require.resolve("tsx/cjs", { paths: [repoRoot] }));
 const { handleWallpaperMedia, openWallpaperStream, registerWallpaperScheme, WALLPAPER_SCHEME } =
   require(join(__dirname, "../src/main/wallpaper.ts"));
 const { CSP_CONTENT } = require(join(__dirname, "../src/main/csp.ts"));
+const { PUSH_CHANNELS } = require(join(__dirname, "../src/main/channels.ts"));
 // 首帧底色（规格 §10 的 v1.1 项）：真 nativeImage 喂进去，判卷侧不复制它的解码逻辑。
 const { bootBackgroundWithTint, wallpaperTintFor } = require(join(__dirname, "../src/main/wallpaper-tint.ts"));
 const { bootBackgroundForWallpaper } = require(join(__dirname, "../src/main/boot-background.ts"));
 const { wallpaperDialogOptions } = require(join(__dirname, "../src/main/wallpaper-pick.ts"));
+const { installSuspendPause } = require(join(__dirname, "../src/main/wallpaper-suspend.ts"));
 // 对比度模型（地板判据的唯一一份）：真机读到的地板要过模型的最差格。
 const { CONTRAST_TARGET, LIGHT_SPEC, DARK_SPEC, floorFor, worstContrast } =
   require(join(__dirname, "../src/renderer/derived/wallpaper-contrast.ts"));
@@ -632,6 +634,38 @@ async function main() {
   check("在面板里加一个人 ⇒ 名单真的多一行（写入口只有一条通道）",
     addClicked.found === true && afterAdd.rows.some((r) => r.includes("新来的")), readings.teamPanel.add);
   await shot(teamWin, "10-team-panel-1440x900");
+  // ⑪b 发言权的调用点：点「排一轮」⇒ 主进程回包 ⇒ 面板按批序渲染（不是渲染层自己算）。
+  const planClicked = await tjs(`(() => {
+    const btn = [...document.querySelectorAll('.mini-btn')].find((b) => (b.textContent || "").includes("排一轮"));
+    if (!btn) return { found: false };
+    btn.click();
+    return { found: true };
+  })()`);
+  await pause(700);
+  const planShown = await tjs(`(() => {
+    const rows = [...document.querySelectorAll('.ss-row')].map((r) => r.textContent || "");
+    return { rows, calls: window.__cairnRoundPlans ? window.__cairnRoundPlans().length : 0 };
+  })()`);
+  readings.teamRound = { planClicked, planShown };
+  check("「排一轮」真的调到 teamRoundPlan，并把批序渲染出来（发言权有调用方）",
+    planClicked.found === true && planShown.calls >= 1 && planShown.rows.some((r) => /1\./.test(r) && r.includes("示例成员")),
+    readings.teamRound);
+  // ⑪c 段的写入点：点「开新段」⇒ 调用 sessionSegmentOpen ⇒ 面板显示新序数。
+  const segClicked = await tjs(`(() => {
+    const btn = [...document.querySelectorAll('.mini-btn')].find((b) => (b.textContent || "").includes("开新段"));
+    if (!btn) return { found: false };
+    btn.click();
+    return { found: true };
+  })()`);
+  await pause(700);
+  const segShown = await tjs(`(() => {
+    const row = [...document.querySelectorAll('.ss-row')].find((r) => (r.textContent || "").includes("当前会话的段"));
+    return { found: !!row, text: row ? row.textContent : "" };
+  })()`);
+  readings.teamSegment = { segClicked, segShown };
+  check("「开新段」真的调到 sessionSegmentOpen，并显示新序数（段有写入点）",
+    segClicked.found === true && segShown.found === true && /当前会话的段2开新段/.test(String(segShown.text).replace(/\s+/g, "")),
+    readings.teamSegment);
   // 侧栏成员区（同一份名单，另一个面）：关掉设置页后侧栏底部应有成员区且渲染出名字。
   await tjs(`(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: "Escape", code: "Escape", bubbles: true })); })()`);
   await pause(400);
@@ -694,6 +728,51 @@ async function main() {
       && dialogOptions.filters[0].extensions.includes("png")
       && dialogOptions.filters[0].extensions.includes("mp4"),
     dialogOptions);
+
+  // ⑭ 真 powerMonitor 对象：装配挂在**真事件源**上，emit 走真实监听链（不是假 source）。
+  // 判的是「Electron 的真 powerMonitor → 我们的装配 → 推送 → 渲染层暂停」这条链；
+  // 唯一没覆盖的是 macOS/Electron 自己那跳（OS → powerMonitor 的投递）。
+  const realSuspendErrors = [];
+  currentPath = videoFixture;
+  const suspendWin = await makeWindow(join(distDir, "index.html"), realSuspendErrors, { theme: "dark", video: videoFixture, show: true });
+  suspendWin.focus();
+  const sjs = jsOf(suspendWin);
+  for (let i = 0; i < 100; i++) { if (await sjs(`!!document.querySelector('.avatar')`)) break; await pause(); }
+  const suspendState = () => sjs(`(() => {
+    const v = document.querySelector('.cw-layer video.cw-media');
+    return v === null ? { has: false } : { has: true, paused: v.paused, focused: document.hasFocus() };
+  })()`);
+  let beforeSuspend = { has: false };
+  for (let i = 0; i < 60; i++) {
+    beforeSuspend = await suspendState();
+    if (beforeSuspend.has === true && beforeSuspend.paused === false) break;
+    await pause(200);
+  }
+  const uninstall = installSuspendPause({
+    source: powerMonitor,
+    targets: () => BrowserWindow.getAllWindows(),
+    channel: PUSH_CHANNELS.onWallpaperSuspend,
+    onError: (error) => { realSuspendErrors.push(String(error)); },
+  });
+  const listenerCount = powerMonitor.listenerCount("suspend");
+  powerMonitor.emit("suspend");
+  await pause(700);
+  const afterRealSuspend = await suspendState();
+  powerMonitor.emit("resume");
+  let afterRealResume = { has: false };
+  for (let i = 0; i < 30; i++) {
+    afterRealResume = await suspendState();
+    if (afterRealResume.has === true && afterRealResume.paused === false) break;
+    await pause(200);
+  }
+  uninstall();
+  readings.realPowerMonitor = { beforeSuspend, listenerCount, afterRealSuspend, afterRealResume, errors: realSuspendErrors };
+  check("真 powerMonitor 对象上 emit suspend ⇒ 视频暂停；emit resume ⇒ 续播（装配挂的是真事件源）",
+    beforeSuspend.paused === false && listenerCount >= 1 && afterRealSuspend.paused === true
+      && afterRealResume.paused === false && realSuspendErrors.length === 0,
+    readings.realPowerMonitor);
+  suspendWin.destroy();
+  currentPath = wallpaperPath;
 
   writeFileSync(join(out, "checks.json"), JSON.stringify(checks, null, 2));
   writeFileSync(join(out, "readings.json"), JSON.stringify(readings, null, 2));

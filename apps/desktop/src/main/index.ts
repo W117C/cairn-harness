@@ -9,6 +9,8 @@ import type { TintSource } from "./wallpaper-tint";
 import { installSuspendPause } from "./wallpaper-suspend";
 import { pickWallpaper } from "./wallpaper-pick";
 import { appendTeamPatch, readTeamRoster, teamLogPath } from "./team-store";
+import { openSegmentForSession } from "./session-segments";
+import { planRound } from "../../../../src/orchestration/speech";
 import { memberPatch } from "../../../../src/agent/team/members";
 import { windowVibrancyOptions } from "./window-vibrancy";
 import { focusedWindowViewing, notificationClickWindow, runNotificationCopy, runNotificationTarget, shouldNotifyRunSettled } from "./run-notification";
@@ -793,6 +795,47 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
         records: roster.records,
       },
     };
+  },
+  // v60 一轮的发言秩序（发言权的第一个调用方）：名单从团队事件日志读，秩序由核心纯函数算。
+  teamRoundPlan: async (raw) => {
+    const input = (raw ?? {}) as {
+      mode?: unknown; mentioned?: unknown; silent?: unknown; idleRounds?: unknown; idleLimit?: unknown;
+    };
+    const mode = input.mode === "chairFirst" ? "chairFirst" : "turnOrder";
+    const asIds = (value: unknown): string[] =>
+      Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+    try {
+      const s = await getSettings();
+      const roster = await readTeamRoster(teamLogPath(app.getPath("userData")), s.mode);
+      // 「主持」＝角色里写明主持的成员（角色是自由文本，字符串判定放在这里而不是核心）。
+      const members = roster.members.map((m) => ({ id: m.id, chair: /主持/.test(m.role) }));
+      const plan = planRound({
+        members,
+        mode,
+        mentioned: asIds(input.mentioned),
+        silent: asIds(input.silent),
+        ...(typeof input.idleRounds === "number" ? { idleRounds: input.idleRounds } : {}),
+        ...(typeof input.idleLimit === "number" ? { idleLimit: input.idleLimit } : {}),
+      });
+      return {
+        ok: true,
+        plan: {
+          ...plan,
+          roster: roster.members.map((m) => ({ id: m.id, name: m.name, tier: m.tier })),
+        },
+      };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+  // v60 段的写入点：给会话开新段（追加一条 session_meta_update，序数由日志算）。
+  sessionSegmentOpen: async (sessionId, workspace) => {
+    const root = await explicitSessionsRoot(typeof workspace === "string" ? workspace : undefined);
+    if (root === undefined) return { ok: false, error: "没有可用的会话根" };
+    const s = await getSettings();
+    const id = typeof sessionId === "string" && sessionId !== "" ? sessionId : s.currentSession;
+    if (id === null || id === "") return { ok: false, error: "没有当前会话" };
+    return await openSegmentForSession(root, id, "user");
   },
   // v6 连接自检：GET 模型清单（不产生 token 费用）。
   providerCheck: (provider) => checkProviderConnection({ provider: String(provider) }),

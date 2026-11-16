@@ -184,6 +184,8 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   // v59 团队名单（成员档案＝投影；写入口只有一条，删人写墓碑）
   teamRoster: "agent:team-roster",
   teamMemberSave: "agent:team-member-save",
+  teamRoundPlan: "agent:team-round-plan",
+  sessionSegmentOpen: "agent:session-segment-open",
   // v9：Tab 想下一条（业主裁 A②）——main 端按上下文单发模型调用（suggestNextMessage），
   // renderer 原样上屏结果/分类文案。
   suggestNext: "agent:suggest-next",
@@ -402,6 +404,8 @@ export const CHANNEL_DOMAINS: { [K in InvokeChannel]: ChannelDomain } = {
   wallpaperPick: "app",
   teamRoster: "team",
   teamMemberSave: "team",
+  teamRoundPlan: "team",
+  sessionSegmentOpen: "session",
   speakText: "app",
   stopSpeaking: "app",
   saveTempFile: "app",
