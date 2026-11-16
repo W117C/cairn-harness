@@ -818,6 +818,34 @@ async function main() {
     paneState.found === true && paneState.rows >= 1 && roundCalls >= 1
       && String(paneState.text).includes("示例成员") && /1\./.test(String(paneState.plan)),
     readings.teamPane);
+  // ⑮b 派活（v62）：点成员「派活」→ 填任务书 → 「放进他的线程」⇒ 真调到 teamMemberDispatch。
+  const dispatchFlow = await pjs(`(async () => {
+    const pick = [...document.querySelectorAll('.mini-btn')].find((b) => (b.textContent || "").includes("派活"));
+    if (!pick) return { step: "no-button" };
+    pick.click();
+    await new Promise((r) => setTimeout(r, 150));
+    const input = document.querySelector('.team-pane-dispatch .ss-input');
+    if (!input) return { step: "no-input" };
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    setter.call(input, "把对比度再量一遍");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 120));
+    const send = [...document.querySelectorAll('.team-pane-dispatch .mini-btn')][0];
+    if (!send) return { step: "no-send" };
+    send.click();
+    await new Promise((r) => setTimeout(r, 600));
+    return {
+      step: "done",
+      calls: window.__cairnDispatches ? window.__cairnDispatches() : [],
+      text: (document.querySelector('[data-team-pane="true"]') || {}).textContent || "",
+    };
+  })()`);
+  readings.teamDispatch = dispatchFlow;
+  check("派活入口真的调到 teamMemberDispatch，并把回执（会话 id）画出来",
+    dispatchFlow.step === "done" && dispatchFlow.calls.length === 1
+      && dispatchFlow.calls[0].task === "把对比度再量一遍"
+      && String(dispatchFlow.text).includes("s-team-1"),
+    { step: dispatchFlow.step, calls: dispatchFlow.calls });
   await shot(paneWin, "12-team-pane-1440x900");
   paneWin.destroy();
 

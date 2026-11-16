@@ -48,6 +48,13 @@ describe("团队会话窗格", () => {
     expect(html).toContain("整体停机等人");
   });
 
+  it("派活入口在：每个成员一个「派活」按钮，外加任务书输入与「放进他的线程」", () => {
+    const html = renderToStaticMarkup(<TeamPane initialRoster={roster} initialPlan={plan} />);
+    expect((html.match(/团队 pane|派活/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    expect(html).toContain("任务书写什么");
+    expect(html).toContain("放进他的线程");
+  });
+
   it("空名单说「空名单」", () => {
     const html = renderToStaticMarkup(
       <TeamPane initialRoster={{ ...roster, members: [], records: 0 }} initialPlan={{ ...plan, batches: [], roster: [] }} />,

@@ -43,3 +43,12 @@
 .team-pane-plan-head { font-size: 11px; color: hsl(var(--text-300)); }
 .team-pane-plan-value { font-variant-numeric: tabular-nums; }
 .team-pane-hint { font-size: 11px; color: hsl(var(--text-300)); margin-top: auto; }
+/* 派活（v62）：一行输入 + 一个按钮；不自动开跑，回执只说「放进去了」。 */
+.team-pane-dispatch {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  border-top: 1px solid var(--hairline);
+  padding-top: 8px;
+}
+.team-pane-dispatch .ss-input { flex: 1 1 auto; min-width: 0; }

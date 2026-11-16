@@ -205,7 +205,7 @@
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": false,
-    "t": 0.02,
+    "t": 0.05,
     "ready": 4,
     "duration": 2,
     "focused": true,
@@ -215,7 +215,7 @@
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": true,
-    "t": 0.3,
+    "t": 0.33,
     "ready": 4,
     "duration": 2,
     "focused": false,
@@ -225,7 +225,7 @@
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": false,
-    "t": 0.32,
+    "t": 0.35,
     "ready": 4,
     "duration": 2,
     "focused": true,
@@ -235,7 +235,7 @@
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": true,
-    "t": 0.32,
+    "t": 0.35,
     "ready": 4,
     "duration": 2,
     "focused": true,
@@ -245,7 +245,7 @@
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": false,
-    "t": 0.32,
+    "t": 0.35,
     "ready": 4,
     "duration": 2,
     "focused": true,
@@ -289,7 +289,7 @@
       "rows": [
         "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
         "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-        "新来的成员 · mmwir0czeread-onlydefaultguidedautofull-accessteammemberproject移除",
+        "新来的成员 · mmwiseuseread-onlydefaultguidedautofull-accessteammemberproject移除",
         "本轮发言秩序主持优先按名单轮排一轮",
         "当前会话的段—开新段",
         "权限（成员维）团队档 default · 无裁剪",
@@ -306,7 +306,7 @@
       "rows": [
         "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
         "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-        "新来的成员 · mmwir0czeread-onlydefaultguidedautofull-accessteammemberproject移除",
+        "新来的成员 · mmwiseuseread-onlydefaultguidedautofull-accessteammemberproject移除",
         "本轮发言秩序主持优先按名单轮排一轮",
         "排出来的秩序1. 示例成员　2. 新来的",
         "当前会话的段—开新段",
@@ -356,7 +356,7 @@
       "canceled": false,
       "filePaths": []
     },
-    "elapsedMs": 2450,
+    "elapsedMs": 2183,
     "options": {
       "title": "选择壁纸",
       "properties": [
@@ -403,9 +403,19 @@
     "paneState": {
       "found": true,
       "rows": 1,
-      "text": "团队成员1示例成员调研read-only排出来的秩序1. 示例成员在 设置 › 团队 里管理",
+      "text": "团队成员1示例成员调研read-only派活排出来的秩序1. 示例成员放进他的线程在 设置 › 团队 里管理",
       "plan": "排出来的秩序1. 示例成员"
     },
     "roundCalls": 1
+  },
+  "teamDispatch": {
+    "step": "done",
+    "calls": [
+      {
+        "memberId": "m-seed",
+        "task": "把对比度再量一遍"
+      }
+    ],
+    "text": "团队成员1示例成员调研read-only已选排出来的秩序1. 示例成员放进他的线程已派给 m-seed · s-team-1在 设置 › 团队 里管理"
   }
 }

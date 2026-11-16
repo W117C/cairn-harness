@@ -11,6 +11,7 @@ import { pickWallpaper } from "./wallpaper-pick";
 import { appendTeamPatch, readTeamRoster, teamLogPath } from "./team-store";
 import { listSessions, readSessionEvents } from "../../../../src/main/sessions";
 import { openSegmentForSession } from "./session-segments";
+import { dispatchToMember } from "./team-dispatch";
 import { planRound } from "../../../../src/orchestration/speech";
 import { memberPatch } from "../../../../src/agent/team/members";
 import { TEAM_USAGE_SESSION_CAP, memoryScopes, permissionRows, usageAcrossSessions } from "../../../../src/agent/team/insights";
@@ -836,6 +837,18 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
         records: roster.records,
       },
     };
+  },
+  // v62 给成员派活：开一条归属该成员的会话（`session_meta.member`），任务书成为第一句。
+  // 成员必须真在团队日志里（不认的字 id 一律拒）；**不自动开跑**——按不按发送由人决定。
+  teamMemberDispatch: async (memberId, task, workspace) => {
+    const root = await explicitSessionsRoot(typeof workspace === "string" ? workspace : undefined);
+    if (root === undefined) return { ok: false, error: "没有可用的会话根" };
+    const id = typeof memberId === "string" ? memberId : "";
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) return { ok: false, error: "成员 id 不合法" };
+    const settings = await getSettings();
+    const roster = await readTeamRoster(teamLogPath(app.getPath("userData")), settings.mode);
+    if (!roster.members.some((m) => m.id === id)) return { ok: false, error: "成员不在名单里（先建档案再派活）" };
+    return await dispatchToMember({ sessionsRoot: root, memberId: id, task: typeof task === "string" ? task : "" });
   },
   // v60 一轮的发言秩序（发言权的第一个调用方）：名单从团队事件日志读，秩序由核心纯函数算。
   teamRoundPlan: async (raw) => {

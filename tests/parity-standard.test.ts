@@ -59,7 +59,9 @@ describe("对表标准可判", () => {
     // absent 的条目必须是**明确列出来的能力面**（这条防「悄悄把没做的删掉」：
     // 删掉会让 inScope 变小、覆盖分变高——但那不是做完了，是尺变短了）。
     expect(new Set(checklist.items.filter((i) => i.status === "absent").map((i) => i.id))).toEqual(
-      new Set(["bot.member-dispatch-ui", "bot.group-chat", "bot.secrets-cards"]),
+      // 2026-11-16：`bot.member-dispatch-ui` 从 absent 变 partial（团队窗格的「派活」已落），
+      // 剩这两格未做。集合只准变短（每补一格就从这里删一条，判据逼着同步）。
+      new Set(["bot.group-chat", "bot.secrets-cards"]),
     );
   });
 });

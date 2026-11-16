@@ -185,6 +185,7 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   teamRoster: "agent:team-roster",
   teamMemberSave: "agent:team-member-save",
   teamRoundPlan: "agent:team-round-plan",
+  teamMemberDispatch: "agent:team-member-dispatch",
   sessionSegmentOpen: "agent:session-segment-open",
   // v9：Tab 想下一条（业主裁 A②）——main 端按上下文单发模型调用（suggestNextMessage），
   // renderer 原样上屏结果/分类文案。
@@ -405,6 +406,7 @@ export const CHANNEL_DOMAINS: { [K in InvokeChannel]: ChannelDomain } = {
   teamRoster: "team",
   teamMemberSave: "team",
   teamRoundPlan: "team",
+  teamMemberDispatch: "team",
   sessionSegmentOpen: "session",
   speakText: "app",
   stopSpeaking: "app",

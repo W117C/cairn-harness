@@ -2,7 +2,7 @@
   "version": 1,
   "date": "2026-11-16",
   "rule": "范围内的条目按 covered=1 / partial=0.5 / absent=0 计分；范围外必须在 outOfScopeReason 里写清理由。覆盖分必须 ≥ 0.8，且每条 covered/partial 都要有本仓可跑的证人（测试文件或真机冒烟脚本），否则判红。",
-  "threshold": 0.75,
+  "threshold": 0.8,
   "items": [
     {
       "id": "bot.replay-authority",
@@ -95,9 +95,13 @@
       "id": "bot.member-dispatch-ui",
       "capability": "从 UI 给成员派活",
       "reference": "群里 @成员 即开工",
-      "ours": "只有工具面 spawn_agent(member)",
-      "status": "absent",
-      "evidence": []
+      "ours": "团队窗格「派活」→ 开一条归属该成员的会话（不自动开跑）",
+      "status": "partial",
+      "evidence": [
+        "apps/desktop/tests/team-dispatch.test.ts",
+        "apps/desktop/tests/team-pane.test.tsx",
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs"
+      ]
     },
     {
       "id": "bot.group-chat",
@@ -201,5 +205,5 @@
       "evidence": []
     }
   ],
-  "thresholdNote": "目标 0.8；现读 0.778（差的正是未做的「UI 派活」）。棘轮：补齐后上调到 0.8，只准上调。"
+  "thresholdNote": "目标 0.9；现读 0.806（缺群聊共享流与密钥卡两格 absent + 三格 partial）。棘轮：补齐后上调，只准上调。"
 }
