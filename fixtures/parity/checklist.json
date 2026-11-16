@@ -1,0 +1,275 @@
+{
+  "version": 1,
+  "date": "2026-11-16",
+  "rule": "范围内的条目按 covered=1 / partial=0.5 / absent=0 计分；范围外必须在 outOfScopeReason 里写清理由。覆盖分必须 ≥ 0.8，且每条 covered/partial 都要有本仓可跑的证人（测试文件或真机冒烟脚本），否则判红。",
+  "threshold": 0.96,
+  "items": [
+    {
+      "id": "bot.replay-authority",
+      "capability": "团队状态的真源可重放",
+      "reference": "DS-Bot state.json",
+      "ours": "事件日志补丁 + 投影",
+      "status": "covered",
+      "evidence": [
+        "tests/team-members.test.ts",
+        "apps/desktop/tests/team-store.test.ts"
+      ]
+    },
+    {
+      "id": "bot.member-profiles",
+      "capability": "成员档案增删改可审计",
+      "reference": "roster 落 state.json",
+      "ours": "补丁 + 墓碑",
+      "status": "covered",
+      "evidence": [
+        "tests/team-members.test.ts",
+        "apps/desktop/tests/team-store.test.ts"
+      ]
+    },
+    {
+      "id": "bot.speech-order",
+      "capability": "一轮发言秩序",
+      "reference": "两种模式 + PASS + 空转守卫",
+      "ours": "planRound + 引擎仲裁",
+      "status": "covered",
+      "evidence": [
+        "tests/orchestration-speech.test.ts",
+        "tests/orchestration-round-arbiter.test.ts"
+      ]
+    },
+    {
+      "id": "bot.segments",
+      "capability": "分段与压缩后换段",
+      "reference": "一段一个 Session 文件",
+      "ours": "事件行号 + 自动触发",
+      "status": "covered",
+      "evidence": [
+        "tests/segments.test.ts",
+        "tests/segments-auto.test.ts"
+      ]
+    },
+    {
+      "id": "bot.member-thread",
+      "capability": "成员线程（身份=member:<id>）",
+      "reference": "每个 bot 一条 root Session",
+      "ours": "spawn_agent 带 member",
+      "status": "covered",
+      "evidence": [
+        "tests/team-identity.test.ts"
+      ]
+    },
+    {
+      "id": "bot.memory-scopes",
+      "capability": "三档记忆作用域（读+写）",
+      "reference": "bot/群/团队三档",
+      "ours": "project/team/member + 作用域过滤",
+      "status": "covered",
+      "evidence": [
+        "tests/memory-scope.test.ts",
+        "tests/remember-member-scope.test.ts"
+      ]
+    },
+    {
+      "id": "bot.mention-routing",
+      "capability": "群里的 @ 路由（点名并行）",
+      "reference": "mentionSpans + 名字长者优先",
+      "ours": "parseMemberMentions（整名匹配/长者优先/认不出进 unknown）+ 群轮次按被点名人成批",
+      "status": "covered",
+      "evidence": [
+        "tests/team-mentions.test.ts",
+        "apps/desktop/tests/team-round.test.ts"
+      ]
+    },
+    {
+      "id": "bot.usage-by-member",
+      "capability": "用量按成员归集",
+      "reference": "按 bot 三视角",
+      "ours": "usageByOwner + 跨会话上限",
+      "status": "covered",
+      "evidence": [
+        "tests/team-insights.test.ts"
+      ]
+    },
+    {
+      "id": "bot.panels",
+      "capability": "面板族（成员区/团队/设置）",
+      "reference": "104 个客户端文件",
+      "ours": "成员区/团队/设置/团队窗格 + 群聊共享流（v70）+ 记忆面板（v71，三层主题数/字节，缺层点名）",
+      "status": "covered",
+      "evidence": [
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs",
+        "apps/desktop/tests/memory-panel.test.ts",
+        "apps/desktop/tests/team-pane.test.tsx",
+        "apps/desktop/tests/team-section.test.tsx",
+        "tests/memory-panel.test.ts",
+        "tests/team-stream.test.ts"
+      ]
+    },
+    {
+      "id": "bot.member-dispatch-ui",
+      "capability": "从 UI 给成员派活",
+      "reference": "群里 @成员 即开工",
+      "ours": "团队窗格「派活」/「派活并开跑」（后者交给正常 run 通道）",
+      "status": "covered",
+      "evidence": [
+        "apps/desktop/tests/team-dispatch.test.ts",
+        "apps/desktop/tests/team-pane.test.tsx",
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs"
+      ]
+    },
+    {
+      "id": "bot.group-chat",
+      "capability": "群聊共享流与轮次",
+      "reference": "room + round + 共享日志",
+      "ours": "群会话（group=1）+ 共享流 + 轮次（@ 命中即一批，否则轮转）+ **波次**（v76：被 @ 的人顺序跑，每人开跑前重读共享流 ⇒ 后面的人看得见前面刚说的）+ 轮到谁就交给谁开跑 + 带上下文",
+      "status": "covered",
+      "evidence": [
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs",
+        "apps/desktop/tests/team-group.test.ts",
+        "apps/desktop/tests/team-pane.test.tsx",
+        "apps/desktop/tests/team-round.test.ts",
+        "apps/desktop/tests/team-wave.test.ts",
+        "tests/team-round-context.test.ts"
+      ]
+    },
+    {
+      "id": "bot.secrets-cards",
+      "capability": "密钥按成员申请/授权",
+      "reference": "卡片申请 + 按 bot 授权",
+      "ours": "申请卡（pending）→ 人审批（allow/deny 并置终态）→ 起跑前注入（只 allow、只注有值的）→ **串行闸**（v75：一次一个成员，注入窗口不重叠，不串）→ 输出脱敏",
+      "status": "covered",
+      "evidence": [
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs",
+        "apps/desktop/tests/member-run-lock.test.ts",
+        "apps/desktop/tests/team-dispatch.test.ts",
+        "apps/desktop/tests/team-section.test.tsx",
+        "tests/team-secrets.test.ts"
+      ]
+    },
+    {
+      "id": "wallpaper.media-protocol",
+      "capability": "壁纸媒体白名单协议",
+      "reference": "同源 HTTP 路由",
+      "ours": "cairn-wallpaper:// + Range",
+      "status": "covered",
+      "evidence": [
+        "apps/desktop/tests/wallpaper-media.test.ts",
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs"
+      ]
+    },
+    {
+      "id": "wallpaper.csp",
+      "capability": "CSP 白名单承重（含反证臂）",
+      "reference": "未提",
+      "ours": "反证臂：摘 scheme 必须加载失败；另按**实际下发的头**判：对象/基址/表单三条硬化为 none、script-src 无 unsafe-inline",
+      "status": "covered",
+      "evidence": [
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs",
+        "scripts/standard-report.ts"
+      ]
+    },
+    {
+      "id": "wallpaper.contrast-floor",
+      "capability": "可读性地板（现算 + 漂移守卫）",
+      "reference": "网格法 + 手抄常量",
+      "ours": "真机真值现算",
+      "status": "covered",
+      "evidence": [
+        "apps/desktop/tests/wallpaper-contrast.test.ts",
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs"
+      ]
+    },
+    {
+      "id": "wallpaper.first-frame",
+      "capability": "首帧底色不闪画布色",
+      "reference": "未提",
+      "ours": "1×1 PNG 平均色",
+      "status": "covered",
+      "evidence": [
+        "apps/desktop/tests/wallpaper-tint.test.ts",
+        "apps/desktop/tests/boot-background.test.ts"
+      ]
+    },
+    {
+      "id": "wallpaper.lifecycle",
+      "capability": "失焦/隐藏/锁屏即停",
+      "reference": "失焦/隐藏",
+      "ours": "含系统级推送（真机 powerMonitor 监听 + v72 主进程活跃推送；冒烟 58/58 全绿）",
+      "status": "covered",
+      "evidence": [
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs",
+        "apps/desktop/tests/wallpaper-active.test.ts",
+        "apps/desktop/tests/wallpaper-suspend.test.ts"
+      ]
+    },
+    {
+      "id": "wallpaper.degrade",
+      "capability": "媒体失效即降级并点名",
+      "reference": "未提",
+      "ours": "撤层 + 设置行「文件不可用」",
+      "status": "covered",
+      "evidence": [
+        "apps/desktop/tests/wallpaper-settings-ui.test.tsx",
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs"
+      ]
+    },
+    {
+      "id": "wallpaper.pick-in-app",
+      "capability": "应用内选壁纸（输目录 → 点文件）",
+      "reference": "原生面板",
+      "ours": "应用内选择器：列目录（白名单/目录排前/隐藏不列）+ 面包屑上级 + 点文件走同一条校验；**键盘也能走通**（Tab 到文件行、Enter 选中，WCAG 2.1.1 实测）",
+      "status": "covered",
+      "evidence": [
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs",
+        "apps/desktop/tests/wallpaper-browse.test.ts",
+        "apps/desktop/tests/wallpaper-browser.test.tsx"
+      ]
+    },
+    {
+      "id": "wallpaper.pick-dialog",
+      "capability": "选壁纸：面板调起 / 取消 / 选中之后",
+      "reference": "宿主选文件",
+      "ours": "面板调起与取消用真系统面板验（Promise 攥住 ≥1s、关窗结算、canceled 非 error）；选中之后用「点选替身臂」验（真决策壳 + 真校验：选中⇒ok/kind/path，非白名单⇒拒）",
+      "status": "covered",
+      "evidence": [
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs",
+        "apps/desktop/tests/wallpaper-pick.test.ts"
+      ]
+    },
+    {
+      "id": "wallpaper.native-click",
+      "capability": "原生面板里「真点中一个文件」这一跳",
+      "reference": "人工点选",
+      "ours": "不可自动化：Electron 无替人点击 API，osascript 无辅助功能权限（实测超时）。已备一条人跑的命令",
+      "status": "out",
+      "outOfScopeReason": "自动化判不到：面板本体由 OS 绘制，Electron 不给「替人点」的接口，本机又拿不到辅助功能权限。不伪装成 covered——用 scripts/native-pick-accept.cjs 由人跑一次（60 秒内点一个文件或取消），读数落 outputs/native-pick-accept/*.json；说明见 docs/native-pick-acceptance.md。",
+      "evidence": [
+        "apps/desktop/scripts/native-pick-accept.cjs",
+        "docs/native-pick-acceptance.md"
+      ]
+    },
+    {
+      "id": "wallpaper.scene-engine",
+      "capability": "场景/工坊/频谱",
+      "reference": "Wallpaper Engine 生态",
+      "ours": "明确不做",
+      "status": "out",
+      "outOfScopeReason": "装饰不承载信息（spec §8 已钉）；插件边界装不进来",
+      "evidence": []
+    },
+    {
+      "id": "wallpaper.website",
+      "capability": "网站作为壁纸（受限 CSP 已获批）",
+      "reference": "Plash（Make any website your Mac desktop wallpaper）",
+      "ours": "iframe 铺在壁纸层：只收 https（http/data/blob 由主进程校验拒）、sandbox + no-referrer + 不吃鼠标；CSP 只放 `frame-src https:`。真机双臂：https 未被拦、http 被拦 1 次（同一条策略在管）；跨域不读 DOM，页面像素未验——这是这条判据的边界",
+      "status": "covered",
+      "evidence": [
+        "tests/wallpaper-web.test.ts",
+        "apps/desktop/tests/wallpaper-web-layer.test.tsx",
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs",
+        "apps/desktop/src/main/csp.ts"
+      ]
+    }
+  ],
+  "thresholdNote": "目标 0.95；现读 1.000（评分面 21 格全 covered；阈值 0.96）。两格 out：scene-engine 不做、native-click 需人工点一次。标准对照九条 + bot 报告 12/12 全 pass；天气源已真网络验过（Open-Meteo）"
+}

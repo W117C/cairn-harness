@@ -1,0 +1,9 @@
+{
+  "at": "2026-11-16T10:58:00.313Z",
+  "url": "https://api.open-meteo.com/v1/forecast?latitude=39.9&longitude=116.4&current_weather=true",
+  "lat": "39.9",
+  "lon": "116.4",
+  "kind": "clouds",
+  "reason": "ok",
+  "status": 200
+}

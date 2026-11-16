@@ -37,10 +37,18 @@ describe("壁纸设置", () => {
     expect(v).toEqual({
       kind: "video",
       path: "/tmp/a.mp4",
+      url: null,
       opacity: 0.5,
       scrim: 0.2,
       glassAlpha: 0.3,
       revision: 3,
+      // 2026-11-16：定时轮换随壁纸设置一起校验（缺省 = 关 / 60 分钟 / 空候选）
+      rotation: {
+        enabled: false, mode: "interval", weather: { kind: "clear", paths: {}, source: "manual", filePath: null, httpUrl: null },
+        latitude: 39.9042, longitude: 116.4074,
+        dayPath: null, nightPath: null, everyMinutes: 60, paths: [], lastAt: 0,
+      },
+      perDisplay: {},
     });
   });
 

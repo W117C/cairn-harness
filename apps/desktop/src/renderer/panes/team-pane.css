@@ -1,0 +1,92 @@
+/* 团队会话窗格（2026-11-16，v60）：名单 + 自动算出的一轮发言秩序。
+   颜色一律走主题变量，零字面色值。 */
+.team-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  height: 100%;
+  overflow: auto;
+}
+.team-pane-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 12px;
+  color: hsl(var(--text-300));
+}
+.team-pane-title { font-weight: 600; }
+.team-pane-count { font-variant-numeric: tabular-nums; }
+.team-pane-issue { font-size: 12px; color: hsl(var(--danger-000, var(--text-300))); }
+.team-pane-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.team-pane-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px;
+  align-items: baseline;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+.team-pane-name { font-size: 12px; color: hsl(var(--text-100)); }
+.team-pane-role,
+.team-pane-tier { font-size: 11px; color: hsl(var(--text-300)); }
+.team-pane-empty { font-size: 12px; color: hsl(var(--text-300)); padding: 4px 6px; }
+.team-pane-plan {
+  border-top: 1px solid var(--hairline);
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: hsl(var(--text-100));
+}
+.team-pane-plan-head { font-size: 11px; color: hsl(var(--text-300)); }
+.team-pane-plan-value { font-variant-numeric: tabular-nums; }
+.team-pane-hint { font-size: 11px; color: hsl(var(--text-300)); margin-top: auto; }
+/* 派活（v62）：一行输入 + 一个按钮；不自动开跑，回执只说「放进去了」。 */
+.team-pane-group,
+.team-pane-dispatch {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  border-top: 1px solid var(--hairline);
+  padding-top: 8px;
+}
+.team-pane-group .ss-input,
+.team-pane-dispatch .ss-input { flex: 1 1 auto; min-width: 0; }
+
+/* v70：群聊共享流（只读投影；每条带轮与说话人） */
+.team-pane-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 8px 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+.team-pane-stream-row { display: flex; gap: 8px; font-size: 12px; line-height: 1.45; }
+.team-pane-stream-speaker { flex: 0 0 auto; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.team-pane-stream-row.agent .team-pane-stream-text { color: var(--foreground); }
+.team-pane-stream-row.user .team-pane-stream-text { color: var(--primary); }
+.team-pane-stream-text { flex: 1 1 auto; white-space: pre-wrap; word-break: break-word; }
+
+/* v71：记忆面板（三层主题数，缺层点名） */
+.team-pane-memory {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  margin: 8px 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  font-size: 12px;
+}
+.team-pane-memory-total { font-weight: 600; }
+.team-pane-memory-row { color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.team-pane-memory-missing { color: var(--destructive); }

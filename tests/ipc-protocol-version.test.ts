@@ -10,7 +10,7 @@ describe("IPC 协议版本（§3.5/§12）", () => {
     expect(IPC_PROTOCOL_VERSION).toBeGreaterThanOrEqual(1);
   });
 
-  it("bump 版本必须有意为之：现钉 58——改协议形状（AgentApi 增删/字段语义变）= bump 常量 + 同步本格，desktop-panel 提案走同一流水线", () => {
+  it("bump 版本必须有意为之：现钉 79——改协议形状（AgentApi 增删/字段语义变）= bump 常量 + 同步本格，desktop-panel 提案走同一流水线", () => {
     // v8 → v9（2026-10-16 建议批）：＋suggestNext（「Tab 想下一条」按上下文单发模型调用）。
     // v9 → v10（2026-10-16 能力在场性批）：＋capabilities（搜索端点配没配——让「模型为什么少一把工具」上屏）。
     // v10 → v11（2026-10-16 主界面重做批）：＋gitStatus / gitClone / workspaceSearch / touchProject /
@@ -61,7 +61,7 @@ describe("IPC 协议版本（§3.5/§12）", () => {
     //   assignSessionProject 增可选 workspace。同 id 跨工作区的组织动作按显式根做存在性检查，
     //   隔离树建在会话自己的工作区（不再回落构造期的启动工作区）。
     // v56 → v57：listMessagePins 增可选 workspace；读取与写入共用显式根存在性检查。
-    // v57 → v58：AskPayload 增可选 workspace；审批卡与等门计数按目标根寻址。
-    expect(IPC_PROTOCOL_VERSION).toBe(58);
+    // v58 → v59：壁纸系统暂停推送（onWallpaperSuspend）+ 团队名单/写入两条 invoke 通道。
+    expect(IPC_PROTOCOL_VERSION).toBe(79);
   });
 });

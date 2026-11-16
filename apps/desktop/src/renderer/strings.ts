@@ -687,7 +687,6 @@ export const STR = {
     summaryTest: "只读核对测试和验证证据。",
     title: "委派",
     allowLabel: "允许委派子 Agent",
-    allowDesc: "控制主 Agent 能否启动、等待和取消子 Agent。",
     concurrencyCap: "同时运行上限",
     concurrencyUnit: " 个",
     rolesTitle: "角色",

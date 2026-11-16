@@ -44,6 +44,7 @@ import {
   type RecallInput,
 } from "./retrieval.js";
 import { selectRecallHybrid, type EmbeddingProvider } from "./semantic.js";
+import { scopeAllowed } from "./scope.js";
 import { bumpStat } from "./strength.js";
 
 export const MEMORY_TOKEN_BUDGET_DEFAULT = 6_000;
@@ -198,6 +199,12 @@ async function recallSection(args: {
   limit: number;
   nowISO: string;
   embedding?: { provider: EmbeddingProvider; signal?: AbortSignal };
+  /** 允许读的记忆作用域（ADR 0015 S1）。缺席 = 不过滤（老路径逐字不变）。 */
+  scopes?: readonly string[];
+  /** 成员身份（来自 `agent_id = member:<id>`）。给了才读成员私有档；缺席 = 不读（老路径不变）。 */
+  memberId?: string;
+  /** 这一层的条目属于哪个作用域（项目层 = project，全局层 = team）；缺省按条目自带值。 */
+  entryScope?: string;
 }): Promise<{
   section: Section | null;
   picked: string[];
@@ -240,12 +247,13 @@ async function recallSection(args: {
     } catch {
       body = null;
     }
-    inputs.push({ ...e, stat: args.stats[e.topic], body });
+    inputs.push({ ...e, ...(args.entryScope === undefined ? {} : { scope: args.entryScope }), stat: args.stats[e.topic], body });
   }
   const outcome = await selectRecallHybrid(query, inputs, {
     k: args.limit,
     nowISO: args.nowISO,
     ...(args.embedding ? { embedding: args.embedding } : {}),
+    ...(args.scopes === undefined ? {} : { scopes: args.scopes }),
   });
   const picks = outcome.picks;
   if (picks.length === 0) {
@@ -460,6 +468,11 @@ export interface MemoryInjectionOptions {
   queryText?: string;
   /** RECALL 段每层最多选几条正文，缺省 RECALL_MAX_TOPICS。 */
   recallLimit?: number;
+  /** 允许读的记忆作用域（ADR 0015 S1）。缺席 = 不过滤（老路径逐字不变）。
+   *  运行期由调用方按 agent 身份给：`member:<id>` ⇒ project/team/member，其余 ⇒ project/team。 */
+  scopes?: readonly string[];
+  /** 成员身份（`agent_id = member:<id>` 的 id 那一段）。给了才读成员私有档。 */
+  memberId?: string;
   /** 外部引用审批状态；缺省从全局记忆目录读。 */
   refState?: ExternalRefState;
   /** 首次批准回调（缺省无 = fail-closed 停用）。 */
@@ -532,16 +545,33 @@ export async function buildMemoryInjection(opts: MemoryInjectionOptions): Promis
 
   const arch = await archSection(opts.workspace);
   const decisions = await decisionsSection(opts.workspace, opts.decisionsLimit ?? DECISIONS_RECENT_DEFAULT);
-  const projIndex = indexSectionFiltered("[MEMORY.md 索引]", projIndexRaw, projStats);
-  const globIndex = indexSectionFiltered("[MEMORY.md 索引（全局）]", globIndexRaw, globStats);
+  // 作用域不允许的那一层，**连索引都不给看**：给了索引等于告诉人「有这么一条，只是不给你看」，
+  // 与「私密」的语义冲突（ADR 0015 §六.2 的留痕式拒绝是给审计的，不是给读侧的）。
+  const layerAllowed = (scope: string): boolean => scopeAllowed(scope, opts.scopes);
+  const projIndex = layerAllowed("project") ? indexSectionFiltered("[MEMORY.md 索引]", projIndexRaw, projStats) : null;
+  const globIndex = layerAllowed("team") ? indexSectionFiltered("[MEMORY.md 索引（全局）]", globIndexRaw, globStats) : null;
+  // 成员私有层（`<global>/members/<id>`）：只有拿到成员身份、且作用域允许时才读。
+  const memberDir = opts.memberId !== undefined && layerAllowed("member")
+    ? globDir + "/members/" + opts.memberId
+    : null;
+  const memberStats = memberDir === null ? {} : await readStats(memberDir);
+  const memberIndexRaw = memberDir === null ? null : await readTextOrNull(memberDir + "/" + MEMORY_INDEX);
+  const memberIndex = memberDir === null ? null : indexSectionFiltered("[MEMORY.md 索引（成员）]", memberIndexRaw, memberStats);
   const recallLimit = opts.recallLimit ?? RECALL_MAX_TOPICS;
+  // 每一层的候选按**目录**打作用域标签（项目层 = project，全局层 = team）；
+  // 允许集缺席 ⇒ 不按作用域过滤（老路径逐字不变），给了集合就整层整层地挡。
+  const recallScopes = opts.scopes === undefined ? {} : { scopes: opts.scopes };
   const recallProj = await recallSection({
     dir: projDir, label: "项目层", queryText: opts.queryText, stats: projStats, limit: recallLimit, nowISO,
-    ...(opts.embedding ? { embedding: opts.embedding } : {}),
+    ...(opts.embedding ? { embedding: opts.embedding } : {}), ...recallScopes, entryScope: "project",
   });
   const recallGlob = await recallSection({
     dir: globDir, label: "全局层", queryText: opts.queryText, stats: globStats, limit: recallLimit, nowISO,
-    ...(opts.embedding ? { embedding: opts.embedding } : {}),
+    ...(opts.embedding ? { embedding: opts.embedding } : {}), ...recallScopes, entryScope: "team",
+  });
+  const recallMember = memberDir === null ? null : await recallSection({
+    dir: memberDir, label: "成员层", queryText: opts.queryText, stats: memberStats, limit: recallLimit, nowISO,
+    ...(opts.embedding ? { embedding: opts.embedding } : {}), ...recallScopes, entryScope: "member",
   });
 
   // 段内容统一过「脱敏 → 外部引用治理 → 控制标签转义」再进块；包装产生**新对象**，
@@ -553,13 +583,15 @@ export async function buildMemoryInjection(opts: MemoryInjectionOptions): Promis
     return { header: s.header, lines: escapeControlTags(await sanitize(s.lines.join("\n"))).split("\n") };
   };
   const recallProjWrapped = await wrap(recallProj.section);
+  const memberIndexWrapped = await wrap(memberIndex);
+  const recallMemberWrapped = await wrap(recallMember?.section ?? null);
   const recallGlobWrapped = await wrap(recallGlob.section);
 
   const projectSections: Section[] = [];
   // 教训段放**最后**：预算治理是从各段**首部**整行丢弃、保尾部（下面那个循环），放最后 ⇒
   // 它是项目段里最后被丢的那一段。RECALL 放索引之后、教训之前：它是本轮任务最相关的正文，
   // 但教训带证据指针、丢了更难自救，所以教训仍在它后面受保护。
-  for (const s of [await wrap(arch), await wrap(decisions), await wrap(projIndex), recallProjWrapped, await wrap(await lessonsSection(projDir, opts.lessonsLimit ?? LESSONS_RECENT_DEFAULT))]) {
+  for (const s of [await wrap(arch), await wrap(decisions), await wrap(projIndex), memberIndexWrapped, recallProjWrapped, recallMemberWrapped, await wrap(await lessonsSection(projDir, opts.lessonsLimit ?? LESSONS_RECENT_DEFAULT))]) {
     if (s === null) continue;
     projectSections.push(s);
   }

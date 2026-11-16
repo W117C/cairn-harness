@@ -21,6 +21,8 @@ const WALLPAPER_ORIGIN = `${WALLPAPER_SCHEME}:`;
  *   · 媒体（<video> 壁纸）同样要放行壁纸协议——`<img>` 与 `<video>` 各受一条指令管；
  *   · 连接面允许 http(s)/ws(s)（本地预览与 dev HMR）；**不放壁纸协议**：渲染层不从这条协议
  *     fetch（自定义 scheme 未开 corsEnabled，fetch 一律被 CORS 挡），放行等于白开一扇门；
+ *   · `frame-src` 只放 **https:**（网站壁纸；2026-11-16 业主批「准放 CSP」）——
+ *     不放 data:/blob:/http:，且嵌入页带 `sandbox` 属性隔离；script-src 不动；
  *   · 不放 object/base；form-action 锁死。
  *
  * 为什么不用 `bypassCSP: true` 换省事：那等于让这个协议绕过整份 CSP，越权面比白名单大。
@@ -34,6 +36,9 @@ export const CSP_CONTENT = [
   `media-src 'self' data: blob: ${WALLPAPER_ORIGIN}`,
   "connect-src 'self' http: https: ws: wss:",
   "worker-src 'self' blob:",
+  // 2026-11-16（业主批「准放 CSP」）：网站壁纸要能嵌 **https** 页面。
+  // 放开面严格限在 `frame-src https:`：不放 data:/blob:/http:，不动 script-src，不动 object/base/form。
+  "frame-src https:",
   "object-src 'none'",
   "base-uri 'none'",
   "form-action 'none'",

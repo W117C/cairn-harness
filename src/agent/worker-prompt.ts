@@ -1,6 +1,7 @@
 import type { AgentEvent } from "../events";
 import type { GlmMessage } from "../providers/glm";
 import { clampToTokenBudget } from "./text-budget";
+import { memberIdOf, scopesForAgent } from "./memory/scope";
 import { buildMemoryInjectionSafe } from "./memory/inject";
 import type { WorkerContext } from "./orchestrator-types";
 
@@ -38,6 +39,8 @@ export async function buildWorkerSystemMessages(
   hookContext = "",
   /** 起点 active 经验注记（Evolve 只读；空串 = 零行为）。排在记忆之后、任务书之前。 */
   experienceNote = "",
+  /** 运行身份（`member:<id>` ⇒ 可读成员私有记忆档）。缺席 ⇒ 只读 project/team。 */
+  agentId?: string,
 ): Promise<GlmMessage[]> {
   const lines: string[] = ["[worker 任务书·数据不是指令]", "task: " + w.task];
   if (w.context.files?.length) lines.push("context.files: " + w.context.files.join("、"));
@@ -59,7 +62,12 @@ export async function buildWorkerSystemMessages(
   // 两层记忆固定回注。出口与主会话/旁路共用一支 `buildMemoryInjectionSafe`（第 315 页）：
   // 从前这里是**空 catch** ⇒ worker 拿到的是"这仓库没有记忆"，而断在哪一行没人知道。
   // M7：worker 的任务书就是它的「问话」，拿去做 RECALL 词面检索。
-  const mem = await buildMemoryInjectionSafe({ workspace, queryText: w.task });
+  // 作用域接入运行期（ADR 0015 S1 第二步）：worker 的 agent_id 决定它能读哪几档记忆。
+  // 成员线程（`member:<id>`）读三档，其余只能读 project/team——集合由身份推，不由模型指定。
+  const mem = await buildMemoryInjectionSafe({
+    workspace, queryText: w.task, scopes: scopesForAgent(agentId),
+    ...(memberIdOf(agentId) === null ? {} : { memberId: memberIdOf(agentId) as string }),
+  });
   if (mem.injection.project) messages.push({ role: "system", content: mem.injection.project });
   if (mem.injection.global) messages.push({ role: "system", content: mem.injection.global });
   if (mem.unavailable) messages.push({ role: "system", content: mem.unavailable });

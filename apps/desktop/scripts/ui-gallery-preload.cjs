@@ -1,6 +1,6 @@
 // UI 画廊的假 AgentApi（contextBridge 注入；形状与 src/main/ipc-protocol.ts 的 AgentApi 对齐）。
 // 只为离屏截图服务——真桥在 src/preload/index.ts，别把这文件接进产品链路。
-const { contextBridge } = require("electron");
+const { contextBridge, ipcRenderer } = require("electron");
 
 const reply = (v) => () => new Promise((res) => setTimeout(() => res(typeof v === "function" ? v() : v), 30));
 // 第 9 点冒烟的断言面：渲染层调过 runSteer 的**原始参数**。走 contextBridge 暴露
@@ -1584,18 +1584,196 @@ if (process.argv.includes("--cairn-project-entry-fixture")) {
 const wallpaperFixturePath = argOf("--cairn-wallpaper-fixture=", "");
 if (wallpaperFixturePath !== "") {
   settingsState.wallpaper = {
-    kind: "image", path: wallpaperFixturePath,
+    kind: "image", path: wallpaperFixturePath, url: null,
     opacity: 1, scrim: 0.35, glassAlpha: 0.25, revision: 0,
+    // 定时轮换（2026-11-16）：夹具里也给一份真形状，缺它渲染层会读到 undefined。
+    rotation: {
+      enabled: false, mode: "interval", weather: { kind: "clear", paths: {}, source: "manual", filePath: null, httpUrl: null },
+      latitude: 39.9042, longitude: 116.4074,
+      dayPath: null, nightPath: null, everyMinutes: 60, paths: [], lastAt: 0,
+    },
   };
   const wallpaperPicks = [];
   stub.wallpaperPick = () => {
     wallpaperPicks.push(Date.now());
     return Promise.resolve({ ok: true, kind: "image", path: wallpaperFixturePath });
   };
+  // v73 应用内选择器：走**真 IPC**——主进程那边由冒烟注册真实现（fs 列目录 / 真校验），
+  // preload 只做转发（与产品同一组通道名）。
+  stub.wallpaperBrowse = (dir) => ipcRenderer.invoke("agent:wallpaper-browse", dir);
+  stub.wallpaperApplyPath = (path) => ipcRenderer.invoke("agent:wallpaper-apply-path", path);
+  stub.wallpaperDisplays = () => ipcRenderer.invoke("agent:wallpaper-displays");
+  stub.wallpaperSetForDisplay = (id) => ipcRenderer.invoke("agent:wallpaper-set-for-display", id);
+  // v78：天气来源解析——把当前设置里的 wallpaper 交给主进程真实现。
+  stub.wallpaperWeatherNow = async () => ipcRenderer.invoke("agent:wallpaper-weather-now", settingsState.wallpaper);
+  stub.wallpaperWeatherFetch = () => ipcRenderer.invoke("agent:wallpaper-weather-fetch", settingsState.wallpaper.rotation.weather.httpUrl);
+  stub.wallpaperWeatherSetKey = (key) => ipcRenderer.invoke("agent:wallpaper-weather-set-key", key);
   contextBridge.exposeInMainWorld("__cairnWallpaper", {
     picks: () => wallpaperPicks.length,
     path: wallpaperFixturePath,
   });
 }
+
+// 视频壁纸夹具（同一支冒烟的「失焦即暂停」臂）：只换 kind/path，其余与图片臂同形。
+// 两条臂互斥——同一次窗口只喂一种壁纸，免得「到底在验哪一条」说不清。
+const wallpaperVideoPath = argOf("--cairn-wallpaper-video=", "");
+if (wallpaperVideoPath !== "") {
+  settingsState.wallpaper = {
+    kind: "video", path: wallpaperVideoPath,
+    opacity: 1, scrim: 0.35, glassAlpha: 0.25, revision: 0,
+  };
+  contextBridge.exposeInMainWorld("__cairnWallpaper", {
+    picks: () => 0,
+    path: wallpaperVideoPath,
+  });
+}
+
+// v59 壁纸系统暂停：桩里**真收集**订阅（与 onAsk 同式），主进程用 executeJavaScript 调
+// `__cairnPushWallpaperSuspend` 推进来。判的是「锁屏时窗口既没失焦也没隐藏」那一格。
+const wallpaperSuspendListeners = new Set();
+// 与产品同一条真通道：`ipcRenderer.on("agent:wallpaper-suspend")`。
+// 这样主进程 `webContents.send` 能直接投进来（真 IPC），而 `__cairnPushWallpaperSuspend`
+// 只是本地直投的旁路，用来单独验渲染层那一跳。
+stub.onWallpaperSuspend = (fn) => {
+  const handler = (_event, payload) => { try { fn(payload); } catch { /* 一个订阅者抛了不该挡住别人 */ } };
+  ipcRenderer.on("agent:wallpaper-suspend", handler);
+  wallpaperSuspendListeners.add(fn);
+  return () => {
+    ipcRenderer.removeListener("agent:wallpaper-suspend", handler);
+    wallpaperSuspendListeners.delete(fn);
+  };
+};
+// v72 窗口活跃：与产品同一条真通道（`ipcRenderer.on("agent:wallpaper-active")`）。
+const wallpaperActiveListeners = new Set();
+stub.onWallpaperActive = (fn) => {
+  const handler = (_event, payload) => { try { fn(payload); } catch { /* 同上 */ } };
+  ipcRenderer.on("agent:wallpaper-active", handler);
+  wallpaperActiveListeners.add(fn);
+  return () => {
+    ipcRenderer.removeListener("agent:wallpaper-active", handler);
+    wallpaperActiveListeners.delete(fn);
+  };
+};
+contextBridge.exposeInMainWorld("__cairnPushWallpaperActive", (payload) => {
+  for (const fn of wallpaperActiveListeners) { try { fn(payload); } catch { /* 同上 */ } }
+});
+
+contextBridge.exposeInMainWorld("__cairnPushWallpaperSuspend", (payload) => {
+  for (const fn of wallpaperSuspendListeners) { try { fn(payload); } catch { /* 一个订阅者抛了不该挡住别人 */ } }
+});
+
+// v59 团队面板夹具：桩里给一份**真形状**的名单（不是 {}），面板才能判渲染面；
+// 写入按同一条通道的口径改内存名单（增/改档/墓碑），回包给新名单。
+// 真落盘那一段属主进程（`team-store`），冒烟另行判它的读写闭环。
+const teamMembers = [{ id: "m-seed", name: "示例成员", role: "调研", tier: "read-only", memoryScope: "team", capabilities: [] }];
+const teamRosterPayload = () => ({
+  members: teamMembers.map((m) => ({ ...m })),
+  clamped: [],
+  rejected: [],
+  records: teamMembers.length,
+  insights: {
+    permissions: { teamTier: "default", clamped: [], rows: teamMembers.map((m) => ({ id: m.id, name: m.name, requested: m.tier, applied: m.tier, clamped: false })) },
+    memory: { scopes: [{ scope: "team", members: teamMembers.map((m) => m.id) }, { scope: "member", members: [] }, { scope: "project", members: [] }] },
+    usage: { byOwner: [{ owner: "main", inputTokens: 1200, outputTokens: 340, events: 3 }], totalEvents: 3 },
+  },
+});
+stub.teamRoster = () => Promise.resolve(teamRosterPayload());
+stub.teamMemberSave = (input) => {
+  const id = String(input && input.id ? input.id : "");
+  if (input && input.remove === true) {
+    const at = teamMembers.findIndex((m) => m.id === id);
+    if (at >= 0) teamMembers.splice(at, 1);
+  } else if (input && typeof input.name === "string" && input.name !== "") {
+    teamMembers.push({
+      id, name: input.name,
+      role: typeof input.role === "string" && input.role !== "" ? input.role : "成员",
+      tier: typeof input.tier === "string" ? input.tier : "read-only",
+      capabilities: [],
+    });
+  }
+  return Promise.resolve({ ok: true, roster: teamRosterPayload() });
+};
+
+// v60 发言权与会话开段：桩按真形状回包（`planRound` 的结果与「下一段」的序数）。
+const teamRoundPlans = [];
+stub.teamRoundPlan = (input) => {
+  const mode = input && input.mode === "chairFirst" ? "chairFirst" : "turnOrder";
+  const ids = teamMembers.map((m) => m.id);
+  const batches = mode === "chairFirst" && ids.length > 0
+    ? [{ order: 1, speakers: [ids[0]] }, ...ids.slice(1).map((id, i) => ({ order: i + 2, speakers: [id] }))]
+    : ids.map((id, i) => ({ order: i + 1, speakers: [id] }));
+  const plan = { batches, paused: false, pausedReason: null, silent: [], unknown: [], roster: teamMembers.map((m) => ({ id: m.id, name: m.name, tier: m.tier })) };
+  teamRoundPlans.push({ mode, plan });
+  return Promise.resolve({ ok: true, plan });
+};
+contextBridge.exposeInMainWorld("__cairnRoundPlans", () => teamRoundPlans.map((p) => ({ mode: p.mode, plan: p.plan })));
+const teamDispatches = [];
+stub.teamMemberDispatch = (memberId, task) => {
+  teamDispatches.push({ memberId, task });
+  return Promise.resolve({ ok: true, sessionId: "s-team-" + String(teamDispatches.length) });
+};
+contextBridge.exposeInMainWorld("__cairnDispatches", () => teamDispatches.map((d) => ({ ...d })));
+const teamStarts = [];
+stub.teamMemberStart = (memberId, task) => {
+  teamStarts.push({ memberId, task });
+  return Promise.resolve({ ok: true, sessionId: "s-run-" + String(teamStarts.length) });
+};
+contextBridge.exposeInMainWorld("__cairnStarts", () => teamStarts.map((d) => ({ ...d })));
+const teamGroups = [];
+stub.teamGroupCreate = (name) => {
+  teamGroups.push({ name: name || "" });
+  return Promise.resolve({ ok: true, sessionId: "s-group-" + String(teamGroups.length) });
+};
+contextBridge.exposeInMainWorld("__cairnGroups", () => teamGroups.map((g) => ({ ...g })));
+let groupRoundNo = 0;
+const groupNexts = [];
+stub.teamGroupNext = (sessionId, _workspace, start) => {
+  groupRoundNo += 1;
+  groupNexts.push({ sessionId, round: groupRoundNo, start: start === true });
+  return Promise.resolve({
+    ok: true, round: groupRoundNo, speaker: "m-seed", speakers: ["m-seed"],
+    ...(start === true ? { sessionId: "s-speak-" + String(groupRoundNo) } : {}),
+  });
+};
+contextBridge.exposeInMainWorld("__cairnGroupNexts", () => groupNexts.map((g) => ({ ...g })));
+const teamGrants = [];
+stub.teamSecretGrants = () => Promise.resolve({ ok: true, grants: teamGrants.map((g) => ({ ...g })), requests: teamRequests.map((r) => ({ ...r })), rejected: [] });
+const teamRequests = [];
+stub.teamSecretRequest = (memberId, secret) => {
+  teamRequests.push({ memberId, secret, state: "pending" });
+  return Promise.resolve({ ok: true });
+};
+contextBridge.exposeInMainWorld("__cairnSecretRequests", () => teamRequests.map((r) => ({ ...r })));
+// v70 共享流：返回两条真形状的条目（user + agent），带轮与说话人。
+stub.teamGroupStream = () => Promise.resolve({
+  ok: true, dropped: 0, truncated: 0,
+  items: [
+    { seq: 1, kind: "user", speaker: "user", round: 1, text: "第一轮：一起看下", at: null },
+    { seq: 2, kind: "agent", speaker: "member:m-seed", round: 1, text: "我先来", at: null },
+  ],
+});
+contextBridge.exposeInMainWorld("__cairnStreamCalls", () => streamCalls);
+// v71 记忆面板：三层读数（真形状）
+stub.teamMemoryPanel = () => Promise.resolve({
+  ok: true,
+  total: { topics: 5, bytes: 900 },
+  missingScopes: [],
+  rows: [
+    { scope: "project", dir: "/p", topics: 2, bytes: 300 },
+    { scope: "team", dir: "/t", topics: 2, bytes: 400 },
+    { scope: "member", dir: "/t/members/m-seed", topics: 1, bytes: 200, memberId: "m-seed" },
+  ],
+});
+const streamCalls = [];
+stub.teamSecretGrant = (memberId, secret, allow) => {
+  teamGrants.push({ memberId, secret, allow: allow === true, at: teamGrants.length + 1 });
+  return Promise.resolve({ ok: true });
+};
+contextBridge.exposeInMainWorld("__cairnGrants", () => teamGrants.map((g) => ({ ...g })));
+let segmentCounter = 1;
+stub.sessionSegmentOpen = () => {
+  segmentCounter += 1;
+  return Promise.resolve({ ok: true, segment: segmentCounter });
+};
 
 contextBridge.exposeInMainWorld("agent", stub);

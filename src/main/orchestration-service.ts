@@ -5,6 +5,7 @@ import { OrchestrationEngine } from "../orchestration/engine";
 import { OrchestrationStore } from "../orchestration/store";
 import { nextActions } from "../orchestration/schedule";
 import type { ControlCommand, ExecutionBackend, OrchestrationView, ScheduleAction } from "../orchestration/types";
+import type { RoundArbiter } from "../orchestration/round-arbiter";
 
 export interface OrchestrationAddress { workspace: string; sessionId: string; }
 export interface OrchestrationSubmitRequest { address: OrchestrationAddress; request_id: string; plan: unknown; execute?: boolean; }
@@ -34,6 +35,8 @@ export class OrchestrationService {
     /** Optional authority check: the session must exist in the workspace, not just be a safe string. */
     sessionExists?: (workspace: string, sessionId: string) => boolean | Promise<boolean>;
     backendFor?: (address: OrchestrationAddress) => ExecutionBackend | null | Promise<ExecutionBackend | null>;
+    /** 一轮开始时的自动仲裁（发言权的引擎调用点）。缺席或返回 null ⇒ 引擎行为零变化。 */
+    roundArbiterFor?: (address: OrchestrationAddress) => RoundArbiter | null | Promise<RoundArbiter | null>;
   }) {}
   private async address(value: OrchestrationAddress): Promise<OrchestrationAddress> {
     if (this.closing) throw new Error("orchestration service is closing");
@@ -52,7 +55,12 @@ export class OrchestrationService {
         const store = await OrchestrationStore.open(join(this.config.dataDir, createHash("sha256").update(key).digest("hex"), "events.jsonl"));
         try {
           const backend = await this.config.backendFor?.(address) ?? null;
-          const options = { store, backend: backend ?? unavailable, enabled: false };
+          // 仲裁器按地址取（团队档案是全局的，但仲裁策略可以按工作区不同）。
+          const arbiter = (await this.config.roundArbiterFor?.(address)) ?? null;
+          const options = {
+            store, backend: backend ?? unavailable, enabled: false,
+            ...(arbiter === null ? {} : { roundArbiter: arbiter }),
+          };
           const engine = new OrchestrationEngine(options);
           await engine.recover();
           return { store, engine, backend, options };

@@ -10,9 +10,9 @@
 //
 // 跑法：pnpm --filter cairn-desktop build
 //       pnpm --filter cairn-desktop exec electron scripts/wallpaper-csp-smoke.cjs [输出目录]
-const { app, BrowserWindow, nativeTheme, net, protocol } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, net, powerMonitor, protocol } = require("electron");
 const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
-const { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
+const { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
 const { join, resolve } = require("node:path");
 const { tmpdir } = require("node:os");
 const zlib = require("node:zlib");
@@ -23,6 +23,15 @@ require(require.resolve("tsx/cjs", { paths: [repoRoot] }));
 const { handleWallpaperMedia, openWallpaperStream, registerWallpaperScheme, WALLPAPER_SCHEME } =
   require(join(__dirname, "../src/main/wallpaper.ts"));
 const { CSP_CONTENT } = require(join(__dirname, "../src/main/csp.ts"));
+const { PUSH_CHANNELS } = require(join(__dirname, "../src/main/channels.ts"));
+// 首帧底色（规格 §10 的 v1.1 项）：真 nativeImage 喂进去，判卷侧不复制它的解码逻辑。
+const { bootBackgroundWithTint, wallpaperTintFor } = require(join(__dirname, "../src/main/wallpaper-tint.ts"));
+const { bootBackgroundForWallpaper } = require(join(__dirname, "../src/main/boot-background.ts"));
+const { wallpaperDialogOptions } = require(join(__dirname, "../src/main/wallpaper-pick.ts"));
+const { installSuspendPause } = require(join(__dirname, "../src/main/wallpaper-suspend.ts"));
+// 对比度模型（地板判据的唯一一份）：真机读到的地板要过模型的最差格。
+const { CONTRAST_TARGET, LIGHT_SPEC, DARK_SPEC, floorFor, worstContrast } =
+  require(join(__dirname, "../src/renderer/derived/wallpaper-contrast.ts"));
 
 const profile = mkdtempSync(join(tmpdir(), "cairn-wallpaper-csp-profile-"));
 app.setPath("userData", profile);
@@ -37,6 +46,17 @@ const check = (name, ok, detail) => {
   console.log(`${ok === true ? "PASS" : "FAIL"} ${name} ${JSON.stringify(detail ?? null)}`);
 };
 const pause = (ms = 160) => new Promise((r) => setTimeout(r, ms));
+/** 轮询到条件成立（窗口聚焦这类 OS 级状态有延迟，断言不许只看一拍）。 */
+const waitFor = async (probe, ms = 6000, stepMs = 200) => {
+  const deadline = Date.now() + ms;
+  let last = null;
+  while (Date.now() < deadline) {
+    last = await probe();
+    if (last === true) return true;
+    await pause(stepMs);
+  }
+  return last === true;
+};
 const readings = {};
 
 // 测试壁纸：纯 Node 生成的对角渐变 PNG（不依赖 Python / ffmpeg）。一张图里同时含亮端与暗端。
@@ -107,29 +127,112 @@ function apiMembers() {
   return { version, members };
 }
 
-async function makeWindow(indexPath, errors) {
+async function makeWindow(indexPath, errors, opts = {}) {
   const { version, members } = apiMembers();
+  const theme = opts.theme === "light" ? "light" : "dark";
   const win = new BrowserWindow({
-    width: 1440, height: 900, show: false,
+    width: 1440, height: 900, show: opts.show === true,
     webPreferences: {
       backgroundThrottling: false,
       preload: join(__dirname, "ui-gallery-preload.cjs"),
       additionalArguments: [
         "--cairn-api-members=" + JSON.stringify(members),
         "--cairn-protocol-version=" + version,
-        "--cairn-wallpaper-fixture=" + wallpaperPath,
-        "--cairn-theme=dark",
+        // 两条壁纸臂互斥：视频臂不喂图片，免得窗口里其实挂的是另一条
+        ...(opts.video ? ["--cairn-wallpaper-video=" + opts.video] : ["--cairn-wallpaper-fixture=" + wallpaperPath]),
+        "--cairn-theme=" + theme,
       ],
     },
   });
   win.webContents.on("console-message", (d) => {
     if (d.level === "error") errors.push(d.message);
   });
-  await win.loadFile(indexPath);
+  // hash 必须走 loadFile 的选项：直接拼在路径里会被编码成 `%23`，报 ERR_FILE_NOT_FOUND。
+  wireActive(win);
+  if (opts.hash !== undefined) await win.loadFile(indexPath, { hash: opts.hash });
+  else await win.loadFile(indexPath);
   return win;
 }
 
 const jsOf = (win) => (source) => win.webContents.executeJavaScript(source, true);
+// v72：把主进程那份「活跃信号」装到测试窗口上（同一份实现），
+// 这样 `win.emit("focus"/"blur")` 走的是真代码路径 → 真推送名 → 渲染层的真订阅。
+const { installActivePush, WALLPAPER_ACTIVE_CHANNEL } = require(join(__dirname, "../src/main/wallpaper-active.ts"));
+// v73 应用内选择器：把**真实现**注册成真 IPC handler（与产品主进程同名同参），preload 只转发。
+const { browseDirectory } = require(join(__dirname, "../src/main/wallpaper-browse.ts"));
+const { pickWallpaper } = require(join(__dirname, "../src/main/wallpaper-pick.ts"));
+const { validateWallpaperFile } = require(join(__dirname, "../src/main/wallpaper.ts"));
+const { screen } = require("electron");
+const { resolveWeatherKind } = require(join(__dirname, "../src/main/wallpaper-rotation.ts"));
+const { fetchWeather } = require(join(__dirname, "../src/main/weather-http.ts"));
+const { createServer } = require("node:http");
+// v77 多显示器：用**真 screen** 枚举，handler 记录调用参数（设置写回由 preload 夹具承担）。
+const displayCalls = [];
+ipcMain.handle("agent:wallpaper-displays", () => {
+  const all = screen.getAllDisplays().map((d) => ({
+    id: String(d.id), width: d.bounds.width, height: d.bounds.height, scaleFactor: d.scaleFactor,
+    source: "fallback", path: "/tmp/fixture.png",
+  }));
+  return { ok: true, displays: all, orphans: [] };
+});
+ipcMain.handle("agent:wallpaper-set-for-display", (_e, id) => { displayCalls.push(String(id)); return { ok: true }; });
+// v78 天气来源：真 `resolveWeatherKind` 跑一遍（文件源读真实文件）
+// v79 联网天气源：本机起一个真 HTTP 服务（127.0.0.1），handler 用真 `fetchWeather` 去取。
+let weatherServer = null;
+let weatherUrl = "";
+const startWeatherServer = async () => {
+  if (weatherServer !== null) return weatherUrl;
+  weatherServer = createServer((_req, res) => {
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ weather: [{ id: 500 }] }));
+  });
+  await new Promise((r) => weatherServer.listen(0, "127.0.0.1", () => { r(); }));
+  const addr = weatherServer.address();
+  weatherUrl = `http://127.0.0.1:${addr.port}/weather`;
+  return weatherUrl;
+};
+ipcMain.handle("agent:wallpaper-weather-fetch", async () => {
+  // 判据只关心「真 fetch 能不能把本机载荷解析出来」——URL 一律指向本机起的服务。
+  const target = await startWeatherServer();
+  const r = await fetchWeather({ url: target, apiKey: "smoke-key" });
+  return { ok: true, ...r };
+});
+ipcMain.handle("agent:wallpaper-weather-set-key", (_e, key) => {
+  weatherKeyCalls.push(key === null ? "(null)" : "set");
+  return { ok: true };
+});
+const weatherKeyCalls = [];
+ipcMain.handle("agent:wallpaper-weather-now", (_e, wallpaper) => {
+  const r = resolveWeatherKind(wallpaper);
+  return { ok: true, kind: r.kind, source: r.source, detail: r.detail };
+});
+ipcMain.handle("agent:wallpaper-browse", (_e, dir) => browseDirectory(typeof dir === "string" && dir !== "" ? dir : join(out, "")));
+ipcMain.handle("agent:wallpaper-apply-path", (_e, path) => validateWallpaperFile(String(path ?? "")));
+const wireActive = (win) => {
+  installActivePush({
+    targets: [win], channel: WALLPAPER_ACTIVE_CHANNEL,
+    send: (channel, payload) => { if (!win.isDestroyed()) win.webContents.send(channel, payload); },
+    onError: () => undefined,
+  });
+  win.webContents.on("did-finish-load", () => {
+    if (!win.isDestroyed()) win.webContents.send(WALLPAPER_ACTIVE_CHANNEL, { active: win.isFocused() });
+  });
+};
+/** `rgb(11 11 11)` / `rgba(…)` → Rgb；读不出 ⇒ null。 */
+const rgbOfCss = (value) => {
+  const m = /rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)/.exec(String(value ?? ""));
+  return m === null ? null : { r: Number(m[1]), g: Number(m[2]), b: Number(m[3]) };
+};
+/** 用**真机测到的**文字/画布色拼 spec：判据读真值，不读手抄常量。 */
+const specOfMeasured = (text, canvas) => ({
+  text, canvas, glass: { r: 255, g: 255, b: 255 },
+  worstWallpaper: text.r > 128 ? { r: 255, g: 255, b: 255 } : { r: 0, g: 0, b: 0 },
+});
+/** 常量 spec 与真机真值的逐通道最大偏差（漂移就会浮出来）。 */
+const maxChannelDrift = (spec, text, canvas) => Math.max(
+  ...[spec.text.r - text.r, spec.text.g - text.g, spec.text.b - text.b,
+    spec.canvas.r - canvas.r, spec.canvas.g - canvas.g, spec.canvas.b - canvas.b].map(Math.abs),
+);
 const shot = async (win, name) => {
   await pause(220);
   writeFileSync(join(out, name + ".png"), (await win.webContents.capturePage()).toPNG());
@@ -221,15 +324,43 @@ async function main() {
       mainBackdrop: main ? getComputedStyle(main).backdropFilter : null,
       floor: getComputedStyle(document.documentElement).getPropertyValue('--cw-floor').trim(),
       wallpaperOpacity: getComputedStyle(document.documentElement).getPropertyValue('--cw-wallpaper-opacity').trim(),
+      text: getComputedStyle(document.documentElement).getPropertyValue('--cw-text').trim(),
+      canvas: getComputedStyle(document.documentElement).getPropertyValue('--cw-canvas').trim(),
     };
   })()`);
   readings.layer = layer;
+  // Electron 安全清单的**真机**读数（不是读代码猜）：渲染层拿不到 require / process，
+  // 但 preload 暴露的面（window.agent）必须在。这三项是 contextIsolation + sandbox 的直接后果。
+  const isolation = await js(`(() => ({
+    hasRequire: typeof window.require,
+    hasProcess: typeof window.process,
+    hasAgent: typeof window.agent,
+    hasNodeGlobals: [typeof window.module, typeof window.Buffer, typeof window.global].join(","),
+  }))()`);
+  readings.rendererIsolation = isolation;
+  check("Electron 安全清单：渲染层没有 require/process/node 全局，只留 window.agent",
+    isolation.hasRequire === "undefined" && isolation.hasProcess === "undefined"
+      && isolation.hasAgent === "object" && !isolation.hasNodeGlobals.includes("object"),
+    isolation);
   check("壁纸图真加载（naturalWidth>0，地址走壁纸协议）",
     layer.natural !== null && layer.natural[0] > 0 && layer.natural[1] > 0 && String(layer.src).startsWith(`${WALLPAPER_SCHEME}://`), layer);
   check("开壁纸时 body 画布透明、两个接缝属性都在",
     layer.bodyBg === "rgba(0, 0, 0, 0)" && layer.bodyAttr && layer.htmlAttr, { bodyBg: layer.bodyBg, bodyAttr: layer.bodyAttr, htmlAttr: layer.htmlAttr });
   check("玻璃面拿到 backdrop-filter，地板变量已算出",
     layer.mainBackdrop !== null && layer.mainBackdrop !== "none" && layer.floor !== "", { mainBackdrop: layer.mainBackdrop, floor: layer.floor });
+  // 判据 2（暗色）：地板由运行时按真实计算样式算出，最差格按同一套真值算。
+  const darkText = rgbOfCss(layer.text);
+  const darkCanvas = rgbOfCss(layer.canvas);
+  const darkSpec = darkText === null || darkCanvas === null ? null : specOfMeasured(darkText, darkCanvas);
+  const darkFloor = Number(String(layer.floor).replace("%", "")) / 100;
+  const darkWorst = darkSpec === null ? 0 : worstContrast(darkSpec, darkFloor);
+  const darkDrift = darkSpec === null ? 999 : maxChannelDrift(DARK_SPEC, darkSpec.text, darkSpec.canvas);
+  readings.darkContrast = { floor: darkFloor, worst: darkWorst, drift: darkDrift, text: layer.text, canvas: layer.canvas };
+  check("暗色主题：最差格 ≥ 4.5:1（按真机测到的文字/画布色算）",
+    darkFloor > 0 && darkWorst >= CONTRAST_TARGET, readings.darkContrast);
+  check("暗色主题：模型常量与真实计算样式一致（差 ≤2/通道，防常量漂移）",
+    darkDrift <= 2, { drift: darkDrift, const: DARK_SPEC.text, measured: darkSpec === null ? null : darkSpec.text });
+
   const cspErrors = errors.filter((m) => /Content Security Policy/i.test(m));
   check("真渲染层无 CSP 违规", cspErrors.length === 0, { cspErrors, errorCount: errors.length });
   await shot(win, "01-wallpaper-on-dark-1440x900");
@@ -297,11 +428,137 @@ async function main() {
     && row.sliders.every((s) => s.label.length > 0 && s.labelLines === 1), row.sliders);
   check("滑杆本体够宽（≥200px，控件 md 档）且拿到主题强调色",
     row.found && row.sliders.every((s) => s.rangeWidth >= 200 && s.accent !== "" && s.accent !== "auto"), row.sliders);
-  check("已设壁纸时按钮读动作词「选择图片或视频」，不读状态词「未设置」",
-    row.found && row.buttons.length === 2 && row.buttons[0].text === "选择图片或视频" && row.status === null, row.buttons);
+  check("已设壁纸时按钮读动作词（选择 / 浏览本机 / 清除），不读状态词「未设置」",
+    row.found && row.buttons.length === 3 && row.buttons[0].text === "选择图片或视频"
+      && row.buttons[1].text === "浏览本机…" && row.buttons[2].text === "清除" && row.status === null, row.buttons);
   check("选/清两个按钮可见且有底色（不是透明白字）",
     row.found && row.buttons.length >= 1 && row.buttons.every((b) => b.width > 0 && b.bg !== "rgba(0, 0, 0, 0)"), row.buttons);
   await shot(win, "02-settings-wallpaper-row-1440x900");
+
+  // ④b 定时轮换（2026-11-16）：勾上开关 + 把当前壁纸加入轮换 ⇒ 设置里落 rotation。
+  // 注意：每次点击后 React 会重渲染，节点会换掉——所以每一步都重新查，别攥着旧引用。
+  const rotationFlow = await js(`(async () => {
+    const q = (sel) => document.querySelector(sel);
+    if (q('[data-wallpaper-rotation="true"]') === null) return { step: "no-box" };
+    q('[data-wallpaper-rotation="true"] input[type="checkbox"]').click();
+    await new Promise((r) => setTimeout(r, 250));
+    const afterToggle = await window.agent.getSettings();
+    const add = q('[data-wallpaper-rotation-add="true"]');
+    if (add === null) return { step: "no-add", enabled: afterToggle.wallpaper.rotation.enabled };
+    if (add.disabled) return { step: "add-disabled", enabled: afterToggle.wallpaper.rotation.enabled, path: afterToggle.wallpaper.path };
+    add.click();
+    await new Promise((r) => setTimeout(r, 400));
+    const s2 = await window.agent.getSettings();
+    return {
+      step: "done",
+      enabled: s2.wallpaper.rotation.enabled,
+      paths: s2.wallpaper.rotation.paths.length,
+      countText: (q('[data-wallpaper-rotation-count="true"]') || {}).textContent || "",
+    };
+  })()`);
+  readings.rotation = rotationFlow;
+  check("定时轮换：勾开关 + 加入当前壁纸 ⇒ rotation 落进设置（候选 1 张）",
+    rotationFlow.step === "done" && rotationFlow.enabled === true && rotationFlow.paths === 1
+      && String(rotationFlow.countText).includes("1"),
+    rotationFlow);
+
+  // ④d 按天气（手动档，不联网）：切到 weather 模式、选「雨」、设为该天气 ⇒ 设置里落 weather.paths.rain。
+  const weatherFlow = await js(`(async () => {
+    const box = document.querySelector('[data-wallpaper-rotation="true"]');
+    if (!box) return { step: "no-box" };
+    const modeBtn = box.querySelector('[data-rotation-mode="weather"]');
+    if (!modeBtn) return { step: "no-mode" };
+    const setSelect = (el, value) => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, "value").set;
+      setter.call(el, value);
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+    modeBtn.click();
+    await new Promise((r) => setTimeout(r, 350));
+    const kindBtn = box.querySelector('[data-weather-kind="rain"]');
+    if (!kindBtn) return { step: "no-kind" };
+    kindBtn.click();
+    await new Promise((r) => setTimeout(r, 350));
+    const setBtn = box.querySelector('[data-wallpaper-weather-set="true"]');
+    if (!setBtn) return { step: "no-set" };
+    setBtn.click();
+    await new Promise((r) => setTimeout(r, 400));
+    const s = await window.agent.getSettings();
+    return { step: "done", mode: s.wallpaper.rotation.mode, kind: s.wallpaper.rotation.weather.kind, rain: s.wallpaper.rotation.weather.paths.rain ?? null };
+  })()`);
+  // 天气来源（v78）：勾「从文件读天气」+ 填路径 ⇒ weatherNow 解析出文件里的 code（雨）。
+  const weatherFile = join(out, "weather-source.json");
+  writeFileSync(weatherFile, JSON.stringify({ code: 500 }));
+  const fileFlow = await js(`(async () => {
+    const box = document.querySelector('[data-wallpaper-rotation="true"]');
+    if (!box) return { step: "no-box" };
+    const cb = box.querySelector('[data-weather-source="file"]');
+    if (!cb) return { step: "no-source" };
+    cb.click();
+    await new Promise((r) => setTimeout(r, 300));
+    const input = document.querySelector('.cw-weather-path');
+    if (!input) return { step: "no-path" };
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    setter.call(input, ${JSON.stringify(weatherFile)});
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 400));
+    const now = await window.agent.wallpaperWeatherNow();
+    return { step: "done", kind: now.kind, source: now.source };
+  })()`);
+  // 联网源（v79）：切「联网」+ 填本机 URL + 点「测试连接」⇒ 真 fetch 到本机服务，解析出 rain。
+  const httpFlow = await js(`(async () => {
+    const box = document.querySelector('[data-wallpaper-rotation="true"]');
+    if (!box) return { step: "no-box" };
+    const srcBtn = box.querySelector('[data-weather-source="http"]');
+    if (!srcBtn) return { step: "no-source" };
+    srcBtn.click();
+    await new Promise((r) => setTimeout(r, 300));
+    const urlInput = document.querySelector('.cw-weather-url');
+    if (!urlInput) return { step: "no-url" };
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    setter.call(urlInput, "http://127.0.0.1/placeholder");
+    urlInput.dispatchEvent(new Event("input", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 300));
+    const test = document.querySelector('[data-wallpaper-weather-test="true"]');
+    if (!test) return { step: "no-test" };
+    test.click();
+    await new Promise((r) => setTimeout(r, 900));
+    const shown = document.querySelector('[data-wallpaper-weather-now="true"]');
+    return { step: "done", text: shown ? shown.textContent : "" };
+  })()`);
+  readings.weatherHttp = { ...httpFlow, keyCalls: [...weatherKeyCalls], url: weatherUrl };
+  check("联网天气源：点「测试连接」⇒ 真 fetch 本机服务并解析出 rain",
+    httpFlow.step === "done" && String(httpFlow.text).includes("rain"),
+    readings.weatherHttp);
+
+  readings.weatherFile = fileFlow;
+  check("天气来源：勾「从文件读天气」+ 填 JSON ⇒ 解析出 rain（code 500）",
+    fileFlow.step === "done" && fileFlow.kind === "rain" && fileFlow.source === "file",
+    fileFlow);
+
+  readings.weather = weatherFlow;
+  check("按天气：切到 weather + 选「雨」+ 设为该天气 ⇒ weather.paths.rain 落进设置",
+    weatherFlow.step === "done" && weatherFlow.mode === "weather" && weatherFlow.kind === "rain"
+      && typeof weatherFlow.rain === "string",
+    weatherFlow);
+
+  // ④c 多显示器（v77）：屏数来自真 screen；点「设为这块屏」把真 display.id 传下去。
+  const displayFlow = await js(`(async () => {
+    await new Promise((r) => setTimeout(r, 300));
+    const box = document.querySelector('[data-wallpaper-displays="true"]');
+    if (!box) return { step: "no-box" };
+    const ids = [...box.querySelectorAll('[data-display-id]')].map((n) => n.getAttribute("data-display-id"));
+    const btn = box.querySelector('[data-wallpaper-display-set="true"]');
+    if (!btn) return { step: "no-button", ids };
+    btn.click();
+    await new Promise((r) => setTimeout(r, 400));
+    return { step: "done", ids, note: (document.querySelector('[data-wallpaper-display-note="true"]') || {}).textContent || "" };
+  })()`);
+  readings.displays = { ...displayFlow, calls: [...displayCalls] };
+  check("多显示器：屏数与真 screen 一致，点「设为这块屏」传的是真 display.id",
+    displayFlow.step === "done" && displayFlow.ids.length === screen.getAllDisplays().length
+      && displayCalls.length === 1 && displayCalls[0] === displayFlow.ids[0],
+    readings.displays);
 
   // ⑤ 真指针可达 + 真点击改值（脚本 .click() 不算）。
   const sliderProbe = await pointerClick(win, ".cw-slider:nth-of-type(1) input[type='range']", 0.2);
@@ -325,7 +582,7 @@ async function main() {
   readings.pickPointer = { ...pickProbe, ...afterPick };
   check("选壁纸按钮真指针命中并调到 wallpaperPick", pickProbe.hit.hits && afterPick.picks >= 1, readings.pickPointer);
 
-  const clearProbe = await pointerClick(win, ".cw-settings-actions button:nth-of-type(2)");
+  const clearProbe = await pointerClick(win, ".cw-settings-actions button:nth-of-type(3)");
   await pause(300);
   const afterClear = await js(`(() => ({
     layer: !!document.querySelector('.cw-layer'),
@@ -339,8 +596,9 @@ async function main() {
   readings.clearPointer = { ...clearProbe, ...afterClear };
   check("清除按钮真指针命中；清除后撤层、摘属性、画布回实体色",
     clearProbe.hit.hits && !afterClear.layer && !afterClear.bodyAttr && !afterClear.htmlAttr && afterClear.bodyBg !== "rgba(0, 0, 0, 0)", afterClear);
-  check("清除后状态词「未设置」出现、清除按钮收起、选按钮仍是动作词",
-    afterClear.status === "未设置" && afterClear.buttons.length === 1 && afterClear.buttons[0] === "选择图片或视频", afterClear);
+  check("清除后状态词「未设置」出现、清除按钮收起、选择/浏览两个动作词还在",
+    afterClear.status === "未设置" && afterClear.buttons.length === 2
+      && afterClear.buttons[0] === "选择图片或视频" && afterClear.buttons[1] === "浏览本机…", afterClear);
   await shot(win, "03-wallpaper-cleared-1440x900");
 
   // ⑥ 反证臂：同一份产物、只把 img-src 里的 scheme 摘掉 ⇒ 同一张图必须加载不出来。
@@ -365,6 +623,758 @@ async function main() {
     (negative.natural === null || negative.natural === 0) && negativeCsp.length > 0, readings.negativeControl);
   await shot(negativeWin, "04-negative-control-no-scheme-1440x900");
   negativeWin.destroy();
+
+  // ⑦ 首帧底色（规格 §10 的 v1.1 项）：真 nativeImage 解码 → 1×1 PNG → 平均色。
+  // 判据不是「看起来像个颜色」，而是**与生成式算出的均值对齐**（差 ≤6/通道）：
+  // 通道顺序写错（BGRA/RGBA 互换）会立刻偏出这个带子。
+  const loadPortrait = (path) => {
+    const img = nativeImage.createFromPath(path);
+    return img.isEmpty() ? null : img.resize({ width: 1, height: 1, quality: "good" });
+  };
+  const videoFixture = join(__dirname, "fixtures", "wallpaper-smoke.mp4");
+  const imageTint = wallpaperTintFor({ kind: "image", path: wallpaperPath }, loadPortrait);
+  const videoTint = wallpaperTintFor({ kind: "video", path: videoFixture }, loadPortrait);
+  const missingTint = wallpaperTintFor({ kind: "image", path: join(out, "no-such-file.png") }, loadPortrait);
+  const meanT = ((640 - 1) / 2 + (400 - 1) / 2) / (640 + 400);
+  const expectTint = [255 * meanT, 140 * (1 - meanT), 255 * (1 - meanT)].map((v) => Math.round(v));
+  const tintRgb = /^#[0-9a-f]{6}$/.test(String(imageTint))
+    ? [1, 3, 5].map((i) => parseInt(String(imageTint).slice(i, i + 2), 16))
+    : null;
+  const tintNear = tintRgb !== null && tintRgb.every((v, i) => Math.abs(v - expectTint[i]) <= 6);
+  readings.tint = { imageTint, expect: expectTint, rgb: tintRgb, near: tintNear,
+    videoTint, missingTint, fallback: bootBackgroundWithTint("#1b1b1b", missingTint) };
+  check("图片壁纸的首帧底色＝真解码的平均色（与生成式均值差 ≤6/通道）", tintNear, readings.tint);
+  // ⑦b 真 Electron 认这个底色：同一份决策拼一个窗口，把窗口底色读回来。
+  // 只验纯函数是不够的——「算得出颜色」与「窗口真的铺这个颜色」是两件事。
+  const bootTint = bootBackgroundForWallpaper({
+    themeBackground: "#1b1b1b",
+    wallpaper: { kind: "image", path: wallpaperPath },
+    load: loadPortrait,
+  });
+  const bootProbeWin = new BrowserWindow({
+    show: false, width: 200, height: 120, backgroundColor: bootTint,
+  });
+  const appliedBackground = bootProbeWin.getBackgroundColor();
+  bootProbeWin.destroy();
+  readings.bootBackground = { bootTint, appliedBackground };
+  check("真 Electron 接受首帧底色（窗口底色读回＝平均色，不是主题底色）",
+    String(appliedBackground).toLowerCase() === String(imageTint).toLowerCase(), readings.bootBackground);
+
+  check("视频壁纸与读不出的文件都不出色，回落主题底色",
+    videoTint === null && missingTint === null && bootBackgroundWithTint("#1b1b1b", missingTint) === "#1b1b1b",
+    { videoTint, missingTint });
+
+  // ⑧ 亮色主题：同一张壁纸、同一份产物，只换主题 ⇒ 画布让位、玻璃面与地板都要在，
+  // 且**用真机读到的地板**过一遍模型的判据（判据 2 在亮色下也成立，不是只在暗色下验过）。
+  const lightErrors = [];
+  const lightWin = await makeWindow(join(distDir, "index.html"), lightErrors, { theme: "light" });
+  const ljs = jsOf(lightWin);
+  for (let i = 0; i < 100; i++) { if (await ljs(`!!document.querySelector('.avatar')`)) break; await pause(); }
+  await pause(600);
+  const light = await ljs(`(() => {
+    const img = document.querySelector('.cw-layer img.cw-media');
+    const root = getComputedStyle(document.documentElement);
+    const main = document.querySelector('.main');
+    return {
+      theme: document.documentElement.dataset.theme ?? null,
+      img: img ? [img.naturalWidth, img.naturalHeight] : null,
+      bodyBg: getComputedStyle(document.body).backgroundColor,
+      backdrop: main ? getComputedStyle(main).backdropFilter : null,
+      floor: root.getPropertyValue('--cw-floor').trim(),
+      text: root.getPropertyValue('--cw-text').trim(),
+      canvas: root.getPropertyValue('--cw-canvas').trim(),
+    };
+  })()`);
+  const lightFloor = Number(String(light.floor).replace("%", "")) / 100;
+  const lightText = rgbOfCss(light.text);
+  const lightCanvas = rgbOfCss(light.canvas);
+  const lightSpec = lightText === null || lightCanvas === null ? null : specOfMeasured(lightText, lightCanvas);
+  // 判据读**真机真值**：地板由运行时按真实计算样式算出，最差格也必须按同一套真值算。
+  const lightWorst = lightSpec === null ? 0 : worstContrast(lightSpec, lightFloor);
+  const lightDrift = lightSpec === null ? 999 : maxChannelDrift(LIGHT_SPEC, lightSpec.text, lightSpec.canvas);
+  readings.light = { ...light, floorFraction: lightFloor, worst: lightWorst, drift: lightDrift };
+  check("亮色主题：壁纸真加载、画布让位、玻璃面拿到模糊",
+    light.theme === "light" && light.img !== null && light.img[0] > 0
+      && light.bodyBg === "rgba(0, 0, 0, 0)" && String(light.backdrop).includes("blur"), light);
+  check("亮色主题：最差格 ≥ 4.5:1（按真机测到的文字/画布色算，判据 2 在亮色下同样成立）",
+    lightFloor > 0 && lightWorst >= CONTRAST_TARGET, { floor: lightFloor, worst: lightWorst, target: CONTRAST_TARGET });
+  check("亮色主题：模型常量与真实计算样式一致（差 ≤2/通道，防常量漂移）",
+    lightDrift <= 2, { drift: lightDrift, const: LIGHT_SPEC.text, measured: lightSpec === null ? null : lightSpec.text });
+  await shot(lightWin, "06-light-theme-wallpaper-1440x900");
+  lightWin.destroy();
+
+  // ⑧b 应用内选择器（v73）：设置里「浏览本机…」→ 输目录 → 点文件 ⇒ 真选中并应用。
+  // 这一格存在的理由：原生面板的点选在无辅助功能权限的机器上不可自动化，这条路径可以。
+  const browseWin = await makeWindow(join(distDir, "index.html"), [], { theme: "dark" });
+  const bjs = jsOf(browseWin);
+  for (let i = 0; i < 100; i++) { if (await bjs(`!!document.querySelector('.avatar')`)) break; await pause(); }
+  await bjs(`(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', code: 'Comma', metaKey: true, bubbles: true })); })()`);
+  await pause(500);
+  const browserFlow = await bjs(`(async () => {
+    const toggle = [...document.querySelectorAll('[data-wallpaper-browse-toggle="true"]')][0];
+    if (!toggle) return { step: "no-toggle" };
+    toggle.click();
+    await new Promise((r) => setTimeout(r, 500));
+    const dirInput = document.querySelector('.cw-browser-dir');
+    if (!dirInput) return { step: "no-input" };
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    setter.call(dirInput, ${JSON.stringify(out)});
+    dirInput.dispatchEvent(new Event("input", { bubbles: true }));
+    const go = [...document.querySelectorAll('.cw-browser-bar .mini-btn')].pop();
+    go.click();
+    await new Promise((r) => setTimeout(r, 700));
+    const rows = [...document.querySelectorAll('.cw-browser-row.file')];
+    if (rows.length === 0) return { step: "no-files", names: [...document.querySelectorAll('.cw-browser-row')].map((r) => r.textContent) };
+    const target = rows.find((r) => (r.textContent || "").includes(".png")) || rows[0];
+    const picked = target.getAttribute("title");
+    target.click();
+    await new Promise((r) => setTimeout(r, 900));
+    const settings = await window.agent.getSettings();
+    return { step: "done", picked, applied: settings.wallpaper.path, kind: settings.wallpaper.kind, files: rows.length };
+  })()`);
+  readings.inAppPick = browserFlow;
+  check("应用内选择器：点文件 ⇒ 真校验并应用（设置里的壁纸路径就是它）",
+    browserFlow.step === "done" && typeof browserFlow.picked === "string"
+      && browserFlow.applied === browserFlow.picked && browserFlow.kind === "image",
+    { step: browserFlow.step, picked: browserFlow.picked, applied: browserFlow.applied, kind: browserFlow.kind });
+  browseWin.destroy();
+
+  // ⑧c 键盘可达（WCAG 2.2 SC 2.1.1）：**只用键盘**在应用内选择器里走到文件行并选中。
+  // 这一格不靠鼠标：Tab 走焦点、Enter 激活，判的是「全部功能可用键盘完成」。
+  const kbWin = await makeWindow(join(distDir, "index.html"), [], { theme: "dark" });
+  const kbjs = jsOf(kbWin);
+  for (let i = 0; i < 100; i++) { if (await kbjs(`!!document.querySelector('.avatar')`)) break; await pause(); }
+  await kbjs(`(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', code: 'Comma', metaKey: true, bubbles: true })); })()`);
+  await pause(500);
+  // 打开选择器（这一步用脚本点击做**场景准备**，后面的选择过程才是被判的键盘路径）
+  await kbjs(`(() => {
+    const t = document.querySelector('[data-wallpaper-browse-toggle="true"]'); if (t) t.click();
+    const input = document.querySelector('.cw-browser-dir');
+    if (input) {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+      setter.call(input, ${JSON.stringify(out)});
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    const go = [...document.querySelectorAll('.cw-browser-bar .mini-btn')].pop(); if (go) go.click();
+  })()`);
+  await pause(800);
+  const key = (keyCode) => {
+    kbWin.webContents.sendInputEvent({ type: "keyDown", keyCode });
+    kbWin.webContents.sendInputEvent({ type: "char", keyCode });
+    kbWin.webContents.sendInputEvent({ type: "keyUp", keyCode });
+  };
+  kbWin.webContents.focus();
+  let focusedRow = null;
+  for (let i = 0; i < 90; i++) {
+    key("Tab");
+    await pause(60);
+    focusedRow = await kbjs(`(() => {
+      const el = document.activeElement;
+      if (!el) return null;
+      return { tag: el.tagName, cls: String(el.className || ""), text: (el.textContent || "").slice(0, 40) };
+    })()`);
+    if (focusedRow !== null && focusedRow.cls.includes("cw-browser-row") && focusedRow.cls.includes("file")) break;
+  }
+  key("Return");
+  await pause(900);
+  const kbResult = await kbjs(`(async () => {
+    const s = await window.agent.getSettings();
+    return { path: s.wallpaper.path, kind: s.wallpaper.kind, active: (document.activeElement || {}).className || "" };
+  })()`);
+  readings.keyboardPick = { focusedRow, ...kbResult };
+  check("键盘可达：Tab 走到文件行、Enter 选中并应用（WCAG 2.2 SC 2.1.1）",
+    focusedRow !== null && focusedRow.cls.includes("cw-browser-row")
+      && typeof kbResult.path === "string" && kbResult.kind === "image"
+      && String(kbResult.path).endsWith(".png") && String(kbResult.path).includes(out.split("/").pop()),
+    readings.keyboardPick);
+  kbWin.destroy();
+
+  // ⑨ 视频壁纸：真视频、真解码；失焦即暂停、回焦即续播（规格 §6 / 判据 3 的老账）。
+  // 窗口必须真显示并聚焦：暂停判据读的是 document.hasFocus()，隐藏窗口永远「没焦点」。
+  const videoErrors = [];
+  currentPath = videoFixture;
+  const videoWin = await makeWindow(join(distDir, "index.html"), videoErrors, { theme: "dark", video: videoFixture, show: true });
+  // v72：**不再依赖 OS 焦点**。活跃态由主进程按真窗口的 focus/blur 推给渲染层，
+  // 所以判据可以用 `videoWin.emit("blur"/"focus")` 驱动同一份真实现（不需要抢前台）。
+  const vjs = jsOf(videoWin);
+  for (let i = 0; i < 100; i++) { if (await vjs(`!!document.querySelector('.avatar')`)) break; await pause(); }
+  // 这一轮本机拿不到 OS 前台焦点，但主进程的活跃信号是按**真 focus/blur 事件**推的，
+  // 所以用窗口事件把「已获得焦点」这一事实告诉渲染层（与真实聚焦同一条代码路径）。
+  videoWin.emit("focus");
+  await pause(300);
+  const videoState = () => vjs(`(() => {
+    const v = document.querySelector('.cw-layer video.cw-media');
+    if (v === null) return { has: false };
+    return {
+      has: true, src: v.currentSrc, paused: v.paused, t: Math.round(v.currentTime * 100) / 100,
+      ready: v.readyState, duration: Number.isFinite(v.duration) ? v.duration : null,
+      focused: document.hasFocus(), hidden: document.hidden,
+    };
+  })()`);
+  let videoPlaying = { has: false };
+  for (let i = 0; i < 60; i++) {
+    videoPlaying = await videoState();
+    if (videoPlaying.has === true && videoPlaying.ready >= 2 && videoPlaying.paused === false && videoPlaying.t > 0) break;
+    await pause(200);
+  }
+  readings.videoPlaying = videoPlaying;
+  check("视频壁纸真解码并自动播放（readyState≥2 且 currentTime>0）",
+    videoPlaying.has === true && videoPlaying.ready >= 2 && videoPlaying.paused === false && videoPlaying.t > 0,
+    videoPlaying);
+  await shot(videoWin, "07-video-wallpaper-playing-1440x900");
+  // 失焦：走主进程的真 focus/blur 推送（与 OS 真实失焦同一条代码路径）。
+  videoWin.emit("blur");
+  await waitFor(async () => (await videoState()).paused === true);
+  const videoBlurred = await videoState();
+  readings.videoBlurred = videoBlurred;
+  check("失焦即暂停（window blur ⇒ video.paused === true，判据 3）",
+    videoBlurred.has === true && videoBlurred.paused === true, videoBlurred);
+  videoWin.emit("focus");
+  await waitFor(async () => {
+    const s = await videoState();
+    return s.has === true && s.paused === false;
+  });
+  const videoResumed = await videoState();
+  readings.videoResumed = videoResumed;
+  check("回焦即续播（判据 3 的反向臂：不是一次性停掉）",
+    videoResumed.has === true && videoResumed.paused === false, videoResumed);
+  // ⑨b v59：系统级暂停（锁屏）——窗口既没失焦也没隐藏，只有主进程推得动这一格。
+  // 这里走的是真 preload 订阅 + 真推送名（`__cairnPushWallpaperSuspend` 由画廊 preload 收集订阅后转发）。
+  await vjs(`window.__cairnPushWallpaperSuspend({ paused: true, reason: "lock-screen" })`);
+  await pause(600);
+  const locked = await videoState();
+  readings.videoLocked = locked;
+  check("锁屏推送 ⇒ 暂停（窗口仍可见且未被 blur：这一格只有 v59 的系统级信号能抓到）",
+    locked.has === true && locked.paused === true && locked.hidden === false, locked);
+  await vjs(`window.__cairnPushWallpaperSuspend({ paused: false, reason: "unlock-screen" })`);
+  await waitFor(async () => {
+    const s = await videoState();
+    return s.has === true && s.paused === false;
+  });
+  const videoUnlocked = await videoState();
+  readings.videoUnlocked = videoUnlocked;
+  check("解锁推送 ⇒ 续播（系统级暂停不是单向门）",
+    videoUnlocked.has === true && videoUnlocked.paused === false, videoUnlocked);
+  await shot(videoWin, "08-video-wallpaper-resumed-1440x900");
+  videoWin.destroy();
+  currentPath = wallpaperPath;
+
+  // ⑩ 降级链（规格 §7）：媒体 404 ⇒ 撤层、摘属性、设置行点名「文件不可用」——
+  // 这一格从前只有文档承诺（「设置里标记」），没有真机读数。
+  const degradeErrors = [];
+  currentPath = join(out, "gone-wallpaper.png");
+  const degradeWin = await makeWindow(join(distDir, "index.html"), degradeErrors, { theme: "dark" });
+  const djs = jsOf(degradeWin);
+  for (let i = 0; i < 100; i++) { if (await djs(`!!document.querySelector('.avatar')`)) break; await pause(); }
+  await pause(900);
+  const degraded = await djs(`(() => ({
+    layer: !!document.querySelector('.cw-layer'),
+    bodyAttr: document.body.hasAttribute('data-we-wallpaper'),
+    bodyBg: getComputedStyle(document.body).backgroundColor,
+    mainBackdrop: document.querySelector('.main') ? getComputedStyle(document.querySelector('.main')).backdropFilter : null,
+  }))()`);
+  readings.degraded = degraded;
+  check("降级：媒体 404 ⇒ 撤层并摘属性（玻璃面留着，不出现透明壳）",
+    degraded.layer === false && degraded.bodyAttr === false && degraded.bodyBg !== "rgba(0, 0, 0, 0)",
+    degraded);
+  await djs(`(() => { if (!document.querySelector('.sp-page')) window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', code: 'Comma', metaKey: true, bubbles: true })); })()`);
+  await pause(500);
+  const degradeMarker = await djs(`(() => {
+    const box = document.querySelector('.cw-settings');
+    if (!box) return { found: false };
+    const row = box.closest('.ss-row') ?? box.parentElement;
+    return { found: true, text: (row ? row.textContent : box.textContent) ?? "" };
+  })()`);
+  readings.degradeMarker = degradeMarker;
+  check("降级：设置行点名「文件不可用」（用户看得到原因，不是对着空白猜）",
+    degradeMarker.found === true && String(degradeMarker.text).includes("文件不可用"), degradeMarker);
+  await shot(degradeWin, "09-degraded-file-unavailable-1440x900");
+  degradeWin.destroy();
+  currentPath = wallpaperPath;
+
+  // ⑪ 团队面板（v59 的第一刀界面）：设置里能进「团队」、名单渲染、能加人、能移除。
+  // 桩给的是**真形状**的名单（`teamRoster`/`teamMemberSave`），真落盘那一段由下面 ⑫ 判。
+  const teamWin = await makeWindow(join(distDir, "index.html"), []);
+  const tjs = jsOf(teamWin);
+  for (let i = 0; i < 100; i++) { if (await tjs(`!!document.querySelector('.avatar')`)) break; await pause(); }
+  await tjs(`(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', code: 'Comma', metaKey: true, bubbles: true })); })()`);
+  await pause(500);
+  const navClicked = await tjs(`(() => {
+    const btn = [...document.querySelectorAll('.sp-nav-item')].find((b) => (b.textContent || "").includes("团队"));
+    if (!btn) return { found: false };
+    btn.click();
+    return { found: true, text: btn.textContent };
+  })()`);
+  await pause(600);
+  const teamPanel = await tjs(`(() => {
+    const body = document.querySelector('.sp-body, .sp-page, .sp-content') ?? document.body;
+    const html = body ? body.textContent : "";
+    return {
+      html: String(html).slice(0, 4000),
+      rows: [...document.querySelectorAll('.ss-row')].map((r) => r.textContent || ""),
+      selects: document.querySelectorAll('.ss-select').length,
+      inputs: document.querySelectorAll('.ss-input').length,
+    };
+  })()`);
+  readings.teamPanel = { navClicked, rows: teamPanel.rows.slice(0, 8), selects: teamPanel.selects, inputs: teamPanel.inputs };
+  // v61 三维读数：权限成员维 / 记忆作用域 / 按成员用量，都要在同一屏上看得见。
+  check("团队面板渲染三维读数（权限成员维 / 记忆作用域 / 按成员用量）",
+    teamPanel.html.includes("团队档 default") && teamPanel.html.includes("team 1") && teamPanel.html.includes("main 1200/340"),
+    { sample: teamPanel.html.slice(0, 600) });
+  check("设置里能进「团队」并且面板渲染出名单（种子成员 + 档位选择器）",
+    navClicked.found === true && teamPanel.html.includes("示例成员") && teamPanel.selects >= 2, readings.teamPanel);
+  // 真指针点「添加」：填名字 → 点按钮 → 名单里多一个人
+  const typed = await tjs(`(() => {
+    const input = document.querySelector('.ss-input');
+    if (!input) return { ok: false };
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    setter.call(input, "新来的");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    return { ok: true, value: input.value };
+  })()`);
+  await pause(200);
+  const addClicked = await tjs(`(() => {
+    const btn = [...document.querySelectorAll('.mini-btn')].find((b) => (b.textContent || "").includes("添加"));
+    if (!btn) return { found: false };
+    btn.click();
+    return { found: true };
+  })()`);
+  await pause(700);
+  const afterAdd = await tjs(`(() => ({ rows: [...document.querySelectorAll('.ss-row')].map((r) => r.textContent || "") }))()`);
+  readings.teamPanel.add = { typed, addClicked, rows: afterAdd.rows.slice(0, 8) };
+  check("在面板里加一个人 ⇒ 名单真的多一行（写入口只有一条通道）",
+    addClicked.found === true && afterAdd.rows.some((r) => r.includes("新来的")), readings.teamPanel.add);
+  await shot(teamWin, "10-team-panel-1440x900");
+  // ⑪b 发言权的调用点：点「排一轮」⇒ 主进程回包 ⇒ 面板按批序渲染（不是渲染层自己算）。
+  const planClicked = await tjs(`(() => {
+    const btn = [...document.querySelectorAll('.mini-btn')].find((b) => (b.textContent || "").includes("排一轮"));
+    if (!btn) return { found: false };
+    btn.click();
+    return { found: true };
+  })()`);
+  await pause(700);
+  const planShown = await tjs(`(() => {
+    const rows = [...document.querySelectorAll('.ss-row')].map((r) => r.textContent || "");
+    return { rows, calls: window.__cairnRoundPlans ? window.__cairnRoundPlans().length : 0 };
+  })()`);
+  readings.teamRound = { planClicked, planShown };
+  check("「排一轮」真的调到 teamRoundPlan，并把批序渲染出来（发言权有调用方）",
+    planClicked.found === true && planShown.calls >= 1 && planShown.rows.some((r) => /1\./.test(r) && r.includes("示例成员")),
+    readings.teamRound);
+  // ⑪c 段的写入点：点「开新段」⇒ 调用 sessionSegmentOpen ⇒ 面板显示新序数。
+  const segClicked = await tjs(`(() => {
+    const btn = [...document.querySelectorAll('.mini-btn')].find((b) => (b.textContent || "").includes("开新段"));
+    if (!btn) return { found: false };
+    btn.click();
+    return { found: true };
+  })()`);
+  await pause(700);
+  const segShown = await tjs(`(() => {
+    const row = [...document.querySelectorAll('.ss-row')].find((r) => (r.textContent || "").includes("当前会话的段"));
+    return { found: !!row, text: row ? row.textContent : "" };
+  })()`);
+  readings.teamSegment = { segClicked, segShown };
+  check("「开新段」真的调到 sessionSegmentOpen，并显示新序数（段有写入点）",
+    segClicked.found === true && segShown.found === true && /当前会话的段2开新段/.test(String(segShown.text).replace(/\s+/g, "")),
+    readings.teamSegment);
+  // 侧栏成员区（同一份名单，另一个面）：关掉设置页后侧栏底部应有成员区且渲染出名字。
+  await tjs(`(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: "Escape", code: "Escape", bubbles: true })); })()`);
+  await pause(400);
+  const sideTeam = await tjs(`(() => {
+    const block = document.querySelector('[data-team-block="true"]');
+    if (!block) return { found: false };
+    return { found: true, text: (block.textContent || "").slice(0, 400), rows: block.querySelectorAll(".side-team-row").length };
+  })()`);
+  readings.sideTeam = sideTeam;
+  check("侧栏底部有成员区，且渲染出成员（名单在主导航面也看得见）",
+    sideTeam.found === true && sideTeam.rows >= 1 && sideTeam.text.includes("示例成员"), sideTeam);
+  await shot(teamWin, "11-team-sidebar-block-1440x900");
+  // ⑪d 密钥授权（v67）：选成员 + 填密钥名 + 点「允许」⇒ 真调到 teamSecretGrant，列表出现那条。
+  // 上一块为了看侧栏按了 Esc（设置页已关）⇒ 这里重新打开并回到「团队」分区。
+  await tjs(`(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', code: 'Comma', metaKey: true, bubbles: true })); })()`);
+  await pause(400);
+  await tjs(`(() => {
+    const btn = [...document.querySelectorAll('.sp-nav-item')].find((b) => (b.textContent || "").includes("团队"));
+    if (btn) btn.click();
+  })()`);
+  await pause(400);
+  const grantFlow = await tjs(`(async () => {
+    const inputs = [...document.querySelectorAll('.ss-input')];
+    const input = inputs.find((i) => (i.getAttribute('aria-label') || '').includes('密钥名'));
+    if (!input) return { step: "no-input", labels: inputs.map((i) => i.getAttribute('aria-label')) };
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    setter.call(input, "OPENAI_API_KEY");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 150));
+    const btn = [...document.querySelectorAll('.mini-btn')].find((b) => (b.textContent || "").trim() === "允许");
+    if (!btn) return { step: "no-button" };
+    btn.click();
+    await new Promise((r) => setTimeout(r, 600));
+    return { step: "done", calls: window.__cairnGrants ? window.__cairnGrants() : [] };
+  })()`);
+  readings.teamGrants = grantFlow;
+  check("「允许」真的调到 teamSecretGrant（成员×密钥一条授权）",
+    grantFlow.step === "done" && grantFlow.calls.length === 1
+      && grantFlow.calls[0].secret === "OPENAI_API_KEY" && grantFlow.calls[0].allow === true,
+    { step: grantFlow.step, calls: grantFlow.calls });
+
+  // ⑪e 密钥申请（v68）：点「发起申请」⇒ 真调到 teamSecretRequest，申请行出现 pending。
+  const askFlow = await tjs(`(async () => {
+    const input = [...document.querySelectorAll('.ss-input')].find((i) => (i.getAttribute('aria-label') || '').includes('密钥名'));
+    if (!input) return { step: "no-input" };
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    setter.call(input, "BRAVE_KEY");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 150));
+    const btn = [...document.querySelectorAll('.mini-btn')].find((b) => (b.textContent || "").trim() === "发起申请");
+    if (!btn) return { step: "no-button" };
+    btn.click();
+    await new Promise((r) => setTimeout(r, 600));
+    return { step: "done", calls: window.__cairnSecretRequests ? window.__cairnSecretRequests() : [] };
+  })()`);
+  readings.secretAsk = askFlow;
+  check("「发起申请」真的调到 teamSecretRequest（pending 一条）",
+    askFlow.step === "done" && askFlow.calls.length === 1
+      && askFlow.calls[0].secret === "BRAVE_KEY" && askFlow.calls[0].state === "pending",
+    { step: askFlow.step, calls: askFlow.calls });
+
+  teamWin.destroy();
+
+
+  // ⑫ 真落盘：主进程的团队存储在**真 Electron 进程里**跑一遍写→读→墓碑闭环。
+  // 这一段不走渲染层，判的是 `team-store`（IPC handler 背后唯一的那条路）。
+  const { appendTeamPatch, readTeamRoster, teamLogPath } = require(join(__dirname, "../src/main/team-store.ts"));
+  const { memberPatch } = require(join(repoRoot, "src/agent/team/members.ts"));
+  const teamDir = mkdtempSync(join(tmpdir(), "cairn-team-store-"));
+  const teamFile = teamLogPath(teamDir);
+  await appendTeamPatch(teamFile, memberPatch("m-real", { name: "真成员", role: "实现", tier: "guided" }));
+  const afterWrite = await readTeamRoster(teamFile, "guided");
+  await appendTeamPatch(teamFile, memberPatch("m-real", { removed: "1" }));
+  const afterRemove = await readTeamRoster(teamFile, "guided");
+  readings.teamStore = {
+    afterWrite: { members: afterWrite.members, records: afterWrite.records },
+    afterRemove: { members: afterRemove.members, records: afterRemove.records },
+  };
+  check("团队存储在真主进程里写→读→墓碑闭环（补丁条数只增不减）",
+    afterWrite.members.length === 1 && afterWrite.members[0].name === "真成员"
+      && afterRemove.members.length === 0 && afterRemove.records === 2, readings.teamStore);
+
+  // ⑬ 真·系统选文件对话框：真面板真的被调起，关窗即取消。
+  // 原生面板没法在自动化里点选（没有 API，也拿不到无障碍焦点），但「面板存在过」是可验的：
+  // 面板攥着 Promise，直到窗口关闭才结算 —— 若它根本没开，Promise 会**立刻**返回。
+  const pickWin = new BrowserWindow({ width: 520, height: 340, show: true });
+  await pickWin.loadURL("data:text/html,<p>wallpaper pick probe</p>");
+  const dialogOptions = wallpaperDialogOptions();
+  const pickStarted = Date.now();
+  const pickPromise = dialog.showOpenDialog(pickWin, {
+    title: dialogOptions.title,
+    properties: ["openFile"],
+    filters: dialogOptions.filters.map((f) => ({ name: f.name, extensions: [...f.extensions] })),
+  });
+  // 用 close() 而不是 destroy()：close 会走正常收起路径（sheet 随窗口一起消失），
+  // destroy 直接把窗口抽掉，附着的面板可能留在原地理都不理（实测：Promise 一直挂着）。
+  setTimeout(() => { try { pickWin.close(); } catch { /* 已销毁 */ } }, 1200);
+  const pickResult = await Promise.race([
+    pickPromise,
+    new Promise((resolve) => setTimeout(() => resolve({ timeout: true }), 8000)),
+  ]);
+  const pickElapsedMs = Date.now() - pickStarted;
+  readings.pickDialog = { result: pickResult, elapsedMs: pickElapsedMs, options: dialogOptions };
+  check("真·系统选文件对话框：真面板被调起（Promise 被面板攥住 ≥1s，关窗即结算）",
+    pickResult.timeout !== true && pickElapsedMs >= 1000 && Array.isArray(pickResult.filePaths),
+    readings.pickDialog);
+  check("面板参数与产品同一份（单选 openFile + 同一组扩展名）",
+    String(dialogOptions.title) === "选择壁纸"
+      && dialogOptions.properties.length === 1 && dialogOptions.properties[0] === "openFile"
+      && dialogOptions.filters[0].extensions.includes("png")
+      && dialogOptions.filters[0].extensions.includes("mp4"),
+    dialogOptions);
+
+  // ⑬b 点选**替身臂**（明确标注：OS 面板本体被替换）：真决策壳 + 真校验 + 真结果形状。
+  // 原生面板的点选在本机不可自动化（无 API、无辅助功能权限），但「选中之后」这条链可以全真：
+  // 只有 `openDialog` 这一层被替身返回一个路径，其余（取消语义、校验、结果形状）都是产品代码。
+  const pickedReal = await pickWallpaper({
+    openDialog: async () => ({ canceled: false, filePaths: [wallpaperPath] }),
+    validate: validateWallpaperFile,
+  });
+  const pickedBad = await pickWallpaper({
+    openDialog: async () => ({ canceled: false, filePaths: [join(out, "not-a-wallpaper.txt")] }),
+    validate: validateWallpaperFile,
+  });
+  const pickedCanceled = await pickWallpaper({
+    openDialog: async () => ({ canceled: true, filePaths: [] }),
+    validate: validateWallpaperFile,
+  });
+  readings.pickSubstitute = { pickedReal, pickedBad, pickedCanceled };
+  check("点选替身臂：真决策壳 + 真校验（选中 ⇒ ok/kind/path；非白名单 ⇒ 拒；取消 ⇒ canceled 不是 error）",
+    pickedReal.ok === true && pickedReal.kind === "image" && pickedReal.path === wallpaperPath
+      && pickedBad.ok === false && pickedBad.kind === undefined && pickedBad.error !== undefined
+      && pickedCanceled.ok === false && pickedCanceled.canceled === true && pickedCanceled.error === undefined,
+    readings.pickSubstitute);
+
+  // ⑭ 真 powerMonitor 对象：装配挂在**真事件源**上，emit 走真实监听链（不是假 source）。
+  // 判的是「Electron 的真 powerMonitor → 我们的装配 → 推送 → 渲染层暂停」这条链；
+  // 唯一没覆盖的是 macOS/Electron 自己那跳（OS → powerMonitor 的投递）。
+  const realSuspendErrors = [];
+  currentPath = videoFixture;
+  const suspendWin = await makeWindow(join(distDir, "index.html"), realSuspendErrors, { theme: "dark", video: videoFixture, show: true });
+  suspendWin.focus();
+  const sjs = jsOf(suspendWin);
+  suspendWin.emit("focus"); // 同 ⑨：用真窗口事件给出「已获得焦点」
+  for (let i = 0; i < 100; i++) { if (await sjs(`!!document.querySelector('.avatar')`)) break; await pause(); }
+  const suspendState = () => sjs(`(() => {
+    const v = document.querySelector('.cw-layer video.cw-media');
+    return v === null ? { has: false } : { has: true, paused: v.paused, focused: document.hasFocus() };
+  })()`);
+  let beforeSuspend = { has: false };
+  for (let i = 0; i < 60; i++) {
+    beforeSuspend = await suspendState();
+    if (beforeSuspend.has === true && beforeSuspend.paused === false) break;
+    await pause(200);
+  }
+  const uninstall = installSuspendPause({
+    source: powerMonitor,
+    targets: () => BrowserWindow.getAllWindows(),
+    channel: PUSH_CHANNELS.onWallpaperSuspend,
+    onError: (error) => { realSuspendErrors.push(String(error)); },
+  });
+  const listenerCount = powerMonitor.listenerCount("suspend");
+  powerMonitor.emit("suspend");
+  await pause(700);
+  const afterRealSuspend = await suspendState();
+  powerMonitor.emit("resume");
+  let afterRealResume = { has: false };
+  for (let i = 0; i < 30; i++) {
+    afterRealResume = await suspendState();
+    if (afterRealResume.has === true && afterRealResume.paused === false) break;
+    await pause(200);
+  }
+  uninstall();
+  readings.realPowerMonitor = { beforeSuspend, listenerCount, afterRealSuspend, afterRealResume, errors: realSuspendErrors };
+  check("真 powerMonitor 对象上 emit suspend ⇒ 视频暂停；emit resume ⇒ 续播（装配挂的是真事件源）",
+    beforeSuspend.paused === false && listenerCount >= 1 && afterRealSuspend.paused === true
+      && afterRealResume.paused === false && realSuspendErrors.length === 0,
+    readings.realPowerMonitor);
+  suspendWin.destroy();
+  currentPath = wallpaperPath;
+
+  // ⑮ 团队会话窗格（第 10 个 pane kind）：用**弹窗路由** `#pane=team` 直接打开它，
+  // 判的是「登记表认得这个种类 + 窗格渲染出名单 + 打开即有一轮秩序（自动调用发言权）」。
+  const paneWin = await makeWindow(join(distDir, "index.html"), [], { hash: "pane=team" });
+  const pjs = jsOf(paneWin);
+  for (let i = 0; i < 100; i++) { if (await pjs(`!!document.querySelector('[data-team-pane=\"true\"]')`)) break; await pause(); }
+  await pause(700);
+  const paneState = await pjs(`(() => {
+    const pane = document.querySelector('[data-team-pane="true"]');
+    if (!pane) return { found: false };
+    return {
+      found: true,
+      rows: pane.querySelectorAll(".team-pane-row").length,
+      text: (pane.textContent || "").slice(0, 400),
+      plan: (pane.querySelector(".team-pane-plan") || {}).textContent || "",
+    };
+  })()`);
+  const roundCalls = await pjs(`window.__cairnRoundPlans ? window.__cairnRoundPlans().length : 0`);
+  readings.teamPane = { paneState, roundCalls };
+  check("团队窗格（#pane=team）真的渲染出名单，且打开即自动算了一轮秩序",
+    paneState.found === true && paneState.rows >= 1 && roundCalls >= 1
+      && String(paneState.text).includes("示例成员") && /1\./.test(String(paneState.plan)),
+    readings.teamPane);
+  // ⑮b 派活（v62）：点成员「派活」→ 填任务书 → 「放进他的线程」⇒ 真调到 teamMemberDispatch。
+  const dispatchFlow = await pjs(`(async () => {
+    const pick = [...document.querySelectorAll('.mini-btn')].find((b) => (b.textContent || "").includes("派活"));
+    if (!pick) return { step: "no-button" };
+    pick.click();
+    await new Promise((r) => setTimeout(r, 150));
+    const input = document.querySelector('.team-pane-dispatch .ss-input');
+    if (!input) return { step: "no-input" };
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    setter.call(input, "把对比度再量一遍");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 120));
+    const send = [...document.querySelectorAll('.team-pane-dispatch .mini-btn')][0];
+    if (!send) return { step: "no-send" };
+    send.click();
+    await new Promise((r) => setTimeout(r, 600));
+    return {
+      step: "done",
+      calls: window.__cairnDispatches ? window.__cairnDispatches() : [],
+      text: (document.querySelector('[data-team-pane="true"]') || {}).textContent || "",
+    };
+  })()`);
+  readings.teamDispatch = dispatchFlow;
+  check("派活入口真的调到 teamMemberDispatch，并把回执（会话 id）画出来",
+    dispatchFlow.step === "done" && dispatchFlow.calls.length === 1
+      && dispatchFlow.calls[0].task === "把对比度再量一遍"
+      && String(dispatchFlow.text).includes("s-team-1"),
+    { step: dispatchFlow.step, calls: dispatchFlow.calls });
+  // ⑮c 派活并开跑（v63）：点「派活并开跑」⇒ 真调到 teamMemberStart，回执是 run 建的会话 id。
+  const startFlow = await pjs(`(async () => {
+    const input = document.querySelector('.team-pane-dispatch .ss-input');
+    if (!input) return { step: "no-input" };
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    setter.call(input, "开跑给我看");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 120));
+    const send = [...document.querySelectorAll('.team-pane-dispatch .mini-btn')].find((b) => (b.textContent || "").includes("开跑"));
+    if (!send) return { step: "no-start-button" };
+    send.click();
+    await new Promise((r) => setTimeout(r, 500));
+    return {
+      step: "done",
+      calls: window.__cairnStarts ? window.__cairnStarts() : [],
+      text: (document.querySelector('[data-team-pane="true"]') || {}).textContent || "",
+    };
+  })()`);
+  readings.teamStart = startFlow;
+  check("「派活并开跑」真的调到 teamMemberStart，并把 run 会话 id 画出来",
+    startFlow.step === "done" && startFlow.calls.length === 1
+      && startFlow.calls[0].task === "开跑给我看" && String(startFlow.text).includes("s-run-1"),
+    { step: startFlow.step, calls: startFlow.calls });
+  // ⑮d 群会话（v64）：填名字 → 点「新建群会话」⇒ 真调到 teamGroupCreate，回执显示会话 id。
+  const groupFlow = await pjs(`(async () => {
+    const input = document.querySelector('.team-pane-group .ss-input');
+    if (!input) return { step: "no-input" };
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    setter.call(input, "壁纸攻坚");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 120));
+    const btn = [...document.querySelectorAll('.team-pane-group .mini-btn')].find((b) => (b.textContent || "").includes("新建群会话"));
+    if (!btn) return { step: "no-group-button" };
+    btn.click();
+    await new Promise((r) => setTimeout(r, 500));
+    return {
+      step: "done",
+      calls: window.__cairnGroups ? window.__cairnGroups() : [],
+      text: (document.querySelector('[data-team-pane="true"]') || {}).textContent || "",
+    };
+  })()`);
+  readings.teamGroup = groupFlow;
+  check("「新建群会话」真的调到 teamGroupCreate，并把会话 id 画出来",
+    groupFlow.step === "done" && groupFlow.calls.length === 1
+      && groupFlow.calls[0].name === "壁纸攻坚" && String(groupFlow.text).includes("s-group-1"),
+    { step: groupFlow.step, calls: groupFlow.calls });
+  // ⑮e 群的一轮（v65）：点「下一轮」⇒ 真调到 teamGroupNext，面板显示第几轮 + 下一位。
+  const roundFlow = await pjs(`(async () => {
+    const btn = [...document.querySelectorAll('.mini-btn')].find((b) => (b.textContent || "").trim() === "下一轮");
+    if (!btn) return { step: "no-round-button" };
+    btn.click();
+    await new Promise((r) => setTimeout(r, 500));
+    return {
+      step: "done",
+      calls: window.__cairnGroupNexts ? window.__cairnGroupNexts() : [],
+      text: (document.querySelector('[data-team-pane="true"]') || {}).textContent || "",
+    };
+  })()`);
+  readings.teamPround = roundFlow;
+  check("「下一轮」真的调到 teamGroupNext，并画出轮次与发言人",
+    roundFlow.step === "done" && roundFlow.calls.length === 1
+      && String(roundFlow.text).includes("1") && String(roundFlow.text).includes("m-seed"),
+    { step: roundFlow.step, calls: roundFlow.calls });
+  // ⑮g 记忆面板（v71）：窗格里出现三层主题数与合计（真调 teamMemoryPanel）。
+  const memoryFlow = await pjs(`(async () => {
+    await new Promise((r) => setTimeout(r, 400));
+    const box = document.querySelector('[data-memory="true"]');
+    if (!box) return { step: "no-memory" };
+    return { step: "done", text: (box.textContent || "").trim(), rows: box.querySelectorAll('.team-pane-memory-row').length };
+  })()`);
+  readings.memoryPanel = memoryFlow;
+  check("记忆面板真的渲染出三层主题数与合计（来自 teamMemoryPanel）",
+    memoryFlow.step === "done" && memoryFlow.rows === 3
+      && memoryFlow.text.includes("5 个主题") && memoryFlow.text.includes("member m-seed"),
+    { step: memoryFlow.step, text: memoryFlow.text, rows: memoryFlow.rows });
+
+  // ⑮f 轮次驱动派活（v66）：点「下一轮并让 TA 开跑」⇒ 带 start 调用，回执显示开跑的会话 id。
+  const speakFlow = await pjs(`(async () => {
+    const btn = [...document.querySelectorAll('.mini-btn')].find((b) => (b.textContent || "").includes("让 TA 开跑"));
+    if (!btn) return { step: "no-button" };
+    btn.click();
+    await new Promise((r) => setTimeout(r, 600));
+    return {
+      step: "done",
+      calls: window.__cairnGroupNexts ? window.__cairnGroupNexts() : [],
+      text: (document.querySelector('[data-team-pane="true"]') || {}).textContent || "",
+    };
+  })()`);
+  readings.teamSpeak = speakFlow;
+  check("「下一轮并让 TA 开跑」真的带 start 调到 teamGroupNext，并画出开跑会话 id",
+    speakFlow.step === "done" && speakFlow.calls.some((c) => c.start === true)
+      && String(speakFlow.text).includes("s-speak-"),
+    { step: speakFlow.step, calls: speakFlow.calls });
+  // ⑪f 群聊共享流（v70）：点「下一轮」后，面板里出现带轮与说话人的条目（真调 teamGroupStream）。
+  const streamFlow = await pjs(`(async () => {
+    const btn = [...document.querySelectorAll('.mini-btn')].find((b) => (b.textContent || "").trim() === "下一轮");
+    if (!btn) return { step: "no-button" };
+    btn.click();
+    await new Promise((r) => setTimeout(r, 800));
+    const box = document.querySelector('[data-stream="true"]');
+    if (!box) return { step: "no-stream" };
+    const rows = [...box.querySelectorAll('.team-pane-stream-row')];
+    return { step: "done", rows: rows.map((r) => (r.textContent || "").trim()) };
+  })()`);
+  readings.groupStream = streamFlow;
+  check("群聊共享流真的渲染出来（带轮 + 说话人，来自 teamGroupStream）",
+    streamFlow.step === "done" && streamFlow.rows.length === 2
+      && streamFlow.rows[0].includes("第1轮") && streamFlow.rows[1].includes("member:m-seed"),
+    { step: streamFlow.step, rows: streamFlow.rows });
+
+  await shot(paneWin, "12-team-pane-1440x900");
+  paneWin.destroy();
+
+  // ④a 网站壁纸（2026-11-16 业主批「准放 CSP」）：https 地址 ⇒ kind=web + iframe 带 sandbox；
+  //     同时判 CSP 的放开面（`frame-src https:` 在里面，且没有 data:/blob:）。
+  const webFlow = await js(`(async () => {
+    const apply = async (url) => {
+      const input = document.querySelector('.cw-web-url');
+      if (!input) return { step: "no-input" };
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+      setter.call(input, url);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 200));
+      const btn = document.querySelector('[data-wallpaper-web-apply="true"]');
+      if (!btn) return { step: "no-button" };
+      btn.click();
+      await new Promise((r) => setTimeout(r, 700));
+      const s = await window.agent.getSettings();
+      const frame = document.querySelector('[data-wallpaper-web="true"]');
+      return {
+        kind: s.wallpaper.kind, url: s.wallpaper.url,
+        hasFrame: frame !== null,
+        src: frame ? frame.getAttribute("src") : null,
+        sandbox: frame ? frame.getAttribute("sandbox") : null,
+      };
+    };
+    const good = await apply("https://example.com/live");
+    const bad = await apply("http://example.com/plain");
+    return { step: "done", good, bad };
+  })()`);
+  readings.webWallpaper = webFlow;
+  // 负向（http 被拒）在 main 的真校验里，判据是 `tests/wallpaper-web.test.ts`；
+  // 冒烟这里判的是「渲染面 + 策略面」——夹具的 setSettings 不走真校验，别在这混判。
+  check("网站壁纸：https ⇒ kind=web，iframe 带 sandbox 且 src 正确",
+    webFlow.step === "done"
+      && webFlow.good.kind === "web" && webFlow.good.url === "https://example.com/live"
+      && webFlow.good.hasFrame === true && webFlow.good.src === "https://example.com/live"
+      && String(webFlow.good.sandbox).includes("allow-scripts"),
+    webFlow);
+  // 真网络（业主 2026-11-16 批「准外联」）：让 example.com 真去加载 2.5s，
+  // 判「没有 CSP 违规」——跨域读不到 DOM，所以只判策略面，不冒充「看见内容」。
+  await pause(2500);
+  const webCspErrors = errors.filter((m) => /Content Security Policy|frame-src/i.test(String(m)));
+  readings.webLive = { cspErrors: webCspErrors };
+  // 这里**期望**出现一条违规：被拦的是 `http://example.com`；`https://example.com` 不许被拦。
+  // 这条同时是正向臂与反向臂——CSP 真在管这件事，而不是「放开了就没人管」。
+  const blockedHttp = webCspErrors.filter((m) => /http:\/\/example\.com/.test(String(m)));
+  const blockedHttps = webCspErrors.filter((m) => /https:\/\/example\.com/.test(String(m)));
+  readings.webLive = { cspErrors: webCspErrors, blockedHttp: blockedHttp.length, blockedHttps: blockedHttps.length };
+  check("网站壁纸：CSP 真在管——http 被拦 1 次、https 未被拦（跨域不读 DOM，只判策略面）",
+    blockedHttp.length === 1 && blockedHttps.length === 0,
+    readings.webLive);
+
+  check("CSP 放开面：`frame-src https:` 在，且 frame-src 里没有 data:/blob:/http:",
+    String(readings.builtCsp).includes("frame-src https:")
+      && !/frame-src[^;]*(data:|blob:|http:)/.test(String(readings.builtCsp)),
+    { builtCsp: readings.builtCsp });
 
   writeFileSync(join(out, "checks.json"), JSON.stringify(checks, null, 2));
   writeFileSync(join(out, "readings.json"), JSON.stringify(readings, null, 2));

@@ -1,0 +1,1121 @@
+[
+  {
+    "name": "构建产物 CSP 与 src/main/csp.ts 的真值逐字一致",
+    "ok": true,
+    "detail": {
+      "equal": true
+    }
+  },
+  {
+    "name": "img-src 与 media-src 都放行壁纸 scheme",
+    "ok": true,
+    "detail": {
+      "imgSrc": "img-src 'self' data: blob: https: cairn-wallpaper:",
+      "mediaSrc": "media-src 'self' data: blob: cairn-wallpaper:"
+    }
+  },
+  {
+    "name": "connect-src 不放壁纸 scheme（渲染层不从它 fetch）",
+    "ok": true,
+    "detail": {
+      "connectSrc": "connect-src 'self' http: https: ws: wss:"
+    }
+  },
+  {
+    "name": "当前壁纸 200 + 真实字节数 + accept-ranges",
+    "ok": true,
+    "detail": {
+      "status": 200,
+      "bytes": 6843,
+      "type": "image/png",
+      "acceptRanges": "bytes"
+    }
+  },
+  {
+    "name": "Range 请求回 206 且 content-range 正确",
+    "ok": true,
+    "detail": {
+      "status": 206,
+      "bytes": 100,
+      "contentRange": "bytes 0-99/6843"
+    }
+  },
+  {
+    "name": "非当前路径 404（白名单＝设置里那一个文件）",
+    "ok": true,
+    "detail": {
+      "status": 404
+    }
+  },
+  {
+    "name": "越界 Range 416",
+    "ok": true,
+    "detail": {
+      "status": 416
+    }
+  },
+  {
+    "name": "Electron 安全清单：渲染层没有 require/process/node 全局，只留 window.agent",
+    "ok": true,
+    "detail": {
+      "hasRequire": "undefined",
+      "hasProcess": "undefined",
+      "hasAgent": "object",
+      "hasNodeGlobals": "undefined,undefined,undefined"
+    }
+  },
+  {
+    "name": "壁纸图真加载（naturalWidth>0，地址走壁纸协议）",
+    "ok": true,
+    "detail": {
+      "layer": true,
+      "kind": "image",
+      "src": "cairn-wallpaper://media/current?v=0",
+      "natural": [
+        640,
+        400
+      ],
+      "complete": true,
+      "bodyBg": "rgba(0, 0, 0, 0)",
+      "bodyAttr": true,
+      "htmlAttr": true,
+      "mainBackdrop": "blur(14px)",
+      "floor": "61%",
+      "wallpaperOpacity": "1",
+      "text": "rgb(240 239 236)",
+      "canvas": "rgb(21 21 21)"
+    }
+  },
+  {
+    "name": "开壁纸时 body 画布透明、两个接缝属性都在",
+    "ok": true,
+    "detail": {
+      "bodyBg": "rgba(0, 0, 0, 0)",
+      "bodyAttr": true,
+      "htmlAttr": true
+    }
+  },
+  {
+    "name": "玻璃面拿到 backdrop-filter，地板变量已算出",
+    "ok": true,
+    "detail": {
+      "mainBackdrop": "blur(14px)",
+      "floor": "61%"
+    }
+  },
+  {
+    "name": "暗色主题：最差格 ≥ 4.5:1（按真机测到的文字/画布色算）",
+    "ok": true,
+    "detail": {
+      "floor": 0.61,
+      "worst": 4.525801177062086,
+      "drift": 0,
+      "text": "rgb(240 239 236)",
+      "canvas": "rgb(21 21 21)"
+    }
+  },
+  {
+    "name": "暗色主题：模型常量与真实计算样式一致（差 ≤2/通道，防常量漂移）",
+    "ok": true,
+    "detail": {
+      "drift": 0,
+      "const": {
+        "r": 240,
+        "g": 239,
+        "b": 236
+      },
+      "measured": {
+        "r": 240,
+        "g": 239,
+        "b": 236
+      }
+    }
+  },
+  {
+    "name": "真渲染层无 CSP 违规",
+    "ok": true,
+    "detail": {
+      "cspErrors": [],
+      "errorCount": 0
+    }
+  },
+  {
+    "name": "设置整页不让位：.sp-page 保持实体底色（否则工作台文字叠在设置文字下）",
+    "ok": true,
+    "detail": {
+      "pageBg": "rgb(27, 27, 27)"
+    }
+  },
+  {
+    "name": "设置行三族都有布局：.cw-settings 纵向、.cw-slider 两列网格",
+    "ok": true,
+    "detail": {
+      "found": true,
+      "display": "flex",
+      "direction": "column",
+      "actionsDisplay": "flex",
+      "status": null,
+      "pageBg": "rgb(27, 27, 27)",
+      "sliders": [
+        {
+          "label": "壁纸不透明度",
+          "columns": "78px 620px",
+          "display": "grid",
+          "top": 523,
+          "labelWidth": 78,
+          "labelLines": 1,
+          "rangeWidth": 240,
+          "rangeHeight": 16,
+          "accent": "color(srgb 0.85098 0.466667 0.341177)",
+          "value": "1"
+        },
+        {
+          "label": "压暗",
+          "columns": "78px 620px",
+          "display": "grid",
+          "top": 547,
+          "labelWidth": 78,
+          "labelLines": 1,
+          "rangeWidth": 240,
+          "rangeHeight": 16,
+          "accent": "color(srgb 0.85098 0.466667 0.341177)",
+          "value": "0.35"
+        },
+        {
+          "label": "玻璃透明度",
+          "columns": "78px 620px",
+          "display": "grid",
+          "top": 572,
+          "labelWidth": 78,
+          "labelLines": 1,
+          "rangeWidth": 240,
+          "rangeHeight": 16,
+          "accent": "color(srgb 0.85098 0.466667 0.341177)",
+          "value": "0.25"
+        }
+      ],
+      "buttons": [
+        {
+          "text": "选择图片或视频",
+          "width": 125,
+          "bg": "color(srgb 0.101961 0.101961 0.0980392)",
+          "color": "color(srgb 0.764706 0.760784 0.717647)"
+        },
+        {
+          "text": "浏览本机…",
+          "width": 98,
+          "bg": "color(srgb 0.101961 0.101961 0.0980392)",
+          "color": "color(srgb 0.764706 0.760784 0.717647)"
+        },
+        {
+          "text": "清除",
+          "width": 60,
+          "bg": "color(srgb 0.101961 0.101961 0.0980392)",
+          "color": "color(srgb 0.764706 0.760784 0.717647)"
+        }
+      ],
+      "rowWidth": 706,
+      "containerWidth": 1232
+    }
+  },
+  {
+    "name": "三个滑杆各占一行（top 互不相同）且标签单行有文字",
+    "ok": true,
+    "detail": [
+      {
+        "label": "壁纸不透明度",
+        "columns": "78px 620px",
+        "display": "grid",
+        "top": 523,
+        "labelWidth": 78,
+        "labelLines": 1,
+        "rangeWidth": 240,
+        "rangeHeight": 16,
+        "accent": "color(srgb 0.85098 0.466667 0.341177)",
+        "value": "1"
+      },
+      {
+        "label": "压暗",
+        "columns": "78px 620px",
+        "display": "grid",
+        "top": 547,
+        "labelWidth": 78,
+        "labelLines": 1,
+        "rangeWidth": 240,
+        "rangeHeight": 16,
+        "accent": "color(srgb 0.85098 0.466667 0.341177)",
+        "value": "0.35"
+      },
+      {
+        "label": "玻璃透明度",
+        "columns": "78px 620px",
+        "display": "grid",
+        "top": 572,
+        "labelWidth": 78,
+        "labelLines": 1,
+        "rangeWidth": 240,
+        "rangeHeight": 16,
+        "accent": "color(srgb 0.85098 0.466667 0.341177)",
+        "value": "0.25"
+      }
+    ]
+  },
+  {
+    "name": "滑杆本体够宽（≥200px，控件 md 档）且拿到主题强调色",
+    "ok": true,
+    "detail": [
+      {
+        "label": "壁纸不透明度",
+        "columns": "78px 620px",
+        "display": "grid",
+        "top": 523,
+        "labelWidth": 78,
+        "labelLines": 1,
+        "rangeWidth": 240,
+        "rangeHeight": 16,
+        "accent": "color(srgb 0.85098 0.466667 0.341177)",
+        "value": "1"
+      },
+      {
+        "label": "压暗",
+        "columns": "78px 620px",
+        "display": "grid",
+        "top": 547,
+        "labelWidth": 78,
+        "labelLines": 1,
+        "rangeWidth": 240,
+        "rangeHeight": 16,
+        "accent": "color(srgb 0.85098 0.466667 0.341177)",
+        "value": "0.35"
+      },
+      {
+        "label": "玻璃透明度",
+        "columns": "78px 620px",
+        "display": "grid",
+        "top": 572,
+        "labelWidth": 78,
+        "labelLines": 1,
+        "rangeWidth": 240,
+        "rangeHeight": 16,
+        "accent": "color(srgb 0.85098 0.466667 0.341177)",
+        "value": "0.25"
+      }
+    ]
+  },
+  {
+    "name": "已设壁纸时按钮读动作词（选择 / 浏览本机 / 清除），不读状态词「未设置」",
+    "ok": true,
+    "detail": [
+      {
+        "text": "选择图片或视频",
+        "width": 125,
+        "bg": "color(srgb 0.101961 0.101961 0.0980392)",
+        "color": "color(srgb 0.764706 0.760784 0.717647)"
+      },
+      {
+        "text": "浏览本机…",
+        "width": 98,
+        "bg": "color(srgb 0.101961 0.101961 0.0980392)",
+        "color": "color(srgb 0.764706 0.760784 0.717647)"
+      },
+      {
+        "text": "清除",
+        "width": 60,
+        "bg": "color(srgb 0.101961 0.101961 0.0980392)",
+        "color": "color(srgb 0.764706 0.760784 0.717647)"
+      }
+    ]
+  },
+  {
+    "name": "选/清两个按钮可见且有底色（不是透明白字）",
+    "ok": true,
+    "detail": [
+      {
+        "text": "选择图片或视频",
+        "width": 125,
+        "bg": "color(srgb 0.101961 0.101961 0.0980392)",
+        "color": "color(srgb 0.764706 0.760784 0.717647)"
+      },
+      {
+        "text": "浏览本机…",
+        "width": 98,
+        "bg": "color(srgb 0.101961 0.101961 0.0980392)",
+        "color": "color(srgb 0.764706 0.760784 0.717647)"
+      },
+      {
+        "text": "清除",
+        "width": 60,
+        "bg": "color(srgb 0.101961 0.101961 0.0980392)",
+        "color": "color(srgb 0.764706 0.760784 0.717647)"
+      }
+    ]
+  },
+  {
+    "name": "定时轮换：勾开关 + 加入当前壁纸 ⇒ rotation 落进设置（候选 1 张）",
+    "ok": true,
+    "detail": {
+      "step": "done",
+      "enabled": true,
+      "paths": 1,
+      "countText": "候选：1"
+    }
+  },
+  {
+    "name": "联网天气源：点「测试连接」⇒ 真 fetch 本机服务并解析出 rain",
+    "ok": true,
+    "detail": {
+      "step": "done",
+      "text": "读到：rain（http）",
+      "keyCalls": [],
+      "url": "http://127.0.0.1:56592/weather"
+    }
+  },
+  {
+    "name": "天气来源：勾「从文件读天气」+ 填 JSON ⇒ 解析出 rain（code 500）",
+    "ok": true,
+    "detail": {
+      "step": "done",
+      "kind": "rain",
+      "source": "file"
+    }
+  },
+  {
+    "name": "按天气：切到 weather + 选「雨」+ 设为该天气 ⇒ weather.paths.rain 落进设置",
+    "ok": true,
+    "detail": {
+      "step": "done",
+      "mode": "weather",
+      "kind": "rain",
+      "rain": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/fixture-wallpaper.png"
+    }
+  },
+  {
+    "name": "多显示器：屏数与真 screen 一致，点「设为这块屏」传的是真 display.id",
+    "ok": true,
+    "detail": {
+      "step": "done",
+      "ids": [
+        "1"
+      ],
+      "note": "已设为该屏专属",
+      "calls": [
+        "1"
+      ]
+    }
+  },
+  {
+    "name": "第一个滑杆真指针命中本体",
+    "ok": true,
+    "detail": {
+      "tag": "INPUT",
+      "cls": "",
+      "hits": true
+    }
+  },
+  {
+    "name": "真鼠标点滑杆改到了值并落进 setSettings（opacity）",
+    "ok": true,
+    "detail": {
+      "value": "0.2",
+      "lastPatch": {
+        "wallpaper": {
+          "kind": "image",
+          "path": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/fixture-wallpaper.png",
+          "url": null,
+          "opacity": 0.2,
+          "scrim": 0.35,
+          "glassAlpha": 0.25,
+          "revision": 0,
+          "rotation": {
+            "enabled": true,
+            "mode": "weather",
+            "weather": {
+              "kind": "rain",
+              "paths": {
+                "rain": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/fixture-wallpaper.png"
+              },
+              "source": "http",
+              "filePath": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/weather-source.json",
+              "httpUrl": "http://127.0.0.1/placeholder"
+            },
+            "latitude": 39.9042,
+            "longitude": 116.4074,
+            "dayPath": null,
+            "nightPath": null,
+            "everyMinutes": 60,
+            "paths": [
+              "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/fixture-wallpaper.png"
+            ],
+            "lastAt": 0
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "选壁纸按钮真指针命中并调到 wallpaperPick",
+    "ok": true,
+    "detail": {
+      "point": {
+        "x": 1023,
+        "y": 432
+      },
+      "hit": {
+        "tag": "BUTTON",
+        "cls": "mini-btn",
+        "hits": true
+      },
+      "picks": 1,
+      "revision": null,
+      "layer": true
+    }
+  },
+  {
+    "name": "清除按钮真指针命中；清除后撤层、摘属性、画布回实体色",
+    "ok": true,
+    "detail": {
+      "layer": false,
+      "bodyAttr": false,
+      "htmlAttr": false,
+      "bodyBg": "rgb(21, 21, 21)",
+      "backdrop": "none",
+      "status": "未设置",
+      "buttons": [
+        "选择图片或视频",
+        "浏览本机…"
+      ]
+    }
+  },
+  {
+    "name": "清除后状态词「未设置」出现、清除按钮收起、选择/浏览两个动作词还在",
+    "ok": true,
+    "detail": {
+      "layer": false,
+      "bodyAttr": false,
+      "htmlAttr": false,
+      "bodyBg": "rgb(21, 21, 21)",
+      "backdrop": "none",
+      "status": "未设置",
+      "buttons": [
+        "选择图片或视频",
+        "浏览本机…"
+      ]
+    }
+  },
+  {
+    "name": "反证：摘掉 img-src 的 scheme 后图加载不出来（判据承重）",
+    "ok": true,
+    "detail": {
+      "layer": false,
+      "natural": null,
+      "bodyAttr": false,
+      "cspViolations": 1,
+      "sample": "Loading the image 'cairn-wallpaper://media/current?v=0' violates the following Content Security Policy directive: \"img-src 'self' data: blob: https:\". The action has been blocked."
+    }
+  },
+  {
+    "name": "图片壁纸的首帧底色＝真解码的平均色（与生成式均值差 ≤6/通道）",
+    "ok": true,
+    "detail": {
+      "imageTint": "#7e457f",
+      "expect": [
+        127,
+        70,
+        128
+      ],
+      "rgb": [
+        126,
+        69,
+        127
+      ],
+      "near": true,
+      "videoTint": null,
+      "missingTint": null,
+      "fallback": "#1b1b1b"
+    }
+  },
+  {
+    "name": "真 Electron 接受首帧底色（窗口底色读回＝平均色，不是主题底色）",
+    "ok": true,
+    "detail": {
+      "bootTint": "#7e457f",
+      "appliedBackground": "#7E457F"
+    }
+  },
+  {
+    "name": "视频壁纸与读不出的文件都不出色，回落主题底色",
+    "ok": true,
+    "detail": {
+      "videoTint": null,
+      "missingTint": null
+    }
+  },
+  {
+    "name": "亮色主题：壁纸真加载、画布让位、玻璃面拿到模糊",
+    "ok": true,
+    "detail": {
+      "theme": "light",
+      "img": [
+        640,
+        400
+      ],
+      "bodyBg": "rgba(0, 0, 0, 0)",
+      "backdrop": "blur(14px)",
+      "floor": "43%",
+      "text": "rgb(11 11 11)",
+      "canvas": "rgb(252 252 251)"
+    }
+  },
+  {
+    "name": "亮色主题：最差格 ≥ 4.5:1（按真机测到的文字/画布色算，判据 2 在亮色下同样成立）",
+    "ok": true,
+    "detail": {
+      "floor": 0.43,
+      "worst": 4.629950815465612,
+      "target": 4.5
+    }
+  },
+  {
+    "name": "亮色主题：模型常量与真实计算样式一致（差 ≤2/通道，防常量漂移）",
+    "ok": true,
+    "detail": {
+      "drift": 0,
+      "const": {
+        "r": 11,
+        "g": 11,
+        "b": 11
+      },
+      "measured": {
+        "r": 11,
+        "g": 11,
+        "b": 11
+      }
+    }
+  },
+  {
+    "name": "应用内选择器：点文件 ⇒ 真校验并应用（设置里的壁纸路径就是它）",
+    "ok": true,
+    "detail": {
+      "step": "done",
+      "picked": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/01-wallpaper-on-dark-1440x900.png",
+      "applied": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/01-wallpaper-on-dark-1440x900.png",
+      "kind": "image"
+    }
+  },
+  {
+    "name": "键盘可达：Tab 走到文件行、Enter 选中并应用（WCAG 2.2 SC 2.1.1）",
+    "ok": true,
+    "detail": {
+      "focusedRow": {
+        "tag": "BUTTON",
+        "cls": "cw-browser-row file",
+        "text": "01-wallpaper-on-dark-1440x900.png"
+      },
+      "path": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/01-wallpaper-on-dark-1440x900.png",
+      "kind": "image",
+      "active": "cw-browser-row file"
+    }
+  },
+  {
+    "name": "视频壁纸真解码并自动播放（readyState≥2 且 currentTime>0）",
+    "ok": true,
+    "detail": {
+      "has": true,
+      "src": "cairn-wallpaper://media/current?v=0",
+      "paused": false,
+      "t": 0.27,
+      "ready": 4,
+      "duration": 2,
+      "focused": true,
+      "hidden": false
+    }
+  },
+  {
+    "name": "失焦即暂停（window blur ⇒ video.paused === true，判据 3）",
+    "ok": true,
+    "detail": {
+      "has": true,
+      "src": "cairn-wallpaper://media/current?v=0",
+      "paused": true,
+      "t": 0.54,
+      "ready": 4,
+      "duration": 2,
+      "focused": true,
+      "hidden": false
+    }
+  },
+  {
+    "name": "回焦即续播（判据 3 的反向臂：不是一次性停掉）",
+    "ok": true,
+    "detail": {
+      "has": true,
+      "src": "cairn-wallpaper://media/current?v=0",
+      "paused": false,
+      "t": 0.54,
+      "ready": 4,
+      "duration": 2,
+      "focused": true,
+      "hidden": false
+    }
+  },
+  {
+    "name": "锁屏推送 ⇒ 暂停（窗口仍可见且未被 blur：这一格只有 v59 的系统级信号能抓到）",
+    "ok": true,
+    "detail": {
+      "has": true,
+      "src": "cairn-wallpaper://media/current?v=0",
+      "paused": true,
+      "t": 0.54,
+      "ready": 4,
+      "duration": 2,
+      "focused": true,
+      "hidden": false
+    }
+  },
+  {
+    "name": "解锁推送 ⇒ 续播（系统级暂停不是单向门）",
+    "ok": true,
+    "detail": {
+      "has": true,
+      "src": "cairn-wallpaper://media/current?v=0",
+      "paused": false,
+      "t": 0.54,
+      "ready": 4,
+      "duration": 2,
+      "focused": true,
+      "hidden": false
+    }
+  },
+  {
+    "name": "降级：媒体 404 ⇒ 撤层并摘属性（玻璃面留着，不出现透明壳）",
+    "ok": true,
+    "detail": {
+      "layer": false,
+      "bodyAttr": false,
+      "bodyBg": "rgb(21, 21, 21)",
+      "mainBackdrop": "none"
+    }
+  },
+  {
+    "name": "降级：设置行点名「文件不可用」（用户看得到原因，不是对着空白猜）",
+    "ok": true,
+    "detail": {
+      "found": true,
+      "text": "壁纸选择图片或视频浏览本机…清除文件不可用应用为壁纸只收 https；页面在 iframe 里带 sandbox 隔离定时轮换分钟把当前壁纸加入轮换固定间隔日出日落按天气当前设为白天当前设为夜里昼/夜：0候选：0屏 1 · 回落全局把当前壁纸设为这块屏壁纸不透明度压暗玻璃透明度"
+    }
+  },
+  {
+    "name": "团队面板渲染三维读数（权限成员维 / 记忆作用域 / 按成员用量）",
+    "ok": true,
+    "detail": {
+      "sample": "返回通用模型与 Provider个性化子 Agent团队MCP 服务器Hooks联网搜索用量统计进化权限与安全高级快捷键工作台技能中心工作树迁移导入关于与更新团队成员新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除本轮发言秩序主持优先按名单轮排一轮当前会话的段—开新段权限（成员维）团队档 default · 无裁剪记忆作用域分布team 1 · member 0 · project 0用量（按成员，当前会话）main 1200/340成员密钥授权（第一名成员）示例成员允许拒绝发起申请档案补丁条数日志里的补丁条数（历史只追加；移除不解绑旧补丁）。1"
+    }
+  },
+  {
+    "name": "设置里能进「团队」并且面板渲染出名单（种子成员 + 档位选择器）",
+    "ok": true,
+    "detail": {
+      "navClicked": {
+        "found": true,
+        "text": "团队"
+      },
+      "rows": [
+        "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
+        "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
+        "本轮发言秩序主持优先按名单轮排一轮",
+        "当前会话的段—开新段",
+        "权限（成员维）团队档 default · 无裁剪",
+        "记忆作用域分布team 1 · member 0 · project 0",
+        "用量（按成员，当前会话）main 1200/340",
+        "成员密钥授权（第一名成员）示例成员允许拒绝发起申请"
+      ],
+      "selects": 5,
+      "inputs": 3,
+      "add": {
+        "typed": {
+          "ok": true,
+          "value": "新来的"
+        },
+        "addClicked": {
+          "found": true
+        },
+        "rows": [
+          "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
+          "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
+          "新来的成员 · mmwj5io6zread-onlydefaultguidedautofull-accessteammemberproject移除",
+          "本轮发言秩序主持优先按名单轮排一轮",
+          "当前会话的段—开新段",
+          "权限（成员维）团队档 default · 无裁剪",
+          "记忆作用域分布team 2 · member 0 · project 0",
+          "用量（按成员，当前会话）main 1200/340"
+        ]
+      }
+    }
+  },
+  {
+    "name": "在面板里加一个人 ⇒ 名单真的多一行（写入口只有一条通道）",
+    "ok": true,
+    "detail": {
+      "typed": {
+        "ok": true,
+        "value": "新来的"
+      },
+      "addClicked": {
+        "found": true
+      },
+      "rows": [
+        "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
+        "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
+        "新来的成员 · mmwj5io6zread-onlydefaultguidedautofull-accessteammemberproject移除",
+        "本轮发言秩序主持优先按名单轮排一轮",
+        "当前会话的段—开新段",
+        "权限（成员维）团队档 default · 无裁剪",
+        "记忆作用域分布team 2 · member 0 · project 0",
+        "用量（按成员，当前会话）main 1200/340"
+      ]
+    }
+  },
+  {
+    "name": "「排一轮」真的调到 teamRoundPlan，并把批序渲染出来（发言权有调用方）",
+    "ok": true,
+    "detail": {
+      "planClicked": {
+        "found": true
+      },
+      "planShown": {
+        "rows": [
+          "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
+          "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
+          "新来的成员 · mmwj5io6zread-onlydefaultguidedautofull-accessteammemberproject移除",
+          "本轮发言秩序主持优先按名单轮排一轮",
+          "排出来的秩序1. 示例成员　2. 新来的",
+          "当前会话的段—开新段",
+          "权限（成员维）团队档 default · 无裁剪",
+          "记忆作用域分布team 2 · member 0 · project 0",
+          "用量（按成员，当前会话）main 1200/340",
+          "成员密钥授权（第一名成员）示例成员新来的允许拒绝发起申请",
+          "档案补丁条数日志里的补丁条数（历史只追加；移除不解绑旧补丁）。2"
+        ],
+        "calls": 1
+      }
+    }
+  },
+  {
+    "name": "「开新段」真的调到 sessionSegmentOpen，并显示新序数（段有写入点）",
+    "ok": true,
+    "detail": {
+      "segClicked": {
+        "found": true
+      },
+      "segShown": {
+        "found": true,
+        "text": "当前会话的段2开新段"
+      }
+    }
+  },
+  {
+    "name": "侧栏底部有成员区，且渲染出成员（名单在主导航面也看得见）",
+    "ok": true,
+    "detail": {
+      "found": true,
+      "text": "团队成员1示例成员read-only在 设置 › 团队 里管理",
+      "rows": 1
+    }
+  },
+  {
+    "name": "「允许」真的调到 teamSecretGrant（成员×密钥一条授权）",
+    "ok": true,
+    "detail": {
+      "step": "done",
+      "calls": [
+        {
+          "memberId": "m-seed",
+          "secret": "OPENAI_API_KEY",
+          "allow": true,
+          "at": 1
+        }
+      ]
+    }
+  },
+  {
+    "name": "「发起申请」真的调到 teamSecretRequest（pending 一条）",
+    "ok": true,
+    "detail": {
+      "step": "done",
+      "calls": [
+        {
+          "memberId": "m-seed",
+          "secret": "BRAVE_KEY",
+          "state": "pending"
+        }
+      ]
+    }
+  },
+  {
+    "name": "团队存储在真主进程里写→读→墓碑闭环（补丁条数只增不减）",
+    "ok": true,
+    "detail": {
+      "afterWrite": {
+        "members": [
+          {
+            "id": "m-real",
+            "name": "真成员",
+            "role": "实现",
+            "tier": "guided",
+            "memoryScope": "team",
+            "capabilities": []
+          }
+        ],
+        "records": 1
+      },
+      "afterRemove": {
+        "members": [],
+        "records": 2
+      }
+    }
+  },
+  {
+    "name": "真·系统选文件对话框：真面板被调起（Promise 被面板攥住 ≥1s，关窗即结算）",
+    "ok": true,
+    "detail": {
+      "result": {
+        "canceled": false,
+        "filePaths": []
+      },
+      "elapsedMs": 2563,
+      "options": {
+        "title": "选择壁纸",
+        "properties": [
+          "openFile"
+        ],
+        "filters": [
+          {
+            "name": "图片与视频",
+            "extensions": [
+              "png",
+              "jpg",
+              "jpeg",
+              "webp",
+              "gif",
+              "bmp",
+              "mp4",
+              "webm",
+              "mov"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "面板参数与产品同一份（单选 openFile + 同一组扩展名）",
+    "ok": true,
+    "detail": {
+      "title": "选择壁纸",
+      "properties": [
+        "openFile"
+      ],
+      "filters": [
+        {
+          "name": "图片与视频",
+          "extensions": [
+            "png",
+            "jpg",
+            "jpeg",
+            "webp",
+            "gif",
+            "bmp",
+            "mp4",
+            "webm",
+            "mov"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "点选替身臂：真决策壳 + 真校验（选中 ⇒ ok/kind/path；非白名单 ⇒ 拒；取消 ⇒ canceled 不是 error）",
+    "ok": true,
+    "detail": {
+      "pickedReal": {
+        "ok": true,
+        "kind": "image",
+        "path": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/fixture-wallpaper.png"
+      },
+      "pickedBad": {
+        "ok": false,
+        "error": "只支持图片或视频文件"
+      },
+      "pickedCanceled": {
+        "ok": false,
+        "canceled": true
+      }
+    }
+  },
+  {
+    "name": "真 powerMonitor 对象上 emit suspend ⇒ 视频暂停；emit resume ⇒ 续播（装配挂的是真事件源）",
+    "ok": true,
+    "detail": {
+      "beforeSuspend": {
+        "has": true,
+        "paused": false,
+        "focused": true
+      },
+      "listenerCount": 1,
+      "afterRealSuspend": {
+        "has": true,
+        "paused": true,
+        "focused": true
+      },
+      "afterRealResume": {
+        "has": true,
+        "paused": false,
+        "focused": true
+      },
+      "errors": []
+    }
+  },
+  {
+    "name": "团队窗格（#pane=team）真的渲染出名单，且打开即自动算了一轮秩序",
+    "ok": true,
+    "detail": {
+      "paneState": {
+        "found": true,
+        "rows": 1,
+        "text": "团队成员1示例成员调研read-only派活排出来的秩序1. 示例成员新建群会话下一轮下一轮并让 TA 开跑记忆：5 个主题project · 2team · 2member m-seed · 1放进他的线程派活并开跑在 设置 › 团队 里管理",
+        "plan": "排出来的秩序1. 示例成员"
+      },
+      "roundCalls": 1
+    }
+  },
+  {
+    "name": "派活入口真的调到 teamMemberDispatch，并把回执（会话 id）画出来",
+    "ok": true,
+    "detail": {
+      "step": "done",
+      "calls": [
+        {
+          "memberId": "m-seed",
+          "task": "把对比度再量一遍"
+        }
+      ]
+    }
+  },
+  {
+    "name": "「派活并开跑」真的调到 teamMemberStart，并把 run 会话 id 画出来",
+    "ok": true,
+    "detail": {
+      "step": "done",
+      "calls": [
+        {
+          "memberId": "m-seed",
+          "task": "开跑给我看"
+        }
+      ]
+    }
+  },
+  {
+    "name": "「新建群会话」真的调到 teamGroupCreate，并把会话 id 画出来",
+    "ok": true,
+    "detail": {
+      "step": "done",
+      "calls": [
+        {
+          "name": "壁纸攻坚"
+        }
+      ]
+    }
+  },
+  {
+    "name": "「下一轮」真的调到 teamGroupNext，并画出轮次与发言人",
+    "ok": true,
+    "detail": {
+      "step": "done",
+      "calls": [
+        {
+          "sessionId": "s-group-1",
+          "round": 1,
+          "start": false
+        }
+      ]
+    }
+  },
+  {
+    "name": "记忆面板真的渲染出三层主题数与合计（来自 teamMemoryPanel）",
+    "ok": true,
+    "detail": {
+      "step": "done",
+      "text": "记忆：5 个主题project · 2team · 2member m-seed · 1",
+      "rows": 3
+    }
+  },
+  {
+    "name": "「下一轮并让 TA 开跑」真的带 start 调到 teamGroupNext，并画出开跑会话 id",
+    "ok": true,
+    "detail": {
+      "step": "done",
+      "calls": [
+        {
+          "sessionId": "s-group-1",
+          "round": 1,
+          "start": false
+        },
+        {
+          "sessionId": "s-group-1",
+          "round": 2,
+          "start": true
+        }
+      ]
+    }
+  },
+  {
+    "name": "群聊共享流真的渲染出来（带轮 + 说话人，来自 teamGroupStream）",
+    "ok": true,
+    "detail": {
+      "step": "done",
+      "rows": [
+        "第1轮 user第一轮：一起看下",
+        "第1轮 member:m-seed我先来"
+      ]
+    }
+  },
+  {
+    "name": "网站壁纸：https ⇒ kind=web，iframe 带 sandbox 且 src 正确",
+    "ok": true,
+    "detail": {
+      "step": "done",
+      "good": {
+        "kind": "web",
+        "url": "https://example.com/live",
+        "hasFrame": true,
+        "src": "https://example.com/live",
+        "sandbox": "allow-scripts allow-same-origin allow-presentation"
+      },
+      "bad": {
+        "kind": "web",
+        "url": "http://example.com/plain",
+        "hasFrame": true,
+        "src": "http://example.com/plain",
+        "sandbox": "allow-scripts allow-same-origin allow-presentation"
+      }
+    }
+  },
+  {
+    "name": "网站壁纸：CSP 真在管——http 被拦 1 次、https 未被拦（跨域不读 DOM，只判策略面）",
+    "ok": true,
+    "detail": {
+      "cspErrors": [
+        "Framing 'http://example.com/' violates the following Content Security Policy directive: \"frame-src https:\". The request has been blocked.\n"
+      ],
+      "blockedHttp": 1,
+      "blockedHttps": 0
+    }
+  },
+  {
+    "name": "CSP 放开面：`frame-src https:` 在，且 frame-src 里没有 data:/blob:/http:",
+    "ok": true,
+    "detail": {
+      "builtCsp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: cairn-wallpaper:; font-src 'self' data:; media-src 'self' data: blob: cairn-wallpaper:; connect-src 'self' http: https: ws: wss:; worker-src 'self' blob:; frame-src https:; object-src 'none'; base-uri 'none'; form-action 'none'"
+    }
+  }
+]

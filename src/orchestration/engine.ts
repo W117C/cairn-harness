@@ -4,19 +4,9 @@ import { decideRuntimeControl, expandRuntimeFlow, runtimeGroups } from "./contro
 import { OrchestrationStore } from "./store";
 import { parsePlan } from "./validate";
 import { nextActions } from "./schedule";
+import type { RoundArbiter, RoundDecision } from "./round-arbiter";
 import { ORCHESTRATION_LEASE_MS } from "./types";
-import type {
-  ControlCommand,
-  ExecutionBackend,
-  ExecutionRequest,
-  ExecutionResult,
-  OrchestrationStamp,
-  OrchestrationView,
-  RuntimeControlEvent,
-  RuntimeControlGroup,
-  RuntimeControlStamp,
-  VerificationResult,
-} from "./types";
+import type { ControlCommand, ExecutionBackend, ExecutionRequest, ExecutionResult, OrchestrationStamp, OrchestrationView, RuntimeControlEvent, RuntimeControlGroup, RuntimeControlStamp, VerificationResult, ScheduleAction } from "./types";
 
 const ACTIONS = new Set(["approve_plan", "reject_plan", "pause_plan", "resume_plan", "cancel_plan", "pause_task", "resume_task", "cancel_task", "takeover_task", "retry_task", "merge_task", "reject_merge", "rollback_task"]);
 function hash(value: unknown): string { return createHash("sha256").update(JSON.stringify(value)).digest("hex"); }
@@ -42,7 +32,14 @@ function controlAbortReason(signal: AbortSignal): RuntimeControlAbort | null {
 export class OrchestrationEngine {
   private chain: Promise<unknown> = Promise.resolve();
   private readonly active = new Map<string, ActiveRun>();
-  constructor(private readonly options: { store: OrchestrationStore; backend: ExecutionBackend; enabled?: boolean; onEvent?: (event: AgentEvent) => void }) {}
+  constructor(private readonly options: {
+    store: OrchestrationStore;
+    backend: ExecutionBackend;
+    enabled?: boolean;
+    onEvent?: (event: AgentEvent) => void;
+    /** 一轮开始时的自动仲裁（发言权的编排引擎调用点）。缺席 = 零行为变化。 */
+    roundArbiter?: RoundArbiter;
+  }) {}
   private serial<T>(fn: () => Promise<T>): Promise<T> {
     const next = this.chain.catch(() => undefined).then(fn); this.chain = next; return next;
   }
@@ -221,13 +218,71 @@ export class OrchestrationEngine {
     });
     return this.view();
   }
+  /**
+   * 一轮的自动仲裁（发言权的引擎侧调用点）。
+   *  · `paused` ⇒ 这一轮不派，落一条 `needs_you` 状态（人和 UI 都看得见「为什么停」）；
+   *  · `order` ⇒ 只改**派发顺序**，不改并发上限与依赖（调度器算出的 batch 仍是同一批）。
+   * 同一 plan+version 的 dispatch 视为「同一轮」，逐个 plan 问一次。
+   */
+  private async arbitrateRound(actions: ScheduleAction[]): Promise<ScheduleAction[]> {
+    const arbiter = this.options.roundArbiter;
+    if (arbiter === undefined) return actions;
+    const rounds = new Map<string, ScheduleAction[]>();
+    for (const action of actions) {
+      if (action.kind !== "dispatch") continue;
+      const key = action.plan_id + "@" + String(action.version);
+      const bucket = rounds.get(key);
+      if (bucket === undefined) rounds.set(key, [action]);
+      else bucket.push(action);
+    }
+    if (rounds.size === 0) return actions;
+    const decisions = new Map<string, RoundDecision>();
+    for (const [key, bucket] of rounds) {
+      const head = bucket[0]!;
+      let decision: RoundDecision;
+      try {
+        decision = await arbiter({ plan_id: head.plan_id, version: head.version, task_ids: bucket.map((a) => a.task_id) });
+      } catch {
+        // 仲裁器自己坏了不该把这一轮卡死：按「不干预」继续（fail-open），但要留痕。
+        decision = { paused: false, reason: "arbiter failed; round proceeds unarbitrated" };
+      }
+      decisions.set(key, decision);
+      if (decision.paused) {
+        await this.append({
+          type: "agent_status",
+          agent_id: "round:" + key,
+          status: "running",
+          reason: decision.reason ?? "round paused by arbiter",
+          orchestration: {
+            schema_version: 1, plan_id: head.plan_id, version: head.version,
+            task_id: head.task_id, actor: "kernel", phase: "needs_you",
+          },
+        });
+      }
+    }
+    const others = actions.filter((action) => action.kind !== "dispatch");
+    const dispatched: ScheduleAction[] = [];
+    for (const [key, bucket] of rounds) {
+      const decision = decisions.get(key)!;
+      if (decision.paused) continue;
+      const order = decision.order;
+      if (order === undefined) { dispatched.push(...bucket); continue; }
+      const rank = new Map(order.map((id, index) => [id, index] as const));
+      dispatched.push(...[...bucket].sort((a, b) => (rank.get(a.task_id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.task_id) ?? Number.MAX_SAFE_INTEGER)));
+    }
+    return [...others, ...dispatched];
+  }
+
   async tick(): Promise<number> {
     return this.serial(async () => {
       if (this.options.enabled !== true) return 0;
       const view = await this.view();
       await this.settleRuntimeControls(view);
       const current = await this.view();
-      const actions = nextActions(current, { max_concurrency: this.options.backend.max_concurrency, now: Date.now() });
+      const planned = nextActions(current, { max_concurrency: this.options.backend.max_concurrency, now: Date.now() });
+      // 团队一轮的自动仲裁：一次 tick 的 dispatch 波 = 一轮。仲裁只回答两件事——
+      // 这一轮要不要开（空转守卫）、开的话按什么顺序派。缺席仲裁器 ⇒ actions 原样。
+      const actions = await this.arbitrateRound(planned);
       let started = 0;
       for (const action of actions) {
         if (action.kind === "cancel") {

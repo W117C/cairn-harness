@@ -1,0 +1,626 @@
+{
+  "builtCsp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: cairn-wallpaper:; font-src 'self' data:; media-src 'self' data: blob: cairn-wallpaper:; connect-src 'self' http: https: ws: wss:; worker-src 'self' blob:; frame-src https:; object-src 'none'; base-uri 'none'; form-action 'none'",
+  "protocol": {
+    "full": {
+      "status": 200,
+      "bytes": 6843,
+      "type": "image/png",
+      "acceptRanges": "bytes"
+    },
+    "ranged": {
+      "status": 206,
+      "bytes": 100,
+      "contentRange": "bytes 0-99/6843"
+    },
+    "wrongPath": 404,
+    "badRange": 416
+  },
+  "layer": {
+    "layer": true,
+    "kind": "image",
+    "src": "cairn-wallpaper://media/current?v=0",
+    "natural": [
+      640,
+      400
+    ],
+    "complete": true,
+    "bodyBg": "rgba(0, 0, 0, 0)",
+    "bodyAttr": true,
+    "htmlAttr": true,
+    "mainBackdrop": "blur(14px)",
+    "floor": "61%",
+    "wallpaperOpacity": "1",
+    "text": "rgb(240 239 236)",
+    "canvas": "rgb(21 21 21)"
+  },
+  "rendererIsolation": {
+    "hasRequire": "undefined",
+    "hasProcess": "undefined",
+    "hasAgent": "object",
+    "hasNodeGlobals": "undefined,undefined,undefined"
+  },
+  "darkContrast": {
+    "floor": 0.61,
+    "worst": 4.525801177062086,
+    "drift": 0,
+    "text": "rgb(240 239 236)",
+    "canvas": "rgb(21 21 21)"
+  },
+  "settingsRow": {
+    "found": true,
+    "display": "flex",
+    "direction": "column",
+    "actionsDisplay": "flex",
+    "status": null,
+    "pageBg": "rgb(27, 27, 27)",
+    "sliders": [
+      {
+        "label": "壁纸不透明度",
+        "columns": "78px 620px",
+        "display": "grid",
+        "top": 523,
+        "labelWidth": 78,
+        "labelLines": 1,
+        "rangeWidth": 240,
+        "rangeHeight": 16,
+        "accent": "color(srgb 0.85098 0.466667 0.341177)",
+        "value": "1"
+      },
+      {
+        "label": "压暗",
+        "columns": "78px 620px",
+        "display": "grid",
+        "top": 547,
+        "labelWidth": 78,
+        "labelLines": 1,
+        "rangeWidth": 240,
+        "rangeHeight": 16,
+        "accent": "color(srgb 0.85098 0.466667 0.341177)",
+        "value": "0.35"
+      },
+      {
+        "label": "玻璃透明度",
+        "columns": "78px 620px",
+        "display": "grid",
+        "top": 572,
+        "labelWidth": 78,
+        "labelLines": 1,
+        "rangeWidth": 240,
+        "rangeHeight": 16,
+        "accent": "color(srgb 0.85098 0.466667 0.341177)",
+        "value": "0.25"
+      }
+    ],
+    "buttons": [
+      {
+        "text": "选择图片或视频",
+        "width": 125,
+        "bg": "color(srgb 0.101961 0.101961 0.0980392)",
+        "color": "color(srgb 0.764706 0.760784 0.717647)"
+      },
+      {
+        "text": "浏览本机…",
+        "width": 98,
+        "bg": "color(srgb 0.101961 0.101961 0.0980392)",
+        "color": "color(srgb 0.764706 0.760784 0.717647)"
+      },
+      {
+        "text": "清除",
+        "width": 60,
+        "bg": "color(srgb 0.101961 0.101961 0.0980392)",
+        "color": "color(srgb 0.764706 0.760784 0.717647)"
+      }
+    ],
+    "rowWidth": 706,
+    "containerWidth": 1232
+  },
+  "rotation": {
+    "step": "done",
+    "enabled": true,
+    "paths": 1,
+    "countText": "候选：1"
+  },
+  "weatherHttp": {
+    "step": "done",
+    "text": "读到：rain（http）",
+    "keyCalls": [],
+    "url": "http://127.0.0.1:56592/weather"
+  },
+  "weatherFile": {
+    "step": "done",
+    "kind": "rain",
+    "source": "file"
+  },
+  "weather": {
+    "step": "done",
+    "mode": "weather",
+    "kind": "rain",
+    "rain": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/fixture-wallpaper.png"
+  },
+  "displays": {
+    "step": "done",
+    "ids": [
+      "1"
+    ],
+    "note": "已设为该屏专属",
+    "calls": [
+      "1"
+    ]
+  },
+  "sliderPointer": {
+    "point": {
+      "x": 687,
+      "y": 451
+    },
+    "hit": {
+      "tag": "INPUT",
+      "cls": "",
+      "hits": true
+    },
+    "value": "0.2",
+    "lastPatch": {
+      "wallpaper": {
+        "kind": "image",
+        "path": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/fixture-wallpaper.png",
+        "url": null,
+        "opacity": 0.2,
+        "scrim": 0.35,
+        "glassAlpha": 0.25,
+        "revision": 0,
+        "rotation": {
+          "enabled": true,
+          "mode": "weather",
+          "weather": {
+            "kind": "rain",
+            "paths": {
+              "rain": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/fixture-wallpaper.png"
+            },
+            "source": "http",
+            "filePath": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/weather-source.json",
+            "httpUrl": "http://127.0.0.1/placeholder"
+          },
+          "latitude": 39.9042,
+          "longitude": 116.4074,
+          "dayPath": null,
+          "nightPath": null,
+          "everyMinutes": 60,
+          "paths": [
+            "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/fixture-wallpaper.png"
+          ],
+          "lastAt": 0
+        }
+      }
+    }
+  },
+  "pickPointer": {
+    "point": {
+      "x": 1023,
+      "y": 432
+    },
+    "hit": {
+      "tag": "BUTTON",
+      "cls": "mini-btn",
+      "hits": true
+    },
+    "picks": 1,
+    "revision": null,
+    "layer": true
+  },
+  "clearPointer": {
+    "point": {
+      "x": 1229,
+      "y": 432
+    },
+    "hit": {
+      "tag": "BUTTON",
+      "cls": "mini-btn",
+      "hits": true
+    },
+    "layer": false,
+    "bodyAttr": false,
+    "htmlAttr": false,
+    "bodyBg": "rgb(21, 21, 21)",
+    "backdrop": "none",
+    "status": "未设置",
+    "buttons": [
+      "选择图片或视频",
+      "浏览本机…"
+    ]
+  },
+  "negativeControl": {
+    "layer": false,
+    "natural": null,
+    "bodyAttr": false,
+    "cspViolations": 1,
+    "sample": "Loading the image 'cairn-wallpaper://media/current?v=0' violates the following Content Security Policy directive: \"img-src 'self' data: blob: https:\". The action has been blocked."
+  },
+  "tint": {
+    "imageTint": "#7e457f",
+    "expect": [
+      127,
+      70,
+      128
+    ],
+    "rgb": [
+      126,
+      69,
+      127
+    ],
+    "near": true,
+    "videoTint": null,
+    "missingTint": null,
+    "fallback": "#1b1b1b"
+  },
+  "bootBackground": {
+    "bootTint": "#7e457f",
+    "appliedBackground": "#7E457F"
+  },
+  "light": {
+    "theme": "light",
+    "img": [
+      640,
+      400
+    ],
+    "bodyBg": "rgba(0, 0, 0, 0)",
+    "backdrop": "blur(14px)",
+    "floor": "43%",
+    "text": "rgb(11 11 11)",
+    "canvas": "rgb(252 252 251)",
+    "floorFraction": 0.43,
+    "worst": 4.629950815465612,
+    "drift": 0
+  },
+  "inAppPick": {
+    "step": "done",
+    "picked": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/01-wallpaper-on-dark-1440x900.png",
+    "applied": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/01-wallpaper-on-dark-1440x900.png",
+    "kind": "image",
+    "files": 12
+  },
+  "keyboardPick": {
+    "focusedRow": {
+      "tag": "BUTTON",
+      "cls": "cw-browser-row file",
+      "text": "01-wallpaper-on-dark-1440x900.png"
+    },
+    "path": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/01-wallpaper-on-dark-1440x900.png",
+    "kind": "image",
+    "active": "cw-browser-row file"
+  },
+  "videoPlaying": {
+    "has": true,
+    "src": "cairn-wallpaper://media/current?v=0",
+    "paused": false,
+    "t": 0.27,
+    "ready": 4,
+    "duration": 2,
+    "focused": true,
+    "hidden": false
+  },
+  "videoBlurred": {
+    "has": true,
+    "src": "cairn-wallpaper://media/current?v=0",
+    "paused": true,
+    "t": 0.54,
+    "ready": 4,
+    "duration": 2,
+    "focused": true,
+    "hidden": false
+  },
+  "videoResumed": {
+    "has": true,
+    "src": "cairn-wallpaper://media/current?v=0",
+    "paused": false,
+    "t": 0.54,
+    "ready": 4,
+    "duration": 2,
+    "focused": true,
+    "hidden": false
+  },
+  "videoLocked": {
+    "has": true,
+    "src": "cairn-wallpaper://media/current?v=0",
+    "paused": true,
+    "t": 0.54,
+    "ready": 4,
+    "duration": 2,
+    "focused": true,
+    "hidden": false
+  },
+  "videoUnlocked": {
+    "has": true,
+    "src": "cairn-wallpaper://media/current?v=0",
+    "paused": false,
+    "t": 0.54,
+    "ready": 4,
+    "duration": 2,
+    "focused": true,
+    "hidden": false
+  },
+  "degraded": {
+    "layer": false,
+    "bodyAttr": false,
+    "bodyBg": "rgb(21, 21, 21)",
+    "mainBackdrop": "none"
+  },
+  "degradeMarker": {
+    "found": true,
+    "text": "壁纸选择图片或视频浏览本机…清除文件不可用应用为壁纸只收 https；页面在 iframe 里带 sandbox 隔离定时轮换分钟把当前壁纸加入轮换固定间隔日出日落按天气当前设为白天当前设为夜里昼/夜：0候选：0屏 1 · 回落全局把当前壁纸设为这块屏壁纸不透明度压暗玻璃透明度"
+  },
+  "teamPanel": {
+    "navClicked": {
+      "found": true,
+      "text": "团队"
+    },
+    "rows": [
+      "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
+      "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
+      "本轮发言秩序主持优先按名单轮排一轮",
+      "当前会话的段—开新段",
+      "权限（成员维）团队档 default · 无裁剪",
+      "记忆作用域分布team 1 · member 0 · project 0",
+      "用量（按成员，当前会话）main 1200/340",
+      "成员密钥授权（第一名成员）示例成员允许拒绝发起申请"
+    ],
+    "selects": 5,
+    "inputs": 3,
+    "add": {
+      "typed": {
+        "ok": true,
+        "value": "新来的"
+      },
+      "addClicked": {
+        "found": true
+      },
+      "rows": [
+        "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
+        "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
+        "新来的成员 · mmwj5io6zread-onlydefaultguidedautofull-accessteammemberproject移除",
+        "本轮发言秩序主持优先按名单轮排一轮",
+        "当前会话的段—开新段",
+        "权限（成员维）团队档 default · 无裁剪",
+        "记忆作用域分布team 2 · member 0 · project 0",
+        "用量（按成员，当前会话）main 1200/340"
+      ]
+    }
+  },
+  "teamRound": {
+    "planClicked": {
+      "found": true
+    },
+    "planShown": {
+      "rows": [
+        "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
+        "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
+        "新来的成员 · mmwj5io6zread-onlydefaultguidedautofull-accessteammemberproject移除",
+        "本轮发言秩序主持优先按名单轮排一轮",
+        "排出来的秩序1. 示例成员　2. 新来的",
+        "当前会话的段—开新段",
+        "权限（成员维）团队档 default · 无裁剪",
+        "记忆作用域分布team 2 · member 0 · project 0",
+        "用量（按成员，当前会话）main 1200/340",
+        "成员密钥授权（第一名成员）示例成员新来的允许拒绝发起申请",
+        "档案补丁条数日志里的补丁条数（历史只追加；移除不解绑旧补丁）。2"
+      ],
+      "calls": 1
+    }
+  },
+  "teamSegment": {
+    "segClicked": {
+      "found": true
+    },
+    "segShown": {
+      "found": true,
+      "text": "当前会话的段2开新段"
+    }
+  },
+  "sideTeam": {
+    "found": true,
+    "text": "团队成员1示例成员read-only在 设置 › 团队 里管理",
+    "rows": 1
+  },
+  "teamGrants": {
+    "step": "done",
+    "calls": [
+      {
+        "memberId": "m-seed",
+        "secret": "OPENAI_API_KEY",
+        "allow": true,
+        "at": 1
+      }
+    ]
+  },
+  "secretAsk": {
+    "step": "done",
+    "calls": [
+      {
+        "memberId": "m-seed",
+        "secret": "BRAVE_KEY",
+        "state": "pending"
+      }
+    ]
+  },
+  "teamStore": {
+    "afterWrite": {
+      "members": [
+        {
+          "id": "m-real",
+          "name": "真成员",
+          "role": "实现",
+          "tier": "guided",
+          "memoryScope": "team",
+          "capabilities": []
+        }
+      ],
+      "records": 1
+    },
+    "afterRemove": {
+      "members": [],
+      "records": 2
+    }
+  },
+  "pickDialog": {
+    "result": {
+      "canceled": false,
+      "filePaths": []
+    },
+    "elapsedMs": 2563,
+    "options": {
+      "title": "选择壁纸",
+      "properties": [
+        "openFile"
+      ],
+      "filters": [
+        {
+          "name": "图片与视频",
+          "extensions": [
+            "png",
+            "jpg",
+            "jpeg",
+            "webp",
+            "gif",
+            "bmp",
+            "mp4",
+            "webm",
+            "mov"
+          ]
+        }
+      ]
+    }
+  },
+  "pickSubstitute": {
+    "pickedReal": {
+      "ok": true,
+      "kind": "image",
+      "path": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/fixture-wallpaper.png"
+    },
+    "pickedBad": {
+      "ok": false,
+      "error": "只支持图片或视频文件"
+    },
+    "pickedCanceled": {
+      "ok": false,
+      "canceled": true
+    }
+  },
+  "realPowerMonitor": {
+    "beforeSuspend": {
+      "has": true,
+      "paused": false,
+      "focused": true
+    },
+    "listenerCount": 1,
+    "afterRealSuspend": {
+      "has": true,
+      "paused": true,
+      "focused": true
+    },
+    "afterRealResume": {
+      "has": true,
+      "paused": false,
+      "focused": true
+    },
+    "errors": []
+  },
+  "teamPane": {
+    "paneState": {
+      "found": true,
+      "rows": 1,
+      "text": "团队成员1示例成员调研read-only派活排出来的秩序1. 示例成员新建群会话下一轮下一轮并让 TA 开跑记忆：5 个主题project · 2team · 2member m-seed · 1放进他的线程派活并开跑在 设置 › 团队 里管理",
+      "plan": "排出来的秩序1. 示例成员"
+    },
+    "roundCalls": 1
+  },
+  "teamDispatch": {
+    "step": "done",
+    "calls": [
+      {
+        "memberId": "m-seed",
+        "task": "把对比度再量一遍"
+      }
+    ],
+    "text": "团队成员1示例成员调研read-only已选排出来的秩序1. 示例成员新建群会话下一轮下一轮并让 TA 开跑记忆：5 个主题project · 2team · 2member m-seed · 1放进他的线程派活并开跑已派给 m-seed · s-team-1在 设置 › 团队 里管理"
+  },
+  "teamStart": {
+    "step": "done",
+    "calls": [
+      {
+        "memberId": "m-seed",
+        "task": "开跑给我看"
+      }
+    ],
+    "text": "团队成员1示例成员调研read-only已选排出来的秩序1. 示例成员新建群会话下一轮下一轮并让 TA 开跑记忆：5 个主题project · 2team · 2member m-seed · 1放进他的线程派活并开跑已派给 m-seed · s-run-1在 设置 › 团队 里管理"
+  },
+  "teamGroup": {
+    "step": "done",
+    "calls": [
+      {
+        "name": "壁纸攻坚"
+      }
+    ],
+    "text": "团队成员1示例成员调研read-only已选排出来的秩序1. 示例成员新建群会话已建群会话 s-group-1下一轮下一轮并让 TA 开跑记忆：5 个主题project · 2team · 2member m-seed · 1放进他的线程派活并开跑已派给 m-seed · s-run-1在 设置 › 团队 里管理"
+  },
+  "teamPround": {
+    "step": "done",
+    "calls": [
+      {
+        "sessionId": "s-group-1",
+        "round": 1,
+        "start": false
+      }
+    ],
+    "text": "团队成员1示例成员调研read-only已选排出来的秩序1. 示例成员新建群会话已建群会话 s-group-1下一轮下一轮并让 TA 开跑记忆：5 个主题project · 2team · 2member m-seed · 1第1轮 user第一轮：一起看下第1轮 member:m-seed我先来第 N 轮发言：1 · m-seed放进他的线程派活并开跑已派给 m-seed · s-run-1在 设置 › 团队 里管理"
+  },
+  "memoryPanel": {
+    "step": "done",
+    "text": "记忆：5 个主题project · 2team · 2member m-seed · 1",
+    "rows": 3
+  },
+  "teamSpeak": {
+    "step": "done",
+    "calls": [
+      {
+        "sessionId": "s-group-1",
+        "round": 1,
+        "start": false
+      },
+      {
+        "sessionId": "s-group-1",
+        "round": 2,
+        "start": true
+      }
+    ],
+    "text": "团队成员1示例成员调研read-only已选排出来的秩序1. 示例成员新建群会话已建群会话 s-group-1下一轮下一轮并让 TA 开跑记忆：5 个主题project · 2team · 2member m-seed · 1第1轮 user第一轮：一起看下第1轮 member:m-seed我先来第 N 轮发言：2 · m-seed放进他的线程派活并开跑已派给 m-seed · s-speak-2在 设置 › 团队 里管理"
+  },
+  "groupStream": {
+    "step": "done",
+    "rows": [
+      "第1轮 user第一轮：一起看下",
+      "第1轮 member:m-seed我先来"
+    ]
+  },
+  "webWallpaper": {
+    "step": "done",
+    "good": {
+      "kind": "web",
+      "url": "https://example.com/live",
+      "hasFrame": true,
+      "src": "https://example.com/live",
+      "sandbox": "allow-scripts allow-same-origin allow-presentation"
+    },
+    "bad": {
+      "kind": "web",
+      "url": "http://example.com/plain",
+      "hasFrame": true,
+      "src": "http://example.com/plain",
+      "sandbox": "allow-scripts allow-same-origin allow-presentation"
+    }
+  },
+  "webLive": {
+    "cspErrors": [
+      "Framing 'http://example.com/' violates the following Content Security Policy directive: \"frame-src https:\". The request has been blocked.\n"
+    ],
+    "blockedHttp": 1,
+    "blockedHttps": 0
+  }
+}

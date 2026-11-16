@@ -187,6 +187,7 @@ async function main() {
     ["20-settings-about", "关于与更新"],
     ["21-settings-skills", "技能中心"],
     ["22-settings-worktrees", "工作树"],
+    ["23-settings-team", "团队"],
   ]) {
     const clicked = await clickText(name, ".sp-nav-item", label);
     if (!clicked) { checks.misses.push({ step: name, selector: ".sp-nav-item", text: label }); continue; }

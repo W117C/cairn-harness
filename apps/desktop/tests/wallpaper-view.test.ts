@@ -1,7 +1,14 @@
 // 壁纸视图投影判卷（2026-11-14 · 设计规格 §3.5）：
 // 设置 → 视图是纯函数；kind=none ⇒ 无 URL；revision 进 URL 破缓存。
 import { describe, expect, it } from "vitest";
-import { shouldPauseMedia, wallpaperUrl, wallpaperViewOf } from "../src/renderer/state/wallpaper";
+import {
+  markWallpaperUnavailable,
+  setWallpaperView,
+  shouldPauseMedia,
+  wallpaperFailed,
+  wallpaperUrl,
+  wallpaperViewOf,
+} from "../src/renderer/state/wallpaper";
 import { DEFAULT_SETTINGS, type AppSettings } from "../../../src/main/settings";
 
 function settingsWith(wallpaper: Partial<AppSettings["wallpaper"]>): AppSettings {
@@ -28,10 +35,23 @@ describe("壁纸视图投影", () => {
     expect(v.url).toBeNull();
   });
 
-  it("暂停判据：失焦或不可见即停", () => {
+  it("降级链：媒体失败 ⇒ 撤层并记「文件不可用」；视图重设即清掉（自动重试）", () => {
+    setWallpaperView(wallpaperViewOf(settingsWith({ kind: "image", path: "/tmp/a.png", revision: 2 })));
+    expect(wallpaperFailed()).toBe(false);
+    markWallpaperUnavailable();
+    expect(wallpaperFailed()).toBe(true);
+    // 重新选（revision 变）或重读设置 ⇒ 失败态清掉，重新再试
+    setWallpaperView(wallpaperViewOf(settingsWith({ kind: "image", path: "/tmp/a.png", revision: 3 })));
+    expect(wallpaperFailed()).toBe(false);
+  });
+
+  it("暂停判据：失焦 / 不可见 / 系统休眠（锁屏）即停", () => {
     expect(shouldPauseMedia(true, true)).toBe(false);
     expect(shouldPauseMedia(false, true)).toBe(true);
     expect(shouldPauseMedia(true, false)).toBe(true);
     expect(shouldPauseMedia(false, false)).toBe(true);
+    // 锁屏：窗口既没失焦也没隐藏，只有系统级推送能抓到这一格
+    expect(shouldPauseMedia(true, true, true)).toBe(true);
+    expect(shouldPauseMedia(true, true, false)).toBe(false);
   });
 });

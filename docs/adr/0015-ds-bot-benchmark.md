@@ -1,6 +1,9 @@
 # ADR 0015：bot 团队协作核心（自研）——调研裁决与落点
 
-- **状态**：Proposed（待业主批准；批准前不写实现代码，符合调研计划 §0 的放行条件）
+- **状态**：**Accepted**（2026-11-16 转正）。放行依据：业主 2026-11-16 10:43（Asia/Shanghai）的指令
+  「把bot和壁纸都全部做完，并且做到行业最高的水平」——该指令要求落实现，故本 ADR 从 Proposed 转 Accepted；
+  落点仍按本文的裁决执行（形态 A、B3、G2、P2、R1、S1、C2、L1），实现进度见
+  `docs/superpowers/specs/2026-11-16-bot-team-core-design.md` §9。
 - **日期**：2026-11-15（Asia/Shanghai）
 - **依据**：`docs/superpowers/plans/2026-11-14-ds-bot-benchmark.md` v2.2；业主 2026-11-14 裁决
   「范围＝bot 团队协作核心；定位＝自研；落点由差距表裁决」
@@ -157,6 +160,8 @@
 
 ## 十一、参考
 
+- **Phase 4 第一篇（§九 五个未决口的答法）**：`docs/superpowers/specs/2026-11-16-bot-team-core-design.md`
+  （待业主复核；本 ADR 的裁决一项未改）
 - `docs/superpowers/plans/2026-11-14-ds-bot-benchmark.md`（v2.2；J1–J6、Q1–Q18、§4.9 矩阵）
 - `docs/adr/0005-log-structural-records.md`（事件种类封闭）
 - `docs/adr/0008-conversation-rail.md`（渲染层 rail 判据）

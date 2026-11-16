@@ -30,6 +30,8 @@ export interface HybridRecallOutcome {
 export interface HybridRecallOptions {
   k?: number;
   nowISO?: string;
+  /** 允许读的记忆作用域（ADR 0015 S1 第二步）。缺席 = 不过滤（老调用方逐字不变）。 */
+  scopes?: readonly string[];
   embedding?: {
     provider: EmbeddingProvider;
     signal?: AbortSignal;
@@ -97,7 +99,7 @@ export async function selectRecallHybrid(
 ): Promise<HybridRecallOutcome> {
   const k = opts.k ?? RECALL_MAX_TOPICS;
   if (!opts.embedding) {
-    return { mode: "lexical", picks: selectRecall(query, candidates, { k, ...(opts.nowISO ? { nowISO: opts.nowISO } : {}) }) };
+    return { mode: "lexical", picks: selectRecall(query, candidates, { k, ...(opts.nowISO ? { nowISO: opts.nowISO } : {}), ...(opts.scopes === undefined ? {} : { scopes: opts.scopes }) }) };
   }
   if (k <= 0 || candidates.length === 0) return { mode: "hybrid", picks: [] };
 
@@ -115,7 +117,7 @@ export async function selectRecallHybrid(
     return {
       mode: "hybrid-fallback",
       reason: (error instanceof Error ? error.message : String(error)).slice(0, 300),
-      picks: selectRecall(query, candidates, { k, ...(opts.nowISO ? { nowISO: opts.nowISO } : {}) }),
+      picks: selectRecall(query, candidates, { k, ...(opts.nowISO ? { nowISO: opts.nowISO } : {}), ...(opts.scopes === undefined ? {} : { scopes: opts.scopes }) }),
     };
   }
 

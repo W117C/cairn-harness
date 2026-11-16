@@ -1,5 +1,5 @@
 // 设置导航的轻量单源：命令面板只需要分区 id/标签，不应因此把设置页正文与工作台一起拉进首屏。
-import { BarChart3, BookOpen, Brain, Bot, Clock, FolderInput, GitBranch, Globe, KeyRound, Keyboard, Plug, Puzzle, Shield, SlidersHorizontal, Sparkles, UserRound, Webhook, Wrench } from "lucide-react";
+import { BarChart3, BookOpen, Brain, Bot, Users, Clock, FolderInput, GitBranch, Globe, KeyRound, Keyboard, Plug, Puzzle, Shield, SlidersHorizontal, Sparkles, UserRound, Webhook, Wrench } from "lucide-react";
 
 import type { PageId } from "../app-controls";
 export type { PageId } from "../app-controls";
@@ -27,6 +27,8 @@ export const SECTIONS: readonly { id: SectionId; label: string; icon: React.JSX.
   { id: "provider", label: "模型与 Provider", icon: <KeyRound size={14} /> },
   { id: "personalization", label: "个性化", icon: <UserRound size={14} /> },
   { id: "subagents", label: "子 Agent", icon: <Bot size={14} /> },
+  // 2026-11-16（v59）：团队成员——档案是补丁投影，名单与写入口都走团队事件日志。
+  { id: "team", label: "团队", icon: <Users size={14} /> },
   // 用户级 MCP 服务器（ZCode 独立管理对应面，2026-11-05）：<appData>/mcp.json 的管理面。
   { id: "mcp", label: "MCP 服务器", icon: <Plug size={14} /> },
   // 用户级 Hooks（ZCode HooksSection 对应面，2026-11-05）：<appData>/hooks.json 的管理面。
@@ -66,6 +68,7 @@ export const SECTION_KEYWORDS: Readonly<Record<SectionId, string>> = {
   general: "主题 暗 亮 深色 夜间 外观 界面 语言 ctrl tab 循环 会话切换",
   personalization: "全局 自定义 指令 提示词 prompt 个性化 工作偏好",
   subagents: "子代理 子智能体 并行 worker 角色 委派 subagent",
+  team: "团队 成员 成员档案 团队档 名单 roster 团队日志",
   migration: "迁移 导入 claude code codex 兼容 配置",
   provider: "模型 通道 api key 密钥 接口 glm openai anthropic gemini deepseek 自定义 识图 视觉",
   mcp: "mcp server 服务器 工具 模型上下文协议 stdio sse http 接入",

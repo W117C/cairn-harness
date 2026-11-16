@@ -37,6 +37,9 @@ export interface ExternalReadGrant {
 export interface ToolContext {
   /** 工具执行的工作区（绝对路径）。 */
   workspace: string;
+  /** 运行身份（`member:<id>` 等）。缺省 = 没有身份（不是「主会话」的别名）。
+   *  记忆写入的成员作用域只认这一格——**模型参数不能指定成员**。 */
+  agentId?: string;
   /** 会话日志定位跨 worktree 保持稳定，用于隔离后台命令。 */
   sessionLogPath?: string;
   /** 仅由通过审批的沙箱启动路径设置。 */

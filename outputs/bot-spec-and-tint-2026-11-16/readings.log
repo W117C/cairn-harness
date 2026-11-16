@@ -1,0 +1,29 @@
+# 读数原件（2026-11-16 · Asia/Shanghai · HEAD 2bdac46a + 本批未提交改动）
+
+## 1. 核心判据：typecheck
+```
+typecheck: tsc --noEmit 通过（0 条报错）✅
+```
+
+## 2. 渲染层分层与行帽
+```
+renderer-layer-check: 绿（247 个渲染层源文件；I1 组件层不回流 App / I2 状态层不 import 组件 / I3 派生层纯 / I4 行数帽 1200·App 900）
+```
+
+## 3. 壁纸首帧底色判卷（新增 7 条）
+```
+ [32m✓[39m tests/wallpaper-tint.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m7 passed[39m[22m[90m (7)[39m
+```
+
+## 4. 桌面全量套件（`pnpm --filter cairn-desktop test`，即 `vitest run --config vitest.config.ts`）
+```
+ Test Files  397 passed (397)
+      Tests  2581 passed (2581)
+ exit=0
+```
+## 5. 桌面边界
+```
+desktop-boundary-check: 绿（src 无反向依赖、无 UI import）
+```

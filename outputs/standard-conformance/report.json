@@ -1,0 +1,95 @@
+{
+  "at": "2026-11-16T12:25:36.075Z",
+  "verdict": "pass",
+  "parity": {
+    "threshold": 0.96,
+    "total": 23,
+    "covered": 21,
+    "partial": 0,
+    "absent": 0,
+    "out": 2
+  },
+  "rows": [
+    {
+      "standard": "WCAG 2.2",
+      "clause": "SC 1.4.3 Contrast Minimum",
+      "threshold": 4.5,
+      "unit": "ratio",
+      "measured": 4.526,
+      "verdict": "pass",
+      "source": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/readings.json"
+    },
+    {
+      "standard": "CSP Level 3",
+      "clause": "越权取图必须被 CSP 拦下",
+      "threshold": 1,
+      "unit": "violations",
+      "measured": 1,
+      "verdict": "pass",
+      "source": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/readings.json"
+    },
+    {
+      "standard": "CSP Level 3",
+      "clause": "硬化指令（object-src / base-uri / form-action）",
+      "threshold": 3,
+      "unit": "directives",
+      "measured": 3,
+      "verdict": "pass",
+      "source": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/readings.json"
+    },
+    {
+      "standard": "CSP Level 3",
+      "clause": "script-src 不含 unsafe-inline",
+      "threshold": 0,
+      "unit": "occurrences",
+      "measured": 0,
+      "verdict": "pass",
+      "source": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/readings.json"
+    },
+    {
+      "standard": "CSP Level 3",
+      "clause": "frame-src 放开面（只 https:，无 data:/blob:/http:）",
+      "threshold": 1,
+      "unit": "ok",
+      "measured": 1,
+      "verdict": "pass",
+      "source": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/readings.json"
+    },
+    {
+      "standard": "Electron 安全清单",
+      "clause": "contextIsolation / 无 nodeIntegration / sandbox / 无 node 全局",
+      "threshold": 4,
+      "unit": "checks",
+      "measured": 4,
+      "verdict": "pass",
+      "source": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/readings.json"
+    },
+    {
+      "standard": "WCAG 2.2",
+      "clause": "SC 2.1.1 Keyboard（只用键盘选壁纸）",
+      "threshold": 1,
+      "unit": "flows",
+      "measured": 1,
+      "verdict": "pass",
+      "source": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/readings.json"
+    },
+    {
+      "standard": "OWASP Top 10 2021",
+      "clause": "A09 敏感值不得进日志（脱敏后残留）",
+      "threshold": 0,
+      "unit": "occurrences",
+      "measured": 0,
+      "verdict": "pass",
+      "source": "scripts/standard-report.ts"
+    },
+    {
+      "standard": "本方对表",
+      "clause": "评分面 covered 比例（对表自己声明的阈值）",
+      "threshold": 0.96,
+      "unit": "ratio",
+      "measured": 1,
+      "verdict": "pass",
+      "source": "fixtures/parity/checklist.json"
+    }
+  ]
+}

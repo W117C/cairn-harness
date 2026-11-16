@@ -84,7 +84,7 @@ describe("协议版本握手接线（§3.5/§12）", () => {
     //   assignSessionProject 增可选 workspace——同 id 跨工作区时按显式根做存在性检查，
     //   隔离树建在会话自己的工作区，不再回落构造期的启动工作区。
     // v56 → v57：listMessagePins 增可选 workspace，置顶读取按显式根做存在性检查。
-    // v57 → v58：AskPayload 增可选 workspace，审批卡/等门计数按目标根寻址。
-    expect(IPC_PROTOCOL_VERSION).toBe(58);
+    // v58 → v59：壁纸系统暂停推送 + 团队名单/写入两条 invoke 通道。
+    expect(IPC_PROTOCOL_VERSION).toBe(79);
   });
 });

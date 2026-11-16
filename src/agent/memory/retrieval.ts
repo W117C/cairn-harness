@@ -14,10 +14,13 @@
 // · 一切有界：问句经 boundQuery 封顶、摘录按**码点**截断（UTF-8 完整性那一族）。
 import { boundQuery, tokensOf } from "../map/retrieve.js";
 import { decayStrength, type MemoryStat } from "./strength.js";
+import { filterByScope } from "./scope.js";
 
 /** 一次选材的输入条目：词面语料 = topic 名 + 索引摘要行（**不读全文**——全文只给选中的 top-k，
  *  评分语料用索引行已经足够，整库读正文会把每轮注入变成 O(库×正文) 的 IO）。 */
 export interface RecallCandidate {
+  /** 记忆作用域（v61 的 S1 第二步）；缺席 = project。 */
+  scope?: string;
   topic: string;
   type: string;
   digest: string;
@@ -93,11 +96,14 @@ export function scoreRecallCandidates(
 export function selectRecall(
   query: string,
   candidates: readonly RecallInput[],
-  opts: { k?: number; nowISO?: string } = {},
+  opts: { k?: number; nowISO?: string; scopes?: readonly string[] } = {},
 ): RecallPick[] {
   const k = opts.k ?? RECALL_MAX_TOPICS;
   if (k <= 0) return [];
-  const scored = new Map(scoreRecallCandidates(query, candidates).map((s) => [s.topic, s]));
+  // 作用域过滤（ADR 0015 S1 第二步）：默认不过滤（老调用方逐字不变）；
+  // 给了空集合就是「这个人没有可读档」，不是「全读」。
+  const visible = filterByScope(candidates, opts.scopes);
+  const scored = new Map(scoreRecallCandidates(query, visible).map((s) => [s.topic, s]));
   // 强度微调只折半影响：词面命中是主干（编码特异性），强度只表达「多久没用」——
   // 决不许让一条 0 强度的强命中出局（那是 decay 抢了 cueing 的方向盘）。nowISO 缺省取
   // 衰减锚点本身（Δ=0 不衰减）：纯函数调用方不该被迫先看一眼钟。

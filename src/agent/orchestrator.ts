@@ -4,6 +4,7 @@
 // spawn_agent（非运行时报错）；worker 上下文 = task + context + 项目记忆注入，永不继承主对话。
 // 事件纪律（§4.4.9 / 任务书裁决 1）：worker 事件落主会话 JSONL（子流：agent_* + 带 agent_id 的
 // tool_call/tool_result/usage），agent_spawned 携 parent_event_id 建立血缘树；重放主流后投影一致。
+import { spawnIdentity } from "./team/identity";
 import { execFile } from "node:child_process";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -672,7 +673,15 @@ export class Orchestrator {
 
     // ---- M3b 写租约表（§4.4.5）：resources glob 与活跃 write worker 租约求交 ----
     // 相交 → 审批卡显式警告（可强行批准）——租约是合并冲突预测器，不是硬闸。
-    const agentId = nextAgentId();
+    // 成员线程：`args.member` 给了就派给那个成员（agent_id = member:<id>），
+    // 不给就沿用 worker-N（老路径逐字不变）。id 不合法直接拒——不悄悄退化成匿名 worker，
+    // 否则「派给某人」会变成「派给一个匿名 worker」，事后没人查得出来。
+    const identity = spawnIdentity(
+      typeof (args as { member?: unknown }).member === "string" ? (args as { member: string }).member : undefined,
+      nextAgentId,
+    );
+    if (!identity.ok) return { ok: false, output: identity.error };
+    const agentId = identity.agentId;
     if (mode === "write") {
       const conflicts = this.leaseConflicts(resources);
       // glob 没抓到才问语义层（省一次建图，也让既有事件流/审批文案在纯 glob 场景逐字不变）
@@ -1260,7 +1269,8 @@ export class Orchestrator {
             + (err instanceof Error ? err.message : String(err)));
         }
       }
-      const system = await buildWorkerSystemMessages(w, this.opts.workspace, startContext, experienceNote); // 记忆注入恒读主 checkout（裁决 2）
+      // 记忆注入恒读主 checkout（裁决 2）；`w.agentId` 决定记忆作用域（成员线程读三档）。
+      const system = await buildWorkerSystemMessages(w, this.opts.workspace, startContext, experienceNote, w.agentId);
       const provider = createWorkerProvider({
         readEvents: () => w.events,
         system,

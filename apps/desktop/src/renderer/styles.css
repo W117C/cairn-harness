@@ -2552,6 +2552,35 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
   transform: rotate(45deg); pointer-events: none;
 }
 .ss-field[data-select] > select { appearance: none; padding-right: 32px; }
+
+/* 2026-11-16（R3 修）：`.ss-input` / `.ss-select` 在团队页、团队窗格与壁纸设置里被直接挂到
+   原生控件上，但**此前没有任何样式规则**——暗色下是白底白字的系统控件（业主截图取证），
+   四件控件还在一条 flex 里互相挤压。形制与 .ss-field 内的控件对齐：同高、同圆角、同 token；
+   宽度交给容器里的 .team-add / .team-member 决定，不在控件上写死。 */
+.ss-input, .ss-select {
+  box-sizing: border-box; min-width: 0; height: 36px; padding: 0 var(--space-md);
+  border: 1px solid var(--hairline-strong); border-radius: var(--radius-field);
+  background-color: var(--fill-field); color: hsl(var(--text-000)); outline: 0;
+  font-family: inherit; font-size: var(--fs-body-md);
+}
+.ss-input::placeholder { color: hsl(var(--text-500)); }
+.ss-input:focus-visible, .ss-select:focus-visible { border-color: hsl(var(--accent-control) / 60%); }
+.ss-input:disabled, .ss-select:disabled { opacity: 0.55; cursor: default; }
+/* 自绘箭头（data URI 走 CSP 的 img-src data:）：原生箭头在自涂底色上会跟主题打架。 */
+.ss-select {
+  appearance: none; padding-right: 30px;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238a8a8a' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center;
+}
+/* 一行里的多件控件：等距、靠右、窄窗自动换行——不再挤成一条看不清的横带。 */
+.team-add, .team-member {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end;
+  gap: var(--space-sm); min-width: 0;
+}
+.team-add .ss-input { width: 160px; }
+.team-add .ss-select { width: 132px; }
+.team-member .ss-input { width: 220px; }
+.team-member .ss-select { width: 132px; }
 /* 卡片内控件与按钮同高 36px（导航列的小按钮不在卡内，不受影响）。
    主按钮不再在卡内改走强调色域（2026-11-01 第 862 页）：同一个 `mini-btn primary`
    在全应用 20 余处是「深色实底（亮色）/ 抬升暖面 + 亮字 + 细描边（暗色）」，只有设置卡里

@@ -153,3 +153,48 @@ body[data-we-wallpaper] :is(.side) {
     text-align: left;
   }
 }
+
+/* v73：应用内壁纸选择器（输目录 / 点目录下钻 / 点文件应用） */
+.cw-browser { display: flex; flex-direction: column; gap: 6px; width: 100%; margin: 4px 0; }
+.cw-browser-bar { display: flex; gap: 6px; align-items: center; }
+.cw-browser-dir { flex: 1 1 auto; min-width: 0; }
+.cw-browser-list {
+  display: flex; flex-direction: column; gap: 2px;
+  max-height: 180px; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 4px; background: var(--card);
+}
+.cw-browser-row {
+  text-align: left; background: none; border: 0; cursor: pointer;
+  padding: 3px 6px; border-radius: calc(var(--radius) - 2px);
+  color: var(--foreground); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cw-browser-row:hover { background: var(--accent); }
+.cw-browser-row.dir { color: var(--muted-foreground); }
+.cw-browser-issue { color: var(--destructive); }
+
+/* 定时轮换（2026-11-16）：开 / 间隔 / 把当前加入 / 候选数 */
+.cw-rotation { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0; font-size: 12px; }
+.cw-rotation-toggle { display: inline-flex; gap: 6px; align-items: center; }
+.cw-rotation-minutes { width: 72px; }
+
+/* 2026-11-16（R3 修）：壁纸设置拆行后的子控件族。此前这些类名组件侧写了、样式表里没有规则——
+   真机上是「应用为壁纸」贴着输入框、轮换三档挤成一条、多屏信息连成一句话、选中态看不出来。
+   现在每一族自带间距与换行；宽度只给输入框，按钮按内容走。 */
+.cw-web-row, .cw-displays { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); min-width: 0; }
+.cw-web-row .cw-web-url { width: 320px; max-width: 100%; }
+.cw-weather-url { width: 260px; max-width: 100%; }
+.cw-weather-key { width: 220px; max-width: 100%; }
+.cw-weather-path { width: 300px; max-width: 100%; }
+.cw-rotation-modes { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.cw-rotation-modes > .mini-btn { min-height: 28px; }
+/* 选中态与设置页其它分段控件同一条配方（accent-brand 10% 底 + 55% 边）。 */
+.cw-rotation-modes > .mini-btn.on,
+.cw-rotation-modes > .mini-btn[aria-pressed="true"] {
+  border-color: hsl(var(--accent-brand) / 55%);
+  background: hsl(var(--accent-brand) / 10%);
+  color: hsl(var(--text-000));
+}
+
+/* 网站壁纸（2026-11-16 业主批「准放 CSP」）：iframe 铺满、不吃交互 */
+.cw-web { border: 0; width: 100%; height: 100%; pointer-events: none; }

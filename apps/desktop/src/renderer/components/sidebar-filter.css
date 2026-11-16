@@ -42,3 +42,52 @@
   align-items: flex-start;
   gap: 6px;
 }
+
+/* 成员区（2026-11-16，v59）：侧栏底部的团队名单。颜色一律走主题变量，不写字面色值。 */
+.side-team {
+  margin: 8px 10px 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.side-team-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: hsl(var(--text-300));
+  letter-spacing: 0.02em;
+}
+.side-team-title { font-weight: 600; }
+.side-team-count {
+  font-variant-numeric: tabular-nums;
+  color: hsl(var(--text-300) / 0.8);
+}
+.side-team-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 6px;
+  border-radius: 6px;
+}
+.side-team-name {
+  font-size: 12px;
+  color: hsl(var(--text-100));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.side-team-tier {
+  font-size: 10px;
+  color: hsl(var(--text-300));
+  font-variant-numeric: tabular-nums;
+}
+.side-team-empty,
+.side-team-hint {
+  font-size: 11px;
+  color: hsl(var(--text-300));
+  padding: 2px 6px;
+}

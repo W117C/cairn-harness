@@ -1,0 +1,16 @@
+# 读数原件（2026-11-16 · Asia/Shanghai · HEAD 049fff94 + 本批未提交改动）
+
+## 1. 三件最小件的判卷
+```
+ [32m✓[39m tests/orchestration-speech.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/segments.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/team-members.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+[2m Test Files [22m [1m[32m3 passed[39m[22m[90m (3)[39m
+[2m      Tests [22m [1m[32m25 passed[39m[22m[90m (25)[39m
+```
+
+## 2. 核心判据：typecheck
+```
+typecheck: tsc --noEmit 通过（0 条报错）✅
+```
+

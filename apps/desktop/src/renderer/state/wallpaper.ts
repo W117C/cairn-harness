@@ -27,8 +27,10 @@ export const WALLPAPER_ATTR = "data-we-wallpaper";
 export const CAIRN_WALLPAPER_ATTR = "data-cairn-wallpaper";
 
 export interface WallpaperView {
-  kind: "none" | "image" | "video";
+  kind: "none" | "image" | "video" | "web";
   url: string | null;
+  /** kind=web 时的页面地址（https）。 */
+  webUrl?: string | null;
 }
 
 /** 媒体地址：协议常量 + revision（破浏览器缓存）。 */
@@ -39,17 +41,27 @@ export function wallpaperUrl(revision: number): string {
 /** 设置 → 视图（纯函数）。kind 非 none 但没有 path ⇒ 视作无壁纸。 */
 export function wallpaperViewOf(settings: AppSettings): WallpaperView {
   const w = settings.wallpaper;
-  if (w.kind === "none" || w.path === null) return { kind: "none", url: null };
+  if (w.kind === "none") return { kind: "none", url: null };
+  // 网站壁纸（2026-11-16 业主批「准放 CSP」）：view 里带的是页面地址，不走壁纸协议。
+  if (w.kind === "web") return w.url === null ? { kind: "none", url: null } : { kind: "web", url: null, webUrl: w.url };
+  if (w.path === null) return { kind: "none", url: null };
   return { kind: w.kind, url: wallpaperUrl(w.revision) };
 }
 
-/** 失焦或不可见 ⇒ 暂停视频（省电）。系统休眠时机器本就不跑，不另设通道。 */
-export function shouldPauseMedia(focused: boolean, visible: boolean): boolean {
-  return !focused || !visible;
+/**
+ * 失焦 / 不可见 / **系统休眠或锁屏** ⇒ 暂停视频（省电）。
+ *
+ * 第三个入参是 v59 的推送（主进程 `powerMonitor` 的 suspend/lock-screen）：锁屏时窗口既没失焦
+ * 也没隐藏，只靠前两个判据抓不到——那才是最该省电的时刻（人不在，机器还醒着）。
+ */
+export function shouldPauseMedia(focused: boolean, visible: boolean, systemPaused = false): boolean {
+  return systemPaused || !focused || !visible;
 }
 
-/** 接缝属性的唯一写者（body 上是上游接缝、html 上是我们自己的权重属性）。 */
+/** 接缝属性的唯一写者（body 上是上游接缝、html 上是我们自己的权重属性）。
+ *  判卷环境（node，无 DOM）只是不落属性，不抛——视图与失败态本身仍可判。 */
 export function applyWallpaperAttr(active: boolean): void {
+  if (typeof document === "undefined") return;
   if (active) {
     document.body.setAttribute(WALLPAPER_ATTR, "");
     document.documentElement.setAttribute(CAIRN_WALLPAPER_ATTR, "");
@@ -62,12 +74,75 @@ export function applyWallpaperAttr(active: boolean): void {
 /* ── 视图存储：设置面改完后回灌这里（components → state 的允许方向）─────────── */
 
 let current: WallpaperView = { kind: "none", url: null };
+/**
+ * 降级链的「文件不可用」标记（设计规格 §7）：媒体 404 / 解码失败 ⇒ 撤层 **并** 在设置里点名。
+ *
+ * 这是**运行期状态**，不是设置字段：settings 里仍然指向那张图（文件回来 / 换台机器就该再试），
+ * 失败只影响这一轮显示。任何一次视图重设（新选文件、重读设置）都把它清掉 = 自动重试。
+ */
+let failed = false;
+/** 系统级暂停（v59 推送）：锁屏/休眠时窗口既没失焦也没隐藏，只能由主进程告诉我们。 */
+let systemPaused = false;
+/**
+ * 窗口活跃（v72 推送）：**由主进程按真窗口的 focus/blur 告诉我们**，而不是读 `document.hasFocus()`。
+ * 理由见 `main/wallpaper-active.ts`：后台脚本窗口的 hasFocus 会假阴性，代价是视频永远不播。
+ * 缺省 true：没收到推送时按「活跃」算——宁可先播，也不要一上来就黑屏。
+ */
+let windowActive = true;
 const listeners = new Set<() => void>();
 
 export function setWallpaperView(view: WallpaperView): void {
   current = view;
+  failed = false;
   applyWallpaperAttr(view.kind !== "none");
   for (const l of listeners) l();
+}
+
+/** 降级：撤掉媒体层（玻璃面留着），并记下「文件不可用」。 */
+export function markWallpaperUnavailable(): void {
+  current = { kind: "none", url: null };
+  failed = true;
+  applyWallpaperAttr(false);
+  for (const l of listeners) l();
+}
+
+export function wallpaperFailed(): boolean {
+  return failed;
+}
+
+/** 主进程推来的系统级暂停态（唯一写者是推送订阅，见 `bootWallpaper`）。 */
+export function setSystemPaused(paused: boolean): void {
+  if (systemPaused === paused) return;
+  systemPaused = paused;
+  for (const l of listeners) l();
+}
+
+/** 主进程推来的窗口活跃态（唯一写者是推送订阅，见 `bootWallpaper`）。 */
+export function setWindowActive(active: boolean): void {
+  if (windowActive === active) return;
+  windowActive = active;
+  for (const l of listeners) l();
+}
+
+export function wallpaperWindowActive(): boolean {
+  return windowActive;
+}
+
+export function useWallpaperWindowActive(): boolean {
+  return useSyncExternalStore(subscribeWallpaper, wallpaperWindowActive, wallpaperWindowActive);
+}
+
+export function wallpaperSystemPaused(): boolean {
+  return systemPaused;
+}
+
+export function useWallpaperSystemPaused(): boolean {
+  return useSyncExternalStore(subscribeWallpaper, wallpaperSystemPaused, wallpaperSystemPaused);
+}
+
+/** 设置行读它来显示「文件不可用」（与视图同一份订阅）。 */
+export function useWallpaperFailed(): boolean {
+  return useSyncExternalStore(subscribeWallpaper, wallpaperFailed, wallpaperFailed);
 }
 
 export function subscribeWallpaper(listener: () => void): () => void {
@@ -77,11 +152,6 @@ export function subscribeWallpaper(listener: () => void): () => void {
 
 export function useWallpaperView(): WallpaperView {
   return useSyncExternalStore(subscribeWallpaper, () => current, () => current);
-}
-
-/** 媒体失效（404 / 解码失败）⇒ 撤层：只撤媒体，不撤玻璃面。 */
-export function dropWallpaper(): void {
-  setWallpaperView({ kind: "none", url: null });
 }
 
 /** 改完设置后重读一次（设置真源在主进程，渲染层只读）。 */
@@ -145,9 +215,13 @@ export function applyThemeVars(settings: AppSettings): void {
   root.setProperty("--cw-scrim", String(settings.wallpaper.scrim));
 }
 
-/** 启动：读一次设置、落位属性与变量，并订阅主题变化重算地板。 */
+/** 启动：读一次设置、落位属性与变量，订阅主题变化重算地板，并订阅系统级暂停推送。 */
 export function bootWallpaper(): void {
   void refreshWallpaper().catch(() => undefined);
+  try {
+    window.agent.onWallpaperSuspend((p) => { setSystemPaused(p.paused === true); });
+    window.agent.onWallpaperActive((p) => { setWindowActive(p.active !== false); });
+  } catch { /* 老协议没有这条推送（v59 之前）：不订阅，也不炸 */ }
   try {
     const observer = new MutationObserver(() => {
       void window.agent.getSettings().then((s) => { applyThemeVars(s); }).catch(() => undefined);

@@ -1,9 +1,34 @@
 // Electron main 装配根（M1-6）：kernel-host 单点装配 + IPC 薄映射。
 // 装载通道：entry.cjs 注册 repo 根 tsx 后 require 本 TS 源——core 链零打包零漂移
 // （esbuild 打包会把 agent-runner 的 ROOT 漂进 <repo>/apps，fixtures 运行时静默落空）。
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, Notification, powerSaveBlocker, protocol, safeStorage, screen, shell, webContents, type IpcMainInvokeEvent, type WebContents } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, Notification, powerMonitor, powerSaveBlocker, protocol, safeStorage, screen, shell, webContents, type IpcMainInvokeEvent, type WebContents } from "electron";
 import { clampToWorkArea, readWindowState, writeWindowState } from "./window-state";
 import { bootBackgroundFor, normalizeThemePreference, resolveBootTheme, type ThemePreference } from "./boot-theme";
+import { parseBootWallpaper, bootBackgroundForWallpaper, createTintMemo, NO_WALLPAPER, type BootWallpaper } from "./boot-background";
+import type { TintSource } from "./wallpaper-tint";
+import { installSuspendPause } from "./wallpaper-suspend";
+import { installActivePush, WALLPAPER_ACTIVE_CHANNEL } from "./wallpaper-active";
+import { installWallpaperRotation, resolveWeatherKind } from "./wallpaper-rotation";
+import { fetchWeather } from "./weather-http";
+import { readWeatherKey, saveWeatherKey } from "./weather-key";
+import { pickWallpaper } from "./wallpaper-pick";
+import { browseDirectory } from "./wallpaper-browse";
+import { resolveDisplays } from "./displays-view";
+import { appendTeamPatch, readTeamRecords, readTeamRoster, teamLogPath } from "./team-store";
+import { listSessions, readSessionEvents } from "../../../../src/main/sessions";
+import { openSegmentForSession } from "./session-segments";
+import { defaultStartDeps, dispatchToMember, startMemberWithSecrets, startToMember } from "./team-dispatch";
+import { createTeamGroup } from "./team-group";
+import { advanceGroupRound, groupTaskOf } from "./team-round";
+import { grantPatch, projectSecretGrants, requestPatch } from "../../../../src/agent/team/secrets";
+import { projectGroupStream } from "../../../../src/agent/team/stream";
+import { runWave } from "./team-wave";
+import { memoryPanelFor } from "./memory-panel";
+import { globalMemoryDir, projectMemoryDir } from "../../../../src/agent/memory/store";
+import { memberMemoryDir } from "../../../../src/agent/memory/scope";
+import { planRound } from "../../../../src/orchestration/speech";
+import { memberPatch } from "../../../../src/agent/team/members";
+import { TEAM_USAGE_SESSION_CAP, memoryScopes, permissionRows, usageAcrossSessions } from "../../../../src/agent/team/insights";
 import { windowVibrancyOptions } from "./window-vibrancy";
 import { focusedWindowViewing, notificationClickWindow, runNotificationCopy, runNotificationTarget, shouldNotifyRunSettled } from "./run-notification";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -165,8 +190,38 @@ const readThemePreference = (): ThemePreference => {
     return "system";
   }
 };
-const bootBackground = (): string =>
-  bootBackgroundFor(resolveBootTheme(readThemePreference(), nativeTheme.shouldUseDarkColors));
+/**
+ * 首帧底色的**决策**在 `./boot-background`（纯函数，判卷不启动 Electron）；这里只把
+ * Electron 的真东西递进去：settings.json 的读盘、`nativeImage` 的解码、主题底色的算法。
+ */
+const readWallpaperPreference = (): BootWallpaper => {
+  try {
+    const raw = JSON.parse(readFileSync(join(app.getPath("userData"), "settings.json"), "utf8")) as {
+      wallpaper?: unknown;
+    };
+    return parseBootWallpaper(raw.wallpaper, isAbsolute);
+  } catch {
+    return NO_WALLPAPER;
+  }
+};
+/**
+ * `nativeImage` 的注入面：`resize({width:1,height:1})` 之后的那一个像素就是平均色
+ * （规格 §10 写的最小修法；缩放由 Chromium 做，取色由 `wallpaper-tint` 从 PNG 解，
+ * 见那边的头注——裸位图的通道顺序随平台变，PNG 不变）。空图返 null，由 tint 模块回落。
+ */
+const nativeImageOf = (path: string): TintSource | null => {
+  const img = nativeImage.createFromPath(path);
+  if (img.isEmpty()) return null;
+  return img.resize({ width: 1, height: 1, quality: "good" });
+};
+/** 同一张图在启动期只解码一次（主窗与弹窗创建各调一次 `bootBackground()`）。 */
+const tintMemo = createTintMemo();
+const bootBackground = (): string => {
+  const themeBackground = bootBackgroundFor(resolveBootTheme(readThemePreference(), nativeTheme.shouldUseDarkColors));
+  const wallpaper = readWallpaperPreference();
+  if (wallpaper.kind !== "image") return themeBackground;
+  return tintMemo(wallpaper.path ?? "", () => bootBackgroundForWallpaper({ themeBackground, wallpaper, load: nativeImageOf }));
+};
 const readWindowVibrancyPreference = (): boolean => {
   try {
     const raw = JSON.parse(readFileSync(join(app.getPath("userData"), "settings.json"), "utf8")) as { windowVibrancy?: unknown };
@@ -549,6 +604,40 @@ const { pluginInstallJobs, ...pluginHandlers } = createPluginIpcHandlers({
   workspaceContext,
 });
 
+/** v61：团队三维读数。用量按「当前会话」的事件算——跨会话聚合属另一层（性能与口径都要先定）。 */
+const teamInsightsOf = async (
+  roster: { members: { id: string; name: string; role: string; tier: string; memoryScope: string; capabilities: string[] }[]; clamped: { id: string; requested: string; applied: string }[] },
+  settings: { mode: string; currentSession: string | null },
+) => {
+  const members = roster.members as never as Parameters<typeof memoryScopes>[0];
+  const requested: Record<string, never> = {};
+  const permissions = permissionRows(
+    roster.members as never,
+    requested as never,
+    settings.mode as never,
+    roster.clamped as never,
+  );
+  // 用量：**跨会话**聚合（当前会话 + 同根最近若干会话），有上限、读不到的跳过。
+  // 「哪些会话算同一个团队」仍是产品口径；这里的默认是「同一会话根下的最近 10 个」。
+  // 口径常量住在核心（`insights.ts`），这里不抄第二遍数字。
+
+  let usage = { byOwner: [] as { owner: string; inputTokens: number; outputTokens: number; events: number }[], totalEvents: 0 };
+  const root = await explicitSessionsRoot(undefined);
+  if (root !== undefined) {
+    const listed = await listSessions(root).catch(() => []);
+    const ids = listed
+      .slice()
+      .sort((a, b) => (b.mtimeMs ?? 0) - (a.mtimeMs ?? 0))
+      .slice(0, TEAM_USAGE_SESSION_CAP)
+      .map((s) => s.id);
+    const current = settings.currentSession;
+    if (current !== null && current !== "" && !ids.includes(current)) ids.unshift(current);
+    const logs = await Promise.all(ids.map((id) => readSessionEvents(root, id).catch(() => [])));
+    usage = usageAcrossSessions(logs);
+  }
+  return { permissions, memory: memoryScopes(members as never), usage };
+};
+
 const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   // 当前调用窗口的可信工作区；不接受 renderer 自报的目录。
   searchSettingsGet: () => getSearchSettings(resolveWorkspace()),
@@ -720,6 +809,250 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     if (!r.ok) return { ok: false, error: r.message };
     return { ok: true, dest: r.dest, copiedFiles: r.copiedFiles };
   },
+  // v59 团队名单：读团队事件日志 → 投影成名单。团队档取当前用户档（成员不得宽于团队）。
+  teamRoster: async () => {
+    const s = await getSettings();
+    // 团队档＝用户当前档（`settings.mode`）；成员档不得超过它。
+    const roster = await readTeamRoster(teamLogPath(app.getPath("userData")), s.mode);
+    return {
+      members: roster.members.map((m) => ({
+        id: m.id, name: m.name, role: m.role, tier: m.tier, capabilities: m.capabilities,
+        memoryScope: m.memoryScope,
+        ...(m.model === undefined ? {} : { model: m.model }),
+        ...(m.thinking === undefined ? {} : { thinking: m.thinking }),
+      })),
+      insights: await teamInsightsOf(roster, s),
+      clamped: roster.clamped,
+      rejected: roster.rejected,
+      records: roster.records,
+    };
+  },
+  // v59 写一条成员档案：新增 / 改档 / 移除都是同一条通道。移除＝写墓碑，不删历史。
+  teamMemberSave: async (raw) => {
+    const input = (raw ?? {}) as { id?: unknown; name?: unknown; role?: unknown; tier?: unknown; memoryScope?: unknown; remove?: unknown };
+    const id = String(input.id ?? "");
+    const path = teamLogPath(app.getPath("userData"));
+    let patch: Record<string, string>;
+    try {
+      patch = input.remove === true
+        ? memberPatch(id, { removed: "1" })
+        : memberPatch(id, {
+          ...(input.name === undefined ? {} : { name: String(input.name) }),
+          ...(input.role === undefined ? {} : { role: String(input.role) }),
+          ...(input.tier === undefined ? {} : { tier: String(input.tier) }),
+          ...(input.memoryScope === undefined ? {} : { memoryScope: String(input.memoryScope) }),
+        });
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+    if (Object.keys(patch).length === 0) return { ok: false, error: "没有要写的字段" };
+    await appendTeamPatch(path, patch);
+    const s = await getSettings();
+    const roster = await readTeamRoster(path, s.mode);
+    return {
+      ok: true,
+      roster: {
+        members: roster.members.map((m) => ({
+          id: m.id, name: m.name, role: m.role, tier: m.tier, capabilities: m.capabilities,
+          memoryScope: m.memoryScope,
+          ...(m.model === undefined ? {} : { model: m.model }),
+          ...(m.thinking === undefined ? {} : { thinking: m.thinking }),
+        })),
+        insights: await teamInsightsOf(roster, s),
+        clamped: roster.clamped,
+        rejected: roster.rejected,
+        records: roster.records,
+      },
+    };
+  },
+  // v62 给成员派活：开一条归属该成员的会话（`session_meta.member`），任务书成为第一句。
+  // 成员必须真在团队日志里（不认的字 id 一律拒）；**不自动开跑**——按不按发送由人决定。
+  teamMemberDispatch: async (memberId, task, workspace) => {
+    const root = await explicitSessionsRoot(typeof workspace === "string" ? workspace : undefined);
+    if (root === undefined) return { ok: false, error: "没有可用的会话根" };
+    const id = typeof memberId === "string" ? memberId : "";
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) return { ok: false, error: "成员 id 不合法" };
+    const settings = await getSettings();
+    const roster = await readTeamRoster(teamLogPath(app.getPath("userData")), settings.mode);
+    if (!roster.members.some((m) => m.id === id)) return { ok: false, error: "成员不在名单里（先建档案再派活）" };
+    return await dispatchToMember({ sessionsRoot: root, memberId: id, task: typeof task === "string" ? task : "" });
+  },
+  // v63 派活并开跑：建归属会话（只写归属）→ 交给 run 通道写任务书并开跑。
+  // 任务书**不由这里写**：同一条任务只能有一条写入路径，否则会话里会出现两条一样的 user_message。
+  teamMemberStart: async (memberId, task, workspace) => {
+    const root = await explicitSessionsRoot(typeof workspace === "string" ? workspace : undefined);
+    if (root === undefined) return { ok: false, error: "没有可用的会话根" };
+    const id = typeof memberId === "string" ? memberId : "";
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) return { ok: false, error: "成员 id 不合法" };
+    const settings = await getSettings();
+    const roster = await readTeamRoster(teamLogPath(app.getPath("userData")), settings.mode);
+    if (!roster.members.some((m) => m.id === id)) return { ok: false, error: "成员不在名单里（先建档案再派活）" };
+    // v69：起跑前按授权注入密钥（只 allow 的、只注入本机有值的），run 收束后一定撤。
+    const grants = projectSecretGrants(await readTeamRecords(teamLogPath(app.getPath("userData"))));
+    return await startMemberWithSecrets(
+      { sessionsRoot: root, memberId: id, task: typeof task === "string" ? task : "", mode: settings.mode,
+        ...(typeof workspace === "string" ? { workspace } : {}) },
+      { ...defaultStartDeps(async (req) => await (wired.run as (x: unknown) => Promise<{ ok?: boolean; error?: string }>)(req)), grants },
+    );
+  },
+  // v64 建团队会话：一条带 `group=1` 标记的会话（共享流＝它自己的事件流）。
+  teamGroupCreate: async (name, workspace) => {
+    const root = await explicitSessionsRoot(typeof workspace === "string" ? workspace : undefined);
+    if (root === undefined) return { ok: false, error: "没有可用的会话根" };
+    return await createTeamGroup({ sessionsRoot: root, ...(typeof name === "string" && name.trim() !== "" ? { name } : {}) });
+  },
+  // v65 群的一轮：轮次落群会话补丁，下一位按名单轮转（成员从团队日志读，空名单拒）。
+  teamGroupNext: async (sessionId, workspace, start) => {
+    const root = await explicitSessionsRoot(typeof workspace === "string" ? workspace : undefined);
+    if (root === undefined) return { ok: false, error: "没有可用的会话根" };
+    const id = typeof sessionId === "string" ? sessionId : "";
+    if (id === "") return { ok: false, error: "没有指定群会话" };
+    const settings = await getSettings();
+    const roster = await readTeamRoster(teamLogPath(app.getPath("userData")), settings.mode);
+    const advanced = await advanceGroupRound({
+      sessionsRoot: root, sessionId: id, memberIds: roster.members.map((m) => m.id),
+      members: roster.members.map((m) => ({ id: m.id, name: m.name })),
+    });
+    if (advanced.ok !== true || start !== true || advanced.speaker === undefined) return advanced;
+    // 轮到谁，就把群里最后一句交给谁开跑（任务书＝群里最后一条 user_message；没有就不派）。
+    const events = await readSessionEvents(root, id).catch(() => []);
+    const task = groupTaskOf(events);
+    if (task === null) return { ...advanced, error: "群里还没有一句话，没得派" };
+    // v76：一轮里被 @ 到的人按**波次**顺序跑，每人开跑前重读共享流（后面的人看得见前面刚说的）。
+    const wave = await runWave({
+      speakers: advanced.speakers ?? [advanced.speaker],
+      task,
+      read: async () => await readSessionEvents(root, id).catch(() => []),
+      start: async (memberId, composed) => {
+        const started = await startToMember(
+          { sessionsRoot: root, memberId, task: composed, mode: settings.mode },
+          defaultStartDeps(async (req) => await (wired.run as (x: unknown) => Promise<{ ok?: boolean; error?: string }>)(req)),
+        );
+        return { ok: started.ok === true, ...(started.sessionId === undefined ? {} : { sessionId: started.sessionId }), ...(started.error === undefined ? {} : { error: started.error }) };
+      },
+    });
+    if (wave.failed !== undefined) return { ...advanced, error: wave.failed.error, wave: wave.ran };
+    return { ...advanced, sessionId: wave.ran[0]?.sessionId, wave: wave.ran };
+  },
+  // v71 记忆面板：三层目录数一遍（只读、不建目录），交给核心纯投影折成行。
+  teamMemoryPanel: async (workspace) => {
+    try {
+      const settings = await getSettings();
+      const roster = await readTeamRoster(teamLogPath(app.getPath("userData")), settings.mode);
+      const ws = typeof workspace === "string" && workspace !== "" ? workspace : (getLastWorkspace() ?? process.cwd());
+      const home = globalMemoryDir();
+      const view = await memoryPanelFor({
+        projectDir: projectMemoryDir(ws),
+        teamDir: home,
+        memberIds: roster.members.map((m) => m.id),
+        memberDirOf: (id) => memberMemoryDir(home, id),
+      });
+      return { ok: true, rows: view.rows, total: view.total, missingScopes: view.missingScopes };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+  // v70 群聊共享流：读群会话自己的事件流（单一面），带轮与说话人，截断如实。
+  teamGroupStream: async (sessionId, workspace, limit) => {
+    const root = await explicitSessionsRoot(typeof workspace === "string" ? workspace : undefined);
+    if (root === undefined) return { ok: false, error: "没有可用的会话根" };
+    const id = typeof sessionId === "string" ? sessionId : "";
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) return { ok: false, error: "会话 id 不合法" };
+    try {
+      const events = await readSessionEvents(root, id);
+      const view = projectGroupStream(events, typeof limit === "number" && limit > 0 ? { limit } : {});
+      return { ok: true, items: view.items, dropped: view.dropped, truncated: view.truncated };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+  // v68 密钥申请：成员发起 pending（人审批走 teamSecretGrant，它会把申请置终态）。
+  teamSecretRequest: async (rawMember, rawSecret) => {
+    try {
+      const memberId = String(rawMember ?? "");
+      const secret = String(rawSecret ?? "");
+      const settings = await getSettings();
+      const roster = await readTeamRoster(teamLogPath(app.getPath("userData")), settings.mode);
+      if (!roster.members.some((m) => m.id === memberId)) return { ok: false, error: "成员不在名单里" };
+      await appendTeamPatch(teamLogPath(app.getPath("userData")), requestPatch(memberId, secret, "pending"));
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+  // v67 成员密钥授权：读投影 / 写一条（默认拒、后写覆盖前写、历史只追加）。
+  teamSecretGrants: async () => {
+    try {
+      const path = teamLogPath(app.getPath("userData"));
+      const records = await readTeamRecords(path);
+      const view = projectSecretGrants(records);
+      return { ok: true, grants: view.grants, requests: view.requests, rejected: view.rejected };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+  teamSecretGrant: async (rawMember, rawSecret, rawAllow) => {
+    try {
+      const memberId = String(rawMember ?? "");
+      const secret = String(rawSecret ?? "");
+      // 成员必须真在名单里（不给不存在的人授权；这条与派活同一口径）。
+      const settings = await getSettings();
+      const roster = await readTeamRoster(teamLogPath(app.getPath("userData")), settings.mode);
+      if (!roster.members.some((m) => m.id === memberId)) return { ok: false, error: "成员不在名单里" };
+      const path = teamLogPath(app.getPath("userData"));
+      await appendTeamPatch(path, grantPatch(memberId, secret, rawAllow === true));
+      // 审批顺带把申请置终态（有申请才写；没有就只是直接授权）。
+      const records = await readTeamRecords(path);
+      const pending = projectSecretGrants(records).requests.some((r) => r.memberId === memberId && r.secret === secret);
+      if (pending) {
+        await appendTeamPatch(path, requestPatch(memberId, secret, rawAllow === true ? "approved" : "denied"));
+      }
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+  // v60 一轮的发言秩序（发言权的第一个调用方）：名单从团队事件日志读，秩序由核心纯函数算。
+  teamRoundPlan: async (raw) => {
+    const input = (raw ?? {}) as {
+      mode?: unknown; mentioned?: unknown; silent?: unknown; idleRounds?: unknown; idleLimit?: unknown;
+    };
+    const mode = input.mode === "chairFirst" ? "chairFirst" : "turnOrder";
+    const asIds = (value: unknown): string[] =>
+      Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+    try {
+      const s = await getSettings();
+      const roster = await readTeamRoster(teamLogPath(app.getPath("userData")), s.mode);
+      // 「主持」＝角色里写明主持的成员（角色是自由文本，字符串判定放在这里而不是核心）。
+      const members = roster.members.map((m) => ({ id: m.id, chair: /主持/.test(m.role) }));
+      const plan = planRound({
+        members,
+        mode,
+        mentioned: asIds(input.mentioned),
+        silent: asIds(input.silent),
+        ...(typeof input.idleRounds === "number" ? { idleRounds: input.idleRounds } : {}),
+        ...(typeof input.idleLimit === "number" ? { idleLimit: input.idleLimit } : {}),
+      });
+      return {
+        ok: true,
+        plan: {
+          ...plan,
+          roster: roster.members.map((m) => ({ id: m.id, name: m.name, tier: m.tier })),
+        },
+      };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+  // v60 段的写入点：给会话开新段（追加一条 session_meta_update，序数由日志算）。
+  sessionSegmentOpen: async (sessionId, workspace) => {
+    const root = await explicitSessionsRoot(typeof workspace === "string" ? workspace : undefined);
+    if (root === undefined) return { ok: false, error: "没有可用的会话根" };
+    const s = await getSettings();
+    const id = typeof sessionId === "string" && sessionId !== "" ? sessionId : s.currentSession;
+    if (id === null || id === "") return { ok: false, error: "没有当前会话" };
+    return await openSegmentForSession(root, id, "user");
+  },
   // v6 连接自检：GET 模型清单（不产生 token 费用）。
   providerCheck: (provider) => checkProviderConnection({ provider: String(provider) }),
   // 斜杠菜单技能清单（2026-10-18）：显式传工作区，切项目时不吃竞态。
@@ -828,17 +1161,88 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   // 路径只回给 renderer 一次、由它写进 settings.json；媒体本身经 cairn-wallpaper:// 取，
   // 渲染层拿不到任意读文件的能力。
   wallpaperPick: async () => {
+    // 决策壳在 ./wallpaper-pick（取消语义、白名单、校验顺序都是纯逻辑，判卷不碰原生面板）。
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null;
-    const options = {
-      title: "选择壁纸",
-      properties: ["openFile" as const],
-      filters: [
-        { name: "图片与视频", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp", "mp4", "webm", "mov"] },
-      ],
-    };
-    const picked = win === null ? await dialog.showOpenDialog(options) : await dialog.showOpenDialog(win, options);
-    if (picked.canceled || picked.filePaths.length === 0) return { ok: false, canceled: true };
-    return validateWallpaperFile(picked.filePaths[0]!);
+    return await pickWallpaper({
+      openDialog: async (options) => {
+        // readonly → 可变：Electron 的 Options 是可变数组类型（我们不能改它的 d.ts）。
+        const electronOptions = {
+          title: options.title,
+          properties: ["openFile" as const],
+          filters: options.filters.map((f) => ({ name: f.name, extensions: [...f.extensions] })),
+        };
+        return win === null ? await dialog.showOpenDialog(electronOptions) : await dialog.showOpenDialog(win, electronOptions);
+      },
+      validate: validateWallpaperFile,
+    });
+  },
+  // v79 联网天气源（默认关）：只在 source=http 时被调用；key 走钥匙串。
+  wallpaperWeatherFetch: async () => {
+    try {
+      const s = await getSettings();
+      const url = s.wallpaper.rotation.weather.httpUrl;
+      if (url === null) return { ok: false, reason: "没填天气源 URL" };
+      const key = readWeatherKey({ file: join(app.getPath("userData"), "weather-key.bin"), safeStorage });
+      const r = await fetchWeather({ url, apiKey: key });
+      return { ok: true, ...r };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+  wallpaperWeatherSetKey: async (key) => {
+    return saveWeatherKey(
+      { file: join(app.getPath("userData"), "weather-key.bin"), safeStorage },
+      typeof key === "string" ? key : null,
+    );
+  },
+  // v78 天气来源：manual / file（外部 JSON）；读不到回落手动档并说明。
+  wallpaperWeatherNow: async () => {
+    try {
+      const s = await getSettings();
+      const r = resolveWeatherKind(s.wallpaper);
+      return { ok: true, kind: r.kind, source: r.source, detail: r.detail };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+  // v77 多显示器：每块屏解析（专属 > 回落 > 无）+ 孤儿键；设某屏专属。
+  wallpaperDisplays: async () => {
+    try {
+      const s = await getSettings();
+      const live = screen.getAllDisplays().map((d) => ({
+        id: String(d.id), width: d.bounds.width, height: d.bounds.height, scaleFactor: d.scaleFactor,
+      }));
+      // 视图合成在 `displays-view`（两块屏的输入已有判据；这里只负责把真屏列表喂进去）。
+      return { ok: true, ...resolveDisplays(s.wallpaper, live) };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+  wallpaperSetForDisplay: async (displayId) => {
+    try {
+      const id = String(displayId ?? "");
+      if (!/^[0-9]{1,20}$/.test(id)) return { ok: false, error: "显示器 id 只收数字" };
+      const s = await getSettings();
+      if (s.wallpaper.kind === "none" || s.wallpaper.path === null) return { ok: false, error: "还没选壁纸" };
+      await setSettings({
+        wallpaper: {
+          ...s.wallpaper,
+          perDisplay: { ...s.wallpaper.perDisplay, [id]: { kind: s.wallpaper.kind, path: s.wallpaper.path } },
+        },
+      } as never);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+  // v73 应用内选择器：列目录 / 按路径应用（同一条校验，渲染层拿不到没验过的路径）。
+  wallpaperBrowse: async (dir) => {
+    const target = typeof dir === "string" && dir.trim() !== "" ? dir : app.getPath("pictures");
+    return await browseDirectory(target);
+  },
+  wallpaperApplyPath: async (path) => {
+    if (typeof path !== "string" || path.trim() === "") return { ok: false, error: "没有路径" };
+    return await validateWallpaperFile(path);
   },
   // v9：Tab 想下一条（业主裁 A②）：按「当前选中模型（会话覆盖 > 设置缺省）」单发一次上下文建议。
   // 不走会话归属/漂移——单发不进会话流、不落 JSONL；解析失败（模型未登记等）也分类返回，
@@ -1530,6 +1934,45 @@ app.whenReady().then(() => {
       range: request.headers.get("range"),
       open: openWallpaperStream,
     });
+  });
+  // 系统休眠/锁屏 ⇒ 暂停视频壁纸（设计规格 §6 的「系统休眠」行）。
+  // 真事件测不了（真休眠会把宿主一起睡掉），所以装配写成可注入的纯函数，由单测判卷；
+  // 这里只把 Electron 的真事件源与真窗口递进去。
+  // 定时轮换（2026-11-16）：每 30s 问一次「该不该换」；决定在核心纯函数里。
+  installWallpaperRotation({
+    read: async () => (await getSettings()).wallpaper,
+    apply: async ({ kind, path }) => {
+      const cur = await getSettings();
+      await setSettings({
+        wallpaper: {
+          ...cur.wallpaper, kind, path,
+          revision: cur.wallpaper.revision + 1,
+          rotation: { ...cur.wallpaper.rotation, lastAt: Date.now() },
+        },
+      } as never);
+    },
+    exists: (p) => existsSync(p),
+    onError: () => undefined,
+  });
+
+  // v72 活跃信号：每个窗口都挂真 focus/blur → 推 `{active}`（渲染层媒体门只认这一个信号）。
+  const pushActiveFor = (win: Electron.BrowserWindow): void => {
+    const send = (channel: string, payload: { active: boolean }): void => {
+      if (win.isDestroyed()) return;
+      win.webContents.send(channel, payload);
+    };
+    installActivePush({ targets: [win], channel: WALLPAPER_ACTIVE_CHANNEL, send, onError: () => undefined });
+    // 首帧给一次当前态（否则渲染层要等到第一次 blur 才知道自己活跃）。
+    win.webContents.on("did-finish-load", () => { send(WALLPAPER_ACTIVE_CHANNEL, { active: win.isFocused() }); });
+  };
+  for (const win of BrowserWindow.getAllWindows()) pushActiveFor(win);
+  app.on("browser-window-created", (_event, win) => { pushActiveFor(win); });
+
+  installSuspendPause({
+    source: powerMonitor,
+    targets: () => BrowserWindow.getAllWindows(),
+    channel: PUSH_CHANNELS.onWallpaperSuspend,
+    onError: (error) => { console.error("[cairn] 壁纸暂停推送失败", error); },
   });
   if (process.env.CAIRN_SMOKE === "1") console.error("[cairn-smoke] app ready");
   if (process.platform === "darwin" && appIcon !== undefined) app.dock?.setIcon(appIcon);

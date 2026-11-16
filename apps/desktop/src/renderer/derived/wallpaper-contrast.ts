@@ -10,33 +10,14 @@
 //   surface = prev×(1-alphaF) + floor×canvas + (1-floor)×glassAlpha×glass
 //
 // 本模块是 derived 层：**纯**（无 DOM、无时钟、无随机、无 IO、无 await、无模块级可变态）。
-export interface Rgb {
-  r: number;
-  g: number;
-  b: number;
-}
+export type { Rgb } from "../../../../../src/wallpaper/contrast";
+import type { Rgb } from "../../../../../src/wallpaper/contrast";
+import { contrastRatio, relativeLuminance } from "../../../../../src/wallpaper/contrast";
+export { contrastRatio, relativeLuminance };
 
 /** 两色线性插值：t=0 全 a，t=1 全 b（与 CSS 里逐层 mix 的口径一致）。 */
 export function mix(a: Rgb, b: Rgb, t: number): Rgb {
   return { r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t };
-}
-
-/** sRGB 通道 → 线性光（WCAG 2.x 的相对亮度口径）。 */
-function channel(v: number): number {
-  const c = v / 255;
-  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-}
-
-/** 相对亮度（WCAG 2.x）。 */
-export function relativeLuminance(c: Rgb): number {
-  return 0.2126 * channel(c.r) + 0.7152 * channel(c.g) + 0.0722 * channel(c.b);
-}
-
-/** 对比度（WCAG 2.x）：黑对白 = 21。 */
-export function contrastRatio(a: Rgb, b: Rgb): number {
-  const la = relativeLuminance(a);
-  const lb = relativeLuminance(b);
-  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }
 
 /**
@@ -71,18 +52,27 @@ export interface ThemeContrastSpec {
   worstWallpaper: Rgb;
 }
 
-/** 亮色主题（画布 #fcfcfb、文字 #141413 —— vendored palette.css / tokens.css 的真值）。 */
+/**
+ * 两个主题的常量**是量出来的，不是抄来的**（2026-11-16 真机读数，`smoke:wallpaper` 每次重测）：
+ * 亮色 body 计算色 `rgb(11 11 11)`、画布 `rgb(252 252 251)`；
+ * 暗色 body 计算色 `rgb(240 239 236)`、画布 `rgb(21 21 21)`。
+ *
+ * 为什么这行注释重要：这里从前写的是 `#141413` / `#FAF9F5`（是 vendored token 的字面值，
+ * 不是**计算后**的字面值），真机一测就漂 9–10/通道——旧常量让模型算出 45%/58% 的地板，
+ * 而运行时按真实计算样式算出 43%/61%。两边各说各话时，判据（模型最差格）会误报破线。
+ * 现在两边同源；`smoke:wallpaper` 里有一条「常量 vs 真机真值差 ≤2/通道」的漂移守卫钉着。
+ */
 export const LIGHT_SPEC: ThemeContrastSpec = {
-  text: { r: 0x14, g: 0x14, b: 0x13 },
-  canvas: { r: 0xfc, g: 0xfc, b: 0xfb },
+  text: { r: 11, g: 11, b: 11 },
+  canvas: { r: 252, g: 252, b: 251 },
   glass: { r: 255, g: 255, b: 255 },
   worstWallpaper: { r: 0, g: 0, b: 0 },
 };
 
-/** 暗色主题（画布 #141413、文字 #FAF9F5）。 */
+/** 暗色主题（同上：真机读数，不是 token 字面值）。 */
 export const DARK_SPEC: ThemeContrastSpec = {
-  text: { r: 0xfa, g: 0xf9, b: 0xf5 },
-  canvas: { r: 0x14, g: 0x14, b: 0x13 },
+  text: { r: 240, g: 239, b: 236 },
+  canvas: { r: 21, g: 21, b: 21 },
   glass: { r: 255, g: 255, b: 255 },
   worstWallpaper: { r: 255, g: 255, b: 255 },
 };

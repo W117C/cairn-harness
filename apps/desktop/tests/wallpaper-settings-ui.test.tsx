@@ -7,7 +7,7 @@ import { DEFAULT_SETTINGS, type AppSettings } from "../../../src/main/settings";
 
 const noop = (): void => undefined;
 
-function markup(over: Partial<AppSettings["wallpaper"]> = {}): string {
+function markup(over: Partial<AppSettings["wallpaper"]> = {}, unavailable = false): string {
   const settings: AppSettings = {
     ...DEFAULT_SETTINGS,
     wallpaper: { ...DEFAULT_SETTINGS.wallpaper, ...over },
@@ -28,6 +28,8 @@ function markup(over: Partial<AppSettings["wallpaper"]> = {}): string {
       onWallpaperScrim={noop}
       onWallpaperGlass={noop}
       onWallpaperClear={noop}
+      wallpaperUnavailable={unavailable}
+        onWallpaperRotation={() => {}}
     />,
   );
 }
@@ -37,6 +39,24 @@ describe("壁纸设置行", () => {
     const html = markup();
     expect(html).toContain("壁纸");
     expect((html.match(/type="range"/g) ?? []).length).toBe(3);
+  });
+
+  it("降级：设了壁纸但媒体读不出 ⇒ 行里点名「文件不可用」；没设壁纸不点名", () => {
+    expect(markup({ kind: "image", path: "/tmp/gone.png" }, true)).toContain("文件不可用");
+    // 没有壁纸时「不可用」无从谈起（降级态只对已设壁纸有意义）
+    expect(markup({ kind: "none", path: null }, true)).not.toContain("文件不可用");
+    // 正常态不出现
+    expect(markup({ kind: "image", path: "/tmp/a.png" }, false)).not.toContain("文件不可用");
+  });
+
+  it("壁纸自成一段：来源 / 轮换 / 依据 / 显示各行分开，不再是一条控件带", () => {
+    // 2026-11-16（R3）：整块壁纸原先挂在「外观」段尾的**一条** SettingsRow 里，
+    // 真机截图上是一条从右往左堆的控件带。拆行后每件事各占一行，行标签就是它的名字。
+    const html = markup();
+    for (const label of ["当前壁纸", "定时轮换", "轮换依据", "显示"]) expect(html).toContain(label);
+    // 顺序：壁纸各行在「使用习惯」之前——它没有被并回外观段尾以外的位置。
+    expect(html.indexOf("当前壁纸")).toBeGreaterThan(-1);
+    expect(html.indexOf("使用习惯")).toBeGreaterThan(html.indexOf("当前壁纸"));
   });
 
   it("没设壁纸时给「选择」入口、设了才给「清除」", () => {

@@ -2,7 +2,7 @@
 // AgentApi 新增方法而这里不加行 ⇒ typecheck 红（ipc-protocol 删键同理）。
 import type { AgentApi } from "../../../../src/main/ipc-protocol";
 
-export type PushChannel = "onEvent" | "onAsk" | "onAskDone" | "onTerminalData" | "onTerminalExit" | "onBrowserState" | "onPreviewState" | "onMenu" | "onNotificationOpen";
+export type PushChannel = "onEvent" | "onAsk" | "onAskDone" | "onTerminalData" | "onTerminalExit" | "onBrowserState" | "onPreviewState" | "onMenu" | "onNotificationOpen" | "onWallpaperSuspend" | "onWallpaperActive";
 export type InvokeChannel = Exclude<keyof AgentApi, PushChannel>;
 
 export const PUSH_CHANNELS: { [K in PushChannel]: string } = {
@@ -15,7 +15,10 @@ export const PUSH_CHANNELS: { [K in PushChannel]: string } = {
   onPreviewState: "agent:preview-state",
   onMenu: "agent:menu-command",
   onNotificationOpen: "agent:notification-open",
+  onWallpaperSuspend: "agent:wallpaper-suspend",
+  onWallpaperActive: "agent:wallpaper-active",
 };
+
 
 export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   run: "agent:run",
@@ -179,6 +182,27 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   // 桌面端壁纸（2026-11-14 · 设计规格 §3.3）：单选、带扩展名过滤的选文件通道。
   // 不复用 pickFiles——它无过滤且是多选，语义与「挑一个壁纸」不符。
   wallpaperPick: "agent:wallpaper-pick",
+  wallpaperBrowse: "agent:wallpaper-browse",
+  wallpaperApplyPath: "agent:wallpaper-apply-path",
+  wallpaperDisplays: "agent:wallpaper-displays",
+  wallpaperSetForDisplay: "agent:wallpaper-set-for-display",
+  wallpaperWeatherNow: "agent:wallpaper-weather-now",
+  wallpaperWeatherFetch: "agent:wallpaper-weather-fetch",
+  wallpaperWeatherSetKey: "agent:wallpaper-weather-set-key",
+  // v59 团队名单（成员档案＝投影；写入口只有一条，删人写墓碑）
+  teamRoster: "agent:team-roster",
+  teamMemberSave: "agent:team-member-save",
+  teamRoundPlan: "agent:team-round-plan",
+  teamMemberDispatch: "agent:team-member-dispatch",
+  teamMemberStart: "agent:team-member-start",
+  teamGroupCreate: "agent:team-group-create",
+  teamGroupNext: "agent:team-group-next",
+  teamSecretGrants: "agent:team-secret-grants",
+  teamSecretGrant: "agent:team-secret-grant",
+  teamSecretRequest: "agent:team-secret-request",
+  teamGroupStream: "agent:team-group-stream",
+  teamMemoryPanel: "agent:team-memory-panel",
+  sessionSegmentOpen: "agent:session-segment-open",
   // v9：Tab 想下一条（业主裁 A②）——main 端按上下文单发模型调用（suggestNextMessage），
   // renderer 原样上屏结果/分类文案。
   suggestNext: "agent:suggest-next",
@@ -238,6 +262,7 @@ export type ChannelDomain =
   | "automation"
   | "pane"
   | "app"
+  | "team"
   | "integration"
   | "evolve"
   | "orchestration"
@@ -247,6 +272,7 @@ export type ChannelDomain =
   | "feedback";
 
 export const CHANNEL_DOMAIN_DESC: { [K in ChannelDomain]: string } = {
+  team: "团队（成员档案的名单与写入；档案是补丁投影，删人写墓碑不删历史）",
   run: "跑一轮与助手动作（发起、决策、澄清、计划、目标、取消、插话、压缩、建议下一条、卡片动作）",
   session: "会话生命周期与队列（建/开/改名/删/分叉/回滚、偏好、worktree、检索、日志、置顶、发送队列、导出）",
   project: "项目与工作区（项目增删改、模板与诊断、工作区上下文与文件浏览、路径动作、项目内检索、变更与 git 两闸）",
@@ -393,6 +419,26 @@ export const CHANNEL_DOMAINS: { [K in InvokeChannel]: ChannelDomain } = {
   pickDirectory: "app",
   pickFiles: "app",
   wallpaperPick: "app",
+  wallpaperBrowse: "app",
+  wallpaperApplyPath: "app",
+  wallpaperDisplays: "app",
+  wallpaperSetForDisplay: "app",
+  wallpaperWeatherNow: "app",
+  wallpaperWeatherFetch: "app",
+  wallpaperWeatherSetKey: "app",
+  teamRoster: "team",
+  teamMemberSave: "team",
+  teamRoundPlan: "team",
+  teamMemberDispatch: "team",
+  teamMemberStart: "team",
+  teamGroupCreate: "team",
+  teamGroupNext: "team",
+  teamSecretGrants: "team",
+  teamSecretGrant: "team",
+  teamSecretRequest: "team",
+  teamGroupStream: "team",
+  teamMemoryPanel: "team",
+  sessionSegmentOpen: "session",
   speakText: "app",
   stopSpeaking: "app",
   saveTempFile: "app",
@@ -439,6 +485,8 @@ export const PUSH_CHANNEL_DOMAINS: { [K in PushChannel]: ChannelDomain } = {
   onPreviewState: "pane",
   onMenu: "app",
   onNotificationOpen: "app",
+  onWallpaperActive: "app",
+  onWallpaperSuspend: "app",
 };
 
 /** push 通道用到的域的说明（只有 push 真正用到的那几个域有词条 ⇒ Partial）。 */

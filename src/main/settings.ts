@@ -48,12 +48,17 @@ export type ProviderKind = "demo" | (typeof ENV_KEYED_PROVIDERS)[number] | (stri
 /** 壁纸类型：none = 无壁纸；image / video = 用户自选的本地文件。
  *  2026-11-14（设计规格 §3.4）：壁纸是**应用内**对话背后的一层，不是系统桌面壁纸。
  *  kind=none 时 path 必为 null——「有路径才有壁纸」是单一事实，两个字段不许各说各话。 */
-export type WallpaperKind = "none" | "image" | "video";
+import { sanitizeDisplayMap, type DisplayMap } from "../wallpaper/displays";
+import { isWeatherKind, WEATHER_KINDS } from "../wallpaper/weather";
+
+export type WallpaperKind = "none" | "image" | "video" | "web";
 
 export interface WallpaperSettings {
   kind: WallpaperKind;
   /** 绝对路径。只在主进程与 settings.json 里；渲染层经 cairn-wallpaper:// 协议取媒体。 */
   path: string | null;
+  /** kind=web 时的页面地址（**只收 https**；http/data/blob 一律拒）。 */
+  url: string | null;
   /** 壁纸自身不透明度 0..1。 */
   opacity: number;
   /** 压暗强度 0..1（把壁纸拉回主题方向）。 */
@@ -62,9 +67,46 @@ export interface WallpaperSettings {
   glassAlpha: number;
   /** 主进程单调自增，用于给媒体 URL 破缓存；**只在 path 变化时自增**（滑杆不得重载媒体）。 */
   revision: number;
+  /** 定时轮换（2026-11-16）：到点换下一张。`paths` 为空时轮换无意义（保持原样）。 */
+  rotation: WallpaperRotation;
+  /** 多显示器（2026-11-16）：每屏专属壁纸；没有的屏回落到全局 kind/path。 */
+  perDisplay: DisplayMap;
 }
 
-export const WALLPAPER_KINDS: readonly WallpaperKind[] = ["none", "image", "video"];
+export interface WallpaperRotation {
+  enabled: boolean;
+  /** 轮换依据：`interval`（固定间隔）/ `dayNight`（日出日落）/ `weather`（按天气，手动档）。 */
+  mode: "interval" | "dayNight" | "weather";
+  /** 天气模式：当前天气 + 每档一张（默认手动，**不联网**）。 */
+  weather: {
+    kind: "clear" | "clouds" | "rain" | "snow";
+    paths: Partial<Record<"clear" | "clouds" | "rain" | "snow", string>>;
+    /** 天气来源：`manual`（面板选）/ `file`（外部写 JSON）/ `http`（联网，需填 URL，默认关）。 */
+    source: "manual" | "file" | "http";
+    /** `source=http` 时的地址（key 不在这里，走钥匙串）。 */
+    httpUrl: string | null;
+    /** `source=file` 时读哪个文件（绝对路径）。 */
+    filePath: string | null;
+  };
+  /** 日出日落模式用：纬度/经度（度；东经/北纬为正）。 */
+  latitude: number;
+  longitude: number;
+  /** 日出日落模式的两张：白天 / 夜里。 */
+  dayPath: string | null;
+  nightPath: string | null;
+  /** 轮换间隔（分钟，1..1440）。 */
+  everyMinutes: number;
+  /** 候选绝对路径（最多 32 条；不存在的由主进程跳过并出声）。 */
+  paths: string[];
+  /** 上次轮换时间（毫秒时间戳；0 = 还没轮换过）。 */
+  lastAt: number;
+}
+
+export const ROTATION_MIN_MINUTES = 1;
+export const ROTATION_MAX_MINUTES = 1440;
+export const ROTATION_MAX_PATHS = 32;
+
+export const WALLPAPER_KINDS: readonly WallpaperKind[] = ["none", "image", "video", "web"];
 
 export interface AppSettings {
   layout: LayoutState;
@@ -216,7 +258,16 @@ export const DEFAULT_SETTINGS: AppSettings = {
   textSize: "md",
   uiSize: "2",
   // 壁纸层默认关：功耗敏感项（视频解码持续耗电），不主动开（设计规格 §6）。
-  wallpaper: { kind: "none", path: null, opacity: 1, scrim: 0.35, glassAlpha: 0.25, revision: 0 },
+  wallpaper: {
+    kind: "none", path: null, url: null, opacity: 1, scrim: 0.35, glassAlpha: 0.25, revision: 0,
+    rotation: {
+      enabled: false, mode: "interval", weather: { kind: "clear", paths: {}, source: "manual", filePath: null, httpUrl: null },
+      latitude: 39.9042, longitude: 116.4074,
+      dayPath: null, nightPath: null,
+      everyMinutes: 60, paths: [], lastAt: 0,
+    },
+    perDisplay: {},
+  },
 };
 
 export const SAFE_MODES = ["off", "report", "gate"] as const;
@@ -264,15 +315,67 @@ function validateWallpaper(raw: unknown): WallpaperSettings {
   const kind = WALLPAPER_KINDS.includes(r.kind as WallpaperKind) ? (r.kind as WallpaperKind) : d.kind;
   const path =
     typeof r.path === "string" && r.path.trim() !== "" && r.path.length <= 4096 ? r.path : null;
+  const rawUrl = typeof r.url === "string" ? r.url.trim() : "";
+  // 网站壁纸只收 https：http 会混进明文、data:/blob: 等于把页面内容塞进设置。
+  const url = /^https:\/\/[^\s]+$/i.test(rawUrl) && rawUrl.length <= 4096 ? rawUrl : null;
   const revision =
     typeof r.revision === "number" && Number.isInteger(r.revision) && r.revision >= 0 ? r.revision : d.revision;
   return {
-    kind,
-    path: kind === "none" ? null : path,
+    kind: kind === "web" && url === null ? "none" : kind,
+    path: kind === "none" || kind === "web" ? null : path,
+    url: kind === "web" ? url : null,
     opacity: unitInterval(r.opacity, d.opacity),
     scrim: unitInterval(r.scrim, d.scrim),
     glassAlpha: glassAlphaOf(r.glassAlpha, d.glassAlpha),
     revision,
+    rotation: validateRotation(r.rotation, d.rotation),
+    perDisplay: sanitizeDisplayMap(r.perDisplay).kept,
+  };
+}
+
+function clampCoord(v: unknown, min: number, max: number, fallback: number): number {
+  if (typeof v !== "number" || !Number.isFinite(v)) return fallback;
+  return Math.min(max, Math.max(min, v));
+}
+
+/** 轮换字段：间隔夹在 1..1440、路径去空且上限 32、时间戳非负整数、经纬度夹在合法范围。 */
+function validateRotation(raw: unknown, fallback: WallpaperRotation): WallpaperRotation {
+  if (typeof raw !== "object" || raw === null) return { ...fallback, paths: [...fallback.paths] };
+  const r = raw as Record<string, unknown>;
+  const minutes = typeof r.everyMinutes === "number" && Number.isFinite(r.everyMinutes)
+    ? Math.min(ROTATION_MAX_MINUTES, Math.max(ROTATION_MIN_MINUTES, Math.round(r.everyMinutes)))
+    : fallback.everyMinutes;
+  const paths = Array.isArray(r.paths)
+    ? r.paths
+      .filter((p): p is string => typeof p === "string" && p.trim() !== "" && p.length <= 4096)
+      .slice(0, ROTATION_MAX_PATHS)
+    : [...fallback.paths];
+  const lastAt = typeof r.lastAt === "number" && Number.isFinite(r.lastAt) && r.lastAt >= 0 ? r.lastAt : fallback.lastAt;
+  const mode = r.mode === "dayNight" ? "dayNight" : r.mode === "weather" ? "weather"
+    : r.mode === "interval" ? "interval" : fallback.mode;
+  const latitude = clampCoord(r.latitude, -90, 90, fallback.latitude);
+  const longitude = clampCoord(r.longitude, -180, 180, fallback.longitude);
+  const pick = (v: unknown, fb: string | null): string | null =>
+    typeof v === "string" && v.trim() !== "" && v.length <= 4096 ? v : fb;
+  const rawWeather = (r.weather ?? {}) as { kind?: unknown; paths?: Record<string, unknown>; source?: unknown; filePath?: unknown };
+  const weatherKind = isWeatherKind(rawWeather.kind) ? rawWeather.kind : "clear";
+  const weatherSource = rawWeather.source === "file" ? "file" : rawWeather.source === "http" ? "http" : "manual";
+  const rawUrl = (rawWeather as { httpUrl?: unknown }).httpUrl;
+  const httpUrl = typeof rawUrl === "string" && /^https?:\/\//i.test(rawUrl) && rawUrl.length <= 4096 ? rawUrl : null;
+  const weatherFilePath = typeof rawWeather.filePath === "string" && rawWeather.filePath.trim() !== "" && rawWeather.filePath.length <= 4096
+    ? rawWeather.filePath : null;
+  const weatherPaths: Partial<Record<"clear" | "clouds" | "rain" | "snow", string>> = {};
+  for (const k of WEATHER_KINDS) {
+    const v = rawWeather.paths?.[k];
+    if (typeof v === "string" && v.trim() !== "" && v.length <= 4096) weatherPaths[k] = v;
+  }
+  return {
+    enabled: r.enabled === true, mode,
+    weather: { kind: weatherKind, paths: weatherPaths, source: weatherSource, filePath: weatherFilePath, httpUrl },
+    latitude, longitude,
+    dayPath: pick(r.dayPath, fallback.dayPath),
+    nightPath: pick(r.nightPath, fallback.nightPath),
+    everyMinutes: minutes, paths, lastAt,
   };
 }
 

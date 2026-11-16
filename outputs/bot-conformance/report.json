@@ -1,0 +1,155 @@
+{
+  "at": "2026-11-16T12:25:35.800Z",
+  "rows": [
+    {
+      "id": "bot.replay-authority",
+      "capability": "团队状态的真源可重放",
+      "status": "covered",
+      "witnesses": [
+        "tests/team-members.test.ts",
+        "apps/desktop/tests/team-store.test.ts"
+      ],
+      "missingWitnesses": [],
+      "note": "事件日志补丁 + 投影"
+    },
+    {
+      "id": "bot.member-profiles",
+      "capability": "成员档案增删改可审计",
+      "status": "covered",
+      "witnesses": [
+        "tests/team-members.test.ts",
+        "apps/desktop/tests/team-store.test.ts"
+      ],
+      "missingWitnesses": [],
+      "note": "补丁 + 墓碑"
+    },
+    {
+      "id": "bot.speech-order",
+      "capability": "一轮发言秩序",
+      "status": "covered",
+      "witnesses": [
+        "tests/orchestration-speech.test.ts",
+        "tests/orchestration-round-arbiter.test.ts"
+      ],
+      "missingWitnesses": [],
+      "note": "planRound + 引擎仲裁"
+    },
+    {
+      "id": "bot.segments",
+      "capability": "分段与压缩后换段",
+      "status": "covered",
+      "witnesses": [
+        "tests/segments.test.ts",
+        "tests/segments-auto.test.ts"
+      ],
+      "missingWitnesses": [],
+      "note": "事件行号 + 自动触发"
+    },
+    {
+      "id": "bot.member-thread",
+      "capability": "成员线程（身份=member:<id>）",
+      "status": "covered",
+      "witnesses": [
+        "tests/team-identity.test.ts"
+      ],
+      "missingWitnesses": [],
+      "note": "spawn_agent 带 member"
+    },
+    {
+      "id": "bot.memory-scopes",
+      "capability": "三档记忆作用域（读+写）",
+      "status": "covered",
+      "witnesses": [
+        "tests/memory-scope.test.ts",
+        "tests/remember-member-scope.test.ts"
+      ],
+      "missingWitnesses": [],
+      "note": "project/team/member + 作用域过滤"
+    },
+    {
+      "id": "bot.mention-routing",
+      "capability": "群里的 @ 路由（点名并行）",
+      "status": "covered",
+      "witnesses": [
+        "tests/team-mentions.test.ts",
+        "apps/desktop/tests/team-round.test.ts"
+      ],
+      "missingWitnesses": [],
+      "note": "parseMemberMentions（整名匹配/长者优先/认不出进 unknown）+ 群轮次按被点名人成批"
+    },
+    {
+      "id": "bot.usage-by-member",
+      "capability": "用量按成员归集",
+      "status": "covered",
+      "witnesses": [
+        "tests/team-insights.test.ts"
+      ],
+      "missingWitnesses": [],
+      "note": "usageByOwner + 跨会话上限"
+    },
+    {
+      "id": "bot.panels",
+      "capability": "面板族（成员区/团队/设置）",
+      "status": "covered",
+      "witnesses": [
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs",
+        "apps/desktop/tests/memory-panel.test.ts",
+        "apps/desktop/tests/team-pane.test.tsx",
+        "apps/desktop/tests/team-section.test.tsx",
+        "tests/memory-panel.test.ts",
+        "tests/team-stream.test.ts"
+      ],
+      "missingWitnesses": [],
+      "note": "成员区/团队/设置/团队窗格 + 群聊共享流（v70）+ 记忆面板（v71，三层主题数/字节，缺层点名）"
+    },
+    {
+      "id": "bot.member-dispatch-ui",
+      "capability": "从 UI 给成员派活",
+      "status": "covered",
+      "witnesses": [
+        "apps/desktop/tests/team-dispatch.test.ts",
+        "apps/desktop/tests/team-pane.test.tsx",
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs"
+      ],
+      "missingWitnesses": [],
+      "note": "团队窗格「派活」/「派活并开跑」（后者交给正常 run 通道）"
+    },
+    {
+      "id": "bot.group-chat",
+      "capability": "群聊共享流与轮次",
+      "status": "covered",
+      "witnesses": [
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs",
+        "apps/desktop/tests/team-group.test.ts",
+        "apps/desktop/tests/team-pane.test.tsx",
+        "apps/desktop/tests/team-round.test.ts",
+        "apps/desktop/tests/team-wave.test.ts",
+        "tests/team-round-context.test.ts"
+      ],
+      "missingWitnesses": [],
+      "note": "群会话（group=1）+ 共享流 + 轮次（@ 命中即一批，否则轮转）+ **波次**（v76：被 @ 的人顺序跑，每人开跑前重读共享流 ⇒ 后面的人看得见前面刚说的）+ 轮到谁就交给谁开跑 + 带上下文"
+    },
+    {
+      "id": "bot.secrets-cards",
+      "capability": "密钥按成员申请/授权",
+      "status": "covered",
+      "witnesses": [
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs",
+        "apps/desktop/tests/member-run-lock.test.ts",
+        "apps/desktop/tests/team-dispatch.test.ts",
+        "apps/desktop/tests/team-section.test.tsx",
+        "tests/team-secrets.test.ts"
+      ],
+      "missingWitnesses": [],
+      "note": "申请卡（pending）→ 人审批（allow/deny 并置终态）→ 起跑前注入（只 allow、只注有值的）→ **串行闸**（v75：一次一个成员，注入窗口不重叠，不串）→ 输出脱敏"
+    }
+  ],
+  "summary": {
+    "total": 12,
+    "covered": 12,
+    "partial": 0,
+    "out": 0,
+    "missing": 0
+  },
+  "verdict": "pass"
+}

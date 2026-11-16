@@ -33,12 +33,16 @@ const VISION = { state: "undeclared" as const, modelId: "cn:hy3", declaredModali
 
 describe("批 6：通用段（外观 / 语言 / 字号 / 快捷键 四卡）", () => {
   const menu = (over: Partial<AppSettings> = {}, textSize: TextSizeSetting = "md", uiSize: UiSizeSetting = "2"): string =>
-    renderToStaticMarkup(<GeneralSection settings={S(over)} textSize={textSize} uiSize={uiSize} onSave={noop} onCtrlTab={noop} onTextSize={noop} onUiSize={noop} onWindowVibrancy={noop} onNotify={noop} onWallpaperPick={noop} onWallpaperOpacity={noop} onWallpaperScrim={noop} onWallpaperGlass={noop} onWallpaperClear={noop} />);
+    renderToStaticMarkup(<GeneralSection settings={S(over)} textSize={textSize} uiSize={uiSize} onSave={noop} onCtrlTab={noop} onTextSize={noop} onUiSize={noop} onWindowVibrancy={noop} onNotify={noop} onWallpaperPick={noop} onWallpaperOpacity={noop} onWallpaperScrim={noop} onWallpaperGlass={noop} onWallpaperClear={noop}
+          wallpaperUnavailable={false}
+        onWallpaperRotation={() => {}} />);
 
-  it("外观控件合并为一组，使用习惯独立成组；保留重启与未支持提示", () => {
+  it("外观控件合并为一组，壁纸与使用习惯各自成组；保留重启与未支持提示", () => {
     const h = menu();
-    for (const t of ["外观", "使用习惯", "主题", "文字大小", "界面密度", "窗口材质", "界面语言", "Ctrl+Tab 切会话"]) expect(h).toContain(t);
-    expect((h.match(/class="ss-sec"/g) ?? []).length).toBe(2);
+    for (const t of ["外观", "壁纸", "使用习惯", "主题", "文字大小", "界面密度", "窗口材质", "界面语言", "Ctrl+Tab 切会话"]) expect(h).toContain(t);
+    // 2026-11-16（R3）：壁纸从「外观」段尾的一条大行拆成独立一段（一行一件事），
+    // 段数 2 → 3；这条断言同时保证三段都在场，不会因为把壁纸并回去而失效。
+    expect((h.match(/class="ss-sec"/g) ?? []).length).toBe(3);
     const appearance = h.slice(0, h.indexOf("使用习惯"));
     for (const label of ["主题", "文字大小", "界面密度", "窗口材质"]) expect(appearance).toContain(label);
     // 第 866 页「让布局说话」：不可推导的那半句留下（要重启），
@@ -525,6 +529,7 @@ describe("通用设置移除首启检查", () => {
       onWindowVibrancy: noop, onNotify: noop, onShowOnboarding: noop,
       onWallpaperPick: noop, onWallpaperOpacity: noop, onWallpaperScrim: noop,
       onWallpaperGlass: noop, onWallpaperClear: noop,
+      wallpaperUnavailable: false, onWallpaperRotation: noop,
     };
     const html = renderToStaticMarkup(<GeneralSection {...legacyProps} />);
     expect(html).not.toContain("首启检查");

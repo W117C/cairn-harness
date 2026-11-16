@@ -140,8 +140,110 @@ export type { SearchProvider } from "../tools/web-search";
  *  v57 = 置顶清单读取带 workspace：listMessagePins 与写入路径共用显式根存在性检查，
  *        同 id 跨工作区不再拿另一根的结果冒充。
  *  v58 = AskPayload 显式携带 workspace：审批卡/等门计数与推送队列按目标根寻址，
- *        同 id 跨工作区的卡不再互相覆盖。 */
-export const IPC_PROTOCOL_VERSION = 58;
+ *        同 id 跨工作区的卡不再互相覆盖。
+ *  v59 = 壁纸媒体暂停推送（onWallpaperSuspend）：系统休眠/锁屏时主进程推一次
+ *        `{paused:true, reason}`，唤醒/解锁推 `{paused:false}`——视频壁纸不必靠猜 document 可见性。
+ *  v60 = 团队一轮的发言秩序（teamRoundPlan，发言权的第一个调用方）与会话开新段
+ *        （sessionSegmentOpen，段的第一个写入点）。
+ *  v61 = 团队名单带三维读数（`insights`：权限成员维 / 记忆作用域 / 按成员用量）与成员的
+ *        `memoryScope` 字段——面板族剩下三面的数据形状。
+ *  v62 = 给成员派活（`teamMemberDispatch`）：开一条归属该成员的会话（`session_meta.member`）并把
+ *        任务书写成它的第一条 user_message；**不自动开跑**（按不按发送仍由人决定）。
+ *  v63 = 派活并开跑（`teamMemberStart`）：同一条归属会话，交给正常 run 通道跑起来（不另写任务书，
+ *        避免同一条任务写两遍）。
+ *  v64 = 团队会话（`teamGroupCreate`）：建一条带 `group=1` 标记的会话；共享流就是它自己的事件流。
+ *  v65 = 群的一轮（`teamGroupNext`）：轮次序号写进群会话补丁，下一位发言者按名单轮转。
+ *  v66 = 群轮次驱动派活（`teamGroupNext` 增 `start`）：轮到谁，就把群里最后一句交给谁开跑。
+ *  v67 = 成员密钥授权（`teamSecretGrants` / `teamSecretGrant`）：成员×密钥的允许/拒绝投影，
+ *        默认拒、后写覆盖前写、历史只追加。
+ *  v68 = 密钥申请卡（`teamSecretRequest`）：成员发起 pending，人审批后落 allow/deny 并把申请置终态。
+ *  v69 = 成员起跑前注入密钥：`teamMemberStart` 按授权把 `DSH_SECRET_<NAME>` 注入那次 run，
+ *        收束后撤销；回包带 `injected` / `missingSecrets` / `deniedSecrets`（只报名字，不报值）。
+ *  v70 = 群聊共享流（`teamGroupStream`）：读群会话自己的事件流，带轮与说话人，截断如实。
+ *  v71 = 记忆面板（`teamMemoryPanel`）：三层记忆的主题数/字节数，成员逐个点名，缺层如实。
+ *  v72 = 窗口活跃推送（`onWallpaperActive`）：主进程按真窗口 focus/blur 推 `{active}`，
+ *        渲染层的媒体门不再读 `document.hasFocus()`（后台窗口会假阴性 ⇒ 视频永不播）。
+ *  v73 = 应用内壁纸选择器（`wallpaperBrowse` / `wallpaperApplyPath`）：列目录、点文件选中并校验，
+ *        不依赖原生面板（无辅助功能权限的机器上点选不可自动化）。
+ *  v74 = 群轮次带上下文：轮到谁开跑时，把群里最近几条编进任务书（同一批看得见本批之前的话）。
+ *  v75 = 成员 run 串行闸：`teamMemberStart` 回包增 `waitedMs`；一次只跑一个成员，密钥注入窗口不重叠。
+ *  v76 = 群一轮的波次：`teamGroupNext(start)` 把被 @ 的人**顺序**跑，每人开跑前重读共享流
+ *        （后面的人看得见前面刚说的），回包增 `wave`。
+ *  v77 = 多显示器壁纸：`wallpaperDisplays` 读每块屏解析结果与孤儿键；`wallpaperSetForDisplay` 把
+ *        当前壁纸设为某块屏专属。
+ *  v78 = 天气来源可插拔：`wallpaperWeatherNow` 返回当前解析出的天气（manual / file），
+ *        file 源读外部 JSON（读不到回落手动档并说明）。
+ *  v79 = 联网天气源（默认关）：`wallpaperWeatherFetch` 按设置里的 URL 取一次并解析；
+ *        `wallpaperWeatherSetKey` 把 key 交给钥匙串（不明文落盘）。 */
+export const IPC_PROTOCOL_VERSION = 79;
+
+/** 团队名单（v59）：成员档案是投影，`records` 是补丁条数（面板据此说「有几条历史」）。 */
+export interface TeamRosterPayload {
+  members: {
+    id: string; name: string; role: string; tier: string; model?: string; thinking?: string;
+    /** 记忆作用域（v61）：team / member / project。 */
+    memoryScope?: "team" | "member" | "project";
+    capabilities: string[];
+  }[];
+  /** 三维读数（v61）：权限成员维 / 记忆作用域 / 按成员用量（当前会话）。 */
+  insights?: {
+    permissions: {
+      teamTier: string;
+      clamped: { id: string; requested: string; applied: string }[];
+      rows: { id: string; name: string; requested: string; applied: string; clamped: boolean }[];
+    };
+    memory: { scopes: { scope: string; members: string[] }[] };
+    /** `byOwner` 的 owner：`main` / worker 的 agent_id / 成员级 `member:<id>`。 */
+    usage: { byOwner: { owner: string; inputTokens: number; outputTokens: number; events: number }[]; totalEvents: number };
+  };
+  /** 被团队档裁剪过的成员（裁剪出声，不静默降级）。 */
+  clamped: { id: string; requested: string; applied: string }[];
+  /** 被拒的补丁（坏输入不静默）。 */
+  rejected: { at: number; id: string | null; error: string }[];
+  /** 日志里的补丁条数。 */
+  records: number;
+}
+
+/** 写一条成员档案（v59）：`remove` 为真时写墓碑（`removed=1`），不删历史。 */
+export interface TeamMemberInput {
+  id: string;
+  name?: string;
+  role?: string;
+  tier?: string;
+  /** v61：记忆作用域（team / member / project）。 */
+  memoryScope?: string;
+  remove?: boolean;
+}
+
+/** 一轮的发言秩序（v60）：`mode` 决定主持优先还是按序，点名为解析后的成员 id。 */
+export interface TeamRoundInput {
+  mode: "chairFirst" | "turnOrder";
+  mentioned?: string[];
+  silent?: string[];
+  idleRounds?: number;
+  idleLimit?: number;
+}
+
+export interface TeamRoundPlanPayload {
+  batches: { order: number; speakers: string[] }[];
+  paused: boolean;
+  pausedReason: "idle" | null;
+  silent: string[];
+  unknown: string[];
+  /** 参与这一轮的全部成员 id（按声明顺序）；UI 用它把 id 翻成名字。 */
+  roster: { id: string; name: string; tier: string }[];
+}
+
+/** 壁纸媒体的系统级暂停信号（v59）。`reason` 只描述「为什么停」，不描述渲染层怎么做。 */
+export interface WallpaperActivePayload {
+  /** 窗口是否活跃（由主进程按真窗口的 focus/blur 判定）。 */
+  active: boolean;
+}
+
+export interface WallpaperSuspendPayload {
+  paused: boolean;
+  reason: "suspend" | "lock-screen" | "resume" | "unlock-screen";
+}
 
 export type SettingsMigrationSource = "claude-code" | "codex";
 export interface SettingsMigrationItem {
@@ -536,6 +638,78 @@ export interface AgentApi {
   onAskDone(cb: (p: AskOutcomePayload) => void): () => void;
   /** v21：用户点击完成通知 → 主进程已聚焦窗口，渲染层据此打开目标会话。 */
   onNotificationOpen(cb: (p: RunNotificationPayload) => void): () => void;
+  /** v59：系统休眠/锁屏 ⇒ 暂停视频壁纸；唤醒/解锁 ⇒ 恢复。只在壁纸挂视频时才有意义。 */
+  onWallpaperSuspend(cb: (p: WallpaperSuspendPayload) => void): () => void;
+  /** v72：窗口活跃推送（主进程听真 focus/blur）。 */
+  onWallpaperActive(cb: (payload: WallpaperActivePayload) => void): () => void;
+  /** v59：团队名单（成员档案＝投影；读的是团队事件日志，不是 JSON 配置文件）。 */
+  teamRoster(): Promise<TeamRosterPayload>;
+  /** v59：写一条成员档案（新增/改档/删人都是同一条通道；删＝写墓碑，不删历史）。 */
+  teamMemberSave(input: TeamMemberInput): Promise<{ ok: boolean; error?: string; roster?: TeamRosterPayload }>;
+  /** v60：算一轮的发言秩序（发言权的第一个调用方；名单从团队事件日志读，UI 只渲染结果）。 */
+  teamRoundPlan(input: TeamRoundInput): Promise<{ ok: boolean; error?: string; plan?: TeamRoundPlanPayload }>;
+  /** v62：给成员派活——开一条归属该成员的会话，任务书成为它第一句；不自动开跑。 */
+  teamMemberDispatch(memberId: string, task: string, workspace?: string): Promise<{ ok: boolean; sessionId?: string; error?: string }>;
+  /** v63：派活并开跑——建归属会话，然后把任务交给正常 run 通道（任务书由 run 写，不重复）。 */
+  teamMemberStart(memberId: string, task: string, workspace?: string): Promise<{
+    ok: boolean;
+    sessionId?: string;
+    /** v69：这次 run 注入的密钥个数（不露名字与值）。 */
+    injected?: number;
+    /** v69：授权了但本机没有值的名字。 */
+    missingSecrets?: string[];
+    /** v69：被拒的名字。 */
+    deniedSecrets?: string[];
+    /** v75：排队等了多久（毫秒）——串行闸不静默拖慢。 */
+    waitedMs?: number;
+    error?: string;
+  }>;
+  /** v64：建一条团队会话（`group=1`）。共享流＝该会话自己的事件流；轮次仲裁尚未接。 */
+  teamGroupCreate(name?: string, workspace?: string): Promise<{ ok: boolean; sessionId?: string; error?: string }>;
+  /** v67：读成员密钥授权（成员×密钥的最终态 + 被拒补丁）。 */
+  teamSecretGrants(): Promise<{
+    ok: boolean;
+    grants?: { memberId: string; secret: string; allow: boolean; at: number }[];
+    /** v68：申请（pending 排最前）。 */
+    requests?: { memberId: string; secret: string; state: "pending" | "approved" | "denied"; at: number }[];
+    rejected?: { at: number; error: string }[];
+    error?: string;
+  }>;
+  /** v71：记忆面板（三层：project / team / member；每层主题数 + 字节，缺层点名）。 */
+  teamMemoryPanel(workspace?: string): Promise<{
+    ok: boolean;
+    rows?: { scope: string; dir: string; topics: number; bytes: number; memberId?: string }[];
+    total?: { topics: number; bytes: number };
+    missingScopes?: string[];
+    error?: string;
+  }>;
+  /** v70：群聊共享流（只读有效条目，带轮/说话人；dropped/truncated 如实）。 */
+  teamGroupStream(sessionId: string, workspace?: string, limit?: number): Promise<{
+    ok: boolean;
+    items?: { seq: number; kind: "user" | "agent" | "other"; speaker: string; round: number | null; text: string; at: number | null }[];
+    dropped?: number;
+    truncated?: number;
+    error?: string;
+  }>;
+  /** v68：成员发起一条密钥申请（pending）。人审批走 `teamSecretGrant`，它会把申请置终态。 */
+  teamSecretRequest(memberId: string, secret: string): Promise<{ ok: boolean; error?: string }>;
+  /** v67：写一条授权（allow=true 允许 / false 拒绝；后写覆盖前写，历史只追加）。 */
+  teamSecretGrant(memberId: string, secret: string, allow: boolean): Promise<{ ok: boolean; error?: string }>;
+  /** v65：群里推进一轮——轮次序号落群会话补丁，下一位发言者按名单轮转。
+   *  v66：`start` 为真时顺带把「群里最后一句」当作任务书交给那位成员开跑。 */
+  teamGroupNext(sessionId: string, workspace?: string, start?: boolean): Promise<{
+    ok: boolean;
+    round?: number;
+    speaker?: string;
+    speakers?: string[];
+    unknownMentions?: string[];
+    sessionId?: string;
+    /** v76：这一波实际跑了谁（按顺序），以及各自是否看得见前面的话。 */
+    wave?: { memberId: string; sessionId?: string; sawPrior: boolean }[];
+    error?: string;
+  }>;
+  /** v60：给会话开新段（段的第一个写入点：追加一条 `session_meta_update`，序数由日志算）。 */
+  sessionSegmentOpen(sessionId?: string, workspace?: string): Promise<{ ok: boolean; segment?: number; error?: string }>;
   getState(): Promise<StateResponse>;
   /** Provider/model/capability catalog derived from the same registry used by workers. */
   getProviderInfo(): Promise<ProviderInfo>;
@@ -711,6 +885,31 @@ export interface AgentApi {
    *  `cairn-wallpaper://` 协议取媒体（白名单＝当前那一个文件）。
    *  `canceled` 是用户自己取消（不是错误）——不拿错误文案做判断。 */
   wallpaperPick(): Promise<{ ok: boolean; canceled?: boolean; kind?: "image" | "video"; path?: string; error?: string }>;
+  /** v73：应用内选择器——列目录（只列白名单扩展名，目录排前）。 */
+  wallpaperBrowse(dir?: string): Promise<{
+    ok: boolean;
+    dir?: string;
+    parent?: string | null;
+    entries?: { name: string; path: string; kind: "dir" | "file" }[];
+    error?: string;
+  }>;
+  /** v79：按设置里的 URL 取一次天气（联网源；默认关，只有 source=http 才会用到）。 */
+  wallpaperWeatherFetch(): Promise<{ ok: boolean; kind?: string | null; reason?: string; status?: number; error?: string }>;
+  /** v79：把天气源 key 交给钥匙串（`null` = 清除）。 */
+  wallpaperWeatherSetKey(key: string | null): Promise<{ ok: boolean; error?: string }>;
+  /** v78：当前解析出的天气（manual / file；file 读不到会回落并说明）。 */
+  wallpaperWeatherNow(): Promise<{ ok: boolean; kind?: string; source?: string; detail?: string; error?: string }>;
+  /** v77：多显示器——每块屏解析结果（专属 / 回落 / 无）+ 孤儿键。 */
+  wallpaperDisplays(): Promise<{
+    ok: boolean;
+    displays?: { id: string; width: number; height: number; scaleFactor: number; source: "display" | "fallback" | "none"; path?: string }[];
+    orphans?: string[];
+    error?: string;
+  }>;
+  /** v77：把当前壁纸设为某块屏的专属（写 settings.wallpaper.perDisplay）。 */
+  wallpaperSetForDisplay(displayId: string): Promise<{ ok: boolean; error?: string }>;
+  /** v73：应用内选择器——按路径应用（跑同一条 validateWallpaperFile，渲染层拿不到没验过的路径）。 */
+  wallpaperApplyPath(path: string): Promise<{ ok: boolean; kind?: "image" | "video"; path?: string; error?: string }>;
   /** v2.16 用户反馈沉淀（赞/踩）：落 sidecar `feedback.jsonl`（append-only，不进事件流）。
    *  `rating:"none"` = 撤销（读时取最后一条生效）。未接线前界面只选中、不假提交。 */
   submitFeedback(req: { sessionId: string; eventId: number; rating: "up" | "down" | "none"; note?: string; workspace?: string; eventRef?: EventRef }): Promise<{ ok: boolean; error?: string }>;

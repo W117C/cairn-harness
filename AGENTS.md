@@ -30,12 +30,10 @@ current layer), D-4 (no append-to-refute in the current layer), D-5 (`STATE.md` 
   sessions; do not reset or stash them, or include them in a commit for this task.
 - Do not modify frozen judge files or fixtures, weaken assertions, or lower verification
   requirements to make a failing check pass.
-- `outputs/` is the **evidence face** and is really type-checked: `tsconfig.evidence.json`
-  includes it, so every `.ts`/`.tsx`/`.mts` committed under `outputs/` gets compiled there.
-  A source **copy** parked there has relative imports that no longer resolve ⇒ phantom
-  dangerous codes ⇒ `pnpm evidence-typecheck-check` (ratchet: down only) goes red. Never park
-  source copies in `outputs/`: the backup is git history; if a record must stay in the repo,
-  keep it non-TS (`.md` / `.json` / `.log`).
+- `outputs/` is the **evidence face** and is type-checked (`tsconfig.evidence.json`): never park
+  source **copies** there — their relative imports stop resolving ⇒ phantom dangerous codes ⇒
+  `pnpm evidence-typecheck-check` (ratchet: down only) red. History is the backup; keep records
+  non-TS (`.md` / `.json` / `.log`).
 
 ## Verification
 
@@ -55,6 +53,8 @@ Run commands from the repository root. Start with checks covering the changed be
 - Rule or documentation changes: `pnpm docs-check`.
 - Full gates: `pnpm gates`. The current manifest is `scripts/gate-manifest.ts`; it includes
   desktop tests and HEAD checks. A core-only test run does not prove the desktop passes.
+- One-page verdict: `npx tsx scripts/verify-all.ts` → `outputs/verify-all/summary.json`
+  (all gates above). Never-run = `missing`, not `pass`.
 
 ## Renderer layering
 

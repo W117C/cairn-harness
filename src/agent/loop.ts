@@ -818,6 +818,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
         } else {
           const ctx = {
             workspace,
+            ...(opts.agentId === undefined ? {} : { agentId: opts.agentId }),
             ...(opts.sessionLogPath === undefined ? {} : { sessionLogPath: opts.sessionLogPath }),
             emit: (e: Parameters<EventLog["append"]>[0]) => events.append(e),
             callId: output.id,

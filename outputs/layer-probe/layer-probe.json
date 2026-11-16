@@ -1,0 +1,21 @@
+{
+  "at": "2026-11-16T08:54:30.887Z",
+  "capturable": false,
+  "error": null,
+  "windows": [
+    {
+      "role": "wallpaper",
+      "visible": true,
+      "focused": false,
+      "alwaysOnTop": false
+    },
+    {
+      "role": "main",
+      "visible": true,
+      "focused": false,
+      "alwaysOnTop": false
+    }
+  ],
+  "screenPermission": "granted",
+  "sources": []
+}
