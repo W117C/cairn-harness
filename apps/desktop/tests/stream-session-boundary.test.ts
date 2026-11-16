@@ -15,7 +15,7 @@ describe("Stream 的会话边界", () => {
   });
 
   it("没有回退成“行 key 拼会话前缀”的方案（实测会留下旧行）", () => {
-    // 旧方案的两块骨头全应用不许再有（第 1251 页分类迁移）。
+    // 旧方案的两块骨头全应用不许再有（第 1304 页分类迁移）。
     const appSrc = readAppSurface();
     expect(appSrc).not.toContain("sessionKey?: string");
     expect(appSrc).not.toContain("${props.sessionKey");

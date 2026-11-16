@@ -126,7 +126,7 @@ describe("TokenPanel 死组件清理", () => {
       "utf8",
     );
     expect(meter).toContain('import { formatTokens } from "./format-tokens";');
-    // TokenPanel 已整文件下架：全应用不许再 import 它（第 1251 页分类迁移）。
+    // TokenPanel 已整文件下架：全应用不许再 import 它（第 1304 页分类迁移）。
     expect(readAppSurface()).not.toContain("./TokenPanel");
     expect(() => readFileSync(
       fileURLToPath(new URL("../src/renderer/components/TokenPanel.tsx", import.meta.url)),

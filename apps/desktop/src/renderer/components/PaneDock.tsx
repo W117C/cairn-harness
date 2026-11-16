@@ -401,7 +401,7 @@ const BrowserPane = memo(function BrowserPane(props: {
   const closeTab = (key: number, from?: HTMLElement | null): void => {
     const tab = tabsRef.current.find((x) => x.key === key);
     if (tab === undefined) return;
-    // 授权卡的宿主标签被关掉（第 1260 页）：目标视图已经没了，卡片不能继续挂着——
+    // 授权卡的宿主标签被关掉（第 1313 页）：目标视图已经没了，卡片不能继续挂着——
     // 否则点「允许」只会命中 allowAndGo 的兜底分支，静默什么也不发生。关标签就撤掉这一问。
     if (pending !== null && pending.tabKey === key) setPending(null);
     // 关闭钮随行一起卸载：先记「焦点是不是在这一行」，关完把它交给邻居；

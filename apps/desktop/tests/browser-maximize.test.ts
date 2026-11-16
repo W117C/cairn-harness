@@ -33,7 +33,7 @@ describe("浏览器窗格放大（2026-11-03 业主）", () => {
     expect(src).toContain("const [maximized, setMaximized] = useState(false)");
     expect(src).toContain('if (active !== "browser" && maximized) setMaximized(false)');
     expect(src).toContain('if (e.key === "Escape")');
-    // 第 1259 页：放大态自己持 Esc，一次只做一件事——全局智慧停止无条件让路（焦点掉在 body
+    // 第 1312 页：放大态自己持 Esc，一次只做一件事——全局智慧停止无条件让路（焦点掉在 body
     // 时 escOwns 读不到）；放大监听器把模态面 / 仍开着的浮层 / 焦点所在的自持控件让过去。
     expect(app).toContain(`if (document.querySelector('.pane-workbench[data-maximized="true"]') !== null) return;`);
     expect(src).toContain("const gate = readGateInput(false);");

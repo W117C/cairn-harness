@@ -36,7 +36,7 @@ describe("D7 覆盖前快照", () => {
     expect(r.output).toContain("覆盖前原件已存");
     const back = await readFile(join(ws, r.snapshotId as string), "utf8");
     expect(back, "取回的必须是覆盖前的原件，不是新内容").toBe(original);
-    // 快照路径只由输入决定：同 callId、同原件 ⇒ 每次重跑都落在同一处（第 1257 页偿清 D7 快照债）。
+    // 快照路径只由输入决定：同 callId、同原件 ⇒ 每次重跑都落在同一处（第 1310 页偿清 D7 快照债）。
     expect(r.snapshotId).toBe(
       snapshotIdOf(rel, "call-1", snapshotDigestOf(Buffer.from(original, "utf8"))),
     );

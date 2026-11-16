@@ -85,7 +85,7 @@ export interface ExemptionDef {
 }
 
 /** M2/M3 共享：被桌面端判卷**逐字钉住**的动画声明（整条精确匹配 · 显式登记）。
- *  当前为空：breathe 已改走 `--t-breathe`（第 1257 页），两份桌面判卷改为钉令牌名。
+ *  当前为空：breathe 已改走 `--t-breathe`（第 1310 页），两份桌面判卷改为钉令牌名。
  *  空表由 tests/motion-policy.test.ts 钉住——再出现按值的豁免必须先在这里登记理由。 */
 export const ANIMATION_EXEMPTIONS: readonly ExemptionDef[] = [];
 
@@ -652,7 +652,7 @@ function ruleM5(decls: Decl[], file: string, stylesSrc: string): RuleResult {
     return t[2] === "s" ? n * 1000 <= 1 : n <= 1;
   };
   // 降级面有**两路**入口，判据逐面跑同一套：在不在 / 有没有真声明 / 作用域全不全 / 归零 / 滚动让路。
-  // 只查系统那一路时，应用内那一块被删掉不会有任何一道门变红（第 1256 页扩宽后它已是完整降级域）。
+  // 只查系统那一路时，应用内那一块被删掉不会有任何一道门变红（第 1309 页扩宽后它已是完整降级域）。
   const faces: ReducedFace[] = [
     {
       label: "@media (prefers-reduced-motion: reduce)",

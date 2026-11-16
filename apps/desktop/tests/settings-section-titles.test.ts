@@ -22,7 +22,7 @@ describe("设置分区标题只有一个出口（第 949 页）", () => {
   });
 
   it("页头不再写字面量，且六个分区都走 sectionLabel", () => {
-    // 字面量页头全应用不许再有（拆到 settings/*.tsx 的页也算回退；第 1251 页分类迁移）。
+    // 字面量页头全应用不许再有（拆到 settings/*.tsx 的页也算回退；第 1304 页分类迁移）。
     expect(readAppSurface()).not.toContain('SettingsPage title="');
     for (const id of ["general", "provider", "permissions", "shortcuts", "advanced", "about"]) {
       expect(panel).toContain(`<SettingsPage title={sectionLabel("${id}")}>`);

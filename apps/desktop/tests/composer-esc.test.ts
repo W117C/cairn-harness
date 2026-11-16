@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { readAppSurface } from "./helpers/app-surface";
 
 const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/Composer.tsx", import.meta.url)), "utf8");
-// 否定断言读整面：旧豁免/旧 Esc 门一旦搬到别的组件，单文件读会空过（第 1251 页分类迁移）。
+// 否定断言读整面：旧豁免/旧 Esc 门一旦搬到别的组件，单文件读会空过（第 1304 页分类迁移）。
 const appSrc = readAppSurface();
 
 describe("Composer 浮层 Esc", () => {

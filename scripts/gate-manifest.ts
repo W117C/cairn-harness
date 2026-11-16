@@ -162,13 +162,13 @@ export const GATES: readonly string[] = [
   //   它判「形状成立 ＋ 两列与盘上现读逐字一致」（逐条 spawn 靶子，约 5s）。真正只在本门里量的
   //   只剩「漂了但形状仍成立」这一种，而它已经被那条判据的同一次 spawn 覆盖 ⇒ 双买等于付两次同样的账。
   //   ⚠️ 原文这里接着写「这一格必须留人手跑，不许假装它在认证面上」——那句与上一段自相矛盾，
-  //   也与 `tests/bench-judge-spec.test.ts` 的第 ⑵ 组（两列 ↔ 盘上现读逐字一致）矛盾，第 1251 页删掉；
+  //   也与 `tests/bench-judge-spec.test.ts` 的第 ⑵ 组（两列 ↔ 盘上现读逐字一致）矛盾，第 1304 页删掉；
   //   同段的「落在 1.5s 线内」也是笔误：单价 1.76s 本就超线。归属登记在 `CERT_GATE_OUTSIDE`。
   "bench-judge-spec-check",
   // 桌面端单向依赖红线（AGENTS.md 分层规则的机器面）：src → apps/desktop 或 electron 即红。
   // 原先只挂在 apps/desktop test 链尾——core-only 会话跑根门永远不触发；注册进默认门表补上这个洞
   // （终审 #4）。快尺：纯文本扫渲染层，亚秒档。
-  // 第 1251 页按「≤1.5s 全进」买进认证面（买入注在 `CERT_GATES` 那道门旁边）：它是面外 11 道里
+  // 第 1304 页按「≤1.5s 全进」买进认证面（买入注在 `CERT_GATES` 那道门旁边）：它是面外 11 道里
   // **唯一**既在线内、又没有任何别的认证面门覆盖的一道——`tests/renderer-layer.test.ts` 只在临时
   // 目录造坏样本，真树只有这支脚本在量。
   "renderer-layer-check",
@@ -279,7 +279,7 @@ export const CERT_GATES: readonly { name: string; budgetMs: number }[] = [
      对一趟 ~265s 的认证是 +1.6%（量纲分开记：预算之和是登记口径，墙钟是实测口径）。 */
   { name: "e2e", budgetMs: 4000 },            // 实测 1995ms（闭环 e2e：mock provider 驱动生产 loop 修冻结靶子）
   { name: "desktop-test", budgetMs: 10000 },  // 实测 4660ms 冷／2280ms 热（apps/ 145 条判卷 ＋ 桌面边界）
-  /* 第 1251 页买进认证面（2026-11-16）：三态分区体检的结果。
+  /* 第 1304 页买进认证面（2026-11-16）：三态分区体检的结果。
      做法：把 `GATES` 减 `CERT_GATES` 减 `CERT_GATE_EXCLUDED`，面外剩 11 道——逐道问「谁在认证路径上看它」。
      其中 10 道有归属（5 道已被 `test`／`desktop-test` 同源跑过、4 道超线待裁决、1 道同源判据更便宜），
      只有这一道脚踩两条：**快**（亚秒）且**无人覆盖**（`tests/renderer-layer.test.ts` 只在临时目录造坏样本，
@@ -301,7 +301,7 @@ export const CERT_GATE_EXCLUDED: readonly string[] = [
 
 /**
  * 面外重门（超 1.5s 快门线）：不进 `CERT_GATES`（快门面预算不涨），但**进 L1 的 deep gates 步骤**，
- * 每趟 push 都跑（第 1254 页）。
+ * 每趟 push 都跑（第 1307 页）。
  *
  * 为什么不再「待裁决」：这四道从前只在 `pnpm gates` 全量时跑，而 CI 只跑认证面 ⇒ 它们
  * **任何自动化路径都不跑**。`plugins-check` 就这样红着没人发现（F2 的信任表 guard 上线后，
@@ -318,7 +318,7 @@ export const CERT_GATE_DEEP: readonly string[] = [
 ];
 
 /**
- * 认证面之外、且**不属于**「永远不许」的那些门的理由表（第 1251 页）。
+ * 认证面之外、且**不属于**「永远不许」的那些门的理由表（第 1304 页）。
  *
  * 为什么需要第三张表：`GATES` 40 道、`CERT_GATES` 26 道、`CERT_GATE_EXCLUDED` 4 道，
  * 剩下 10 道既不在认证面、也没有机器可读的理由。
@@ -330,14 +330,14 @@ export const CERT_GATE_DEEP: readonly string[] = [
  * `CERT_GATE_DEEP` 那四道已由 L1 深门步骤每趟 push 跑；余下六道由更便宜的同源观测者覆盖。
  */
 export const CERT_GATE_OUTSIDE: Readonly<Record<string, string>> = {
-  // —— 超 1.5s 线：不进快门面，但进 L1 deep gates（名单见 `CERT_GATE_DEEP`，第 1254 页）。
+  // —— 超 1.5s 线：不进快门面，但进 L1 deep gates（名单见 `CERT_GATE_DEEP`，第 1307 页）。
   // 单价必须连着「跑它的那棵树」记（第 226 页那条：同是 map-check，主树 53.0s、认证树 4.8s）。
   "tools-check": "主树现读 8.6s（第 226 页逐道实测，取料 outputs/hard-gate-block-witness-2026-09-30/gates-14-unmeasured.log）⇒ 超 1.5s 快门线；进 L1 deep gates，每趟 push 跑",
   "supervisor-check": "主树现读 8.0s（同上取料）⇒ 超 1.5s 快门线；进 L1 deep gates，每趟 push 跑",
   "plugins-check": "主树现读 15.4s（同上取料）⇒ 超 1.5s 快门线；进 L1 deep gates，每趟 push 跑",
   "map-check": "主树现读 53.0s、认证树 4.8s（第 226 页；十倍差来自取料面：主树刚被写过要重建影响面，规则 276）⇒ 超 1.5s 快门线；进 L1 deep gates，每趟 push 跑",
   // —— 已有更便宜的同源观测者：认证面里再买一次 = 同一笔账付两次。
-  "bench-judge-spec-check": "同源观测者是 test 门里的 tests/bench-judge-spec.test.ts：逐条 spawn 靶子并比对两列与盘上逐字一致；本门只剩『漂了但形状仍成立』，双买无新覆盖面。原文『落在 1.5s 线内』是笔误——单价 1.76s 本就超线（第 1251 页更正）",
+  "bench-judge-spec-check": "同源观测者是 test 门里的 tests/bench-judge-spec.test.ts：逐条 spawn 靶子并比对两列与盘上逐字一致；本门只剩『漂了但形状仍成立』，双买无新覆盖面。原文『落在 1.5s 线内』是笔误——单价 1.76s 本就超线（第 1304 页更正）",
   "event-semantics-check": "断言与 tests/event-semantics.test.ts 同源（文件头写明『互为两把尺』），随 test 门在全量判卷里跑；脚本是给人读的第二把尺，认证面不重复计数",
   "session-semantics-check": "断言与 tests/session-semantics.test.ts 同源，随 test 门跑；脚本是给人读的第二把尺",
   "session-search-check": "同源判据在 tests/session-search.test.ts（三态：空查询／无匹配／可匹配），随 test 门跑；脚本是第二把尺",

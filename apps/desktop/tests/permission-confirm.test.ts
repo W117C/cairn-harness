@@ -63,7 +63,7 @@ describe("接线：命令面板 + ConfirmScrims", () => {
   });
 });
 
-// 第 1258 页：确认卡顶替列表后，被点的行随列表卸载——焦点、Esc、弹层语义都不能掉在地上。
+// 第 1311 页：确认卡顶替列表后，被点的行随列表卸载——焦点、Esc、弹层语义都不能掉在地上。
 describe("内联确认卡的焦点与语义", () => {
   const menu = read("../src/renderer/components/PermissionMenu.tsx");
   const shell = read("../src/renderer/components/ComposerPermissionMenu.tsx");

@@ -4,7 +4,7 @@
 // 同一枚键位从此有两份事实源：改绑定后速查表与面板会说不一样的话。
 // 本判卷把那句注释变成会红的检查：凡是 `keysOf("x")` / `shortcutId: "x"` 引用到的 id，
 // 必须存在于 SHORTCUTS；缺一个就是界面上**静默少一枚提示**（不报错、不红，肉眼扫不出来）。
-// 2026-11-16（第 1250 页）：`withKeys(STR.x, "id")` / `fillKeys(STR.x, "id")` 也是引用面——
+// 2026-11-16（第 1303 页）：`withKeys(STR.x, "id")` / `fillKeys(STR.x, "id")` 也是引用面——
 // 补进清点，否则 id 打错时 tooltip 只是少一截，和当初手抄 F2 是同一种静默。
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -46,7 +46,7 @@ describe("键位 id 引用完整性", () => {
   });
 
   it("可见提示串里的键位回表：词表只留 {key} 占位，键位从 SHORTCUTS 填", () => {
-    // 第 1250 页：这六条此前直接把 ⌘N / ⌘O / ⌘⌥I 抄进句子，改绑定后提示照旧说老键位。
+    // 第 1303 页：这六条此前直接把 ⌘N / ⌘O / ⌘⌥I 抄进句子，改绑定后提示照旧说老键位。
     // 现在词表留占位、消费面 fillKeys 填；这里钉「词表不再含键位字形」这一半。
     const tips = [
       STR.sidebar.emptyList,

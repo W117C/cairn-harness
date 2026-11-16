@@ -50,7 +50,7 @@ describe("usage dashboard", () => {
     // 第 936 页：与用量环同一把尺（k/m），不再是中文紧凑写法「1.4万」
     expect(usageTokenLabel(14_000, 1)).toBe("14.0k");
     expect(usageTokenLabel(1_250_000, 1)).toBe("1.3m");
-    // 旧紧凑写法全应用不许再有（第 1251 页分类迁移：这句是「全应用不得再有」类）。
+    // 旧紧凑写法全应用不许再有（第 1304 页分类迁移：这句是「全应用不得再有」类）。
     expect(readAppSurface()).not.toContain('notation: "compact"');  });
 
   it("uses the scanner timezone for the calendar boundary, even if the renderer timezone differs", () => {

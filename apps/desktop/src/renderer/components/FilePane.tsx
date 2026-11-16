@@ -30,7 +30,7 @@ export function FilePane(props: {
   const dirSeq = useRef(new Map<string, number>());
   const previewSeq = useRef(0);
   const treeRef = useRef<HTMLDivElement | null>(null);
-  // 快速打开的焦点意图（第 1260 页）：行要等父目录数据回来、窗格切到前台才真实可见，
+  // 快速打开的焦点意图（第 1313 页）：行要等父目录数据回来、窗格切到前台才真实可见，
   // 所以先登记路径，由下面那只 effect 在行出现且窗格在前台时搬一次（搬完即清）。
   const focusIntentRef = useRef<string | null>(null);
   const root = dirs[""];
@@ -89,7 +89,7 @@ export function FilePane(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.openTarget]);
 
-  // 快速打开的落点（第 1260 页）：父目录数据回来、行真实渲染、窗格已在前台，三者齐了才搬焦点。
+  // 快速打开的落点（第 1313 页）：父目录数据回来、行真实渲染、窗格已在前台，三者齐了才搬焦点。
   // 少了这一步，命令面板选中的文件只开预览，键盘焦点还留在面板触发钮上——头注释承诺的
   // 「打开预览并聚焦行」只兑现了一半。
   useEffect(() => {

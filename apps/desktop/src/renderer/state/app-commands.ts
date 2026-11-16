@@ -120,7 +120,7 @@ export function useAppCommands(deps: AppCommandsDeps) {
       if (e.key === "Escape") {
         // 站点授权弹层自己吃 Esc（2026-10-18）：全局这里让路，否则按 Esc 想关弹层会顺带停掉本轮。
         if (document.querySelector('.bp-permit[role="alertdialog"]') !== null) return;
-        // 放大窗格自己持 Esc（第 1259 页）：还原由 PaneDock 的放大监听器做，它还会把内层自持
+        // 放大窗格自己持 Esc（第 1312 页）：还原由 PaneDock 的放大监听器做，它还会把内层自持
         // Esc 的控件与仍开着的浮层让过去。这里必须无条件让路——焦点掉在 body 时 escOwns 读不到，
         // 只靠窗格上的 data-esc-owns 会让一次 Esc 既还原又停掉正在跑的本轮。
         if (document.querySelector('.pane-workbench[data-maximized="true"]') !== null) return;

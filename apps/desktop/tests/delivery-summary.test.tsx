@@ -115,7 +115,7 @@ describe("DSH 交付卡：壳与逻辑钉", () => {
     expect(src).toContain('className="change-preview"');
     expect(src).toContain('role="dialog"');
     expect(src).toContain('if (e.key === "Escape")');
-    // 第 1259 页：预览在场且焦点在卡内时 Esc 归卡片自己——只收预览，不让全局把它当「智慧停止」；
+    // 第 1312 页：预览在场且焦点在卡内时 Esc 归卡片自己——只收预览，不让全局把它当「智慧停止」；
     // 焦点离开卡片（或排期未到点就 Esc）时把预览/排期一并收掉。
     expect(src).toContain('{...(preview !== null ? { "data-esc-owns": "true" } : {})}');
     expect(src).toContain("e.stopPropagation();");

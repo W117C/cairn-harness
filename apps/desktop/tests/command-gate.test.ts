@@ -75,7 +75,7 @@ describe("命令门：浮层与焦点（键盘路径与菜单路径共用）", (
     expect(overlayBlocked(readGateInput(true, fakeDom()))).toBe(true);
   });
 
-  it("会自己关自己的浮层（第 1259 页）：全局智慧停止与放大窗格读同一处", () => {
+  it("会自己关自己的浮层（第 1312 页）：全局智慧停止与放大窗格读同一处", () => {
     expect(floatingSurfaceOpen(fakeDom())).toBe(false);
     expect(floatingSurfaceOpen(fakeDom({ floating: true }))).toBe(true);
     const src = appSrc();

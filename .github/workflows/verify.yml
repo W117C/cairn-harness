@@ -89,7 +89,7 @@ jobs:
         run: >-
           pnpm gates
           --only=no-progress-check,prune-check,fork-check,compaction-check,docs-check,memory-check,head-import-check,autonomy-check,sandbox:check,security-check,provider:check,routing-check,model-surface-check,prefix-churn-check,prompt-surface-check,replay-determinism-check,cost-per-progress-check,web-fetch-check,gym-check,evidence-typecheck-check,gate-check,mutate-needles-check,repo-hygiene-check,e2e,desktop-test,renderer-layer-check
-      # 深门步骤（2026-11-16 第 1254 页）：4 道重门超 1.5s 快门线，从前**任何自动化路径都不跑**——
+      # 深门步骤（2026-11-16 第 1307 页）：4 道重门超 1.5s 快门线，从前**任何自动化路径都不跑**——
       # `plugins-check` 就这样红着没人发现（F2 信任表 guard 上线后，脚本仍把 trustFile 放在工作区内）。
       # 它们不进快门面（CERT_GATES 的 75s 预算不变），但同一个 job 每趟 push 都跑；
       # 名单 = `CERT_GATE_DEEP`，由 `tests/ci-cert-face-parity.test.ts` 钉住逐字相等。

@@ -20,7 +20,7 @@ export function PathMenu(props: {
 
   // 首项聚焦与焦点归还都只随挂载/卸载跑一次：此前与监听器同放一个 effect、依赖整包 props
   // （每渲染都是新对象），「操作失败 ⇒ setNotice 重渲染」会把焦点从用户按键的位置拽回首项。
-  // 关闭时菜单项随卸载消失、焦点掉回 body（第 1260 页）：只在焦点确实丢了时交还右键那一刻的
+  // 关闭时菜单项随卸载消失、焦点掉回 body（第 1313 页）：只在焦点确实丢了时交还右键那一刻的
   // 控件（行按钮）；点了别处 / 焦点已有去处时不抢。
   const returnRef = useRef<HTMLElement | null>(null);
   useEffect(() => {

@@ -91,7 +91,7 @@ describe("页体并入设置（v7.1 业主裁）：AppPageBody + 事实源", () 
 
   it("工作树未解析（无可用工作区）时给说明与出路，不是一行状态字（2026-11-02 真机）", () => {
     const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/AppPage.tsx", import.meta.url)), "utf8");
-    // 否定断言读应用页整面：旧状态字搬到同组拆出的面板里也算回退（第 1251 页分类迁移）。
+    // 否定断言读应用页整面：旧状态字搬到同组拆出的面板里也算回退（第 1304 页分类迁移）。
     expect(readAppPageSurface()).not.toContain('stateFrame("工作区未解析（无可用工作区）")');
     expect(src).toContain("还没有可分析的工作区");
     expect(src).toMatch(/还没有可分析的工作区[\s\S]{0,400}先在侧栏打开一个文件夹/);

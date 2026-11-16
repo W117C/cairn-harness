@@ -25,7 +25,7 @@ it("协议（现 v79）：RunRequest.planRequired 字段与 validator 保留，�
 });
 
 it("renderer 不再有用户武装面：Composer 开关、设置默认值、按轮 override 全部撤下", () => {
-  // 「撤下」= 整个渲染层不许再有，不是某一个文件里恰好没有：读应用面（第 1252 页口径），
+  // 「撤下」= 整个渲染层不许再有，不是某一个文件里恰好没有：读应用面（第 1305 页口径），
   // 否则开关代码搬去 hook/子组件后，单文件否定断言会空过。
   const appSrc = readAppSurface();
   expect(appSrc).not.toContain("onPlanRequiredChange");

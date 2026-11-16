@@ -32,7 +32,7 @@ describe("会话行右键菜单", () => {
   it("复用同一个 Radix 菜单（受控 open），不另写一套自绘", () => {
     expect(sidebar).toContain("open={ctxOpen} onOpenChange={setCtxOpen}");
     expect(sidebar).toContain("const [ctxOpen, setCtxOpen] = useState(false)");
-    // 反向：不该出现第二套会话菜单组件（拆到别的侧栏文件同样算第二套；第 1251 页分类迁移）
+    // 反向：不该出现第二套会话菜单组件（拆到别的侧栏文件同样算第二套；第 1304 页分类迁移）
     expect(readAppSurface()).not.toContain("SessionContextMenu");
   });
 

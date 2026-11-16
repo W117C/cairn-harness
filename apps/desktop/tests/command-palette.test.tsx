@@ -117,7 +117,7 @@ describe("③ 同源哨兵（tooltip 与表同源，防漂移）", () => {
     expect(sidebarSrc).toContain('title={STR.sidebar.searchTip}');
     expect(appSrc).not.toContain('withKeys(STR.sidebar.searchTip, "palette")');
     // withKeys 本身也搬进表模块（单一实现）：侧栏/头像/收起轨共用，不再各抄一份。
-    // 2026-11-16（第 1250 页）：空列表提示也回表（fillKeys + {key} 占位），一并钉住。
+    // 2026-11-16（第 1303 页）：空列表提示也回表（fillKeys + {key} 占位），一并钉住。
     expect(sidebarSrc).toMatch(/import \{[^}]*\bwithKeys\b[^}]*\} from "\.\.\/shortcuts";/);
     expect(sidebarSrc).toContain('fillKeys(STR.sidebar.emptyList, "new-session")');
   });

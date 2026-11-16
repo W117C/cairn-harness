@@ -89,7 +89,7 @@ describe("菜单键盘导航（菜单按钮 / 项目弹层共用）", () => {
     expect(src).toContain("}, [props.onClose]);");
   });
 
-  // 第 1260 页：菜单关闭 = 菜单项随卸载消失，焦点会掉回 body。只在确实丢了时交还右键那一刻的控件。
+  // 第 1313 页：菜单关闭 = 菜单项随卸载消失，焦点会掉回 body。只在确实丢了时交还右键那一刻的控件。
   it("路径菜单关闭把焦点交还打开它的控件（有去处时不抢）", () => {
     const src = read("../src/renderer/components/PathMenu.tsx");
     expect(src).toContain("document.activeElement instanceof HTMLElement ? document.activeElement : null");

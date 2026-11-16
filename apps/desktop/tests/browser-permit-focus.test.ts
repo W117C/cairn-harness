@@ -8,7 +8,7 @@ const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/PaneD
 describe("站点授权弹层", () => {
   it("pending 出现时聚焦允许本次", () => {
     expect(src).toContain("const permitFirstRef = useRef<HTMLButtonElement | null>(null);");
-    // 第 1258 页：同一支 effect 兼做「关闭时归还焦点」，守卫从 if(non-null) 改为提前返回。
+    // 第 1311 页：同一支 effect 兼做「关闭时归还焦点」，守卫从 if(non-null) 改为提前返回。
     expect(src).toContain("if (pending === null) return;");
     expect(src).toContain("permitFirstRef.current?.focus();");
     expect(src).toContain("}, [pending]);");

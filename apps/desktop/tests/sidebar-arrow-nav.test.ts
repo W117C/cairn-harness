@@ -85,7 +85,7 @@ describe("↑↓ 在会话之间移动焦点", () => {
   it("到边界不环绕（rows[at±1] 为 undefined 时静默不动）", () => {
     expect(sidebar).toContain("next?.focus()");
     // 没有取模 ⇒ 首行按 ↑、末行按 ↓ 都是 no-op，不跳到另一端。全应用禁令：读面不读
-    // Sidebar 单文件（行移动逻辑搬去 hook/子组件后，单文件否定会空过；第 1252 页口径）。
+    // Sidebar 单文件（行移动逻辑搬去 hook/子组件后，单文件否定会空过；第 1305 页口径）。
     expect(readAppSurface()).not.toMatch(/rows\[\(at \+ [^)]*\) % rows\.length\]/);
   });
 

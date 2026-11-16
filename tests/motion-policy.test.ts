@@ -147,7 +147,7 @@ describe("好标本仍绿（本仓现读面）", () => {
     expect(ids(m2).filter((i) => i === "E1")).toHaveLength(7);
     // breathe 已改走 --t-breathe：按值的 E2 豁免撤名，四条现场回归令牌路径（牌子不许再出现）。
     expect(ids(m2).filter((i) => i === "E2")).toHaveLength(0);
-    // 降级面内按位置豁免的时长声明：系统块 2 条 + 应用内根属性块 2 条（第 1256 页两路同语义）。
+    // 降级面内按位置豁免的时长声明：系统块 2 条 + 应用内根属性块 2 条（第 1309 页两路同语义）。
     expect(ids(m2).filter((i) => i === "E0")).toHaveLength(4);
     const m7 = ruleOf(outcome, "M7");
     expect(ids(m7).filter((i) => i === "E4")).toHaveLength(2);

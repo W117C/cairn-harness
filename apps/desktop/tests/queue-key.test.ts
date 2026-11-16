@@ -67,7 +67,7 @@ describe("发送队列键一致性 · 接线层", () => {
     const strip = readRendererFile("panes/WorkbenchView.tsx");
     const dock = readRendererFile("panes/QueueDock.tsx");
     const sub = readRendererFile("state/session-subscription.ts");
-    // 裸 id 读法全应用不许再有（挪到别的消费面同样会清空队列；第 1251 页分类迁移）。
+    // 裸 id 读法全应用不许再有（挪到别的消费面同样会清空队列；第 1304 页分类迁移）。
     const appSrc = readAppSurface();
     // 渲染条 + 三个改写点（打断并发送 / 移出 / 编辑）都住在 QueueDock
     expect(dock).toContain("queue.current.get(runKey(props.activeWorkspace, props.activeId))");

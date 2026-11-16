@@ -42,7 +42,7 @@ describe("变更窗格 · 分栏审阅器", () => {
     expect(src).toContain("selected === null ? (");
     expect(src).toContain("diff.payload.hunks");
     // 不许出现「一轮全取」的入口（那会把长会话一次拉爆）——全应用禁令，读面不读单文件
-    // （第 1252 页：预取代码搬到 use-change-stats / Stream 后，单文件否定会空过）。
+    // （第 1305 页：预取代码搬到 use-change-stats / Stream 后，单文件否定会空过）。
     expect(readAppSurface()).not.toMatch(/files\.map\([^)]*\)\s*\.map\([^)]*changeDiff/);
   });
 

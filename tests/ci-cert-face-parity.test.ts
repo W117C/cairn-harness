@@ -8,7 +8,7 @@
 //   ③ 空探针证人：解析必须真找到 `--only=` 那一行且解析出 ≥10 个名字。
 //      否则 workflow 一改名（`--only` 换成别的写法、名单挪进行号），①②会同时变成「两边都空 ⇒ 相等」的恒真。
 //      （本仓反复踩的那一格：一片 0 先怀疑取料，不是先报喜。）
-//   ④ 深门（第 1254 页）：面外重门 4 道必须真的在 CI 里跑，名单 = CERT_GATE_DEEP，且与认证面不相交。
+//   ④ 深门（第 1307 页）：面外重门 4 道必须真的在 CI 里跑，名单 = CERT_GATE_DEEP，且与认证面不相交。
 //      从前它们只在 `pnpm gates` 全量时跑，CI 只跑认证面 ⇒ `plugins-check` 红着没人发现。
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

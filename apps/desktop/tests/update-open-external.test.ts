@@ -150,7 +150,7 @@ describe("接线守卫：面板真的用上了更新通道", () => {
 
   it("渲染层不自己开外链：没有 window.open( 调用，也没有 location.href 赋值", () => {
     // 这是「整个渲染层」的禁令，不是 SettingsPanel 一个文件的形状：读应用面，
-    // 否则外链代码搬去别的组件后，单文件否定断言会空过（第 1252 页口径）。
+    // 否则外链代码搬去别的组件后，单文件否定断言会空过（第 1305 页口径）。
     const appSrc = readAppSurface();
     expect(appSrc).not.toMatch(/window\.open\s*\(/);
     expect(appSrc).not.toMatch(/location\s*\.\s*href\s*=/);

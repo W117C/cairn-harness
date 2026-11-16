@@ -49,7 +49,7 @@ it("接线：选中文件 → 开文件窗格 + fileTarget；PaneDock 激活 fil
   expect(filePane).toContain("if (dirs[parent] === undefined) loadDir(parent);");
 });
 
-// 第 1260 页：头注释承诺「打开预览并聚焦行」，此前只开了预览——焦点留在命令面板的触发钮上。
+// 第 1313 页：头注释承诺「打开预览并聚焦行」，此前只开了预览——焦点留在命令面板的触发钮上。
 // 行要等父目录数据回来、窗格切到前台才真实可见；意图挂起，三者齐了才搬一次。
 it("快速打开把焦点落到目标行（等目录数据 + 前台标签，只搬一次）", () => {
   expect(filePane).toContain("focusIntentRef.current = target.path;");
