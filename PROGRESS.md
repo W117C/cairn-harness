@@ -43452,3 +43452,42 @@ PASS 按天气：切到 weather + 选「雨」+ 设为该天气 ⇒ weather.path
 | 定时 / 日出日落 / 多显示器 / 按天气（手动 + 文件 + **联网**） | 已做 |
 | 网站作为壁纸 | 未做 —— 要放开受限 CSP，需业主拍板 |
 | 原生点选自动化 | 判不到 —— 需人工点一次 |
+
+## 2026-11-16 · 第 1294 页：Bot 侧也出生成报告（12/12 covered）（`pending`）
+
+**背景**：壁纸那边有 `standard-report`，bot 这边只有台账里散着的条目——「bot 做完了」一直是一句话。
+这一页把它变成生成物。
+
+### 一、口径
+
+| 规则 | 做法 |
+|---|---|
+| 只收 bot.* | 报告不掺壁纸条目（各管各的证据面） |
+| 每行必须有证人 | 证人是仓库相对路径；**文件不存在 ⇒ 该行 `missing`**，整体 `incomplete` |
+| partial 也算没做完 | 有 `partial` 就整体 `incomplete`——不拿「差不多」当完成 |
+| 边界照抄 | 对表 `ours` 里的边界原样带进报告（不美化） |
+
+### 二、产物
+
+```
+$ npx tsx scripts/bot-report.ts
+bot-report: pass
+  12/12 covered｜partial 0｜out 0｜missing 0
+→ outputs/bot-conformance/report.json   （同时写 report.md）
+```
+
+核心判据 `tests/bot-report.test.ts` 3 条：只收 `bot.*`、统计对得上；**证人缺失 ⇒ missing + incomplete**；
+`partial` 也让整体 incomplete。
+
+### 三、门禁读数（工作树）
+
+- 核心 `pnpm test:capped`：**706 文件 / 8336 条全绿**，exit 0
+- 桌面 419 文件 / 2681 条全绿；真机冒烟 **67/67**（本轮无渲染层改动，四包证据仍有效）
+- `typecheck` 0 报错；`docs-check` 全绿
+
+### 四、边界（如实）
+
+- 多显示器：`perDisplay` 解析对 **多个 id** 有判据（`tests/wallpaper-displays.test.ts`），
+  但这台机器只有 1 块屏 ⇒ **多屏真机分配仍未验**。
+- 网站壁纸：仍 `未做`。可以不改渲染层 CSP 的做法是「另开一个受限窗口当壁纸层」，
+  但窗口层级在 macOS 上不保证稳定置于主窗口之下——这点没验之前我不写进产品。

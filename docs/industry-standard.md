@@ -41,6 +41,14 @@ npx tsx scripts/docs-check.ts
 | Electron 安全清单（contextIsolation / 无 nodeIntegration / 沙箱 / 无 node 全局） | 四项都为「是」 | **4/4**（真机读 `typeof window.require/process/agent/global`，不是读代码猜） | `apps/desktop/scripts/wallpaper-csp-smoke.cjs` |
 | OWASP Top 10 2021 A09（安全日志与监控） | 敏感值不得进日志 | 报告生成时拿真样本跑产品脱敏：**残留 0 次** | `scripts/standard-report.ts` `tests/team-secrets.test.ts` |
 
+## Bot 侧也有生成报告
+
+壁纸那份是 `scripts/standard-report.ts`；bot 这份是 `scripts/bot-report.ts` →
+`outputs/bot-conformance/report.json`。它只收 `bot.*` 的能力，每行必须点名**存在的证人文件**，
+缺证人或带 `partial` 就整体 `incomplete`（判据 `tests/bot-report.test.ts`）。
+
+现读：**12/12 covered、0 partial、0 out、0 missing、总判 pass**。
+
 ## 差距表（我们**没有**的能力）
 
 只在「做到了什么」上打勾，永远能得出「行业最高」。所以差距单独列一份：
