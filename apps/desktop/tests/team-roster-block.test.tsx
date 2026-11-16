@@ -20,7 +20,9 @@ describe("侧栏成员区", () => {
   it("名单：名字与档位都在，计数字段是真的成员数", () => {
     const html = renderToStaticMarkup(<TeamRosterBlock initialRoster={roster()} />);
     expect(html).toContain("阿岚");
-    expect(html).toContain("guided");
+    // 2026-11-17：档位走 modeLabelOf 中文词表（与团队窗格/设置页同源）；原始枚举不再上屏。
+    expect(html).toContain("智能审批");
+    expect(html).not.toContain("guided");
     expect(html).toContain("小北");
     expect(html).toContain(">2<");
   });

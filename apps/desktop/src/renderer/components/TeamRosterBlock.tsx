@@ -5,6 +5,7 @@
 // 侧栏给的是「队里有谁、什么档」，点进设置才改得动。
 import { useCallback, useEffect, useState } from "react";
 import type { TeamRosterPayload } from "../../../../../src/main/ipc-protocol";
+import { modeLabelOf } from "../permission-labels";
 import { STR } from "../strings";
 
 export function TeamRosterBlock(props: { initialRoster?: TeamRosterPayload } = {}): React.JSX.Element {
@@ -35,9 +36,9 @@ export function TeamRosterBlock(props: { initialRoster?: TeamRosterPayload } = {
         <div className="side-team-empty">{STR.team.emptyValue}</div>
       )}
       {!failed && members.map((m) => (
-        <div className="side-team-row" key={m.id} title={`${m.name} · ${m.role} · ${m.tier}`}>
+        <div className="side-team-row" key={m.id} title={`${m.name} · ${m.role} · ${modeLabelOf(m.tier)}`}>
           <span className="side-team-name">{m.name}</span>
-          <span className="side-team-tier">{m.tier}</span>
+          <span className="side-team-tier">{modeLabelOf(m.tier)}</span>
         </div>
       ))}
       <div className="side-team-hint">{STR.team.manageHint}</div>

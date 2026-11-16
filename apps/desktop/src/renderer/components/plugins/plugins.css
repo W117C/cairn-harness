@@ -293,6 +293,8 @@
   background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover));
 }
 
+/* 占位标颜色走 --mark-hue（PluginMark 注入的纯数字色相；未注入时回落品牌色相 24）。
+   识别面：每行一个稳定色块，不再全市场同一枚拼图块；s/l 固定中档，两主题都可读。 */
 .plugin-mark {
   width: 32px;
   height: 32px;
@@ -300,8 +302,10 @@
   align-items: center;
   justify-content: center;
   border-radius: 7px;
-  color: hsl(var(--accent-brand));
-  background: hsl(var(--accent-brand) / 9%);
+  font-size: var(--fs-caption-md);
+  font-weight: var(--fw-bold);
+  color: hsl(var(--mark-hue, 24) 52% 46%);
+  background: hsl(var(--mark-hue, 24) 52% 50% / 12%);
 }
 
 .plugin-row-copy {
@@ -376,6 +380,32 @@
   background-size: 240% 100%;
   animation: plugin-skeleton 1.4s ease-in-out infinite;
 }
+
+/* 加载骨架（2026-11-17）：双列卡片占位——与落定后的网格同 gap 同列宽（auto-fill minmax(340px,1fr)），
+   loading→ready 不再从 56px 横条跳成 40px 方块卡片。mark/双行渐变条复用同一 pulse。 */
+.plugin-skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 0 10px;
+}
+.plugin-skeleton-card {
+  display: flex; align-items: center; gap: 10px;
+  min-height: 56px; padding: 10px 8px; border-radius: var(--radius-md);
+}
+.plugin-skeleton-card .plugin-skeleton-mark {
+  flex: none; width: 40px; height: 40px; border-radius: var(--radius-md);
+  background: linear-gradient(90deg, transparent, hsl(var(--text-000) / 4%), transparent);
+  background-size: 240% 100%;
+  animation: plugin-skeleton 1.4s ease-in-out infinite;
+}
+.plugin-skeleton-card .plugin-skeleton-lines { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.plugin-skeleton-card .plugin-skeleton-line {
+  height: 10px; border-radius: 999px;
+  background: linear-gradient(90deg, transparent, hsl(var(--text-000) / 4%), transparent);
+  background-size: 240% 100%;
+  animation: plugin-skeleton 1.4s ease-in-out infinite;
+}
+.plugin-skeleton-card .plugin-skeleton-line.short { width: 62%; }
 
 @keyframes plugin-skeleton {
   from { background-position: 100% 0; }
@@ -775,20 +805,27 @@
 .plugin-discover .plugin-shelf-rows {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 0 10px;
+  gap: 6px 10px;
 }
 
+/* 卡片描边 + hover 抬升（此前静止时像一堵文字墙：无边框、hover 才有底色）。
+   静止 = 发丝线 + 卡底；hover = 边框提亮 + 淡底。 */
 .plugin-store-card {
   min-width: 0;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 10px 8px;
+  border: 1px solid var(--hairline);
+  background: hsl(var(--bg-000));
   border-radius: var(--radius-md);
-  transition: background var(--t-instant);
+  transition: background var(--t-instant), border-color var(--t-instant);
 }
 
-.plugin-store-card:hover { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover)); }
+.plugin-store-card:hover {
+  background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover));
+  border-color: var(--hairline-strong);
+}
 
 .plugin-store-main {
   min-width: 0;
@@ -837,13 +874,18 @@
 .plugin-pill.subtle { border-color: transparent; background: hsl(var(--bg-200)); }
 .plugin-pill.warn { color: hsl(var(--color-risk, var(--accent-brand))); }
 
+/* 检查更新失败的行内警示（failed 结果此前完全不可见）。 */
+.plugin-check-failed { color: hsl(var(--color-risk, var(--accent-brand))); }
+
 .plugin-store-desc {
   min-width: 0;
   overflow: hidden;
   color: hsl(var(--text-300));
   font-size: var(--fs-caption-sm);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
 }
 
 .plugin-store-meta { min-width: 0; overflow: hidden; color: hsl(var(--text-400)); font-size: var(--fs-caption-2xs); text-overflow: ellipsis; white-space: nowrap; }

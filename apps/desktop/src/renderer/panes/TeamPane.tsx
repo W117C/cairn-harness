@@ -5,6 +5,7 @@
 // 窗格自己不留状态。
 import { useCallback, useEffect, useState } from "react";
 import type { TeamRosterPayload, TeamRoundPlanPayload } from "../../../../../src/main/ipc-protocol";
+import { modeLabelOf } from "../permission-labels";
 import { STR } from "../strings";
 import "./team-pane.css";
 
@@ -66,6 +67,8 @@ export function TeamPane(props: {
       setGroupCreated(String(result.sessionId ?? ""));
       setGroupName("");
       setIssue(null);
+      // 建群即拉共享流（此前流区一直空白到第一次 nextRound 才有内容）。
+      void loadStream(String(result.sessionId ?? ""));
     } catch (error) {
       setIssue(error instanceof Error ? error.message : String(error));
     }
@@ -136,6 +139,9 @@ export function TeamPane(props: {
       <div className="team-pane-head">
         <span className="team-pane-title">{STR.team.title}</span>
         <span className="team-pane-count">{roster === null ? STR.team.loading : String(members.length)}</span>
+        {/* 打开即拉一次，之后无轮询（OrchestrationPane 有 2s 轮询）——去设置改档回来看到的是旧名单。
+            手动刷新兜底；成员行/秩序在派活与建群后也会就地重拉。 */}
+        <button type="button" className="mini-btn" aria-label="刷新团队读数" onClick={() => { void load(); if (groupCreated !== null) void loadStream(groupCreated); }}>刷新</button>
       </div>
       {issue !== null && <div className="team-pane-issue">{issue}</div>}
       <ul className="team-pane-list">
@@ -143,7 +149,7 @@ export function TeamPane(props: {
           <li key={m.id} className="team-pane-row">
             <span className="team-pane-name">{m.name}</span>
             <span className="team-pane-role">{[m.role, m.model, m.thinking].filter((v) => typeof v === "string" && v !== "").join(" · ")}</span>
-            <span className="team-pane-tier">{m.tier}</span>
+            <span className="team-pane-tier">{modeLabelOf(m.tier)}</span>
             <button
               type="button"
               className="mini-btn"
@@ -161,8 +167,16 @@ export function TeamPane(props: {
         {plan === null
           ? <span className="team-pane-plan-value">{STR.team.loading}</span>
           : plan.paused
-            ? <span className="team-pane-plan-value">{STR.team.roundPaused}</span>
-            : plan.batches.map((b) => `${String(b.order)}. ${b.speakers.map(nameOf).join("、")}`).join("　")}
+            ? <span className="team-pane-plan-value warn">{STR.team.roundPaused}</span>
+            : (
+              /* 发言秩序 = 波次 chip 行（此前整行拼接字符串，波次读不出来）；
+                 每片保留「N. 名单」的既有文案锚（判卷逐字钉）。 */
+              <span className="team-pane-plan-batches">
+                {plan.batches.map((b) => (
+                  <span key={b.order} className="team-pane-batch">{`${String(b.order)}. ${b.speakers.map(nameOf).join("、")}`}</span>
+                ))}
+              </span>
+            )}
       </div>
       <div className="team-pane-group">
         <input
@@ -200,10 +214,15 @@ export function TeamPane(props: {
 
         {stream !== null && (
           <div className="team-pane-stream" data-stream="true">
+            {/* 被裁剪要显名（本仓纪律）：dropped > 0 时点名；200 字截断处补省略号 + 全文进 title。 */}
+            {stream.dropped > 0 && <div className="team-pane-stream-dropped" role="status">{`已省略较早的 ${String(stream.dropped)} 条`}</div>}
             {stream.items.map((item) => (
               <div key={item.seq} className={`team-pane-stream-row ${item.kind}`}>
                 <span className="team-pane-stream-speaker">{`${item.round === null ? "—" : `第${String(item.round)}轮`} ${item.speaker}`}</span>
-                <span className="team-pane-stream-text">{item.text.slice(0, 200)}</span>
+                <span
+                  className="team-pane-stream-text"
+                  title={item.text.length > 200 ? item.text : undefined}
+                >{item.text.length > 200 ? `${item.text.slice(0, 200)}…` : item.text}</span>
               </div>
             ))}
           </div>

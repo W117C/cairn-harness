@@ -181,6 +181,21 @@ export function PluginsWorkspace(props: PluginsWorkspaceProps): React.JSX.Elemen
             {state.activeJob.state === "review" && (
               <button type="button" className="plugin-text-btn" onClick={state.reopenReview}>继续审查</button>
             )}
+            {/* 失败给重试出口（此前用户须自己回卡片重按安装）：install/update 按 entryId 重放，
+                import 无重放数据（本地源在请求里）不给重试。 */}
+            {state.activeJob.state === "failed" && state.activeJob.entryId !== null && (state.activeJobKind === "install" || state.activeJobKind === "update") && (
+              <button
+                type="button"
+                className="plugin-text-btn"
+                onClick={() => {
+                  const entryId = state.activeJob?.entryId;
+                  if (entryId === null || entryId === undefined) return;
+                  const row = state.rows.find((r) => r.id === entryId);
+                  if (state.activeJobKind === "update" && row !== undefined) void state.updatePlugin(row);
+                  else void state.installPlugin(entryId, state.workspace === null ? "user" : "project");
+                }}
+              >重试</button>
+            )}
           </div>
         )}
 

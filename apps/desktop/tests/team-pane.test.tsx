@@ -33,7 +33,9 @@ describe("团队会话窗格", () => {
     expect(html).toContain('data-team-pane="true"');
     expect(html).toContain("阿岚");
     expect(html).toContain("主持");
-    expect(html).toContain("guided");
+    // 2026-11-17：档位直出中文词表（modeLabelOf，与设置页同一份）；原始枚举不再上屏。
+    expect(html).toContain("智能审批");
+    expect(html).not.toContain("guided");
     expect(html).toContain("1. 阿岚");
     expect(html).toContain("2. 小北");
   });

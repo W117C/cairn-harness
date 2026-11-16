@@ -10,7 +10,7 @@ import { floatingSurfaceOpen, readGateInput } from "../command-gate";
 import { memo, useEffect, useRef, useState, type CSSProperties } from "react";
 import "@xterm/xterm/css/xterm.css";
 import "./pane-tabs.css";
-import { AlertTriangle, ArrowLeft, ArrowRight, Check, Crosshair, ExternalLink, Loader2, Maximize2, Minimize2, MoreHorizontal, Plus, RotateCw, X } from "lucide-react";
+import { AlertTriangle, AppWindow, ArrowLeft, ArrowRight, Check, ClipboardList, Crosshair, ExternalLink, GitBranch, Loader2, Maximize2, Minimize2, MoreHorizontal, Plus, RotateCw, X } from "lucide-react";
 import * as DropdownMenu from "./ui/dropdown-menu";
 import type { AgentEvent } from "../../../../../src/events";
 import { planActionLabel } from "../derived/change-labels";
@@ -39,6 +39,19 @@ import { tabNavigationTarget } from "../radio-nav";
 import { pushAllowedHosts } from "../allowed-hosts";
 // PaneKind / PANE_META 的唯一事实源在 panes.ts（独立窗口路由同用）；此处 re-export 保接口。
 export { PANE_META, PANE_OPENABLE, type PaneKind } from "./panes";
+
+/** 窗格空态统一形制（2026-11-17）：图标锚 + 标题 + 次级说明，替代此前两行灰字无出路。
+ *  panes-structure 判卷钉的文案锚（没有打开的窗格 / 本会话还没有…）逐字保留。
+ *  定义放文件前部：pane-browser-memo 判卷钉着 BrowserPane 结尾与「方案窗格」注释的源码衔接。 */
+function PaneEmpty(props: { mark: React.ReactNode; title: string; note: string }): React.JSX.Element {
+  return (
+    <div className="pane-empty">
+      <div className="pane-empty-mark" aria-hidden="true">{props.mark}</div>
+      <p className="pane-empty-title">{props.title}</p>
+      <p className="pane-empty-note">{props.note}</p>
+    </div>
+  );
+}
 
 const BROWSER_ALLOW_KEY = "cairn.browser.allowedHosts";
 const BROWSER_KEEP_COOKIES_KEY = "cairn.browser.keepCookies";
@@ -614,7 +627,7 @@ const BrowserPane = memo(function BrowserPane(props: {
 const PlanPane = memo(function PlanPane(props: { events: readonly AgentEvent[] }): React.JSX.Element {
   const plans = projectPlans(props.events);
   if (plans.length === 0) {
-    return <div className="pane-empty">本会话还没有提交过方案。<br />模型提请计划后会在审核后留档在这里。</div>;
+    return <PaneEmpty mark={<ClipboardList size={18} />} title="本会话还没有提交过方案。" note="模型提请计划后会在审核后留档在这里。" />;
   }
   const stateWord = (s: string): string => (s === "approved" ? "已批准" : s === "rejected" ? "已拒绝" : "待决");
   const stateCls = (s: string): string => (s === "approved" ? "ok" : s === "rejected" ? "bad" : "warn");
@@ -660,7 +673,7 @@ const TasksPane = memo(function TasksPane(props: { events: readonly AgentEvent[]
   const [ask, setAsk] = useState<{ w: WorkerPaneItem; action: "merge" | "reject" } | null>(null);
   const [diff, setDiff] = useState<{ agentId: string; text: string; hunks: ReturnType<typeof parseUnifiedPatch>; truncated: boolean } | null>(null);
   if (workers.length === 0) {
-    return <div className="pane-empty">本会话还没有派过子任务。<br />agent 派出 worker 后会在这里列出。</div>;
+    return <PaneEmpty mark={<GitBranch size={18} />} title="本会话还没有派过子任务。" note="agent 派出 worker 后会在这里列出。" />;
   }
   const statusWord = (s: WorkerPaneItem["status"]): string =>
     s === "running" ? "运行中"
@@ -938,7 +951,7 @@ export function PaneDock(props: {
   if (props.tabs.length === 0) {
     return (
       <aside className="pane-dock" aria-label="窗格区">
-        <div className="pane-empty">没有打开的窗格。<br />从顶栏「改动」或「工具」打开。</div>
+        <PaneEmpty mark={<AppWindow size={18} />} title="没有打开的窗格。" note="从顶栏「改动」或「工具」打开。" />
       </aside>
     );
   }

@@ -43,14 +43,15 @@ describe("最小尺寸档的命中区兜底（第 1050 页）", () => {
     expect(block).toContain("min-height: 24px");
     expect(block).toContain("min-width: 24px");
     expect(block).not.toContain("button { min"); // 不写全局 button 兜底
-    // 11 条选择器（7 个 min-height + 4 个 min-width）都带 step1 前缀
+    // 15 条选择器（9 个 min-height + 6 个 min-width）都带 step1 前缀
+    // （2026-11-17 补 pane-tab-act / bp-tab-x：右栏最高频的两枚 20px 小钮，最小字号档下兜进 24px。）
     const selectorLines = block.split("\n").filter((l) => l.trim().startsWith('html[data-ui-size="1"]'));
-    expect(selectorLines).toHaveLength(11);
+    expect(selectorLines).toHaveLength(15);
   });
 
-  it("覆盖真机抓到的 7 个高度不足 + 4 个宽高都不足的类", () => {
+  it("覆盖真机抓到的 9 个高度不足 + 6 个宽高都不足的类", () => {
     const block = css.slice(css.indexOf("第 1050 页 · 双轴缩放的最小命中区"));
-    for (const cls of [".iconbtn.sm", ".tb-btn", ".tb-title", ".group-toggle", ".attach-btn", ".ctl", ".usage-ring"]) {
+    for (const cls of [".iconbtn.sm", ".tb-btn", ".tb-title", ".group-toggle", ".attach-btn", ".ctl", ".pane-tab-act", ".bp-tab-x", ".usage-ring"]) {
       expect(block).toContain(`html[data-ui-size="1"] ${cls}`);
     }
   });

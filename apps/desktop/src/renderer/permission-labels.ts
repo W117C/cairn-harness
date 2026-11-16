@@ -21,3 +21,9 @@ export const MODE_LABEL: Record<PermissionMode, { label: string; desc: string; w
   // 完全允许（2026-11-03 业主）：除判卷面冻结闸外什么都不拦——本仓真正的最松档。
   "full-access": { label: STR.permissionModes.fullAccess, desc: STR.permissionModes.fullAccessDesc, warn: true },
 };
+
+/** 团队成员档位显示名：会话内团队窗格 / 侧栏成员区与设置页同读这一份词表（此前窗格与
+ *  侧栏直出英文枚举，设置页才是中文——同一档位三面三个说法）。未知档位直出原值（不猜、不编）。 */
+export function modeLabelOf(tier: string): string {
+  return tier in MODE_LABEL ? MODE_LABEL[tier as PermissionMode].label : tier;
+}

@@ -42,6 +42,18 @@
 }
 .team-pane-plan-head { font-size: 11px; color: hsl(var(--text-300)); }
 .team-pane-plan-value { font-variant-numeric: tabular-nums; }
+/* 停机是「需要人」的状态，不是普通读数：警示色 + 淡底（此前与普通灰字同形）。
+   停机文案锚「整体停机等人」由判卷逐字钉。 */
+.team-pane-plan-value.warn { color: hsl(var(--color-wait)); }
+/* 发言秩序 = 波次 chip 行（此前整行拼接字符串）：每片一个波次，换行读得出顺序。 */
+.team-pane-plan-batches { display: flex; flex-wrap: wrap; gap: 4px; }
+.team-pane-batch {
+  padding: 1px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+  color: hsl(var(--text-100));
+}
 .team-pane-hint { font-size: 11px; color: hsl(var(--text-300)); margin-top: auto; }
 /* 派活（v62）：一行输入 + 一个按钮；不自动开跑，回执只说「放进去了」。 */
 .team-pane-group,
@@ -73,6 +85,8 @@
 .team-pane-stream-row.agent .team-pane-stream-text { color: var(--foreground); }
 .team-pane-stream-row.user .team-pane-stream-text { color: var(--primary); }
 .team-pane-stream-text { flex: 1 1 auto; white-space: pre-wrap; word-break: break-word; }
+/* 被裁剪显名（本仓纪律）：dropped > 0 时点名；截断处由组件补省略号 + 全文进 title。 */
+.team-pane-stream-dropped { font-size: 11px; color: hsl(var(--text-300)); padding-bottom: 2px; border-bottom: 1px dashed var(--hairline); margin-bottom: 2px; }
 
 /* v71：记忆面板（三层主题数，缺层点名） */
 .team-pane-memory {

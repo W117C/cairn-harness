@@ -2831,13 +2831,25 @@ body[data-dsh-claude-style] .md-body .md-code pre { font-size: var(--fs-code); l
 /* ══ 窗格区（蓝本 §3.4 网格化：多窗格同屏、纵向堆叠、可拖行高）═══ */
 .main-group { min-width: 0; height: 100%; }
 .main-group [data-panel], .main-group > div { height: 100%; min-width: 0; }
+/* 检查器分隔手柄：与 .side-handle / .mod-sidebar-resize 同一配方（统一 resize 语言）——
+   9px 热区（::after 向两侧扩 3px，指针落在伪元素上仍触发宿主 hover）+ hover/拖拽出
+   1px 提示线 + col-resize 光标。此前 3px 宽 hairline 常显底 + alpha-3 hover，热区几乎摸不到。 */
 .pane-handle {
-  width: 3px; background: var(--hairline);
+  width: 3px; background: transparent; position: relative; cursor: col-resize; touch-action: none;
   transition: background var(--t-instant);
 }
-.pane-handle:hover, .pane-handle[data-resize-handle-active], .pane-handle[data-panel-resize-handle-active] { background: var(--alpha-3); }
+.pane-handle::after { content: ""; position: absolute; left: -3px; right: -3px; top: 0; bottom: 0; }
+.pane-handle::before {
+  content: ""; position: absolute; left: 1px; top: 0; bottom: 0; width: 1px;
+  background: transparent; transition: background var(--t-instant);
+}
+.pane-handle:hover::before,
+.pane-handle:focus-visible::before,
+.pane-handle[data-resize-handle-active]::before,
+.pane-handle[data-panel-resize-handle-active]::before { background: hsl(var(--text-400) / 45%); }
 .pane-panel { min-width: 0; }
-.pane-dock { height: 100%; background: hsl(var(--bg-200)); border-left: 1px solid var(--hairline); }
+/* 空态与工作态同底（此前空态 bg-200、工作态透明透出 bg-100，关掉最后一个窗格的瞬间右栏会换一次色调）。 */
+.pane-dock { height: 100%; background: transparent; border-left: 1px solid var(--hairline); }
 
 /* ══ P3-2 右侧检查器（Inspector）+ 时间线 ═══════════════════════════ */
 .inspector-col { display: flex; flex-direction: column; height: 100%; min-height: 0; }
@@ -2904,7 +2916,16 @@ body[data-dsh-claude-style] .md-body .md-code pre { font-size: var(--fs-code); l
 .pane-chunk-body { flex: 1; overflow-y: auto; min-height: 0; padding: var(--space-sm); }
 .pt-x { display: inline-flex; align-items: center; justify-content: center; width: var(--h-btn-2xs); height: var(--h-btn-2xs); border-radius: var(--radius-xs); color: hsl(var(--text-400)); }
 .pt-x:hover { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-selected)); color: hsl(var(--text-000)); }
-.pane-empty { padding: var(--space-lg) var(--space-md); font-size: var(--fs-body-sm); line-height: 1.8; color: hsl(var(--text-400)); text-align: center; }
+/* 窗格空态（PaneEmpty 组件形制）：图标锚 + 标题 + 次级说明，居中收口。
+   此前两行灰字 <br/> 排版，与 App 主空态落差大；文案锚由 panes-structure 判卷逐字钉。 */
+.pane-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  flex: 1 1 auto; padding: var(--space-lg) var(--space-md);
+  text-align: center;
+}
+.pane-empty-title { margin: 0; font-size: var(--fs-body-sm); color: hsl(var(--text-200)); }
+.pane-empty-note { margin: 0; font-size: var(--fs-caption-sm); line-height: 1.8; color: hsl(var(--text-400)); }
+.pane-empty-mark { display: inline-flex; color: hsl(var(--text-300) / 70%); margin-bottom: 2px; }
 .pane-list { display: flex; flex-direction: column; gap: var(--space-sm); }
 .mod-sidebar {
   position: relative; width: clamp(280px, 24vw, 340px); min-width: 280px; height: 100%;
@@ -4021,11 +4042,15 @@ body[data-dsh-claude-style] .app[data-sidebar="collapsed"] .side-wrap { border: 
 .pane-nav-items { scroll-snap-type: x proximity; scroll-padding-inline: 4px; }
 .pane-nav-items > .pane-tab { scroll-snap-align: start; }
 .pane-tab { display: inline-flex; align-items: center; gap: 1px; flex: none; padding: 0 3px 0 0; border-radius: var(--radius-sm); }
-.pane-tab .pane-nav-item { padding: 5px 7px; border-radius: var(--radius-sm); background: transparent; }
+/* 窗格标签与检查器三 Tab 同一排印（同一条右栏两套标签语言，开第一个窗格时字会跳）：
+   caption-sm 字号 + 3px 8px 内距，两处读同一组 token。 */
+.pane-tab .pane-nav-item { padding: 3px 8px; border-radius: var(--radius-sm); background: transparent; font-size: var(--fs-caption-sm); }
 .pane-tab .pane-nav-item:hover { color: hsl(var(--text-100)); background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover)); }
 .pane-tab.on { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-selected)); }
 .pane-tab.on .pane-nav-item { color: hsl(var(--text-100)); }
-.pane-tab-act { display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 17px; border-radius: 4px; color: hsl(var(--text-400)); }
+/* 关闭/弹出钮提到 20px（此前 17px 低于自家 24px 判据，最小字号档下只剩 ~14px）；
+   scale-hit-area 的 step-1 兜底名单是否覆盖这两枚（pane-tab-act / bp-tab-x）另行核对。 */
+.pane-tab-act { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 4px; color: hsl(var(--text-400)); }
 .pane-tab-act:hover { color: hsl(var(--text-000)); background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover)); }
 .pane-nav > .iconbtn { flex: none; }
 /* 单窗格占满（2026-10-24）：激活窗格是 pane-workbench 里 nav 之下的唯一子块。 */
@@ -4313,10 +4338,14 @@ html[data-ui-size="1"] .tb-title,
 html[data-ui-size="1"] .group-toggle,
 html[data-ui-size="1"] .attach-btn,
 html[data-ui-size="1"] .ctl,
+html[data-ui-size="1"] .pane-tab-act,
+html[data-ui-size="1"] .bp-tab-x,
 html[data-ui-size="1"] .usage-ring { min-height: 24px; }
 html[data-ui-size="1"] .iconbtn.sm,
 html[data-ui-size="1"] .tb-btn,
 html[data-ui-size="1"] .attach-btn,
+html[data-ui-size="1"] .pane-tab-act,
+html[data-ui-size="1"] .bp-tab-x,
 html[data-ui-size="1"] .usage-ring { min-width: 24px; }
 
 /* 第 1053 页 · 业主裁「A 轻度 + B 轻度」，从可看样板落地（第 1052 页）。

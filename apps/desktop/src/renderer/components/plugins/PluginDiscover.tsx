@@ -3,12 +3,13 @@
 // 未安装 → 「安装」胶囊钮（忙时转圈）；已安装 → 启停 Switch + 悬停露出的卸载（走确认弹窗）。
 // 收藏保留（ZCode 没有此物，Cairn 既有功能不丢），同样悬停露出。
 // 判卷锚不动：data-catalog-state / data-plugin-row="discover" / data-plugin-id。
-import { Download, Loader2, Puzzle, Star, Trash2, WifiOff } from "lucide-react";
+import { Download, Loader2, Star, Trash2, WifiOff } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { PluginRowView } from "../../derived/plugins";
 import type { PluginsMarketplaceState } from "../../state/plugins-marketplace";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { Switch } from "../Switch";
+import { PluginMark } from "./PluginMark";
 import { PLUGIN_CATEGORY_LABEL, sourceKindLabel } from "./labels";
 
 function capabilityText(row: PluginRowView): string {
@@ -28,6 +29,8 @@ function DiscoverRow(props: {
   onToggle: (row: PluginRowView, enabled: boolean) => void;
   busy: boolean;
   mutationBlocked: boolean;
+  /** 全局作业正在装**这一行**（activeJob.entryId 命中）：目标行「安装中…」，其余行维持原禁用口径。 */
+  installTarget: boolean;
 }): React.JSX.Element {
   const row = props.row;
   const disabled = props.busy || props.mutationBlocked || row.state === "name-conflict" || row.state === "unmanaged";
@@ -36,7 +39,7 @@ function DiscoverRow(props: {
   return (
     <article className="plugin-store-card" data-plugin-row="discover" data-plugin-id={row.id}>
       <button type="button" className="plugin-store-main" onClick={() => { props.onSelect(row.id); }}>
-        <span className="plugin-mark lg" aria-hidden="true"><Puzzle size={20} /></span>
+        <PluginMark id={row.id} name={row.name} size="lg" />
         <span className="plugin-store-copy">
           <span className="plugin-store-title">
             <strong>{row.name}</strong>
@@ -83,12 +86,12 @@ function DiscoverRow(props: {
             type="button"
             className="plugin-pill-btn"
             aria-label={`安装 ${row.name}`}
-            title={row.state === "name-conflict" ? "存在同名插件" : "安装"}
+            title={row.state === "name-conflict" ? "存在同名插件" : props.installTarget ? "安装中" : "安装"}
             disabled={disabled}
             onClick={() => { props.onInstall(row.id); }}
           >
-            {props.busy ? <Loader2 size={13} className="spin" aria-hidden="true" /> : <Download size={13} aria-hidden="true" />}
-            安装
+            {props.installTarget ? <Loader2 size={13} className="spin" aria-hidden="true" /> : <Download size={13} aria-hidden="true" />}
+            {props.installTarget ? "安装中…" : "安装"}
           </button>
         )}
       </div>
@@ -138,13 +141,24 @@ export function PluginDiscover(props: PluginDiscoverProps): React.JSX.Element {
       onToggle={(row, next) => { void props.state.setPluginEnabled(row, next); }}
       busy={props.busy === true}
       mutationBlocked={props.mutationBlocked}
+      installTarget={props.busy === true && props.state.activeJob?.entryId === row.id}
     />
   );
 
   if (props.state.catalogStatus === "loading" || props.state.catalogStatus === "idle") {
     return (
       <section className="plugin-discover" data-catalog-state="loading" aria-busy="true">
-        {[0, 1, 2].map((index) => <div key={index} className="plugin-skeleton-row" />)}
+        <div className="plugin-skeleton-grid" aria-hidden="true">
+          {[0, 1, 2, 3, 4, 5].map((index) => (
+            <div key={index} className="plugin-skeleton-card">
+              <div className="plugin-skeleton-mark" />
+              <div className="plugin-skeleton-lines">
+                <div className="plugin-skeleton-line" />
+                <div className="plugin-skeleton-line short" />
+              </div>
+            </div>
+          ))}
+        </div>
       </section>
     );
   }
@@ -190,6 +204,12 @@ export function PluginDiscover(props: PluginDiscoverProps): React.JSX.Element {
         <div className="plugin-state-block">
           <strong>没有匹配的插件</strong>
           <span>清空搜索或切回「全部能力」再看看。</span>
+          {/* 一键清筛选：此前用户要自己想起三个入口（搜索/分类/精选）各清一遍。 */}
+          <button
+            type="button"
+            className="plugin-secondary"
+            onClick={() => { props.state.setQuery(""); props.state.setCategory("all"); props.state.setFavoriteOnly(false); }}
+          >清空筛选</button>
         </div>
       ) : props.showShelves && catalog.catalog.shelves.length > 0 ? (
         <>

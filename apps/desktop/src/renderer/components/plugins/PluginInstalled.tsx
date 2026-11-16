@@ -1,14 +1,16 @@
 import { useMemo, useState } from "react";
 import {
+  AlertTriangle,
   ArrowUpCircle,
-  Puzzle,
+  Loader2,
   RefreshCw,
   Trash2,
 } from "lucide-react";
-import type { PluginRowView } from "../../derived/plugins";
+import { pluginUpdateCheckKey, type PluginRowView } from "../../derived/plugins";
 import type { PluginsMarketplaceState } from "../../state/plugins-marketplace";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { Switch } from "../Switch";
+import { PluginMark } from "./PluginMark";
 import { scopeLabelOf, sourceKindLabel } from "./labels";
 
 function stateLabel(row: PluginRowView): string {
@@ -31,6 +33,9 @@ function InstalledRow(props: {
   const conflict = props.row.state === "name-conflict";
   const disabled = props.busy || props.mutationBlocked || unmanaged || conflict;
   const enabled = installed?.enabled === true;
+  // 检查更新的行内反馈（此前点击后零反馈，failed 结果完全不可见）：checking 转圈、
+  // failed 出警示标（详情进 title）。读数键与派生层同一份（pluginUpdateCheckKey）。
+  const check = installed !== null ? props.state.updateChecks[pluginUpdateCheckKey(installed.source)] : undefined;
   return (
     <article
       className="plugin-store-card"
@@ -39,7 +44,7 @@ function InstalledRow(props: {
       data-plugin-state={props.row.state}
     >
       <button type="button" className="plugin-store-main" onClick={() => { props.state.select(props.row.id); }}>
-        <span className="plugin-mark lg" aria-hidden="true"><Puzzle size={20} /></span>
+        <PluginMark id={props.row.id} name={props.row.name} size="lg" />
         <span className="plugin-store-copy">
           <span className="plugin-store-title">
             <strong>{props.row.name}</strong>
@@ -65,11 +70,15 @@ function InstalledRow(props: {
               type="button"
               className="plugin-icon-btn plugin-hover-act"
               aria-label={`检查更新 ${props.row.name}`}
-              title="检查更新"
+              title={check?.status === "failed" ? check.detail ?? "检查更新失败" : "检查更新"}
               disabled={disabled}
               onClick={() => { void props.state.checkPluginUpdate(props.row); }}
             >
-              <RefreshCw size={14} aria-hidden="true" />
+              {check?.status === "checking"
+                ? <Loader2 size={14} className="spin" aria-hidden="true" />
+                : check?.status === "failed"
+                  ? <AlertTriangle size={14} className="plugin-check-failed" aria-hidden="true" />
+                  : <RefreshCw size={14} aria-hidden="true" />}
             </button>
             <button
               type="button"
@@ -116,6 +125,8 @@ export function PluginInstalled(props: PluginInstalledProps): React.JSX.Element 
         <div className="plugin-state-block">
           <strong>还没有插件</strong>
           <span>到「发现」里挑一个，或用页头的「导入」接入本地插件。</span>
+          {/* 空态给出路：一键切到发现页（此前只有一句灰字）。 */}
+          <button type="button" className="plugin-secondary" onClick={() => { props.state.setView("discover"); }}>去发现</button>
         </div>
       ) : (
         <>
