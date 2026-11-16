@@ -6,6 +6,7 @@
 //  · **不自动开跑**：派活只负责把活放到那个成员的线程里，按不按发送由人决定——
 //    「点一下就跑」要接 run 与审批链，属另一批（这条写在台账里，不装成已完成）。
 import { createEventLog, type AgentEvent } from "../../../../src/events";
+import { withMemberSecretEnv, type SecretGrantView } from "../../../../src/agent/team/secrets";
 import { createSession, pathOf, readSessionEvents } from "../../../../src/main/sessions";
 
 /** 会话元数据里记成员归属的键（与 `session_meta_update.patch` 的自由键通道同形）。 */
@@ -120,4 +121,45 @@ export async function memberOfSession(sessionsRoot: string, sessionId: string): 
     if (typeof raw === "string" && raw !== "") member = raw;
   }
   return member;
+}
+
+export interface StartDepsWithSecrets {
+  createSession: (root: string) => Promise<string>;
+  append: (path: string, event: AgentEvent) => Promise<void>;
+  pathOf: (root: string, id: string) => string;
+  run: (req: { message: string; mode: string; sessionId: string; workspace?: string }) => Promise<{ ok?: boolean; error?: string }>;
+  /** 团队密钥授权的投影（默认拒：没 allow 就一个键都不注入）。 */
+  grants: SecretGrantView;
+  /** 注入目标 / 取值源（判卷时可替换；生产就是 process.env）。 */
+  envTarget?: Record<string, string | undefined>;
+  envSource?: Record<string, string | undefined>;
+}
+
+export interface StartWithSecretsResult extends DispatchResult {
+  /** 这次 run 注入了几个键（只报个数，不报名字与值）。 */
+  injected?: number;
+  missingSecrets?: string[];
+  deniedSecrets?: string[];
+}
+
+/**
+ * 起跑 + 密钥注入：**进 run 前写、run 收束后一定撤**，回包只报个数与缺失/被拒的名字。
+ * 「密钥卡片」的第四跳就接在这里——`teamMemberStart` 只调它，不自己拼 env。
+ */
+export async function startMemberWithSecrets(
+  input: { sessionsRoot: string; memberId: string; task: string; mode: string; workspace?: string },
+  deps: StartDepsWithSecrets,
+): Promise<StartWithSecretsResult> {
+  const target = deps.envTarget ?? process.env;
+  const source = deps.envSource ?? process.env;
+  const wrapped = await withMemberSecretEnv(deps.grants, input.memberId, async (env) => {
+    const result = await startToMember(input, deps);
+    return {
+      ...result,
+      injected: Object.keys(env.env).length,
+      missingSecrets: env.missing,
+      deniedSecrets: env.denied,
+    };
+  }, target, source);
+  return wrapped.result;
 }

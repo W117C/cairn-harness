@@ -156,8 +156,10 @@ export type { SearchProvider } from "../tools/web-search";
  *  v66 = 群轮次驱动派活（`teamGroupNext` 增 `start`）：轮到谁，就把群里最后一句交给谁开跑。
  *  v67 = 成员密钥授权（`teamSecretGrants` / `teamSecretGrant`）：成员×密钥的允许/拒绝投影，
  *        默认拒、后写覆盖前写、历史只追加。
- *  v68 = 密钥申请卡（`teamSecretRequest`）：成员发起 pending，人审批后落 allow/deny 并把申请置终态。 */
-export const IPC_PROTOCOL_VERSION = 68;
+ *  v68 = 密钥申请卡（`teamSecretRequest`）：成员发起 pending，人审批后落 allow/deny 并把申请置终态。
+ *  v69 = 成员起跑前注入密钥：`teamMemberStart` 按授权把 `DSH_SECRET_<NAME>` 注入那次 run，
+ *        收束后撤销；回包带 `injected` / `missingSecrets` / `deniedSecrets`（只报名字，不报值）。 */
+export const IPC_PROTOCOL_VERSION = 69;
 
 /** 团队名单（v59）：成员档案是投影，`records` 是补丁条数（面板据此说「有几条历史」）。 */
 export interface TeamRosterPayload {
@@ -626,7 +628,17 @@ export interface AgentApi {
   /** v62：给成员派活——开一条归属该成员的会话，任务书成为它第一句；不自动开跑。 */
   teamMemberDispatch(memberId: string, task: string, workspace?: string): Promise<{ ok: boolean; sessionId?: string; error?: string }>;
   /** v63：派活并开跑——建归属会话，然后把任务交给正常 run 通道（任务书由 run 写，不重复）。 */
-  teamMemberStart(memberId: string, task: string, workspace?: string): Promise<{ ok: boolean; sessionId?: string; error?: string }>;
+  teamMemberStart(memberId: string, task: string, workspace?: string): Promise<{
+    ok: boolean;
+    sessionId?: string;
+    /** v69：这次 run 注入的密钥个数（不露名字与值）。 */
+    injected?: number;
+    /** v69：授权了但本机没有值的名字。 */
+    missingSecrets?: string[];
+    /** v69：被拒的名字。 */
+    deniedSecrets?: string[];
+    error?: string;
+  }>;
   /** v64：建一条团队会话（`group=1`）。共享流＝该会话自己的事件流；轮次仲裁尚未接。 */
   teamGroupCreate(name?: string, workspace?: string): Promise<{ ok: boolean; sessionId?: string; error?: string }>;
   /** v67：读成员密钥授权（成员×密钥的最终态 + 被拒补丁）。 */

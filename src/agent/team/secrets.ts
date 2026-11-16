@@ -119,3 +119,78 @@ export function projectSecretGrants(records: readonly SecretGrantRecord[]): Secr
 export function canUseSecret(view: SecretGrantView, memberId: string, secret: string): boolean {
   return view.grants.find((g) => g.memberId === memberId && g.secret === secret)?.allow === true;
 }
+
+/** 注入用的环境变量名前缀（`DSH_SECRET_<NAME>`；与参照仓同形，但值只来自本机已有 env）。 */
+export const SECRET_ENV_PREFIX = "DSH_SECRET_";
+
+export interface MemberSecretEnv {
+  /** 这一轮该注入的环境变量。 */
+  env: Record<string, string>;
+  /** 授权了但本机没有值（名字存在于授权表、值不存在） ⇒ 不注入，点名。 */
+  missing: string[];
+  /** 没被授权的名字（调用方若想注入这些，必须拒）。 */
+  denied: string[];
+}
+
+/**
+ * 成员这一轮能拿到的密钥环境：**只认 allow 的授权**，值从 `source`（默认 process.env）取；
+ * 取不到值 ⇒ 记 missing，不注入空串（空串会让下游以为「配置了但为空」）。
+ * 这里只做**决定**，不写 process.env——写与撤由调用方配对（见 applyMemberSecretEnv）。
+ */
+export function envForMember(
+  view: SecretGrantView,
+  memberId: string,
+  source: Record<string, string | undefined> = process.env,
+): MemberSecretEnv {
+  const env: Record<string, string> = {};
+  const missing: string[] = [];
+  const denied: string[] = [];
+  for (const grant of view.grants) {
+    if (grant.memberId !== memberId) continue;
+    if (!grant.allow) { denied.push(grant.secret); continue; }
+    const value = source[grant.secret];
+    if (typeof value !== "string" || value === "") { missing.push(grant.secret); continue; }
+    env[SECRET_ENV_PREFIX + grant.secret] = value;
+  }
+  return { env, missing, denied };
+}
+
+/**
+ * 把成员密钥写进进程环境，返回**撤销函数**（调用方在 run 收束后必须调用）。
+ * 只增删自己写过的键：外部本来就有的同名变量不覆盖（外部 env 永远权威）。
+ */
+export function applyMemberSecretEnv(
+  env: Record<string, string>,
+  target: Record<string, string | undefined> = process.env,
+): () => void {
+  const written: string[] = [];
+  for (const [name, value] of Object.entries(env)) {
+    if (target[name] !== undefined) continue; // 外部已有 ⇒ 不覆盖
+    target[name] = value;
+    written.push(name);
+  }
+  return () => {
+    for (const name of written) delete target[name];
+  };
+}
+
+/**
+ * 在**一次成员 run 的开窗里**注入密钥：进 run 前写、run 收束后一定撤（抛错也撤）。
+ * 并发注意：环境是进程级的，两个成员同时跑会互相看见对方注入的键——
+ * 这是既有的进程模型决定的（provider key 注入同形），要在 run 之间真隔离得等按 run 的分环境。
+ */
+export async function withMemberSecretEnv<T>(
+  view: SecretGrantView,
+  memberId: string,
+  run: (env: MemberSecretEnv) => Promise<T>,
+  target: Record<string, string | undefined> = process.env,
+  source: Record<string, string | undefined> = process.env,
+): Promise<{ result: T; env: MemberSecretEnv }> {
+  const decided = envForMember(view, memberId, source);
+  const undo = applyMemberSecretEnv(decided.env, target);
+  try {
+    return { result: await run(decided), env: decided };
+  } finally {
+    undo();
+  }
+}

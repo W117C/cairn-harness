@@ -204,18 +204,18 @@
   "videoPlaying": {
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
-    "paused": false,
-    "t": 0.05,
+    "paused": true,
+    "t": 0,
     "ready": 4,
     "duration": 2,
-    "focused": true,
+    "focused": false,
     "hidden": false
   },
   "videoBlurred": {
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": true,
-    "t": 0.33,
+    "t": 0,
     "ready": 4,
     "duration": 2,
     "focused": false,
@@ -224,31 +224,31 @@
   "videoResumed": {
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
-    "paused": false,
-    "t": 0.33,
+    "paused": true,
+    "t": 0,
     "ready": 4,
     "duration": 2,
-    "focused": true,
+    "focused": false,
     "hidden": false
   },
   "videoLocked": {
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": true,
-    "t": 0.34,
+    "t": 0,
     "ready": 4,
     "duration": 2,
-    "focused": true,
+    "focused": false,
     "hidden": false
   },
   "videoUnlocked": {
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
-    "paused": false,
-    "t": 0.34,
+    "paused": true,
+    "t": 0,
     "ready": 4,
     "duration": 2,
-    "focused": true,
+    "focused": false,
     "hidden": false
   },
   "degraded": {
@@ -289,7 +289,7 @@
       "rows": [
         "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
         "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-        "新来的成员 · mmwiu76vgread-onlydefaultguidedautofull-accessteammemberproject移除",
+        "新来的成员 · mmwiuq44gread-onlydefaultguidedautofull-accessteammemberproject移除",
         "本轮发言秩序主持优先按名单轮排一轮",
         "当前会话的段—开新段",
         "权限（成员维）团队档 default · 无裁剪",
@@ -306,7 +306,7 @@
       "rows": [
         "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
         "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-        "新来的成员 · mmwiu76vgread-onlydefaultguidedautofull-accessteammemberproject移除",
+        "新来的成员 · mmwiuq44gread-onlydefaultguidedautofull-accessteammemberproject移除",
         "本轮发言秩序主持优先按名单轮排一轮",
         "排出来的秩序1. 示例成员　2. 新来的",
         "当前会话的段—开新段",
@@ -378,7 +378,7 @@
       "canceled": false,
       "filePaths": []
     },
-    "elapsedMs": 2316,
+    "elapsedMs": 2083,
     "options": {
       "title": "选择壁纸",
       "properties": [
@@ -405,19 +405,19 @@
   "realPowerMonitor": {
     "beforeSuspend": {
       "has": true,
-      "paused": false,
-      "focused": true
+      "paused": true,
+      "focused": false
     },
     "listenerCount": 1,
     "afterRealSuspend": {
       "has": true,
       "paused": true,
-      "focused": true
+      "focused": false
     },
     "afterRealResume": {
       "has": true,
-      "paused": false,
-      "focused": true
+      "paused": true,
+      "focused": false
     },
     "errors": []
   },

@@ -42521,3 +42521,43 @@ wallpaper-engine，逐行写「它怎么做 / 我们怎么做 / 证据在哪 / *
 
 - 申请只能由**人在面板上代发起**（或未来由成员 run 调工具发起）；成员侧的工具入口还没接。
 - 注入（把已授权的名字变成成员进程里的环境变量）与成员面脱敏是最后一跳，属下一批。
+
+## 2026-11-16 · 第 1271 页：密钥注入接上真起跑路径（协议 v69）——密钥卡片转 covered（`pending`）
+
+**背景**：第 1270 页把申请与审批接上了，缺的最后一跳是**注入**。本页把注入接到真起跑路径上。
+
+### 一、四跳现在都真
+
+| 跳 | 落点 | 判据 |
+|---|---|---|
+| 申请 | `request.<m>.<s> = pending`（v68） | `team-secrets.test.ts` |
+| 审批 | `grant.<m>.<s> = allow/deny` ＋ 申请置终态（v67/v68） | 同上 |
+| **注入** | `envForMember`（只 allow、只注有值的）＋ `startMemberWithSecrets`（进 run 前写、收束必撤） | `team-dispatch.test.ts` 2 条：run 期间 `DSH_SECRET_OPENAI_API_KEY` 可见、被拒的 `DSH_SECRET_BRAVE_KEY` 不可见、收束后消失；run 失败也撤 |
+| 脱敏 | `redactSecrets`（既有） | `team-secrets.test.ts` 串联一条：注入值出现在输出里会被打码 |
+
+- 回包只报 `injected` 个数与 `missingSecrets` / `deniedSecrets` 的**名字**，不报值。
+- 外部同名 env 永远优先（`applyMemberSecretEnv` 只增删自己写过的键）。
+
+### 二、覆盖率
+
+| 量 | 前 | 后 |
+|---|---|---|
+| covered / partial / absent | 16 / 2 / 1 → 17 / 2 / 0 | **17 / 2 / 0** |
+| **覆盖分** | 0.921 | **0.947** |
+| 阈值 | 0.90 | **0.94**（目标 0.95，差 0.003） |
+
+### 三、门禁读数（工作树）
+
+- 核心 `pnpm test:capped`：**694 文件 / 8273 条全绿**，exit 0。
+- 桌面 **408 文件 / 2642 条全绿**；四份密封证据重签全绿。
+- **真机冒烟 51/56**：5 条焦点相关的视频/系统暂停判据这一轮**没拿到焦点**（`document.hasFocus()=false`）。
+  用一条最小探针复核：新开 400×300 窗口、`app.focus({steal:true})`+`show()`+`focus()` 后
+  `{focused:false, appVisible:true}` ⇒ 是本机会话当前不给后台进程焦点，**不是渲染层回归**；
+  同一套冒烟 13:44 还是 56/56。这条如实记在台账，等会话恢复焦点后重跑，不冒充绿。
+- `typecheck` 0 报错；`docs-check` 全绿。
+
+### 四、边界
+
+- 注入是**进程级**的：两个成员同时跑会互相看见对方注入的键（provider key 注入同形）。
+  要真隔离得等「按 run 分环境」，这条写在代码注释与台账里。
+- 缺值不注入空串（空串会让下游以为「配了但为空」），改记 `missing`。

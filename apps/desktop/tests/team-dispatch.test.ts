@@ -8,8 +8,9 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
-import { dispatchToMember, memberOfSession, startToMember, type DispatchDeps } from "../src/main/team-dispatch";
+import {afterEach, describe, expect, it, vi} from "vitest";
+import { dispatchToMember, memberOfSession, startMemberWithSecrets, startToMember, type DispatchDeps } from "../src/main/team-dispatch";
+import { grantPatch, projectSecretGrants } from "../../../src/agent/team/secrets";
 import { createEventLog, type AgentEvent } from "../../../src/events";
 import { createSession, pathOf } from "../../../src/main/sessions";
 
@@ -104,5 +105,48 @@ describe("派活并开跑（v63）", () => {
       },
     );
     expect(result).toEqual({ ok: false, error: "模型没配" });
+  });
+});
+
+describe("起跑 + 密钥注入（密钥卡片第四跳接在真起跑路径上）", () => {
+  const seeds = () => ({
+    createSession: vi.fn(async () => "s-1"),
+    append: vi.fn(async () => {}),
+    pathOf: () => "/tmp/s-1.jsonl",
+    run: vi.fn(async () => ({ ok: true })),
+  });
+
+  it("授权的键在 run 期间看得见，run 收束后不见；没授权的看不见", async () => {
+    const deps = seeds();
+    const target: Record<string, string | undefined> = {};
+    const source = { OPENAI_API_KEY: "sk-x", BRAVE_KEY: "b" };
+    const grants = projectSecretGrants([
+      { at: 1, patch: grantPatch("m1", "OPENAI_API_KEY", true) },
+      { at: 2, patch: grantPatch("m1", "BRAVE_KEY", false) },
+    ]);
+    let during: Record<string, string | undefined> = {};
+    deps.run.mockImplementation(async () => { during = { ...target }; return { ok: true }; });
+    const out = await startMemberWithSecrets(
+      { sessionsRoot: "/tmp/sessions", memberId: "m1", task: "看下", mode: "default" },
+      { ...deps, grants, envTarget: target, envSource: source },
+    );
+    expect(during.DSH_SECRET_OPENAI_API_KEY).toBe("sk-x");
+    expect(during.DSH_SECRET_BRAVE_KEY).toBeUndefined(); // 被拒的没注入
+    expect(out.injected).toBe(1);
+    expect(out.deniedSecrets).toEqual(["BRAVE_KEY"]);
+    expect(target.DSH_SECRET_OPENAI_API_KEY).toBeUndefined(); // 收束后撤掉
+  });
+
+  it("run 失败也撤（不留后门）", async () => {
+    const deps = seeds();
+    deps.run.mockImplementation(async () => ({ ok: false, error: "挂了" }));
+    const target: Record<string, string | undefined> = {};
+    const grants = projectSecretGrants([{ at: 1, patch: grantPatch("m1", "K", true) }]);
+    const out = await startMemberWithSecrets(
+      { sessionsRoot: "/tmp/sessions", memberId: "m1", task: "跑", mode: "default" },
+      { ...deps, grants, envTarget: target, envSource: { K: "v" } },
+    );
+    expect(out.ok).toBe(false);
+    expect(target.DSH_SECRET_K).toBeUndefined();
   });
 });

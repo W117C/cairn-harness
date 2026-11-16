@@ -11,7 +11,7 @@ import { pickWallpaper } from "./wallpaper-pick";
 import { appendTeamPatch, readTeamRecords, readTeamRoster, teamLogPath } from "./team-store";
 import { listSessions, readSessionEvents } from "../../../../src/main/sessions";
 import { openSegmentForSession } from "./session-segments";
-import { defaultStartDeps, dispatchToMember, startToMember } from "./team-dispatch";
+import { defaultStartDeps, dispatchToMember, startMemberWithSecrets, startToMember } from "./team-dispatch";
 import { createTeamGroup } from "./team-group";
 import { advanceGroupRound, groupTaskOf } from "./team-round";
 import { grantPatch, projectSecretGrants, requestPatch } from "../../../../src/agent/team/secrets";
@@ -863,10 +863,12 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     const settings = await getSettings();
     const roster = await readTeamRoster(teamLogPath(app.getPath("userData")), settings.mode);
     if (!roster.members.some((m) => m.id === id)) return { ok: false, error: "成员不在名单里（先建档案再派活）" };
-    return await startToMember(
+    // v69：起跑前按授权注入密钥（只 allow 的、只注入本机有值的），run 收束后一定撤。
+    const grants = projectSecretGrants(await readTeamRecords(teamLogPath(app.getPath("userData"))));
+    return await startMemberWithSecrets(
       { sessionsRoot: root, memberId: id, task: typeof task === "string" ? task : "", mode: settings.mode,
         ...(typeof workspace === "string" ? { workspace } : {}) },
-      defaultStartDeps(async (req) => await (wired.run as (x: unknown) => Promise<{ ok?: boolean; error?: string }>)(req)),
+      { ...defaultStartDeps(async (req) => await (wired.run as (x: unknown) => Promise<{ ok?: boolean; error?: string }>)(req)), grants },
     );
   },
   // v64 建团队会话：一条带 `group=1` 标记的会话（共享流＝它自己的事件流）。
