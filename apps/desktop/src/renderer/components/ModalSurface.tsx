@@ -1,5 +1,4 @@
 import { useEffect, useRef, type HTMLAttributes, type RefObject } from "react";
-import { useNativeViewOcclusion } from "../state/native-view-occlusion";
 
 const FOCUSABLE_SELECTOR =
   "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [contenteditable='true'], [tabindex]:not([tabindex='-1'])";

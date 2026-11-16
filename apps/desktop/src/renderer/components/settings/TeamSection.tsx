@@ -18,16 +18,19 @@ const MEMORY_LABEL: Record<(typeof MEMORY_SCOPES)[number], string> = {
 /** 权限档只列**可选**的四档（guided 已并入 auto，2026-11-03 裁决）。
  *  2026-11-16（R3 修）：此前直接渲染 AGENT_PERMISSION_MODES 的裸枚举值——用户看到的是
  *  `read-only / guided / auto / full-access`，同一件事在权限页却是中文。 */
+// 2026-11-16（合流）：档位名单一事实源是 permission-labels 的 MODE_LABEL（qoder 线把 STR.permissions
+// 的档位副本收编走了）；团队面不再读 strings 旧副本，改读同一份词表，菜单/确认框/设置面/团队面四处同读。
 const TIER_OPTIONS = [
-  { id: "read-only", label: STR.permissions.modeReadOnly },
-  { id: "default", label: STR.permissions.modeDefault },
-  { id: "auto", label: STR.permissions.modeAuto },
-  { id: "full-access", label: STR.permissions.modeFull },
+  { id: "read-only", label: MODE_LABEL["read-only"].label },
+  { id: "default", label: MODE_LABEL.default.label },
+  { id: "auto", label: MODE_LABEL.auto.label },
+  { id: "full-access", label: MODE_LABEL["full-access"].label },
 ] as const;
 const tierLabel = (id: string): string =>
-  TIER_OPTIONS.find((o) => o.id === id)?.label ?? (id === "guided" ? STR.permissions.modeAuto : id);
+  TIER_OPTIONS.find((o) => o.id === id)?.label ?? (id === "guided" ? MODE_LABEL.guided.label : id);
 import { SettingsRow, SettingsSection } from "../settings-ui";
 import { STR } from "../../strings";
+import { MODE_LABEL } from "../../permission-labels";
 
 /** 新成员的 id：`m` + 36 进制时间戳。不拿名字当 id——名字可改，id 不能。 */
 function newMemberId(): string {
