@@ -29,6 +29,7 @@ import { ProjectContextMenu, ProjectSettingsDialog } from "./SidebarProjects";
 export { ProjectSettingsDialog } from "./SidebarProjects";
 import { AddProjectMenu } from "./AddProjectMenu";
 import { SessionFilterMenu } from "./SessionFilterMenu";
+import { TeamRosterBlock } from "./TeamRosterBlock";
 import { toast } from "../toast";
 import "./sidebar-filter.css";
 
@@ -894,6 +895,9 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
       </nav>
 
 
+
+      {/* 成员区（2026-11-16，v59）：名单在侧栏可见，写入口仍在设置 › 团队。 */}
+      <TeamRosterBlock />
 
       {ctxMenu !== null && (
         <ProjectContextMenu

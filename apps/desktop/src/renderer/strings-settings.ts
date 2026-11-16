@@ -128,6 +128,8 @@ export const settingsStrings = {
     records: "档案补丁条数",
     recordsDesc: "日志里的补丁条数（历史只追加；移除不解绑旧补丁）。",
     issue: "状态",
+    readFailed: "读不到团队名单",
+    manageHint: "在 设置 › 团队 里管理",
   },
   // 2026-11-12（第 1078 页）：关于与更新段收编——值一字不改；许可证/诊断/偏好三条消息族同口径。
   about: {

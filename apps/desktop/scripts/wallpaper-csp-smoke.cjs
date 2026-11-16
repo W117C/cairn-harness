@@ -632,6 +632,18 @@ async function main() {
   check("在面板里加一个人 ⇒ 名单真的多一行（写入口只有一条通道）",
     addClicked.found === true && afterAdd.rows.some((r) => r.includes("新来的")), readings.teamPanel.add);
   await shot(teamWin, "10-team-panel-1440x900");
+  // 侧栏成员区（同一份名单，另一个面）：关掉设置页后侧栏底部应有成员区且渲染出名字。
+  await tjs(`(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: "Escape", code: "Escape", bubbles: true })); })()`);
+  await pause(400);
+  const sideTeam = await tjs(`(() => {
+    const block = document.querySelector('[data-team-block="true"]');
+    if (!block) return { found: false };
+    return { found: true, text: (block.textContent || "").slice(0, 400), rows: block.querySelectorAll(".side-team-row").length };
+  })()`);
+  readings.sideTeam = sideTeam;
+  check("侧栏底部有成员区，且渲染出成员（名单在主导航面也看得见）",
+    sideTeam.found === true && sideTeam.rows >= 1 && sideTeam.text.includes("示例成员"), sideTeam);
+  await shot(teamWin, "11-team-sidebar-block-1440x900");
   teamWin.destroy();
 
   // ⑫ 真落盘：主进程的团队存储在**真 Electron 进程里**跑一遍写→读→墓碑闭环。

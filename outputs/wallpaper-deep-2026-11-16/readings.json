@@ -205,7 +205,7 @@
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": false,
-    "t": 0.05,
+    "t": 0.04,
     "ready": 4,
     "duration": 2,
     "focused": true,
@@ -215,7 +215,7 @@
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": true,
-    "t": 0.32,
+    "t": 0.31,
     "ready": 4,
     "duration": 2,
     "focused": false,
@@ -225,7 +225,7 @@
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": false,
-    "t": 0.32,
+    "t": 0.31,
     "ready": 4,
     "duration": 2,
     "focused": true,
@@ -235,7 +235,7 @@
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": true,
-    "t": 0.32,
+    "t": 0.31,
     "ready": 4,
     "duration": 2,
     "focused": true,
@@ -245,7 +245,7 @@
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": false,
-    "t": 0.32,
+    "t": 0.31,
     "ready": 4,
     "duration": 2,
     "focused": true,
@@ -284,10 +284,15 @@
       "rows": [
         "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
         "示例成员调研 · m-seedread-onlydefaultguidedautofull-access移除",
-        "新来的成员 · mmwio9ybkread-onlydefaultguidedautofull-access移除",
+        "新来的成员 · mmwiojpcxread-onlydefaultguidedautofull-access移除",
         "档案补丁条数日志里的补丁条数（历史只追加；移除不解绑旧补丁）。2"
       ]
     }
+  },
+  "sideTeam": {
+    "found": true,
+    "text": "团队成员1示例成员read-only在 设置 › 团队 里管理",
+    "rows": 1
   },
   "teamStore": {
     "afterWrite": {
@@ -312,7 +317,7 @@
       "canceled": false,
       "filePaths": []
     },
-    "elapsedMs": 2662,
+    "elapsedMs": 2427,
     "options": {
       "title": "选择壁纸",
       "properties": [

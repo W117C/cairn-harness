@@ -5,11 +5,11 @@
     "gray20": "rgb(249, 249, 247)",
     "gray900": "rgb(11, 11, 11)"
   },
-  "rendererDigest": "4a70a29ef9bd7424231d073705abb7b12711b96a7fc2aeaaed8009ed6e9648fd",
-  "generatedAt": "2026-11-16T02:52:09.317Z",
+  "rendererDigest": "5e2fa6fbf5cb8ec0da049cf650135a12068b26cf24779d86285a04ab8f4c822d",
+  "generatedAt": "2026-11-16T03:04:36.485Z",
   "buildFresh": true,
-  "srcMtime": "2026-11-16T02:50:02.814Z",
-  "distMtime": "2026-11-16T02:51:36.534Z",
+  "srcMtime": "2026-11-16T03:03:37.520Z",
+  "distMtime": "2026-11-16T03:04:01.779Z",
   "light": {
     "theme": "light",
     "tokens": {
