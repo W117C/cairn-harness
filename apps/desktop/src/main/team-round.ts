@@ -30,6 +30,20 @@ export function roundOf(events: readonly AgentEvent[]): number {
   return round;
 }
 
+/**
+ * 群里的「这一轮要干什么」：取群会话里**最后一条** user_message 当任务书（没有就返回 null）。
+ * 为什么取最后一条：群的话题就是最后那句话；更早的是历史，不该被当成新任务重复派。
+ */
+export function groupTaskOf(events: readonly AgentEvent[]): string | null {
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const event = events[i]!;
+    if (event.type !== "user_message") continue;
+    const content = (event as { content?: unknown }).content;
+    if (typeof content === "string" && content.trim() !== "") return content.trim();
+  }
+  return null;
+}
+
 /** 下一轮：round+1，发言者按名单轮转（名单为空 ⇒ 拒）。 */
 export async function advanceGroupRound(
   input: { sessionsRoot: string; sessionId: string; memberIds: readonly string[] },

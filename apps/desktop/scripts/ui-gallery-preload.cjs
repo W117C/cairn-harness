@@ -1696,10 +1696,13 @@ stub.teamGroupCreate = (name) => {
 contextBridge.exposeInMainWorld("__cairnGroups", () => teamGroups.map((g) => ({ ...g })));
 let groupRoundNo = 0;
 const groupNexts = [];
-stub.teamGroupNext = (sessionId) => {
+stub.teamGroupNext = (sessionId, _workspace, start) => {
   groupRoundNo += 1;
-  groupNexts.push({ sessionId, round: groupRoundNo });
-  return Promise.resolve({ ok: true, round: groupRoundNo, speaker: "m-seed" });
+  groupNexts.push({ sessionId, round: groupRoundNo, start: start === true });
+  return Promise.resolve({
+    ok: true, round: groupRoundNo, speaker: "m-seed",
+    ...(start === true ? { sessionId: "s-speak-" + String(groupRoundNo) } : {}),
+  });
 };
 contextBridge.exposeInMainWorld("__cairnGroupNexts", () => groupNexts.map((g) => ({ ...g })));
 let segmentCounter = 1;

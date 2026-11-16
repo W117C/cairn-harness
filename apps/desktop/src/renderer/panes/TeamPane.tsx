@@ -50,12 +50,15 @@ export function TeamPane(props: { initialRoster?: TeamRosterPayload; initialPlan
     }
   };
 
-  const nextRound = async (): Promise<void> => {
+  const nextRound = async (start: boolean): Promise<void> => {
     if (groupCreated === null) { setIssue(STR.team.groupNeed); return; }
     try {
-      const result = await window.agent.teamGroupNext(groupCreated);
+      const result = await window.agent.teamGroupNext(groupCreated, undefined, start);
       if (result.ok !== true) { setIssue(result.error ?? STR.team.writeFailed); return; }
       setGroupRound({ round: Number(result.round ?? 0), speaker: String(result.speaker ?? "") });
+      if (start && result.sessionId !== undefined) {
+        setDispatched({ member: String(result.speaker ?? ""), sessionId: String(result.sessionId) });
+      }
       setIssue(null);
     } catch (error) {
       setIssue(error instanceof Error ? error.message : String(error));
@@ -140,8 +143,11 @@ export function TeamPane(props: { initialRoster?: TeamRosterPayload; initialPlan
       </div>
       {groupCreated !== null && <div className="team-pane-hint">{`${STR.team.groupCreated}${groupCreated}`}</div>}
       <div className="team-pane-group">
-        <button type="button" className="mini-btn" onClick={() => { void nextRound(); }}>
+        <button type="button" className="mini-btn" onClick={() => { void nextRound(false); }}>
           {STR.team.groupNext}
+        </button>
+        <button type="button" className="mini-btn" onClick={() => { void nextRound(true); }}>
+          {STR.team.groupNextStart}
         </button>
         {groupRound !== null && (
           <span className="ss-static">{`${STR.team.groupRound}${String(groupRound.round)} · ${groupRound.speaker}`}</span>

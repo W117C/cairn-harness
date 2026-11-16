@@ -107,10 +107,11 @@
       "id": "bot.group-chat",
       "capability": "群聊共享流与轮次",
       "reference": "room + round + 共享日志",
-      "ours": "群会话（group=1 标记）+ 建群入口；共享流＝会话自身事件流；轮次仲裁未接",
-      "status": "partial",
+      "ours": "群会话（group=1）+ 共享流（会话自身事件流）+ 轮次 + 轮到谁就交给谁开跑（@ 路由仍未做，另案）",
+      "status": "covered",
       "evidence": [
         "apps/desktop/tests/team-group.test.ts",
+        "apps/desktop/tests/team-round.test.ts",
         "apps/desktop/tests/team-pane.test.tsx",
         "apps/desktop/scripts/wallpaper-csp-smoke.cjs"
       ]
@@ -209,5 +210,5 @@
       "evidence": []
     }
   ],
-  "thresholdNote": "目标 0.95；现读 0.861（缺密钥卡 + 面板族/原生点选的 partial）。棘轮：只准上调。"
+  "thresholdNote": "目标 0.95；现读 0.889（缺密钥卡 absent；面板族/原生点选/群 @ 路由 partial）。棘轮：只准上调。"
 }

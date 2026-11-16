@@ -13,7 +13,7 @@ import { listSessions, readSessionEvents } from "../../../../src/main/sessions";
 import { openSegmentForSession } from "./session-segments";
 import { defaultStartDeps, dispatchToMember, startToMember } from "./team-dispatch";
 import { createTeamGroup } from "./team-group";
-import { advanceGroupRound } from "./team-round";
+import { advanceGroupRound, groupTaskOf } from "./team-round";
 import { planRound } from "../../../../src/orchestration/speech";
 import { memberPatch } from "../../../../src/agent/team/members";
 import { TEAM_USAGE_SESSION_CAP, memoryScopes, permissionRows, usageAcrossSessions } from "../../../../src/agent/team/insights";
@@ -875,16 +875,27 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     return await createTeamGroup({ sessionsRoot: root, ...(typeof name === "string" && name.trim() !== "" ? { name } : {}) });
   },
   // v65 群的一轮：轮次落群会话补丁，下一位按名单轮转（成员从团队日志读，空名单拒）。
-  teamGroupNext: async (sessionId, workspace) => {
+  teamGroupNext: async (sessionId, workspace, start) => {
     const root = await explicitSessionsRoot(typeof workspace === "string" ? workspace : undefined);
     if (root === undefined) return { ok: false, error: "没有可用的会话根" };
     const id = typeof sessionId === "string" ? sessionId : "";
     if (id === "") return { ok: false, error: "没有指定群会话" };
     const settings = await getSettings();
     const roster = await readTeamRoster(teamLogPath(app.getPath("userData")), settings.mode);
-    return await advanceGroupRound({
+    const advanced = await advanceGroupRound({
       sessionsRoot: root, sessionId: id, memberIds: roster.members.map((m) => m.id),
     });
+    if (advanced.ok !== true || start !== true || advanced.speaker === undefined) return advanced;
+    // 轮到谁，就把群里最后一句交给谁开跑（任务书＝群里最后一条 user_message；没有就不派）。
+    const events = await readSessionEvents(root, id).catch(() => []);
+    const task = groupTaskOf(events);
+    if (task === null) return { ...advanced, error: "群里还没有一句话，没得派" };
+    const started = await startToMember(
+      { sessionsRoot: root, memberId: advanced.speaker, task, mode: settings.mode },
+      defaultStartDeps(async (req) => await (wired.run as (x: unknown) => Promise<{ ok?: boolean; error?: string }>)(req)),
+    );
+    if (started.ok !== true) return { ...advanced, error: started.error ?? "开跑失败" };
+    return { ...advanced, sessionId: started.sessionId };
   },
   // v60 一轮的发言秩序（发言权的第一个调用方）：名单从团队事件日志读，秩序由核心纯函数算。
   teamRoundPlan: async (raw) => {

@@ -909,6 +909,23 @@ async function main() {
     roundFlow.step === "done" && roundFlow.calls.length === 1
       && String(roundFlow.text).includes("1") && String(roundFlow.text).includes("m-seed"),
     { step: roundFlow.step, calls: roundFlow.calls });
+  // ⑮f 轮次驱动派活（v66）：点「下一轮并让 TA 开跑」⇒ 带 start 调用，回执显示开跑的会话 id。
+  const speakFlow = await pjs(`(async () => {
+    const btn = [...document.querySelectorAll('.mini-btn')].find((b) => (b.textContent || "").includes("让 TA 开跑"));
+    if (!btn) return { step: "no-button" };
+    btn.click();
+    await new Promise((r) => setTimeout(r, 600));
+    return {
+      step: "done",
+      calls: window.__cairnGroupNexts ? window.__cairnGroupNexts() : [],
+      text: (document.querySelector('[data-team-pane="true"]') || {}).textContent || "",
+    };
+  })()`);
+  readings.teamSpeak = speakFlow;
+  check("「下一轮并让 TA 开跑」真的带 start 调到 teamGroupNext，并画出开跑会话 id",
+    speakFlow.step === "done" && speakFlow.calls.some((c) => c.start === true)
+      && String(speakFlow.text).includes("s-speak-"),
+    { step: speakFlow.step, calls: speakFlow.calls });
   await shot(paneWin, "12-team-pane-1440x900");
   paneWin.destroy();
 

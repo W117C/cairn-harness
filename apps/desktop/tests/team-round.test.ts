@@ -9,7 +9,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { advanceGroupRound, roundOf } from "../src/main/team-round";
+import { advanceGroupRound, groupTaskOf, roundOf } from "../src/main/team-round";
 import { createEventLog, type AgentEvent } from "../../../src/events";
 import { readSessionEvents } from "../../../src/main/sessions";
 import { pathOf } from "../../../src/main/sessions";
@@ -60,5 +60,20 @@ describe("群的一轮", () => {
       { read: async () => [], append: async () => { throw new Error("磁盘只读"); }, pathOf: () => "/dev/null" },
     );
     expect(result).toEqual({ ok: false, error: "磁盘只读" });
+  });
+});
+
+describe("群里这一轮要干什么", () => {
+  it("取最后一条 user_message 当任务书；没有就 null", () => {
+    const events = [
+      { type: "user_message", content: "旧话题" },
+      { type: "assistant_message", content: "收到" },
+      { type: "user_message", content: "把壁纸对比度再量一遍" },
+    ] as never[];
+    expect(groupTaskOf(events)).toBe("把壁纸对比度再量一遍");
+    expect(groupTaskOf([{ type: "assistant_message", content: "只有回复" }] as never[])).toBeNull();
+    expect(groupTaskOf([] as never[])).toBeNull();
+    // 空白不算一句话
+    expect(groupTaskOf([{ type: "user_message", content: "   " }] as never[])).toBeNull();
   });
 });

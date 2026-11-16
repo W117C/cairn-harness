@@ -141,6 +141,7 @@ export const settingsStrings = {
     groupCreate: "新建群会话",
     groupCreated: "已建群会话 ",
     groupNext: "下一轮",
+    groupNextStart: "下一轮并让 TA 开跑",
     groupRound: "第 N 轮发言：",
     groupNeed: "先建一条群会话，再推进轮次",
     dispatch: "派活",
