@@ -96,7 +96,7 @@
     "croner": "^10.0.1",
     "smol-toml": "1.9.0",
     "tree-sitter-wasms": "0.1.13",
-    "tar": "7.5.22",
+    "tar": "7.5.23",
     "vscode-languageserver-protocol": "^3.18.5",
     "web-tree-sitter": "0.25.10"
   },
