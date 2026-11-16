@@ -121,13 +121,14 @@
       "id": "bot.group-chat",
       "capability": "群聊共享流与轮次",
       "reference": "room + round + 共享日志",
-      "ours": "群会话（group=1）+ 共享流 + 轮次（@ 命中即并行批，否则轮转）+ 轮到谁就交给谁开跑 + **带上下文**（v74：把最近几条编进任务书）",
+      "ours": "群会话（group=1）+ 共享流 + 轮次（@ 命中即一批，否则轮转）+ **波次**（v76：被 @ 的人顺序跑，每人开跑前重读共享流 ⇒ 后面的人看得见前面刚说的）+ 轮到谁就交给谁开跑 + 带上下文",
       "status": "covered",
       "evidence": [
         "apps/desktop/scripts/wallpaper-csp-smoke.cjs",
         "apps/desktop/tests/team-group.test.ts",
         "apps/desktop/tests/team-pane.test.tsx",
         "apps/desktop/tests/team-round.test.ts",
+        "apps/desktop/tests/team-wave.test.ts",
         "tests/team-round-context.test.ts"
       ]
     },

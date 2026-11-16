@@ -166,8 +166,10 @@ export type { SearchProvider } from "../tools/web-search";
  *  v73 = 应用内壁纸选择器（`wallpaperBrowse` / `wallpaperApplyPath`）：列目录、点文件选中并校验，
  *        不依赖原生面板（无辅助功能权限的机器上点选不可自动化）。
  *  v74 = 群轮次带上下文：轮到谁开跑时，把群里最近几条编进任务书（同一批看得见本批之前的话）。
- *  v75 = 成员 run 串行闸：`teamMemberStart` 回包增 `waitedMs`；一次只跑一个成员，密钥注入窗口不重叠。 */
-export const IPC_PROTOCOL_VERSION = 75;
+ *  v75 = 成员 run 串行闸：`teamMemberStart` 回包增 `waitedMs`；一次只跑一个成员，密钥注入窗口不重叠。
+ *  v76 = 群一轮的波次：`teamGroupNext(start)` 把被 @ 的人**顺序**跑，每人开跑前重读共享流
+ *        （后面的人看得见前面刚说的），回包增 `wave`。 */
+export const IPC_PROTOCOL_VERSION = 76;
 
 /** 团队名单（v59）：成员档案是投影，`records` 是补丁条数（面板据此说「有几条历史」）。 */
 export interface TeamRosterPayload {
@@ -689,7 +691,17 @@ export interface AgentApi {
   teamSecretGrant(memberId: string, secret: string, allow: boolean): Promise<{ ok: boolean; error?: string }>;
   /** v65：群里推进一轮——轮次序号落群会话补丁，下一位发言者按名单轮转。
    *  v66：`start` 为真时顺带把「群里最后一句」当作任务书交给那位成员开跑。 */
-  teamGroupNext(sessionId: string, workspace?: string, start?: boolean): Promise<{ ok: boolean; round?: number; speaker?: string; speakers?: string[]; unknownMentions?: string[]; sessionId?: string; error?: string }>;
+  teamGroupNext(sessionId: string, workspace?: string, start?: boolean): Promise<{
+    ok: boolean;
+    round?: number;
+    speaker?: string;
+    speakers?: string[];
+    unknownMentions?: string[];
+    sessionId?: string;
+    /** v76：这一波实际跑了谁（按顺序），以及各自是否看得见前面的话。 */
+    wave?: { memberId: string; sessionId?: string; sawPrior: boolean }[];
+    error?: string;
+  }>;
   /** v60：给会话开新段（段的第一个写入点：追加一条 `session_meta_update`，序数由日志算）。 */
   sessionSegmentOpen(sessionId?: string, workspace?: string): Promise<{ ok: boolean; segment?: number; error?: string }>;
   getState(): Promise<StateResponse>;

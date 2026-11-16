@@ -18,7 +18,7 @@ import { createTeamGroup } from "./team-group";
 import { advanceGroupRound, groupTaskOf } from "./team-round";
 import { grantPatch, projectSecretGrants, requestPatch } from "../../../../src/agent/team/secrets";
 import { projectGroupStream } from "../../../../src/agent/team/stream";
-import { composeRoundTask } from "../../../../src/agent/team/round-context";
+import { runWave } from "./team-wave";
 import { memoryPanelFor } from "./memory-panel";
 import { globalMemoryDir, projectMemoryDir } from "../../../../src/agent/memory/store";
 import { memberMemoryDir } from "../../../../src/agent/memory/scope";
@@ -901,18 +901,21 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     const events = await readSessionEvents(root, id).catch(() => []);
     const task = groupTaskOf(events);
     if (task === null) return { ...advanced, error: "群里还没有一句话，没得派" };
-    // v74：把群里**最近说过的话**编进任务书——同一批成员至少看得见本批之前的内容。
-    const withContext = composeRoundTask({
+    // v76：一轮里被 @ 到的人按**波次**顺序跑，每人开跑前重读共享流（后面的人看得见前面刚说的）。
+    const wave = await runWave({
+      speakers: advanced.speakers ?? [advanced.speaker],
       task,
-      items: projectGroupStream(events).items,
-      speaker: advanced.speaker,
+      read: async () => await readSessionEvents(root, id).catch(() => []),
+      start: async (memberId, composed) => {
+        const started = await startToMember(
+          { sessionsRoot: root, memberId, task: composed, mode: settings.mode },
+          defaultStartDeps(async (req) => await (wired.run as (x: unknown) => Promise<{ ok?: boolean; error?: string }>)(req)),
+        );
+        return { ok: started.ok === true, ...(started.sessionId === undefined ? {} : { sessionId: started.sessionId }), ...(started.error === undefined ? {} : { error: started.error }) };
+      },
     });
-    const started = await startToMember(
-      { sessionsRoot: root, memberId: advanced.speaker, task: withContext, mode: settings.mode },
-      defaultStartDeps(async (req) => await (wired.run as (x: unknown) => Promise<{ ok?: boolean; error?: string }>)(req)),
-    );
-    if (started.ok !== true) return { ...advanced, error: started.error ?? "开跑失败" };
-    return { ...advanced, sessionId: started.sessionId };
+    if (wave.failed !== undefined) return { ...advanced, error: wave.failed.error, wave: wave.ran };
+    return { ...advanced, sessionId: wave.ran[0]?.sessionId, wave: wave.ran };
   },
   // v71 记忆面板：三层目录数一遍（只读、不建目录），交给核心纯投影折成行。
   teamMemoryPanel: async (workspace) => {
