@@ -40,7 +40,7 @@ import { MigrationSection } from "./settings/MigrationSection";
 import { PersonalizationSection } from "./settings/PersonalizationSection";
 import { SubagentsSection } from "./settings/SubagentsSection";
 import { TeamSection } from "./settings/TeamSection";
-import { NAV_GROUP_LABEL, SETTINGS_PAGE_ORDER, SECTIONS, filterSections, sectionById, sectionLabel, type SectionId } from "./settings-nav";
+import { NAV_GROUP_LABEL, SETTINGS_PAGE_ORDER, SECTIONS, filterSectionRows, filterSections, sectionById, sectionLabel, type SectionId } from "./settings-nav";
 import { destinationForSection } from "../navigation";
 import { STR } from "../strings";
 import "./settings-refinement.css";
@@ -195,7 +195,9 @@ export function SettingsPanel(props: {
   const [checkMsg, setCheckMsg] = useState<{ tone: "wait" | "ok" | "err"; text: string; hint?: string } | null>(null);
   // 右下保存状态指示（替换原「修改即保存」静态行）：短暂显示后淡出，不占版式。
   const [flash, setFlash] = useState<string | null>(null);
+  const [flashClosing, setFlashClosing] = useState(false);
   const flashTimer = useRef<number | null>(null);
+  const flashCloseTimer = useRef<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // key 明文零进 React state：输入框非受控，用 ref 取值（与旧实现同一条纪律）。
@@ -210,6 +212,8 @@ export function SettingsPanel(props: {
   const navSectionsRef = useRef<HTMLDivElement | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const visibleSections = useMemo(() => filterSections(navQuery), [navQuery]);
+  // 行级命中（2026-11-17）：分区搜索打到「行」这一级——命中显示「分区 › 行」，点击跳分区。
+  const rowHits = useMemo(() => filterSectionRows(navQuery), [navQuery]);
   // 第 1167 页：三组导航分区一次分好；设置页局部状态变化不重跑 3 次 filter。
   const navGroups = useMemo(() => (["settings", "workspace", "system"] as const).map((group) => ({
     group,
@@ -233,12 +237,20 @@ export function SettingsPanel(props: {
 
   const pulse = (msg: string) => {
     setFlash(msg);
+    setFlashClosing(false);
     if (flashTimer.current !== null) window.clearTimeout(flashTimer.current);
-    flashTimer.current = window.setTimeout(() => setFlash(null), 2200);
+    // 退场拍（2026-11-17）：2.2s 后先落 data-closing 播 150ms 淡出再卸载——此前瞬间消失，
+    // 与弹层退场（ModalSurface data-closing）不对称。
+    flashTimer.current = window.setTimeout(() => {
+      setFlashClosing(true);
+      if (flashCloseTimer.current !== null) window.clearTimeout(flashCloseTimer.current);
+      flashCloseTimer.current = window.setTimeout(() => setFlash(null), 150);
+    }, 2200);
   };
 
   useEffect(() => () => {
     if (flashTimer.current !== null) window.clearTimeout(flashTimer.current);
+    if (flashCloseTimer.current !== null) window.clearTimeout(flashCloseTimer.current);
   }, []);
 
   const refresh = () => {
@@ -596,8 +608,25 @@ export function SettingsPanel(props: {
               </div>
             );
           })}
-          {/* 搜索无命中：说清「没有匹配的分区」，别留一个空导航列让人以为设置坏了。 */}
-          {visibleSections.length === 0 && (
+          {/* 行级命中（搜索时出现）：「分区 › 行」按钮跳对应分区；上限 6 条防长列表顶翻导航列。 */}
+          {navQuery.trim() !== "" && rowHits.length > 0 && (
+            <div className="sp-nav-rows">
+              <div className="sp-nav-label" aria-hidden="true">行级命中</div>
+              {rowHits.slice(0, 6).map((r) => (
+                <button
+                  key={`${r.section}-${r.label}`}
+                  type="button"
+                  className={"sp-nav-rowhit" + (section === r.section ? " on" : "")}
+                  onClick={() => { setSection(r.section); }}
+                >
+                  {`${sectionLabel(r.section)} › ${r.label}`}
+                </button>
+              ))}
+            </div>
+          )}
+          {/* 搜索无命中：说清「没有匹配的分区」，别留一个空导航列让人以为设置坏了。
+              行级有命中时不再说「没有匹配」——分区名没中但行中了不算搜不到。 */}
+          {visibleSections.length === 0 && rowHits.length === 0 && (
             <div className="sp-nav-empty">没有匹配「{navQuery.trim()}」的分区</div>
           )}
           </div>
@@ -774,7 +803,7 @@ export function SettingsPanel(props: {
           </RenderErrorBoundary>
         </div>
         {flash !== null && (
-          <div className="sp-save-flash" role="status" aria-live="polite">{flash}</div>
+          <div className="sp-save-flash" data-closing={flashClosing ? "true" : undefined} role="status" aria-live="polite">{flash}</div>
         )}
       </div>
       {confirmDiscardInstructions && <ConfirmDialog

@@ -1,5 +1,6 @@
 // 设置导航的轻量单源：命令面板只需要分区 id/标签，不应因此把设置页正文与工作台一起拉进首屏。
 import { BarChart3, BookOpen, Brain, Bot, Users, Clock, FolderInput, GitBranch, Globe, KeyRound, Keyboard, Plug, Puzzle, RotateCw, Shield, SlidersHorizontal, Sparkles, UserRound, Webhook, Wrench } from "lucide-react";
+import { STR } from "../strings";
 
 import type { PageId } from "../app-controls";
 export type { PageId } from "../app-controls";
@@ -105,8 +106,56 @@ export function filterSections(query: string): readonly SectionId[] {
   const q = query.trim().toLowerCase();
   if (q === "") return SECTIONS.map((s) => s.id);
   return SECTIONS.filter((s) => {
-    if (s.label.toLowerCase().includes(q)) return true;
+    if (s.label.toLowerCase().includes(q) === true) return true;
     const keys = (SECTION_KEYWORDS[s.id] ?? "").toLowerCase().split(/\s+/);
     return keys.some((k) => k !== "" && (k.includes(q) || q.includes(k)));
   }).map((s) => s.id);
+}
+
+/** 分区内的行级索引（2026-11-17）：行标签直接引用 STR 键（不抄字面量——标签改了这里跟着走），
+ *  分区搜索从此能打到「行」这一级（此前只到分区级，用户得知道「这设置在哪个分区」才能找到）。
+ *  诚实口径**不变**：这仍是人工维护的行清单（只收高频行），不是全文索引——没进表的行
+ *  不参与匹配，与 SECTION_KEYWORDS 同一条纪律（不把全文搜索说成有的样子）。
+ *  匹配口径与 filterSections 相同：label/keys 双向子串、大小写不敏感、保表序。 */
+export interface SectionRowHint {
+  readonly section: SectionId;
+  readonly label: string;
+  /** 搜索同义词（空格分词；双向子串匹配）。 */
+  readonly keys: string;
+}
+
+export const SECTION_ROWS: readonly SectionRowHint[] = [
+  // 通用
+  { section: "general", label: STR.general.theme, keys: "主题 深浅色 暗色 亮色 夜间 外观" },
+  { section: "general", label: STR.general.textSize, keys: "字号 字体大小 文字大小" },
+  { section: "general", label: STR.general.uiSize, keys: "缩放 界面缩放 显示大小" },
+  { section: "general", label: STR.general.wallpaperBlock, keys: "壁纸 压暗 不透明度 遮罩 玻璃 墙纸" },
+  { section: "general", label: STR.general.ctrlTab, keys: "ctrl tab 会话切换 循环切换" },
+  // 高级
+  { section: "advanced", label: STR.advanced.autoMemory, keys: "记忆 沉淀 自动沉淀 自动记忆" },
+  { section: "advanced", label: STR.advanced.promptCache, keys: "prompt 缓存 提示词缓存" },
+  { section: "advanced", label: STR.advanced.maxBudgetUsd, keys: "花费 上限 预算 价格 成本" },
+  { section: "advanced", label: STR.advanced.telemetry, keys: "遥测 隐私 统计 上报" },
+  // 权限与安全
+  { section: "permissions", label: STR.permissions.modesTitle, keys: "档位 模式 只读 自动 审批 沙箱" },
+  { section: "permissions", label: STR.permissions.network, keys: "默认断网 离线 断网" },
+  // 关于与更新
+  { section: "about", label: STR.about.version, keys: "版本号 版本" },
+  { section: "about", label: STR.about.license, keys: "许可证 license" },
+  { section: "about", label: STR.update.manifestLabel, keys: "更新源 manifest" },
+  { section: "about", label: STR.about.preferences, keys: "备份 导出 导入 恢复默认 偏好" },
+  { section: "about", label: STR.about.doctor, keys: "诊断 运行诊断" },
+  { section: "about", label: STR.about.details, keys: "工程细节 细节" },
+];
+
+/** 行级命中（纯函数，可单测）：空查询 = 空（行级只在搜索时出现）；命中保 SECTION_ROWS 序。 */
+export function filterSectionRows(query: string): readonly SectionRowHint[] {
+  const q = query.trim().toLowerCase();
+  if (q === "") return [];
+  return SECTION_ROWS.filter((r) => {
+    const label = r.label.toLowerCase();
+    if (label.includes(q) || q.includes(label)) return true;
+    const keys = r.keys.toLowerCase().split(/\s+/);
+    return keys.some((k) => k !== "" && (k.includes(q) || q.includes(k)));
+  });
 }

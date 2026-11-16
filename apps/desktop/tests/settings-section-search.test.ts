@@ -10,7 +10,7 @@
 //    （它的形状被壳导航与命令面板消费，加字段要连带改两处与它们的判据）。
 // ② 顺序保序：结果按 SECTIONS 原序返回，不让匹配度重排（用户对固定顺序有肌肉记忆）。
 import { describe, expect, it } from "vitest";
-import { filterSections, SECTION_KEYWORDS, SECTIONS, SETTINGS_PAGE_ORDER } from "../src/renderer/components/settings-nav";
+import { filterSectionRows, filterSections, SECTION_KEYWORDS, SECTION_ROWS, SECTIONS, SETTINGS_PAGE_ORDER } from "../src/renderer/components/settings-nav";
 
 const ALL = SECTIONS.map((s) => s.id);
 
@@ -81,6 +81,29 @@ describe("filterSections（分区搜索）", () => {
     for (const s of SECTIONS) {
       expect(SECTION_KEYWORDS[s.id]?.trim(), `${s.id} 词表为空`).not.toBe("");
     }
+  });
+
+  // ③ 行级命中（2026-11-17）：分区搜索打到「行」这一级——仍是人工维护的行清单（与
+  // SECTION_KEYWORDS 同一条诚实纪律），行标签直接引 STR 键（标签改了跟着走，不抄字面量）。
+  it("行级命中：空查询 = 空（行级只在搜索时出现）", () => {
+    expect(filterSectionRows("")).toEqual([]);
+    expect(filterSectionRows("   ")).toEqual([]);
+  });
+
+  it("行级命中：按行标签直命中，且「分区 › 行」可跳分区", () => {
+    const hits = filterSectionRows("主题");
+    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits[0]).toMatchObject({ section: "general" });
+    expect(hits[0]!.label.length).toBeGreaterThan(0);
+    // 同义词命中：分区名与分区词表都没提「断网」的行也能打到。
+    expect(filterSectionRows("断网").some((r) => r.section === "permissions")).toBe(true);
+    expect(filterSectionRows("恢复默认").some((r) => r.section === "about")).toBe(true);
+  });
+
+  it("行级命中：保 SECTION_ROWS 表序（不按匹配度重排）", () => {
+    const got = filterSectionRows("的").map((r) => r.label);
+    const expected = SECTION_ROWS.map((r) => r.label).filter((l) => got.includes(l));
+    expect(got).toEqual(expected);
   });
 
   it("词表覆盖全部 SectionId（新增分区若忘配词表，这里红）", () => {

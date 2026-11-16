@@ -2521,6 +2521,17 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 }
 .sp-back:hover { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover)); color: hsl(var(--text-000)); }
 .sp-nav-foot { margin-top: auto; padding: var(--space-sm); font-size: var(--fs-caption-xs); color: hsl(var(--text-400)); }
+/* 行级命中（2026-11-17）：分区搜索打到「行」——「分区 › 行」按钮，跳对应分区。
+   组标签同款小字标签；命中项 24px 档行高，选中分区上的命中项给淡底。 */
+.sp-nav-rows { padding: var(--space-xs) var(--space-sm) 0; display: flex; flex-direction: column; gap: 2px; }
+.sp-nav-rowhit {
+  display: flex; align-items: center; min-height: 24px; padding: 0 8px;
+  border-radius: var(--radius-xs); color: hsl(var(--text-200)); font-size: var(--fs-caption-sm);
+  text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  transition: background var(--t-instant), color var(--t-instant);
+}
+.sp-nav-rowhit:hover { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover)); color: hsl(var(--text-000)); }
+.sp-nav-rowhit.on { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-selected)); color: hsl(var(--text-000)); }
 /* 右下保存状态指示（批 6 清单阶段 6：撤「修改即保存」静态行，改为保存后短暂「已保存 ✓」）。 */
 .sp-save-flash {
   position: absolute; right: var(--space-lg); bottom: var(--space-lg);
@@ -2535,6 +2546,12 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
   pointer-events: none;
 }
 @keyframes sp-flash-in { from { opacity: 0; transform: translateY(4px); } }
+/* 退场拍（与弹层 data-closing 同一配方）：卸载前 150ms 淡出下沉，reduced-motion 由全局块压到瞬时。 */
+.sp-save-flash[data-closing="true"] {
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity var(--t-fast), transform var(--t-fast);
+}
 /* A（2026-10-16 模型/通道页重做）：滚动容器撑满窗口（原 max-width:760px 把滚动条钉在窗口 ~82% 处、
    右缘留死区）；内容列（设置页 .ss-page / 工作台 .ap-body）960px 水平居中。顶部 24px 起标题。 */
 .sp-body { overflow-y: auto; padding: var(--space-lg) var(--space-xl) var(--space-xl); min-height: 0; container-type: inline-size; }
