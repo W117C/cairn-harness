@@ -9,11 +9,11 @@ import type { TintSource } from "./wallpaper-tint";
 import { installSuspendPause } from "./wallpaper-suspend";
 import { pickWallpaper } from "./wallpaper-pick";
 import { appendTeamPatch, readTeamRoster, teamLogPath } from "./team-store";
-import { readSessionEvents } from "../../../../src/main/sessions";
+import { listSessions, readSessionEvents } from "../../../../src/main/sessions";
 import { openSegmentForSession } from "./session-segments";
 import { planRound } from "../../../../src/orchestration/speech";
 import { memberPatch } from "../../../../src/agent/team/members";
-import { memoryScopes, permissionRows, usageByOwner } from "../../../../src/agent/team/insights";
+import { memoryScopes, permissionRows, usageAcrossSessions } from "../../../../src/agent/team/insights";
 import { windowVibrancyOptions } from "./window-vibrancy";
 import { focusedWindowViewing, notificationClickWindow, runNotificationCopy, runNotificationTarget, shouldNotifyRunSettled } from "./run-notification";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -589,14 +589,22 @@ const teamInsightsOf = async (
     settings.mode as never,
     roster.clamped as never,
   );
+  // 用量：**跨会话**聚合（当前会话 + 同根最近若干会话），有上限、读不到的跳过。
+  // 「哪些会话算同一个团队」仍是产品口径；这里的默认是「同一会话根下的最近 10 个」。
+  const USAGE_SESSION_CAP = 10;
   let usage = { byOwner: [] as { owner: string; inputTokens: number; outputTokens: number; events: number }[], totalEvents: 0 };
-  const sessionId = settings.currentSession;
-  if (sessionId !== null && sessionId !== "") {
-    const root = await explicitSessionsRoot(undefined);
-    if (root !== undefined) {
-      const events = await readSessionEvents(root, sessionId).catch(() => []);
-      usage = usageByOwner(events);
-    }
+  const root = await explicitSessionsRoot(undefined);
+  if (root !== undefined) {
+    const listed = await listSessions(root).catch(() => []);
+    const ids = listed
+      .slice()
+      .sort((a, b) => (b.mtimeMs ?? 0) - (a.mtimeMs ?? 0))
+      .slice(0, USAGE_SESSION_CAP)
+      .map((s) => s.id);
+    const current = settings.currentSession;
+    if (current !== null && current !== "" && !ids.includes(current)) ids.unshift(current);
+    const logs = await Promise.all(ids.map((id) => readSessionEvents(root, id).catch(() => [])));
+    usage = usageAcrossSessions(logs);
   }
   return { permissions, memory: memoryScopes(members as never), usage };
 };

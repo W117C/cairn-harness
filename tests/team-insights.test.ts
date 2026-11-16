@@ -6,7 +6,7 @@
 //   ③ 记忆作用域三桶都给出来（空桶也要有，面板才知道「这一类没人」）；
 //   ④ 权限行把「请求档 / 生效档」并排，裁剪单独点名。
 import { describe, expect, it } from "vitest";
-import { memoryScopes, permissionRows, usageByOwner } from "../src/agent/team/insights";
+import { memoryScopes, permissionRows, usageAcrossSessions, usageByOwner } from "../src/agent/team/insights";
 import type { AgentEvent } from "../src/events";
 
 const usage = (agent_id: string | undefined, inputTokens: unknown, outputTokens: unknown): AgentEvent =>
@@ -33,6 +33,20 @@ describe("团队三维读数", () => {
     expect(rows.byOwner).toEqual([{ owner: "worker-a", inputTokens: 0, outputTokens: 5, events: 1 }]);
     // 非 usage 事件不算
     expect(usageByOwner([{ type: "user_message", content: "hi" } as AgentEvent]).totalEvents).toBe(0);
+  });
+
+  it("跨会话聚合：多份日志拼起来再按归属者汇总（读几份只影响总量，不影响同名归属者）", () => {
+    const first = [usage("member:m1", 100, 10), usage(undefined, 50, 5)];
+    const second = [usage("member:m1", 20, 2), usage("worker-a", 5, 1)];
+    const merged = usageAcrossSessions([first, second]);
+    expect(merged.totalEvents).toBe(4);
+    expect(merged.byOwner).toEqual([
+      { owner: "member:m1", inputTokens: 120, outputTokens: 12, events: 2 },
+      { owner: "main", inputTokens: 50, outputTokens: 5, events: 1 },
+      { owner: "worker-a", inputTokens: 5, outputTokens: 1, events: 1 },
+    ]);
+    // 空输入 ⇒ 空读数（不是 NaN）
+    expect(usageAcrossSessions([])).toEqual({ byOwner: [], totalEvents: 0 });
   });
 
   it("记忆作用域：三桶都给出来，空桶也在", () => {

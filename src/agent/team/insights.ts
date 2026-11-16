@@ -58,6 +58,15 @@ export function usageByOwner(events: readonly AgentEvent[]): UsageInsight {
   return { byOwner, totalEvents: total };
 }
 
+/**
+ * 跨会话聚合（本页新增）：把多份日志拼起来再汇总。
+ * 拼接顺序由调用方给（按会话新旧），汇总本身的排序仍由 `usageByOwner` 决定（总量降序 + 字典序），
+ * 所以「读了几份」不影响同名归属者的数值，只影响总量。
+ */
+export function usageAcrossSessions(logs: readonly (readonly AgentEvent[])[]): UsageInsight {
+  return usageByOwner(logs.flat());
+}
+
 /** 记忆作用域：按 scope 分组（空组也给出，面板才知道「这一类没人」）。 */
 export function memoryScopes(members: readonly Pick<MemberProfile, "id" | "memoryScope">[]): MemoryInsight {
   const scopes: MemoryInsight["scopes"] = [

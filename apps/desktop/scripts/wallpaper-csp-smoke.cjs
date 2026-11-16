@@ -504,6 +504,10 @@ async function main() {
   const videoErrors = [];
   currentPath = videoFixture;
   const videoWin = await makeWindow(join(distDir, "index.html"), videoErrors, { theme: "dark", video: videoFixture, show: true });
+  // 真焦点：脚本进程自己抢一次前台（`app.focus({steal:true})`），再让窗口 show+focus。
+  // 只靠 `win.focus()` 在本机会被别的窗口/前台应用抢走，视频的暂停判据读的正是 document.hasFocus。
+  app.focus({ steal: true });
+  videoWin.show();
   videoWin.focus();
   const vjs = jsOf(videoWin);
   for (let i = 0; i < 100; i++) { if (await vjs(`!!document.querySelector('.avatar')`)) break; await pause(); }
@@ -528,7 +532,7 @@ async function main() {
     videoPlaying);
   await shot(videoWin, "07-video-wallpaper-playing-1440x900");
   // 失焦前先确认窗口真的拿到了 OS 焦点（否则「失焦暂停」会退化成「本来就没焦点」）。
-  await waitFor(async () => (await videoState()).focused === true);
+  await waitFor(async () => (await videoState()).focused === true, 12_000);
   videoWin.blur();
   await waitFor(async () => (await videoState()).paused === true);
   const videoBlurred = await videoState();
@@ -546,7 +550,7 @@ async function main() {
     videoResumed.has === true && videoResumed.paused === false, videoResumed);
   // ⑨b v59：系统级暂停（锁屏）——窗口既没失焦也没隐藏，只有主进程推得动这一格。
   // 这里走的是真 preload 订阅 + 真推送名（`__cairnPushWallpaperSuspend` 由画廊 preload 收集订阅后转发）。
-  await waitFor(async () => (await videoState()).focused === true);
+  await waitFor(async () => (await videoState()).focused === true, 12_000);
   await vjs(`window.__cairnPushWallpaperSuspend({ paused: true, reason: "lock-screen" })`);
   await pause(600);
   const locked = await videoState();
