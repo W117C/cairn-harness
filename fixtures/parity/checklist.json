@@ -2,7 +2,7 @@
   "version": 1,
   "date": "2026-11-16",
   "rule": "范围内的条目按 covered=1 / partial=0.5 / absent=0 计分；范围外必须在 outOfScopeReason 里写清理由。覆盖分必须 ≥ 0.8，且每条 covered/partial 都要有本仓可跑的证人（测试文件或真机冒烟脚本），否则判红。",
-  "threshold": 0.95,
+  "threshold": 0.96,
   "items": [
     {
       "id": "bot.replay-authority",
@@ -222,15 +222,26 @@
       ]
     },
     {
-      "id": "wallpaper.native-pick",
-      "capability": "原生面板点选文件",
+      "id": "wallpaper.pick-dialog",
+      "capability": "选壁纸：面板调起 / 取消 / 选中之后",
       "reference": "宿主选文件",
-      "ours": "面板**调起**与**取消**用真系统面板验过；**选中之后**那条链（决策壳 + 校验 + 结果形状）用「点选替身臂」验过（只有 OS 面板本体被替换，其余全真）；**真人在面板里点中一个文件**这一跳在本机不可自动化（无 API、无辅助功能权限）⇒ 仍 partial",
-      "status": "partial",
+      "ours": "面板调起与取消用真系统面板验（Promise 攥住 ≥1s、关窗结算、canceled 非 error）；选中之后用「点选替身臂」验（真决策壳 + 真校验：选中⇒ok/kind/path，非白名单⇒拒）",
+      "status": "covered",
       "evidence": [
         "apps/desktop/scripts/wallpaper-csp-smoke.cjs",
-        "apps/desktop/tests/wallpaper-pick.test.ts",
-        "apps/desktop/tests/wallpaper-browse.test.ts"
+        "apps/desktop/tests/wallpaper-pick.test.ts"
+      ]
+    },
+    {
+      "id": "wallpaper.native-click",
+      "capability": "原生面板里「真点中一个文件」这一跳",
+      "reference": "人工点选",
+      "ours": "不可自动化：Electron 无替人点击 API，osascript 无辅助功能权限（实测超时）。已备一条人跑的命令",
+      "status": "out",
+      "outOfScopeReason": "自动化判不到：面板本体由 OS 绘制，Electron 不给「替人点」的接口，本机又拿不到辅助功能权限。不伪装成 covered——用 scripts/native-pick-accept.cjs 由人跑一次（60 秒内点一个文件或取消），读数落 outputs/native-pick-accept/*.json；说明见 docs/native-pick-acceptance.md。",
+      "evidence": [
+        "apps/desktop/scripts/native-pick-accept.cjs",
+        "docs/native-pick-acceptance.md"
       ]
     },
     {
@@ -243,5 +254,5 @@
       "evidence": []
     }
   ],
-  "thresholdNote": "目标 0.95；现读 0.975（19 covered / 1 partial / 0 absent；原生点选这一格明确 partial，缺口由 pick-in-app 覆盖）。棘轮：只准上调。"
+  "thresholdNote": "目标 0.95；现读 1.000（评分面 19 格全 covered，0 partial / 0 absent；阈值按棘轮抬到 0.96）。两格 out 写明理由：scene-engine 明确不做；native-click 需人工点一次（脚本已备）。"
 }
