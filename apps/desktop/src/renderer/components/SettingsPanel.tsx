@@ -380,6 +380,23 @@ export function SettingsPanel(props: {
 
   /** 选壁纸（2026-11-14 · 设计规格 §3.3）：主进程弹窗选文件，返回 kind + 绝对路径；
    *  path 只落 settings.json，媒体经 cairn-wallpaper:// 取（渲染层不碰文件系统）。 */
+  // v73：应用内选择器选中路径后走**同一条应用链**（先过主进程校验，再落设置、再刷新层）。
+  const applyWallpaperPath = async (path: string): Promise<void> => {
+    setError(null);
+    try {
+      const r = await window.agent.wallpaperApplyPath(path);
+      if (r.ok !== true) { setError(r.error ?? STR.settingsPanel.saveFailedPrefix); return; }
+      if (r.path === undefined || r.kind === undefined || settings === null) return;
+      const next = await window.agent.setSettings({
+        wallpaper: { ...settings.wallpaper, kind: r.kind, path: r.path, revision: settings.wallpaper.revision + 1 },
+      });
+      setS(next);
+      await refreshWallpaper();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   const pickWallpaper = async (): Promise<void> => {
     setError(null);
     try {
@@ -612,6 +629,7 @@ export function SettingsPanel(props: {
                 onWindowVibrancy={(next) => { void saveSettingKey("windowVibrancy", next); }}
                 onNotify={(next) => { void saveSettingKey("notifyOnComplete", next); }}
                 onWallpaperPick={() => { void pickWallpaper(); }}
+                onWallpaperPickPath={(path) => { void applyWallpaperPath(path); }}
                 onWallpaperOpacity={(next) => { void saveWallpaper({ opacity: next }); }}
                 onWallpaperScrim={(next) => { void saveWallpaper({ scrim: next }); }}
                 onWallpaperGlass={(next) => { void saveWallpaper({ glassAlpha: next }); }}

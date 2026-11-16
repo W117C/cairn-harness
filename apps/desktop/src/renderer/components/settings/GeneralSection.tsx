@@ -3,7 +3,9 @@
 // 2026-11-12（第 1075 页）：裸中文收编进 STR.general（值一字不改；本文件同时进 strings.test 的 REWORKED_FILES）。
 import type { AppSettings } from "../../../../../../src/main/ipc-protocol";
 import type { TextSizeSetting, UiSizeSetting } from "../../../../../../src/main/settings";
+import { useState } from "react";
 import { STR } from "../../strings";
+import { WallpaperBrowser } from "./WallpaperBrowser";
 import { SettingsSection, SettingsRow } from "../settings-ui";
 import { Switch } from "../Switch";
 
@@ -50,6 +52,10 @@ export function GeneralSection(props: {
   /** 2026-11-14（设计规格 §3.3/§5.4）：壁纸行——选文件 / 清除 / 三个滑杆。
    *  全部走单键直调（不进 panelPatch 白名单）。 */
   onWallpaperPick: () => void;
+  /** v73：应用内选择器选中路径后交给上层应用（同一条校验与落设置路径）。 */
+  onWallpaperPickPath?: (path: string) => void;
+  /** 判卷缝：直接给浏览器的初始读数。 */
+  initialBrowser?: { dir: string; parent: string | null; entries: { name: string; path: string; kind: "dir" | "file" }[] };
   onWallpaperOpacity: (next: number) => void;
   onWallpaperScrim: (next: number) => void;
   onWallpaperGlass: (next: number) => void;
@@ -57,6 +63,7 @@ export function GeneralSection(props: {
   /** 设计规格 §7 降级链：媒体读不出时设置行点名「文件不可用」（运行期状态，不是设置字段）。 */
   wallpaperUnavailable: boolean;
 }): React.JSX.Element {
+  const [browsing, setBrowsing] = useState(false);
   return (
     <>
       <SettingsSection title={STR.general.appearanceTitle}>
@@ -132,6 +139,12 @@ export function GeneralSection(props: {
               <button type="button" className="mini-btn" onClick={props.onWallpaperPick}>
                 {STR.general.wallpaperPick}
               </button>
+              {props.onWallpaperPickPath !== undefined && (
+                <button type="button" className="mini-btn" data-wallpaper-browse-toggle="true"
+                  onClick={() => { setBrowsing(!browsing); }}>
+                  {STR.general.wallpaperBrowse}
+                </button>
+              )}
               {props.settings.wallpaper.kind !== "none" && (
                 <button type="button" className="mini-btn" onClick={props.onWallpaperClear}>
                   {STR.general.wallpaperClear}
@@ -142,6 +155,9 @@ export function GeneralSection(props: {
                 <span className="ss-static">{STR.general.wallpaperUnavailable}</span>
               )}
             </div>
+            {browsing && props.onWallpaperPickPath !== undefined && (
+              <WallpaperBrowser onPickPath={props.onWallpaperPickPath} {...(props.initialBrowser === undefined ? {} : { initial: props.initialBrowser })} />
+            )}
             <label className="cw-slider">
               <span>{STR.general.wallpaperOpacity}</span>
               <input

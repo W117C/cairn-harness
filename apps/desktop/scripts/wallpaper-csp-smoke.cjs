@@ -10,7 +10,7 @@
 //
 // 跑法：pnpm --filter cairn-desktop build
 //       pnpm --filter cairn-desktop exec electron scripts/wallpaper-csp-smoke.cjs [输出目录]
-const { app, BrowserWindow, dialog, nativeImage, nativeTheme, net, powerMonitor, protocol } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, net, powerMonitor, protocol } = require("electron");
 const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
 const { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
 const { join, resolve } = require("node:path");
@@ -158,6 +158,11 @@ const jsOf = (win) => (source) => win.webContents.executeJavaScript(source, true
 // v72：把主进程那份「活跃信号」装到测试窗口上（同一份实现），
 // 这样 `win.emit("focus"/"blur")` 走的是真代码路径 → 真推送名 → 渲染层的真订阅。
 const { installActivePush, WALLPAPER_ACTIVE_CHANNEL } = require(join(__dirname, "../src/main/wallpaper-active.ts"));
+// v73 应用内选择器：把**真实现**注册成真 IPC handler（与产品主进程同名同参），preload 只转发。
+const { browseDirectory } = require(join(__dirname, "../src/main/wallpaper-browse.ts"));
+const { validateWallpaperFile } = require(join(__dirname, "../src/main/wallpaper.ts"));
+ipcMain.handle("agent:wallpaper-browse", (_e, dir) => browseDirectory(typeof dir === "string" && dir !== "" ? dir : join(out, "")));
+ipcMain.handle("agent:wallpaper-apply-path", (_e, path) => validateWallpaperFile(String(path ?? "")));
 const wireActive = (win) => {
   installActivePush({
     targets: [win], channel: WALLPAPER_ACTIVE_CHANNEL,
@@ -365,8 +370,9 @@ async function main() {
     && row.sliders.every((s) => s.label.length > 0 && s.labelLines === 1), row.sliders);
   check("滑杆本体够宽（≥200px，控件 md 档）且拿到主题强调色",
     row.found && row.sliders.every((s) => s.rangeWidth >= 200 && s.accent !== "" && s.accent !== "auto"), row.sliders);
-  check("已设壁纸时按钮读动作词「选择图片或视频」，不读状态词「未设置」",
-    row.found && row.buttons.length === 2 && row.buttons[0].text === "选择图片或视频" && row.status === null, row.buttons);
+  check("已设壁纸时按钮读动作词（选择 / 浏览本机 / 清除），不读状态词「未设置」",
+    row.found && row.buttons.length === 3 && row.buttons[0].text === "选择图片或视频"
+      && row.buttons[1].text === "浏览本机…" && row.buttons[2].text === "清除" && row.status === null, row.buttons);
   check("选/清两个按钮可见且有底色（不是透明白字）",
     row.found && row.buttons.length >= 1 && row.buttons.every((b) => b.width > 0 && b.bg !== "rgba(0, 0, 0, 0)"), row.buttons);
   await shot(win, "02-settings-wallpaper-row-1440x900");
@@ -393,7 +399,7 @@ async function main() {
   readings.pickPointer = { ...pickProbe, ...afterPick };
   check("选壁纸按钮真指针命中并调到 wallpaperPick", pickProbe.hit.hits && afterPick.picks >= 1, readings.pickPointer);
 
-  const clearProbe = await pointerClick(win, ".cw-settings-actions button:nth-of-type(2)");
+  const clearProbe = await pointerClick(win, ".cw-settings-actions button:nth-of-type(3)");
   await pause(300);
   const afterClear = await js(`(() => ({
     layer: !!document.querySelector('.cw-layer'),
@@ -407,8 +413,9 @@ async function main() {
   readings.clearPointer = { ...clearProbe, ...afterClear };
   check("清除按钮真指针命中；清除后撤层、摘属性、画布回实体色",
     clearProbe.hit.hits && !afterClear.layer && !afterClear.bodyAttr && !afterClear.htmlAttr && afterClear.bodyBg !== "rgba(0, 0, 0, 0)", afterClear);
-  check("清除后状态词「未设置」出现、清除按钮收起、选按钮仍是动作词",
-    afterClear.status === "未设置" && afterClear.buttons.length === 1 && afterClear.buttons[0] === "选择图片或视频", afterClear);
+  check("清除后状态词「未设置」出现、清除按钮收起、选择/浏览两个动作词还在",
+    afterClear.status === "未设置" && afterClear.buttons.length === 2
+      && afterClear.buttons[0] === "选择图片或视频" && afterClear.buttons[1] === "浏览本机…", afterClear);
   await shot(win, "03-wallpaper-cleared-1440x900");
 
   // ⑥ 反证臂：同一份产物、只把 img-src 里的 scheme 摘掉 ⇒ 同一张图必须加载不出来。
@@ -512,6 +519,42 @@ async function main() {
     lightDrift <= 2, { drift: lightDrift, const: LIGHT_SPEC.text, measured: lightSpec === null ? null : lightSpec.text });
   await shot(lightWin, "06-light-theme-wallpaper-1440x900");
   lightWin.destroy();
+
+  // ⑧b 应用内选择器（v73）：设置里「浏览本机…」→ 输目录 → 点文件 ⇒ 真选中并应用。
+  // 这一格存在的理由：原生面板的点选在无辅助功能权限的机器上不可自动化，这条路径可以。
+  const browseWin = await makeWindow(join(distDir, "index.html"), [], { theme: "dark" });
+  const bjs = jsOf(browseWin);
+  for (let i = 0; i < 100; i++) { if (await bjs(`!!document.querySelector('.avatar')`)) break; await pause(); }
+  await bjs(`(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', code: 'Comma', metaKey: true, bubbles: true })); })()`);
+  await pause(500);
+  const browserFlow = await bjs(`(async () => {
+    const toggle = [...document.querySelectorAll('[data-wallpaper-browse-toggle="true"]')][0];
+    if (!toggle) return { step: "no-toggle" };
+    toggle.click();
+    await new Promise((r) => setTimeout(r, 500));
+    const dirInput = document.querySelector('.cw-browser-dir');
+    if (!dirInput) return { step: "no-input" };
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    setter.call(dirInput, ${JSON.stringify(out)});
+    dirInput.dispatchEvent(new Event("input", { bubbles: true }));
+    const go = [...document.querySelectorAll('.cw-browser-bar .mini-btn')].pop();
+    go.click();
+    await new Promise((r) => setTimeout(r, 700));
+    const rows = [...document.querySelectorAll('.cw-browser-row.file')];
+    if (rows.length === 0) return { step: "no-files", names: [...document.querySelectorAll('.cw-browser-row')].map((r) => r.textContent) };
+    const target = rows.find((r) => (r.textContent || "").includes(".png")) || rows[0];
+    const picked = target.getAttribute("title");
+    target.click();
+    await new Promise((r) => setTimeout(r, 900));
+    const settings = await window.agent.getSettings();
+    return { step: "done", picked, applied: settings.wallpaper.path, kind: settings.wallpaper.kind, files: rows.length };
+  })()`);
+  readings.inAppPick = browserFlow;
+  check("应用内选择器：点文件 ⇒ 真校验并应用（设置里的壁纸路径就是它）",
+    browserFlow.step === "done" && typeof browserFlow.picked === "string"
+      && browserFlow.applied === browserFlow.picked && browserFlow.kind === "image",
+    { step: browserFlow.step, picked: browserFlow.picked, applied: browserFlow.applied, kind: browserFlow.kind });
+  browseWin.destroy();
 
   // ⑨ 视频壁纸：真视频、真解码；失焦即暂停、回焦即续播（规格 §6 / 判据 3 的老账）。
   // 窗口必须真显示并聚焦：暂停判据读的是 document.hasFocus()，隐藏窗口永远「没焦点」。

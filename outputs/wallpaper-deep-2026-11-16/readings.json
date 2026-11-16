@@ -93,6 +93,12 @@
         "color": "color(srgb 0.764706 0.760784 0.717647)"
       },
       {
+        "text": "浏览本机…",
+        "width": 98,
+        "bg": "color(srgb 0.101961 0.101961 0.0980392)",
+        "color": "color(srgb 0.764706 0.760784 0.717647)"
+      },
+      {
         "text": "清除",
         "width": 60,
         "bg": "color(srgb 0.101961 0.101961 0.0980392)",
@@ -126,7 +132,7 @@
   },
   "pickPointer": {
     "point": {
-      "x": 1129,
+      "x": 1023,
       "y": 432
     },
     "hit": {
@@ -155,7 +161,8 @@
     "backdrop": "none",
     "status": "未设置",
     "buttons": [
-      "选择图片或视频"
+      "选择图片或视频",
+      "浏览本机…"
     ]
   },
   "negativeControl": {
@@ -201,6 +208,13 @@
     "worst": 4.629950815465612,
     "drift": 0
   },
+  "inAppPick": {
+    "step": "done",
+    "picked": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/01-wallpaper-on-dark-1440x900.png",
+    "applied": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/01-wallpaper-on-dark-1440x900.png",
+    "kind": "image",
+    "files": 12
+  },
   "videoPlaying": {
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
@@ -215,7 +229,7 @@
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": true,
-    "t": 0.57,
+    "t": 0.59,
     "ready": 4,
     "duration": 2,
     "focused": false,
@@ -225,7 +239,7 @@
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": false,
-    "t": 0.57,
+    "t": 0.59,
     "ready": 4,
     "duration": 2,
     "focused": false,
@@ -235,7 +249,7 @@
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": true,
-    "t": 0.57,
+    "t": 0.59,
     "ready": 4,
     "duration": 2,
     "focused": false,
@@ -245,7 +259,7 @@
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": false,
-    "t": 0.57,
+    "t": 0.59,
     "ready": 4,
     "duration": 2,
     "focused": false,
@@ -259,7 +273,7 @@
   },
   "degradeMarker": {
     "found": true,
-    "text": "壁纸选择图片或视频清除文件不可用壁纸不透明度压暗玻璃透明度"
+    "text": "壁纸选择图片或视频浏览本机…清除文件不可用壁纸不透明度压暗玻璃透明度"
   },
   "teamPanel": {
     "navClicked": {
@@ -289,7 +303,7 @@
       "rows": [
         "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
         "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-        "新来的成员 · mmwivyhveread-onlydefaultguidedautofull-accessteammemberproject移除",
+        "新来的成员 · mmwiwnbt7read-onlydefaultguidedautofull-accessteammemberproject移除",
         "本轮发言秩序主持优先按名单轮排一轮",
         "当前会话的段—开新段",
         "权限（成员维）团队档 default · 无裁剪",
@@ -306,7 +320,7 @@
       "rows": [
         "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
         "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-        "新来的成员 · mmwivyhveread-onlydefaultguidedautofull-accessteammemberproject移除",
+        "新来的成员 · mmwiwnbt7read-onlydefaultguidedautofull-accessteammemberproject移除",
         "本轮发言秩序主持优先按名单轮排一轮",
         "排出来的秩序1. 示例成员　2. 新来的",
         "当前会话的段—开新段",
@@ -378,7 +392,7 @@
       "canceled": false,
       "filePaths": []
     },
-    "elapsedMs": 2106,
+    "elapsedMs": 2084,
     "options": {
       "title": "选择壁纸",
       "properties": [

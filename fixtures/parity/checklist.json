@@ -210,10 +210,22 @@
       ]
     },
     {
+      "id": "wallpaper.pick-in-app",
+      "capability": "应用内选壁纸（输目录 → 点文件）",
+      "reference": "原生面板",
+      "ours": "应用内选择器：列目录（白名单扩展名、目录排前、隐藏不列）+ 面包屑上级 + 点文件走同一条 validateWallpaperFile 校验",
+      "status": "covered",
+      "evidence": [
+        "apps/desktop/tests/wallpaper-browse.test.ts",
+        "apps/desktop/tests/wallpaper-browser.test.tsx",
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs"
+      ]
+    },
+    {
       "id": "wallpaper.native-pick",
       "capability": "原生面板点选文件",
       "reference": "宿主选文件",
-      "ours": "面板调起/取消已验证，点选不可自动化",
+      "ours": "面板调起/取消已验证；**点选**不可自动化（osascript 无辅助功能权限）⇒ 这条缺口由 pick-in-app 那条覆盖",
       "status": "partial",
       "evidence": [
         "apps/desktop/tests/wallpaper-pick.test.ts",
@@ -230,5 +242,5 @@
       "evidence": []
     }
   ],
-  "thresholdNote": "目标 0.95；现读 0.974（18 covered / 1 partial / 0 absent；只剩原生点选一格 partial）。棘轮：只准上调。"
+  "thresholdNote": "目标 0.95；现读 0.975（19 covered / 1 partial / 0 absent；原生点选这一格明确 partial，缺口由 pick-in-app 覆盖）。棘轮：只准上调。"
 }

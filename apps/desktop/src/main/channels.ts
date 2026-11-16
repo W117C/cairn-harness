@@ -182,6 +182,8 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   // 桌面端壁纸（2026-11-14 · 设计规格 §3.3）：单选、带扩展名过滤的选文件通道。
   // 不复用 pickFiles——它无过滤且是多选，语义与「挑一个壁纸」不符。
   wallpaperPick: "agent:wallpaper-pick",
+  wallpaperBrowse: "agent:wallpaper-browse",
+  wallpaperApplyPath: "agent:wallpaper-apply-path",
   // v59 团队名单（成员档案＝投影；写入口只有一条，删人写墓碑）
   teamRoster: "agent:team-roster",
   teamMemberSave: "agent:team-member-save",
@@ -412,6 +414,8 @@ export const CHANNEL_DOMAINS: { [K in InvokeChannel]: ChannelDomain } = {
   pickDirectory: "app",
   pickFiles: "app",
   wallpaperPick: "app",
+  wallpaperBrowse: "app",
+  wallpaperApplyPath: "app",
   teamRoster: "team",
   teamMemberSave: "team",
   teamRoundPlan: "team",

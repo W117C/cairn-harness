@@ -1592,6 +1592,10 @@ if (wallpaperFixturePath !== "") {
     wallpaperPicks.push(Date.now());
     return Promise.resolve({ ok: true, kind: "image", path: wallpaperFixturePath });
   };
+  // v73 应用内选择器：走**真 IPC**——主进程那边由冒烟注册真实现（fs 列目录 / 真校验），
+  // preload 只做转发（与产品同一组通道名）。
+  stub.wallpaperBrowse = (dir) => ipcRenderer.invoke("agent:wallpaper-browse", dir);
+  stub.wallpaperApplyPath = (path) => ipcRenderer.invoke("agent:wallpaper-apply-path", path);
   contextBridge.exposeInMainWorld("__cairnWallpaper", {
     picks: () => wallpaperPicks.length,
     path: wallpaperFixturePath,

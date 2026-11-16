@@ -9,6 +9,7 @@ import type { TintSource } from "./wallpaper-tint";
 import { installSuspendPause } from "./wallpaper-suspend";
 import { installActivePush, WALLPAPER_ACTIVE_CHANNEL } from "./wallpaper-active";
 import { pickWallpaper } from "./wallpaper-pick";
+import { browseDirectory } from "./wallpaper-browse";
 import { appendTeamPatch, readTeamRecords, readTeamRoster, teamLogPath } from "./team-store";
 import { listSessions, readSessionEvents } from "../../../../src/main/sessions";
 import { openSegmentForSession } from "./session-segments";
@@ -1147,6 +1148,15 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
       },
       validate: validateWallpaperFile,
     });
+  },
+  // v73 应用内选择器：列目录 / 按路径应用（同一条校验，渲染层拿不到没验过的路径）。
+  wallpaperBrowse: async (dir) => {
+    const target = typeof dir === "string" && dir.trim() !== "" ? dir : app.getPath("pictures");
+    return await browseDirectory(target);
+  },
+  wallpaperApplyPath: async (path) => {
+    if (typeof path !== "string" || path.trim() === "") return { ok: false, error: "没有路径" };
+    return await validateWallpaperFile(path);
   },
   // v9：Tab 想下一条（业主裁 A②）：按「当前选中模型（会话覆盖 > 设置缺省）」单发一次上下文建议。
   // 不走会话归属/漂移——单发不进会话流、不落 JSONL；解析失败（模型未登记等）也分类返回，

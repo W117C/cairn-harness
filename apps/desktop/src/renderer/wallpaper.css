@@ -153,3 +153,22 @@ body[data-we-wallpaper] :is(.side) {
     text-align: left;
   }
 }
+
+/* v73：应用内壁纸选择器（输目录 / 点目录下钻 / 点文件应用） */
+.cw-browser { display: flex; flex-direction: column; gap: 6px; width: 100%; margin: 4px 0; }
+.cw-browser-bar { display: flex; gap: 6px; align-items: center; }
+.cw-browser-dir { flex: 1 1 auto; min-width: 0; }
+.cw-browser-list {
+  display: flex; flex-direction: column; gap: 2px;
+  max-height: 180px; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 4px; background: var(--card);
+}
+.cw-browser-row {
+  text-align: left; background: none; border: 0; cursor: pointer;
+  padding: 3px 6px; border-radius: calc(var(--radius) - 2px);
+  color: var(--foreground); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cw-browser-row:hover { background: var(--accent); }
+.cw-browser-row.dir { color: var(--muted-foreground); }
+.cw-browser-issue { color: var(--destructive); }

@@ -162,8 +162,10 @@ export type { SearchProvider } from "../tools/web-search";
  *  v70 = 群聊共享流（`teamGroupStream`）：读群会话自己的事件流，带轮与说话人，截断如实。
  *  v71 = 记忆面板（`teamMemoryPanel`）：三层记忆的主题数/字节数，成员逐个点名，缺层如实。
  *  v72 = 窗口活跃推送（`onWallpaperActive`）：主进程按真窗口 focus/blur 推 `{active}`，
- *        渲染层的媒体门不再读 `document.hasFocus()`（后台窗口会假阴性 ⇒ 视频永不播）。 */
-export const IPC_PROTOCOL_VERSION = 72;
+ *        渲染层的媒体门不再读 `document.hasFocus()`（后台窗口会假阴性 ⇒ 视频永不播）。
+ *  v73 = 应用内壁纸选择器（`wallpaperBrowse` / `wallpaperApplyPath`）：列目录、点文件选中并校验，
+ *        不依赖原生面板（无辅助功能权限的机器上点选不可自动化）。 */
+export const IPC_PROTOCOL_VERSION = 73;
 
 /** 团队名单（v59）：成员档案是投影，`records` 是补丁条数（面板据此说「有几条历史」）。 */
 export interface TeamRosterPayload {
@@ -861,6 +863,16 @@ export interface AgentApi {
    *  `cairn-wallpaper://` 协议取媒体（白名单＝当前那一个文件）。
    *  `canceled` 是用户自己取消（不是错误）——不拿错误文案做判断。 */
   wallpaperPick(): Promise<{ ok: boolean; canceled?: boolean; kind?: "image" | "video"; path?: string; error?: string }>;
+  /** v73：应用内选择器——列目录（只列白名单扩展名，目录排前）。 */
+  wallpaperBrowse(dir?: string): Promise<{
+    ok: boolean;
+    dir?: string;
+    parent?: string | null;
+    entries?: { name: string; path: string; kind: "dir" | "file" }[];
+    error?: string;
+  }>;
+  /** v73：应用内选择器——按路径应用（跑同一条 validateWallpaperFile，渲染层拿不到没验过的路径）。 */
+  wallpaperApplyPath(path: string): Promise<{ ok: boolean; kind?: "image" | "video"; path?: string; error?: string }>;
   /** v2.16 用户反馈沉淀（赞/踩）：落 sidecar `feedback.jsonl`（append-only，不进事件流）。
    *  `rating:"none"` = 撤销（读时取最后一条生效）。未接线前界面只选中、不假提交。 */
   submitFeedback(req: { sessionId: string; eventId: number; rating: "up" | "down" | "none"; note?: string; workspace?: string; eventRef?: EventRef }): Promise<{ ok: boolean; error?: string }>;

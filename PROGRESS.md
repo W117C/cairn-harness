@@ -42691,3 +42691,46 @@ wallpaper-engine，逐行写「它怎么做 / 我们怎么做 / 证据在哪 / *
 - 活跃信号是**每窗口**的；一个 app 有多个窗口时，只有被推 `{active:true}` 的那个窗口播（这正是想要的）。
 - `wallpaper.native-pick` 仍 `partial`：原生面板的**点选**这一动作不可自动化（`osascript` UI 自动化超时、无辅助功能权限），
   已验证的是「调起」与「取消」，不冒充点选。
+
+## 2026-11-16 · 第 1275 页：应用内壁纸选择器（协议 v73）——真机冒烟 59/59，覆盖率 0.975（`pending`）
+
+**背景**：`wallpaper.native-pick` 的点选在无辅助功能权限的机器上**不可自动化**。这一页不是硬凑判据，
+而是补了一条**用户真的会用的第二条路**：应用内选择器（输目录 → 点文件）。
+
+### 一、为什么这不是「为了判据造功能」
+
+- 原生面板的缺点在真机上很具体：知道路径也得一层层翻；
+- 应用内选择器支持**直接输目录**（含面包屑上级），点一下就应用，且**可被真点击判据覆盖**。
+
+### 二、落点
+
+| 层 | 落点 |
+|---|---|
+| 主进程 | `wallpaper-browse.ts`：`browseDirectory`（白名单扩展名、目录排前、隐藏不列、读不到不列）、`breadcrumbOf` |
+| IPC | v73 `wallpaperBrowse(dir?)` / `wallpaperApplyPath(path)`（**同一条** `validateWallpaperFile`）；通道 170 → **172**（app 域 19 → 21） |
+| 渲染层 | `WallpaperBrowser`（目录输入 / 上一级 / 前往 / 列表）+ 设置行新增「浏览本机…」；选中后走与原生面板**同一条应用链**（校验 → 写设置 → 刷新层） |
+
+### 三、判卷
+
+- `tests/wallpaper-browse.test.ts` 3 条：目录排前 + 白名单 + 隐藏不列；非目录/空输入如实拒；面包屑到根、父目录为 null；
+- `wallpaper-browser.test.tsx` 2 条：`data-wallpaper-browser` / 行带 `title` 完整路径 / `data-dir` / 空目录明说；
+- 真机冒烟 +1：打开设置 → 点「浏览本机…」→ 输 `outputs/...` → 点 `01-wallpaper-on-dark….png`
+  ⇒ `settings.wallpaper.path` 正是它、`kind=image`。**59/59 全绿**。
+
+### 四、覆盖率
+
+| 量 | 前 | 后 |
+|---|---|---|
+| covered / partial / absent | 18 / 1 / 0（19 格） | **19 / 1 / 0（20 格）**（新增 `wallpaper.pick-in-app` covered） |
+| **覆盖分** | 0.974 | **0.975** |
+| 阈值 | 0.95 | 0.95 |
+
+`wallpaper.native-pick` **仍是 partial**：面板的调起与取消验过，点选这点动作在本机不可自动化——
+这条缺口现在由 `wallpaper.pick-in-app` 覆盖，不再是一个「用户没法选壁纸」的功能空洞。
+
+### 五、门禁读数（工作树）
+
+- 核心 `pnpm test:capped`：**696 文件 / 8281 条全绿**，exit 0。
+- 桌面 **412 文件 / 2655 条全绿**；四份密封证据重签全绿（渲染层改了）。
+- 真机冒烟 **59/59**。
+- `typecheck` 0 报错；`docs-check` 全绿。

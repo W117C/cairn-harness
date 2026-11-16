@@ -90,6 +90,12 @@ export const settingsStrings = {
     // 2026-11-14（设计规格 §3.4/§5.4）：壁纸层——用户自选本地图片/视频，
     // 铺在对话界面背后；三个滑杆（不透明度 / 压暗 / 玻璃透明度）。
     wallpaper: "壁纸",
+    wallpaperBrowse: "浏览本机…",
+    wallpaperBrowseDir: "目录路径",
+    wallpaperBrowseUp: "上一级",
+    wallpaperBrowseGo: "前往",
+    wallpaperBrowseEmpty: "没有可用的图片或视频",
+    wallpaperBrowseFailed: "这个目录读不到",
     wallpaperPick: "选择图片或视频",
     wallpaperClear: "清除",
     wallpaperNone: "未设置",
