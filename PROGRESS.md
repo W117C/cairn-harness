@@ -42955,3 +42955,34 @@ native-pick-accept {"verdict":"TIMEOUT","elapsedMs":60611,"canceled":null,"path"
 - 核心 `pnpm test:capped`：**698 文件 / 8291 条全绿**，exit 0
 - 桌面 **413 文件 / 2659 条全绿**；真机冒烟 **60/60**；四包密封证据有效（无渲染层改动）
 - `typecheck` 0 报错；`docs-check` 全绿
+
+## 2026-11-16 · 第 1281 页：成员 run 串行闸（协议 v75）——把「两个成员同时跑会互相看见键」这条真限制收了（`pending`）
+
+**背景**：台账里记过一条真限制：密钥注入写的是 `process.env`（进程级），两个成员同时跑 ⇒
+A 注入的键在 B 的窗口里也看得见 ⇒ 权限隔离破了。这一页用**串行闸**把它收掉。
+
+### 一、做法
+
+- `apps/desktop/src/main/member-run-lock.ts`：`createRunLock`（排队执行、记录等待毫秒、抛错也放锁、
+  `current()/pending()` 可观测）；进程内唯一那把 = `memberRunLock`；
+- `startMemberWithSecrets` 把「注入 + 起跑」整段包进锁里 ⇒ **注入窗口永不重叠**；
+- 回包增 `waitedMs`（排队多久）——串行闸不静默拖慢；协议 v74 → **v75**。
+
+### 二、判卷
+
+| 判据 | 断言 |
+|---|---|
+| `member-run-lock.test.ts`（3 条） | 两个同时进来 ⇒ 顺序 `a-start/a-end/b-start/b-end`（不交错）；抛错也放锁；`current/pending` 可观测 |
+| `team-dispatch.test.ts` +1 | 两个成员**并发**起跑：m1 只看见 `DSH_SECRET_K1`、m2 只看见 `DSH_SECRET_K2`，**互不串**；跑完 env 清空 |
+| 真机冒烟 | **60/60**（本轮无渲染层改动） |
+
+### 三、门禁读数（工作树）
+
+- 核心 `pnpm test:capped`：**698 文件 / 8291 条全绿**，exit 0
+- 桌面 **414 文件 / 2663 条全绿**；真机冒烟 **60/60**；四包密封证据有效
+- `typecheck` 0 报错；`docs-check` 全绿
+
+### 四、代价（写明，不藏）
+
+串行 ⇒ 两个成员不再并行，吞吐下降。这是**权限正确性**换来的：注入是进程级，
+真并行要等「按 run 分环境」。面板能用 `waitedMs` 把「在排队」说出来。

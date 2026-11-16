@@ -135,13 +135,14 @@
       "id": "bot.secrets-cards",
       "capability": "密钥按成员申请/授权",
       "reference": "卡片申请 + 按 bot 授权",
-      "ours": "申请卡（pending）→ 人审批（allow/deny 并置终态）→ 起跑前注入（只 allow、只注有值的，收束必撤）→ 输出脱敏（redactSecrets 覆盖注入值）",
+      "ours": "申请卡（pending）→ 人审批（allow/deny 并置终态）→ 起跑前注入（只 allow、只注有值的）→ **串行闸**（v75：一次一个成员，注入窗口不重叠，不串）→ 输出脱敏",
       "status": "covered",
       "evidence": [
-        "tests/team-secrets.test.ts",
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs",
+        "apps/desktop/tests/member-run-lock.test.ts",
         "apps/desktop/tests/team-dispatch.test.ts",
         "apps/desktop/tests/team-section.test.tsx",
-        "apps/desktop/scripts/wallpaper-csp-smoke.cjs"
+        "tests/team-secrets.test.ts"
       ]
     },
     {

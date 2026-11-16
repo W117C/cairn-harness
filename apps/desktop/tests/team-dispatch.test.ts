@@ -150,3 +150,38 @@ describe("起跑 + 密钥注入（密钥卡片第四跳接在真起跑路径上�
     expect(target.DSH_SECRET_K).toBeUndefined();
   });
 });
+
+describe("成员 run 串行闸：注入窗口不重叠", () => {
+  it("两个成员同时起跑 ⇒ 各自只看得见自己的键（不串）", async () => {
+    const target: Record<string, string | undefined> = {};
+    const source = { K1: "v1", K2: "v2" };
+    const grants = projectSecretGrants([
+      { at: 1, patch: grantPatch("m1", "K1", true) },
+      { at: 2, patch: grantPatch("m2", "K2", true) },
+    ]);
+    const seen: Record<string, Record<string, string | undefined>> = {};
+    const deps = (id: string) => ({
+      createSession: async () => `s-${id}`,
+      append: async () => {},
+      pathOf: () => `/tmp/${id}.jsonl`,
+      run: async () => {
+        seen[id] = { ...target };
+        await new Promise((r) => setTimeout(r, 5));
+        return { ok: true };
+      },
+      grants, envTarget: target, envSource: source,
+    });
+    const [a, b] = await Promise.all([
+      startMemberWithSecrets({ sessionsRoot: "/tmp/s", memberId: "m1", task: "a", mode: "default" }, deps("m1")),
+      startMemberWithSecrets({ sessionsRoot: "/tmp/s", memberId: "m2", task: "b", mode: "default" }, deps("m2")),
+    ]);
+    expect(seen.m1?.DSH_SECRET_K1).toBe("v1");
+    expect(seen.m1?.DSH_SECRET_K2).toBeUndefined(); // 不串
+    expect(seen.m2?.DSH_SECRET_K2).toBe("v2");
+    expect(seen.m2?.DSH_SECRET_K1).toBeUndefined();
+    expect(typeof b.waitedMs).toBe("number");
+    expect(target.DSH_SECRET_K1).toBeUndefined();
+    expect(target.DSH_SECRET_K2).toBeUndefined();
+    expect(a.ok && b.ok).toBe(true);
+  });
+});

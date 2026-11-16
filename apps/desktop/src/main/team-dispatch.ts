@@ -7,6 +7,7 @@
 //    「点一下就跑」要接 run 与审批链，属另一批（这条写在台账里，不装成已完成）。
 import { createEventLog, type AgentEvent } from "../../../../src/events";
 import { withMemberSecretEnv, type SecretGrantView } from "../../../../src/agent/team/secrets";
+import { memberRunLock, type RunLock } from "./member-run-lock";
 import { createSession, pathOf, readSessionEvents } from "../../../../src/main/sessions";
 
 /** 会话元数据里记成员归属的键（与 `session_meta_update.patch` 的自由键通道同形）。 */
@@ -133,6 +134,8 @@ export interface StartDepsWithSecrets {
   /** 注入目标 / 取值源（判卷时可替换；生产就是 process.env）。 */
   envTarget?: Record<string, string | undefined>;
   envSource?: Record<string, string | undefined>;
+  /** 串行闸（默认进程内唯一那把）：一次只跑一个成员，注入窗口不重叠。 */
+  lock?: RunLock;
 }
 
 export interface StartWithSecretsResult extends DispatchResult {
@@ -140,6 +143,8 @@ export interface StartWithSecretsResult extends DispatchResult {
   injected?: number;
   missingSecrets?: string[];
   deniedSecrets?: string[];
+  /** 排队等了多久（毫秒）——串行闸不静默拖慢。 */
+  waitedMs?: number;
 }
 
 /**
@@ -152,14 +157,19 @@ export async function startMemberWithSecrets(
 ): Promise<StartWithSecretsResult> {
   const target = deps.envTarget ?? process.env;
   const source = deps.envSource ?? process.env;
-  const wrapped = await withMemberSecretEnv(deps.grants, input.memberId, async (env) => {
-    const result = await startToMember(input, deps);
-    return {
-      ...result,
-      injected: Object.keys(env.env).length,
-      missingSecrets: env.missing,
-      deniedSecrets: env.denied,
-    };
-  }, target, source);
-  return wrapped.result;
+  const lock = deps.lock ?? memberRunLock;
+  // 串行闸：注入写的是进程环境，两个成员同时跑会互相看见对方的键（权限隔离破了）。
+  const locked = await lock.run(async () => {
+    const wrapped = await withMemberSecretEnv(deps.grants, input.memberId, async (env) => {
+      const result = await startToMember(input, deps);
+      return {
+        ...result,
+        injected: Object.keys(env.env).length,
+        missingSecrets: env.missing,
+        deniedSecrets: env.denied,
+      };
+    }, target, source);
+    return wrapped.result;
+  }, input.memberId);
+  return { ...locked.result, waitedMs: locked.waitedMs };
 }
