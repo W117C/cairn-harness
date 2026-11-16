@@ -213,20 +213,65 @@ export function GeneralSection(props: {
               >
                 {STR.general.wallpaperRotationAdd}
               </button>
-              <select
-                className="ss-select cw-rotation-mode"
-                aria-label={STR.general.wallpaperRotationMode}
-                value={props.settings.wallpaper.rotation.mode}
-                onChange={(e) => {
-                  props.onWallpaperRotation({
-                    ...props.settings.wallpaper.rotation,
-                    mode: e.target.value === "dayNight" ? "dayNight" : "interval",
-                  });
-                }}
-              >
-                <option value="interval">{STR.general.wallpaperRotationInterval}</option>
-                <option value="dayNight">{STR.general.wallpaperRotationDayNight}</option>
-              </select>
+              {/* 轮换依据：用三个按钮（分段控件）——比 select 更好点，也更好判 */}
+              <span className="cw-rotation-modes" role="group" aria-label={STR.general.wallpaperRotationMode}>
+                {([
+                  ["interval", STR.general.wallpaperRotationInterval],
+                  ["dayNight", STR.general.wallpaperRotationDayNight],
+                  ["weather", STR.general.wallpaperRotationWeather],
+                ] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={`mini-btn cw-rotation-mode${props.settings.wallpaper.rotation.mode === value ? " on" : ""}`}
+                    data-rotation-mode={value}
+                    aria-pressed={props.settings.wallpaper.rotation.mode === value}
+                    onClick={() => props.onWallpaperRotation({ ...props.settings.wallpaper.rotation, mode: value })}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </span>
+              {props.settings.wallpaper.rotation.mode === "weather" && (
+                <>
+                  <span className="cw-rotation-modes" role="group" aria-label={STR.general.wallpaperWeatherKind}>
+                    {([
+                      ["clear", STR.general.wallpaperWeatherClear],
+                      ["clouds", STR.general.wallpaperWeatherClouds],
+                      ["rain", STR.general.wallpaperWeatherRain],
+                      ["snow", STR.general.wallpaperWeatherSnow],
+                    ] as const).map(([kind, label]) => (
+                      <button
+                        key={kind}
+                        type="button"
+                        className={`mini-btn${props.settings.wallpaper.rotation.weather.kind === kind ? " on" : ""}`}
+                        data-weather-kind={kind}
+                        aria-pressed={props.settings.wallpaper.rotation.weather.kind === kind}
+                        onClick={() => props.onWallpaperRotation({
+                          ...props.settings.wallpaper.rotation,
+                          weather: { ...props.settings.wallpaper.rotation.weather, kind },
+                        })}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </span>
+                  <button
+                    type="button"
+                    className="mini-btn"
+                    data-wallpaper-weather-set="true"
+                    disabled={props.settings.wallpaper.path === null}
+                    onClick={() => {
+                      const path = props.settings.wallpaper.path;
+                      if (path === null) return;
+                      const r = props.settings.wallpaper.rotation;
+                      props.onWallpaperRotation({ ...r, weather: { ...r.weather, paths: { ...r.weather.paths, [r.weather.kind]: path } } });
+                    }}
+                  >
+                    {STR.general.wallpaperWeatherSet}
+                  </button>
+                </>
+              )}
               <button
                 type="button"
                 className="mini-btn"

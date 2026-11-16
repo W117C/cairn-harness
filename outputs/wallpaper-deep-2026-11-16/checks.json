@@ -361,6 +361,13 @@
     }
   },
   {
+    "name": "按天气：切到 weather + 选「雨」+ 设为该天气 ⇒ weather.paths.rain 落进设置",
+    "ok": false,
+    "detail": {
+      "step": "no-kind"
+    }
+  },
+  {
     "name": "多显示器：屏数与真 screen 一致，点「设为这块屏」传的是真 display.id",
     "ok": true,
     "detail": {
@@ -399,6 +406,10 @@
           "rotation": {
             "enabled": true,
             "mode": "interval",
+            "weather": {
+              "kind": "clear",
+              "paths": {}
+            },
             "latitude": 39.9042,
             "longitude": 116.4074,
             "dayPath": null,
@@ -662,7 +673,7 @@
     "ok": true,
     "detail": {
       "found": true,
-      "text": "壁纸选择图片或视频浏览本机…清除文件不可用定时轮换分钟把当前壁纸加入轮换固定间隔日出日落当前设为白天当前设为夜里昼/夜：0候选：0屏 1 · 回落全局把当前壁纸设为这块屏壁纸不透明度压暗玻璃透明度"
+      "text": "壁纸选择图片或视频浏览本机…清除文件不可用定时轮换分钟把当前壁纸加入轮换固定间隔日出日落按天气当前设为白天当前设为夜里昼/夜：0候选：0屏 1 · 回落全局把当前壁纸设为这块屏壁纸不透明度压暗玻璃透明度"
     }
   },
   {
@@ -703,7 +714,7 @@
         "rows": [
           "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
           "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-          "新来的成员 · mmwizuty7read-onlydefaultguidedautofull-accessteammemberproject移除",
+          "新来的成员 · mmwj02h2sread-onlydefaultguidedautofull-accessteammemberproject移除",
           "本轮发言秩序主持优先按名单轮排一轮",
           "当前会话的段—开新段",
           "权限（成员维）团队档 default · 无裁剪",
@@ -727,7 +738,7 @@
       "rows": [
         "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
         "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-        "新来的成员 · mmwizuty7read-onlydefaultguidedautofull-accessteammemberproject移除",
+        "新来的成员 · mmwj02h2sread-onlydefaultguidedautofull-accessteammemberproject移除",
         "本轮发言秩序主持优先按名单轮排一轮",
         "当前会话的段—开新段",
         "权限（成员维）团队档 default · 无裁剪",
@@ -747,7 +758,7 @@
         "rows": [
           "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
           "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-          "新来的成员 · mmwizuty7read-onlydefaultguidedautofull-accessteammemberproject移除",
+          "新来的成员 · mmwj02h2sread-onlydefaultguidedautofull-accessteammemberproject移除",
           "本轮发言秩序主持优先按名单轮排一轮",
           "排出来的秩序1. 示例成员　2. 新来的",
           "当前会话的段—开新段",
@@ -843,7 +854,7 @@
         "canceled": false,
         "filePaths": []
       },
-      "elapsedMs": 2096,
+      "elapsedMs": 2100,
       "options": {
         "title": "选择壁纸",
         "properties": [

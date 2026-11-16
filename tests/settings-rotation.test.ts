@@ -8,7 +8,8 @@ describe("轮换字段校验", () => {
   it("缺省 ⇒ 关、60 分钟、空候选", () => {
     const r = withWallpaper(undefined).wallpaper.rotation;
     expect(r).toEqual({
-      enabled: false, mode: "interval", latitude: 39.9042, longitude: 116.4074,
+      enabled: false, mode: "interval", weather: { kind: "clear", paths: {} },
+      latitude: 39.9042, longitude: 116.4074,
       dayPath: null, nightPath: null, everyMinutes: 60, paths: [], lastAt: 0,
     });
   });
@@ -36,6 +37,14 @@ describe("轮换字段校验", () => {
     expect(r.wallpaper.rotation.dayPath).toBe("/d.png");
     expect(r.wallpaper.rotation.nightPath).toBeNull();
     expect(withWallpaper({ mode: "whatever" }).wallpaper.rotation.mode).toBe("interval");
+  });
+
+  it("天气档：kind 只认四档，路径只收四档的键", () => {
+    const r = withWallpaper({ mode: "weather", weather: { kind: "rain", paths: { rain: "/r.png", hail: "/h.png" } } });
+    expect(r.wallpaper.rotation.mode).toBe("weather");
+    expect(r.wallpaper.rotation.weather.kind).toBe("rain");
+    expect(r.wallpaper.rotation.weather.paths).toEqual({ rain: "/r.png" });
+    expect(withWallpaper({ weather: { kind: "hail" } }).wallpaper.rotation.weather.kind).toBe("clear");
   });
 
   it("enabled 只认 true", () => {

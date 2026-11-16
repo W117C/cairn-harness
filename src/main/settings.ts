@@ -49,6 +49,7 @@ export type ProviderKind = "demo" | (typeof ENV_KEYED_PROVIDERS)[number] | (stri
  *  2026-11-14（设计规格 §3.4）：壁纸是**应用内**对话背后的一层，不是系统桌面壁纸。
  *  kind=none 时 path 必为 null——「有路径才有壁纸」是单一事实，两个字段不许各说各话。 */
 import { sanitizeDisplayMap, type DisplayMap } from "../wallpaper/displays";
+import { isWeatherKind, WEATHER_KINDS } from "../wallpaper/weather";
 
 export type WallpaperKind = "none" | "image" | "video";
 
@@ -72,8 +73,10 @@ export interface WallpaperSettings {
 
 export interface WallpaperRotation {
   enabled: boolean;
-  /** 轮换依据：`interval`（固定间隔）或 `dayNight`（日出日落）。 */
-  mode: "interval" | "dayNight";
+  /** 轮换依据：`interval`（固定间隔）/ `dayNight`（日出日落）/ `weather`（按天气，手动档）。 */
+  mode: "interval" | "dayNight" | "weather";
+  /** 天气模式：当前天气 + 每档一张（默认手动，**不联网**）。 */
+  weather: { kind: "clear" | "clouds" | "rain" | "snow"; paths: Partial<Record<"clear" | "clouds" | "rain" | "snow", string>> };
   /** 日出日落模式用：纬度/经度（度；东经/北纬为正）。 */
   latitude: number;
   longitude: number;
@@ -247,7 +250,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   wallpaper: {
     kind: "none", path: null, opacity: 1, scrim: 0.35, glassAlpha: 0.25, revision: 0,
     rotation: {
-      enabled: false, mode: "interval", latitude: 39.9042, longitude: 116.4074,
+      enabled: false, mode: "interval", weather: { kind: "clear", paths: {} },
+      latitude: 39.9042, longitude: 116.4074,
       dayPath: null, nightPath: null,
       everyMinutes: 60, paths: [], lastAt: 0,
     },
@@ -332,13 +336,21 @@ function validateRotation(raw: unknown, fallback: WallpaperRotation): WallpaperR
       .slice(0, ROTATION_MAX_PATHS)
     : [...fallback.paths];
   const lastAt = typeof r.lastAt === "number" && Number.isFinite(r.lastAt) && r.lastAt >= 0 ? r.lastAt : fallback.lastAt;
-  const mode = r.mode === "dayNight" ? "dayNight" : r.mode === "interval" ? "interval" : fallback.mode;
+  const mode = r.mode === "dayNight" ? "dayNight" : r.mode === "weather" ? "weather"
+    : r.mode === "interval" ? "interval" : fallback.mode;
   const latitude = clampCoord(r.latitude, -90, 90, fallback.latitude);
   const longitude = clampCoord(r.longitude, -180, 180, fallback.longitude);
   const pick = (v: unknown, fb: string | null): string | null =>
     typeof v === "string" && v.trim() !== "" && v.length <= 4096 ? v : fb;
+  const rawWeather = (r.weather ?? {}) as { kind?: unknown; paths?: Record<string, unknown> };
+  const weatherKind = isWeatherKind(rawWeather.kind) ? rawWeather.kind : "clear";
+  const weatherPaths: Partial<Record<"clear" | "clouds" | "rain" | "snow", string>> = {};
+  for (const k of WEATHER_KINDS) {
+    const v = rawWeather.paths?.[k];
+    if (typeof v === "string" && v.trim() !== "" && v.length <= 4096) weatherPaths[k] = v;
+  }
   return {
-    enabled: r.enabled === true, mode, latitude, longitude,
+    enabled: r.enabled === true, mode, weather: { kind: weatherKind, paths: weatherPaths }, latitude, longitude,
     dayPath: pick(r.dayPath, fallback.dayPath),
     nightPath: pick(r.nightPath, fallback.nightPath),
     everyMinutes: minutes, paths, lastAt,

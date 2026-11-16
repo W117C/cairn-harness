@@ -3,6 +3,7 @@
 // 决定在核心纯函数里（`decideRotation`），这里只负责：读设置、探测文件、写回、报错。
 // 原则：**不静默**——跳过读不到的候选要在返回值里点名；写失败要交给 onError。
 import { decideDayNight, decideRotation, type RotationDecision } from "../../../../src/wallpaper/rotation";
+import { decideWeather } from "../../../../src/wallpaper/weather";
 import type { WallpaperSettings } from "../../../../src/main/settings";
 import { wallpaperKindOf } from "./wallpaper";
 
@@ -37,6 +38,22 @@ export function installWallpaperRotation(input: InstallRotationInput): RotationH
     try {
       const wallpaper = await input.read();
       if (wallpaper === null) return { rotate: false, path: null, reason: "读不到设置", missing: [], applied: false };
+      // 天气模式（手动档，不联网）：当前天气决定用哪张；已经是那张就不写。
+      if (wallpaper.rotation.enabled && wallpaper.rotation.mode === "weather") {
+        const w = decideWeather({
+          kind: wallpaper.rotation.weather.kind,
+          paths: wallpaper.rotation.weather.paths,
+          ...(input.exists === undefined ? {} : { exists: input.exists }),
+        });
+        if (w.path === null || w.path === wallpaper.path) {
+          return { rotate: false, path: null, reason: w.reason, missing: [], applied: false };
+        }
+        const kind = wallpaperKindOf(w.path);
+        if (kind === null) return { rotate: false, path: null, reason: "选中的那张不是图片/视频", missing: [], applied: false };
+        await input.apply({ kind, path: w.path });
+        return { rotate: true, path: w.path, reason: w.reason, missing: [], applied: true };
+      }
+
       // 日出日落模式：白天/夜里各一张，按当前时刻选；已经是那张就不写。
       if (wallpaper.rotation.enabled && wallpaper.rotation.mode === "dayNight") {
         const dn = decideDayNight({

@@ -429,6 +429,36 @@ async function main() {
       && String(rotationFlow.countText).includes("1"),
     rotationFlow);
 
+  // ④d 按天气（手动档，不联网）：切到 weather 模式、选「雨」、设为该天气 ⇒ 设置里落 weather.paths.rain。
+  const weatherFlow = await js(`(async () => {
+    const box = document.querySelector('[data-wallpaper-rotation="true"]');
+    if (!box) return { step: "no-box" };
+    const modeBtn = box.querySelector('[data-rotation-mode="weather"]');
+    if (!modeBtn) return { step: "no-mode" };
+    const setSelect = (el, value) => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, "value").set;
+      setter.call(el, value);
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+    modeBtn.click();
+    await new Promise((r) => setTimeout(r, 350));
+    const kindBtn = box.querySelector('[data-weather-kind="rain"]');
+    if (!kindBtn) return { step: "no-kind" };
+    kindBtn.click();
+    await new Promise((r) => setTimeout(r, 350));
+    const setBtn = box.querySelector('[data-wallpaper-weather-set="true"]');
+    if (!setBtn) return { step: "no-set" };
+    setBtn.click();
+    await new Promise((r) => setTimeout(r, 400));
+    const s = await window.agent.getSettings();
+    return { step: "done", mode: s.wallpaper.rotation.mode, kind: s.wallpaper.rotation.weather.kind, rain: s.wallpaper.rotation.weather.paths.rain ?? null };
+  })()`);
+  readings.weather = weatherFlow;
+  check("按天气：切到 weather + 选「雨」+ 设为该天气 ⇒ weather.paths.rain 落进设置",
+    weatherFlow.step === "done" && weatherFlow.mode === "weather" && weatherFlow.kind === "rain"
+      && typeof weatherFlow.rain === "string",
+    weatherFlow);
+
   // ④c 多显示器（v77）：屏数来自真 screen；点「设为这块屏」把真 display.id 传下去。
   const displayFlow = await js(`(async () => {
     await new Promise((r) => setTimeout(r, 300));

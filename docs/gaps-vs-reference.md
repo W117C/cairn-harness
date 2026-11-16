@@ -15,7 +15,8 @@
 | 多显示器分别设不同壁纸 | 系统级能力（macOS 设置） | 支持 | 未证实 | **已做**（2026-11-16；单屏机器上验证 1 屏路径，多屏真机未验） | `settings.wallpaper.perDisplay` + `src/wallpaper/displays.ts`（专属 > 回落 > 无、孤儿只报告）+ 冒烟用真 `screen.getAllDisplays()` 判屏数与 id |
 | 定时切换（按固定间隔轮换） | Plash 等桌面壁纸类产品 | 未知 | 未证实 | **已做**（2026-11-16） | 设置里「定时轮换」+ 主进程每 30s 判定：`src/wallpaper/rotation.ts`、`apps/desktop/src/main/wallpaper-rotation.ts`、`tests/wallpaper-rotation.test.ts` |
 | 日出日落切换（按经纬度 + 日期算昼/夜） | 同类产品 | 未知 | 未证实 | **已做**（2026-11-16，近似解） | `src/wallpaper/solar.ts`（±5 分钟量级）+ `decideDayNight`；`tests/wallpaper-solar.test.ts`（北京夏至日出差 ≤12 分钟、极昼/极夜不给假时间） |
-| 按天气切换 | 同类产品 | 未知 | 未证实 | **未做** | 没有天气数据源（无网络请求、无 API key） |
+| 按天气切换（手动档：晴/云/雨/雪各一张） | 同类产品 | 未知 | 未证实 | **已做**（2026-11-16，手动档） | `src/wallpaper/weather.ts` + `tests/wallpaper-weather.test.ts`；冒烟：切按天气 + 选雨 + 设为该天气 ⇒ `weather.paths.rain` 落设置 |
+| 自动天气源（联网取当前天气） | 同类产品 | 支持 | 未证实 | **未做**（默认零外联） | 只给了 `weatherFromCode` 映射，未接任何 HTTP 源 |
 | 三维场景壁纸 | Wallpaper Engine（Windows） | 支持 | 未证实 | **明确不做** | 对表 `wallpaper.scene-engine` 记 `out` 并写理由 |
 | 原生面板里「点中一个文件」的自动化验收 | — | — | 不适用 | **判不到** | 本机 TCC 拦键盘自动化（`frontmost=false`、AX `-1719`）；见 `docs/native-pick-acceptance.md` |
 
