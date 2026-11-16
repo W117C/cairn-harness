@@ -42865,3 +42865,46 @@ native-pick-accept {"verdict":"TIMEOUT","elapsedMs":60611,"canceled":null,"path"
 - 核心 `pnpm test:capped`：**697 文件 / 8284 条全绿**，exit 0
 - 桌面 413 文件 / 2658 条全绿；四份密封证据仍有效（本轮无渲染层改动）
 - 真机冒烟 **60/60**；`typecheck` 0 报错；`docs-check` 全绿
+
+## 2026-11-16 · 第 1279 页：「行业最高」补上**外部阈值**（WCAG / CSP / Electron / OWASP），不是自定六条（`pending`）
+
+### 一、为什么这页必须存在
+
+上一页只立了六条**我方**标准，那是「自证」；要证明「行业最高」，阈值得来自**外部**。
+所以补一张表：`docs/industry-standard.md` 的「按公开标准对照」——每条写清哪份标准的哪一条、阈值、我方真机现读、证据文件。
+
+| 标准 · 条款 | 阈值（外部） | 我方现读 | 证据 |
+|---|---|---|---|
+| WCAG 2.2 SC 1.4.3 Contrast Minimum | 正文 ≥ 4.5:1 | 暗/亮两主题均按最差格现算 ≥ 4.5 | `apps/desktop/scripts/wallpaper-csp-smoke.cjs` |
+| WCAG 2.2 SC 2.1.1 Keyboard | 全部功能可键盘完成 | 选择器：目录输入可键入、Enter 前往、列表项为 `<button>` 可 Tab | `wallpaper-browser.test.tsx` + `WallpaperBrowser.tsx` |
+| CSP Level 3 | `script-src` 不许 `unsafe-inline` | 反证臂：摘 scheme 即加载失败；CSP 无 `unsafe-inline` | 冒烟 |
+| Electron 安全清单 | contextIsolation / 无 nodeIntegration / 沙箱 都为是 | preload 只暴露 `window.agent` | `apps/desktop/src/preload/index.ts` |
+| OWASP Top 10 2021 A09 | 敏感值不得进日志 | 注入值出现在输出即打码（四跳串联） | `tests/team-secrets.test.ts` |
+
+### 二、判据（写口号会红）
+
+`tests/industry-standard.test.ts` 现 6 条，新增 3 条钉这张外部表：
+- 至少四条外部标准，条款要写清（`SC n` / `CSP` / `Electron` / `OWASP`）；
+- **数值阈值的行**：必须能从现读里读出一个 ≥ 阈值的数字（读不出就说明这条没真读）；
+- 每条外部标准的证据文件必须真的存在。
+
+### 三、我做不了的那部分，讲清楚
+
+「比某某产品强」需要**对手的可复现读数**（同机、同素材、同判据）。这轮试过两条路都不成：
+- WebSearch 返回的是无关结果（.ace 压缩格式），不可用；
+- 产品页是 JS 重渲染，WebFetch 抓到的是 CSS 噪声。
+
+所以我不写「比 Plash / Wallpaper Engine 强」这种没有读数的句子——那不是证据，是广告。
+能负责的说法只有：**我们的每条主张都能在这台机器上被重跑出来，且阈值取自公开标准**。
+
+### 四、人工验收（本页又试了两次，如实）
+
+- 直接对本机 `Electron` 进程发 ⌘⇧G + 路径 + 回车：`osascript` 返回 0，但**面板没收到**；
+- 探测 `frontmost` = `false`、`window 1 of process "Electron"` 报 `-1719`（无辅助功能授权）⇒ 键盘自动化这条路**在本机被权限掐死**。
+- 两次 60s 运行都是 `TIMEOUT`，读数在 `outputs/native-pick-accept/native-pick-accept.json`。
+
+### 五、门禁读数（工作树）
+
+- 核心 `pnpm test:capped`：**697 文件 / 8287 条全绿**，exit 0
+- 桌面 413 文件 / 2658 条全绿；四包密封证据仍有效（本轮无渲染层改动）
+- 真机冒烟 **60/60**；`typecheck` 0 报错；`docs-check` 全绿

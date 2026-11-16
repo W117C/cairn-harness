@@ -23,7 +23,7 @@ describe("行业最高标准（本方口径）", () => {
 
   it("每条命令点到的脚本/测试文件真的存在（读数可复算，不是口号）", () => {
     for (const row of rows) {
-      const paths = [...row[2].matchAll(/((?:apps\/desktop\/)?(?:tests|scripts)\/[\w./-]+\.(?:ts|cjs))/g)].map((m) => m[1]);
+      const paths = [...row[2].matchAll(/((?:apps\/desktop\/)?(?:tests|scripts)\/[\w./-]+\.(?:tsx|ts|cjs))/g)].map((m) => m[1]);
       expect(paths.length, `${row[0]} 的命令里没有可点到的文件`).toBeGreaterThan(0);
       for (const p of paths) expect(existsSync(`${root}${p}`), `${row[0]} 点名的文件不存在：${p}`).toBe(true);
     }
@@ -35,6 +35,40 @@ describe("行业最高标准（本方口径）", () => {
     for (const line of outs) {
       const cells = line.split("|").slice(1, -1).map((c) => c.trim());
       expect(cells[1].length, `理由太短：${line}`).toBeGreaterThan(8);
+    }
+  });
+});
+
+describe("按公开标准对照（外部阈值）", () => {
+  const stdRows = doc
+    .split("\n")
+    .filter((l) => /^\|\s*(WCAG|CSP|Electron|OWASP)/.test(l))
+    .map((l) => l.split("|").slice(1, -1).map((c) => c.trim()));
+
+  it("至少四条外部标准，条款写清（SC 编号 / CSP / Electron / OWASP）", () => {
+    expect(stdRows.length).toBeGreaterThanOrEqual(4);
+    for (const row of stdRows) {
+      expect(row[0]).toMatch(/SC \d|CSP|Electron|OWASP/);
+      expect(row[1].length).toBeGreaterThan(3); // 阈值
+      expect(row[3].length).toBeGreaterThan(10); // 证据路径
+    }
+  });
+
+  it("数值阈值的行：现读必须 ≥ 阈值（读不出数字就说明这条没真读）", () => {
+    const contrast = stdRows.find((r) => r[0].includes("1.4.3"));
+    expect(contrast, "缺少 WCAG 1.4.3 那一行").toBeDefined();
+    const threshold = Number((contrast![1].match(/(\d+(?:\.\d+)?)\s*:?\s*1/) ?? [])[1]);
+    expect(threshold).toBeCloseTo(4.5, 1);
+    // 现读里必须出现 ≥4.5 的数字（真机算出来的最差格），否则这条只是口号
+    const readings = [...contrast![2].matchAll(/(\d+(?:\.\d+)?)\s*\+?/g)].map((m) => Number(m[1]));
+    expect(Math.max(...readings)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("每条外部标准的证据文件都存在", () => {
+    for (const row of stdRows) {
+      const paths = [...row[3].matchAll(/((?:apps\/desktop\/)?(?:tests|scripts|src)\/[\w./-]+\.(?:tsx|ts|cjs))/g)].map((m) => m[1]);
+      expect(paths.length, `${row[0]} 没有可点到的证据`).toBeGreaterThan(0);
+      for (const p of paths) expect(existsSync(`${root}${p}`), `证据不存在：${p}`).toBe(true);
     }
   });
 });

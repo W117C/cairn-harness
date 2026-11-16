@@ -28,6 +28,19 @@ pnpm test:capped
 npx tsx scripts/docs-check.ts
 ```
 
+## 按公开标准对照（阈值来自外部，不是我方自定）
+
+比较级需要对手的可复现读数（同机、同素材、同判据），离线拿不到；**公开标准**是可引用的外部阈值。
+下表每条都写清「哪份标准的哪一条」「阈值」「我方真机现读」「证据文件」。
+
+| 标准 · 条款 | 阈值（外部） | 我方现读 | 证据 |
+|---|---|---|---|
+| WCAG 2.2 SC 1.4.3 Contrast Minimum | 正文对比度 ≥ 4.5:1 | 暗色 4.5+、亮色 4.5+（真机现算，按最差格） | `apps/desktop/scripts/wallpaper-csp-smoke.cjs` |
+| WCAG 2.2 SC 2.1.1 Keyboard | 全部功能可用键盘完成 | 选择器：目录输入可键入、Enter 前往、列表项是 `<button>` 可 Tab 到 | `apps/desktop/tests/wallpaper-browser.test.tsx` `apps/desktop/src/renderer/components/settings/WallpaperBrowser.tsx` |
+| CSP Level 3（`script-src` 不许 `unsafe-inline`） | 内联脚本必须被拦 | 反证臂：摘 scheme 即加载失败；CSP 里无 `unsafe-inline` | `apps/desktop/scripts/wallpaper-csp-smoke.cjs` |
+| Electron 安全清单（contextIsolation / 无 nodeIntegration / 沙箱） | 三项都为「是」 | preload 只暴露 `window.agent`，渲染层拿不到 node | `apps/desktop/src/preload/index.ts` |
+| OWASP Top 10 2021 A09（安全日志与监控） | 敏感值不得进日志 | 注入值出现在输出即被打码（四跳串联判据） | `tests/team-secrets.test.ts` |
+
 ## 明确不做（out，带理由）
 
 | 能力 | 为什么不做/判不了 |
