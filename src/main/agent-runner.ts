@@ -9,6 +9,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runLoop } from "../agent/loop";
+import { openSegmentAfterCompaction } from "./segments-auto";
 // 断面补落（finally 那一格）要用同一枚哨兵 id 与同一份判据——不重抄字符串、不重写谓词。
 import { DELIVERY_GUARD_CALL_ID, describePhantomDelivery, eventsForCurrentRun, findPhantomDelivery } from "../agent/delivery-guard";
 import { createImageChannel } from "../agent/image-channel";
@@ -1604,6 +1605,9 @@ export async function runAgent(opts: RunOptions): Promise<AgentEvent[]> {
     const tools = opts.quality === true
       ? qualityToolTable(QUALITY_MINIMAL_TOOLS)
       : toolSets.tools;
+    // 段的自动触发（spec §2 的 compaction 理由）：日志停在一次压缩上 ⇒ 这一轮开新段。
+    // 放在 runLoop 之前、「compaction 必须是最后一条」那条纪律之外；幂等由最后一条事件判定。
+    await openSegmentAfterCompaction(opts.logPath).catch(() => null);
     await withPostRunReadingsOnThrow(
       async () =>
         runLoop({

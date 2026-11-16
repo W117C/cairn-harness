@@ -20,8 +20,9 @@
 | 发言权的调用方 | 面板「排一轮」调 `teamRoundPlan`，秩序由核心纯函数算 | 回包批次渲染成「1. 示例成员　2. 新来的」 |
 | 段的写入点 | 面板「开新段」调 `sessionSegmentOpen` | 回包序数 `2` 直接画在该行 |
 | 真 `powerMonitor` | 装配挂在**真对象**上，`emit` 走真实监听链 → 真 IPC → 渲染层 | suspend ⇒ paused；resume ⇒ 续播；listener 数 ≥1 |
+| 团队会话窗格（第 10 个 pane） | `#pane=team` 直接打开；**打开即自动算一轮秩序** | 窗格出现、名单 1 行、`1. 示例成员`、`__cairnRoundPlans` 调用 1 次 |
 
-合计 **47/47** 条真机检查全绿（`checks.json` / `readings.json` 是原始读数）。
+合计 **48/48** 条真机检查全绿（`checks.json` / `readings.json` 是原始读数）。
 
 ## 二、这批抓到并修掉的一个真缺陷
 

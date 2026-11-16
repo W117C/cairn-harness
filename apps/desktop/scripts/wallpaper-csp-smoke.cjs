@@ -46,6 +46,17 @@ const check = (name, ok, detail) => {
   console.log(`${ok === true ? "PASS" : "FAIL"} ${name} ${JSON.stringify(detail ?? null)}`);
 };
 const pause = (ms = 160) => new Promise((r) => setTimeout(r, ms));
+/** 轮询到条件成立（窗口聚焦这类 OS 级状态有延迟，断言不许只看一拍）。 */
+const waitFor = async (probe, ms = 6000, stepMs = 200) => {
+  const deadline = Date.now() + ms;
+  let last = null;
+  while (Date.now() < deadline) {
+    last = await probe();
+    if (last === true) return true;
+    await pause(stepMs);
+  }
+  return last === true;
+};
 const readings = {};
 
 // 测试壁纸：纯 Node 生成的对角渐变 PNG（不依赖 Python / ffmpeg）。一张图里同时含亮端与暗端。
@@ -136,7 +147,9 @@ async function makeWindow(indexPath, errors, opts = {}) {
   win.webContents.on("console-message", (d) => {
     if (d.level === "error") errors.push(d.message);
   });
-  await win.loadFile(indexPath);
+  // hash 必须走 loadFile 的选项：直接拼在路径里会被编码成 `%23`，报 ERR_FILE_NOT_FOUND。
+  if (opts.hash !== undefined) await win.loadFile(indexPath, { hash: opts.hash });
+  else await win.loadFile(indexPath);
   return win;
 }
 
@@ -514,24 +527,26 @@ async function main() {
     videoPlaying.has === true && videoPlaying.ready >= 2 && videoPlaying.paused === false && videoPlaying.t > 0,
     videoPlaying);
   await shot(videoWin, "07-video-wallpaper-playing-1440x900");
+  // 失焦前先确认窗口真的拿到了 OS 焦点（否则「失焦暂停」会退化成「本来就没焦点」）。
+  await waitFor(async () => (await videoState()).focused === true);
   videoWin.blur();
-  await pause(800);
+  await waitFor(async () => (await videoState()).paused === true);
   const videoBlurred = await videoState();
   readings.videoBlurred = videoBlurred;
   check("失焦即暂停（window blur ⇒ video.paused === true，判据 3）",
     videoBlurred.has === true && videoBlurred.paused === true, videoBlurred);
   videoWin.focus();
-  let videoResumed = { has: false };
-  for (let i = 0; i < 30; i++) {
-    videoResumed = await videoState();
-    if (videoResumed.has === true && videoResumed.paused === false) break;
-    await pause(200);
-  }
+  await waitFor(async () => {
+    const s = await videoState();
+    return s.has === true && s.focused === true && s.paused === false;
+  });
+  const videoResumed = await videoState();
   readings.videoResumed = videoResumed;
   check("回焦即续播（判据 3 的反向臂：不是一次性停掉）",
     videoResumed.has === true && videoResumed.paused === false, videoResumed);
   // ⑨b v59：系统级暂停（锁屏）——窗口既没失焦也没隐藏，只有主进程推得动这一格。
   // 这里走的是真 preload 订阅 + 真推送名（`__cairnPushWallpaperSuspend` 由画廊 preload 收集订阅后转发）。
+  await waitFor(async () => (await videoState()).focused === true);
   await vjs(`window.__cairnPushWallpaperSuspend({ paused: true, reason: "lock-screen" })`);
   await pause(600);
   const locked = await videoState();
@@ -539,12 +554,11 @@ async function main() {
   check("锁屏推送 ⇒ 暂停（窗口仍聚焦、仍可见：这一格只有 v59 的系统级信号能抓到）",
     locked.has === true && locked.paused === true && locked.focused === true && locked.hidden === false, locked);
   await vjs(`window.__cairnPushWallpaperSuspend({ paused: false, reason: "unlock-screen" })`);
-  let videoUnlocked = { has: false };
-  for (let i = 0; i < 30; i++) {
-    videoUnlocked = await videoState();
-    if (videoUnlocked.has === true && videoUnlocked.paused === false) break;
-    await pause(200);
-  }
+  await waitFor(async () => {
+    const s = await videoState();
+    return s.has === true && s.paused === false;
+  });
+  const videoUnlocked = await videoState();
   readings.videoUnlocked = videoUnlocked;
   check("解锁推送 ⇒ 续播（系统级暂停不是单向门）",
     videoUnlocked.has === true && videoUnlocked.paused === false, videoUnlocked);
@@ -773,6 +787,31 @@ async function main() {
     readings.realPowerMonitor);
   suspendWin.destroy();
   currentPath = wallpaperPath;
+
+  // ⑮ 团队会话窗格（第 10 个 pane kind）：用**弹窗路由** `#pane=team` 直接打开它，
+  // 判的是「登记表认得这个种类 + 窗格渲染出名单 + 打开即有一轮秩序（自动调用发言权）」。
+  const paneWin = await makeWindow(join(distDir, "index.html"), [], { hash: "pane=team" });
+  const pjs = jsOf(paneWin);
+  for (let i = 0; i < 100; i++) { if (await pjs(`!!document.querySelector('[data-team-pane=\"true\"]')`)) break; await pause(); }
+  await pause(700);
+  const paneState = await pjs(`(() => {
+    const pane = document.querySelector('[data-team-pane="true"]');
+    if (!pane) return { found: false };
+    return {
+      found: true,
+      rows: pane.querySelectorAll(".team-pane-row").length,
+      text: (pane.textContent || "").slice(0, 400),
+      plan: (pane.querySelector(".team-pane-plan") || {}).textContent || "",
+    };
+  })()`);
+  const roundCalls = await pjs(`window.__cairnRoundPlans ? window.__cairnRoundPlans().length : 0`);
+  readings.teamPane = { paneState, roundCalls };
+  check("团队窗格（#pane=team）真的渲染出名单，且打开即自动算了一轮秩序",
+    paneState.found === true && paneState.rows >= 1 && roundCalls >= 1
+      && String(paneState.text).includes("示例成员") && /1\./.test(String(paneState.plan)),
+    readings.teamPane);
+  await shot(paneWin, "12-team-pane-1440x900");
+  paneWin.destroy();
 
   writeFileSync(join(out, "checks.json"), JSON.stringify(checks, null, 2));
   writeFileSync(join(out, "readings.json"), JSON.stringify(readings, null, 2));

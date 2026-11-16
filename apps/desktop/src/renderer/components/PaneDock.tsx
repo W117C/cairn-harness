@@ -28,6 +28,7 @@ import { pickedElementLabel } from "../picked-element";
 import { WORKBENCH_PANES } from "../pane-registry";
 import { SessionPreviewPane,type PreviewSendOutcome } from "./SessionPreviewPane";
 import { SidechatPane } from "./SidechatPane";
+import { TeamPane } from "../panes/TeamPane";
 import { OrchestrationPane } from "./OrchestrationPane";
 import { PathMenu } from "./PathMenu";
 import { ChangesPane, type ChangesFocus } from "./ChangesPane";
@@ -960,6 +961,7 @@ export function PaneDock(props: {
                 />
               )}
               {kind === "sidechat" && <SidechatPane sessionId={props.sessionId ?? null} workspace={props.workspace ?? null} />}
+              {kind === "team" && <TeamPane />}
               {kind === "plugins" && <PluginSurface workspace={props.workspace ?? null} />}
               {kind === "session" && (
                 <SessionPreviewPane

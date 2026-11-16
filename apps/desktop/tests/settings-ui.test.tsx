@@ -62,13 +62,13 @@ describe("批 6：设置页公共组件（SSR 结构）", () => {
     expect(h).toContain('<h2 class="ss-sec-title">外观</h2>');
   });
 
-  it("快捷键速查：完整分组双列表（36 行）；窄窗一列", () => {
+  it("快捷键速查：完整分组双列表（37 行）；窄窗一列", () => {
     const h = renderToStaticMarkup(<ShortcutsSection />);
     expect(h).toContain('class="kx-list"');
     expect(h).toContain('<kbd class="kx-keys">⌘N</kbd>');
     // 2026-11-02：13 条精简版升级为与 ⌘/ 弹层同源的完整分组表（会话 13 / 窗格 10 / 视图 13）。
     expect(h).toContain('class="kx-what">新会话（回到主页）');
-    expect((h.match(/class="kx-row"/g) ?? []).length).toBe(36);
+    expect((h.match(/class="kx-row"/g) ?? []).length).toBe(37);
     expect(h).toContain('class="ss-sec-title kx-group-title">会话');
     expect(h).toContain('class="ss-sec-title kx-group-title">窗格');
     expect(h).toContain('class="ss-sec-title kx-group-title">视图与输入');
