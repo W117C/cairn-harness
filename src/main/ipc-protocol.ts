@@ -164,8 +164,9 @@ export type { SearchProvider } from "../tools/web-search";
  *  v72 = 窗口活跃推送（`onWallpaperActive`）：主进程按真窗口 focus/blur 推 `{active}`，
  *        渲染层的媒体门不再读 `document.hasFocus()`（后台窗口会假阴性 ⇒ 视频永不播）。
  *  v73 = 应用内壁纸选择器（`wallpaperBrowse` / `wallpaperApplyPath`）：列目录、点文件选中并校验，
- *        不依赖原生面板（无辅助功能权限的机器上点选不可自动化）。 */
-export const IPC_PROTOCOL_VERSION = 73;
+ *        不依赖原生面板（无辅助功能权限的机器上点选不可自动化）。
+ *  v74 = 群轮次带上下文：轮到谁开跑时，把群里最近几条编进任务书（同一批看得见本批之前的话）。 */
+export const IPC_PROTOCOL_VERSION = 74;
 
 /** 团队名单（v59）：成员档案是投影，`records` 是补丁条数（面板据此说「有几条历史」）。 */
 export interface TeamRosterPayload {

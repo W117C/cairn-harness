@@ -93,3 +93,19 @@ describe("群里这一轮要干什么", () => {
     expect(groupTaskOf([{ type: "user_message", content: "   " }] as never[])).toBeNull();
   });
 });
+
+describe("群轮次带上下文（v74）", () => {
+  it("任务书里带最近说过的话，自己的标（你）", async () => {
+    const { composeRoundTask } = await import("../../../src/agent/team/round-context");
+    const out = composeRoundTask({
+      task: "说说你的结论",
+      speaker: "m1",
+      items: [
+        { seq: 1, kind: "user", speaker: "user", round: 1, text: "一起看下", at: null },
+        { seq: 2, kind: "agent", speaker: "m2", round: 1, text: "我觉得先做 A", at: null },
+      ],
+    });
+    expect(out).toContain("- user：一起看下");
+    expect(out).toContain("- m2：我觉得先做 A");
+  });
+});

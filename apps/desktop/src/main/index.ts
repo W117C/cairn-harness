@@ -18,6 +18,7 @@ import { createTeamGroup } from "./team-group";
 import { advanceGroupRound, groupTaskOf } from "./team-round";
 import { grantPatch, projectSecretGrants, requestPatch } from "../../../../src/agent/team/secrets";
 import { projectGroupStream } from "../../../../src/agent/team/stream";
+import { composeRoundTask } from "../../../../src/agent/team/round-context";
 import { memoryPanelFor } from "./memory-panel";
 import { globalMemoryDir, projectMemoryDir } from "../../../../src/agent/memory/store";
 import { memberMemoryDir } from "../../../../src/agent/memory/scope";
@@ -900,8 +901,14 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     const events = await readSessionEvents(root, id).catch(() => []);
     const task = groupTaskOf(events);
     if (task === null) return { ...advanced, error: "群里还没有一句话，没得派" };
+    // v74：把群里**最近说过的话**编进任务书——同一批成员至少看得见本批之前的内容。
+    const withContext = composeRoundTask({
+      task,
+      items: projectGroupStream(events).items,
+      speaker: advanced.speaker,
+    });
     const started = await startToMember(
-      { sessionsRoot: root, memberId: advanced.speaker, task, mode: settings.mode },
+      { sessionsRoot: root, memberId: advanced.speaker, task: withContext, mode: settings.mode },
       defaultStartDeps(async (req) => await (wired.run as (x: unknown) => Promise<{ ok?: boolean; error?: string }>)(req)),
     );
     if (started.ok !== true) return { ...advanced, error: started.error ?? "开跑失败" };
