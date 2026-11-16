@@ -4,9 +4,9 @@
 // （vendored 主题注释写明的层级）。不吃交互（pointer-events: none）。
 //
 // 生命周期：失焦 / 不可见即暂停视频（省电）；系统休眠时机器本就不跑，不另设通道。
-// 降级：媒体 404 / 解码失败 ⇒ 撤层（只撤媒体，玻璃面留着——没有壁纸时它们回落实体色）。
+// 降级：媒体 404 / 解码失败 ⇒ 撤层并记「文件不可用」（只撤媒体，玻璃面留着——没有壁纸时它们回落实体色）。
 import { useEffect, useRef, useState } from "react";
-import { dropWallpaper, shouldPauseMedia, type WallpaperView } from "../state/wallpaper";
+import { markWallpaperUnavailable, shouldPauseMedia, type WallpaperView } from "../state/wallpaper";
 
 export function WallpaperLayer(props: { view: WallpaperView }): React.JSX.Element | null {
   const { view } = props;
@@ -47,10 +47,10 @@ export function WallpaperLayer(props: { view: WallpaperView }): React.JSX.Elemen
             loop
             playsInline
             autoPlay
-            onError={dropWallpaper}
+            onError={markWallpaperUnavailable}
           />
         )
-        : <img className="cw-media" src={view.url} alt="" onError={dropWallpaper} />}
+        : <img className="cw-media" src={view.url} alt="" onError={markWallpaperUnavailable} />}
       <div className="cw-scrim" />
     </div>
   );

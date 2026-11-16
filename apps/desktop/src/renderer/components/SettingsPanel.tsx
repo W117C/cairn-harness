@@ -31,7 +31,7 @@ import { menuNavIndex } from "./popover-keys";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { isCompositionEnter } from "../ime";
 import { readOrError } from "../read-result";
-import { refreshWallpaper } from "../state/wallpaper";
+import { refreshWallpaper, useWallpaperFailed } from "../state/wallpaper";
 import { RenderErrorBoundary } from "./RenderErrorBoundary";
 import { UsageSection } from "./settings/UsageSection";
 import { EvolveSection } from "./settings/EvolveSection";
@@ -163,6 +163,8 @@ export function SettingsPanel(props: {
   initialSection?: SectionId;
   onSettingsSaved?: () => void;
 }): React.JSX.Element {
+  // 壁纸降级态（设计规格 §7）：媒体读不出时壁纸行点名「文件不可用」。订阅与壁纸视图同一份。
+  const wallpaperUnavailable = useWallpaperFailed();
   const [section, setSection] = useState<SectionId>(() =>
     props.initialSection !== undefined && destinationForSection(props.initialSection) === null
       ? props.initialSection
@@ -612,6 +614,7 @@ export function SettingsPanel(props: {
                 onWallpaperScrim={(next) => { void saveWallpaper({ scrim: next }); }}
                 onWallpaperGlass={(next) => { void saveWallpaper({ glassAlpha: next }); }}
                 onWallpaperClear={() => { void saveWallpaper({ kind: "none", path: null }); }}
+                wallpaperUnavailable={wallpaperUnavailable}
               />
             </SettingsPage>
           )}

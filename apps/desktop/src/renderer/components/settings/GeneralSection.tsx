@@ -54,6 +54,8 @@ export function GeneralSection(props: {
   onWallpaperScrim: (next: number) => void;
   onWallpaperGlass: (next: number) => void;
   onWallpaperClear: () => void;
+  /** 设计规格 §7 降级链：媒体读不出时设置行点名「文件不可用」（运行期状态，不是设置字段）。 */
+  wallpaperUnavailable: boolean;
 }): React.JSX.Element {
   return (
     <>
@@ -134,6 +136,10 @@ export function GeneralSection(props: {
                 <button type="button" className="mini-btn" onClick={props.onWallpaperClear}>
                   {STR.general.wallpaperClear}
                 </button>
+              )}
+              {/* 选中的文件读不出（被删/移动/解码失败）⇒ 在这里点名，不让用户对着「已设壁纸但看不见」猜。 */}
+              {props.wallpaperUnavailable && props.settings.wallpaper.kind !== "none" && (
+                <span className="ss-static">{STR.general.wallpaperUnavailable}</span>
               )}
             </div>
             <label className="cw-slider">

@@ -1,0 +1,541 @@
+[
+  {
+    "name": "构建产物 CSP 与 src/main/csp.ts 的真值逐字一致",
+    "ok": true,
+    "detail": {
+      "equal": true
+    }
+  },
+  {
+    "name": "img-src 与 media-src 都放行壁纸 scheme",
+    "ok": true,
+    "detail": {
+      "imgSrc": "img-src 'self' data: blob: https: cairn-wallpaper:",
+      "mediaSrc": "media-src 'self' data: blob: cairn-wallpaper:"
+    }
+  },
+  {
+    "name": "connect-src 不放壁纸 scheme（渲染层不从它 fetch）",
+    "ok": true,
+    "detail": {
+      "connectSrc": "connect-src 'self' http: https: ws: wss:"
+    }
+  },
+  {
+    "name": "当前壁纸 200 + 真实字节数 + accept-ranges",
+    "ok": true,
+    "detail": {
+      "status": 200,
+      "bytes": 6843,
+      "type": "image/png",
+      "acceptRanges": "bytes"
+    }
+  },
+  {
+    "name": "Range 请求回 206 且 content-range 正确",
+    "ok": true,
+    "detail": {
+      "status": 206,
+      "bytes": 100,
+      "contentRange": "bytes 0-99/6843"
+    }
+  },
+  {
+    "name": "非当前路径 404（白名单＝设置里那一个文件）",
+    "ok": true,
+    "detail": {
+      "status": 404
+    }
+  },
+  {
+    "name": "越界 Range 416",
+    "ok": true,
+    "detail": {
+      "status": 416
+    }
+  },
+  {
+    "name": "壁纸图真加载（naturalWidth>0，地址走壁纸协议）",
+    "ok": true,
+    "detail": {
+      "layer": true,
+      "kind": "image",
+      "src": "cairn-wallpaper://media/current?v=0",
+      "natural": [
+        640,
+        400
+      ],
+      "complete": true,
+      "bodyBg": "rgba(0, 0, 0, 0)",
+      "bodyAttr": true,
+      "htmlAttr": true,
+      "mainBackdrop": "blur(14px)",
+      "floor": "61%",
+      "wallpaperOpacity": "1",
+      "text": "rgb(240 239 236)",
+      "canvas": "rgb(21 21 21)"
+    }
+  },
+  {
+    "name": "开壁纸时 body 画布透明、两个接缝属性都在",
+    "ok": true,
+    "detail": {
+      "bodyBg": "rgba(0, 0, 0, 0)",
+      "bodyAttr": true,
+      "htmlAttr": true
+    }
+  },
+  {
+    "name": "玻璃面拿到 backdrop-filter，地板变量已算出",
+    "ok": true,
+    "detail": {
+      "mainBackdrop": "blur(14px)",
+      "floor": "61%"
+    }
+  },
+  {
+    "name": "暗色主题：最差格 ≥ 4.5:1（按真机测到的文字/画布色算）",
+    "ok": true,
+    "detail": {
+      "floor": 0.61,
+      "worst": 4.525801177062086,
+      "drift": 0,
+      "text": "rgb(240 239 236)",
+      "canvas": "rgb(21 21 21)"
+    }
+  },
+  {
+    "name": "暗色主题：模型常量与真实计算样式一致（差 ≤2/通道，防常量漂移）",
+    "ok": true,
+    "detail": {
+      "drift": 0,
+      "const": {
+        "r": 240,
+        "g": 239,
+        "b": 236
+      },
+      "measured": {
+        "r": 240,
+        "g": 239,
+        "b": 236
+      }
+    }
+  },
+  {
+    "name": "真渲染层无 CSP 违规",
+    "ok": true,
+    "detail": {
+      "cspErrors": [],
+      "errorCount": 0
+    }
+  },
+  {
+    "name": "设置整页不让位：.sp-page 保持实体底色（否则工作台文字叠在设置文字下）",
+    "ok": true,
+    "detail": {
+      "pageBg": "rgb(27, 27, 27)"
+    }
+  },
+  {
+    "name": "设置行三族都有布局：.cw-settings 纵向、.cw-slider 两列网格",
+    "ok": true,
+    "detail": {
+      "found": true,
+      "display": "flex",
+      "direction": "column",
+      "actionsDisplay": "flex",
+      "status": null,
+      "pageBg": "rgb(27, 27, 27)",
+      "sliders": [
+        {
+          "label": "壁纸不透明度",
+          "columns": "78px 240px",
+          "display": "grid",
+          "top": 437,
+          "labelWidth": 78,
+          "labelLines": 1,
+          "rangeWidth": 240,
+          "rangeHeight": 16,
+          "accent": "color(srgb 0.85098 0.466667 0.341177)",
+          "value": "1"
+        },
+        {
+          "label": "压暗",
+          "columns": "78px 240px",
+          "display": "grid",
+          "top": 461,
+          "labelWidth": 78,
+          "labelLines": 1,
+          "rangeWidth": 240,
+          "rangeHeight": 16,
+          "accent": "color(srgb 0.85098 0.466667 0.341177)",
+          "value": "0.35"
+        },
+        {
+          "label": "玻璃透明度",
+          "columns": "78px 240px",
+          "display": "grid",
+          "top": 486,
+          "labelWidth": 78,
+          "labelLines": 1,
+          "rangeWidth": 240,
+          "rangeHeight": 16,
+          "accent": "color(srgb 0.85098 0.466667 0.341177)",
+          "value": "0.25"
+        }
+      ],
+      "buttons": [
+        {
+          "text": "选择图片或视频",
+          "width": 125,
+          "bg": "color(srgb 0.101961 0.101961 0.0980392)",
+          "color": "color(srgb 0.764706 0.760784 0.717647)"
+        },
+        {
+          "text": "清除",
+          "width": 60,
+          "bg": "color(srgb 0.101961 0.101961 0.0980392)",
+          "color": "color(srgb 0.764706 0.760784 0.717647)"
+        }
+      ],
+      "rowWidth": 326,
+      "containerWidth": 1232
+    }
+  },
+  {
+    "name": "三个滑杆各占一行（top 互不相同）且标签单行有文字",
+    "ok": true,
+    "detail": [
+      {
+        "label": "壁纸不透明度",
+        "columns": "78px 240px",
+        "display": "grid",
+        "top": 437,
+        "labelWidth": 78,
+        "labelLines": 1,
+        "rangeWidth": 240,
+        "rangeHeight": 16,
+        "accent": "color(srgb 0.85098 0.466667 0.341177)",
+        "value": "1"
+      },
+      {
+        "label": "压暗",
+        "columns": "78px 240px",
+        "display": "grid",
+        "top": 461,
+        "labelWidth": 78,
+        "labelLines": 1,
+        "rangeWidth": 240,
+        "rangeHeight": 16,
+        "accent": "color(srgb 0.85098 0.466667 0.341177)",
+        "value": "0.35"
+      },
+      {
+        "label": "玻璃透明度",
+        "columns": "78px 240px",
+        "display": "grid",
+        "top": 486,
+        "labelWidth": 78,
+        "labelLines": 1,
+        "rangeWidth": 240,
+        "rangeHeight": 16,
+        "accent": "color(srgb 0.85098 0.466667 0.341177)",
+        "value": "0.25"
+      }
+    ]
+  },
+  {
+    "name": "滑杆本体够宽（≥200px，控件 md 档）且拿到主题强调色",
+    "ok": true,
+    "detail": [
+      {
+        "label": "壁纸不透明度",
+        "columns": "78px 240px",
+        "display": "grid",
+        "top": 437,
+        "labelWidth": 78,
+        "labelLines": 1,
+        "rangeWidth": 240,
+        "rangeHeight": 16,
+        "accent": "color(srgb 0.85098 0.466667 0.341177)",
+        "value": "1"
+      },
+      {
+        "label": "压暗",
+        "columns": "78px 240px",
+        "display": "grid",
+        "top": 461,
+        "labelWidth": 78,
+        "labelLines": 1,
+        "rangeWidth": 240,
+        "rangeHeight": 16,
+        "accent": "color(srgb 0.85098 0.466667 0.341177)",
+        "value": "0.35"
+      },
+      {
+        "label": "玻璃透明度",
+        "columns": "78px 240px",
+        "display": "grid",
+        "top": 486,
+        "labelWidth": 78,
+        "labelLines": 1,
+        "rangeWidth": 240,
+        "rangeHeight": 16,
+        "accent": "color(srgb 0.85098 0.466667 0.341177)",
+        "value": "0.25"
+      }
+    ]
+  },
+  {
+    "name": "已设壁纸时按钮读动作词「选择图片或视频」，不读状态词「未设置」",
+    "ok": true,
+    "detail": [
+      {
+        "text": "选择图片或视频",
+        "width": 125,
+        "bg": "color(srgb 0.101961 0.101961 0.0980392)",
+        "color": "color(srgb 0.764706 0.760784 0.717647)"
+      },
+      {
+        "text": "清除",
+        "width": 60,
+        "bg": "color(srgb 0.101961 0.101961 0.0980392)",
+        "color": "color(srgb 0.764706 0.760784 0.717647)"
+      }
+    ]
+  },
+  {
+    "name": "选/清两个按钮可见且有底色（不是透明白字）",
+    "ok": true,
+    "detail": [
+      {
+        "text": "选择图片或视频",
+        "width": 125,
+        "bg": "color(srgb 0.101961 0.101961 0.0980392)",
+        "color": "color(srgb 0.764706 0.760784 0.717647)"
+      },
+      {
+        "text": "清除",
+        "width": 60,
+        "bg": "color(srgb 0.101961 0.101961 0.0980392)",
+        "color": "color(srgb 0.764706 0.760784 0.717647)"
+      }
+    ]
+  },
+  {
+    "name": "第一个滑杆真指针命中本体",
+    "ok": true,
+    "detail": {
+      "tag": "INPUT",
+      "cls": "",
+      "hits": true
+    }
+  },
+  {
+    "name": "真鼠标点滑杆改到了值并落进 setSettings（opacity）",
+    "ok": true,
+    "detail": {
+      "value": "0.2",
+      "lastPatch": {
+        "wallpaper": {
+          "kind": "image",
+          "path": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/fixture-wallpaper.png",
+          "opacity": 0.2,
+          "scrim": 0.35,
+          "glassAlpha": 0.25,
+          "revision": 0
+        }
+      }
+    }
+  },
+  {
+    "name": "选壁纸按钮真指针命中并调到 wallpaperPick",
+    "ok": true,
+    "detail": {
+      "point": {
+        "x": 1129,
+        "y": 432
+      },
+      "hit": {
+        "tag": "BUTTON",
+        "cls": "mini-btn",
+        "hits": true
+      },
+      "picks": 1,
+      "revision": null,
+      "layer": true
+    }
+  },
+  {
+    "name": "清除按钮真指针命中；清除后撤层、摘属性、画布回实体色",
+    "ok": true,
+    "detail": {
+      "layer": false,
+      "bodyAttr": false,
+      "htmlAttr": false,
+      "bodyBg": "rgb(21, 21, 21)",
+      "backdrop": "none",
+      "status": "未设置",
+      "buttons": [
+        "选择图片或视频"
+      ]
+    }
+  },
+  {
+    "name": "清除后状态词「未设置」出现、清除按钮收起、选按钮仍是动作词",
+    "ok": true,
+    "detail": {
+      "layer": false,
+      "bodyAttr": false,
+      "htmlAttr": false,
+      "bodyBg": "rgb(21, 21, 21)",
+      "backdrop": "none",
+      "status": "未设置",
+      "buttons": [
+        "选择图片或视频"
+      ]
+    }
+  },
+  {
+    "name": "反证：摘掉 img-src 的 scheme 后图加载不出来（判据承重）",
+    "ok": true,
+    "detail": {
+      "layer": false,
+      "natural": null,
+      "bodyAttr": false,
+      "cspViolations": 1,
+      "sample": "Loading the image 'cairn-wallpaper://media/current?v=0' violates the following Content Security Policy directive: \"img-src 'self' data: blob: https:\". The action has been blocked."
+    }
+  },
+  {
+    "name": "图片壁纸的首帧底色＝真解码的平均色（与生成式均值差 ≤6/通道）",
+    "ok": true,
+    "detail": {
+      "imageTint": "#7e457f",
+      "expect": [
+        127,
+        70,
+        128
+      ],
+      "rgb": [
+        126,
+        69,
+        127
+      ],
+      "near": true,
+      "videoTint": null,
+      "missingTint": null,
+      "fallback": "#1b1b1b"
+    }
+  },
+  {
+    "name": "视频壁纸与读不出的文件都不出色，回落主题底色",
+    "ok": true,
+    "detail": {
+      "videoTint": null,
+      "missingTint": null
+    }
+  },
+  {
+    "name": "亮色主题：壁纸真加载、画布让位、玻璃面拿到模糊",
+    "ok": true,
+    "detail": {
+      "theme": "light",
+      "img": [
+        640,
+        400
+      ],
+      "bodyBg": "rgba(0, 0, 0, 0)",
+      "backdrop": "blur(14px)",
+      "floor": "43%",
+      "text": "rgb(11 11 11)",
+      "canvas": "rgb(252 252 251)"
+    }
+  },
+  {
+    "name": "亮色主题：最差格 ≥ 4.5:1（按真机测到的文字/画布色算，判据 2 在亮色下同样成立）",
+    "ok": true,
+    "detail": {
+      "floor": 0.43,
+      "worst": 4.629950815465612,
+      "target": 4.5
+    }
+  },
+  {
+    "name": "亮色主题：模型常量与真实计算样式一致（差 ≤2/通道，防常量漂移）",
+    "ok": true,
+    "detail": {
+      "drift": 0,
+      "const": {
+        "r": 11,
+        "g": 11,
+        "b": 11
+      },
+      "measured": {
+        "r": 11,
+        "g": 11,
+        "b": 11
+      }
+    }
+  },
+  {
+    "name": "视频壁纸真解码并自动播放（readyState≥2 且 currentTime>0）",
+    "ok": true,
+    "detail": {
+      "has": true,
+      "src": "cairn-wallpaper://media/current?v=0",
+      "paused": false,
+      "t": 0.05,
+      "ready": 4,
+      "duration": 2,
+      "focused": true,
+      "hidden": false
+    }
+  },
+  {
+    "name": "失焦即暂停（window blur ⇒ video.paused === true，判据 3）",
+    "ok": true,
+    "detail": {
+      "has": true,
+      "src": "cairn-wallpaper://media/current?v=0",
+      "paused": true,
+      "t": 0.32,
+      "ready": 4,
+      "duration": 2,
+      "focused": false,
+      "hidden": false
+    }
+  },
+  {
+    "name": "回焦即续播（判据 3 的反向臂：不是一次性停掉）",
+    "ok": true,
+    "detail": {
+      "has": true,
+      "src": "cairn-wallpaper://media/current?v=0",
+      "paused": false,
+      "t": 0.32,
+      "ready": 4,
+      "duration": 2,
+      "focused": true,
+      "hidden": false
+    }
+  },
+  {
+    "name": "降级：媒体 404 ⇒ 撤层并摘属性（玻璃面留着，不出现透明壳）",
+    "ok": true,
+    "detail": {
+      "layer": false,
+      "bodyAttr": false,
+      "bodyBg": "rgb(21, 21, 21)",
+      "mainBackdrop": "none"
+    }
+  },
+  {
+    "name": "降级：设置行点名「文件不可用」（用户看得到原因，不是对着空白猜）",
+    "ok": true,
+    "detail": {
+      "found": true,
+      "text": "壁纸选择图片或视频清除文件不可用壁纸不透明度压暗玻璃透明度"
+    }
+  }
+]

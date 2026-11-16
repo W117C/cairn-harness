@@ -193,8 +193,9 @@ const readWallpaperPreference = (): BootWallpaper => {
   }
 };
 /**
- * `nativeImage` 的注入面：`resize({width:1,height:1})` 之后的那个位图就是平均色
- * （规格 §10 写的最小修法）。空图（文件不在 / 不是图片）返 null，由 tint 模块回落。
+ * `nativeImage` 的注入面：`resize({width:1,height:1})` 之后的那一个像素就是平均色
+ * （规格 §10 写的最小修法；缩放由 Chromium 做，取色由 `wallpaper-tint` 从 PNG 解，
+ * 见那边的头注——裸位图的通道顺序随平台变，PNG 不变）。空图返 null，由 tint 模块回落。
  */
 const nativeImageOf = (path: string): TintSource | null => {
   const img = nativeImage.createFromPath(path);

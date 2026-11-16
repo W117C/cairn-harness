@@ -48,8 +48,10 @@ export function shouldPauseMedia(focused: boolean, visible: boolean): boolean {
   return !focused || !visible;
 }
 
-/** 接缝属性的唯一写者（body 上是上游接缝、html 上是我们自己的权重属性）。 */
+/** 接缝属性的唯一写者（body 上是上游接缝、html 上是我们自己的权重属性）。
+ *  判卷环境（node，无 DOM）只是不落属性，不抛——视图与失败态本身仍可判。 */
 export function applyWallpaperAttr(active: boolean): void {
+  if (typeof document === "undefined") return;
   if (active) {
     document.body.setAttribute(WALLPAPER_ATTR, "");
     document.documentElement.setAttribute(CAIRN_WALLPAPER_ATTR, "");
@@ -62,12 +64,37 @@ export function applyWallpaperAttr(active: boolean): void {
 /* ── 视图存储：设置面改完后回灌这里（components → state 的允许方向）─────────── */
 
 let current: WallpaperView = { kind: "none", url: null };
+/**
+ * 降级链的「文件不可用」标记（设计规格 §7）：媒体 404 / 解码失败 ⇒ 撤层 **并** 在设置里点名。
+ *
+ * 这是**运行期状态**，不是设置字段：settings 里仍然指向那张图（文件回来 / 换台机器就该再试），
+ * 失败只影响这一轮显示。任何一次视图重设（新选文件、重读设置）都把它清掉 = 自动重试。
+ */
+let failed = false;
 const listeners = new Set<() => void>();
 
 export function setWallpaperView(view: WallpaperView): void {
   current = view;
+  failed = false;
   applyWallpaperAttr(view.kind !== "none");
   for (const l of listeners) l();
+}
+
+/** 降级：撤掉媒体层（玻璃面留着），并记下「文件不可用」。 */
+export function markWallpaperUnavailable(): void {
+  current = { kind: "none", url: null };
+  failed = true;
+  applyWallpaperAttr(false);
+  for (const l of listeners) l();
+}
+
+export function wallpaperFailed(): boolean {
+  return failed;
+}
+
+/** 设置行读它来显示「文件不可用」（与视图同一份订阅）。 */
+export function useWallpaperFailed(): boolean {
+  return useSyncExternalStore(subscribeWallpaper, wallpaperFailed, wallpaperFailed);
 }
 
 export function subscribeWallpaper(listener: () => void): () => void {
@@ -77,11 +104,6 @@ export function subscribeWallpaper(listener: () => void): () => void {
 
 export function useWallpaperView(): WallpaperView {
   return useSyncExternalStore(subscribeWallpaper, () => current, () => current);
-}
-
-/** 媒体失效（404 / 解码失败）⇒ 撤层：只撤媒体，不撤玻璃面。 */
-export function dropWallpaper(): void {
-  setWallpaperView({ kind: "none", url: null });
 }
 
 /** 改完设置后重读一次（设置真源在主进程，渲染层只读）。 */

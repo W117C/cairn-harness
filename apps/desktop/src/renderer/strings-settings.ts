@@ -96,6 +96,7 @@ export const settingsStrings = {
     wallpaperOpacity: "壁纸不透明度",
     wallpaperScrim: "压暗",
     wallpaperGlass: "玻璃透明度",
+    wallpaperUnavailable: "文件不可用",
     habitTitle: "使用习惯",
     locale: "界面语言",
     localeValue: "中文（简体）",

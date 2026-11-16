@@ -1598,4 +1598,18 @@ if (wallpaperFixturePath !== "") {
   });
 }
 
+// 视频壁纸夹具（同一支冒烟的「失焦即暂停」臂）：只换 kind/path，其余与图片臂同形。
+// 两条臂互斥——同一次窗口只喂一种壁纸，免得「到底在验哪一条」说不清。
+const wallpaperVideoPath = argOf("--cairn-wallpaper-video=", "");
+if (wallpaperVideoPath !== "") {
+  settingsState.wallpaper = {
+    kind: "video", path: wallpaperVideoPath,
+    opacity: 1, scrim: 0.35, glassAlpha: 0.25, revision: 0,
+  };
+  contextBridge.exposeInMainWorld("__cairnWallpaper", {
+    picks: () => 0,
+    path: wallpaperVideoPath,
+  });
+}
+
 contextBridge.exposeInMainWorld("agent", stub);

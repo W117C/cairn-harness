@@ -10,9 +10,9 @@
 //
 // 跑法：pnpm --filter cairn-desktop build
 //       pnpm --filter cairn-desktop exec electron scripts/wallpaper-csp-smoke.cjs [输出目录]
-const { app, BrowserWindow, nativeTheme, net, protocol } = require("electron");
+const { app, BrowserWindow, nativeImage, nativeTheme, net, protocol } = require("electron");
 const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
-const { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
+const { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
 const { join, resolve } = require("node:path");
 const { tmpdir } = require("node:os");
 const zlib = require("node:zlib");
@@ -23,6 +23,11 @@ require(require.resolve("tsx/cjs", { paths: [repoRoot] }));
 const { handleWallpaperMedia, openWallpaperStream, registerWallpaperScheme, WALLPAPER_SCHEME } =
   require(join(__dirname, "../src/main/wallpaper.ts"));
 const { CSP_CONTENT } = require(join(__dirname, "../src/main/csp.ts"));
+// 首帧底色（规格 §10 的 v1.1 项）：真 nativeImage 喂进去，判卷侧不复制它的解码逻辑。
+const { bootBackgroundWithTint, wallpaperTintFor } = require(join(__dirname, "../src/main/wallpaper-tint.ts"));
+// 对比度模型（地板判据的唯一一份）：真机读到的地板要过模型的最差格。
+const { CONTRAST_TARGET, LIGHT_SPEC, DARK_SPEC, floorFor, worstContrast } =
+  require(join(__dirname, "../src/renderer/derived/wallpaper-contrast.ts"));
 
 const profile = mkdtempSync(join(tmpdir(), "cairn-wallpaper-csp-profile-"));
 app.setPath("userData", profile);
@@ -107,18 +112,20 @@ function apiMembers() {
   return { version, members };
 }
 
-async function makeWindow(indexPath, errors) {
+async function makeWindow(indexPath, errors, opts = {}) {
   const { version, members } = apiMembers();
+  const theme = opts.theme === "light" ? "light" : "dark";
   const win = new BrowserWindow({
-    width: 1440, height: 900, show: false,
+    width: 1440, height: 900, show: opts.show === true,
     webPreferences: {
       backgroundThrottling: false,
       preload: join(__dirname, "ui-gallery-preload.cjs"),
       additionalArguments: [
         "--cairn-api-members=" + JSON.stringify(members),
         "--cairn-protocol-version=" + version,
-        "--cairn-wallpaper-fixture=" + wallpaperPath,
-        "--cairn-theme=dark",
+        // 两条壁纸臂互斥：视频臂不喂图片，免得窗口里其实挂的是另一条
+        ...(opts.video ? ["--cairn-wallpaper-video=" + opts.video] : ["--cairn-wallpaper-fixture=" + wallpaperPath]),
+        "--cairn-theme=" + theme,
       ],
     },
   });
@@ -130,6 +137,21 @@ async function makeWindow(indexPath, errors) {
 }
 
 const jsOf = (win) => (source) => win.webContents.executeJavaScript(source, true);
+/** `rgb(11 11 11)` / `rgba(…)` → Rgb；读不出 ⇒ null。 */
+const rgbOfCss = (value) => {
+  const m = /rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)/.exec(String(value ?? ""));
+  return m === null ? null : { r: Number(m[1]), g: Number(m[2]), b: Number(m[3]) };
+};
+/** 用**真机测到的**文字/画布色拼 spec：判据读真值，不读手抄常量。 */
+const specOfMeasured = (text, canvas) => ({
+  text, canvas, glass: { r: 255, g: 255, b: 255 },
+  worstWallpaper: text.r > 128 ? { r: 255, g: 255, b: 255 } : { r: 0, g: 0, b: 0 },
+});
+/** 常量 spec 与真机真值的逐通道最大偏差（漂移就会浮出来）。 */
+const maxChannelDrift = (spec, text, canvas) => Math.max(
+  ...[spec.text.r - text.r, spec.text.g - text.g, spec.text.b - text.b,
+    spec.canvas.r - canvas.r, spec.canvas.g - canvas.g, spec.canvas.b - canvas.b].map(Math.abs),
+);
 const shot = async (win, name) => {
   await pause(220);
   writeFileSync(join(out, name + ".png"), (await win.webContents.capturePage()).toPNG());
@@ -221,6 +243,8 @@ async function main() {
       mainBackdrop: main ? getComputedStyle(main).backdropFilter : null,
       floor: getComputedStyle(document.documentElement).getPropertyValue('--cw-floor').trim(),
       wallpaperOpacity: getComputedStyle(document.documentElement).getPropertyValue('--cw-wallpaper-opacity').trim(),
+      text: getComputedStyle(document.documentElement).getPropertyValue('--cw-text').trim(),
+      canvas: getComputedStyle(document.documentElement).getPropertyValue('--cw-canvas').trim(),
     };
   })()`);
   readings.layer = layer;
@@ -230,6 +254,19 @@ async function main() {
     layer.bodyBg === "rgba(0, 0, 0, 0)" && layer.bodyAttr && layer.htmlAttr, { bodyBg: layer.bodyBg, bodyAttr: layer.bodyAttr, htmlAttr: layer.htmlAttr });
   check("玻璃面拿到 backdrop-filter，地板变量已算出",
     layer.mainBackdrop !== null && layer.mainBackdrop !== "none" && layer.floor !== "", { mainBackdrop: layer.mainBackdrop, floor: layer.floor });
+  // 判据 2（暗色）：地板由运行时按真实计算样式算出，最差格按同一套真值算。
+  const darkText = rgbOfCss(layer.text);
+  const darkCanvas = rgbOfCss(layer.canvas);
+  const darkSpec = darkText === null || darkCanvas === null ? null : specOfMeasured(darkText, darkCanvas);
+  const darkFloor = Number(String(layer.floor).replace("%", "")) / 100;
+  const darkWorst = darkSpec === null ? 0 : worstContrast(darkSpec, darkFloor);
+  const darkDrift = darkSpec === null ? 999 : maxChannelDrift(DARK_SPEC, darkSpec.text, darkSpec.canvas);
+  readings.darkContrast = { floor: darkFloor, worst: darkWorst, drift: darkDrift, text: layer.text, canvas: layer.canvas };
+  check("暗色主题：最差格 ≥ 4.5:1（按真机测到的文字/画布色算）",
+    darkFloor > 0 && darkWorst >= CONTRAST_TARGET, readings.darkContrast);
+  check("暗色主题：模型常量与真实计算样式一致（差 ≤2/通道，防常量漂移）",
+    darkDrift <= 2, { drift: darkDrift, const: DARK_SPEC.text, measured: darkSpec === null ? null : darkSpec.text });
+
   const cspErrors = errors.filter((m) => /Content Security Policy/i.test(m));
   check("真渲染层无 CSP 违规", cspErrors.length === 0, { cspErrors, errorCount: errors.length });
   await shot(win, "01-wallpaper-on-dark-1440x900");
@@ -365,6 +402,150 @@ async function main() {
     (negative.natural === null || negative.natural === 0) && negativeCsp.length > 0, readings.negativeControl);
   await shot(negativeWin, "04-negative-control-no-scheme-1440x900");
   negativeWin.destroy();
+
+  // ⑦ 首帧底色（规格 §10 的 v1.1 项）：真 nativeImage 解码 → 1×1 PNG → 平均色。
+  // 判据不是「看起来像个颜色」，而是**与生成式算出的均值对齐**（差 ≤6/通道）：
+  // 通道顺序写错（BGRA/RGBA 互换）会立刻偏出这个带子。
+  const loadPortrait = (path) => {
+    const img = nativeImage.createFromPath(path);
+    return img.isEmpty() ? null : img.resize({ width: 1, height: 1, quality: "good" });
+  };
+  const videoFixture = join(__dirname, "fixtures", "wallpaper-smoke.mp4");
+  const imageTint = wallpaperTintFor({ kind: "image", path: wallpaperPath }, loadPortrait);
+  const videoTint = wallpaperTintFor({ kind: "video", path: videoFixture }, loadPortrait);
+  const missingTint = wallpaperTintFor({ kind: "image", path: join(out, "no-such-file.png") }, loadPortrait);
+  const meanT = ((640 - 1) / 2 + (400 - 1) / 2) / (640 + 400);
+  const expectTint = [255 * meanT, 140 * (1 - meanT), 255 * (1 - meanT)].map((v) => Math.round(v));
+  const tintRgb = /^#[0-9a-f]{6}$/.test(String(imageTint))
+    ? [1, 3, 5].map((i) => parseInt(String(imageTint).slice(i, i + 2), 16))
+    : null;
+  const tintNear = tintRgb !== null && tintRgb.every((v, i) => Math.abs(v - expectTint[i]) <= 6);
+  readings.tint = { imageTint, expect: expectTint, rgb: tintRgb, near: tintNear,
+    videoTint, missingTint, fallback: bootBackgroundWithTint("#1b1b1b", missingTint) };
+  check("图片壁纸的首帧底色＝真解码的平均色（与生成式均值差 ≤6/通道）", tintNear, readings.tint);
+  check("视频壁纸与读不出的文件都不出色，回落主题底色",
+    videoTint === null && missingTint === null && bootBackgroundWithTint("#1b1b1b", missingTint) === "#1b1b1b",
+    { videoTint, missingTint });
+
+  // ⑧ 亮色主题：同一张壁纸、同一份产物，只换主题 ⇒ 画布让位、玻璃面与地板都要在，
+  // 且**用真机读到的地板**过一遍模型的判据（判据 2 在亮色下也成立，不是只在暗色下验过）。
+  const lightErrors = [];
+  const lightWin = await makeWindow(join(distDir, "index.html"), lightErrors, { theme: "light" });
+  const ljs = jsOf(lightWin);
+  for (let i = 0; i < 100; i++) { if (await ljs(`!!document.querySelector('.avatar')`)) break; await pause(); }
+  await pause(600);
+  const light = await ljs(`(() => {
+    const img = document.querySelector('.cw-layer img.cw-media');
+    const root = getComputedStyle(document.documentElement);
+    const main = document.querySelector('.main');
+    return {
+      theme: document.documentElement.dataset.theme ?? null,
+      img: img ? [img.naturalWidth, img.naturalHeight] : null,
+      bodyBg: getComputedStyle(document.body).backgroundColor,
+      backdrop: main ? getComputedStyle(main).backdropFilter : null,
+      floor: root.getPropertyValue('--cw-floor').trim(),
+      text: root.getPropertyValue('--cw-text').trim(),
+      canvas: root.getPropertyValue('--cw-canvas').trim(),
+    };
+  })()`);
+  const lightFloor = Number(String(light.floor).replace("%", "")) / 100;
+  const lightText = rgbOfCss(light.text);
+  const lightCanvas = rgbOfCss(light.canvas);
+  const lightSpec = lightText === null || lightCanvas === null ? null : specOfMeasured(lightText, lightCanvas);
+  // 判据读**真机真值**：地板由运行时按真实计算样式算出，最差格也必须按同一套真值算。
+  const lightWorst = lightSpec === null ? 0 : worstContrast(lightSpec, lightFloor);
+  const lightDrift = lightSpec === null ? 999 : maxChannelDrift(LIGHT_SPEC, lightSpec.text, lightSpec.canvas);
+  readings.light = { ...light, floorFraction: lightFloor, worst: lightWorst, drift: lightDrift };
+  check("亮色主题：壁纸真加载、画布让位、玻璃面拿到模糊",
+    light.theme === "light" && light.img !== null && light.img[0] > 0
+      && light.bodyBg === "rgba(0, 0, 0, 0)" && String(light.backdrop).includes("blur"), light);
+  check("亮色主题：最差格 ≥ 4.5:1（按真机测到的文字/画布色算，判据 2 在亮色下同样成立）",
+    lightFloor > 0 && lightWorst >= CONTRAST_TARGET, { floor: lightFloor, worst: lightWorst, target: CONTRAST_TARGET });
+  check("亮色主题：模型常量与真实计算样式一致（差 ≤2/通道，防常量漂移）",
+    lightDrift <= 2, { drift: lightDrift, const: LIGHT_SPEC.text, measured: lightSpec === null ? null : lightSpec.text });
+  await shot(lightWin, "06-light-theme-wallpaper-1440x900");
+  lightWin.destroy();
+
+  // ⑨ 视频壁纸：真视频、真解码；失焦即暂停、回焦即续播（规格 §6 / 判据 3 的老账）。
+  // 窗口必须真显示并聚焦：暂停判据读的是 document.hasFocus()，隐藏窗口永远「没焦点」。
+  const videoErrors = [];
+  currentPath = videoFixture;
+  const videoWin = await makeWindow(join(distDir, "index.html"), videoErrors, { theme: "dark", video: videoFixture, show: true });
+  videoWin.focus();
+  const vjs = jsOf(videoWin);
+  for (let i = 0; i < 100; i++) { if (await vjs(`!!document.querySelector('.avatar')`)) break; await pause(); }
+  const videoState = () => vjs(`(() => {
+    const v = document.querySelector('.cw-layer video.cw-media');
+    if (v === null) return { has: false };
+    return {
+      has: true, src: v.currentSrc, paused: v.paused, t: Math.round(v.currentTime * 100) / 100,
+      ready: v.readyState, duration: Number.isFinite(v.duration) ? v.duration : null,
+      focused: document.hasFocus(), hidden: document.hidden,
+    };
+  })()`);
+  let videoPlaying = { has: false };
+  for (let i = 0; i < 60; i++) {
+    videoPlaying = await videoState();
+    if (videoPlaying.has === true && videoPlaying.ready >= 2 && videoPlaying.paused === false && videoPlaying.t > 0) break;
+    await pause(200);
+  }
+  readings.videoPlaying = videoPlaying;
+  check("视频壁纸真解码并自动播放（readyState≥2 且 currentTime>0）",
+    videoPlaying.has === true && videoPlaying.ready >= 2 && videoPlaying.paused === false && videoPlaying.t > 0,
+    videoPlaying);
+  await shot(videoWin, "07-video-wallpaper-playing-1440x900");
+  videoWin.blur();
+  await pause(800);
+  const videoBlurred = await videoState();
+  readings.videoBlurred = videoBlurred;
+  check("失焦即暂停（window blur ⇒ video.paused === true，判据 3）",
+    videoBlurred.has === true && videoBlurred.paused === true, videoBlurred);
+  videoWin.focus();
+  let videoResumed = { has: false };
+  for (let i = 0; i < 30; i++) {
+    videoResumed = await videoState();
+    if (videoResumed.has === true && videoResumed.paused === false) break;
+    await pause(200);
+  }
+  readings.videoResumed = videoResumed;
+  check("回焦即续播（判据 3 的反向臂：不是一次性停掉）",
+    videoResumed.has === true && videoResumed.paused === false, videoResumed);
+  await shot(videoWin, "08-video-wallpaper-resumed-1440x900");
+  videoWin.destroy();
+  currentPath = wallpaperPath;
+
+  // ⑩ 降级链（规格 §7）：媒体 404 ⇒ 撤层、摘属性、设置行点名「文件不可用」——
+  // 这一格从前只有文档承诺（「设置里标记」），没有真机读数。
+  const degradeErrors = [];
+  currentPath = join(out, "gone-wallpaper.png");
+  const degradeWin = await makeWindow(join(distDir, "index.html"), degradeErrors, { theme: "dark" });
+  const djs = jsOf(degradeWin);
+  for (let i = 0; i < 100; i++) { if (await djs(`!!document.querySelector('.avatar')`)) break; await pause(); }
+  await pause(900);
+  const degraded = await djs(`(() => ({
+    layer: !!document.querySelector('.cw-layer'),
+    bodyAttr: document.body.hasAttribute('data-we-wallpaper'),
+    bodyBg: getComputedStyle(document.body).backgroundColor,
+    mainBackdrop: document.querySelector('.main') ? getComputedStyle(document.querySelector('.main')).backdropFilter : null,
+  }))()`);
+  readings.degraded = degraded;
+  check("降级：媒体 404 ⇒ 撤层并摘属性（玻璃面留着，不出现透明壳）",
+    degraded.layer === false && degraded.bodyAttr === false && degraded.bodyBg !== "rgba(0, 0, 0, 0)",
+    degraded);
+  await djs(`(() => { if (!document.querySelector('.sp-page')) window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', code: 'Comma', metaKey: true, bubbles: true })); })()`);
+  await pause(500);
+  const degradeMarker = await djs(`(() => {
+    const box = document.querySelector('.cw-settings');
+    if (!box) return { found: false };
+    const row = box.closest('.ss-row') ?? box.parentElement;
+    return { found: true, text: (row ? row.textContent : box.textContent) ?? "" };
+  })()`);
+  readings.degradeMarker = degradeMarker;
+  check("降级：设置行点名「文件不可用」（用户看得到原因，不是对着空白猜）",
+    degradeMarker.found === true && String(degradeMarker.text).includes("文件不可用"), degradeMarker);
+  await shot(degradeWin, "09-degraded-file-unavailable-1440x900");
+  degradeWin.destroy();
+  currentPath = wallpaperPath;
 
   writeFileSync(join(out, "checks.json"), JSON.stringify(checks, null, 2));
   writeFileSync(join(out, "readings.json"), JSON.stringify(readings, null, 2));
