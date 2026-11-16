@@ -42079,3 +42079,48 @@ wallpaper-engine，逐行写「它怎么做 / 我们怎么做 / 证据在哪 / *
 - `scope=member` 现在要求运行期真的下发 `agent_id = member:<id>`。今天**没有**任何调用方这么发
   （成员线程还没接进 run），所以这条写入路径已经判过、但还没有真实流量。
 - 成员记忆的**读**侧（`scopes` 里的 `member` 档）同样等这一步。
+
+## 2026-11-16 · 第 1261 页：成员线程接入运行（`spawn_agent` 带 member 身份，记忆三档端到端）（`pending`）
+
+**背景**：第 1259 / 1260 页把记忆作用域的**读**与**写**都按运行身份接好了，但运行期从来没人下发
+`agent_id = member:<id>`——两条路都判过、没流量。本页把「成员线程」接进派活口。
+
+### 一、接法
+
+- `src/agent/team/identity.ts#spawnIdentity(memberId, fallback)`：点了成员 ⇒ `member:<id>`；
+  没点 ⇒ 老路径 `worker-N`（**逐字不变**）；id 不合法 ⇒ **拒**（不退化成匿名 worker——退回去会让
+  「派给某人」变成「派给一个匿名 worker」，事后查不出来）。
+- `orchestrator.spawnInternal` 是唯一分配 id 的地方：`args.member` 在那里解析成 `agentId`。
+  `spawn()` 不提前算（否则白吃一个全局序号）。
+- 下游自动接通：`worker-prompt` 用 `scopesForAgent(agentId)` 定读哪几档、`memberIdOf(agentId)` 定
+  读不读 `members/<id>`；工具面 `ctx.agentId` 让 `remember` 的 member 档有身份可认；用量按
+  `member:<id>` 归属。
+
+### 二、读侧补了成员层（判卷当场咬住）
+
+第一版只在 `scopes` 上放行，但注入层**根本不读** `members/<id>`——端到端判卷直接红
+（成员线程读不到自己的私有记忆）。补：`MemoryInjectionOptions.memberId` + 注入层读成员目录的
+索引与召回（段标签 `[MEMORY.md 索引（成员）]` / `member` 作用域）。
+
+### 三、判卷
+
+`tests/team-identity.test.ts` 5 条：
+
+| # | 判据 | 读数 |
+|---|---|---|
+| 1 | 没点成员 ⇒ `worker-N` | `{ok:true, agentId:"worker-7", memberId:null}` |
+| 2 | 点成员 ⇒ `member:<id>` | `member:m1` |
+| 3 | 非法 id ⇒ 拒 | 含点/斜杠/超长/中文一律 `ok:false`，错误说得出原因 |
+| 4 | 反向解析与作用域同答案 | `memberOfAgentId` / `memberIdOf` / `scopesForAgent` 一致 |
+| 5 | **端到端**：成员线程读得到 `members/<id>` 的私有记忆，匿名 worker 读不到 | 成员消息里出现「周五前交付」，匿名 worker 里没有 |
+
+### 四、门禁读数（工作树）
+
+- 核心 `pnpm test:capped`：**691 文件 / 8253 条全绿**，exit 0；`typecheck` 0 报错。
+- 桌面与真机冒烟本轮未动（无 renderer / 主进程改动）⇒ 沿用第 1258 页读数。
+
+### 五、边界
+
+- 「派活时点成员」还只有 `spawn_agent` 这一个入口（`args.member`）；团队面板/群聊里点成员派活
+  尚未接（那是 UI 侧下一刀）。
+- 成员**写**私有记忆也要靠这条身份——工具面已通，但没有真实成员 run 走完一整轮（缺的是场景，不是管线）。

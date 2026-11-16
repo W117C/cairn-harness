@@ -1,7 +1,7 @@
 import type { AgentEvent } from "../events";
 import type { GlmMessage } from "../providers/glm";
 import { clampToTokenBudget } from "./text-budget";
-import { scopesForAgent } from "./memory/scope";
+import { memberIdOf, scopesForAgent } from "./memory/scope";
 import { buildMemoryInjectionSafe } from "./memory/inject";
 import type { WorkerContext } from "./orchestrator-types";
 
@@ -64,7 +64,10 @@ export async function buildWorkerSystemMessages(
   // M7：worker 的任务书就是它的「问话」，拿去做 RECALL 词面检索。
   // 作用域接入运行期（ADR 0015 S1 第二步）：worker 的 agent_id 决定它能读哪几档记忆。
   // 成员线程（`member:<id>`）读三档，其余只能读 project/team——集合由身份推，不由模型指定。
-  const mem = await buildMemoryInjectionSafe({ workspace, queryText: w.task, scopes: scopesForAgent(agentId) });
+  const mem = await buildMemoryInjectionSafe({
+    workspace, queryText: w.task, scopes: scopesForAgent(agentId),
+    ...(memberIdOf(agentId) === null ? {} : { memberId: memberIdOf(agentId) as string }),
+  });
   if (mem.injection.project) messages.push({ role: "system", content: mem.injection.project });
   if (mem.injection.global) messages.push({ role: "system", content: mem.injection.global });
   if (mem.unavailable) messages.push({ role: "system", content: mem.unavailable });

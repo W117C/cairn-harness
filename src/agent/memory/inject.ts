@@ -201,6 +201,8 @@ async function recallSection(args: {
   embedding?: { provider: EmbeddingProvider; signal?: AbortSignal };
   /** 允许读的记忆作用域（ADR 0015 S1）。缺席 = 不过滤（老路径逐字不变）。 */
   scopes?: readonly string[];
+  /** 成员身份（来自 `agent_id = member:<id>`）。给了才读成员私有档；缺席 = 不读（老路径不变）。 */
+  memberId?: string;
   /** 这一层的条目属于哪个作用域（项目层 = project，全局层 = team）；缺省按条目自带值。 */
   entryScope?: string;
 }): Promise<{
@@ -469,6 +471,8 @@ export interface MemoryInjectionOptions {
   /** 允许读的记忆作用域（ADR 0015 S1）。缺席 = 不过滤（老路径逐字不变）。
    *  运行期由调用方按 agent 身份给：`member:<id>` ⇒ project/team/member，其余 ⇒ project/team。 */
   scopes?: readonly string[];
+  /** 成员身份（`agent_id = member:<id>` 的 id 那一段）。给了才读成员私有档。 */
+  memberId?: string;
   /** 外部引用审批状态；缺省从全局记忆目录读。 */
   refState?: ExternalRefState;
   /** 首次批准回调（缺省无 = fail-closed 停用）。 */
@@ -546,6 +550,13 @@ export async function buildMemoryInjection(opts: MemoryInjectionOptions): Promis
   const layerAllowed = (scope: string): boolean => scopeAllowed(scope, opts.scopes);
   const projIndex = layerAllowed("project") ? indexSectionFiltered("[MEMORY.md 索引]", projIndexRaw, projStats) : null;
   const globIndex = layerAllowed("team") ? indexSectionFiltered("[MEMORY.md 索引（全局）]", globIndexRaw, globStats) : null;
+  // 成员私有层（`<global>/members/<id>`）：只有拿到成员身份、且作用域允许时才读。
+  const memberDir = opts.memberId !== undefined && layerAllowed("member")
+    ? globDir + "/members/" + opts.memberId
+    : null;
+  const memberStats = memberDir === null ? {} : await readStats(memberDir);
+  const memberIndexRaw = memberDir === null ? null : await readTextOrNull(memberDir + "/" + MEMORY_INDEX);
+  const memberIndex = memberDir === null ? null : indexSectionFiltered("[MEMORY.md 索引（成员）]", memberIndexRaw, memberStats);
   const recallLimit = opts.recallLimit ?? RECALL_MAX_TOPICS;
   // 每一层的候选按**目录**打作用域标签（项目层 = project，全局层 = team）；
   // 允许集缺席 ⇒ 不按作用域过滤（老路径逐字不变），给了集合就整层整层地挡。
@@ -558,6 +569,10 @@ export async function buildMemoryInjection(opts: MemoryInjectionOptions): Promis
     dir: globDir, label: "全局层", queryText: opts.queryText, stats: globStats, limit: recallLimit, nowISO,
     ...(opts.embedding ? { embedding: opts.embedding } : {}), ...recallScopes, entryScope: "team",
   });
+  const recallMember = memberDir === null ? null : await recallSection({
+    dir: memberDir, label: "成员层", queryText: opts.queryText, stats: memberStats, limit: recallLimit, nowISO,
+    ...(opts.embedding ? { embedding: opts.embedding } : {}), ...recallScopes, entryScope: "member",
+  });
 
   // 段内容统一过「脱敏 → 外部引用治理 → 控制标签转义」再进块；包装产生**新对象**，
   // 预算淘汰改的是这些新对象——后面给命中记账必须认它们（认淘汰前的旧对象就是账实不符）。
@@ -568,13 +583,15 @@ export async function buildMemoryInjection(opts: MemoryInjectionOptions): Promis
     return { header: s.header, lines: escapeControlTags(await sanitize(s.lines.join("\n"))).split("\n") };
   };
   const recallProjWrapped = await wrap(recallProj.section);
+  const memberIndexWrapped = await wrap(memberIndex);
+  const recallMemberWrapped = await wrap(recallMember?.section ?? null);
   const recallGlobWrapped = await wrap(recallGlob.section);
 
   const projectSections: Section[] = [];
   // 教训段放**最后**：预算治理是从各段**首部**整行丢弃、保尾部（下面那个循环），放最后 ⇒
   // 它是项目段里最后被丢的那一段。RECALL 放索引之后、教训之前：它是本轮任务最相关的正文，
   // 但教训带证据指针、丢了更难自救，所以教训仍在它后面受保护。
-  for (const s of [await wrap(arch), await wrap(decisions), await wrap(projIndex), recallProjWrapped, await wrap(await lessonsSection(projDir, opts.lessonsLimit ?? LESSONS_RECENT_DEFAULT))]) {
+  for (const s of [await wrap(arch), await wrap(decisions), await wrap(projIndex), memberIndexWrapped, recallProjWrapped, recallMemberWrapped, await wrap(await lessonsSection(projDir, opts.lessonsLimit ?? LESSONS_RECENT_DEFAULT))]) {
     if (s === null) continue;
     projectSections.push(s);
   }
