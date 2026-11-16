@@ -160,8 +160,10 @@ export type { SearchProvider } from "../tools/web-search";
  *  v69 = 成员起跑前注入密钥：`teamMemberStart` 按授权把 `DSH_SECRET_<NAME>` 注入那次 run，
  *        收束后撤销；回包带 `injected` / `missingSecrets` / `deniedSecrets`（只报名字，不报值）。
  *  v70 = 群聊共享流（`teamGroupStream`）：读群会话自己的事件流，带轮与说话人，截断如实。
- *  v71 = 记忆面板（`teamMemoryPanel`）：三层记忆的主题数/字节数，成员逐个点名，缺层如实。 */
-export const IPC_PROTOCOL_VERSION = 71;
+ *  v71 = 记忆面板（`teamMemoryPanel`）：三层记忆的主题数/字节数，成员逐个点名，缺层如实。
+ *  v72 = 窗口活跃推送（`onWallpaperActive`）：主进程按真窗口 focus/blur 推 `{active}`，
+ *        渲染层的媒体门不再读 `document.hasFocus()`（后台窗口会假阴性 ⇒ 视频永不播）。 */
+export const IPC_PROTOCOL_VERSION = 72;
 
 /** 团队名单（v59）：成员档案是投影，`records` 是补丁条数（面板据此说「有几条历史」）。 */
 export interface TeamRosterPayload {
@@ -221,6 +223,11 @@ export interface TeamRoundPlanPayload {
 }
 
 /** 壁纸媒体的系统级暂停信号（v59）。`reason` 只描述「为什么停」，不描述渲染层怎么做。 */
+export interface WallpaperActivePayload {
+  /** 窗口是否活跃（由主进程按真窗口的 focus/blur 判定）。 */
+  active: boolean;
+}
+
 export interface WallpaperSuspendPayload {
   paused: boolean;
   reason: "suspend" | "lock-screen" | "resume" | "unlock-screen";
@@ -621,6 +628,8 @@ export interface AgentApi {
   onNotificationOpen(cb: (p: RunNotificationPayload) => void): () => void;
   /** v59：系统休眠/锁屏 ⇒ 暂停视频壁纸；唤醒/解锁 ⇒ 恢复。只在壁纸挂视频时才有意义。 */
   onWallpaperSuspend(cb: (p: WallpaperSuspendPayload) => void): () => void;
+  /** v72：窗口活跃推送（主进程听真 focus/blur）。 */
+  onWallpaperActive(cb: (payload: WallpaperActivePayload) => void): () => void;
   /** v59：团队名单（成员档案＝投影；读的是团队事件日志，不是 JSON 配置文件）。 */
   teamRoster(): Promise<TeamRosterPayload>;
   /** v59：写一条成员档案（新增/改档/删人都是同一条通道；删＝写墓碑，不删历史）。 */

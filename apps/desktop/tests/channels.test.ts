@@ -10,10 +10,10 @@ import { INVOKE_CHANNELS, PUSH_CHANNELS, type PushChannel } from "../src/main/ch
 // 静态裁决。运行时用例只验推送三键与 invoke 表非空。
 
 describe("通道名表完整性", () => {
-  it("推送通道恰为十条且通道名非空", () => {
+  it("推送通道恰为十一条且通道名非空", () => {
     // 2026-10-20：＋onMenu（原生菜单栏 → 渲染层命令分发，蓝本 §5.2 菜单树）。
     // 2026-10-25（v21）：＋onNotificationOpen（完成通知点击直达会话）。
-    expect(Object.keys(PUSH_CHANNELS).sort()).toEqual(["onAsk", "onAskDone", "onBrowserState", "onEvent", "onMenu", "onNotificationOpen", "onPreviewState", "onTerminalData", "onTerminalExit", "onWallpaperSuspend"]);
+    expect(Object.keys(PUSH_CHANNELS).sort()).toEqual(["onAsk", "onAskDone", "onBrowserState", "onEvent", "onMenu", "onNotificationOpen", "onPreviewState", "onTerminalData", "onTerminalExit", "onWallpaperActive", "onWallpaperSuspend"]);
     for (const channel of Object.values(PUSH_CHANNELS)) expect(channel).toBeTruthy();
   });
 

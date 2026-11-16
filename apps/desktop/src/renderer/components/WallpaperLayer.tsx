@@ -6,7 +6,7 @@
 // 生命周期：失焦 / 不可见即暂停视频（省电）；系统休眠时机器本就不跑，不另设通道。
 // 降级：媒体 404 / 解码失败 ⇒ 撤层并记「文件不可用」（只撤媒体，玻璃面留着——没有壁纸时它们回落实体色）。
 import { useEffect, useRef, useState } from "react";
-import { markWallpaperUnavailable, shouldPauseMedia, useWallpaperSystemPaused, type WallpaperView } from "../state/wallpaper";
+import { markWallpaperUnavailable, shouldPauseMedia, useWallpaperSystemPaused, useWallpaperWindowActive, type WallpaperView } from "../state/wallpaper";
 
 export function WallpaperLayer(props: { view: WallpaperView }): React.JSX.Element | null {
   const { view } = props;
@@ -14,10 +14,12 @@ export function WallpaperLayer(props: { view: WallpaperView }): React.JSX.Elemen
   const [paused, setPaused] = useState(false);
   // v59：系统休眠/锁屏的暂停态由主进程推来（锁屏时窗口既没失焦也没隐藏）。
   const systemPaused = useWallpaperSystemPaused();
+  // v72：窗口活跃也由主进程推（真 focus/blur），不读 document.hasFocus()。
+  const windowActive = useWallpaperWindowActive();
 
   useEffect(() => {
     if (view.kind !== "video") return;
-    const sync = (): void => { setPaused(shouldPauseMedia(document.hasFocus(), !document.hidden, systemPaused)); };
+    const sync = (): void => { setPaused(shouldPauseMedia(windowActive, !document.hidden, systemPaused)); };
     window.addEventListener("blur", sync);
     window.addEventListener("focus", sync);
     document.addEventListener("visibilitychange", sync);
@@ -27,7 +29,7 @@ export function WallpaperLayer(props: { view: WallpaperView }): React.JSX.Elemen
       window.removeEventListener("focus", sync);
       document.removeEventListener("visibilitychange", sync);
     };
-  }, [view.kind, systemPaused]);
+  }, [view.kind, systemPaused, windowActive]);
 
   useEffect(() => {
     const el = videoRef.current;

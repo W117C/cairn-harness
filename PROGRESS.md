@@ -42649,3 +42649,45 @@ wallpaper-engine，逐行写「它怎么做 / 我们怎么做 / 证据在哪 / *
 `wallpaper.lifecycle` 仍是 covered，但它的**真机 emit 臂**这一轮红着——原因是焦点拿不到，不是映射坏了：
 映射由 `wallpaper-suspend.test.ts` 判，真机上 `powerMonitor` 上确实挂着 1 个监听（`listenerCount:1`）。
 这条备注已写进对表 `ours`，等焦点恢复重跑冒烟即可把这条臂判绿。
+
+## 2026-11-16 · 第 1274 页：窗口活跃改由主进程推（协议 v72）——真机冒烟 51/58 → **58/58**（`pending`）
+
+**背景**：13:56 起本机会话不给后台 Electron 进程 OS 前台焦点，冒烟里 5 条依赖 `document.hasFocus()` 的判据一直红。
+本页不是「放宽判据」，是**把判据依赖的东西换掉**：活跃态由主进程按真窗口 focus/blur 推给渲染层。
+
+### 一、为什么这是对的设计（不只是为了判据）
+
+- Electron 里后台窗口的 `document.hasFocus()` 会**假阴性**（脚本启动、被完全遮挡、别的前台 app 拿走焦点）；
+- 假阴性的代价是**视频永远不播** —— 用户看到黑屏，判据红只是它的表征；
+- 所以：主进程听真窗口的 `focus`/`blur`（这就是 OS 真实事件）→ 推 `{active}` → 渲染层媒体门
+  `shouldPauseMedia(windowActive, !document.hidden, systemPaused)` 只认这三个信号。
+
+### 二、落点
+
+| 层 | 落点 |
+|---|---|
+| 主进程 | `apps/desktop/src/main/wallpaper-active.ts`：`installActivePush`（按事件推、销毁窗口不推、单窗抛错不影响别人、卸载摘干净） |
+| 装配 | `index.ts`：每个窗口都挂（含 `browser-window-created`），`did-finish-load` 补一次初始态 |
+| 渲染层 | `state/wallpaper.ts`：`windowActive`（缺省 true，收到推送才改）+ `useWallpaperWindowActive`；`WallpaperLayer` 不再读 `document.hasFocus()` |
+| 协议 | v71 → **v72**：push 通道 `agent:wallpaper-active`（推送通道 10 → **11**，app 域 3 → 4） |
+
+### 三、判卷
+
+- `apps/desktop/tests/wallpaper-active.test.ts` 3 条：blur⇒false / focus⇒true（**按事件推，不等 isFocused 翻转**）、
+  销毁不推、卸载后不再推且一个窗口抛错不影响另一个；
+- 真机冒烟：`videoWin.emit("blur")` ⇒ 暂停、`emit("focus")` ⇒ 续播，走的是**同一份主进程实现 + 真 IPC 通道**；
+  锁屏/解锁与 `powerMonitor.emit("suspend"/"resume")` 两臂照旧。
+- 结果：**58/58 全绿**（此前 51/58 卡在焦点）。用时也从 91s 降到 37s（不再等焦点超时）。
+
+### 四、门禁读数（工作树）
+
+- 核心 `pnpm test:capped`：**696 文件 / 8281 条全绿**，exit 0。
+- 桌面 **410 文件 / 2650 条全绿**；四份密封证据重签全绿（渲染层改了，必须重签）。
+- 真机冒烟 **58/58**。
+- `typecheck` 0 报错；`docs-check` 全绿。
+
+### 五、边界
+
+- 活跃信号是**每窗口**的；一个 app 有多个窗口时，只有被推 `{active:true}` 的那个窗口播（这正是想要的）。
+- `wallpaper.native-pick` 仍 `partial`：原生面板的**点选**这一动作不可自动化（`osascript` UI 自动化超时、无辅助功能权限），
+  已验证的是「调起」与「取消」，不冒充点选。

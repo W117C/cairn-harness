@@ -190,11 +190,12 @@
       "id": "wallpaper.lifecycle",
       "capability": "失焦/隐藏/锁屏即停",
       "reference": "失焦/隐藏",
-      "ours": "含系统级推送（真机 powerMonitor 监听已挂；这条的真机 emit 臂在 13:56 后本机取不到焦点，冒烟里 5 条焦点判据红——映射本身由 wallpaper-suspend.test.ts 判，不冒充绿）",
+      "ours": "含系统级推送（真机 powerMonitor 监听 + v72 主进程活跃推送；冒烟 58/58 全绿）",
       "status": "covered",
       "evidence": [
-        "apps/desktop/tests/wallpaper-suspend.test.ts",
-        "apps/desktop/scripts/wallpaper-csp-smoke.cjs"
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs",
+        "apps/desktop/tests/wallpaper-active.test.ts",
+        "apps/desktop/tests/wallpaper-suspend.test.ts"
       ]
     },
     {

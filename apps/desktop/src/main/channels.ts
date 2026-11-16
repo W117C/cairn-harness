@@ -2,7 +2,7 @@
 // AgentApi 新增方法而这里不加行 ⇒ typecheck 红（ipc-protocol 删键同理）。
 import type { AgentApi } from "../../../../src/main/ipc-protocol";
 
-export type PushChannel = "onEvent" | "onAsk" | "onAskDone" | "onTerminalData" | "onTerminalExit" | "onBrowserState" | "onPreviewState" | "onMenu" | "onNotificationOpen" | "onWallpaperSuspend";
+export type PushChannel = "onEvent" | "onAsk" | "onAskDone" | "onTerminalData" | "onTerminalExit" | "onBrowserState" | "onPreviewState" | "onMenu" | "onNotificationOpen" | "onWallpaperSuspend" | "onWallpaperActive";
 export type InvokeChannel = Exclude<keyof AgentApi, PushChannel>;
 
 export const PUSH_CHANNELS: { [K in PushChannel]: string } = {
@@ -16,6 +16,7 @@ export const PUSH_CHANNELS: { [K in PushChannel]: string } = {
   onMenu: "agent:menu-command",
   onNotificationOpen: "agent:notification-open",
   onWallpaperSuspend: "agent:wallpaper-suspend",
+  onWallpaperActive: "agent:wallpaper-active",
 };
 
 
@@ -470,6 +471,7 @@ export const PUSH_CHANNEL_DOMAINS: { [K in PushChannel]: ChannelDomain } = {
   onPreviewState: "pane",
   onMenu: "app",
   onNotificationOpen: "app",
+  onWallpaperActive: "app",
   onWallpaperSuspend: "app",
 };
 

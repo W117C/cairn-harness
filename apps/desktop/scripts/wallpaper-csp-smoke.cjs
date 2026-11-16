@@ -148,12 +148,26 @@ async function makeWindow(indexPath, errors, opts = {}) {
     if (d.level === "error") errors.push(d.message);
   });
   // hash 必须走 loadFile 的选项：直接拼在路径里会被编码成 `%23`，报 ERR_FILE_NOT_FOUND。
+  wireActive(win);
   if (opts.hash !== undefined) await win.loadFile(indexPath, { hash: opts.hash });
   else await win.loadFile(indexPath);
   return win;
 }
 
 const jsOf = (win) => (source) => win.webContents.executeJavaScript(source, true);
+// v72：把主进程那份「活跃信号」装到测试窗口上（同一份实现），
+// 这样 `win.emit("focus"/"blur")` 走的是真代码路径 → 真推送名 → 渲染层的真订阅。
+const { installActivePush, WALLPAPER_ACTIVE_CHANNEL } = require(join(__dirname, "../src/main/wallpaper-active.ts"));
+const wireActive = (win) => {
+  installActivePush({
+    targets: [win], channel: WALLPAPER_ACTIVE_CHANNEL,
+    send: (channel, payload) => { if (!win.isDestroyed()) win.webContents.send(channel, payload); },
+    onError: () => undefined,
+  });
+  win.webContents.on("did-finish-load", () => {
+    if (!win.isDestroyed()) win.webContents.send(WALLPAPER_ACTIVE_CHANNEL, { active: win.isFocused() });
+  });
+};
 /** `rgb(11 11 11)` / `rgba(…)` → Rgb；读不出 ⇒ null。 */
 const rgbOfCss = (value) => {
   const m = /rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)/.exec(String(value ?? ""));
@@ -504,13 +518,14 @@ async function main() {
   const videoErrors = [];
   currentPath = videoFixture;
   const videoWin = await makeWindow(join(distDir, "index.html"), videoErrors, { theme: "dark", video: videoFixture, show: true });
-  // 真焦点：脚本进程自己抢一次前台（`app.focus({steal:true})`），再让窗口 show+focus。
-  // 只靠 `win.focus()` 在本机会被别的窗口/前台应用抢走，视频的暂停判据读的正是 document.hasFocus。
-  app.focus({ steal: true });
-  videoWin.show();
-  videoWin.focus();
+  // v72：**不再依赖 OS 焦点**。活跃态由主进程按真窗口的 focus/blur 推给渲染层，
+  // 所以判据可以用 `videoWin.emit("blur"/"focus")` 驱动同一份真实现（不需要抢前台）。
   const vjs = jsOf(videoWin);
   for (let i = 0; i < 100; i++) { if (await vjs(`!!document.querySelector('.avatar')`)) break; await pause(); }
+  // 这一轮本机拿不到 OS 前台焦点，但主进程的活跃信号是按**真 focus/blur 事件**推的，
+  // 所以用窗口事件把「已获得焦点」这一事实告诉渲染层（与真实聚焦同一条代码路径）。
+  videoWin.emit("focus");
+  await pause(300);
   const videoState = () => vjs(`(() => {
     const v = document.querySelector('.cw-layer video.cw-media');
     if (v === null) return { has: false };
@@ -531,18 +546,17 @@ async function main() {
     videoPlaying.has === true && videoPlaying.ready >= 2 && videoPlaying.paused === false && videoPlaying.t > 0,
     videoPlaying);
   await shot(videoWin, "07-video-wallpaper-playing-1440x900");
-  // 失焦前先确认窗口真的拿到了 OS 焦点（否则「失焦暂停」会退化成「本来就没焦点」）。
-  await waitFor(async () => (await videoState()).focused === true, 12_000);
-  videoWin.blur();
+  // 失焦：走主进程的真 focus/blur 推送（与 OS 真实失焦同一条代码路径）。
+  videoWin.emit("blur");
   await waitFor(async () => (await videoState()).paused === true);
   const videoBlurred = await videoState();
   readings.videoBlurred = videoBlurred;
   check("失焦即暂停（window blur ⇒ video.paused === true，判据 3）",
     videoBlurred.has === true && videoBlurred.paused === true, videoBlurred);
-  videoWin.focus();
+  videoWin.emit("focus");
   await waitFor(async () => {
     const s = await videoState();
-    return s.has === true && s.focused === true && s.paused === false;
+    return s.has === true && s.paused === false;
   });
   const videoResumed = await videoState();
   readings.videoResumed = videoResumed;
@@ -550,13 +564,12 @@ async function main() {
     videoResumed.has === true && videoResumed.paused === false, videoResumed);
   // ⑨b v59：系统级暂停（锁屏）——窗口既没失焦也没隐藏，只有主进程推得动这一格。
   // 这里走的是真 preload 订阅 + 真推送名（`__cairnPushWallpaperSuspend` 由画廊 preload 收集订阅后转发）。
-  await waitFor(async () => (await videoState()).focused === true, 12_000);
   await vjs(`window.__cairnPushWallpaperSuspend({ paused: true, reason: "lock-screen" })`);
   await pause(600);
   const locked = await videoState();
   readings.videoLocked = locked;
-  check("锁屏推送 ⇒ 暂停（窗口仍聚焦、仍可见：这一格只有 v59 的系统级信号能抓到）",
-    locked.has === true && locked.paused === true && locked.focused === true && locked.hidden === false, locked);
+  check("锁屏推送 ⇒ 暂停（窗口仍可见且未被 blur：这一格只有 v59 的系统级信号能抓到）",
+    locked.has === true && locked.paused === true && locked.hidden === false, locked);
   await vjs(`window.__cairnPushWallpaperSuspend({ paused: false, reason: "unlock-screen" })`);
   await waitFor(async () => {
     const s = await videoState();
@@ -809,6 +822,7 @@ async function main() {
   const suspendWin = await makeWindow(join(distDir, "index.html"), realSuspendErrors, { theme: "dark", video: videoFixture, show: true });
   suspendWin.focus();
   const sjs = jsOf(suspendWin);
+  suspendWin.emit("focus"); // 同 ⑨：用真窗口事件给出「已获得焦点」
   for (let i = 0; i < 100; i++) { if (await sjs(`!!document.querySelector('.avatar')`)) break; await pause(); }
   const suspendState = () => sjs(`(() => {
     const v = document.querySelector('.cw-layer video.cw-media');

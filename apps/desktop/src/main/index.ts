@@ -7,6 +7,7 @@ import { bootBackgroundFor, normalizeThemePreference, resolveBootTheme, type The
 import { parseBootWallpaper, bootBackgroundForWallpaper, createTintMemo, NO_WALLPAPER, type BootWallpaper } from "./boot-background";
 import type { TintSource } from "./wallpaper-tint";
 import { installSuspendPause } from "./wallpaper-suspend";
+import { installActivePush, WALLPAPER_ACTIVE_CHANNEL } from "./wallpaper-active";
 import { pickWallpaper } from "./wallpaper-pick";
 import { appendTeamPatch, readTeamRecords, readTeamRoster, teamLogPath } from "./team-store";
 import { listSessions, readSessionEvents } from "../../../../src/main/sessions";
@@ -1833,6 +1834,19 @@ app.whenReady().then(() => {
   // 系统休眠/锁屏 ⇒ 暂停视频壁纸（设计规格 §6 的「系统休眠」行）。
   // 真事件测不了（真休眠会把宿主一起睡掉），所以装配写成可注入的纯函数，由单测判卷；
   // 这里只把 Electron 的真事件源与真窗口递进去。
+  // v72 活跃信号：每个窗口都挂真 focus/blur → 推 `{active}`（渲染层媒体门只认这一个信号）。
+  const pushActiveFor = (win: Electron.BrowserWindow): void => {
+    const send = (channel: string, payload: { active: boolean }): void => {
+      if (win.isDestroyed()) return;
+      win.webContents.send(channel, payload);
+    };
+    installActivePush({ targets: [win], channel: WALLPAPER_ACTIVE_CHANNEL, send, onError: () => undefined });
+    // 首帧给一次当前态（否则渲染层要等到第一次 blur 才知道自己活跃）。
+    win.webContents.on("did-finish-load", () => { send(WALLPAPER_ACTIVE_CHANNEL, { active: win.isFocused() }); });
+  };
+  for (const win of BrowserWindow.getAllWindows()) pushActiveFor(win);
+  app.on("browser-window-created", (_event, win) => { pushActiveFor(win); });
+
   installSuspendPause({
     source: powerMonitor,
     targets: () => BrowserWindow.getAllWindows(),

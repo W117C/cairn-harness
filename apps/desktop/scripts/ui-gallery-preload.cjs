@@ -1627,6 +1627,21 @@ stub.onWallpaperSuspend = (fn) => {
     wallpaperSuspendListeners.delete(fn);
   };
 };
+// v72 窗口活跃：与产品同一条真通道（`ipcRenderer.on("agent:wallpaper-active")`）。
+const wallpaperActiveListeners = new Set();
+stub.onWallpaperActive = (fn) => {
+  const handler = (_event, payload) => { try { fn(payload); } catch { /* 同上 */ } };
+  ipcRenderer.on("agent:wallpaper-active", handler);
+  wallpaperActiveListeners.add(fn);
+  return () => {
+    ipcRenderer.removeListener("agent:wallpaper-active", handler);
+    wallpaperActiveListeners.delete(fn);
+  };
+};
+contextBridge.exposeInMainWorld("__cairnPushWallpaperActive", (payload) => {
+  for (const fn of wallpaperActiveListeners) { try { fn(payload); } catch { /* 同上 */ } }
+});
+
 contextBridge.exposeInMainWorld("__cairnPushWallpaperSuspend", (payload) => {
   for (const fn of wallpaperSuspendListeners) { try { fn(payload); } catch { /* 一个订阅者抛了不该挡住别人 */ } }
 });

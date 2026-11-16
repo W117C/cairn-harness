@@ -78,6 +78,12 @@ let current: WallpaperView = { kind: "none", url: null };
 let failed = false;
 /** 系统级暂停（v59 推送）：锁屏/休眠时窗口既没失焦也没隐藏，只能由主进程告诉我们。 */
 let systemPaused = false;
+/**
+ * 窗口活跃（v72 推送）：**由主进程按真窗口的 focus/blur 告诉我们**，而不是读 `document.hasFocus()`。
+ * 理由见 `main/wallpaper-active.ts`：后台脚本窗口的 hasFocus 会假阴性，代价是视频永远不播。
+ * 缺省 true：没收到推送时按「活跃」算——宁可先播，也不要一上来就黑屏。
+ */
+let windowActive = true;
 const listeners = new Set<() => void>();
 
 export function setWallpaperView(view: WallpaperView): void {
@@ -104,6 +110,21 @@ export function setSystemPaused(paused: boolean): void {
   if (systemPaused === paused) return;
   systemPaused = paused;
   for (const l of listeners) l();
+}
+
+/** 主进程推来的窗口活跃态（唯一写者是推送订阅，见 `bootWallpaper`）。 */
+export function setWindowActive(active: boolean): void {
+  if (windowActive === active) return;
+  windowActive = active;
+  for (const l of listeners) l();
+}
+
+export function wallpaperWindowActive(): boolean {
+  return windowActive;
+}
+
+export function useWallpaperWindowActive(): boolean {
+  return useSyncExternalStore(subscribeWallpaper, wallpaperWindowActive, wallpaperWindowActive);
 }
 
 export function wallpaperSystemPaused(): boolean {
@@ -194,6 +215,7 @@ export function bootWallpaper(): void {
   void refreshWallpaper().catch(() => undefined);
   try {
     window.agent.onWallpaperSuspend((p) => { setSystemPaused(p.paused === true); });
+    window.agent.onWallpaperActive((p) => { setWindowActive(p.active !== false); });
   } catch { /* 老协议没有这条推送（v59 之前）：不订阅，也不炸 */ }
   try {
     const observer = new MutationObserver(() => {
