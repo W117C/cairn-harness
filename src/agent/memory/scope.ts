@@ -62,3 +62,13 @@ export function scopeDirs(memoryHome: string, projectDir: string, memberId?: str
 export function scopesForAgent(agentId: string | undefined): string[] {
   return typeof agentId === "string" && agentId.startsWith("member:") ? ["project", "team", "member"] : ["project", "team"];
 }
+
+/**
+ * 从运行身份取成员 id：`member:<id>` 且 id 合法才返回；其余一律 null（fail closed）。
+ * 写入口用它——**模型不能指定成员**，身份只能来自运行期。
+ */
+export function memberIdOf(agentId: string | undefined): string | null {
+  if (typeof agentId !== "string" || !agentId.startsWith("member:")) return null;
+  const id = agentId.slice("member:".length);
+  return /^[A-Za-z0-9_-]{1,64}$/.test(id) ? id : null;
+}

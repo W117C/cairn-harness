@@ -8,6 +8,7 @@
 // 权限门在 main 层包装（gatedRemember）：本工具只做参数校验与落盘（与 write_file 同构）。
 // 模型没有删除操作：本工具签名/操作集不含 delete（§8.1.7，删除仅用户经记忆面板）。
 import type { Tool, ToolContext, ToolResult } from "./base.js";
+import { memberIdOf, memberMemoryDir } from "../agent/memory/scope.js";
 import {
   MemoryError,
   MEMORY_TYPES,
@@ -26,7 +27,7 @@ import { redactSecrets } from "../agent/security/scan.js";
 export type RememberKind = "architecture" | "decision" | "preference" | "memory";
 export type RememberOp = "append" | "replace";
 const KINDS: readonly RememberKind[] = ["architecture", "decision", "preference", "memory"];
-const SCOPES: readonly string[] = ["project", "global"];
+const SCOPES: readonly string[] = ["project", "global", "member"];
 
 /** 工具描述（GLM 规格 + 审批卡共用）：密钥卫生与 skip 纪律明文（§8.1.8 第 6 条 / §8.1.3）。
  *  分层口径：**顶层只放纪律**，参数怎么用留给 parameters 的各条 description（scope/kind/op 此前两处各写一遍，
@@ -77,7 +78,7 @@ export const remember: Tool = {
         "scope" in (rawArgs.metadata as Record<string, unknown>);
       throw new MemoryError(
         "call_failed",
-        "remember: scope 必须是顶层参数 project|global" +
+        "remember: scope 必须是顶层参数 project|global|member" +
           (smuggled ? "（检测到 metadata 内的 scope——一律无效，mem0 三次越权同构防线）" : "") +
           "，收到: " + JSON.stringify(scope ?? null),
       );
@@ -87,8 +88,21 @@ export const remember: Tool = {
       throw new MemoryError("call_failed", "remember: kind 必须是 architecture|decision|preference|memory，收到: " + JSON.stringify(kind ?? null));
     }
     const k = kind as RememberKind;
+    // 两条分支各说各的：不改既有的全局层文案（判卷钉着原文），成员层单独一句。
     if (scope === "global" && k !== "memory") {
       throw new MemoryError("call_failed", "remember: 全局层只有记忆笔记（kind=memory），architecture/decision/preference 是项目层 .agent/ 根三文件");
+    }
+    if (scope === "member" && k !== "memory") {
+      throw new MemoryError("call_failed", "remember: 成员层只有记忆笔记（kind=memory），architecture/decision/preference 是项目层 .agent/ 根三文件");
+    }
+    // 成员层：身份只能来自运行期（`agent_id = member:<id>`），**模型不能自己指定成员**。
+    // 没有身份就 fail closed——不许把「我是谁」交给模型参数决定。
+    const memberId = scope === "member" ? memberIdOf(ctx.agentId) : null;
+    if (scope === "member" && memberId === null) {
+      throw new MemoryError(
+        "call_failed",
+        "remember: scope=member 需要运行期身份（agent_id = member:<id>），本次运行没有该身份",
+      );
     }
     const op = rawArgs.op === undefined ? defaultOp(k) : rawArgs.op;
     if (op !== "append" && op !== "replace") {
@@ -119,7 +133,11 @@ export const remember: Tool = {
       if (typeof topic !== "string" || topic.length === 0) {
         throw new MemoryError("call_failed", "remember: kind=memory 必带 topic（1-64 位字母/数字/连字符/下划线）");
       }
-      const dir = scope === "project" ? await projectMemoryWriteDir(ctx.workspace, topic) : globalMemoryDir();
+      const dir = scope === "project"
+        ? await projectMemoryWriteDir(ctx.workspace, topic)
+        : scope === "member"
+          ? memberMemoryDir(globalMemoryDir(), memberId as string)
+          : globalMemoryDir();
       if (op === "replace") {
         const oldContent = rawArgs.old_content;
         if (typeof oldContent !== "string") {
@@ -138,13 +156,13 @@ export const remember: Tool = {
         if (!cas.matched) {
           throw new MemoryError("old_content_mismatch", "remember: old_content 与 " + topic + " 正文不精确匹配（replace 报错重试语义）");
         }
-        return { ok: true, output: "已写入 " + (scope === "project" ? ".agent/" : "全局层 ") + "memory/" + topic + ".md（replace，type=" + type + "，" + Buffer.byteLength(safe.text, "utf8") + " 字节，modified 已落账）" + note };
+        return { ok: true, output: "已写入 " + (scope === "project" ? ".agent/" : scope === "member" ? "成员层（" + String(memberId) + "）" : "全局层 ") + "memory/" + topic + ".md（replace，type=" + type + "，" + Buffer.byteLength(safe.text, "utf8") + " 字节，modified 已落账）" + note };
       }
       // 追加的"读旧正文 → 拼新正文 → 写"**整段在 store 的锁里**（appendTopic）：
       // 旧实现读在锁外 ⇒ 两个并发追加都读到同一份旧正文，后一个把前一个整个盖掉
       // （两笔都回执"已写入"）。见 store.ts 的 appendTopic 注释。
       const res = await appendTopic(dir, topic, type, safe.text, nowISO);
-      return { ok: true, output: "已写入 " + (scope === "project" ? ".agent/" : "全局层 ") + "memory/" + topic + ".md（append，type=" + type + "，" + res.bytes + " 字节，modified 已落账）" + note };
+      return { ok: true, output: "已写入 " + (scope === "project" ? ".agent/" : scope === "member" ? "成员层（" + String(memberId) + "）" : "全局层 ") + "memory/" + topic + ".md（append，type=" + type + "，" + res.bytes + " 字节，modified 已落账）" + note };
     }
     // ---- 根三文件（仅项目层）----
     if (op === "append") {

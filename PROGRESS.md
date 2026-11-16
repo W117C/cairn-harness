@@ -42036,3 +42036,46 @@ wallpaper-engine，逐行写「它怎么做 / 我们怎么做 / 证据在哪 / *
 - **写入**还没分目录：`remember` 的 scope 仍是 `project|global`。目录（`memberMemoryDir`）与
   id 校验已备好；要不要给模型开 `member` 档（改模型可见签名）仍等业主一句。
 - 「一个团队包含哪些会话」的口径也仍等业主（当前默认 `TEAM_USAGE_SESSION_CAP = 10`）。
+
+## 2026-11-16 · 第 1260 页：记忆写入分目录（成员私有档接上写入路径）（`pending`）
+
+**背景**：第 1259 页把**读**侧接通了，写侧还欠一笔：`remember` 只有 `project|global`。
+本页补上 `member` 档——但把「我是谁」的权力留在运行期，不给模型参数。
+
+### 一、写入路径
+
+- `ToolContext.agentId?`（新可选字段；`loop` 从 `opts.agentId` 递进去）——**身份只来自运行期**。
+- `remember` 接受 `scope: "member"`：`memberIdOf(ctx.agentId)` 认出 `member:<id>` 才继续，
+  否则 fail closed；落点 `<memory-home>/members/<id>/`（含该目录自己的 `MEMORY.md` 索引）。
+- 成员层与全局层同一条纪律：**只收记忆笔记**（kind=memory）；架构/决策/偏好仍是项目层根三文件。
+- 既有全局层文案与判据原文一字未改（判卷钉着「全局层只有记忆笔记」那句）。
+
+### 二、判卷
+
+`tests/remember-member-scope.test.ts` 4 条：
+
+| # | 判据 | 读数 |
+|---|---|---|
+| 1 | 没身份 / 非成员身份 ⇒ 拒 | `MemoryError`；错误文案要求「需要运行期身份」 |
+| 2 | 有身份 ⇒ 落 `members/<id>/` | 该目录出现 `mine.md` 与 `MEMORY.md`；全局层根目录**没被写脏** |
+| 3 | 成员层只收 kind=memory | 架构/决策/偏好一律拒 |
+| 4 | 非法身份一律拒 | `member`、`members:m1`、`member:`、`member:a.b`、`member:a/b` |
+
+### 三、被两条判据各咬一次（如实记）
+
+1. **散文针**：第一版错误文案写成「成员身份不接受参数指定」→ promise-recall 判据把它当
+   **无证人的能力断言**（顶包超帽）。改成「需要运行期身份（agent_id = member:<id>）」，并在判卷里
+   钉住这句 → 三态归位。
+2. **既存判卷**：我把「全局层只有记忆笔记」改写成「全局层与成员层…」→ `remember.test.ts` 当场红
+   （它钉原文）。改成两条分支各说各的。
+
+### 四、门禁读数（工作树）
+
+- 核心 `pnpm test:capped`：**690 文件 / 8248 条全绿**，exit 0；`typecheck` 0 报错。
+- 桌面与真机冒烟本轮未动（无 renderer / 主进程改动）⇒ 沿用第 1258 页读数。
+
+### 五、边界
+
+- `scope=member` 现在要求运行期真的下发 `agent_id = member:<id>`。今天**没有**任何调用方这么发
+  （成员线程还没接进 run），所以这条写入路径已经判过、但还没有真实流量。
+- 成员记忆的**读**侧（`scopes` 里的 `member` 档）同样等这一步。
