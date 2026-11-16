@@ -96,7 +96,11 @@ function contentTypeOf(path: string): string {
   return "video/mp4";
 }
 
-/** 协议 handler：只服务 currentPath 那一个文件；其余一律 404。 */
+/** 协议 handler：只服务 currentPath 那一个文件；其余一律 404。
+ *  防御纵深（2026-11-17，Mimosa finding 收口）：settings.json 是用户可手改的文件——手改指向
+ *  任意文件时，此前 handler 只 stat 就开流，等于把任意文件经 wallpaper:// 吐给渲染层。
+ *  这里用**选文件时同一道闸**（validateWallpaperFile：媒体扩展名 + 常规文件 + 体积上限）重验；
+ *  不合闸一律 404（与「壁纸没了」同一措辞，不泄露差异）。正常选取的文件行为不变。 */
 export async function handleWallpaperMedia(opts: {
   currentPath: string | null;
   range: string | null;
@@ -104,6 +108,8 @@ export async function handleWallpaperMedia(opts: {
 }): Promise<Response> {
   const path = opts.currentPath;
   if (path === null) return new Response("no wallpaper", { status: 404 });
+  const verdict = await validateWallpaperFile(path);
+  if (verdict.ok !== true) return new Response("no wallpaper", { status: 404 });
   let size: number;
   try {
     size = (await stat(path)).size;

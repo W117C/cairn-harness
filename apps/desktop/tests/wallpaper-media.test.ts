@@ -68,4 +68,15 @@ describe("壁纸媒体", () => {
     const bad = await handleWallpaperMedia({ currentPath: p, range: "bytes=999-", open });
     expect(bad.status).toBe(416);
   });
+
+  it("防御纵深（2026-11-17）：手改 settings 指向非媒体文件 ⇒ 404，不把任意文件经 wallpaper:// 吐给渲染层", async () => {
+    const open = (): ReadableStream<Uint8Array> => Readable.toWeb(Readable.from([Buffer.alloc(4, 3)])) as ReadableStream<Uint8Array>;
+    // 手改指向的普通文件（如配置/密钥）：过不了选文件那道闸 ⇒ 与「壁纸没了」同一 404 措辞。
+    const txt = await tempFile("secret.txt", 16);
+    const rejected = await handleWallpaperMedia({ currentPath: txt, range: null, open });
+    expect(rejected.status).toBe(404);
+    // 指向不存在的路径同理（选完被删也 404）。
+    const gone = await handleWallpaperMedia({ currentPath: join(tmpdir(), "cairn-nope-xyz.mp4"), range: null, open });
+    expect(gone.status).toBe(404);
+  });
 });
