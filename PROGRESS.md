@@ -42734,3 +42734,48 @@ wallpaper-engine，逐行写「它怎么做 / 我们怎么做 / 证据在哪 / *
 - 桌面 **412 文件 / 2655 条全绿**；四份密封证据重签全绿（渲染层改了）。
 - 真机冒烟 **59/59**。
 - `typecheck` 0 报错；`docs-check` 全绿。
+
+## 2026-11-16 · 第 1276 页：点选替身臂（真决策壳 + 真校验）——冒烟 59/59 → **60/60**（`pending`）
+
+**背景**：`wallpaper.native-pick` 里「真人在系统面板里点中一个文件」这一跳在本机不可自动化
+（Electron 无 API、`osascript` 无辅助功能权限）。这一页把**能判的部分判满**，并把不能判的那一跳点名。
+
+### 一、三种臂，各自证什么
+
+| 臂 | 做法 | 证到什么 |
+|---|---|---|
+| A 调起 | 真 `dialog.showOpenDialog` + 关窗 | 面板真被调起（Promise 被攥住 ≥1s，关窗才结算） |
+| B 取消 | 同上，关窗 | 取消是**合法结果**（`canceled`，不是 error） |
+| **C 选中之后** | **点选替身臂**：`openDialog` 替身返回一个路径，其余全真（`pickWallpaper` + `validateWallpaperFile`） | 选中 ⇒ `ok/kind/path`；非白名单 ⇒ 拒；取消 ⇒ `canceled` |
+
+C 臂**只有 OS 面板本体被替换**，这不是 mock 产品逻辑，是把"面板这一层无法自动化"隔离出来。
+
+### 二、判卷读数
+
+```json
+pickedReal    {"ok":true,"kind":"image","path":"…/fixture-wallpaper.png"}
+pickedBad     {"ok":false,"error":"只支持图片或视频文件"}
+pickedCanceled{"ok":false,"canceled":true}
+```
+
+真机冒烟 **60/60**（新增 1 条 PASS）。
+
+### 三、覆盖率（不变，如实）
+
+`wallpaper.native-pick` 仍 `partial`：缺的是**真人在面板里点中一个文件**这一跳。
+覆盖分维持 **0.975**（19 covered / 1 partial / 0 absent，20 格）。
+
+### 四、门禁读数（工作树）
+
+- 核心 `pnpm test:capped`：696 文件 / 8281 条全绿。
+- 桌面：412 文件 / 2655 条全绿；四份密封证据重签全绿。
+- 真机冒烟 **60/60**；`typecheck` 0 报错；`docs-check` 全绿。
+
+### 五、留给业主的口径决定（我不自己改尺）
+
+三选一：
+1. **保持 partial**（现状态）：格子诚实，但永远差这一跳；
+2. **合并**：把 `native-pick` 并进 `wallpaper.pick-in-app`，写成「选壁纸 = 应用内选择器（真点击）+ 原生面板（调起/取消/选中后全链）」；
+3. **转 out**：写明「原生面板点选不可自动化，需人工验收」并移出评分面。
+
+三条我都能立刻执行；不自选，是因为这动的是**验收口径**，不是实现。

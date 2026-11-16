@@ -160,6 +160,7 @@ const jsOf = (win) => (source) => win.webContents.executeJavaScript(source, true
 const { installActivePush, WALLPAPER_ACTIVE_CHANNEL } = require(join(__dirname, "../src/main/wallpaper-active.ts"));
 // v73 应用内选择器：把**真实现**注册成真 IPC handler（与产品主进程同名同参），preload 只转发。
 const { browseDirectory } = require(join(__dirname, "../src/main/wallpaper-browse.ts"));
+const { pickWallpaper } = require(join(__dirname, "../src/main/wallpaper-pick.ts"));
 const { validateWallpaperFile } = require(join(__dirname, "../src/main/wallpaper.ts"));
 ipcMain.handle("agent:wallpaper-browse", (_e, dir) => browseDirectory(typeof dir === "string" && dir !== "" ? dir : join(out, "")));
 ipcMain.handle("agent:wallpaper-apply-path", (_e, path) => validateWallpaperFile(String(path ?? "")));
@@ -856,6 +857,28 @@ async function main() {
       && dialogOptions.filters[0].extensions.includes("png")
       && dialogOptions.filters[0].extensions.includes("mp4"),
     dialogOptions);
+
+  // ⑬b 点选**替身臂**（明确标注：OS 面板本体被替换）：真决策壳 + 真校验 + 真结果形状。
+  // 原生面板的点选在本机不可自动化（无 API、无辅助功能权限），但「选中之后」这条链可以全真：
+  // 只有 `openDialog` 这一层被替身返回一个路径，其余（取消语义、校验、结果形状）都是产品代码。
+  const pickedReal = await pickWallpaper({
+    openDialog: async () => ({ canceled: false, filePaths: [wallpaperPath] }),
+    validate: validateWallpaperFile,
+  });
+  const pickedBad = await pickWallpaper({
+    openDialog: async () => ({ canceled: false, filePaths: [join(out, "not-a-wallpaper.txt")] }),
+    validate: validateWallpaperFile,
+  });
+  const pickedCanceled = await pickWallpaper({
+    openDialog: async () => ({ canceled: true, filePaths: [] }),
+    validate: validateWallpaperFile,
+  });
+  readings.pickSubstitute = { pickedReal, pickedBad, pickedCanceled };
+  check("点选替身臂：真决策壳 + 真校验（选中 ⇒ ok/kind/path；非白名单 ⇒ 拒；取消 ⇒ canceled 不是 error）",
+    pickedReal.ok === true && pickedReal.kind === "image" && pickedReal.path === wallpaperPath
+      && pickedBad.ok === false && pickedBad.kind === undefined && pickedBad.error !== undefined
+      && pickedCanceled.ok === false && pickedCanceled.canceled === true && pickedCanceled.error === undefined,
+    readings.pickSubstitute);
 
   // ⑭ 真 powerMonitor 对象：装配挂在**真事件源**上，emit 走真实监听链（不是假 source）。
   // 判的是「Electron 的真 powerMonitor → 我们的装配 → 推送 → 渲染层暂停」这条链；

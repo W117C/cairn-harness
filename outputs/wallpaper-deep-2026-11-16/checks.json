@@ -642,7 +642,7 @@
         "rows": [
           "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
           "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-          "新来的成员 · mmwiwnbt7read-onlydefaultguidedautofull-accessteammemberproject移除",
+          "新来的成员 · mmwiwu46qread-onlydefaultguidedautofull-accessteammemberproject移除",
           "本轮发言秩序主持优先按名单轮排一轮",
           "当前会话的段—开新段",
           "权限（成员维）团队档 default · 无裁剪",
@@ -666,7 +666,7 @@
       "rows": [
         "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
         "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-        "新来的成员 · mmwiwnbt7read-onlydefaultguidedautofull-accessteammemberproject移除",
+        "新来的成员 · mmwiwu46qread-onlydefaultguidedautofull-accessteammemberproject移除",
         "本轮发言秩序主持优先按名单轮排一轮",
         "当前会话的段—开新段",
         "权限（成员维）团队档 default · 无裁剪",
@@ -686,7 +686,7 @@
         "rows": [
           "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
           "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-          "新来的成员 · mmwiwnbt7read-onlydefaultguidedautofull-accessteammemberproject移除",
+          "新来的成员 · mmwiwu46qread-onlydefaultguidedautofull-accessteammemberproject移除",
           "本轮发言秩序主持优先按名单轮排一轮",
           "排出来的秩序1. 示例成员　2. 新来的",
           "当前会话的段—开新段",
@@ -782,7 +782,7 @@
         "canceled": false,
         "filePaths": []
       },
-      "elapsedMs": 2084,
+      "elapsedMs": 2131,
       "options": {
         "title": "选择壁纸",
         "properties": [
@@ -831,6 +831,25 @@
           ]
         }
       ]
+    }
+  },
+  {
+    "name": "点选替身臂：真决策壳 + 真校验（选中 ⇒ ok/kind/path；非白名单 ⇒ 拒；取消 ⇒ canceled 不是 error）",
+    "ok": true,
+    "detail": {
+      "pickedReal": {
+        "ok": true,
+        "kind": "image",
+        "path": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/fixture-wallpaper.png"
+      },
+      "pickedBad": {
+        "ok": false,
+        "error": "只支持图片或视频文件"
+      },
+      "pickedCanceled": {
+        "ok": false,
+        "canceled": true
+      }
     }
   },
   {

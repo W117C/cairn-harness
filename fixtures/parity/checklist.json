@@ -225,11 +225,12 @@
       "id": "wallpaper.native-pick",
       "capability": "原生面板点选文件",
       "reference": "宿主选文件",
-      "ours": "面板调起/取消已验证；**点选**不可自动化（osascript 无辅助功能权限）⇒ 这条缺口由 pick-in-app 那条覆盖",
+      "ours": "面板**调起**与**取消**用真系统面板验过；**选中之后**那条链（决策壳 + 校验 + 结果形状）用「点选替身臂」验过（只有 OS 面板本体被替换，其余全真）；**真人在面板里点中一个文件**这一跳在本机不可自动化（无 API、无辅助功能权限）⇒ 仍 partial",
       "status": "partial",
       "evidence": [
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs",
         "apps/desktop/tests/wallpaper-pick.test.ts",
-        "apps/desktop/scripts/wallpaper-csp-smoke.cjs"
+        "apps/desktop/tests/wallpaper-browse.test.ts"
       ]
     },
     {
