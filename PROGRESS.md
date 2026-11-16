@@ -43534,7 +43534,7 @@ bot-report: pass
 | `wallpaper.native-click` | 需人工点一次 | 两次 TIMEOUT + TCC `-1719` |
 | `wallpaper.website` | 两条路不通/需拍板 | `layer-probe.json`（sources=[]） |
 
-## 2026-11-16 · 第 1296 页：「全部做完了吗」现在有一条命令（`verify-all`）＋修掉 3 条存量类型错（`pending`）
+## 2026-11-16 · 第 1296 页：「全部做完了吗」现在有一条命令（`verify-all`）＋修掉 3 条存量类型错（`a47bb53a`）
 
 ### 一、一条命令，一个总判
 
