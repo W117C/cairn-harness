@@ -86,7 +86,26 @@ describe("公开标准对照报告", () => {
       },
       isolation: { hasRequire: "undefined", hasProcess: "undefined", hasAgent: "object", hasNodeGlobals: "undefined,undefined,undefined" },
       redaction: { occurrencesAfter: 0 },
+      keyboardPick: { picked: true },
     });
     expect(reportVerdict(rows)).toBe("pass");
+  });
+});
+
+describe("键盘可达（WCAG 2.1.1）", () => {
+  const base = {
+    readingsPath: "/tmp/r.json",
+    parity,
+    readings: { dark: { worst: 5 }, light: { worst: 5 }, negativeControl: { cspViolations: 1 } },
+    isolation: { hasRequire: "undefined", hasProcess: "undefined", hasAgent: "object", hasNodeGlobals: "none" },
+    redaction: { occurrencesAfter: 0 },
+  };
+  it("键盘走通 ⇒ pass；走不通 ⇒ fail；没读数 ⇒ missing", () => {
+    expect(buildConformanceReport({ ...base, keyboardPick: { picked: true } })
+      .find((r) => r.clause.includes("2.1.1"))!.verdict).toBe("pass");
+    expect(buildConformanceReport({ ...base, keyboardPick: { picked: false } })
+      .find((r) => r.clause.includes("2.1.1"))!.verdict).toBe("fail");
+    expect(buildConformanceReport({ ...base, keyboardPick: null })
+      .find((r) => r.clause.includes("2.1.1"))!.verdict).toBe("missing");
   });
 });

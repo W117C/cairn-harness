@@ -216,12 +216,12 @@
       "id": "wallpaper.pick-in-app",
       "capability": "应用内选壁纸（输目录 → 点文件）",
       "reference": "原生面板",
-      "ours": "应用内选择器：列目录（白名单扩展名、目录排前、隐藏不列）+ 面包屑上级 + 点文件走同一条 validateWallpaperFile 校验",
+      "ours": "应用内选择器：列目录（白名单/目录排前/隐藏不列）+ 面包屑上级 + 点文件走同一条校验；**键盘也能走通**（Tab 到文件行、Enter 选中，WCAG 2.1.1 实测）",
       "status": "covered",
       "evidence": [
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs",
         "apps/desktop/tests/wallpaper-browse.test.ts",
-        "apps/desktop/tests/wallpaper-browser.test.tsx",
-        "apps/desktop/scripts/wallpaper-csp-smoke.cjs"
+        "apps/desktop/tests/wallpaper-browser.test.tsx"
       ]
     },
     {
@@ -257,5 +257,5 @@
       "evidence": []
     }
   ],
-  "thresholdNote": "目标 0.95；现读 1.000（评分面 20 格全 covered，0 partial / 0 absent；阈值 0.96）。两格 out 各带理由：scene-engine 明确不做；native-click 需人工点一次（脚本已备）。标准对照报告由真机读数生成：outputs/standard-conformance/report.json（五条全 pass）。"
+  "thresholdNote": "目标 0.95；现读 1.000（评分面 20 格全 covered；阈值 0.96）。两格 out 各带理由：scene-engine 不做、native-click 需人工点一次。标准对照报告由真机读数生成：六条全 pass（WCAG 1.4.3 / WCAG 2.1.1 / CSP / Electron / OWASP / 对表）。"
 }

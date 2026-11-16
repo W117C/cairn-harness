@@ -48,6 +48,8 @@ export interface ConformanceInput {
   isolation?: unknown;
   /** OWASP A09：拿一个真会泄露的样本跑一遍脱敏，数还剩几次。 */
   redaction?: { occurrencesAfter: number } | null;
+  /** WCAG 2.1.1：键盘能否走到可选文件并选中（真机 keyDown 事件）。 */
+  keyboardPick?: { picked: boolean } | null;
 }
 
 export function buildConformanceReport(input: ConformanceInput): ConformanceRow[] {
@@ -76,6 +78,15 @@ export function buildConformanceReport(input: ConformanceInput): ConformanceRow[
       verdict: isolationChecks(input.isolation) === null
         ? "missing"
         : isolationChecks(input.isolation)! >= 4 ? "pass" : "fail",
+      source: input.readingsPath,
+    },
+    {
+      standard: "WCAG 2.2", clause: "SC 2.1.1 Keyboard（只用键盘选壁纸）",
+      threshold: 1, unit: "flows",
+      measured: input.keyboardPick === undefined || input.keyboardPick === null ? null : input.keyboardPick.picked ? 1 : 0,
+      verdict: input.keyboardPick === undefined || input.keyboardPick === null
+        ? "missing"
+        : input.keyboardPick.picked ? "pass" : "fail",
       source: input.readingsPath,
     },
     {

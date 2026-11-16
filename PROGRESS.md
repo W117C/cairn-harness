@@ -43096,3 +43096,44 @@ standard-report: pass
 - 核心 `pnpm test:capped`：**699 文件 / 8298 条全绿**，exit 0
 - 桌面 415 文件 / 2666 条全绿；真机冒烟 **61/61**；四包密封证据有效（渲染层未改）
 - `typecheck` 0 报错；`docs-check` 全绿
+
+## 2026-11-16 · 第 1285 页：键盘路径真机跑通（WCAG 2.1.1 实测），冒烟 62/62（`pending`）
+
+**背景**：标准对照里 WCAG 2.1.1 那条一直是「看标签猜」——`<button>` 就当作可键盘。这一页把它改成**真按键**。
+
+### 一、怎么测的
+
+冒烟第 62 条：打开设置 → 打开应用内选择器（场景准备）→ **只发真键事件**
+（`webContents.sendInputEvent` 的 `keyDown/char/keyUp`）——Tab 逐个走焦点，直到 `document.activeElement`
+落在 `.cw-browser-row.file`，再发 `Return`，最后读 `getSettings()`。
+
+读数：
+
+```json
+{"focusedRow":{"tag":"BUTTON","cls":"cw-browser-row file","text":"01-wallpaper-on-dark-1440x900.png"},
+ "path":"…/01-wallpaper-on-dark-1440x900.png","kind":"image"}
+```
+
+⇒ **冒烟 62/62**。这条同时说明：**不用原生面板也能纯键盘选壁纸**。
+
+### 二、报告扩到六条（全部实测）
+
+```
+standard-report: pass
+  pass  WCAG 2.2 SC 1.4.3 Contrast Minimum｜4.526 ratio｜阈值 4.5
+  pass  WCAG 2.2 SC 2.1.1 Keyboard｜1 flows｜阈值 1
+  pass  CSP Level 3 越权取图被拦｜1 violations｜阈值 1
+  pass  Electron 安全清单（4 项）｜4 checks｜阈值 4
+  pass  OWASP Top 10 2021 A09 脱敏残留｜0 occurrences｜阈值 0
+  pass  本方对表 covered 比例｜1.000｜阈值 1
+```
+
+### 三、判卷
+
+`tests/conformance-report.test.ts` → **8 条**（新增 1）：键盘走通 ⇒ pass、走不通 ⇒ fail、没读数 ⇒ missing。
+
+### 四、门禁读数（工作树）
+
+- 核心 `pnpm test:capped`：**699 文件 / 8299 条全绿**，exit 0
+- 桌面 415 文件 / 2666 条全绿；真机冒烟 **62/62**；四包密封证据有效（渲染层未改）
+- `typecheck` 0 报错；`docs-check` 全绿

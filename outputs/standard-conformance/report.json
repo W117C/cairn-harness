@@ -1,5 +1,5 @@
 {
-  "at": "2026-11-16T07:36:05.290Z",
+  "at": "2026-11-16T07:40:39.165Z",
   "verdict": "pass",
   "parity": {
     "total": 22,
@@ -33,6 +33,15 @@
       "threshold": 4,
       "unit": "checks",
       "measured": 4,
+      "verdict": "pass",
+      "source": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/readings.json"
+    },
+    {
+      "standard": "WCAG 2.2",
+      "clause": "SC 2.1.1 Keyboard（只用键盘选壁纸）",
+      "threshold": 1,
+      "unit": "flows",
+      "measured": 1,
       "verdict": "pass",
       "source": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/readings.json"
     },

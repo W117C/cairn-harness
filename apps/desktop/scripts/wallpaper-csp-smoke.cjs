@@ -570,6 +570,56 @@ async function main() {
     { step: browserFlow.step, picked: browserFlow.picked, applied: browserFlow.applied, kind: browserFlow.kind });
   browseWin.destroy();
 
+  // ⑧c 键盘可达（WCAG 2.2 SC 2.1.1）：**只用键盘**在应用内选择器里走到文件行并选中。
+  // 这一格不靠鼠标：Tab 走焦点、Enter 激活，判的是「全部功能可用键盘完成」。
+  const kbWin = await makeWindow(join(distDir, "index.html"), [], { theme: "dark" });
+  const kbjs = jsOf(kbWin);
+  for (let i = 0; i < 100; i++) { if (await kbjs(`!!document.querySelector('.avatar')`)) break; await pause(); }
+  await kbjs(`(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', code: 'Comma', metaKey: true, bubbles: true })); })()`);
+  await pause(500);
+  // 打开选择器（这一步用脚本点击做**场景准备**，后面的选择过程才是被判的键盘路径）
+  await kbjs(`(() => {
+    const t = document.querySelector('[data-wallpaper-browse-toggle="true"]'); if (t) t.click();
+    const input = document.querySelector('.cw-browser-dir');
+    if (input) {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+      setter.call(input, ${JSON.stringify(out)});
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    const go = [...document.querySelectorAll('.cw-browser-bar .mini-btn')].pop(); if (go) go.click();
+  })()`);
+  await pause(800);
+  const key = (keyCode) => {
+    kbWin.webContents.sendInputEvent({ type: "keyDown", keyCode });
+    kbWin.webContents.sendInputEvent({ type: "char", keyCode });
+    kbWin.webContents.sendInputEvent({ type: "keyUp", keyCode });
+  };
+  kbWin.webContents.focus();
+  let focusedRow = null;
+  for (let i = 0; i < 40; i++) {
+    key("Tab");
+    await pause(60);
+    focusedRow = await kbjs(`(() => {
+      const el = document.activeElement;
+      if (!el) return null;
+      return { tag: el.tagName, cls: String(el.className || ""), text: (el.textContent || "").slice(0, 40) };
+    })()`);
+    if (focusedRow !== null && focusedRow.cls.includes("cw-browser-row") && focusedRow.cls.includes("file")) break;
+  }
+  key("Return");
+  await pause(900);
+  const kbResult = await kbjs(`(async () => {
+    const s = await window.agent.getSettings();
+    return { path: s.wallpaper.path, kind: s.wallpaper.kind, active: (document.activeElement || {}).className || "" };
+  })()`);
+  readings.keyboardPick = { focusedRow, ...kbResult };
+  check("键盘可达：Tab 走到文件行、Enter 选中并应用（WCAG 2.2 SC 2.1.1）",
+    focusedRow !== null && focusedRow.cls.includes("cw-browser-row")
+      && typeof kbResult.path === "string" && kbResult.kind === "image"
+      && String(kbResult.path).endsWith(".png") && String(kbResult.path).includes(out.split("/").pop()),
+    readings.keyboardPick);
+  kbWin.destroy();
+
   // ⑨ 视频壁纸：真视频、真解码；失焦即暂停、回焦即续播（规格 §6 / 判据 3 的老账）。
   // 窗口必须真显示并聚焦：暂停判据读的是 document.hasFocus()，隐藏窗口永远「没焦点」。
   const videoErrors = [];

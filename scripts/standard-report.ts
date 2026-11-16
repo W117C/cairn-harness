@@ -44,6 +44,11 @@ const occurrencesAfter = masked.split(SAMPLE_SECRET).length - 1;
 
 const rows = buildConformanceReport({
   isolation: (raw as { rendererIsolation?: unknown } | undefined)?.rendererIsolation,
+  // 键盘路径：冒烟里真有 Tab/Enter 走通并把设置写进去，才记 1。
+  keyboardPick: (() => {
+    const kb = (raw as { keyboardPick?: { path?: unknown; kind?: unknown } } | undefined)?.keyboardPick;
+    return kb === undefined || typeof kb.path !== "string" ? null : { picked: kb.kind === "image" && kb.path !== "" };
+  })(),
   redaction: { occurrencesAfter },
   readings: raw === undefined ? null : { dark: raw.darkContrast, light: raw.light, negativeControl: raw.negativeControl },
   readingsPath: readings?.path ?? "(没有真机读数)",
