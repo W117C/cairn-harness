@@ -49,6 +49,16 @@ describe("壁纸设置行", () => {
     expect(markup({ kind: "image", path: "/tmp/a.png" }, false)).not.toContain("文件不可用");
   });
 
+  it("壁纸自成一段：来源 / 轮换 / 依据 / 显示各行分开，不再是一条控件带", () => {
+    // 2026-11-16（R3）：整块壁纸原先挂在「外观」段尾的**一条** SettingsRow 里，
+    // 真机截图上是一条从右往左堆的控件带。拆行后每件事各占一行，行标签就是它的名字。
+    const html = markup();
+    for (const label of ["当前壁纸", "定时轮换", "轮换依据", "显示"]) expect(html).toContain(label);
+    // 顺序：壁纸各行在「使用习惯」之前——它没有被并回外观段尾以外的位置。
+    expect(html.indexOf("当前壁纸")).toBeGreaterThan(-1);
+    expect(html.indexOf("使用习惯")).toBeGreaterThan(html.indexOf("当前壁纸"));
+  });
+
   it("没设壁纸时给「选择」入口、设了才给「清除」", () => {
     expect(markup()).toContain("选择图片或视频");
     expect(markup()).not.toContain("清除");

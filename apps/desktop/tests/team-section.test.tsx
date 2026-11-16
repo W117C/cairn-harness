@@ -102,9 +102,13 @@ describe("团队成员面板", () => {
         })}
       />,
     );
-    expect(html).toContain("团队档 guided");
-    expect(html).toContain("full-access→guided");
-    expect(html).toContain("team 1");
+    /* 2026-11-16（R3）：这三处原先钉裸枚举值（guided / full-access / team）。
+       界面不该把内部枚举当文案——同一件事在权限页写的是「智能审批 / 完全允许」，
+       记忆作用域写的是「团队 / 成员 / 项目」。断言改为钉同一份读数的人话形：
+       读数仍在、关系仍看得见（裁剪从哪档降到哪档），只是不再拿枚举当标签。 */
+    expect(html).toContain("团队档 智能审批");
+    expect(html).toContain("完全允许→智能审批");
+    expect(html).toContain("团队 1");
     expect(html).toContain("main 100/10");
   });
 

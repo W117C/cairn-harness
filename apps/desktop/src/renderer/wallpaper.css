@@ -178,5 +178,23 @@ body[data-we-wallpaper] :is(.side) {
 .cw-rotation-toggle { display: inline-flex; gap: 6px; align-items: center; }
 .cw-rotation-minutes { width: 72px; }
 
+/* 2026-11-16（R3 修）：壁纸设置拆行后的子控件族。此前这些类名组件侧写了、样式表里没有规则——
+   真机上是「应用为壁纸」贴着输入框、轮换三档挤成一条、多屏信息连成一句话、选中态看不出来。
+   现在每一族自带间距与换行；宽度只给输入框，按钮按内容走。 */
+.cw-web-row, .cw-displays { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); min-width: 0; }
+.cw-web-row .cw-web-url { width: 320px; max-width: 100%; }
+.cw-weather-url { width: 260px; max-width: 100%; }
+.cw-weather-key { width: 220px; max-width: 100%; }
+.cw-weather-path { width: 300px; max-width: 100%; }
+.cw-rotation-modes { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.cw-rotation-modes > .mini-btn { min-height: 28px; }
+/* 选中态与设置页其它分段控件同一条配方（accent-brand 10% 底 + 55% 边）。 */
+.cw-rotation-modes > .mini-btn.on,
+.cw-rotation-modes > .mini-btn[aria-pressed="true"] {
+  border-color: hsl(var(--accent-brand) / 55%);
+  background: hsl(var(--accent-brand) / 10%);
+  color: hsl(var(--text-000));
+}
+
 /* 网站壁纸（2026-11-16 业主批「准放 CSP」）：iframe 铺满、不吃交互 */
 .cw-web { border: 0; width: 100%; height: 100%; pointer-events: none; }

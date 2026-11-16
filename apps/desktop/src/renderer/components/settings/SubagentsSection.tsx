@@ -72,7 +72,7 @@ export function SubagentsSection(props: {
   return (
     <div className="agent-role-section">
       <SettingsSection title={STR.subagents.title}>
-        <SettingsRow label={STR.subagents.allowLabel} desc={STR.subagents.allowDesc}>
+        <SettingsRow label={STR.subagents.allowLabel}>
           <Switch label={STR.subagents.allowLabel} checked={props.enabled} busy={busy}
             onChange={(next) => { void perform(() => props.onToggle(next)); }} />
         </SettingsRow>

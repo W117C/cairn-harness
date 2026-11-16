@@ -159,9 +159,15 @@ export function GeneralSection(props: {
             offText={STR.general.off}
           />
         </SettingsRow>
-        {/* 壁纸（2026-11-14）：一行里放「选/清」与三个滑杆——同一屏同一件事，
-            不再拆第二个二级标签（设计规范：布局优先，避免二级标签）。 */}
-        <SettingsRow label={STR.general.wallpaper}>
+      </SettingsSection>
+      {/* 壁纸自成一段：它有一套自己的决定（来源 / 网站 / 轮换 / 多屏 / 显示），
+          挂在「外观」段尾会让一整段读成外观的第六条。 */}
+      <SettingsSection title={STR.general.wallpaper}>
+        {/* 壁纸（2026-11-16 重构）：此前选图、网站、轮换（含天气）、多屏与三个滑杆**全塞在一条**
+            SettingsRow 的控件列里——真机截图里就是一条从右往左堆的控件带，而「壁纸」这个标签
+            孤零零悬在左边。现在按「一次决定一行」拆开：标签说是哪件事，控件自己说怎么做；
+            轮换依据 / 天气 / 昼夜这类从属行只在相关时出现。 */}
+        <SettingsRow label={STR.general.wallpaperCurrent}>
           <div className="cw-settings">
             <div className="cw-settings-actions">
               {/* 「未设置」是状态词，不是动作：放在按钮左边当静态回执。
@@ -188,204 +194,103 @@ export function GeneralSection(props: {
                 <span className="ss-static">{STR.general.wallpaperUnavailable}</span>
               )}
             </div>
-            {/* 网站壁纸（2026-11-16 业主批「准放 CSP」）：只收 https；iframe 带 sandbox 隔离。 */}
-            {props.onWallpaperSetWeb !== undefined && (
-              <div className="cw-web-row" data-wallpaper-web-row="true">
-                <input
-                  className="ss-input cw-web-url"
-                  aria-label={STR.general.wallpaperWebUrl}
-                  placeholder={STR.general.wallpaperWebUrl}
-                  value={webUrl}
-                  onChange={(e) => setWebUrl(e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="mini-btn"
-                  data-wallpaper-web-apply="true"
-                  onClick={() => props.onWallpaperSetWeb?.(webUrl)}
-                >
-                  {STR.general.wallpaperWebApply}
-                </button>
-                <span className="ss-static">{STR.general.wallpaperWebHint}</span>
-              </div>
+            {browsing && props.onWallpaperPickPath !== undefined && (
+              <WallpaperBrowser onPickPath={props.onWallpaperPickPath} {...(props.initialBrowser === undefined ? {} : { initial: props.initialBrowser })} />
             )}
-            {/* 定时轮换（2026-11-16）：到点换下一张；候选少于两张时按纯函数口径不轮换。 */}
-            <div className="cw-rotation" data-wallpaper-rotation="true">
-              <label className="cw-rotation-toggle">
-                <input
-                  type="checkbox"
-                  aria-label={STR.general.wallpaperRotation}
-                  checked={props.settings.wallpaper.rotation.enabled}
-                  onChange={(e) => {
-                    props.onWallpaperRotation({ ...props.settings.wallpaper.rotation, enabled: e.target.checked });
-                  }}
-                />
-                {STR.general.wallpaperRotation}
-              </label>
+          </div>
+        </SettingsRow>
+        {/* 网站壁纸（2026-11-16 业主批「准放 CSP」）：只收 https；页面在 iframe 里带 sandbox 隔离。
+            这句是安全边界（C 档），改成行的说明位——常驻、可读，不挤在控件旁边抢宽度。 */}
+        {props.onWallpaperSetWeb !== undefined && (
+          <SettingsRow label={STR.general.wallpaperWeb} desc={STR.general.wallpaperWebHint}>
+            <div className="cw-web-row" data-wallpaper-web-row="true">
               <input
-                className="ss-input cw-rotation-minutes"
-                type="number"
-                min={1}
-                max={1440}
-                aria-label={STR.general.wallpaperRotationMinutes}
-                value={props.settings.wallpaper.rotation.everyMinutes}
-                onChange={(e) => {
-                  const minutes = Number(e.target.value);
-                  if (!Number.isFinite(minutes)) return;
-                  props.onWallpaperRotation({ ...props.settings.wallpaper.rotation, everyMinutes: minutes });
-                }}
+                className="ss-input cw-web-url"
+                aria-label={STR.general.wallpaperWebUrl}
+                placeholder={STR.general.wallpaperWebUrl}
+                value={webUrl}
+                onChange={(e) => setWebUrl(e.target.value)}
               />
-              <span className="ss-static">{STR.general.wallpaperRotationUnit}</span>
               <button
                 type="button"
                 className="mini-btn"
-                data-wallpaper-rotation-add="true"
-                disabled={props.settings.wallpaper.path === null}
-                onClick={() => {
-                  const path = props.settings.wallpaper.path;
-                  if (path === null) return;
-                  const paths = props.settings.wallpaper.rotation.paths;
-                  if (paths.includes(path)) return;
-                  props.onWallpaperRotation({ ...props.settings.wallpaper.rotation, paths: [...paths, path].slice(0, 32) });
-                }}
+                data-wallpaper-web-apply="true"
+                onClick={() => props.onWallpaperSetWeb?.(webUrl)}
               >
-                {STR.general.wallpaperRotationAdd}
+                {STR.general.wallpaperWebApply}
               </button>
-              {/* 轮换依据：用三个按钮（分段控件）——比 select 更好点，也更好判 */}
-              <span className="cw-rotation-modes" role="group" aria-label={STR.general.wallpaperRotationMode}>
-                {([
-                  ["interval", STR.general.wallpaperRotationInterval],
-                  ["dayNight", STR.general.wallpaperRotationDayNight],
-                  ["weather", STR.general.wallpaperRotationWeather],
-                ] as const).map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    className={`mini-btn cw-rotation-mode${props.settings.wallpaper.rotation.mode === value ? " on" : ""}`}
-                    data-rotation-mode={value}
-                    aria-pressed={props.settings.wallpaper.rotation.mode === value}
-                    onClick={() => props.onWallpaperRotation({ ...props.settings.wallpaper.rotation, mode: value })}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </span>
-              {props.settings.wallpaper.rotation.mode === "weather" && (
-                <>
-                  <span className="cw-rotation-modes" role="group" aria-label={STR.general.wallpaperWeatherKind}>
-                    {([
-                      ["clear", STR.general.wallpaperWeatherClear],
-                      ["clouds", STR.general.wallpaperWeatherClouds],
-                      ["rain", STR.general.wallpaperWeatherRain],
-                      ["snow", STR.general.wallpaperWeatherSnow],
-                    ] as const).map(([kind, label]) => (
-                      <button
-                        key={kind}
-                        type="button"
-                        className={`mini-btn${props.settings.wallpaper.rotation.weather.kind === kind ? " on" : ""}`}
-                        data-weather-kind={kind}
-                        aria-pressed={props.settings.wallpaper.rotation.weather.kind === kind}
-                        onClick={() => props.onWallpaperRotation({
-                          ...props.settings.wallpaper.rotation,
-                          weather: { ...props.settings.wallpaper.rotation.weather, kind },
-                        })}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </span>
-                  <span className="cw-rotation-modes" role="group" aria-label={STR.general.wallpaperWeatherSource}>
-                    {([
-                      ["manual", STR.general.wallpaperWeatherSourceManual],
-                      ["file", STR.general.wallpaperWeatherFromFile],
-                      ["http", STR.general.wallpaperWeatherSourceHttp],
-                    ] as const).map(([value, label]) => (
-                      <button
-                        key={value}
-                        type="button"
-                        className={`mini-btn${props.settings.wallpaper.rotation.weather.source === value ? " on" : ""}`}
-                        data-weather-source={value}
-                        aria-pressed={props.settings.wallpaper.rotation.weather.source === value}
-                        onClick={() => props.onWallpaperRotation({
-                          ...props.settings.wallpaper.rotation,
-                          weather: { ...props.settings.wallpaper.rotation.weather, source: value },
-                        })}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </span>
-                  {props.settings.wallpaper.rotation.weather.source === "http" && (
-                    <>
-                      <input
-                        className="ss-input cw-weather-url"
-                        aria-label={STR.general.wallpaperWeatherUrl}
-                        placeholder={STR.general.wallpaperWeatherUrl}
-                        value={props.settings.wallpaper.rotation.weather.httpUrl ?? ""}
-                        onChange={(e) => props.onWallpaperRotation({
-                          ...props.settings.wallpaper.rotation,
-                          weather: { ...props.settings.wallpaper.rotation.weather, httpUrl: e.target.value === "" ? null : e.target.value },
-                        })}
-                      />
-                      <input
-                        className="ss-input cw-weather-key"
-                        type="password"
-                        aria-label={STR.general.wallpaperWeatherKey}
-                        placeholder={STR.general.wallpaperWeatherKey}
-                        value={weatherKey}
-                        onChange={(e) => setWeatherKey(e.target.value)}
-                      />
-                      <button
-                        type="button"
-                        className="mini-btn"
-                        data-wallpaper-weather-test="true"
-                        onClick={() => {
-                          void (async () => {
-                            if (weatherKey !== "") await window.agent.wallpaperWeatherSetKey(weatherKey);
-                            const r = await window.agent.wallpaperWeatherFetch();
-                            setWeatherNow(r.kind === undefined || r.kind === null
-                              ? { kind: STR.general.wallpaperWeatherFailed, source: r.reason ?? "" }
-                              : { kind: r.kind, source: "http" });
-                          })();
-                        }}
-                      >
-                        {STR.general.wallpaperWeatherTest}
-                      </button>
-                    </>
-                  )}
-                  {weatherNow !== null && (
-                    <span className="ss-static" data-wallpaper-weather-now="true">
-                      {`${STR.general.wallpaperWeatherNow}${weatherNow.kind}（${weatherNow.source}）`}
-                    </span>
-                  )}
-                  {props.settings.wallpaper.rotation.weather.source === "file" && (
-                    <input
-                      className="ss-input cw-weather-path"
-                      aria-label={STR.general.wallpaperWeatherFile}
-                      placeholder={STR.general.wallpaperWeatherFile}
-                      value={props.settings.wallpaper.rotation.weather.filePath ?? ""}
-                      onChange={(e) => props.onWallpaperRotation({
-                        ...props.settings.wallpaper.rotation,
-                        weather: { ...props.settings.wallpaper.rotation.weather, filePath: e.target.value === "" ? null : e.target.value },
-                      })}
-                    />
-                  )}
-                  <button
-                    type="button"
-                    className="mini-btn"
-                    data-wallpaper-weather-set="true"
-                    disabled={props.settings.wallpaper.path === null}
-                    onClick={() => {
-                      const path = props.settings.wallpaper.path;
-                      if (path === null) return;
-                      const r = props.settings.wallpaper.rotation;
-                      props.onWallpaperRotation({ ...r, weather: { ...r.weather, paths: { ...r.weather.paths, [r.weather.kind]: path } } });
-                    }}
-                  >
-                    {STR.general.wallpaperWeatherSet}
-                  </button>
-                </>
-              )}
+            </div>
+          </SettingsRow>
+        )}
+        {/* 定时轮换（2026-11-16）：到点换下一张；候选少于两张时按纯函数口径不轮换。 */}
+        <SettingsRow label={STR.general.wallpaperRotation}>
+          <div className="cw-rotation" data-wallpaper-rotation="true">
+            <input
+              type="checkbox"
+              aria-label={STR.general.wallpaperRotation}
+              checked={props.settings.wallpaper.rotation.enabled}
+              onChange={(e) => {
+                props.onWallpaperRotation({ ...props.settings.wallpaper.rotation, enabled: e.target.checked });
+              }}
+            />
+            <input
+              className="ss-input cw-rotation-minutes"
+              type="number"
+              min={1}
+              max={1440}
+              aria-label={STR.general.wallpaperRotationMinutes}
+              value={props.settings.wallpaper.rotation.everyMinutes}
+              onChange={(e) => {
+                const minutes = Number(e.target.value);
+                if (!Number.isFinite(minutes)) return;
+                props.onWallpaperRotation({ ...props.settings.wallpaper.rotation, everyMinutes: minutes });
+              }}
+            />
+            <span className="ss-static">{STR.general.wallpaperRotationUnit}</span>
+            <button
+              type="button"
+              className="mini-btn"
+              data-wallpaper-rotation-add="true"
+              disabled={props.settings.wallpaper.path === null}
+              onClick={() => {
+                const path = props.settings.wallpaper.path;
+                if (path === null) return;
+                const paths = props.settings.wallpaper.rotation.paths;
+                if (paths.includes(path)) return;
+                props.onWallpaperRotation({ ...props.settings.wallpaper.rotation, paths: [...paths, path].slice(0, 32) });
+              }}
+            >
+              {STR.general.wallpaperRotationAdd}
+            </button>
+            <span className="ss-static" data-wallpaper-rotation-count="true">
+              {`${STR.general.wallpaperRotationCount}${String(props.settings.wallpaper.rotation.paths.length)}`}
+            </span>
+          </div>
+        </SettingsRow>
+        {/* 轮换依据：用三个按钮（分段控件）——比 select 更好点，也更好判 */}
+        <SettingsRow label={STR.general.wallpaperRotationMode}>
+          <span className="cw-rotation-modes" role="group" aria-label={STR.general.wallpaperRotationMode}>
+            {([
+              ["interval", STR.general.wallpaperRotationInterval],
+              ["dayNight", STR.general.wallpaperRotationDayNight],
+              ["weather", STR.general.wallpaperRotationWeather],
+            ] as const).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                className={`mini-btn cw-rotation-mode${props.settings.wallpaper.rotation.mode === value ? " on" : ""}`}
+                data-rotation-mode={value}
+                aria-pressed={props.settings.wallpaper.rotation.mode === value}
+                onClick={() => props.onWallpaperRotation({ ...props.settings.wallpaper.rotation, mode: value })}
+              >
+                {label}
+              </button>
+            ))}
+          </span>
+        </SettingsRow>
+        {props.settings.wallpaper.rotation.mode === "dayNight" && (
+          <SettingsRow label={STR.general.wallpaperDayNight}>
+            <div className="cw-rotation">
               <button
                 type="button"
                 className="mini-btn"
@@ -411,39 +316,158 @@ export function GeneralSection(props: {
               <span className="ss-static" data-wallpaper-daynight-count="true">
                 {`${STR.general.wallpaperRotationDayNightCount}${String((props.settings.wallpaper.rotation.dayPath === null ? 0 : 1) + (props.settings.wallpaper.rotation.nightPath === null ? 0 : 1))}`}
               </span>
-              <span className="ss-static" data-wallpaper-rotation-count="true">
-                {`${STR.general.wallpaperRotationCount}${String(props.settings.wallpaper.rotation.paths.length)}`}
-              </span>
             </div>
-            {/* 多显示器（v77）：每块屏一张；没有专属就回落全局。 */}
-            {displays.length > 0 && (
-              <div className="cw-displays" data-wallpaper-displays="true">
-                {displays.map((d) => (
-                  <span key={d.id} className="ss-static" data-display-id={d.id}>
-                    {`${STR.general.wallpaperDisplayPrefix} ${d.id} · ${d.source === "display" ? STR.general.wallpaperDisplayOwn : d.source === "fallback" ? STR.general.wallpaperDisplayFallback : STR.general.wallpaperDisplayNone}`}
-                  </span>
+          </SettingsRow>
+        )}
+        {props.settings.wallpaper.rotation.mode === "weather" && (
+          <SettingsRow label={STR.general.wallpaperWeather}>
+            <div className="cw-rotation">
+              <span className="cw-rotation-modes" role="group" aria-label={STR.general.wallpaperWeatherKind}>
+                {([
+                  ["clear", STR.general.wallpaperWeatherClear],
+                  ["clouds", STR.general.wallpaperWeatherClouds],
+                  ["rain", STR.general.wallpaperWeatherRain],
+                  ["snow", STR.general.wallpaperWeatherSnow],
+                ] as const).map(([kind, label]) => (
+                  <button
+                    key={kind}
+                    type="button"
+                    className={`mini-btn${props.settings.wallpaper.rotation.weather.kind === kind ? " on" : ""}`}
+                    data-weather-kind={kind}
+                    aria-pressed={props.settings.wallpaper.rotation.weather.kind === kind}
+                    onClick={() => props.onWallpaperRotation({
+                      ...props.settings.wallpaper.rotation,
+                      weather: { ...props.settings.wallpaper.rotation.weather, kind },
+                    })}
+                  >
+                    {label}
+                  </button>
                 ))}
-                <button
-                  type="button"
-                  className="mini-btn"
-                  data-wallpaper-display-set="true"
-                  disabled={props.settings.wallpaper.path === null}
-                  onClick={() => {
-                    const first = displays[0];
-                    if (first === undefined) return;
-                    void window.agent.wallpaperSetForDisplay(first.id).then((r) => {
-                      setDisplayNote(r.ok === true ? STR.general.wallpaperDisplaySetOk : (r.error ?? STR.general.wallpaperDisplaySetFailed));
-                    });
-                  }}
-                >
-                  {STR.general.wallpaperDisplaySet}
-                </button>
-                {displayNote !== null && <span className="ss-static" data-wallpaper-display-note="true">{displayNote}</span>}
-              </div>
-            )}
-            {browsing && props.onWallpaperPickPath !== undefined && (
-              <WallpaperBrowser onPickPath={props.onWallpaperPickPath} {...(props.initialBrowser === undefined ? {} : { initial: props.initialBrowser })} />
-            )}
+              </span>
+              <span className="cw-rotation-modes" role="group" aria-label={STR.general.wallpaperWeatherSource}>
+                {([
+                  ["manual", STR.general.wallpaperWeatherSourceManual],
+                  ["file", STR.general.wallpaperWeatherFromFile],
+                  ["http", STR.general.wallpaperWeatherSourceHttp],
+                ] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={`mini-btn${props.settings.wallpaper.rotation.weather.source === value ? " on" : ""}`}
+                    data-weather-source={value}
+                    aria-pressed={props.settings.wallpaper.rotation.weather.source === value}
+                    onClick={() => props.onWallpaperRotation({
+                      ...props.settings.wallpaper.rotation,
+                      weather: { ...props.settings.wallpaper.rotation.weather, source: value },
+                    })}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </span>
+              {props.settings.wallpaper.rotation.weather.source === "http" && (
+                <>
+                  <input
+                    className="ss-input cw-weather-url"
+                    aria-label={STR.general.wallpaperWeatherUrl}
+                    placeholder={STR.general.wallpaperWeatherUrl}
+                    value={props.settings.wallpaper.rotation.weather.httpUrl ?? ""}
+                    onChange={(e) => props.onWallpaperRotation({
+                      ...props.settings.wallpaper.rotation,
+                      weather: { ...props.settings.wallpaper.rotation.weather, httpUrl: e.target.value === "" ? null : e.target.value },
+                    })}
+                  />
+                  <input
+                    className="ss-input cw-weather-key"
+                    type="password"
+                    aria-label={STR.general.wallpaperWeatherKey}
+                    placeholder={STR.general.wallpaperWeatherKey}
+                    value={weatherKey}
+                    onChange={(e) => setWeatherKey(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="mini-btn"
+                    data-wallpaper-weather-test="true"
+                    onClick={() => {
+                      void (async () => {
+                        if (weatherKey !== "") await window.agent.wallpaperWeatherSetKey(weatherKey);
+                        const r = await window.agent.wallpaperWeatherFetch();
+                        setWeatherNow(r.kind === undefined || r.kind === null
+                          ? { kind: STR.general.wallpaperWeatherFailed, source: r.reason ?? "" }
+                          : { kind: r.kind, source: "http" });
+                      })();
+                    }}
+                  >
+                    {STR.general.wallpaperWeatherTest}
+                  </button>
+                </>
+              )}
+              {weatherNow !== null && (
+                <span className="ss-static" data-wallpaper-weather-now="true">
+                  {`${STR.general.wallpaperWeatherNow}${weatherNow.kind}（${weatherNow.source}）`}
+                </span>
+              )}
+              {props.settings.wallpaper.rotation.weather.source === "file" && (
+                <input
+                  className="ss-input cw-weather-path"
+                  aria-label={STR.general.wallpaperWeatherFile}
+                  placeholder={STR.general.wallpaperWeatherFile}
+                  value={props.settings.wallpaper.rotation.weather.filePath ?? ""}
+                  onChange={(e) => props.onWallpaperRotation({
+                    ...props.settings.wallpaper.rotation,
+                    weather: { ...props.settings.wallpaper.rotation.weather, filePath: e.target.value === "" ? null : e.target.value },
+                  })}
+                />
+              )}
+              <button
+                type="button"
+                className="mini-btn"
+                data-wallpaper-weather-set="true"
+                disabled={props.settings.wallpaper.path === null}
+                onClick={() => {
+                  const path = props.settings.wallpaper.path;
+                  if (path === null) return;
+                  const r = props.settings.wallpaper.rotation;
+                  props.onWallpaperRotation({ ...r, weather: { ...r.weather, paths: { ...r.weather.paths, [r.weather.kind]: path } } });
+                }}
+              >
+                {STR.general.wallpaperWeatherSet}
+              </button>
+            </div>
+          </SettingsRow>
+        )}
+        {/* 多显示器（v77）：每块屏一张；没有专属就回落全局。 */}
+        {displays.length > 0 && (
+          <SettingsRow label={STR.general.wallpaperDisplay}>
+            <div className="cw-displays" data-wallpaper-displays="true">
+              {displays.map((d) => (
+                <span key={d.id} className="ss-static" data-display-id={d.id}>
+                  {`${STR.general.wallpaperDisplayPrefix} ${d.id} · ${d.source === "display" ? STR.general.wallpaperDisplayOwn : d.source === "fallback" ? STR.general.wallpaperDisplayFallback : STR.general.wallpaperDisplayNone}`}
+                </span>
+              ))}
+              <button
+                type="button"
+                className="mini-btn"
+                data-wallpaper-display-set="true"
+                disabled={props.settings.wallpaper.path === null}
+                onClick={() => {
+                  const first = displays[0];
+                  if (first === undefined) return;
+                  void window.agent.wallpaperSetForDisplay(first.id).then((r) => {
+                    setDisplayNote(r.ok === true ? STR.general.wallpaperDisplaySetOk : (r.error ?? STR.general.wallpaperDisplaySetFailed));
+                  });
+                }}
+              >
+                {STR.general.wallpaperDisplaySet}
+              </button>
+              {displayNote !== null && <span className="ss-static" data-wallpaper-display-note="true">{displayNote}</span>}
+            </div>
+          </SettingsRow>
+        )}
+        {/* 三个滑杆是同一件事（壁纸怎么压）⇒ 一行三档，各自带标签；不拆成三条重复的「壁纸」行。 */}
+        <SettingsRow label={STR.general.wallpaperBlock}>
+          <div className="cw-settings">
             <label className="cw-slider">
               <span>{STR.general.wallpaperOpacity}</span>
               <input
@@ -479,6 +503,7 @@ export function GeneralSection(props: {
             </label>
           </div>
         </SettingsRow>
+
       </SettingsSection>
       <SettingsSection title={STR.general.habitTitle}>
         {/* 次级说明不再复述控件已经说的话：语言值就摆在右侧（只有一项），

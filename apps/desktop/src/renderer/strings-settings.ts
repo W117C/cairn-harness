@@ -90,6 +90,13 @@ export const settingsStrings = {
     // 2026-11-14（设计规格 §3.4/§5.4）：壁纸层——用户自选本地图片/视频，
     // 铺在对话界面背后；三个滑杆（不透明度 / 压暗 / 玻璃透明度）。
     wallpaper: "壁纸",
+    /* 2026-11-16（R3 修）：壁纸从「一条控件带」拆成一行一件事，行标签落在这里。 */
+    wallpaperCurrent: "当前壁纸",
+    wallpaperWeb: "网站壁纸",
+    wallpaperDayNight: "昼夜壁纸",
+    wallpaperWeather: "天气",
+    wallpaperDisplay: "多显示器",
+    wallpaperBlock: "显示",
     wallpaperWebUrl: "网站壁纸地址（https）",
     wallpaperWebApply: "应用为壁纸",
     wallpaperWebHint: "只收 https；页面在 iframe 里带 sandbox 隔离",
@@ -154,14 +161,16 @@ export const settingsStrings = {
   team: {
     title: "团队成员",
     add: "新增成员",
-    addDesc: "名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。",
+    /* 2026-11-16（R3 修）：原句「档案是补丁投影，删人写墓碑，历史不删」是内部机制黑话。
+       拆成两句人话：必填项说清，移除后的历史口径说清（后者是数据契约，保留）。 */
+    addDesc: "名字必填。角色留空记为「成员」。",
     name: "名字",
     role: "角色",
     tier: "权限档",
     addAction: "添加",
     remove: "移除",
     list: "成员名单",
-    empty: "还没有成员。添加之后名单由团队事件日志投影出来（不是 JSON 配置文件）。",
+    empty: "还没有成员。",
     emptyValue: "空名单",
     loading: "载入中…",
     nameRequired: "名字不能为空",
@@ -170,7 +179,7 @@ export const settingsStrings = {
     clamped: "被团队档裁剪",
     rejected: "被拒的补丁",
     records: "档案补丁条数",
-    recordsDesc: "日志里的补丁条数（历史只追加；移除不解绑旧补丁）。",
+    recordsDesc: "只追加；移除成员不会清掉这里的历史。",
     issue: "状态",
     roundTitle: "本轮发言秩序",
     roundMode: "秩序",
@@ -207,6 +216,9 @@ export const settingsStrings = {
     dispatchDone: "已派给 ",
     dispatchEmpty: "任务书不能为空",
     memoryScope: "记忆作用域",
+    memoryScopeTeam: "团队",
+    memoryScopeMember: "成员",
+    memoryScopeProject: "项目",
     permissions: "权限（成员维）",
     memory: "记忆作用域分布",
     usage: "用量（按成员，当前会话）",

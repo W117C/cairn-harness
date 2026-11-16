@@ -10,7 +10,22 @@ import type { TeamMemberInput, TeamRosterPayload, TeamRoundPlanPayload } from ".
  *  浏览器包（实测：构建会因 vscode-languageserver-protocol 的 `./node` 导出直接失败）。
  *  形状由 `TeamRosterPayload.members[].memoryScope` 的类型钉住。 */
 const MEMORY_SCOPES = ["team", "member", "project"] as const;
-import { AGENT_PERMISSION_MODES } from "../../../../../../src/events/types";
+const MEMORY_LABEL: Record<(typeof MEMORY_SCOPES)[number], string> = {
+  team: STR.team.memoryScopeTeam,
+  member: STR.team.memoryScopeMember,
+  project: STR.team.memoryScopeProject,
+};
+/** 权限档只列**可选**的四档（guided 已并入 auto，2026-11-03 裁决）。
+ *  2026-11-16（R3 修）：此前直接渲染 AGENT_PERMISSION_MODES 的裸枚举值——用户看到的是
+ *  `read-only / guided / auto / full-access`，同一件事在权限页却是中文。 */
+const TIER_OPTIONS = [
+  { id: "read-only", label: STR.permissions.modeReadOnly },
+  { id: "default", label: STR.permissions.modeDefault },
+  { id: "auto", label: STR.permissions.modeAuto },
+  { id: "full-access", label: STR.permissions.modeFull },
+] as const;
+const tierLabel = (id: string): string =>
+  TIER_OPTIONS.find((o) => o.id === id)?.label ?? (id === "guided" ? STR.permissions.modeAuto : id);
 import { SettingsRow, SettingsSection } from "../settings-ui";
 import { STR } from "../../strings";
 
@@ -169,7 +184,7 @@ export function TeamSection(
             value={tier}
             onChange={(e) => { setTier(e.target.value); }}
           >
-            {AGENT_PERMISSION_MODES.map((mode) => <option key={mode} value={mode}>{mode}</option>)}
+            {TIER_OPTIONS.map((mode) => <option key={mode.id} value={mode.id}>{mode.label}</option>)}
           </select>
           <button type="button" className="mini-btn" disabled={busy} onClick={() => { void add(); }}>
             {STR.team.addAction}
@@ -197,7 +212,7 @@ export function TeamSection(
               disabled={busy}
               onChange={(e) => { void write({ id: m.id, tier: e.target.value }); }}
             >
-              {AGENT_PERMISSION_MODES.map((mode) => <option key={mode} value={mode}>{mode}</option>)}
+              {TIER_OPTIONS.map((mode) => <option key={mode.id} value={mode.id}>{mode.label}</option>)}
             </select>
             <select
               className="ss-select"
@@ -206,7 +221,7 @@ export function TeamSection(
               disabled={busy}
               onChange={(e) => { void write({ id: m.id, memoryScope: e.target.value }); }}
             >
-              {MEMORY_SCOPES.map((scope) => <option key={scope} value={scope}>{scope}</option>)}
+              {MEMORY_SCOPES.map((scope) => <option key={scope} value={scope}>{MEMORY_LABEL[scope]}</option>)}
             </select>
             <button type="button" className="mini-btn" disabled={busy} onClick={() => { void write({ id: m.id, remove: true }); }}>
               {STR.team.remove}
@@ -270,9 +285,9 @@ export function TeamSection(
       {roster?.insights !== undefined && (
         <SettingsRow label={STR.team.permissions}>
           <span className="ss-static">
-            {`团队档 ${roster.insights.permissions.teamTier}`}
+            {`团队档 ${tierLabel(roster.insights.permissions.teamTier)}`}
             {roster.insights.permissions.clamped.length > 0
-              ? ` · 裁剪 ${roster.insights.permissions.clamped.map((c) => `${c.id} ${c.requested}→${c.applied}`).join("；")}`
+              ? ` · 裁剪 ${roster.insights.permissions.clamped.map((c) => `${nameOf(c.id)} ${tierLabel(c.requested)}→${tierLabel(c.applied)}`).join("；")}`
               : ` · 无裁剪`}
           </span>
         </SettingsRow>
@@ -282,7 +297,7 @@ export function TeamSection(
         <SettingsRow label={STR.team.memory}>
           <span className="ss-static">
             {roster.insights.memory.scopes
-              .map((s) => `${s.scope} ${String(s.members.length)}`)
+              .map((s) => `${MEMORY_LABEL[s.scope as (typeof MEMORY_SCOPES)[number]] ?? s.scope} ${String(s.members.length)}`)
               .join(" · ")}
           </span>
         </SettingsRow>
@@ -340,7 +355,7 @@ export function TeamSection(
 
       {grants.length > 0 && (
         <SettingsRow label={STR.team.secretGrants}>
-          <span className="ss-static">{grants.map((g) => `${g.memberId} ${g.secret} ${g.allow ? "allow" : "deny"}`).join("；")}</span>
+          <span className="ss-static">{grants.map((g) => `${g.memberId} ${g.secret} ${g.allow ? STR.team.secretAllow : STR.team.secretDeny}`).join("；")}</span>
         </SettingsRow>
       )}
 
