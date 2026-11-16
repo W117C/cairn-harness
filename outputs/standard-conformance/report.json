@@ -1,0 +1,40 @@
+{
+  "at": "2026-11-16T07:31:25.064Z",
+  "verdict": "pass",
+  "parity": {
+    "total": 22,
+    "covered": 20,
+    "partial": 0,
+    "absent": 0,
+    "out": 2
+  },
+  "rows": [
+    {
+      "standard": "WCAG 2.2",
+      "clause": "SC 1.4.3 Contrast Minimum",
+      "threshold": 4.5,
+      "unit": "ratio",
+      "measured": 4.526,
+      "verdict": "pass",
+      "source": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/readings.json"
+    },
+    {
+      "standard": "CSP Level 3",
+      "clause": "越权取图必须被 CSP 拦下",
+      "threshold": 1,
+      "unit": "violations",
+      "measured": 1,
+      "verdict": "pass",
+      "source": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/readings.json"
+    },
+    {
+      "standard": "本方对表",
+      "clause": "评分面 covered 比例",
+      "threshold": 1,
+      "unit": "ratio",
+      "measured": 1,
+      "verdict": "pass",
+      "source": "fixtures/parity/checklist.json"
+    }
+  ]
+}

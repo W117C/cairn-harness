@@ -43020,3 +43020,42 @@ A 注入的键在 B 的窗口里也看得见 ⇒ 权限隔离破了。这一页�
 - 核心 `pnpm test:capped`：**698 文件 / 8291 条全绿**，exit 0
 - 桌面 **415 文件 / 2666 条全绿**；真机冒烟 **60/60**；四包密封证据有效
 - `typecheck` 0 报错；`docs-check` 全绿
+
+## 2026-11-16 · 第 1283 页：标准对照报告**由真机读数生成**（不是散文）（`pending`）
+
+**背景**：上一页的外部标准表还是手写的，容易「写得好听、读不出数」。这一页把它变成**生成的产物**。
+
+### 一、口径
+
+- 输入：**真机冒烟读数**（`outputs/wallpaper-deep-*/readings.json`）+ 对表统计；
+- 计算：对比度用**最差格**（`worst`，含壁纸底色与玻璃面叠加），没有才回落「文字色 vs 画布色」；
+- 读数缺 ⇒ `missing`，**不许默认绿**（缺读数报绿是最经典的翻车法）；
+- 总判三态：`pass` / `fail` / `incomplete`。
+
+### 二、产物
+
+`npx tsx scripts/standard-report.ts` ⇒ `outputs/standard-conformance/{report.json,report.md}`：
+
+```
+standard-report: pass
+  pass  WCAG 2.2 · SC 1.4.3 Contrast Minimum｜实测 4.526 ratio｜阈值 4.5
+  pass  CSP Level 3 · 越权取图必须被 CSP 拦下｜实测 1 violations｜阈值 1
+  pass  本方对表 · 评分面 covered 比例｜实测 1 ratio｜阈值 1
+```
+
+**4.526 是真实的最差格**（贴着 4.5 的线过的），不是挑好看的那条臂报的 15.9。
+
+### 三、判卷
+
+`tests/conformance-report.test.ts`（5 条）：
+- 颜色解析两种写法（空格/逗号）；
+- 两条臂都在 ⇒ **取更差的**（浅灰压白 ⇒ 整条 fail）；
+- 读数缺失 ⇒ `missing` + 总判 `incomplete`；
+- 对表有 partial/absent ⇒ 那行 fail；
+- 全达标 ⇒ pass。
+
+### 四、门禁读数（工作树）
+
+- 核心 `pnpm test:capped`：**699 文件 / 8296 条全绿**，exit 0
+- 桌面 415 文件 / 2666 条全绿；真机冒烟 60/60（读数来源）；四包密封证据有效
+- `typecheck` 0 报错；`docs-check` 全绿
