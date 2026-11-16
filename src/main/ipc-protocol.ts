@@ -155,8 +155,9 @@ export type { SearchProvider } from "../tools/web-search";
  *  v65 = 群的一轮（`teamGroupNext`）：轮次序号写进群会话补丁，下一位发言者按名单轮转。
  *  v66 = 群轮次驱动派活（`teamGroupNext` 增 `start`）：轮到谁，就把群里最后一句交给谁开跑。
  *  v67 = 成员密钥授权（`teamSecretGrants` / `teamSecretGrant`）：成员×密钥的允许/拒绝投影，
- *        默认拒、后写覆盖前写、历史只追加。 */
-export const IPC_PROTOCOL_VERSION = 67;
+ *        默认拒、后写覆盖前写、历史只追加。
+ *  v68 = 密钥申请卡（`teamSecretRequest`）：成员发起 pending，人审批后落 allow/deny 并把申请置终态。 */
+export const IPC_PROTOCOL_VERSION = 68;
 
 /** 团队名单（v59）：成员档案是投影，`records` 是补丁条数（面板据此说「有几条历史」）。 */
 export interface TeamRosterPayload {
@@ -629,7 +630,16 @@ export interface AgentApi {
   /** v64：建一条团队会话（`group=1`）。共享流＝该会话自己的事件流；轮次仲裁尚未接。 */
   teamGroupCreate(name?: string, workspace?: string): Promise<{ ok: boolean; sessionId?: string; error?: string }>;
   /** v67：读成员密钥授权（成员×密钥的最终态 + 被拒补丁）。 */
-  teamSecretGrants(): Promise<{ ok: boolean; grants?: { memberId: string; secret: string; allow: boolean; at: number }[]; rejected?: { at: number; error: string }[]; error?: string }>;
+  teamSecretGrants(): Promise<{
+    ok: boolean;
+    grants?: { memberId: string; secret: string; allow: boolean; at: number }[];
+    /** v68：申请（pending 排最前）。 */
+    requests?: { memberId: string; secret: string; state: "pending" | "approved" | "denied"; at: number }[];
+    rejected?: { at: number; error: string }[];
+    error?: string;
+  }>;
+  /** v68：成员发起一条密钥申请（pending）。人审批走 `teamSecretGrant`，它会把申请置终态。 */
+  teamSecretRequest(memberId: string, secret: string): Promise<{ ok: boolean; error?: string }>;
   /** v67：写一条授权（allow=true 允许 / false 拒绝；后写覆盖前写，历史只追加）。 */
   teamSecretGrant(memberId: string, secret: string, allow: boolean): Promise<{ ok: boolean; error?: string }>;
   /** v65：群里推进一轮——轮次序号落群会话补丁，下一位发言者按名单轮转。

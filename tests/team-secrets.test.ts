@@ -1,6 +1,6 @@
 // 成员密钥授权判卷（ADR 0015 §五 M12）：默认拒、后写覆盖前写、非法名字进 rejected。
 import { describe, expect, it } from "vitest";
-import { canUseSecret, grantPatch, projectSecretGrants } from "../src/agent/team/secrets";
+import { canUseSecret, grantPatch, projectSecretGrants, requestPatch } from "../src/agent/team/secrets";
 
 const rec = (at: number, patch: Record<string, string>) => ({ at, patch });
 
@@ -38,6 +38,32 @@ describe("成员密钥授权", () => {
     ]);
     expect(view.grants).toEqual([]);
     expect(view.rejected.map((r) => r.at)).toEqual([1, 2, 3]);
+  });
+
+  it("申请：pending 排最前；同一对后写覆盖前写（审批后变 approved/denied）", () => {
+    const view = projectSecretGrants([
+      rec(1, requestPatch("m1", "OPENAI_API_KEY", "pending")),
+      rec(2, requestPatch("m2", "BRAVE_KEY", "approved")),
+    ]);
+    expect(view.requests.map((r) => [r.memberId, r.secret, r.state])).toEqual([
+      ["m1", "OPENAI_API_KEY", "pending"],
+      ["m2", "BRAVE_KEY", "approved"],
+    ]);
+    const approved = projectSecretGrants([
+      rec(1, requestPatch("m1", "K", "pending")),
+      rec(2, requestPatch("m1", "K", "approved")),
+    ]);
+    expect(approved.requests).toEqual([{ memberId: "m1", secret: "K", state: "approved", at: 2 }]);
+  });
+
+  it("申请键也用同一把名字尺；非法进 rejected", () => {
+    const view = projectSecretGrants([
+      rec(1, { "request.m1.a.b": "pending" }),
+      rec(2, { "request.m1.K": "maybe" }),
+    ]);
+    expect(view.requests).toEqual([]);
+    expect(view.rejected.map((r) => r.at)).toEqual([1, 2]);
+    expect(() => requestPatch("a.b", "K", "pending")).toThrow(/成员 id/);
   });
 
   it("写侧 helper 拒绝非法名字", () => {

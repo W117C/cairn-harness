@@ -1706,7 +1706,13 @@ stub.teamGroupNext = (sessionId, _workspace, start) => {
 };
 contextBridge.exposeInMainWorld("__cairnGroupNexts", () => groupNexts.map((g) => ({ ...g })));
 const teamGrants = [];
-stub.teamSecretGrants = () => Promise.resolve({ ok: true, grants: teamGrants.map((g) => ({ ...g })), rejected: [] });
+stub.teamSecretGrants = () => Promise.resolve({ ok: true, grants: teamGrants.map((g) => ({ ...g })), requests: teamRequests.map((r) => ({ ...r })), rejected: [] });
+const teamRequests = [];
+stub.teamSecretRequest = (memberId, secret) => {
+  teamRequests.push({ memberId, secret, state: "pending" });
+  return Promise.resolve({ ok: true });
+};
+contextBridge.exposeInMainWorld("__cairnSecretRequests", () => teamRequests.map((r) => ({ ...r })));
 stub.teamSecretGrant = (memberId, secret, allow) => {
   teamGrants.push({ memberId, secret, allow: allow === true, at: teamGrants.length + 1 });
   return Promise.resolve({ ok: true });

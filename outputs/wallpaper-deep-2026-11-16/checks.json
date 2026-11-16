@@ -493,7 +493,7 @@
       "has": true,
       "src": "cairn-wallpaper://media/current?v=0",
       "paused": false,
-      "t": 0.02,
+      "t": 0.05,
       "ready": 4,
       "duration": 2,
       "focused": true,
@@ -507,7 +507,7 @@
       "has": true,
       "src": "cairn-wallpaper://media/current?v=0",
       "paused": true,
-      "t": 0.3,
+      "t": 0.33,
       "ready": 4,
       "duration": 2,
       "focused": false,
@@ -521,7 +521,7 @@
       "has": true,
       "src": "cairn-wallpaper://media/current?v=0",
       "paused": false,
-      "t": 0.3,
+      "t": 0.33,
       "ready": 4,
       "duration": 2,
       "focused": true,
@@ -535,7 +535,7 @@
       "has": true,
       "src": "cairn-wallpaper://media/current?v=0",
       "paused": true,
-      "t": 0.3,
+      "t": 0.34,
       "ready": 4,
       "duration": 2,
       "focused": true,
@@ -549,7 +549,7 @@
       "has": true,
       "src": "cairn-wallpaper://media/current?v=0",
       "paused": false,
-      "t": 0.3,
+      "t": 0.34,
       "ready": 4,
       "duration": 2,
       "focused": true,
@@ -578,7 +578,7 @@
     "name": "团队面板渲染三维读数（权限成员维 / 记忆作用域 / 按成员用量）",
     "ok": true,
     "detail": {
-      "sample": "返回通用模型与 Provider个性化子 Agent团队MCP 服务器Hooks联网搜索用量统计进化权限与安全高级快捷键工作台技能中心工作树迁移导入关于与更新团队成员新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除本轮发言秩序主持优先按名单轮排一轮当前会话的段—开新段权限（成员维）团队档 default · 无裁剪记忆作用域分布team 1 · member 0 · project 0用量（按成员，当前会话）main 1200/340成员密钥授权（第一名成员）示例成员允许拒绝档案补丁条数日志里的补丁条数（历史只追加；移除不解绑旧补丁）。1"
+      "sample": "返回通用模型与 Provider个性化子 Agent团队MCP 服务器Hooks联网搜索用量统计进化权限与安全高级快捷键工作台技能中心工作树迁移导入关于与更新团队成员新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除本轮发言秩序主持优先按名单轮排一轮当前会话的段—开新段权限（成员维）团队档 default · 无裁剪记忆作用域分布team 1 · member 0 · project 0用量（按成员，当前会话）main 1200/340成员密钥授权（第一名成员）示例成员允许拒绝发起申请档案补丁条数日志里的补丁条数（历史只追加；移除不解绑旧补丁）。1"
     }
   },
   {
@@ -597,7 +597,7 @@
         "权限（成员维）团队档 default · 无裁剪",
         "记忆作用域分布team 1 · member 0 · project 0",
         "用量（按成员，当前会话）main 1200/340",
-        "成员密钥授权（第一名成员）示例成员允许拒绝"
+        "成员密钥授权（第一名成员）示例成员允许拒绝发起申请"
       ],
       "selects": 5,
       "inputs": 3,
@@ -612,7 +612,7 @@
         "rows": [
           "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
           "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-          "新来的成员 · mmwitz184read-onlydefaultguidedautofull-accessteammemberproject移除",
+          "新来的成员 · mmwiu76vgread-onlydefaultguidedautofull-accessteammemberproject移除",
           "本轮发言秩序主持优先按名单轮排一轮",
           "当前会话的段—开新段",
           "权限（成员维）团队档 default · 无裁剪",
@@ -636,7 +636,7 @@
       "rows": [
         "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
         "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-        "新来的成员 · mmwitz184read-onlydefaultguidedautofull-accessteammemberproject移除",
+        "新来的成员 · mmwiu76vgread-onlydefaultguidedautofull-accessteammemberproject移除",
         "本轮发言秩序主持优先按名单轮排一轮",
         "当前会话的段—开新段",
         "权限（成员维）团队档 default · 无裁剪",
@@ -656,14 +656,14 @@
         "rows": [
           "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
           "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-          "新来的成员 · mmwitz184read-onlydefaultguidedautofull-accessteammemberproject移除",
+          "新来的成员 · mmwiu76vgread-onlydefaultguidedautofull-accessteammemberproject移除",
           "本轮发言秩序主持优先按名单轮排一轮",
           "排出来的秩序1. 示例成员　2. 新来的",
           "当前会话的段—开新段",
           "权限（成员维）团队档 default · 无裁剪",
           "记忆作用域分布team 2 · member 0 · project 0",
           "用量（按成员，当前会话）main 1200/340",
-          "成员密钥授权（第一名成员）示例成员新来的允许拒绝",
+          "成员密钥授权（第一名成员）示例成员新来的允许拒绝发起申请",
           "档案补丁条数日志里的补丁条数（历史只追加；移除不解绑旧补丁）。2"
         ],
         "calls": 1
@@ -708,6 +708,20 @@
     }
   },
   {
+    "name": "「发起申请」真的调到 teamSecretRequest（pending 一条）",
+    "ok": true,
+    "detail": {
+      "step": "done",
+      "calls": [
+        {
+          "memberId": "m-seed",
+          "secret": "BRAVE_KEY",
+          "state": "pending"
+        }
+      ]
+    }
+  },
+  {
     "name": "团队存储在真主进程里写→读→墓碑闭环（补丁条数只增不减）",
     "ok": true,
     "detail": {
@@ -738,7 +752,7 @@
         "canceled": false,
         "filePaths": []
       },
-      "elapsedMs": 2058,
+      "elapsedMs": 2316,
       "options": {
         "title": "选择壁纸",
         "properties": [

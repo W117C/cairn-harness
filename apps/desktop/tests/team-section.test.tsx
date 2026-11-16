@@ -129,6 +129,7 @@ describe("团队成员面板", () => {
     expect(html).toContain("密钥名");
     expect(html).toContain("允许");
     expect(html).toContain("拒绝");
+    expect(html).toContain("发起申请");
   });
 
   it("补丁条数如实显示（历史只增不减）", () => {

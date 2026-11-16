@@ -14,7 +14,7 @@ import { openSegmentForSession } from "./session-segments";
 import { defaultStartDeps, dispatchToMember, startToMember } from "./team-dispatch";
 import { createTeamGroup } from "./team-group";
 import { advanceGroupRound, groupTaskOf } from "./team-round";
-import { grantPatch, projectSecretGrants } from "../../../../src/agent/team/secrets";
+import { grantPatch, projectSecretGrants, requestPatch } from "../../../../src/agent/team/secrets";
 import { planRound } from "../../../../src/orchestration/speech";
 import { memberPatch } from "../../../../src/agent/team/members";
 import { TEAM_USAGE_SESSION_CAP, memoryScopes, permissionRows, usageAcrossSessions } from "../../../../src/agent/team/insights";
@@ -899,13 +899,27 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     if (started.ok !== true) return { ...advanced, error: started.error ?? "开跑失败" };
     return { ...advanced, sessionId: started.sessionId };
   },
+  // v68 密钥申请：成员发起 pending（人审批走 teamSecretGrant，它会把申请置终态）。
+  teamSecretRequest: async (rawMember, rawSecret) => {
+    try {
+      const memberId = String(rawMember ?? "");
+      const secret = String(rawSecret ?? "");
+      const settings = await getSettings();
+      const roster = await readTeamRoster(teamLogPath(app.getPath("userData")), settings.mode);
+      if (!roster.members.some((m) => m.id === memberId)) return { ok: false, error: "成员不在名单里" };
+      await appendTeamPatch(teamLogPath(app.getPath("userData")), requestPatch(memberId, secret, "pending"));
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
   // v67 成员密钥授权：读投影 / 写一条（默认拒、后写覆盖前写、历史只追加）。
   teamSecretGrants: async () => {
     try {
       const path = teamLogPath(app.getPath("userData"));
       const records = await readTeamRecords(path);
       const view = projectSecretGrants(records);
-      return { ok: true, grants: view.grants, rejected: view.rejected };
+      return { ok: true, grants: view.grants, requests: view.requests, rejected: view.rejected };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
@@ -918,8 +932,14 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
       const settings = await getSettings();
       const roster = await readTeamRoster(teamLogPath(app.getPath("userData")), settings.mode);
       if (!roster.members.some((m) => m.id === memberId)) return { ok: false, error: "成员不在名单里" };
-      const patch = grantPatch(memberId, secret, rawAllow === true);
-      await appendTeamPatch(teamLogPath(app.getPath("userData")), patch);
+      const path = teamLogPath(app.getPath("userData"));
+      await appendTeamPatch(path, grantPatch(memberId, secret, rawAllow === true));
+      // 审批顺带把申请置终态（有申请才写；没有就只是直接授权）。
+      const records = await readTeamRecords(path);
+      const pending = projectSecretGrants(records).requests.some((r) => r.memberId === memberId && r.secret === secret);
+      if (pending) {
+        await appendTeamPatch(path, requestPatch(memberId, secret, rawAllow === true ? "approved" : "denied"));
+      }
       return { ok: true };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) };

@@ -729,6 +729,26 @@ async function main() {
       && grantFlow.calls[0].secret === "OPENAI_API_KEY" && grantFlow.calls[0].allow === true,
     { step: grantFlow.step, calls: grantFlow.calls });
 
+  // ⑪e 密钥申请（v68）：点「发起申请」⇒ 真调到 teamSecretRequest，申请行出现 pending。
+  const askFlow = await tjs(`(async () => {
+    const input = [...document.querySelectorAll('.ss-input')].find((i) => (i.getAttribute('aria-label') || '').includes('密钥名'));
+    if (!input) return { step: "no-input" };
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    setter.call(input, "BRAVE_KEY");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 150));
+    const btn = [...document.querySelectorAll('.mini-btn')].find((b) => (b.textContent || "").trim() === "发起申请");
+    if (!btn) return { step: "no-button" };
+    btn.click();
+    await new Promise((r) => setTimeout(r, 600));
+    return { step: "done", calls: window.__cairnSecretRequests ? window.__cairnSecretRequests() : [] };
+  })()`);
+  readings.secretAsk = askFlow;
+  check("「发起申请」真的调到 teamSecretRequest（pending 一条）",
+    askFlow.step === "done" && askFlow.calls.length === 1
+      && askFlow.calls[0].secret === "BRAVE_KEY" && askFlow.calls[0].state === "pending",
+    { step: askFlow.step, calls: askFlow.calls });
+
   teamWin.destroy();
 
 

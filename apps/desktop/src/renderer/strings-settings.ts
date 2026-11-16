@@ -144,6 +144,8 @@ export const settingsStrings = {
     secretMember: "成员",
     secretMemberDefault: "（第一名成员）",
     secretName: "密钥名（如 OPENAI_API_KEY）",
+    secretAsk: "发起申请",
+    secretRequests: "密钥申请",
     secretAllow: "允许",
     secretDeny: "拒绝",
     secretGrants: "当前授权",

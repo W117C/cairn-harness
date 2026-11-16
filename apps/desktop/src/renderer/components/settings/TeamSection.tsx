@@ -33,6 +33,7 @@ export function TeamSection(
   const [segment, setSegment] = useState<number | null>(props.initialSegment ?? null);
   // 密钥授权（v67）：成员 × 密钥 的允许/拒绝；默认拒，列表只读投影来自团队日志。
   const [grants, setGrants] = useState<{ memberId: string; secret: string; allow: boolean }[]>([]);
+  const [requests, setRequests] = useState<{ memberId: string; secret: string; state: string }[]>([]);
   const [secretMember, setSecretMember] = useState("");
   const [secretName, setSecretName] = useState("");
   const [roundMode, setRoundMode] = useState<"chairFirst" | "turnOrder">("chairFirst");
@@ -52,9 +53,25 @@ export function TeamSection(
     try {
       const result = await window.agent.teamSecretGrants();
       if (result.ok === true && result.grants !== undefined) setGrants(result.grants);
+      if (result.ok === true && result.requests !== undefined) setRequests(result.requests);
     } catch { /* 读不到就不显示，不打扰 */ }
   }, []);
   useEffect(() => { void loadGrants(); }, [loadGrants]);
+
+  const askSecret = async (): Promise<void> => {
+    const member = secretMember === "" ? (roster?.members[0]?.id ?? "") : secretMember;
+    const secret = secretName.trim();
+    if (member === "" || secret === "") { setIssue(STR.team.secretNeed); return; }
+    try {
+      const result = await window.agent.teamSecretRequest(member, secret);
+      if (result.ok !== true) { setIssue(result.error ?? STR.team.writeFailed); return; }
+      setSecretName("");
+      setIssue(null);
+      await loadGrants();
+    } catch (error) {
+      setIssue(error instanceof Error ? error.message : String(error));
+    }
+  };
 
   const grant = async (allow: boolean): Promise<void> => {
     const member = secretMember === "" ? (roster?.members[0]?.id ?? "") : secretMember;
@@ -307,8 +324,19 @@ export function TeamSection(
           <button type="button" className="mini-btn" disabled={busy} onClick={() => { void grant(false); }}>
             {STR.team.secretDeny}
           </button>
+          <button type="button" className="mini-btn" disabled={busy} onClick={() => { void askSecret(); }}>
+            {STR.team.secretAsk}
+          </button>
         </div>
       </SettingsRow>
+
+      {requests.length > 0 && (
+        <SettingsRow label={STR.team.secretRequests}>
+          <span className="ss-static">
+            {requests.map((r) => `${r.memberId} ${r.secret} ${r.state}`).join("；")}
+          </span>
+        </SettingsRow>
+      )}
 
       {grants.length > 0 && (
         <SettingsRow label={STR.team.secretGrants}>
