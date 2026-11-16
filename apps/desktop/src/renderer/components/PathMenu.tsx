@@ -2,7 +2,7 @@
 // 渲染层自绘菜单（不走原生 Menu——与设计体系同皮；动作面走 v7 workspacePathAction 通道，
 // 路径越界在 main 侧会被 resolveEntry 拒绝）。Esc/点外关闭；data-state="open" 参与全局「浮层优先」判据。
 // 键盘契约与项目右键菜单一致：↑↓ 循环、Home/End 到首尾、Tab 关闭（焦点已落在首项）。
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { menuNavIndex } from "./popover-keys";
 
 export function PathMenu(props: {
@@ -65,8 +65,23 @@ export function PathMenu(props: {
     });
   };
 
-  const x = Math.min(props.x, Math.max(8, window.innerWidth - 232));
-  const y = Math.min(props.y, Math.max(8, window.innerHeight - 176));
+  // 首帧按 232/176 估算钳位（SSR/首帧无真身可量）；挂载后量一次真身并二次钳位——
+  // 此前只有估算值，贴底/贴右弹出时下缘被视口裁掉（估高 176 装不下 头行+4 项+错误条）。
+  const [pos, setPos] = useState(() => ({
+    x: Math.min(props.x, Math.max(8, window.innerWidth - 232)),
+    y: Math.min(props.y, Math.max(8, window.innerHeight - 176)),
+  }));
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (el === null) return;
+    const rect = el.getBoundingClientRect();
+    setPos((prev) => ({
+      x: Math.max(8, Math.min(prev.x, window.innerWidth - rect.width - 8)),
+      y: Math.max(8, Math.min(prev.y, window.innerHeight - rect.height - 8)),
+    }));
+  }, []);
+  const x = pos.x;
+  const y = pos.y;
   return (
     <div
       className="path-menu"
