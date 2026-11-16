@@ -700,7 +700,37 @@ async function main() {
   check("侧栏底部有成员区，且渲染出成员（名单在主导航面也看得见）",
     sideTeam.found === true && sideTeam.rows >= 1 && sideTeam.text.includes("示例成员"), sideTeam);
   await shot(teamWin, "11-team-sidebar-block-1440x900");
+  // ⑪d 密钥授权（v67）：选成员 + 填密钥名 + 点「允许」⇒ 真调到 teamSecretGrant，列表出现那条。
+  // 上一块为了看侧栏按了 Esc（设置页已关）⇒ 这里重新打开并回到「团队」分区。
+  await tjs(`(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', code: 'Comma', metaKey: true, bubbles: true })); })()`);
+  await pause(400);
+  await tjs(`(() => {
+    const btn = [...document.querySelectorAll('.sp-nav-item')].find((b) => (b.textContent || "").includes("团队"));
+    if (btn) btn.click();
+  })()`);
+  await pause(400);
+  const grantFlow = await tjs(`(async () => {
+    const inputs = [...document.querySelectorAll('.ss-input')];
+    const input = inputs.find((i) => (i.getAttribute('aria-label') || '').includes('密钥名'));
+    if (!input) return { step: "no-input", labels: inputs.map((i) => i.getAttribute('aria-label')) };
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    setter.call(input, "OPENAI_API_KEY");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 150));
+    const btn = [...document.querySelectorAll('.mini-btn')].find((b) => (b.textContent || "").trim() === "允许");
+    if (!btn) return { step: "no-button" };
+    btn.click();
+    await new Promise((r) => setTimeout(r, 600));
+    return { step: "done", calls: window.__cairnGrants ? window.__cairnGrants() : [] };
+  })()`);
+  readings.teamGrants = grantFlow;
+  check("「允许」真的调到 teamSecretGrant（成员×密钥一条授权）",
+    grantFlow.step === "done" && grantFlow.calls.length === 1
+      && grantFlow.calls[0].secret === "OPENAI_API_KEY" && grantFlow.calls[0].allow === true,
+    { step: grantFlow.step, calls: grantFlow.calls });
+
   teamWin.destroy();
+
 
   // ⑫ 真落盘：主进程的团队存储在**真 Electron 进程里**跑一遍写→读→墓碑闭环。
   // 这一段不走渲染层，判的是 `team-store`（IPC handler 背后唯一的那条路）。

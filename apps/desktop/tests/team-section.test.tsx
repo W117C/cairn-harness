@@ -23,8 +23,8 @@ describe("团队成员面板", () => {
     expect(html).toContain("小北");
     expect(html).toContain("调研");
     expect(html).toContain("m1");
-    // 每个成员两个选择器（权限档 + 记忆作用域）+ 新增行一个 + 发言秩序一个（v60/v61）
-    expect((html.match(/<select/g) ?? []).length).toBe(6);
+    // 每个成员两个选择器（权限档 + 记忆作用域）+ 新增行一个 + 发言秩序一个 + 密钥授权成员一个
+    expect((html.match(/<select/g) ?? []).length).toBe(7);
     expect((html.match(/移除/g) ?? []).length).toBeGreaterThanOrEqual(2);
   });
 
@@ -121,6 +121,14 @@ describe("团队成员面板", () => {
       />,
     );
     expect(html).toContain("当前会话还没有用量读数");
+  });
+
+  it("密钥授权入口在：成员选择 + 密钥名 + 允许/拒绝", () => {
+    const html = renderToStaticMarkup(<TeamSection initialRoster={roster()} />);
+    expect(html).toContain("成员密钥授权");
+    expect(html).toContain("密钥名");
+    expect(html).toContain("允许");
+    expect(html).toContain("拒绝");
   });
 
   it("补丁条数如实显示（历史只增不减）", () => {

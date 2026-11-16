@@ -30,8 +30,8 @@ const IMPORT_CHANNELS = {
 } as const;
 
 describe("plugin marketplace import and update IPC wiring", () => {
-  it("exposes the unified import, update, check, picker, and config surface at protocol v66", () => {
-    expect(IPC_PROTOCOL_VERSION).toBe(66);
+  it("exposes the unified import, update, check, picker, and config surface at protocol v67", () => {
+    expect(IPC_PROTOCOL_VERSION).toBe(67);
     const channels = INVOKE_CHANNELS as Record<string, string>;
     for (const [key, channel] of Object.entries(IMPORT_CHANNELS)) {
       expect(channels[key]).toBe(channel);

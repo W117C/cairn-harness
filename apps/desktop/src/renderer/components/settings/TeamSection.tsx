@@ -31,6 +31,10 @@ export function TeamSection(
   const [tier, setTier] = useState<string>("read-only");
   const [plan, setPlan] = useState<TeamRoundPlanPayload | null>(props.initialPlan ?? null);
   const [segment, setSegment] = useState<number | null>(props.initialSegment ?? null);
+  // 密钥授权（v67）：成员 × 密钥 的允许/拒绝；默认拒，列表只读投影来自团队日志。
+  const [grants, setGrants] = useState<{ memberId: string; secret: string; allow: boolean }[]>([]);
+  const [secretMember, setSecretMember] = useState("");
+  const [secretName, setSecretName] = useState("");
   const [roundMode, setRoundMode] = useState<"chairFirst" | "turnOrder">("chairFirst");
 
   const load = useCallback(async (): Promise<void> => {
@@ -43,6 +47,29 @@ export function TeamSection(
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  const loadGrants = useCallback(async (): Promise<void> => {
+    try {
+      const result = await window.agent.teamSecretGrants();
+      if (result.ok === true && result.grants !== undefined) setGrants(result.grants);
+    } catch { /* 读不到就不显示，不打扰 */ }
+  }, []);
+  useEffect(() => { void loadGrants(); }, [loadGrants]);
+
+  const grant = async (allow: boolean): Promise<void> => {
+    const member = secretMember === "" ? (roster?.members[0]?.id ?? "") : secretMember;
+    const secret = secretName.trim();
+    if (member === "" || secret === "") { setIssue(STR.team.secretNeed); return; }
+    try {
+      const result = await window.agent.teamSecretGrant(member, secret, allow);
+      if (result.ok !== true) { setIssue(result.error ?? STR.team.writeFailed); return; }
+      setSecretName("");
+      setIssue(null);
+      await loadGrants();
+    } catch (error) {
+      setIssue(error instanceof Error ? error.message : String(error));
+    }
+  };
 
   const write = async (input: TeamMemberInput): Promise<void> => {
     setBusy(true);
@@ -253,6 +280,39 @@ export function TeamSection(
                 .map((u) => `${u.owner} ${String(u.inputTokens)}/${String(u.outputTokens)}`)
                 .join("　")}
           </span>
+        </SettingsRow>
+      )}
+
+      <SettingsRow label={STR.team.secretTitle}>
+        <div className="team-member">
+          <select
+            className="ss-select"
+            aria-label={STR.team.secretMember}
+            value={secretMember}
+            onChange={(e) => { setSecretMember(e.target.value); }}
+          >
+            <option value="">{STR.team.secretMemberDefault}</option>
+            {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
+          <input
+            className="ss-input"
+            aria-label={STR.team.secretName}
+            placeholder={STR.team.secretName}
+            value={secretName}
+            onChange={(e) => { setSecretName(e.target.value); }}
+          />
+          <button type="button" className="mini-btn" disabled={busy} onClick={() => { void grant(true); }}>
+            {STR.team.secretAllow}
+          </button>
+          <button type="button" className="mini-btn" disabled={busy} onClick={() => { void grant(false); }}>
+            {STR.team.secretDeny}
+          </button>
+        </div>
+      </SettingsRow>
+
+      {grants.length > 0 && (
+        <SettingsRow label={STR.team.secretGrants}>
+          <span className="ss-static">{grants.map((g) => `${g.memberId} ${g.secret} ${g.allow ? "allow" : "deny"}`).join("；")}</span>
         </SettingsRow>
       )}
 

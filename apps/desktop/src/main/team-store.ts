@@ -11,6 +11,7 @@ import { dirname, join } from "node:path";
 import { createEventLog, replay, type AgentEvent } from "../../../../src/events";
 import type { AgentPermissionMode } from "../../../../src/events/types";
 import { MEMBER_KEY_PREFIX, projectMembers, type MemberPatchRecord, type MemberRoster } from "../../../../src/agent/team/members";
+import { GRANT_KEY_PREFIX } from "../../../../src/agent/team/secrets";
 
 /** 团队日志落点：`<userData>/team/events.jsonl`（与会话/编排日志同级，不在工作区里）。 */
 export function teamLogPath(userData: string): string {
@@ -31,7 +32,9 @@ export async function readTeamRecords(path: string): Promise<MemberPatchRecord[]
     if (event.type !== "session_meta_update") return;
     const patch = event.patch;
     if (patch === null || typeof patch !== "object") return;
-    if (!Object.keys(patch).some((key) => key.startsWith(MEMBER_KEY_PREFIX))) return;
+    // 团队日志里现在有两族键：成员档案（member.*）与密钥授权（grant.*）。两族都要读，
+    // 各自投影；不认识的键仍在各自投影里被点名为 rejected。
+    if (!Object.keys(patch).some((key) => key.startsWith(MEMBER_KEY_PREFIX) || key.startsWith(GRANT_KEY_PREFIX))) return;
     out.push({ at: index + 1, patch });
   });
   return out;

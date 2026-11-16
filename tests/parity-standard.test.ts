@@ -61,7 +61,9 @@ describe("对表标准可判", () => {
     expect(new Set(checklist.items.filter((i) => i.status === "absent").map((i) => i.id))).toEqual(
       // 2026-11-16：`bot.member-dispatch-ui` 从 absent 变 partial（团队窗格的「派活」已落），
       // 剩这两格未做。集合只准变短（每补一格就从这里删一条，判据逼着同步）。
-      new Set(["bot.secrets-cards"]),
+      // 2026-11-16：密钥卡片从 absent 变 partial（授权投影 + 面板入口已落），absent 归零。
+      // 这张表只准变短；将来再加 absent 项必须同时改这里与口径（判据会红）。
+      new Set<string>([]),
     );
   });
 });
