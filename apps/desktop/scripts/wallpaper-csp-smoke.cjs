@@ -623,7 +623,7 @@ async function main() {
   };
   kbWin.webContents.focus();
   let focusedRow = null;
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 90; i++) {
     key("Tab");
     await pause(60);
     focusedRow = await kbjs(`(() => {

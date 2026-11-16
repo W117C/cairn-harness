@@ -9,7 +9,10 @@ const settings = (patch: Partial<AppSettings["wallpaper"]["rotation"]> = {}): Ap
   ...DEFAULT_SETTINGS,
   wallpaper: {
     kind: "image", path: "/tmp/a.png", opacity: 1, scrim: 0.35, glassAlpha: 0.25, revision: 3,
-    rotation: { enabled: true, everyMinutes: 30, paths: ["/tmp/a.png", "/tmp/b.png"], lastAt: 0, ...patch },
+    rotation: {
+      enabled: true, mode: "interval", latitude: 39.9042, longitude: 116.4074, dayPath: null, nightPath: null,
+      everyMinutes: 30, paths: ["/tmp/a.png", "/tmp/b.png"], lastAt: 0, ...patch,
+    },
   },
 }) as AppSettings;
 
@@ -42,6 +45,14 @@ describe("设置里的定时轮换", () => {
     expect(html).toContain('value="30"');
     expect(html).toContain('data-wallpaper-rotation-add="true"');
     expect(html).toContain("候选：2");
+  });
+
+  it("日出日落：模式选择 + 设白天/夜里两个按钮都在", () => {
+    const html = render(settings({ mode: "dayNight", dayPath: "/tmp/a.png", nightPath: "/tmp/b.png" }));
+    expect(html).toContain("日出日落");
+    expect(html).toContain('data-wallpaper-daynight="day"');
+    expect(html).toContain('data-wallpaper-daynight="night"');
+    expect(html).toContain("昼/夜：2");
   });
 
   it("没选壁纸时「加入轮换」是禁用的（不让人加空路径）", () => {

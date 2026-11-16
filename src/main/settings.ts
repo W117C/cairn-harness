@@ -68,6 +68,14 @@ export interface WallpaperSettings {
 
 export interface WallpaperRotation {
   enabled: boolean;
+  /** 轮换依据：`interval`（固定间隔）或 `dayNight`（日出日落）。 */
+  mode: "interval" | "dayNight";
+  /** 日出日落模式用：纬度/经度（度；东经/北纬为正）。 */
+  latitude: number;
+  longitude: number;
+  /** 日出日落模式的两张：白天 / 夜里。 */
+  dayPath: string | null;
+  nightPath: string | null;
   /** 轮换间隔（分钟，1..1440）。 */
   everyMinutes: number;
   /** 候选绝对路径（最多 32 条；不存在的由主进程跳过并出声）。 */
@@ -234,7 +242,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // 壁纸层默认关：功耗敏感项（视频解码持续耗电），不主动开（设计规格 §6）。
   wallpaper: {
     kind: "none", path: null, opacity: 1, scrim: 0.35, glassAlpha: 0.25, revision: 0,
-    rotation: { enabled: false, everyMinutes: 60, paths: [], lastAt: 0 },
+    rotation: {
+      enabled: false, mode: "interval", latitude: 39.9042, longitude: 116.4074,
+      dayPath: null, nightPath: null,
+      everyMinutes: 60, paths: [], lastAt: 0,
+    },
   },
 };
 
@@ -296,7 +308,12 @@ function validateWallpaper(raw: unknown): WallpaperSettings {
   };
 }
 
-/** 轮换字段：间隔夹在 1..1440、路径去空且上限 32、时间戳非负整数。 */
+function clampCoord(v: unknown, min: number, max: number, fallback: number): number {
+  if (typeof v !== "number" || !Number.isFinite(v)) return fallback;
+  return Math.min(max, Math.max(min, v));
+}
+
+/** 轮换字段：间隔夹在 1..1440、路径去空且上限 32、时间戳非负整数、经纬度夹在合法范围。 */
 function validateRotation(raw: unknown, fallback: WallpaperRotation): WallpaperRotation {
   if (typeof raw !== "object" || raw === null) return { ...fallback, paths: [...fallback.paths] };
   const r = raw as Record<string, unknown>;
@@ -309,7 +326,17 @@ function validateRotation(raw: unknown, fallback: WallpaperRotation): WallpaperR
       .slice(0, ROTATION_MAX_PATHS)
     : [...fallback.paths];
   const lastAt = typeof r.lastAt === "number" && Number.isFinite(r.lastAt) && r.lastAt >= 0 ? r.lastAt : fallback.lastAt;
-  return { enabled: r.enabled === true, everyMinutes: minutes, paths, lastAt };
+  const mode = r.mode === "dayNight" ? "dayNight" : r.mode === "interval" ? "interval" : fallback.mode;
+  const latitude = clampCoord(r.latitude, -90, 90, fallback.latitude);
+  const longitude = clampCoord(r.longitude, -180, 180, fallback.longitude);
+  const pick = (v: unknown, fb: string | null): string | null =>
+    typeof v === "string" && v.trim() !== "" && v.length <= 4096 ? v : fb;
+  return {
+    enabled: r.enabled === true, mode, latitude, longitude,
+    dayPath: pick(r.dayPath, fallback.dayPath),
+    nightPath: pick(r.nightPath, fallback.nightPath),
+    everyMinutes: minutes, paths, lastAt,
+  };
 }
 
 /** 逐字段校验：合法取原值，非法/缺失取默认（验收②：非法布局值回退默认）。

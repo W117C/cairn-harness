@@ -7,7 +7,10 @@ const withWallpaper = (rotation: unknown) => validateSettings({ wallpaper: { kin
 describe("轮换字段校验", () => {
   it("缺省 ⇒ 关、60 分钟、空候选", () => {
     const r = withWallpaper(undefined).wallpaper.rotation;
-    expect(r).toEqual({ enabled: false, everyMinutes: 60, paths: [], lastAt: 0 });
+    expect(r).toEqual({
+      enabled: false, mode: "interval", latitude: 39.9042, longitude: 116.4074,
+      dayPath: null, nightPath: null, everyMinutes: 60, paths: [], lastAt: 0,
+    });
   });
 
   it("间隔夹到 1..1440；时间戳非负", () => {
@@ -23,6 +26,16 @@ describe("轮换字段校验", () => {
     const r = withWallpaper({ paths: [...many, "", 123] }).wallpaper.rotation.paths;
     expect(r).toHaveLength(ROTATION_MAX_PATHS);
     expect(r[0]).toBe("/p0.png");
+  });
+
+  it("日出日落：mode 只认两个值，经纬度夹到合法范围，两张路径可空", () => {
+    const r = withWallpaper({ mode: "dayNight", latitude: 999, longitude: -999, dayPath: "/d.png", nightPath: "" });
+    expect(r.wallpaper.rotation.mode).toBe("dayNight");
+    expect(r.wallpaper.rotation.latitude).toBe(90);
+    expect(r.wallpaper.rotation.longitude).toBe(-180);
+    expect(r.wallpaper.rotation.dayPath).toBe("/d.png");
+    expect(r.wallpaper.rotation.nightPath).toBeNull();
+    expect(withWallpaper({ mode: "whatever" }).wallpaper.rotation.mode).toBe("interval");
   });
 
   it("enabled 只认 true", () => {

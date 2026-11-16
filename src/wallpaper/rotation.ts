@@ -1,4 +1,6 @@
-// 定时轮换的**决定**部分（纯函数）：到点了没？下一个是谁？
+import { isDaylight } from "./solar";
+
+// 定时/昼夜轮换的**决定**部分（纯函数）：到点了没？下一个是谁？现在是白天还是夜里？
 //
 // 口径：
 //  ① 轮换只在 enabled 且候选 ≥2 时才有意义（1 张「轮换」是自欺）；
@@ -40,4 +42,23 @@ export function decideRotation(input: {
     rotate: true, path: next, missing,
     reason: index === -1 ? "当前壁纸不在候选里，取第一条" : "到点换下一张",
   };
+}
+
+/** 日出日落模式：白天/夜里各一张，按当前时刻选。 */
+export function decideDayNight(input: {
+  dayPath: string | null;
+  nightPath: string | null;
+  now: Date;
+  latitude: number;
+  longitude: number;
+  exists?: (path: string) => boolean;
+}): { path: string | null; reason: string; phase: "day" | "night" } {
+  const daylight = isDaylight(input.now, input.latitude, input.longitude);
+  const phase: "day" | "night" = daylight ? "day" : "night";
+  const candidate = daylight ? input.dayPath : input.nightPath;
+  if (candidate === null) return { path: null, reason: daylight ? "没配白天那张" : "没配夜里那张", phase };
+  if (input.exists !== undefined && !input.exists(candidate)) {
+    return { path: null, reason: "选中的那张读不出来", phase };
+  }
+  return { path: candidate, reason: daylight ? "现在是白天" : "现在是夜里", phase };
 }

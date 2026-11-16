@@ -199,6 +199,45 @@ export function GeneralSection(props: {
               >
                 {STR.general.wallpaperRotationAdd}
               </button>
+              <select
+                className="ss-select cw-rotation-mode"
+                aria-label={STR.general.wallpaperRotationMode}
+                value={props.settings.wallpaper.rotation.mode}
+                onChange={(e) => {
+                  props.onWallpaperRotation({
+                    ...props.settings.wallpaper.rotation,
+                    mode: e.target.value === "dayNight" ? "dayNight" : "interval",
+                  });
+                }}
+              >
+                <option value="interval">{STR.general.wallpaperRotationInterval}</option>
+                <option value="dayNight">{STR.general.wallpaperRotationDayNight}</option>
+              </select>
+              <button
+                type="button"
+                className="mini-btn"
+                data-wallpaper-daynight="day"
+                onClick={() => {
+                  const path = props.settings.wallpaper.path;
+                  if (path !== null) props.onWallpaperRotation({ ...props.settings.wallpaper.rotation, dayPath: path });
+                }}
+              >
+                {STR.general.wallpaperRotationSetDay}
+              </button>
+              <button
+                type="button"
+                className="mini-btn"
+                data-wallpaper-daynight="night"
+                onClick={() => {
+                  const path = props.settings.wallpaper.path;
+                  if (path !== null) props.onWallpaperRotation({ ...props.settings.wallpaper.rotation, nightPath: path });
+                }}
+              >
+                {STR.general.wallpaperRotationSetNight}
+              </button>
+              <span className="ss-static" data-wallpaper-daynight-count="true">
+                {`${STR.general.wallpaperRotationDayNightCount}${String((props.settings.wallpaper.rotation.dayPath === null ? 0 : 1) + (props.settings.wallpaper.rotation.nightPath === null ? 0 : 1))}`}
+              </span>
               <span className="ss-static" data-wallpaper-rotation-count="true">
                 {`${STR.general.wallpaperRotationCount}${String(props.settings.wallpaper.rotation.paths.length)}`}
               </span>

@@ -1,6 +1,6 @@
 // 定时轮换判卷：到点判定、跳过读不到的、当前不在候选里取第一条、候选不足不轮换。
 import { describe, expect, it } from "vitest";
-import { decideRotation, rotationDue } from "../src/wallpaper/rotation";
+import { decideDayNight, decideRotation, rotationDue } from "../src/wallpaper/rotation";
 
 const base = { enabled: true, everyMinutes: 60, lastAt: 1_000_000, now: 1_000_000 + 3_600_000, current: "/a.png" };
 
@@ -35,5 +35,34 @@ describe("壁纸定时轮换", () => {
       .toMatchObject({ rotate: false, reason: "轮换没开" });
     expect(decideRotation({ ...base, now: base.lastAt + 1000, paths: ["/a.png", "/b.png"] }))
       .toMatchObject({ rotate: false, reason: "还没到点" });
+  });
+});
+
+describe("日出日落模式", () => {
+  it("白天取 dayPath、夜里取 nightPath（北京）", () => {
+    const day = decideDayNight({
+      dayPath: "/day.png", nightPath: "/night.png",
+      now: new Date("2026-06-21T04:00:00Z"), latitude: 39.9042, longitude: 116.4074,
+    });
+    expect(day).toMatchObject({ path: "/day.png", phase: "day" });
+    const night = decideDayNight({
+      dayPath: "/day.png", nightPath: "/night.png",
+      now: new Date("2026-06-21T16:00:00Z"), latitude: 39.9042, longitude: 116.4074,
+    });
+    expect(night).toMatchObject({ path: "/night.png", phase: "night" });
+  });
+
+  it("没配那一张 / 读不出来 ⇒ 不换并说明", () => {
+    const noNight = decideDayNight({
+      dayPath: "/day.png", nightPath: null,
+      now: new Date("2026-06-21T16:00:00Z"), latitude: 39.9042, longitude: 116.4074,
+    });
+    expect(noNight).toMatchObject({ path: null, reason: "没配夜里那张" });
+    const gone = decideDayNight({
+      dayPath: "/day.png", nightPath: "/night.png",
+      now: new Date("2026-06-21T04:00:00Z"), latitude: 39.9042, longitude: 116.4074,
+      exists: () => false,
+    });
+    expect(gone).toMatchObject({ path: null, reason: "选中的那张读不出来" });
   });
 });

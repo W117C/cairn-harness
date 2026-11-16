@@ -14,7 +14,8 @@
 | 网站作为壁纸（渲染网页并常驻） | Plash（`github.com/sindresorhus/Plash`，标语「Make any website your Mac desktop wallpaper」） | 支持 | 已见 | **不做** | 本仓无 webview 壁纸实现；`wallpaper.kind` 只有 `image` / `video`（`apps/desktop/src/main/wallpaper.ts`） |
 | 多显示器分别设不同壁纸 | 系统级能力（macOS 设置） | 支持 | 未证实 | **未做** | 全局单张：`settings.wallpaper` 只有一份（`src/main/ipc-protocol.ts`） |
 | 定时切换（按固定间隔轮换） | Plash 等桌面壁纸类产品 | 未知 | 未证实 | **已做**（2026-11-16） | 设置里「定时轮换」+ 主进程每 30s 判定：`src/wallpaper/rotation.ts`、`apps/desktop/src/main/wallpaper-rotation.ts`、`tests/wallpaper-rotation.test.ts` |
-| 日出日落 / 按天气切换 | 同类产品 | 未知 | 未证实 | **未做** | 只做固定间隔；无地理位置/天文计算 |
+| 日出日落切换（按经纬度 + 日期算昼/夜） | 同类产品 | 未知 | 未证实 | **已做**（2026-11-16，近似解） | `src/wallpaper/solar.ts`（±5 分钟量级）+ `decideDayNight`；`tests/wallpaper-solar.test.ts`（北京夏至日出差 ≤12 分钟、极昼/极夜不给假时间） |
+| 按天气切换 | 同类产品 | 未知 | 未证实 | **未做** | 没有天气数据源（无网络请求、无 API key） |
 | 三维场景壁纸 | Wallpaper Engine（Windows） | 支持 | 未证实 | **明确不做** | 对表 `wallpaper.scene-engine` 记 `out` 并写理由 |
 | 原生面板里「点中一个文件」的自动化验收 | — | — | 不适用 | **判不到** | 本机 TCC 拦键盘自动化（`frontmost=false`、AX `-1719`）；见 `docs/native-pick-acceptance.md` |
 
