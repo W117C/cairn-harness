@@ -1,12 +1,12 @@
 {
-  "at": "2026-11-16T09:06:39.948Z",
-  "fast": false,
+  "at": "2026-11-16T10:46:00.016Z",
+  "fast": true,
   "verdict": "pass",
   "gates": [
     {
       "gate": "typecheck",
       "verdict": "pass",
-      "detail": "node --import tsx scripts/typecheck.ts ⇒ exit 0（6s）"
+      "detail": "node --import tsx scripts/typecheck.ts ⇒ exit 0（8s）"
     },
     {
       "gate": "docs-check",
@@ -27,16 +27,6 @@
       "gate": "parity",
       "verdict": "pass",
       "detail": "npx vitest run --config tests/vitest.config.ts tests/parity-standard.test.ts ⇒ exit 0（0s）"
-    },
-    {
-      "gate": "core-suite",
-      "verdict": "pass",
-      "detail": "pnpm test:capped ⇒ exit 0（163s）"
-    },
-    {
-      "gate": "desktop-suite",
-      "verdict": "pass",
-      "detail": "npx vitest run --config vitest.config.ts ⇒ exit 0（12s）"
     }
   ],
   "failed": [],

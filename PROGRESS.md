@@ -43621,3 +43621,44 @@ standard-report: pass
 - 核心 `pnpm test:capped`：**708 文件 / 8344 条全绿**，exit 0
 - 桌面 **421 文件 / 2686 条全绿**；真机冒烟 **69/69**；四包密封证据**已重签**（渲染层与 CSP 都动了）
 - `typecheck` 0 报错；`docs-check` 全绿
+
+## 2026-11-16 · 第 1298 页：业主批「准外联」——天气源真网络跑通、网站壁纸判据补上正向臂（`pending`）
+
+### 一、天气源：真网络读数（不再只靠本机夹具）
+
+`scripts/weather-live.ts` 打 **Open-Meteo（无 key、公开）**：
+
+```
+$ npx tsx scripts/weather-live.ts
+weather-live {"kind":"clouds","reason":"ok","status":200}
+→ outputs/weather-live/reading.json
+```
+
+顺带补了 Open-Meteo 的载荷形状 `{current_weather:{weathercode}}` 与 WMO → 四档映射
+（判据 `tests/wallpaper-weather.test.ts` +1）。
+
+### 二、网站壁纸：从「策略面」升级到**双臂**判据
+
+真机 70/70，新增那一条是关键：
+
+```
+PASS 网站壁纸：CSP 真在管——http 被拦 1 次、https 未被拦
+     {"blockedHttp":1,"blockedHttps":0,
+      "cspErrors":["Framing 'http://example.com/' violates ... \"frame-src https:\". The request has been blocked."]}
+```
+
+- **https 未被拦** ⇒ 放开的那一面真的通了；
+- **http 被拦 1 次** ⇒ 放开面之外仍然被管着（不是「放开了就没人管」）。
+
+边界照写：跨域读不到 DOM ⇒ **页面像素未验**，只判策略面与层渲染。
+
+### 三、对表与差距表
+
+- `wallpaper.website`：`partial` → **`covered`**（边界写进 `ours`）；评分面 **21/21 covered**，覆盖分 **1.000**（阈值 0.96）；
+- 差距表：网站壁纸 → 已做（补上双臂读数）。
+
+### 四、门禁读数（工作树）
+
+- 核心 `pnpm test:capped`：**708 文件 / 8345 条全绿**，exit 0
+- 桌面 421 文件 / 2686 条全绿；真机冒烟 **70/70**；四包密封证据有效（本轮无渲染层改动）
+- `typecheck` 0 报错；`docs-check` 全绿

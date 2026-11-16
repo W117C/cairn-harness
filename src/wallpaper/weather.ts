@@ -67,6 +67,15 @@ export function weatherFromJson(raw: unknown): WeatherKind | null {
 export function weatherFromPayload(raw: unknown): WeatherKind | null {
   const direct = weatherFromJson(raw);
   if (direct !== null) return direct;
+  // Open-Meteo（无 key）：`{current_weather:{weathercode: 61}}`
+  if (typeof raw === "object" && raw !== null) {
+    const cur = (raw as { current_weather?: unknown }).current_weather;
+    if (typeof cur === "object" && cur !== null) {
+      const wc = (cur as { weathercode?: unknown }).weathercode;
+      const code = typeof wc === "number" ? wc : typeof wc === "string" ? Number(wc) : NaN;
+      if (Number.isFinite(code)) return weatherFromWmoCode(code);
+    }
+  }
   if (typeof raw === "object" && raw !== null) {
     const arr = (raw as { weather?: unknown }).weather;
     if (Array.isArray(arr)) {
@@ -76,6 +85,18 @@ export function weatherFromPayload(raw: unknown): WeatherKind | null {
     }
   }
   return null;
+}
+
+/** WMO 天气代码（Open-Meteo 用）→ 我们的四档。 */
+export function weatherFromWmoCode(code: number): WeatherKind {
+  if (code === 0) return "clear";
+  if (code <= 3 || code === 45 || code === 48) return "clouds";
+  if (code >= 51 && code <= 67) return "rain";
+  if (code >= 71 && code <= 77) return "snow";
+  if (code >= 80 && code <= 82) return "rain";
+  if (code === 85 || code === 86) return "snow";
+  if (code >= 95) return "rain";
+  return "clouds";
 }
 
 /** 从文本读（文件源用）：非 JSON 或读不懂 ⇒ null。 */

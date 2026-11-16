@@ -11,7 +11,7 @@
 
 | 能力 | 参照产品 | 参照是否支持 | 依据等级 | 我们的状态 | 依据 |
 |---|---|---|---|---|---|
-| 网站作为壁纸（渲染网页并常驻） | Plash（`github.com/sindresorhus/Plash`，标语「Make any website your Mac desktop wallpaper」） | 支持 | 已见 | **已做**（2026-11-16，业主批「准放 CSP」；受限放开） | iframe + `sandbox` + `no-referrer`；CSP 只放 `frame-src https:`（`apps/desktop/src/main/csp.ts`）；校验只收 https（`tests/wallpaper-web.test.ts`）；冒烟判层与策略（69/69）。**边界**：离线只验到层/策略/校验，页面内容未联网渲染 |
+| 网站作为壁纸（渲染网页并常驻） | Plash（`github.com/sindresorhus/Plash`，标语「Make any website your Mac desktop wallpaper」） | 支持 | 已见 | **已做**（2026-11-16；业主批「准放 CSP」+「准外联」） | iframe + `sandbox` + `no-referrer`；CSP 只放 `frame-src https:`；校验只收 https。真机双臂：**https 未被拦、http 被拦 1 次**（同一条策略在管）；跨域不读 DOM ⇒ 页面像素未验 |
 | 多显示器分别设不同壁纸 | 系统级能力（macOS 设置） | 支持 | 未证实 | **已做**（2026-11-16；单屏机器上验证 1 屏路径，多屏真机未验） | `settings.wallpaper.perDisplay` + `src/wallpaper/displays.ts`（专属 > 回落 > 无、孤儿只报告）+ 冒烟用真 `screen.getAllDisplays()` 判屏数与 id |
 | 定时切换（按固定间隔轮换） | Plash 等桌面壁纸类产品 | 未知 | 未证实 | **已做**（2026-11-16） | 设置里「定时轮换」+ 主进程每 30s 判定：`src/wallpaper/rotation.ts`、`apps/desktop/src/main/wallpaper-rotation.ts`、`tests/wallpaper-rotation.test.ts` |
 | 日出日落切换（按经纬度 + 日期算昼/夜） | 同类产品 | 未知 | 未证实 | **已做**（2026-11-16，近似解） | `src/wallpaper/solar.ts`（±5 分钟量级）+ `decideDayNight`；`tests/wallpaper-solar.test.ts`（北京夏至日出差 ≤12 分钟、极昼/极夜不给假时间） |

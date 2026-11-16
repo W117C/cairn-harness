@@ -367,7 +367,7 @@
       "step": "done",
       "text": "读到：rain（http）",
       "keyCalls": [],
-      "url": "http://127.0.0.1:51884/weather"
+      "url": "http://127.0.0.1:56592/weather"
     }
   },
   {
@@ -623,7 +623,7 @@
       "has": true,
       "src": "cairn-wallpaper://media/current?v=0",
       "paused": false,
-      "t": 0.3,
+      "t": 0.27,
       "ready": 4,
       "duration": 2,
       "focused": true,
@@ -637,7 +637,7 @@
       "has": true,
       "src": "cairn-wallpaper://media/current?v=0",
       "paused": true,
-      "t": 0.57,
+      "t": 0.54,
       "ready": 4,
       "duration": 2,
       "focused": true,
@@ -651,7 +651,7 @@
       "has": true,
       "src": "cairn-wallpaper://media/current?v=0",
       "paused": false,
-      "t": 0.57,
+      "t": 0.54,
       "ready": 4,
       "duration": 2,
       "focused": true,
@@ -665,7 +665,7 @@
       "has": true,
       "src": "cairn-wallpaper://media/current?v=0",
       "paused": true,
-      "t": 0.57,
+      "t": 0.54,
       "ready": 4,
       "duration": 2,
       "focused": true,
@@ -679,7 +679,7 @@
       "has": true,
       "src": "cairn-wallpaper://media/current?v=0",
       "paused": false,
-      "t": 0.57,
+      "t": 0.54,
       "ready": 4,
       "duration": 2,
       "focused": true,
@@ -742,7 +742,7 @@
         "rows": [
           "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
           "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-          "新来的成员 · mmwj4mavyread-onlydefaultguidedautofull-accessteammemberproject移除",
+          "新来的成员 · mmwj5io6zread-onlydefaultguidedautofull-accessteammemberproject移除",
           "本轮发言秩序主持优先按名单轮排一轮",
           "当前会话的段—开新段",
           "权限（成员维）团队档 default · 无裁剪",
@@ -766,7 +766,7 @@
       "rows": [
         "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
         "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-        "新来的成员 · mmwj4mavyread-onlydefaultguidedautofull-accessteammemberproject移除",
+        "新来的成员 · mmwj5io6zread-onlydefaultguidedautofull-accessteammemberproject移除",
         "本轮发言秩序主持优先按名单轮排一轮",
         "当前会话的段—开新段",
         "权限（成员维）团队档 default · 无裁剪",
@@ -786,7 +786,7 @@
         "rows": [
           "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
           "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-          "新来的成员 · mmwj4mavyread-onlydefaultguidedautofull-accessteammemberproject移除",
+          "新来的成员 · mmwj5io6zread-onlydefaultguidedautofull-accessteammemberproject移除",
           "本轮发言秩序主持优先按名单轮排一轮",
           "排出来的秩序1. 示例成员　2. 新来的",
           "当前会话的段—开新段",
@@ -882,7 +882,7 @@
         "canceled": false,
         "filePaths": []
       },
-      "elapsedMs": 2461,
+      "elapsedMs": 2563,
       "options": {
         "title": "选择壁纸",
         "properties": [
@@ -1098,6 +1098,17 @@
         "src": "http://example.com/plain",
         "sandbox": "allow-scripts allow-same-origin allow-presentation"
       }
+    }
+  },
+  {
+    "name": "网站壁纸：CSP 真在管——http 被拦 1 次、https 未被拦（跨域不读 DOM，只判策略面）",
+    "ok": true,
+    "detail": {
+      "cspErrors": [
+        "Framing 'http://example.com/' violates the following Content Security Policy directive: \"frame-src https:\". The request has been blocked.\n"
+      ],
+      "blockedHttp": 1,
+      "blockedHttps": 0
     }
   },
   {

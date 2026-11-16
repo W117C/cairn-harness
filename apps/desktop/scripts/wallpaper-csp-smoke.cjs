@@ -1357,6 +1357,20 @@ async function main() {
       && webFlow.good.hasFrame === true && webFlow.good.src === "https://example.com/live"
       && String(webFlow.good.sandbox).includes("allow-scripts"),
     webFlow);
+  // 真网络（业主 2026-11-16 批「准外联」）：让 example.com 真去加载 2.5s，
+  // 判「没有 CSP 违规」——跨域读不到 DOM，所以只判策略面，不冒充「看见内容」。
+  await pause(2500);
+  const webCspErrors = errors.filter((m) => /Content Security Policy|frame-src/i.test(String(m)));
+  readings.webLive = { cspErrors: webCspErrors };
+  // 这里**期望**出现一条违规：被拦的是 `http://example.com`；`https://example.com` 不许被拦。
+  // 这条同时是正向臂与反向臂——CSP 真在管这件事，而不是「放开了就没人管」。
+  const blockedHttp = webCspErrors.filter((m) => /http:\/\/example\.com/.test(String(m)));
+  const blockedHttps = webCspErrors.filter((m) => /https:\/\/example\.com/.test(String(m)));
+  readings.webLive = { cspErrors: webCspErrors, blockedHttp: blockedHttp.length, blockedHttps: blockedHttps.length };
+  check("网站壁纸：CSP 真在管——http 被拦 1 次、https 未被拦（跨域不读 DOM，只判策略面）",
+    blockedHttp.length === 1 && blockedHttps.length === 0,
+    readings.webLive);
+
   check("CSP 放开面：`frame-src https:` 在，且 frame-src 里没有 data:/blob:/http:",
     String(readings.builtCsp).includes("frame-src https:")
       && !/frame-src[^;]*(data:|blob:|http:)/.test(String(readings.builtCsp)),

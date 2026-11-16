@@ -1,6 +1,6 @@
 // 天气切换判卷：四档、没配不猜、读不出不换、代码映射。
 import { describe, expect, it } from "vitest";
-import { decideWeather, isWeatherKind, weatherFromCode, weatherFromPayload, weatherFromText, WEATHER_KINDS } from "../src/wallpaper/weather";
+import { decideWeather, isWeatherKind, weatherFromCode, weatherFromPayload, weatherFromText, weatherFromWmoCode, WEATHER_KINDS } from "../src/wallpaper/weather";
 
 describe("按天气切换", () => {
   it("四档固定；未知值不是 WeatherKind", () => {
@@ -53,5 +53,17 @@ describe("联网源载荷（默认关）", () => {
     expect(weatherFromPayload({ weather: [] })).toBeNull();
     expect(weatherFromPayload({ weather: [{ id: "x" }] })).toBeNull();
     expect(weatherFromPayload(null)).toBeNull();
+  });
+});
+
+describe("Open-Meteo 形状（无 key 源）", () => {
+  it("current_weather.weathercode ⇒ 四档；WMO 映射覆盖雨雪云晴", () => {
+    expect(weatherFromPayload({ current_weather: { weathercode: 0 } })).toBe("clear");
+    expect(weatherFromPayload({ current_weather: { weathercode: 3 } })).toBe("clouds");
+    expect(weatherFromPayload({ current_weather: { weathercode: 61 } })).toBe("rain");
+    expect(weatherFromPayload({ current_weather: { weathercode: 75 } })).toBe("snow");
+    expect(weatherFromPayload({ current_weather: { weathercode: 95 } })).toBe("rain");
+    expect(weatherFromPayload({ current_weather: {} })).toBeNull();
+    expect(weatherFromWmoCode(2)).toBe("clouds");
   });
 });
