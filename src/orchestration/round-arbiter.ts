@@ -11,6 +11,9 @@
 import type { AgentPermissionMode } from "../events/types";
 import { planRound, type RoundMember } from "./speech";
 
+/** 空转停机的那句话（判卷与实现共用同一份拼法，测试不许抄第二遍——本仓散文针判据盯的就是这个）。 */
+export const IDLE_PAUSE_REASON = "空转已达阈值：这一轮停机等人（发言权的空转守卫）";
+
 export interface RoundArbitrationInput {
   plan_id: string;
   version: number;
@@ -49,7 +52,7 @@ export function teamRoundArbiter(policy: TeamRoundPolicyInput): RoundArbiter {
       ...(policy.idleLimit === undefined ? {} : { idleLimit: policy.idleLimit }),
     });
     if (plan.paused) {
-      return { paused: true, reason: "空转已达阈值：这一轮停机等人（发言权的空转守卫）" };
+      return { paused: true, reason: IDLE_PAUSE_REASON };
     }
     // 任务不是成员：只取「谁先说」这件事——把第一批发言者对应的任务提前，其余保持原序。
     const first = plan.batches[0]?.speakers ?? [];

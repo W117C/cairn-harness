@@ -20,7 +20,7 @@ describe("成员档案", () => {
   it("最小档案：name + role，档位缺席时按最窄档（fail closed）", () => {
     const roster = projectMembers([rec(1, memberPatch("m1", { name: "阿岚", role: "调研" }))], "guided");
     expect(roster.members).toEqual([
-      { id: "m1", name: "阿岚", role: "调研", tier: "read-only", capabilities: [] },
+      { id: "m1", name: "阿岚", role: "调研", tier: "read-only", memoryScope: "team", capabilities: [] },
     ]);
     expect(roster.rejected).toEqual([]);
   });

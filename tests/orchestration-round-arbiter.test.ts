@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { OrchestrationStore } from "../src/orchestration/store";
 import { OrchestrationEngine } from "../src/orchestration/engine";
-import { teamRoundArbiter, type RoundArbiter } from "../src/orchestration/round-arbiter";
+import { IDLE_PAUSE_REASON, teamRoundArbiter, type RoundArbiter } from "../src/orchestration/round-arbiter";
 import type { ExecutionBackend, ExecutionRequest } from "../src/orchestration/types";
 import { orchestrationPlan } from "./orchestration-fixture";
 
@@ -42,14 +42,14 @@ async function approved(engine: OrchestrationEngine, tasks = 3): Promise<void> {
 
 it("仲裁 paused ⇒ 这一轮不派，并落一条 needs_you 状态", async () => {
   const calls: ExecutionRequest[] = [];
-  const { store, engine } = await setup(backend(calls), () => ({ paused: true, reason: "空转已达阈值" }));
+  const { store, engine } = await setup(backend(calls), () => ({ paused: true, reason: IDLE_PAUSE_REASON }));
   await approved(engine);
   await engine.runUntilIdle();
   expect(calls).toHaveLength(0);
   const events = await store.events();
   const needsYou = events.filter((e) => e.type === "agent_status" && (e as { orchestration?: { phase?: string } }).orchestration?.phase === "needs_you");
   expect(needsYou).toHaveLength(1);
-  expect((needsYou[0] as { reason?: string }).reason).toContain("空转");
+  expect((needsYou[0] as { reason?: string }).reason).toBe(IDLE_PAUSE_REASON);
 });
 
 it("仲裁 order ⇒ 改派发顺序（agent_spawned 的先后）", async () => {

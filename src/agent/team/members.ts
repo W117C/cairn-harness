@@ -14,11 +14,15 @@
 import { AGENT_PERMISSION_MODES, type AgentPermissionMode } from "../../events/types";
 import { clampTier } from "../worker-report";
 
+/** 记忆作用域的三种取值（S1：扩展现有轴，不另造坐标系）。 */
+export const MEMBER_MEMORY_SCOPES = ["team", "member", "project"] as const;
+export type MemberMemoryScope = (typeof MEMBER_MEMORY_SCOPES)[number];
+
 /** 补丁键前缀：`member.<id>.<字段>`。id 里不许出现 `.`（分隔符歧义会让读侧猜错人）。 */
 export const MEMBER_KEY_PREFIX = "member.";
 
 /** 档案字段白名单（多一个都要改这里，避免「随手加个键就成字段」）。 */
-export const MEMBER_FIELDS = ["name", "role", "model", "thinking", "workdir", "tier", "capabilities", "removed"] as const;
+export const MEMBER_FIELDS = ["name", "role", "model", "thinking", "workdir", "tier", "capabilities", "removed", "memoryScope"] as const;
 export type MemberField = (typeof MEMBER_FIELDS)[number];
 
 export interface MemberProfile {
@@ -30,6 +34,8 @@ export interface MemberProfile {
   workdir?: string | null;
   /** 权限档：只能是既有五档之一，且不得宽于团队档（重建时按团队档裁剪）。 */
   tier: AgentPermissionMode;
+  /** 记忆作用域（ADR 0015 §五 S1 的轴）：团队共享 / 成员私有 / 跟随项目。缺省＝团队。 */
+  memoryScope: MemberMemoryScope;
   capabilities: string[];
 }
 
@@ -117,6 +123,10 @@ export function projectMembers(records: readonly MemberPatchRecord[], teamTier: 
         group.errors.push(`档位认不出：${JSON.stringify(raw)}（既有五档：${AGENT_PERMISSION_MODES.join(" / ")}）`);
         continue;
       }
+      if (field === "memoryScope" && !(MEMBER_MEMORY_SCOPES as readonly string[]).includes(raw)) {
+        group.errors.push(`memoryScope 只收 ${MEMBER_MEMORY_SCOPES.join(" / ")}，实测 ${JSON.stringify(raw)}`);
+        continue;
+      }
       if (field === "removed" && raw !== "0" && raw !== "1") {
         group.errors.push(`removed 只收 "0" / "1"，实测 ${JSON.stringify(raw)}`);
         continue;
@@ -174,6 +184,7 @@ export function projectMembers(records: readonly MemberPatchRecord[], teamTier: 
       name: p.name,
       role: p.role,
       tier: tier.mode,
+      memoryScope: p.memoryScope ?? "team",
       capabilities: p.capabilities ?? [],
       ...(p.model === undefined ? {} : { model: p.model }),
       ...(p.thinking === undefined ? {} : { thinking: p.thinking }),

@@ -23378,6 +23378,13 @@ cleanOrphanWorktree(root, "worker-10", { ownedAgentIds: new Set(["worker-10"]) }
 分区搜索词表补 `worktrees: "工作树 worktree 孤儿 清理 分支"`，否则设置搜索里这个新分区
 搜不到（`settings-section-search.test.ts` 的「词表覆盖全部 SectionId」会当场红）。
 
+### 三点五、被散文针咬住的一处（同批修）
+
+`tests/orchestration-round-arbiter.test.ts` 里我抄了生产的那句「空转已达阈值…」——
+散文针（`scripts/prose-needle-scan.ts`）的顶包候选从 10 涨到 11，判卷当场红。
+按第 327 页的先例改成**派生断言**：生产侧导出 `IDLE_PAUSE_REASON`，实现与判卷共用同一份拼法，
+帽字不动（仍是 10）。
+
 ### 四、判卷与读数
 
 | 面 | 读数 |
@@ -41860,3 +41867,45 @@ wallpaper-engine，逐行写「它怎么做 / 我们怎么做 / 证据在哪 / *
   现在它能做的是「这一轮开不开、按什么顺序派」，这是发言权在引擎里能落地的那一半。
 - `idleRounds` 还没有生产者（空转读数由谁记属产品裁决），所以空转守卫在引擎侧默认不触发。
 - 面板族仍缺：记忆面板、权限的成员维、用量的成员维（三面都要先定数据形状）。
+
+## 2026-11-16 · 第 1255 页：面板族剩下三面的数据形状（协议 v61）（`pending`）
+
+**背景**：第 1254 页之后仍被点名「面板族缺记忆、权限成员维、用量成员维」。本页把三面的**数据形状**
+一次落下来，协议 v60 → **v61**（只加字段，不加通道：README 的 161 个 invoke 不变）。
+
+### 一、三面各自落在哪
+
+| 面 | 数据形状 | 落点 |
+|---|---|---|
+| 权限（成员维） | `PermissionInsight`：团队档 ＋ 每个成员的「请求档 / 生效档 / 是否被裁」 | `src/agent/team/insights.ts#permissionRows`（复用 `clampTier` 的结果，不重算一遍） |
+| 记忆作用域 | 成员档案新增 `memoryScope: team / member / project`；`memoryScopes` 按作用域数人头（**空桶也给**） | `members.ts` 字段 ＋ `insights.ts#memoryScopes` |
+| 用量（成员维） | `usageByOwner`：按归属者（`main` / worker 的 `agent_id` / `member:<id>`）汇总 token 与笔数 | `insights.ts#usageByOwner`（当前会话事件 → 汇总；跨会话聚合属另一层） |
+
+三面都挂在既有的 `teamRoster` 回包上（`insights` 字段），**没有新开通道**：
+面板要的是读数，不是新动作。
+
+### 二、UI
+
+设置 › 团队新增三行（**无 desc**，36 条次级说明帽不变）：权限（团队档 + 裁剪点名）、
+记忆作用域分布、按成员用量；成员行多一个记忆作用域选择器（写入口仍是唯一那条 `teamMemberSave`）。
+没有用量读数时显示「当前会话还没有用量读数」，不画 0/0。
+
+### 三、被自己的构建咬住的一处（教训）
+
+第一版把 `MEMBER_MEMORY_SCOPES` 从核心 `members.ts` import 进渲染层 ⇒ 浏览器包被拉进
+`vscode-languageserver-protocol` 的 `./node` 导出 ⇒ **vite 构建直接失败**（`build=1`）。
+修法：渲染层只保留**线值常量**＋类型（type-only），注释写清为什么不 import 核心模块。
+
+### 四、判卷与读数
+
+- 核心 `tests/team-insights.test.ts` 4 条（汇总顺序、缺字段不补零、三桶齐全、权限并排）；
+  `team-members` / `team-store` 的形状断言同步补 `memoryScope`。
+- 面板 SSR：`team-section.test.tsx` 增 2 条（三维读数都画出来 / 没有读数时说真话）。
+- 真机冒烟：新增一条「三维读数同屏可见」⇒ **49/49**。
+- 桌面 **405 文件 / 2619 条全绿**；核心读数见下方补记；四份密封证据重签后全绿。
+
+### 五、边界
+
+- 用量只聚合**当前会话**；跨会话/跨成员的账单要另定口径（哪些会话算一个团队）。
+- 记忆作用域目前是**声明与展示**：检索层还没按作用域过滤（ADR 0015 §五 S1 的第二步）。
+- 权限的成员维是**读面**：改档仍只有设置页那条通道，成员自己改不了（单调继承）。

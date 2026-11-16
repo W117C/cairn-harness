@@ -144,12 +144,30 @@ export type { SearchProvider } from "../tools/web-search";
  *  v59 = 壁纸媒体暂停推送（onWallpaperSuspend）：系统休眠/锁屏时主进程推一次
  *        `{paused:true, reason}`，唤醒/解锁推 `{paused:false}`——视频壁纸不必靠猜 document 可见性。
  *  v60 = 团队一轮的发言秩序（teamRoundPlan，发言权的第一个调用方）与会话开新段
- *        （sessionSegmentOpen，段的第一个写入点）。 */
-export const IPC_PROTOCOL_VERSION = 60;
+ *        （sessionSegmentOpen，段的第一个写入点）。
+ *  v61 = 团队名单带三维读数（`insights`：权限成员维 / 记忆作用域 / 按成员用量）与成员的
+ *        `memoryScope` 字段——面板族剩下三面的数据形状。 */
+export const IPC_PROTOCOL_VERSION = 61;
 
 /** 团队名单（v59）：成员档案是投影，`records` 是补丁条数（面板据此说「有几条历史」）。 */
 export interface TeamRosterPayload {
-  members: { id: string; name: string; role: string; tier: string; model?: string; thinking?: string; capabilities: string[] }[];
+  members: {
+    id: string; name: string; role: string; tier: string; model?: string; thinking?: string;
+    /** 记忆作用域（v61）：team / member / project。 */
+    memoryScope?: "team" | "member" | "project";
+    capabilities: string[];
+  }[];
+  /** 三维读数（v61）：权限成员维 / 记忆作用域 / 按成员用量（当前会话）。 */
+  insights?: {
+    permissions: {
+      teamTier: string;
+      clamped: { id: string; requested: string; applied: string }[];
+      rows: { id: string; name: string; requested: string; applied: string; clamped: boolean }[];
+    };
+    memory: { scopes: { scope: string; members: string[] }[] };
+    /** `byOwner` 的 owner：`main` / worker 的 agent_id / 成员级 `member:<id>`。 */
+    usage: { byOwner: { owner: string; inputTokens: number; outputTokens: number; events: number }[]; totalEvents: number };
+  };
   /** 被团队档裁剪过的成员（裁剪出声，不静默降级）。 */
   clamped: { id: string; requested: string; applied: string }[];
   /** 被拒的补丁（坏输入不静默）。 */
@@ -164,6 +182,8 @@ export interface TeamMemberInput {
   name?: string;
   role?: string;
   tier?: string;
+  /** v61：记忆作用域（team / member / project）。 */
+  memoryScope?: string;
   remove?: boolean;
 }
 

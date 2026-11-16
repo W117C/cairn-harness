@@ -9,9 +9,11 @@ import type { TintSource } from "./wallpaper-tint";
 import { installSuspendPause } from "./wallpaper-suspend";
 import { pickWallpaper } from "./wallpaper-pick";
 import { appendTeamPatch, readTeamRoster, teamLogPath } from "./team-store";
+import { readSessionEvents } from "../../../../src/main/sessions";
 import { openSegmentForSession } from "./session-segments";
 import { planRound } from "../../../../src/orchestration/speech";
 import { memberPatch } from "../../../../src/agent/team/members";
+import { memoryScopes, permissionRows, usageByOwner } from "../../../../src/agent/team/insights";
 import { windowVibrancyOptions } from "./window-vibrancy";
 import { focusedWindowViewing, notificationClickWindow, runNotificationCopy, runNotificationTarget, shouldNotifyRunSettled } from "./run-notification";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -574,6 +576,31 @@ const { pluginInstallJobs, ...pluginHandlers } = createPluginIpcHandlers({
   workspaceContext,
 });
 
+/** v61：团队三维读数。用量按「当前会话」的事件算——跨会话聚合属另一层（性能与口径都要先定）。 */
+const teamInsightsOf = async (
+  roster: { members: { id: string; name: string; role: string; tier: string; memoryScope: string; capabilities: string[] }[]; clamped: { id: string; requested: string; applied: string }[] },
+  settings: { mode: string; currentSession: string | null },
+) => {
+  const members = roster.members as never as Parameters<typeof memoryScopes>[0];
+  const requested: Record<string, never> = {};
+  const permissions = permissionRows(
+    roster.members as never,
+    requested as never,
+    settings.mode as never,
+    roster.clamped as never,
+  );
+  let usage = { byOwner: [] as { owner: string; inputTokens: number; outputTokens: number; events: number }[], totalEvents: 0 };
+  const sessionId = settings.currentSession;
+  if (sessionId !== null && sessionId !== "") {
+    const root = await explicitSessionsRoot(undefined);
+    if (root !== undefined) {
+      const events = await readSessionEvents(root, sessionId).catch(() => []);
+      usage = usageByOwner(events);
+    }
+  }
+  return { permissions, memory: memoryScopes(members as never), usage };
+};
+
 const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   // 当前调用窗口的可信工作区；不接受 renderer 自报的目录。
   searchSettingsGet: () => getSearchSettings(resolveWorkspace()),
@@ -753,9 +780,11 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     return {
       members: roster.members.map((m) => ({
         id: m.id, name: m.name, role: m.role, tier: m.tier, capabilities: m.capabilities,
+        memoryScope: m.memoryScope,
         ...(m.model === undefined ? {} : { model: m.model }),
         ...(m.thinking === undefined ? {} : { thinking: m.thinking }),
       })),
+      insights: await teamInsightsOf(roster, s),
       clamped: roster.clamped,
       rejected: roster.rejected,
       records: roster.records,
@@ -763,7 +792,7 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   },
   // v59 写一条成员档案：新增 / 改档 / 移除都是同一条通道。移除＝写墓碑，不删历史。
   teamMemberSave: async (raw) => {
-    const input = (raw ?? {}) as { id?: unknown; name?: unknown; role?: unknown; tier?: unknown; remove?: unknown };
+    const input = (raw ?? {}) as { id?: unknown; name?: unknown; role?: unknown; tier?: unknown; memoryScope?: unknown; remove?: unknown };
     const id = String(input.id ?? "");
     const path = teamLogPath(app.getPath("userData"));
     let patch: Record<string, string>;
@@ -774,6 +803,7 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
           ...(input.name === undefined ? {} : { name: String(input.name) }),
           ...(input.role === undefined ? {} : { role: String(input.role) }),
           ...(input.tier === undefined ? {} : { tier: String(input.tier) }),
+          ...(input.memoryScope === undefined ? {} : { memoryScope: String(input.memoryScope) }),
         });
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
@@ -787,9 +817,11 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
       roster: {
         members: roster.members.map((m) => ({
           id: m.id, name: m.name, role: m.role, tier: m.tier, capabilities: m.capabilities,
+          memoryScope: m.memoryScope,
           ...(m.model === undefined ? {} : { model: m.model }),
           ...(m.thinking === undefined ? {} : { thinking: m.thinking }),
         })),
+        insights: await teamInsightsOf(roster, s),
         clamped: roster.clamped,
         rejected: roster.rejected,
         records: roster.records,

@@ -37,7 +37,7 @@ describe("团队档案落点", () => {
     expect(Object.keys(records[0]!.patch)).toContain("member.m1.name");
     const roster = await readTeamRoster(path, "guided");
     expect(roster.members).toEqual([
-      { id: "m1", name: "阿岚", role: "调研", tier: "guided", capabilities: [] },
+      { id: "m1", name: "阿岚", role: "调研", tier: "guided", memoryScope: "team", capabilities: [] },
     ]);
   });
 

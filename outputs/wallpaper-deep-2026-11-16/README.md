@@ -21,8 +21,9 @@
 | 段的写入点 | 面板「开新段」调 `sessionSegmentOpen` | 回包序数 `2` 直接画在该行 |
 | 真 `powerMonitor` | 装配挂在**真对象**上，`emit` 走真实监听链 → 真 IPC → 渲染层 | suspend ⇒ paused；resume ⇒ 续播；listener 数 ≥1 |
 | 团队会话窗格（第 10 个 pane） | `#pane=team` 直接打开；**打开即自动算一轮秩序** | 窗格出现、名单 1 行、`1. 示例成员`、`__cairnRoundPlans` 调用 1 次 |
+| 三维读数（v61） | 权限成员维 / 记忆作用域 / 按成员用量同屏可见 | 「团队档 default」「team 1」「main 1200/340」 |
 
-合计 **48/48** 条真机检查全绿（`checks.json` / `readings.json` 是原始读数）。
+合计 **49/49** 条真机检查全绿（`checks.json` / `readings.json` 是原始读数）。
 
 ## 二、这批抓到并修掉的一个真缺陷
 

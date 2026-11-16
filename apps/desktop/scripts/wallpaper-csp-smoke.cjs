@@ -624,6 +624,10 @@ async function main() {
     };
   })()`);
   readings.teamPanel = { navClicked, rows: teamPanel.rows.slice(0, 8), selects: teamPanel.selects, inputs: teamPanel.inputs };
+  // v61 三维读数：权限成员维 / 记忆作用域 / 按成员用量，都要在同一屏上看得见。
+  check("团队面板渲染三维读数（权限成员维 / 记忆作用域 / 按成员用量）",
+    teamPanel.html.includes("团队档 default") && teamPanel.html.includes("team 1") && teamPanel.html.includes("main 1200/340"),
+    { sample: teamPanel.html.slice(0, 600) });
   check("设置里能进「团队」并且面板渲染出名单（种子成员 + 档位选择器）",
     navClicked.found === true && teamPanel.html.includes("示例成员") && teamPanel.selects >= 2, readings.teamPanel);
   // 真指针点「添加」：填名字 → 点按钮 → 名单里多一个人

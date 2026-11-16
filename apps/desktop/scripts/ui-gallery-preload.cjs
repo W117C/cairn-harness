@@ -1634,12 +1634,17 @@ contextBridge.exposeInMainWorld("__cairnPushWallpaperSuspend", (payload) => {
 // v59 团队面板夹具：桩里给一份**真形状**的名单（不是 {}），面板才能判渲染面；
 // 写入按同一条通道的口径改内存名单（增/改档/墓碑），回包给新名单。
 // 真落盘那一段属主进程（`team-store`），冒烟另行判它的读写闭环。
-const teamMembers = [{ id: "m-seed", name: "示例成员", role: "调研", tier: "read-only", capabilities: [] }];
+const teamMembers = [{ id: "m-seed", name: "示例成员", role: "调研", tier: "read-only", memoryScope: "team", capabilities: [] }];
 const teamRosterPayload = () => ({
   members: teamMembers.map((m) => ({ ...m })),
   clamped: [],
   rejected: [],
   records: teamMembers.length,
+  insights: {
+    permissions: { teamTier: "default", clamped: [], rows: teamMembers.map((m) => ({ id: m.id, name: m.name, requested: m.tier, applied: m.tier, clamped: false })) },
+    memory: { scopes: [{ scope: "team", members: teamMembers.map((m) => m.id) }, { scope: "member", members: [] }, { scope: "project", members: [] }] },
+    usage: { byOwner: [{ owner: "main", inputTokens: 1200, outputTokens: 340, events: 3 }], totalEvents: 3 },
+  },
 });
 stub.teamRoster = () => Promise.resolve(teamRosterPayload());
 stub.teamMemberSave = (input) => {

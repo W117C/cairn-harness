@@ -6,6 +6,10 @@
 //  ③ 拒绝要看得见：被拒的补丁与被裁剪的档位都在页面上点名，不糊成一句「保存失败」。
 import { useCallback, useEffect, useState } from "react";
 import type { TeamMemberInput, TeamRosterPayload, TeamRoundPlanPayload } from "../../../../../../src/main/ipc-protocol";
+/** 记忆作用域的三个线值（v61 的线格式）。渲染层不 import 核心模块——那会把 node 依赖拉进
+ *  浏览器包（实测：构建会因 vscode-languageserver-protocol 的 `./node` 导出直接失败）。
+ *  形状由 `TeamRosterPayload.members[].memoryScope` 的类型钉住。 */
+const MEMORY_SCOPES = ["team", "member", "project"] as const;
 import { AGENT_PERMISSION_MODES } from "../../../../../../src/events/types";
 import { SettingsRow, SettingsSection } from "../settings-ui";
 import { STR } from "../../strings";
@@ -151,6 +155,15 @@ export function TeamSection(
             >
               {AGENT_PERMISSION_MODES.map((mode) => <option key={mode} value={mode}>{mode}</option>)}
             </select>
+            <select
+              className="ss-select"
+              aria-label={STR.team.memoryScope}
+              value={m.memoryScope ?? "team"}
+              disabled={busy}
+              onChange={(e) => { void write({ id: m.id, memoryScope: e.target.value }); }}
+            >
+              {MEMORY_SCOPES.map((scope) => <option key={scope} value={scope}>{scope}</option>)}
+            </select>
             <button type="button" className="mini-btn" disabled={busy} onClick={() => { void write({ id: m.id, remove: true }); }}>
               {STR.team.remove}
             </button>
@@ -209,6 +222,39 @@ export function TeamSection(
           </button>
         </div>
       </SettingsRow>
+
+      {roster?.insights !== undefined && (
+        <SettingsRow label={STR.team.permissions}>
+          <span className="ss-static">
+            {`团队档 ${roster.insights.permissions.teamTier}`}
+            {roster.insights.permissions.clamped.length > 0
+              ? ` · 裁剪 ${roster.insights.permissions.clamped.map((c) => `${c.id} ${c.requested}→${c.applied}`).join("；")}`
+              : ` · 无裁剪`}
+          </span>
+        </SettingsRow>
+      )}
+
+      {roster?.insights !== undefined && (
+        <SettingsRow label={STR.team.memory}>
+          <span className="ss-static">
+            {roster.insights.memory.scopes
+              .map((s) => `${s.scope} ${String(s.members.length)}`)
+              .join(" · ")}
+          </span>
+        </SettingsRow>
+      )}
+
+      {roster?.insights !== undefined && (
+        <SettingsRow label={STR.team.usage}>
+          <span className="ss-static">
+            {roster.insights.usage.totalEvents === 0
+              ? STR.team.usageEmpty
+              : roster.insights.usage.byOwner
+                .map((u) => `${u.owner} ${String(u.inputTokens)}/${String(u.outputTokens)}`)
+                .join("　")}
+          </span>
+        </SettingsRow>
+      )}
 
       <SettingsRow label={STR.team.records} desc={STR.team.recordsDesc}>
         <span className="ss-static">{roster === null ? "—" : String(roster.records)}</span>

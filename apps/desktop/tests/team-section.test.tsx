@@ -23,8 +23,8 @@ describe("团队成员面板", () => {
     expect(html).toContain("小北");
     expect(html).toContain("调研");
     expect(html).toContain("m1");
-    // 每个成员一个档位选择器 + 新增行一个 + 发言秩序一个（v60）
-    expect((html.match(/<select/g) ?? []).length).toBe(4);
+    // 每个成员两个选择器（权限档 + 记忆作用域）+ 新增行一个 + 发言秩序一个（v60/v61）
+    expect((html.match(/<select/g) ?? []).length).toBe(6);
     expect((html.match(/移除/g) ?? []).length).toBeGreaterThanOrEqual(2);
   });
 
@@ -84,6 +84,43 @@ describe("团队成员面板", () => {
     const html = renderToStaticMarkup(<TeamSection initialRoster={roster()} initialSegment={3} />);
     expect(html).toContain("当前会话的段");
     expect(/>3</.test(html)).toBe(true);
+  });
+
+  it("三维读数：权限（团队档 + 裁剪）、记忆作用域分布、按成员用量都画出来", () => {
+    const html = renderToStaticMarkup(
+      <TeamSection
+        initialRoster={roster({
+          insights: {
+            permissions: {
+              teamTier: "guided",
+              clamped: [{ id: "m1", requested: "full-access", applied: "guided" }],
+              rows: [{ id: "m1", name: "阿岚", requested: "full-access", applied: "guided", clamped: true }],
+            },
+            memory: { scopes: [{ scope: "team", members: ["m1"] }, { scope: "member", members: [] }, { scope: "project", members: [] }] },
+            usage: { byOwner: [{ owner: "main", inputTokens: 100, outputTokens: 10, events: 1 }], totalEvents: 1 },
+          },
+        })}
+      />,
+    );
+    expect(html).toContain("团队档 guided");
+    expect(html).toContain("full-access→guided");
+    expect(html).toContain("team 1");
+    expect(html).toContain("main 100/10");
+  });
+
+  it("没有任何用量读数时说实话，不画 0/0", () => {
+    const html = renderToStaticMarkup(
+      <TeamSection
+        initialRoster={roster({
+          insights: {
+            permissions: { teamTier: "guided", clamped: [], rows: [] },
+            memory: { scopes: [{ scope: "team", members: [] }, { scope: "member", members: [] }, { scope: "project", members: [] }] },
+            usage: { byOwner: [], totalEvents: 0 },
+          },
+        })}
+      />,
+    );
+    expect(html).toContain("当前会话还没有用量读数");
   });
 
   it("补丁条数如实显示（历史只增不减）", () => {
