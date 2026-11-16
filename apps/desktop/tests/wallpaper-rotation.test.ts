@@ -8,7 +8,7 @@ const wp = (patch: Partial<WallpaperSettings["rotation"]> & { path?: string | nu
   opacity: 1, scrim: 0.35, glassAlpha: 0.25, revision: 1,
   perDisplay: {},
   rotation: {
-    enabled: true, mode: "interval", weather: { kind: "clear", paths: {} },
+    enabled: true, mode: "interval", weather: { kind: "clear", paths: {}, source: "manual", filePath: null },
     latitude: 39.9042, longitude: 116.4074, dayPath: null, nightPath: null,
     everyMinutes: 60, paths: ["/a.png", "/b.png"], lastAt: 0, ...patch,
   },

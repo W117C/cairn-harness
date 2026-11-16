@@ -170,8 +170,10 @@ export type { SearchProvider } from "../tools/web-search";
  *  v76 = 群一轮的波次：`teamGroupNext(start)` 把被 @ 的人**顺序**跑，每人开跑前重读共享流
  *        （后面的人看得见前面刚说的），回包增 `wave`。
  *  v77 = 多显示器壁纸：`wallpaperDisplays` 读每块屏解析结果与孤儿键；`wallpaperSetForDisplay` 把
- *        当前壁纸设为某块屏专属。 */
-export const IPC_PROTOCOL_VERSION = 77;
+ *        当前壁纸设为某块屏专属。
+ *  v78 = 天气来源可插拔：`wallpaperWeatherNow` 返回当前解析出的天气（manual / file），
+ *        file 源读外部 JSON（读不到回落手动档并说明）。 */
+export const IPC_PROTOCOL_VERSION = 78;
 
 /** 团队名单（v59）：成员档案是投影，`records` 是补丁条数（面板据此说「有几条历史」）。 */
 export interface TeamRosterPayload {
@@ -889,6 +891,8 @@ export interface AgentApi {
     entries?: { name: string; path: string; kind: "dir" | "file" }[];
     error?: string;
   }>;
+  /** v78：当前解析出的天气（manual / file；file 读不到会回落并说明）。 */
+  wallpaperWeatherNow(): Promise<{ ok: boolean; kind?: string; source?: string; detail?: string; error?: string }>;
   /** v77：多显示器——每块屏解析结果（专属 / 回落 / 无）+ 孤儿键。 */
   wallpaperDisplays(): Promise<{
     ok: boolean;

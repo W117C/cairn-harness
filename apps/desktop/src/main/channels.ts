@@ -186,6 +186,7 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   wallpaperApplyPath: "agent:wallpaper-apply-path",
   wallpaperDisplays: "agent:wallpaper-displays",
   wallpaperSetForDisplay: "agent:wallpaper-set-for-display",
+  wallpaperWeatherNow: "agent:wallpaper-weather-now",
   // v59 团队名单（成员档案＝投影；写入口只有一条，删人写墓碑）
   teamRoster: "agent:team-roster",
   teamMemberSave: "agent:team-member-save",
@@ -420,6 +421,7 @@ export const CHANNEL_DOMAINS: { [K in InvokeChannel]: ChannelDomain } = {
   wallpaperApplyPath: "app",
   wallpaperDisplays: "app",
   wallpaperSetForDisplay: "app",
+  wallpaperWeatherNow: "app",
   teamRoster: "team",
   teamMemberSave: "team",
   teamRoundPlan: "team",

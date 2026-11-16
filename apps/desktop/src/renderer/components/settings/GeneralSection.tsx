@@ -70,6 +70,19 @@ export function GeneralSection(props: {
   const [browsing, setBrowsing] = useState(false);
   const [displays, setDisplays] = useState<{ id: string; source: string; path?: string }[]>(props.initialDisplays ?? []);
   const [displayNote, setDisplayNote] = useState<string | null>(null);
+  // v78：文件源时把「解析出来的天气」显示出来（面板不只让你填路径，还告诉你读到了什么）。
+  const [weatherNow, setWeatherNow] = useState<{ kind: string; source: string } | null>(null);
+
+  useEffect(() => {
+    const w = props.settings.wallpaper.rotation.weather;
+    if (w.source !== "file" || w.filePath === null) { setWeatherNow(null); return; }
+    void (async () => {
+      try {
+        const r = await window.agent.wallpaperWeatherNow();
+        if (r.ok === true && typeof r.kind === "string") setWeatherNow({ kind: r.kind, source: String(r.source ?? "") });
+      } catch { setWeatherNow(null); }
+    })();
+  }, [props.settings.wallpaper.rotation.weather.source, props.settings.wallpaper.rotation.weather.filePath, props.settings.wallpaper.rotation.weather.kind]);
 
   useEffect(() => {
     if (props.initialDisplays !== undefined) return;
@@ -256,6 +269,36 @@ export function GeneralSection(props: {
                       </button>
                     ))}
                   </span>
+                  <label className="cw-rotation-toggle">
+                    <input
+                      type="checkbox"
+                      aria-label={STR.general.wallpaperWeatherFromFile}
+                      data-wallpaper-weather-source="true"
+                      checked={props.settings.wallpaper.rotation.weather.source === "file"}
+                      onChange={(e) => props.onWallpaperRotation({
+                        ...props.settings.wallpaper.rotation,
+                        weather: { ...props.settings.wallpaper.rotation.weather, source: e.target.checked ? "file" : "manual" },
+                      })}
+                    />
+                    {STR.general.wallpaperWeatherFromFile}
+                  </label>
+                  {weatherNow !== null && (
+                    <span className="ss-static" data-wallpaper-weather-now="true">
+                      {`${STR.general.wallpaperWeatherNow}${weatherNow.kind}（${weatherNow.source}）`}
+                    </span>
+                  )}
+                  {props.settings.wallpaper.rotation.weather.source === "file" && (
+                    <input
+                      className="ss-input cw-weather-path"
+                      aria-label={STR.general.wallpaperWeatherFile}
+                      placeholder={STR.general.wallpaperWeatherFile}
+                      value={props.settings.wallpaper.rotation.weather.filePath ?? ""}
+                      onChange={(e) => props.onWallpaperRotation({
+                        ...props.settings.wallpaper.rotation,
+                        weather: { ...props.settings.wallpaper.rotation.weather, filePath: e.target.value === "" ? null : e.target.value },
+                      })}
+                    />
+                  )}
                   <button
                     type="button"
                     className="mini-btn"

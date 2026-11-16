@@ -41,3 +41,29 @@ export function decideWeather(input: {
   if (input.exists !== undefined && !input.exists(candidate)) return { path: null, reason: "配的那张读不出来" };
   return { path: candidate, reason: `现在是 ${input.kind}` };
 }
+
+/**
+ * 天气**外部源**的解析（离线优先）：外部写一个 JSON，我们读它。
+ *
+ * 支持两种形状，都是为了「让别人能喂数据」而不是逼我们联网：
+ *   `{"kind": "rain"}`            —— 直接给四档之一
+ *   `{"code": 500}` / `{"code": "500"}` —— OpenWeather 风格代码，走 `weatherFromCode`
+ * 读不懂 ⇒ null（调用方保持手动档，不猜）。
+ */
+export function weatherFromJson(raw: unknown): WeatherKind | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as { kind?: unknown; code?: unknown };
+  if (isWeatherKind(r.kind)) return r.kind;
+  const code = typeof r.code === "number" ? r.code : typeof r.code === "string" ? Number(r.code) : NaN;
+  if (!Number.isFinite(code)) return null;
+  return weatherFromCode(code);
+}
+
+/** 从文本读（文件源用）：非 JSON 或读不懂 ⇒ null。 */
+export function weatherFromText(text: string): WeatherKind | null {
+  try {
+    return weatherFromJson(JSON.parse(text) as unknown);
+  } catch {
+    return null;
+  }
+}

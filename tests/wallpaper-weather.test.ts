@@ -1,6 +1,6 @@
 // 天气切换判卷：四档、没配不猜、读不出不换、代码映射。
 import { describe, expect, it } from "vitest";
-import { decideWeather, isWeatherKind, weatherFromCode, WEATHER_KINDS } from "../src/wallpaper/weather";
+import { decideWeather, isWeatherKind, weatherFromCode, weatherFromText, WEATHER_KINDS } from "../src/wallpaper/weather";
 
 describe("按天气切换", () => {
   it("四档固定；未知值不是 WeatherKind", () => {
@@ -27,5 +27,20 @@ describe("按天气切换", () => {
     expect(weatherFromCode(800)).toBe("clear");
     expect(weatherFromCode(803)).toBe("clouds");
     expect(weatherFromCode(741)).toBe("clouds");
+  });
+});
+
+describe("天气外部源（离线文件）", () => {
+  it("kind 直给 / code 数字 / code 字符串 三种都认", () => {
+    expect(weatherFromText('{"kind":"snow"}')).toBe("snow");
+    expect(weatherFromText('{"code":500}')).toBe("rain");
+    expect(weatherFromText('{"code":"800"}')).toBe("clear");
+  });
+
+  it("坏 JSON / 未知值 / 非对象 ⇒ null（不猜）", () => {
+    expect(weatherFromText("not json")).toBeNull();
+    expect(weatherFromText('{"kind":"hail"}')).toBeNull();
+    expect(weatherFromText('"rain"')).toBeNull();
+    expect(weatherFromText("{}")).toBeNull();
   });
 });

@@ -1588,7 +1588,7 @@ if (wallpaperFixturePath !== "") {
     opacity: 1, scrim: 0.35, glassAlpha: 0.25, revision: 0,
     // 定时轮换（2026-11-16）：夹具里也给一份真形状，缺它渲染层会读到 undefined。
     rotation: {
-      enabled: false, mode: "interval", weather: { kind: "clear", paths: {} },
+      enabled: false, mode: "interval", weather: { kind: "clear", paths: {}, source: "manual", filePath: null },
       latitude: 39.9042, longitude: 116.4074,
       dayPath: null, nightPath: null, everyMinutes: 60, paths: [], lastAt: 0,
     },
@@ -1604,6 +1604,8 @@ if (wallpaperFixturePath !== "") {
   stub.wallpaperApplyPath = (path) => ipcRenderer.invoke("agent:wallpaper-apply-path", path);
   stub.wallpaperDisplays = () => ipcRenderer.invoke("agent:wallpaper-displays");
   stub.wallpaperSetForDisplay = (id) => ipcRenderer.invoke("agent:wallpaper-set-for-display", id);
+  // v78：天气来源解析——把当前设置里的 wallpaper 交给主进程真实现。
+  stub.wallpaperWeatherNow = async () => ipcRenderer.invoke("agent:wallpaper-weather-now", settingsState.wallpaper);
   contextBridge.exposeInMainWorld("__cairnWallpaper", {
     picks: () => wallpaperPicks.length,
     path: wallpaperFixturePath,

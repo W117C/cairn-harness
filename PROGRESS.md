@@ -43370,3 +43370,43 @@ PASS 按天气：切到 weather + 选「雨」+ 设为该天气 ⇒ weather.path
 | 自动天气源（联网） | 未做 —— 默认零外联，需你定是否引入 HTTP 源与 key |
 | 网站作为壁纸 | 未做 —— 要放开 CSP 给 webview，产品口径 |
 | 原生点选自动化 | 判不到 —— TCC 拦，需人工点一次 |
+
+## 2026-11-16 · 第 1292 页：自动天气源（文件源，仍零外联）——差距表再收一条（`pending`）
+
+### 一、为什么是「文件源」而不是「HTTP 源」
+
+产品默认零外联（没有天气 key、也不该偷偷发请求）。所以把「自动」做成**别人喂、我们读**：
+
+| 形状 | 含义 |
+|---|---|
+| `{"kind": "rain"}` | 直接给四档之一 |
+| `{"code": 500}` / `{"code": "500"}` | OpenWeather 风格代码，走 `weatherFromCode` |
+| 坏 JSON / 未知值 | `null` ⇒ 回落手动档，并在 `source` 里标 `file-invalid` / `file-missing` |
+
+### 二、接线
+
+- 设置：`rotation.weather.source = manual | file` + `filePath`；
+- 主进程：`resolveWeatherKind`（读文件 → 解析 → 回落），轮换 tick 与 IPC 共用同一份；
+- 协议 v78：`wallpaperWeatherNow`（面板显示「读到：rain（file）」）；
+- 面板：勾「从文件读天气」+ 填 JSON 路径 + 显示解析结果。
+
+### 三、判据
+
+- `tests/wallpaper-weather.test.ts`（6 条，新增 2）：kind/code 数字/code 字符串都认；坏 JSON、未知值、非对象 ⇒ null；
+- 真机冒烟 +1：勾来源 + 填 `{"code":500}` ⇒ `wallpaperWeatherNow()` 返回 `{kind:"rain", source:"file"}` ⇒ **冒烟 66/66**；
+- 消费者面判据（`invoke-consumer-census`）：面板真调用 `wallpaperWeatherNow`，不是只为冒烟接的通道。
+
+### 四、门禁读数（工作树）
+
+- 核心 `pnpm test:capped`：**705 文件 / 8332 条全绿**，exit 0
+- 桌面 **417 文件 / 2674 条全绿**；真机冒烟 **66/66**；四包密封证据**已重签**
+- `typecheck` 0 报错；`docs-check` 全绿
+
+### 五、差距表现状（只剩三行）
+
+| 能力 | 状态 |
+|---|---|
+| 定时 / 日出日落 / 多显示器 / 按天气（手动 + **文件源**） | 已做 |
+| 联网天气源（HTTP + key） | 未做 —— 需业主批准外联 |
+| 网站作为壁纸 | 未做 —— 需业主批准放开受限 CSP |
+| 原生点选自动化 | 判不到 —— 需人工点一次 |

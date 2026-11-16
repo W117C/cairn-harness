@@ -76,7 +76,14 @@ export interface WallpaperRotation {
   /** 轮换依据：`interval`（固定间隔）/ `dayNight`（日出日落）/ `weather`（按天气，手动档）。 */
   mode: "interval" | "dayNight" | "weather";
   /** 天气模式：当前天气 + 每档一张（默认手动，**不联网**）。 */
-  weather: { kind: "clear" | "clouds" | "rain" | "snow"; paths: Partial<Record<"clear" | "clouds" | "rain" | "snow", string>> };
+  weather: {
+    kind: "clear" | "clouds" | "rain" | "snow";
+    paths: Partial<Record<"clear" | "clouds" | "rain" | "snow", string>>;
+    /** 天气来源：`manual`（面板选）或 `file`（外部写 JSON，我们只读）。 */
+    source: "manual" | "file";
+    /** `source=file` 时读哪个文件（绝对路径）。 */
+    filePath: string | null;
+  };
   /** 日出日落模式用：纬度/经度（度；东经/北纬为正）。 */
   latitude: number;
   longitude: number;
@@ -250,7 +257,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   wallpaper: {
     kind: "none", path: null, opacity: 1, scrim: 0.35, glassAlpha: 0.25, revision: 0,
     rotation: {
-      enabled: false, mode: "interval", weather: { kind: "clear", paths: {} },
+      enabled: false, mode: "interval", weather: { kind: "clear", paths: {}, source: "manual", filePath: null },
       latitude: 39.9042, longitude: 116.4074,
       dayPath: null, nightPath: null,
       everyMinutes: 60, paths: [], lastAt: 0,
@@ -342,15 +349,20 @@ function validateRotation(raw: unknown, fallback: WallpaperRotation): WallpaperR
   const longitude = clampCoord(r.longitude, -180, 180, fallback.longitude);
   const pick = (v: unknown, fb: string | null): string | null =>
     typeof v === "string" && v.trim() !== "" && v.length <= 4096 ? v : fb;
-  const rawWeather = (r.weather ?? {}) as { kind?: unknown; paths?: Record<string, unknown> };
+  const rawWeather = (r.weather ?? {}) as { kind?: unknown; paths?: Record<string, unknown>; source?: unknown; filePath?: unknown };
   const weatherKind = isWeatherKind(rawWeather.kind) ? rawWeather.kind : "clear";
+  const weatherSource = rawWeather.source === "file" ? "file" : "manual";
+  const weatherFilePath = typeof rawWeather.filePath === "string" && rawWeather.filePath.trim() !== "" && rawWeather.filePath.length <= 4096
+    ? rawWeather.filePath : null;
   const weatherPaths: Partial<Record<"clear" | "clouds" | "rain" | "snow", string>> = {};
   for (const k of WEATHER_KINDS) {
     const v = rawWeather.paths?.[k];
     if (typeof v === "string" && v.trim() !== "" && v.length <= 4096) weatherPaths[k] = v;
   }
   return {
-    enabled: r.enabled === true, mode, weather: { kind: weatherKind, paths: weatherPaths }, latitude, longitude,
+    enabled: r.enabled === true, mode,
+    weather: { kind: weatherKind, paths: weatherPaths, source: weatherSource, filePath: weatherFilePath },
+    latitude, longitude,
     dayPath: pick(r.dayPath, fallback.dayPath),
     nightPath: pick(r.nightPath, fallback.nightPath),
     everyMinutes: minutes, paths, lastAt,

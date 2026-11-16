@@ -8,7 +8,7 @@ import { parseBootWallpaper, bootBackgroundForWallpaper, createTintMemo, NO_WALL
 import type { TintSource } from "./wallpaper-tint";
 import { installSuspendPause } from "./wallpaper-suspend";
 import { installActivePush, WALLPAPER_ACTIVE_CHANNEL } from "./wallpaper-active";
-import { installWallpaperRotation } from "./wallpaper-rotation";
+import { installWallpaperRotation, resolveWeatherKind } from "./wallpaper-rotation";
 import { pickWallpaper } from "./wallpaper-pick";
 import { browseDirectory } from "./wallpaper-browse";
 import { pruneDisplays, wallpaperForDisplay } from "../../../../src/wallpaper/displays";
@@ -1160,6 +1160,16 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
       },
       validate: validateWallpaperFile,
     });
+  },
+  // v78 天气来源：manual / file（外部 JSON）；读不到回落手动档并说明。
+  wallpaperWeatherNow: async () => {
+    try {
+      const s = await getSettings();
+      const r = resolveWeatherKind(s.wallpaper);
+      return { ok: true, kind: r.kind, source: r.source, detail: r.detail };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
   },
   // v77 多显示器：每块屏解析（专属 > 回落 > 无）+ 孤儿键；设某屏专属。
   wallpaperDisplays: async () => {

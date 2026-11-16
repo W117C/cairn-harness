@@ -163,6 +163,7 @@ const { browseDirectory } = require(join(__dirname, "../src/main/wallpaper-brows
 const { pickWallpaper } = require(join(__dirname, "../src/main/wallpaper-pick.ts"));
 const { validateWallpaperFile } = require(join(__dirname, "../src/main/wallpaper.ts"));
 const { screen } = require("electron");
+const { resolveWeatherKind } = require(join(__dirname, "../src/main/wallpaper-rotation.ts"));
 // v77 多显示器：用**真 screen** 枚举，handler 记录调用参数（设置写回由 preload 夹具承担）。
 const displayCalls = [];
 ipcMain.handle("agent:wallpaper-displays", () => {
@@ -173,6 +174,11 @@ ipcMain.handle("agent:wallpaper-displays", () => {
   return { ok: true, displays: all, orphans: [] };
 });
 ipcMain.handle("agent:wallpaper-set-for-display", (_e, id) => { displayCalls.push(String(id)); return { ok: true }; });
+// v78 天气来源：真 `resolveWeatherKind` 跑一遍（文件源读真实文件）
+ipcMain.handle("agent:wallpaper-weather-now", (_e, wallpaper) => {
+  const r = resolveWeatherKind(wallpaper);
+  return { ok: true, kind: r.kind, source: r.source, detail: r.detail };
+});
 ipcMain.handle("agent:wallpaper-browse", (_e, dir) => browseDirectory(typeof dir === "string" && dir !== "" ? dir : join(out, "")));
 ipcMain.handle("agent:wallpaper-apply-path", (_e, path) => validateWallpaperFile(String(path ?? "")));
 const wireActive = (win) => {
@@ -453,6 +459,30 @@ async function main() {
     const s = await window.agent.getSettings();
     return { step: "done", mode: s.wallpaper.rotation.mode, kind: s.wallpaper.rotation.weather.kind, rain: s.wallpaper.rotation.weather.paths.rain ?? null };
   })()`);
+  // 天气来源（v78）：勾「从文件读天气」+ 填路径 ⇒ weatherNow 解析出文件里的 code（雨）。
+  const weatherFile = join(out, "weather-source.json");
+  writeFileSync(weatherFile, JSON.stringify({ code: 500 }));
+  const fileFlow = await js(`(async () => {
+    const box = document.querySelector('[data-wallpaper-rotation="true"]');
+    if (!box) return { step: "no-box" };
+    const cb = box.querySelector('[data-wallpaper-weather-source="true"]');
+    if (!cb) return { step: "no-source" };
+    cb.click();
+    await new Promise((r) => setTimeout(r, 300));
+    const input = document.querySelector('.cw-weather-path');
+    if (!input) return { step: "no-path" };
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    setter.call(input, ${JSON.stringify(weatherFile)});
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 400));
+    const now = await window.agent.wallpaperWeatherNow();
+    return { step: "done", kind: now.kind, source: now.source };
+  })()`);
+  readings.weatherFile = fileFlow;
+  check("天气来源：勾「从文件读天气」+ 填 JSON ⇒ 解析出 rain（code 500）",
+    fileFlow.step === "done" && fileFlow.kind === "rain" && fileFlow.source === "file",
+    fileFlow);
+
   readings.weather = weatherFlow;
   check("按天气：切到 weather + 选「雨」+ 设为该天气 ⇒ weather.paths.rain 落进设置",
     weatherFlow.step === "done" && weatherFlow.mode === "weather" && weatherFlow.kind === "rain"

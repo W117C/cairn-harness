@@ -15,8 +15,8 @@ const repo = (rel: string): string => {
 };
 
 describe("plugin marketplace catalog wiring", () => {
-  it("keeps the read-only catalog channel at protocol v77", () => {
-    expect(IPC_PROTOCOL_VERSION).toBe(77);
+  it("keeps the read-only catalog channel at protocol v78", () => {
+    expect(IPC_PROTOCOL_VERSION).toBe(78);
     expect(INVOKE_CHANNELS.marketplaceCatalog).toBe("agent:marketplace-catalog");
     expect(repo("../../../src/main/ipc-protocol.ts")).toContain(
       'marketplaceCatalog(refresh?: "never" | "auto" | "force"): Promise<MarketplaceCatalogReadout>',

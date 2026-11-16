@@ -8,7 +8,7 @@ describe("轮换字段校验", () => {
   it("缺省 ⇒ 关、60 分钟、空候选", () => {
     const r = withWallpaper(undefined).wallpaper.rotation;
     expect(r).toEqual({
-      enabled: false, mode: "interval", weather: { kind: "clear", paths: {} },
+      enabled: false, mode: "interval", weather: { kind: "clear", paths: {}, source: "manual", filePath: null },
       latitude: 39.9042, longitude: 116.4074,
       dayPath: null, nightPath: null, everyMinutes: 60, paths: [], lastAt: 0,
     });

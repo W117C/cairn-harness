@@ -3,13 +3,27 @@
 // 决定在核心纯函数里（`decideRotation`），这里只负责：读设置、探测文件、写回、报错。
 // 原则：**不静默**——跳过读不到的候选要在返回值里点名；写失败要交给 onError。
 import { decideDayNight, decideRotation, type RotationDecision } from "../../../../src/wallpaper/rotation";
-import { decideWeather } from "../../../../src/wallpaper/weather";
+import { decideWeather, weatherFromText } from "../../../../src/wallpaper/weather";
+import { readFileSync } from "node:fs";
 import type { WallpaperSettings } from "../../../../src/main/settings";
 import { wallpaperKindOf } from "./wallpaper";
 
 export interface RotationTickResult extends RotationDecision {
   /** 这次真的写设置了吗。 */
   applied: boolean;
+}
+
+/** 天气来源解析：manual 直接用设置里的 kind；file 读外部 JSON（读不到 ⇒ 回落 manual 并说明）。 */
+export function resolveWeatherKind(wallpaper: WallpaperSettings): { kind: WallpaperSettings["rotation"]["weather"]["kind"]; source: string; detail: string } {
+  const w = wallpaper.rotation.weather;
+  if (w.source !== "file" || w.filePath === null) return { kind: w.kind, source: "manual", detail: "面板选的那档" };
+  try {
+    const parsed = weatherFromText(readFileSync(w.filePath, "utf8"));
+    if (parsed === null) return { kind: w.kind, source: "file-invalid", detail: "文件读不懂，回落手动档" };
+    return { kind: parsed, source: "file", detail: w.filePath };
+  } catch {
+    return { kind: w.kind, source: "file-missing", detail: "文件读不到，回落手动档" };
+  }
 }
 
 export interface InstallRotationInput {
@@ -40,8 +54,9 @@ export function installWallpaperRotation(input: InstallRotationInput): RotationH
       if (wallpaper === null) return { rotate: false, path: null, reason: "读不到设置", missing: [], applied: false };
       // 天气模式（手动档，不联网）：当前天气决定用哪张；已经是那张就不写。
       if (wallpaper.rotation.enabled && wallpaper.rotation.mode === "weather") {
+        const resolved = resolveWeatherKind(wallpaper);
         const w = decideWeather({
-          kind: wallpaper.rotation.weather.kind,
+          kind: resolved.kind,
           paths: wallpaper.rotation.weather.paths,
           ...(input.exists === undefined ? {} : { exists: input.exists }),
         });
