@@ -256,7 +256,19 @@
       "status": "out",
       "outOfScopeReason": "装饰不承载信息（spec §8 已钉）；插件边界装不进来",
       "evidence": []
+    },
+    {
+      "id": "wallpaper.website",
+      "capability": "网站作为壁纸（渲染网页当壁纸层）",
+      "reference": "Plash（Make any website your Mac desktop wallpaper）",
+      "ours": "两条路都走不通/需拍板：①另开受限窗口当壁纸层——需要在**屏幕**上判 z-order，本机 `desktopCapturer.getSources({types:['screen']})` 返回 0 个源（探针 `apps/desktop/scripts/layer-probe.cjs`，记录见 `outputs/layer-probe/layer-probe.json`），z-order 无法验证；②在渲染层用 iframe/webview —— 必须放开受限 CSP（`frame-src`），那会把当前 CSP 三条硬化判据降级，属产品/安全取舍，未获授权。",
+      "status": "out",
+      "outOfScopeReason": "①另开窗口方案的 z-order 在本机不可验证（截屏源为 0）；②渲染层方案要放开受限 CSP，需业主对「放宽 CSP 换网站壁纸」拍板。不把未验证的层级假设写进产品。",
+      "evidence": [
+        "apps/desktop/scripts/layer-probe.cjs",
+        "outputs/layer-probe/layer-probe.json"
+      ]
     }
   ],
-  "thresholdNote": "目标 0.95；现读 1.000（评分面 20 格全 covered；阈值 0.96）。两格 out 各带理由：scene-engine 不做、native-click 需人工点一次。标准对照报告由真机读数生成：八条全 pass（WCAG 1.4.3 / 2.1.1、CSP 三条、Electron、OWASP、对表）。"
+  "thresholdNote": "目标 0.95；现读 1.000（评分面 20 格全 covered；阈值 0.96）。三格 out 各带理由：scene-engine 不做、native-click 需人工点一次、website 两条路都验不过/需拍板。标准对照八条全 pass；bot 报告 12/12。"
 }

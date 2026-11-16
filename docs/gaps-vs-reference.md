@@ -11,7 +11,7 @@
 
 | 能力 | 参照产品 | 参照是否支持 | 依据等级 | 我们的状态 | 依据 |
 |---|---|---|---|---|---|
-| 网站作为壁纸（渲染网页并常驻） | Plash（`github.com/sindresorhus/Plash`，标语「Make any website your Mac desktop wallpaper」） | 支持 | 已见 | **不做** | 本仓无 webview 壁纸实现；`wallpaper.kind` 只有 `image` / `video`（`apps/desktop/src/main/wallpaper.ts`） |
+| 网站作为壁纸（渲染网页并常驻） | Plash（`github.com/sindresorhus/Plash`，标语「Make any website your Mac desktop wallpaper」） | 支持 | 已见 | **不做**（两条路都验不过/需拍板） | ①另开受限窗口：z-order 需截屏才能判，本机 `desktopCapturer` 返回 0 个源（`apps/desktop/scripts/layer-probe.cjs`）；②渲染层 iframe/webview：需放开受限 CSP（产品取舍）。详见对表 `wallpaper.website` |
 | 多显示器分别设不同壁纸 | 系统级能力（macOS 设置） | 支持 | 未证实 | **已做**（2026-11-16；单屏机器上验证 1 屏路径，多屏真机未验） | `settings.wallpaper.perDisplay` + `src/wallpaper/displays.ts`（专属 > 回落 > 无、孤儿只报告）+ 冒烟用真 `screen.getAllDisplays()` 判屏数与 id |
 | 定时切换（按固定间隔轮换） | Plash 等桌面壁纸类产品 | 未知 | 未证实 | **已做**（2026-11-16） | 设置里「定时轮换」+ 主进程每 30s 判定：`src/wallpaper/rotation.ts`、`apps/desktop/src/main/wallpaper-rotation.ts`、`tests/wallpaper-rotation.test.ts` |
 | 日出日落切换（按经纬度 + 日期算昼/夜） | 同类产品 | 未知 | 未证实 | **已做**（2026-11-16，近似解） | `src/wallpaper/solar.ts`（±5 分钟量级）+ `decideDayNight`；`tests/wallpaper-solar.test.ts`（北京夏至日出差 ≤12 分钟、极昼/极夜不给假时间） |

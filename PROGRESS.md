@@ -43491,3 +43491,45 @@ bot-report: pass
   但这台机器只有 1 块屏 ⇒ **多屏真机分配仍未验**。
 - 网站壁纸：仍 `未做`。可以不改渲染层 CSP 的做法是「另开一个受限窗口当壁纸层」，
   但窗口层级在 macOS 上不保证稳定置于主窗口之下——这点没验之前我不写进产品。
+
+## 2026-11-16 · 第 1295 页：网站壁纸——探针跑完，两条路都不通/需拍板，记 `out` 并附读数（`pending`）
+
+### 一、我先去验前提，而不是先写产品
+
+「另开一个受限窗口当壁纸层」是否成立，取决于**它是否稳定位于主窗口之下**；这一点没有 API，
+只能**看屏幕**。所以探针测的是「能不能截屏」，顺带记录窗口属性。
+
+`apps/desktop/scripts/layer-probe.cjs` 的真机读数（`outputs/layer-probe/layer-probe.json`）：
+
+```json
+{"capturable": false, "error": null, "screenPermission": "granted", "sources": [],
+ "windows": [{"role":"wallpaper","visible":true,"focused":false,"alwaysOnTop":false},
+             {"role":"main","visible":true,"focused":false,"alwaysOnTop":false}]}
+```
+
+⇒ 权限显示 `granted`，但 `desktopCapturer.getSources({types:["screen"]})` **返回 0 个源**：
+本机拿不到屏幕画面 ⇒ **z-order 无法验证**。
+
+### 二、所以记 `out`，理由写成两条（不是一句「没做」）
+
+对表新增 `wallpaper.website`（`status: out`）：
+
+1. 另开受限窗口：z-order 本机不可验证（上面那份读数）；
+2. 渲染层 iframe/webview：必须放开受限 CSP（`frame-src`），会把当前三条 CSP 硬化判据降级 —— 产品/安全取舍。
+
+**不把「窗口大概会在下面」这种未验证假设写进产品。**
+
+### 三、门禁读数（工作树）
+
+- 核心 `pnpm test:capped`：**706 文件 / 8336 条全绿**，exit 0
+- 桌面 419 文件 / 2681 条全绿；真机冒烟 67/67（本轮无渲染层改动，四包证据仍有效）
+- `bot-report`：**12/12 covered**，总判 pass
+- `docs-check` 全绿
+
+### 四、对表全貌（现在三格 out，每格都有读数）
+
+| 格 | 理由 | 读数/证据 |
+|---|---|---|
+| `wallpaper.scene-engine` | 明确不做 | 对表理由 |
+| `wallpaper.native-click` | 需人工点一次 | 两次 TIMEOUT + TCC `-1719` |
+| `wallpaper.website` | 两条路不通/需拍板 | `layer-probe.json`（sources=[]） |
