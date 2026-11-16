@@ -8,7 +8,7 @@ import type { AppSettings } from "../../../src/main/ipc-protocol";
 const settings = (patch: Partial<AppSettings["wallpaper"]["rotation"]> = {}): AppSettings => ({
   ...DEFAULT_SETTINGS,
   wallpaper: {
-    kind: "image", path: "/tmp/a.png", opacity: 1, scrim: 0.35, glassAlpha: 0.25, revision: 3,
+    kind: "image", path: "/tmp/a.png", url: null, opacity: 1, scrim: 0.35, glassAlpha: 0.25, revision: 3,
     perDisplay: {},
   rotation: {
       enabled: true, mode: "interval", weather: { kind: "clear", paths: {}, source: "manual", filePath: null, httpUrl: null },

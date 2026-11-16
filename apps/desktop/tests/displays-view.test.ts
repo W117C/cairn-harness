@@ -4,7 +4,7 @@ import { resolveDisplays } from "../src/main/displays-view";
 import type { WallpaperSettings } from "../../../src/main/settings";
 
 const base = (patch: Partial<WallpaperSettings> = {}): WallpaperSettings => ({
-  kind: "image", path: "/global.png", opacity: 1, scrim: 0.35, glassAlpha: 0.25, revision: 1,
+  kind: "image", path: "/global.png", url: null, opacity: 1, scrim: 0.35, glassAlpha: 0.25, revision: 1,
   perDisplay: {}, rotation: { enabled: false, mode: "interval", weather: { kind: "clear", paths: {}, source: "manual", filePath: null, httpUrl: null }, latitude: 0, longitude: 0, dayPath: null, nightPath: null, everyMinutes: 60, paths: [], lastAt: 0 },
   ...patch,
 });

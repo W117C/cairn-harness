@@ -33,10 +33,10 @@ describe("公开标准对照报告", () => {
     expect(reportVerdict(rows)).toBe("incomplete");
   });
 
-  it("对表有 partial/absent ⇒ 那一行 fail", () => {
+  it("对表有 partial 且低于阈值 ⇒ 那一行 fail；达到阈值 ⇒ pass", () => {
     const rows = buildConformanceReport({
       readingsPath: "/tmp/r.json",
-      parity: { ...parity, covered: 19, partial: 1 },
+      parity: { ...parity, covered: 10, partial: 10, threshold: 0.96 },
       readings: {
         dark: { text: "rgb(240 239 236)", canvas: "rgb(21 21 21)" },
         light: { text: "rgb(11 11 11)", canvas: "rgb(252 252 251)" },
@@ -45,6 +45,20 @@ describe("公开标准对照报告", () => {
     });
     expect(rows.find((r) => r.standard === "本方对表")!.verdict).toBe("fail");
     expect(reportVerdict(rows)).toBe("fail");
+    const okRows = buildConformanceReport({
+      readingsPath: "/tmp/r.json",
+      parity: { ...parity, covered: 19, partial: 1, threshold: 0.95 },
+      readings: {
+        dark: { text: "rgb(240 239 236)", canvas: "rgb(21 21 21)" },
+        light: { text: "rgb(11 11 11)", canvas: "rgb(252 252 251)" },
+        negativeControl: { cspViolations: 1 },
+      },
+      isolation: { hasRequire: "undefined", hasProcess: "undefined", hasAgent: "object", hasNodeGlobals: "none" },
+      redaction: { occurrencesAfter: 0 },
+      keyboardPick: { picked: true },
+      csp: "default-src 'self'; script-src 'self'; frame-src https:; object-src 'none'; base-uri 'none'; form-action 'none'",
+    });
+    expect(okRows.find((r) => r.standard === "本方对表")!.verdict).toBe("pass");
   });
 
   it("Electron 隔离四项：缺项少一项就不算 pass；读数缺失 ⇒ missing", () => {
@@ -87,7 +101,7 @@ describe("公开标准对照报告", () => {
       isolation: { hasRequire: "undefined", hasProcess: "undefined", hasAgent: "object", hasNodeGlobals: "undefined,undefined,undefined" },
       redaction: { occurrencesAfter: 0 },
       keyboardPick: { picked: true },
-      csp: "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'",
+      csp: "default-src 'self'; script-src 'self'; frame-src https:; object-src 'none'; base-uri 'none'; form-action 'none'",
     });
     expect(reportVerdict(rows)).toBe("pass");
   });
@@ -133,5 +147,22 @@ describe("CSP 硬化指令（读实际头，不读文档）", () => {
     expect(buildConformanceReport({ ...base, csp: bad }).find((r) => r.clause.includes("unsafe-inline"))!.verdict).toBe("fail");
     const ok = "default-src 'self'; script-src 'self'";
     expect(buildConformanceReport({ ...base, csp: ok }).find((r) => r.clause.includes("unsafe-inline"))!.verdict).toBe("pass");
+  });
+});
+
+describe("frame-src 放开面（网站壁纸）", () => {
+  const base = {
+    readingsPath: "/tmp/r.json", parity,
+    readings: { dark: { worst: 5 }, light: { worst: 5 }, negativeControl: { cspViolations: 1 } },
+    isolation: { hasRequire: "undefined", hasProcess: "undefined", hasAgent: "object", hasNodeGlobals: "none" },
+    redaction: { occurrencesAfter: 0 }, keyboardPick: { picked: true },
+  };
+  const row = (csp: string) => buildConformanceReport({ ...base, csp }).find((r) => r.clause.includes("frame-src"))!;
+
+  it("只有 https: ⇒ pass；混进 http:/data:/blob: ⇒ fail；没有 frame-src ⇒ fail", () => {
+    expect(row("default-src 'self'; frame-src https:").verdict).toBe("pass");
+    expect(row("default-src 'self'; frame-src https: http:").verdict).toBe("fail");
+    expect(row("default-src 'self'; frame-src data: https:").verdict).toBe("fail");
+    expect(row("default-src 'self'").verdict).toBe("fail");
   });
 });

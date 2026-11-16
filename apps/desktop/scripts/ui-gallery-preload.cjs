@@ -1584,7 +1584,7 @@ if (process.argv.includes("--cairn-project-entry-fixture")) {
 const wallpaperFixturePath = argOf("--cairn-wallpaper-fixture=", "");
 if (wallpaperFixturePath !== "") {
   settingsState.wallpaper = {
-    kind: "image", path: wallpaperFixturePath,
+    kind: "image", path: wallpaperFixturePath, url: null,
     opacity: 1, scrim: 0.35, glassAlpha: 0.25, revision: 0,
     // 定时轮换（2026-11-16）：夹具里也给一份真形状，缺它渲染层会读到 undefined。
     rotation: {

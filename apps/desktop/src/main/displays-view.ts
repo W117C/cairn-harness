@@ -21,9 +21,10 @@ export function resolveDisplays(
   wallpaper: WallpaperSettings,
   live: readonly LiveDisplay[],
 ): { displays: DisplayRow[]; orphans: string[] } {
-  const fallback = wallpaper.kind === "none" || wallpaper.path === null
-    ? null
-    : { kind: wallpaper.kind, path: wallpaper.path };
+  // perDisplay 只记本地媒体（image/video）；网站壁纸是全局一张，不进 perDisplay。
+  const fallback = (wallpaper.kind === "image" || wallpaper.kind === "video") && wallpaper.path !== null
+    ? { kind: wallpaper.kind, path: wallpaper.path }
+    : null;
   const displays = live.map((d) => {
     const r = wallpaperForDisplay(d.id, wallpaper.perDisplay, fallback);
     return { ...d, source: r.source, ...(r.wallpaper === null ? {} : { path: r.wallpaper.path }) };

@@ -21,8 +21,9 @@ describe("差距表（我们没有的能力）", () => {
     }
   });
 
-  it("至少三条「不做 / 未做 / 判不到」——差距不许被删空", () => {
-    const gaps = rows.filter((r) => /不做|未做|判不到/.test(r[4]));
+  it("至少三条「不做 / 未做 / 判不到 / 未验」——差距不许被删空", () => {
+    // 「未验」也算差距（硬件/权限不到位时，逻辑有判据但真机没验）——三种缺口词都认。
+    const gaps = rows.filter((r) => /不做|未做|判不到|未验/.test(r[4]));
     expect(gaps.length).toBeGreaterThanOrEqual(3);
   });
 

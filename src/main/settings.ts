@@ -51,12 +51,14 @@ export type ProviderKind = "demo" | (typeof ENV_KEYED_PROVIDERS)[number] | (stri
 import { sanitizeDisplayMap, type DisplayMap } from "../wallpaper/displays";
 import { isWeatherKind, WEATHER_KINDS } from "../wallpaper/weather";
 
-export type WallpaperKind = "none" | "image" | "video";
+export type WallpaperKind = "none" | "image" | "video" | "web";
 
 export interface WallpaperSettings {
   kind: WallpaperKind;
   /** 绝对路径。只在主进程与 settings.json 里；渲染层经 cairn-wallpaper:// 协议取媒体。 */
   path: string | null;
+  /** kind=web 时的页面地址（**只收 https**；http/data/blob 一律拒）。 */
+  url: string | null;
   /** 壁纸自身不透明度 0..1。 */
   opacity: number;
   /** 压暗强度 0..1（把壁纸拉回主题方向）。 */
@@ -104,7 +106,7 @@ export const ROTATION_MIN_MINUTES = 1;
 export const ROTATION_MAX_MINUTES = 1440;
 export const ROTATION_MAX_PATHS = 32;
 
-export const WALLPAPER_KINDS: readonly WallpaperKind[] = ["none", "image", "video"];
+export const WALLPAPER_KINDS: readonly WallpaperKind[] = ["none", "image", "video", "web"];
 
 export interface AppSettings {
   layout: LayoutState;
@@ -257,7 +259,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   uiSize: "2",
   // 壁纸层默认关：功耗敏感项（视频解码持续耗电），不主动开（设计规格 §6）。
   wallpaper: {
-    kind: "none", path: null, opacity: 1, scrim: 0.35, glassAlpha: 0.25, revision: 0,
+    kind: "none", path: null, url: null, opacity: 1, scrim: 0.35, glassAlpha: 0.25, revision: 0,
     rotation: {
       enabled: false, mode: "interval", weather: { kind: "clear", paths: {}, source: "manual", filePath: null, httpUrl: null },
       latitude: 39.9042, longitude: 116.4074,
@@ -313,11 +315,15 @@ function validateWallpaper(raw: unknown): WallpaperSettings {
   const kind = WALLPAPER_KINDS.includes(r.kind as WallpaperKind) ? (r.kind as WallpaperKind) : d.kind;
   const path =
     typeof r.path === "string" && r.path.trim() !== "" && r.path.length <= 4096 ? r.path : null;
+  const rawUrl = typeof r.url === "string" ? r.url.trim() : "";
+  // 网站壁纸只收 https：http 会混进明文、data:/blob: 等于把页面内容塞进设置。
+  const url = /^https:\/\/[^\s]+$/i.test(rawUrl) && rawUrl.length <= 4096 ? rawUrl : null;
   const revision =
     typeof r.revision === "number" && Number.isInteger(r.revision) && r.revision >= 0 ? r.revision : d.revision;
   return {
-    kind,
-    path: kind === "none" ? null : path,
+    kind: kind === "web" && url === null ? "none" : kind,
+    path: kind === "none" || kind === "web" ? null : path,
+    url: kind === "web" ? url : null,
     opacity: unitInterval(r.opacity, d.opacity),
     scrim: unitInterval(r.scrim, d.scrim),
     glassAlpha: glassAlphaOf(r.glassAlpha, d.glassAlpha),

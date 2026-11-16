@@ -64,6 +64,8 @@ export function GeneralSection(props: {
   wallpaperUnavailable: boolean;
   /** 定时轮换（2026-11-16）：整块 rotation 交给上层写（走 setSettings 的 wallpaper 合并，不走 panelPatch 白名单）。 */
   onWallpaperRotation: (next: AppSettings["wallpaper"]["rotation"]) => void;
+  /** 网站壁纸（2026-11-16）：把 https 地址交给上层写设置（kind=web）。 */
+  onWallpaperSetWeb?: (url: string) => void;
   /** 多显示器（v77）：判卷缝——直接给解析结果（生产走 wallpaperDisplays）。 */
   initialDisplays?: { id: string; source: string; path?: string }[];
 }): React.JSX.Element {
@@ -73,6 +75,7 @@ export function GeneralSection(props: {
   // v78：文件源时把「解析出来的天气」显示出来（面板不只让你填路径，还告诉你读到了什么）。
   const [weatherNow, setWeatherNow] = useState<{ kind: string; source: string } | null>(null);
   const [weatherKey, setWeatherKey] = useState("");
+  const [webUrl, setWebUrl] = useState("");
 
   useEffect(() => {
     const w = props.settings.wallpaper.rotation.weather;
@@ -185,6 +188,27 @@ export function GeneralSection(props: {
                 <span className="ss-static">{STR.general.wallpaperUnavailable}</span>
               )}
             </div>
+            {/* 网站壁纸（2026-11-16 业主批「准放 CSP」）：只收 https；iframe 带 sandbox 隔离。 */}
+            {props.onWallpaperSetWeb !== undefined && (
+              <div className="cw-web-row" data-wallpaper-web-row="true">
+                <input
+                  className="ss-input cw-web-url"
+                  aria-label={STR.general.wallpaperWebUrl}
+                  placeholder={STR.general.wallpaperWebUrl}
+                  value={webUrl}
+                  onChange={(e) => setWebUrl(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="mini-btn"
+                  data-wallpaper-web-apply="true"
+                  onClick={() => props.onWallpaperSetWeb?.(webUrl)}
+                >
+                  {STR.general.wallpaperWebApply}
+                </button>
+                <span className="ss-static">{STR.general.wallpaperWebHint}</span>
+              </div>
+            )}
             {/* 定时轮换（2026-11-16）：到点换下一张；候选少于两张时按纯函数口径不轮换。 */}
             <div className="cw-rotation" data-wallpaper-rotation="true">
               <label className="cw-rotation-toggle">

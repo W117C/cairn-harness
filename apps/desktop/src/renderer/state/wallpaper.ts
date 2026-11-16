@@ -27,8 +27,10 @@ export const WALLPAPER_ATTR = "data-we-wallpaper";
 export const CAIRN_WALLPAPER_ATTR = "data-cairn-wallpaper";
 
 export interface WallpaperView {
-  kind: "none" | "image" | "video";
+  kind: "none" | "image" | "video" | "web";
   url: string | null;
+  /** kind=web 时的页面地址（https）。 */
+  webUrl?: string | null;
 }
 
 /** 媒体地址：协议常量 + revision（破浏览器缓存）。 */
@@ -39,7 +41,10 @@ export function wallpaperUrl(revision: number): string {
 /** 设置 → 视图（纯函数）。kind 非 none 但没有 path ⇒ 视作无壁纸。 */
 export function wallpaperViewOf(settings: AppSettings): WallpaperView {
   const w = settings.wallpaper;
-  if (w.kind === "none" || w.path === null) return { kind: "none", url: null };
+  if (w.kind === "none") return { kind: "none", url: null };
+  // 网站壁纸（2026-11-16 业主批「准放 CSP」）：view 里带的是页面地址，不走壁纸协议。
+  if (w.kind === "web") return w.url === null ? { kind: "none", url: null } : { kind: "web", url: null, webUrl: w.url };
+  if (w.path === null) return { kind: "none", url: null };
   return { kind: w.kind, url: wallpaperUrl(w.revision) };
 }
 

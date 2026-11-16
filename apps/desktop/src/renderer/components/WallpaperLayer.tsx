@@ -38,7 +38,27 @@ export function WallpaperLayer(props: { view: WallpaperView }): React.JSX.Elemen
     else void el.play().catch(() => undefined);
   }, [paused, view.url]);
 
-  if (view.kind === "none" || view.url === null) return null;
+  if (view.kind === "none") return null;
+  // 网站壁纸：iframe 走受限 CSP（frame-src https:）+ sandbox 隔离；不吃鼠标、不拿 referrer。
+  if (view.kind === "web") {
+    const src = view.webUrl ?? null;
+    if (src === null) return null;
+    return (
+      <div className="cw-layer" data-kind="web" aria-hidden="true">
+        <iframe
+          className="cw-media cw-web"
+          data-wallpaper-web="true"
+          src={src}
+          title=""
+          sandbox="allow-scripts allow-same-origin allow-presentation"
+          referrerPolicy="no-referrer"
+          tabIndex={-1}
+        />
+        <div className="cw-scrim" />
+      </div>
+    );
+  }
+  if (view.url === null) return null;
   return (
     <div className="cw-layer" data-kind={view.kind} aria-hidden="true">
       {view.kind === "video"

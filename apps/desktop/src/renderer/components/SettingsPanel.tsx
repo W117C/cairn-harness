@@ -630,6 +630,13 @@ export function SettingsPanel(props: {
                 onNotify={(next) => { void saveSettingKey("notifyOnComplete", next); }}
                 onWallpaperPick={() => { void pickWallpaper(); }}
                 onWallpaperPickPath={(path) => { void applyWallpaperPath(path); }}
+                onWallpaperSetWeb={(url) => {
+                  if (settings === null) return;
+                  void window.agent.setSettings({
+                    wallpaper: { ...settings.wallpaper, kind: "web", path: null, url, revision: settings.wallpaper.revision + 1 },
+                  }).then(async (next) => { setS(next); await refreshWallpaper(); })
+                    .catch((err: unknown) => { setError(err instanceof Error ? err.message : String(err)); });
+                }}
                 onWallpaperRotation={(rotation) => {
                   if (settings === null) return;
                   void window.agent.setSettings({ wallpaper: { ...settings.wallpaper, rotation } }).then((next) => { setS(next); });

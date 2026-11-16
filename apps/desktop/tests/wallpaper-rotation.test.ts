@@ -4,7 +4,7 @@ import { installWallpaperRotation } from "../src/main/wallpaper-rotation";
 import type { WallpaperSettings } from "../../../src/main/settings";
 
 const wp = (patch: Partial<WallpaperSettings["rotation"]> & { path?: string | null } = {}): WallpaperSettings => ({
-  kind: "image", path: patch.path === undefined ? "/a.png" : patch.path,
+  kind: "image", path: patch.path === undefined ? "/a.png" : patch.path, url: null,
   opacity: 1, scrim: 0.35, glassAlpha: 0.25, revision: 1,
   perDisplay: {},
   rotation: {

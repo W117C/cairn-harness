@@ -28,6 +28,7 @@ const checklist = JSON.parse(readFileSync(join(root, "fixtures", "parity", "chec
   items: { status: string }[];
 };
 const parity = {
+  threshold: (checklist as { threshold?: number }).threshold ?? 0.95,
   total: checklist.items.length,
   covered: checklist.items.filter((i) => i.status === "covered").length,
   partial: checklist.items.filter((i) => i.status === "partial").length,

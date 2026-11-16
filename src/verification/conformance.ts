@@ -43,7 +43,7 @@ export interface ConformanceInput {
   /** 读数文件路径（写进报告，便于回查）。 */
   readingsPath: string;
   /** 对表统计。 */
-  parity: { total: number; covered: number; partial: number; absent: number; out: number };
+  parity: { total: number; covered: number; partial: number; absent: number; out: number; threshold?: number };
   /** PW：渲染层隔离读数（真机）。 */
   isolation?: unknown;
   /** OWASP A09：拿一个真会泄露的样本跑一遍脱敏，数还剩几次。 */
@@ -92,6 +92,13 @@ export function buildConformanceReport(input: ConformanceInput): ConformanceRow[
       source: input.readingsPath,
     },
     {
+      standard: "CSP Level 3", clause: "frame-src 放开面（只 https:，无 data:/blob:/http:）",
+      threshold: 1, unit: "ok",
+      measured: frameSrcScope(input.csp) === null ? null : frameSrcScope(input.csp)!.ok ? 1 : 0,
+      verdict: frameSrcScope(input.csp) === null ? "missing" : frameSrcScope(input.csp)!.ok ? "pass" : "fail",
+      source: input.readingsPath,
+    },
+    {
       standard: "Electron 安全清单", clause: "contextIsolation / 无 nodeIntegration / sandbox / 无 node 全局",
       threshold: 4, unit: "checks",
       measured: isolationChecks(input.isolation),
@@ -119,12 +126,17 @@ export function buildConformanceReport(input: ConformanceInput): ConformanceRow[
       source: "scripts/standard-report.ts",
     },
     {
-      standard: "本方对表", clause: "评分面 covered 比例",
-      threshold: 1, unit: "ratio",
+      standard: "本方对表", clause: "评分面 covered 比例（对表自己声明的阈值）",
+      threshold: input.parity.threshold ?? 0.95, unit: "ratio",
+      // 与对表判据同一套权重：covered=1、partial=0.5、absent=0（口径必须同源，否则两个数会打架）
       measured: input.parity.covered + input.parity.partial + input.parity.absent === 0
         ? null
-        : Math.round((input.parity.covered / (input.parity.covered + input.parity.partial + input.parity.absent)) * 1000) / 1000,
-      verdict: input.parity.partial + input.parity.absent === 0 ? "pass" : "fail",
+        : Math.round(((input.parity.covered + input.parity.partial * 0.5) / (input.parity.covered + input.parity.partial + input.parity.absent)) * 1000) / 1000,
+      verdict: input.parity.covered + input.parity.partial + input.parity.absent === 0
+        ? "missing"
+        : (input.parity.covered + input.parity.partial * 0.5) / (input.parity.covered + input.parity.partial + input.parity.absent) >= (input.parity.threshold ?? 0.95)
+          ? "pass"
+          : "fail",
       source: "fixtures/parity/checklist.json",
     },
   ];
@@ -145,6 +157,16 @@ export function isolationChecks(isolation: unknown): number | null {
 
 /** CSP 硬化指令清单：这三条在「只加载自己的资源」语境下是硬要求。 */
 export const CSP_HARDENING = ["object-src 'none'", "base-uri 'none'", "form-action 'none'"] as const;
+
+/** 网站壁纸的放开面：`frame-src` 里只许出现 `https:`（不许 data:/blob:/http:）。 */
+export function frameSrcScope(csp: string | null | undefined): { scope: string[]; ok: boolean } | null {
+  if (typeof csp !== "string") return null;
+  const m = /frame-src([^;]*)/.exec(csp);
+  if (m === null) return { scope: [], ok: false };
+  const scope = m[1]!.trim().split(/\s+/).filter((t) => t !== "");
+  const banned = scope.filter((t) => t === "data:" || t === "blob:" || t === "http:");
+  return { scope, ok: banned.length === 0 && scope.includes("https:") };
+}
 
 export function cspHardeningCount(csp: string | null | undefined): number | null {
   if (typeof csp !== "string" || csp.trim() === "") return null;

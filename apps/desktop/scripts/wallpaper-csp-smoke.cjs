@@ -1321,6 +1321,47 @@ async function main() {
   await shot(paneWin, "12-team-pane-1440x900");
   paneWin.destroy();
 
+  // ④a 网站壁纸（2026-11-16 业主批「准放 CSP」）：https 地址 ⇒ kind=web + iframe 带 sandbox；
+  //     同时判 CSP 的放开面（`frame-src https:` 在里面，且没有 data:/blob:）。
+  const webFlow = await js(`(async () => {
+    const apply = async (url) => {
+      const input = document.querySelector('.cw-web-url');
+      if (!input) return { step: "no-input" };
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+      setter.call(input, url);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 200));
+      const btn = document.querySelector('[data-wallpaper-web-apply="true"]');
+      if (!btn) return { step: "no-button" };
+      btn.click();
+      await new Promise((r) => setTimeout(r, 700));
+      const s = await window.agent.getSettings();
+      const frame = document.querySelector('[data-wallpaper-web="true"]');
+      return {
+        kind: s.wallpaper.kind, url: s.wallpaper.url,
+        hasFrame: frame !== null,
+        src: frame ? frame.getAttribute("src") : null,
+        sandbox: frame ? frame.getAttribute("sandbox") : null,
+      };
+    };
+    const good = await apply("https://example.com/live");
+    const bad = await apply("http://example.com/plain");
+    return { step: "done", good, bad };
+  })()`);
+  readings.webWallpaper = webFlow;
+  // 负向（http 被拒）在 main 的真校验里，判据是 `tests/wallpaper-web.test.ts`；
+  // 冒烟这里判的是「渲染面 + 策略面」——夹具的 setSettings 不走真校验，别在这混判。
+  check("网站壁纸：https ⇒ kind=web，iframe 带 sandbox 且 src 正确",
+    webFlow.step === "done"
+      && webFlow.good.kind === "web" && webFlow.good.url === "https://example.com/live"
+      && webFlow.good.hasFrame === true && webFlow.good.src === "https://example.com/live"
+      && String(webFlow.good.sandbox).includes("allow-scripts"),
+    webFlow);
+  check("CSP 放开面：`frame-src https:` 在，且 frame-src 里没有 data:/blob:/http:",
+    String(readings.builtCsp).includes("frame-src https:")
+      && !/frame-src[^;]*(data:|blob:|http:)/.test(String(readings.builtCsp)),
+    { builtCsp: readings.builtCsp });
+
   writeFileSync(join(out, "checks.json"), JSON.stringify(checks, null, 2));
   writeFileSync(join(out, "readings.json"), JSON.stringify(readings, null, 2));
   const failed = checks.filter((c) => !c.ok);

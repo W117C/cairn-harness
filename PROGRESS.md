@@ -43581,3 +43581,43 @@ verify-all: pass
 - 核心 `pnpm test:capped`：**707 文件 / 8340 条全绿**，exit 0
 - 桌面 **420 文件 / 2683 条全绿**；真机冒烟 67/67（无渲染层改动，四包有效）
 - 根 `typecheck` 0 报错；`docs-check` 全绿
+
+## 2026-11-16 · 第 1297 页：网站壁纸落地（业主批「准放 CSP」）——受限放开 + 两条判据（`pending`）
+
+### 一、放开面（只放一条，能收回的都收回）
+
+| 项 | 决定 |
+|---|---|
+| CSP | 只加 `frame-src https:`；**不放 `data:` / `blob:` / `http:`**；`script-src` 与 `object-src`/`base-uri`/`form-action` 三条硬化**不动** |
+| 校验 | 主进程只收 `https://`（`http`/`data:`/`blob:`/空 ⇒ 回落 `kind=none`）；`kind=web` 时 `path` 归零 |
+| 渲染 | `<iframe sandbox="allow-scripts allow-same-origin allow-presentation" referrerpolicy="no-referrer">`，`pointer-events:none` |
+
+### 二、判据
+
+| 判据 | 断言 |
+|---|---|
+| `tests/wallpaper-web.test.ts`（3 条） | https 保留且 path 归零；http/data/blob/空 ⇒ kind 回落 none；非 web kind 不保留 url 残值 |
+| `apps/desktop/tests/wallpaper-web-layer.test.tsx`（3 条） | iframe 带 src/sandbox/no-referrer/data 属性；空地址不渲染空壳；图片壁纸不被当成网站 |
+| `tests/conformance-report.test.ts` +1 | 新行「frame-src 放开面」：只有 https ⇒ pass；混进 http/data ⇒ fail；无 frame-src ⇒ fail |
+| 真机冒烟 +2 | https ⇒ `kind=web` 且 iframe `src` 正确；CSP 头里 `frame-src https:` 在且无 data/blob/http ⇒ **69/69** |
+
+### 三、标准对照报告（重生成）
+
+```
+standard-report: pass
+  WCAG 1.4.3 4.526 / CSP 越权拦截 1 / CSP 硬化 3 / script-src 无 unsafe-inline 0
+  CSP frame-src 放开面 1（只 https:）
+  Electron 隔离 4/4 / WCAG 2.1.1 键盘 1 / OWASP A09 残留 0 / 对表 0.976（阈值 0.96）
+```
+
+### 四、对表与差距表
+
+- `wallpaper.website`：`out` → **`partial`**（边界写清：真机离线只验到「层 + 策略 + 校验」，页面内容未联网渲染）；
+  评分面 **20 covered + 1 partial / 21**，覆盖分 **0.976**（阈值 0.96）；
+- 差距表：网站壁纸 → **已做**；新增一行「多屏真机分配 = 未验」，判据允许 `未验` 作为差距词。
+
+### 五、门禁读数（工作树）
+
+- 核心 `pnpm test:capped`：**708 文件 / 8344 条全绿**，exit 0
+- 桌面 **421 文件 / 2686 条全绿**；真机冒烟 **69/69**；四包密封证据**已重签**（渲染层与 CSP 都动了）
+- `typecheck` 0 报错；`docs-check` 全绿

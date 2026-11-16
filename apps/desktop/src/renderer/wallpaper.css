@@ -177,3 +177,6 @@ body[data-we-wallpaper] :is(.side) {
 .cw-rotation { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0; font-size: 12px; }
 .cw-rotation-toggle { display: inline-flex; gap: 6px; align-items: center; }
 .cw-rotation-minutes { width: 72px; }
+
+/* 网站壁纸（2026-11-16 业主批「准放 CSP」）：iframe 铺满、不吃交互 */
+.cw-web { border: 0; width: 100%; height: 100%; pointer-events: none; }

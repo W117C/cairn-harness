@@ -161,7 +161,7 @@
           "label": "壁纸不透明度",
           "columns": "78px 620px",
           "display": "grid",
-          "top": 503,
+          "top": 523,
           "labelWidth": 78,
           "labelLines": 1,
           "rangeWidth": 240,
@@ -173,7 +173,7 @@
           "label": "压暗",
           "columns": "78px 620px",
           "display": "grid",
-          "top": 527,
+          "top": 547,
           "labelWidth": 78,
           "labelLines": 1,
           "rangeWidth": 240,
@@ -185,7 +185,7 @@
           "label": "玻璃透明度",
           "columns": "78px 620px",
           "display": "grid",
-          "top": 552,
+          "top": 572,
           "labelWidth": 78,
           "labelLines": 1,
           "rangeWidth": 240,
@@ -226,7 +226,7 @@
         "label": "壁纸不透明度",
         "columns": "78px 620px",
         "display": "grid",
-        "top": 503,
+        "top": 523,
         "labelWidth": 78,
         "labelLines": 1,
         "rangeWidth": 240,
@@ -238,7 +238,7 @@
         "label": "压暗",
         "columns": "78px 620px",
         "display": "grid",
-        "top": 527,
+        "top": 547,
         "labelWidth": 78,
         "labelLines": 1,
         "rangeWidth": 240,
@@ -250,7 +250,7 @@
         "label": "玻璃透明度",
         "columns": "78px 620px",
         "display": "grid",
-        "top": 552,
+        "top": 572,
         "labelWidth": 78,
         "labelLines": 1,
         "rangeWidth": 240,
@@ -268,7 +268,7 @@
         "label": "壁纸不透明度",
         "columns": "78px 620px",
         "display": "grid",
-        "top": 503,
+        "top": 523,
         "labelWidth": 78,
         "labelLines": 1,
         "rangeWidth": 240,
@@ -280,7 +280,7 @@
         "label": "压暗",
         "columns": "78px 620px",
         "display": "grid",
-        "top": 527,
+        "top": 547,
         "labelWidth": 78,
         "labelLines": 1,
         "rangeWidth": 240,
@@ -292,7 +292,7 @@
         "label": "玻璃透明度",
         "columns": "78px 620px",
         "display": "grid",
-        "top": 552,
+        "top": 572,
         "labelWidth": 78,
         "labelLines": 1,
         "rangeWidth": 240,
@@ -361,6 +361,16 @@
     }
   },
   {
+    "name": "联网天气源：点「测试连接」⇒ 真 fetch 本机服务并解析出 rain",
+    "ok": true,
+    "detail": {
+      "step": "done",
+      "text": "读到：rain（http）",
+      "keyCalls": [],
+      "url": "http://127.0.0.1:51884/weather"
+    }
+  },
+  {
     "name": "天气来源：勾「从文件读天气」+ 填 JSON ⇒ 解析出 rain（code 500）",
     "ok": true,
     "detail": {
@@ -411,6 +421,7 @@
         "wallpaper": {
           "kind": "image",
           "path": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/fixture-wallpaper.png",
+          "url": null,
           "opacity": 0.2,
           "scrim": 0.35,
           "glassAlpha": 0.25,
@@ -423,8 +434,9 @@
               "paths": {
                 "rain": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/fixture-wallpaper.png"
               },
-              "source": "file",
-              "filePath": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/weather-source.json"
+              "source": "http",
+              "filePath": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/weather-source.json",
+              "httpUrl": "http://127.0.0.1/placeholder"
             },
             "latitude": 39.9042,
             "longitude": 116.4074,
@@ -614,7 +626,7 @@
       "t": 0.3,
       "ready": 4,
       "duration": 2,
-      "focused": false,
+      "focused": true,
       "hidden": false
     }
   },
@@ -625,10 +637,10 @@
       "has": true,
       "src": "cairn-wallpaper://media/current?v=0",
       "paused": true,
-      "t": 0.59,
+      "t": 0.57,
       "ready": 4,
       "duration": 2,
-      "focused": false,
+      "focused": true,
       "hidden": false
     }
   },
@@ -639,10 +651,10 @@
       "has": true,
       "src": "cairn-wallpaper://media/current?v=0",
       "paused": false,
-      "t": 0.59,
+      "t": 0.57,
       "ready": 4,
       "duration": 2,
-      "focused": false,
+      "focused": true,
       "hidden": false
     }
   },
@@ -653,10 +665,10 @@
       "has": true,
       "src": "cairn-wallpaper://media/current?v=0",
       "paused": true,
-      "t": 0.59,
+      "t": 0.57,
       "ready": 4,
       "duration": 2,
-      "focused": false,
+      "focused": true,
       "hidden": false
     }
   },
@@ -667,10 +679,10 @@
       "has": true,
       "src": "cairn-wallpaper://media/current?v=0",
       "paused": false,
-      "t": 0.59,
+      "t": 0.57,
       "ready": 4,
       "duration": 2,
-      "focused": false,
+      "focused": true,
       "hidden": false
     }
   },
@@ -689,7 +701,7 @@
     "ok": true,
     "detail": {
       "found": true,
-      "text": "壁纸选择图片或视频浏览本机…清除文件不可用定时轮换分钟把当前壁纸加入轮换固定间隔日出日落按天气当前设为白天当前设为夜里昼/夜：0候选：0屏 1 · 回落全局把当前壁纸设为这块屏壁纸不透明度压暗玻璃透明度"
+      "text": "壁纸选择图片或视频浏览本机…清除文件不可用应用为壁纸只收 https；页面在 iframe 里带 sandbox 隔离定时轮换分钟把当前壁纸加入轮换固定间隔日出日落按天气当前设为白天当前设为夜里昼/夜：0候选：0屏 1 · 回落全局把当前壁纸设为这块屏壁纸不透明度压暗玻璃透明度"
     }
   },
   {
@@ -730,7 +742,7 @@
         "rows": [
           "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
           "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-          "新来的成员 · mmwj0fu1zread-onlydefaultguidedautofull-accessteammemberproject移除",
+          "新来的成员 · mmwj4mavyread-onlydefaultguidedautofull-accessteammemberproject移除",
           "本轮发言秩序主持优先按名单轮排一轮",
           "当前会话的段—开新段",
           "权限（成员维）团队档 default · 无裁剪",
@@ -754,7 +766,7 @@
       "rows": [
         "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
         "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-        "新来的成员 · mmwj0fu1zread-onlydefaultguidedautofull-accessteammemberproject移除",
+        "新来的成员 · mmwj4mavyread-onlydefaultguidedautofull-accessteammemberproject移除",
         "本轮发言秩序主持优先按名单轮排一轮",
         "当前会话的段—开新段",
         "权限（成员维）团队档 default · 无裁剪",
@@ -774,7 +786,7 @@
         "rows": [
           "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
           "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-          "新来的成员 · mmwj0fu1zread-onlydefaultguidedautofull-accessteammemberproject移除",
+          "新来的成员 · mmwj4mavyread-onlydefaultguidedautofull-accessteammemberproject移除",
           "本轮发言秩序主持优先按名单轮排一轮",
           "排出来的秩序1. 示例成员　2. 新来的",
           "当前会话的段—开新段",
@@ -870,7 +882,7 @@
         "canceled": false,
         "filePaths": []
       },
-      "elapsedMs": 2095,
+      "elapsedMs": 2461,
       "options": {
         "title": "选择壁纸",
         "properties": [
@@ -947,18 +959,18 @@
       "beforeSuspend": {
         "has": true,
         "paused": false,
-        "focused": false
+        "focused": true
       },
       "listenerCount": 1,
       "afterRealSuspend": {
         "has": true,
         "paused": true,
-        "focused": false
+        "focused": true
       },
       "afterRealResume": {
         "has": true,
         "paused": false,
-        "focused": false
+        "focused": true
       },
       "errors": []
     }
@@ -1065,6 +1077,34 @@
         "第1轮 user第一轮：一起看下",
         "第1轮 member:m-seed我先来"
       ]
+    }
+  },
+  {
+    "name": "网站壁纸：https ⇒ kind=web，iframe 带 sandbox 且 src 正确",
+    "ok": true,
+    "detail": {
+      "step": "done",
+      "good": {
+        "kind": "web",
+        "url": "https://example.com/live",
+        "hasFrame": true,
+        "src": "https://example.com/live",
+        "sandbox": "allow-scripts allow-same-origin allow-presentation"
+      },
+      "bad": {
+        "kind": "web",
+        "url": "http://example.com/plain",
+        "hasFrame": true,
+        "src": "http://example.com/plain",
+        "sandbox": "allow-scripts allow-same-origin allow-presentation"
+      }
+    }
+  },
+  {
+    "name": "CSP 放开面：`frame-src https:` 在，且 frame-src 里没有 data:/blob:/http:",
+    "ok": true,
+    "detail": {
+      "builtCsp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: cairn-wallpaper:; font-src 'self' data:; media-src 'self' data: blob: cairn-wallpaper:; connect-src 'self' http: https: ws: wss:; worker-src 'self' blob:; frame-src https:; object-src 'none'; base-uri 'none'; form-action 'none'"
     }
   }
 ]

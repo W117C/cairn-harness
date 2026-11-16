@@ -37,6 +37,7 @@ describe("壁纸设置", () => {
     expect(v).toEqual({
       kind: "video",
       path: "/tmp/a.mp4",
+      url: null,
       opacity: 0.5,
       scrim: 0.2,
       glassAlpha: 0.3,
