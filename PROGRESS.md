@@ -42866,7 +42866,7 @@ native-pick-accept {"verdict":"TIMEOUT","elapsedMs":60611,"canceled":null,"path"
 - 桌面 413 文件 / 2658 条全绿；四份密封证据仍有效（本轮无渲染层改动）
 - 真机冒烟 **60/60**；`typecheck` 0 报错；`docs-check` 全绿
 
-## 2026-11-16 · 第 1279 页：「行业最高」补上**外部阈值**（WCAG / CSP / Electron / OWASP），不是自定六条（`pending`）
+## 2026-11-16 · 第 1279 页：「行业最高」补上**外部阈值**（WCAG / CSP / Electron / OWASP），不是自定六条（`73993c85`）
 
 ### 一、为什么这页必须存在
 
