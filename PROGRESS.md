@@ -41810,3 +41810,53 @@ wallpaper-engine，逐行写「它怎么做 / 我们怎么做 / 证据在哪 / *
 - 「自动触发」只覆盖段（压缩结尾）。发言权的自动调用点是**打开窗格**，不是「一轮开始由引擎仲裁」——
   那需要把成员映射进编排引擎的调度，属下一批。
 - 原生面板点选、OS → powerMonitor 那一跳仍未验（原因见第 1252 页与对表页 §3）。
+
+## 2026-11-16 · 第 1254 页：编排引擎的一轮自动仲裁（发言权接进引擎）（`pending`）
+
+**背景**：第 1253 页之后仍被点名的一格是「发言权只由人点/只由窗格打开触发，编排引擎自己不仲裁」。
+本页把它接进引擎的**派发波**：一次 tick 的 dispatch 波 = 一轮。
+
+### 一、引擎侧的仲裁钩子
+
+- `src/orchestration/engine.ts`：新增可选 `roundArbiter`。`tick()` 里先算调度动作，再过一次
+  `arbitrateRound(actions)`：
+  · `paused` ⇒ 这一轮**不派**，并落一条 `agent_status`（`orchestration.phase = "needs_you"`），
+    reason 写清为什么停；
+  · `order` ⇒ 只改派发顺序（并发上限与依赖不变，调度器算出的仍是同一批）；
+  · 仲裁器自己抛错 ⇒ **fail-open**（照常派，reason 留痕）——策略坏了不该把活卡死。
+- `src/orchestration/round-arbiter.ts`：`RoundArbiter` 的形状 ＋ `teamRoundArbiter(policy)`——
+  把团队名单变成仲裁器（角色里写「主持」的先派，其余按名单顺序；空转到阈值 ⇒ 整轮停机）。
+- 装配：`OrchestrationService` 新增 `roundArbiterFor(address)`；`kernel-host` 里从**团队事件日志**
+  读名单，**没有成员就返回 null**（零团队 = 零干预，引擎行为与今天逐字一致）。
+
+### 二、判卷
+
+`tests/orchestration-round-arbiter.test.ts` 4 条：
+
+| # | 判据 | 读数 |
+|---|---|---|
+| 1 | paused ⇒ 不派 ＋ 一条 needs_you | `calls = 0`，事件里恰好 1 条 `needs_you`，reason 含「空转」 |
+| 2 | order ⇒ 改派发顺序 | 两轮：`[t0,t1]` 被反转 ⇒ `agent_spawned` 顺序 `evidence 1, 0`，第二波 `evidence 2` |
+| 3 | 仲裁器抛错 ⇒ fail-open | 2 个任务照常派完 |
+| 4 | `teamRoundArbiter` | 空转 6 ⇒ paused；否则主持 `b` 排到 `a` 前 |
+
+判据 2 的第一版读的是 `backend.execute` 的调用先后——那是**假读数**（每轮落盘 await 会打乱顺序），
+改读 `agent_spawned` 的落盘顺序才成立。
+
+### 三、顺带：成员详情（面板族的细节格）
+
+设置 › 团队与团队窗格里，成员的 `model` / `thinking` 并进既有那一行（**不新增次级说明行**，
+36 条 desc 帽不变）；没有就不显示，不写「未设置」。
+
+### 四、门禁读数（工作树）
+
+- 核心 `pnpm test:capped`（`--maxWorkers=2`）：**687 文件 / 8230 条全绿**，exit 0。
+- 桌面 **405 文件 / 2617 条全绿**；壁纸真机冒烟 **48/48**；四份密封证据重签后全绿。
+- `typecheck` 0 报错；`docs-check` 全绿。
+
+### 五、边界
+
+- 仲裁的「轮」= 一次 dispatch 波，不是「群聊的一轮」：没有群会话，就没有「谁这一轮发言」的语义源。
+  现在它能做的是「这一轮开不开、按什么顺序派」，这是发言权在引擎里能落地的那一半。
+- `idleRounds` 还没有生产者（空转读数由谁记属产品裁决），所以空转守卫在引擎侧默认不触发。
+- 面板族仍缺：记忆面板、权限的成员维、用量的成员维（三面都要先定数据形状）。

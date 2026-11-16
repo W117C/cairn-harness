@@ -42,7 +42,7 @@ export function TeamPane(props: { initialRoster?: TeamRosterPayload; initialPlan
         {members.map((m) => (
           <li key={m.id} className="team-pane-row">
             <span className="team-pane-name">{m.name}</span>
-            <span className="team-pane-role">{m.role}</span>
+            <span className="team-pane-role">{[m.role, m.model, m.thinking].filter((v) => typeof v === "string" && v !== "").join(" · ")}</span>
             <span className="team-pane-tier">{m.tier}</span>
           </li>
         ))}

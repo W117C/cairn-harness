@@ -136,7 +136,11 @@ export function TeamSection(
       )}
 
       {members.map((m) => (
-        <SettingsRow key={m.id} label={m.name} desc={`${m.role} · ${m.id}`}>
+        <SettingsRow
+          key={m.id}
+          label={m.name}
+          desc={[m.role, m.model, m.thinking, m.id].filter((v): v is string => typeof v === "string" && v !== "").join(" · ")}
+        >
           <div className="team-member">
             <select
               className="ss-select"

@@ -92,6 +92,9 @@ import { emptyUsageAnalytics, mergeUsageAnalytics, usageAnalyticsSnapshot } from
 import { readSessionLogTail } from "../../../../src/main/session-log";
 import { createHash } from "node:crypto";
 import { OrchestrationService, type OrchestrationAddress, type OrchestrationSubmitRequest, type OrchestrationControlRequest, type OrchestrationResponse } from "../../../../src/main/orchestration-service";
+import { readTeamRecords, teamLogPath } from "./team-store";
+import { projectMembers } from "../../../../src/agent/team/members";
+import { teamRoundArbiter } from "../../../../src/orchestration/round-arbiter";
 import { createWorkspaceOrchestrationBackend } from "../../../../src/main/orchestration-backend";
 
 export interface KernelHostDeps {
@@ -354,6 +357,15 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
     dataDir: join(deps.userDataDir, "orchestration"), allowedWorkspaces: () => workspaces,
     sessionExists: (workspace, sessionId) => sessionExists(join(workspace, ".agent", "sessions"), sessionId),
     backendFor: address => createWorkspaceOrchestrationBackend(address.workspace, join(deps.userDataDir, "orchestration-backends", createHash("sha256").update(JSON.stringify(address)).digest("hex"))),
+    // 一轮的自动仲裁（发言权的引擎调用点）：名单从团队事件日志投影；**没有成员就没有仲裁器**
+    // ⇒ 引擎行为与今天逐字一致（零团队 = 零干预）。
+    roundArbiterFor: async () => {
+      const records = await readTeamRecords(teamLogPath(deps.userDataDir)).catch(() => []);
+      if (records.length === 0) return null;
+      const roster = projectMembers(records, "read-only");
+      if (roster.members.length === 0) return null;
+      return teamRoundArbiter({ members: roster.members.map((m) => ({ id: m.id, role: m.role })) });
+    },
   });
   // 会话根按工作区解析（spec §4.1）：与 CLI 同根 <ws>/.agent/sessions。
   // 单例 initSessionsDir 仍指 activeWorkspace：core 里 requireSessionsDir 的兜底路径

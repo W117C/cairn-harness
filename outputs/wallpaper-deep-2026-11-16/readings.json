@@ -205,7 +205,7 @@
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": false,
-    "t": 0.13,
+    "t": 0.07,
     "ready": 4,
     "duration": 2,
     "focused": true,
@@ -215,7 +215,7 @@
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": true,
-    "t": 0.41,
+    "t": 0.34,
     "ready": 4,
     "duration": 2,
     "focused": false,
@@ -225,7 +225,7 @@
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": false,
-    "t": 0.42,
+    "t": 0.35,
     "ready": 4,
     "duration": 2,
     "focused": true,
@@ -235,7 +235,7 @@
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": true,
-    "t": 0.43,
+    "t": 0.36,
     "ready": 4,
     "duration": 2,
     "focused": true,
@@ -245,7 +245,7 @@
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": false,
-    "t": 0.43,
+    "t": 0.36,
     "ready": 4,
     "duration": 2,
     "focused": true,
@@ -286,7 +286,7 @@
       "rows": [
         "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
         "示例成员调研 · m-seedread-onlydefaultguidedautofull-access移除",
-        "新来的成员 · mmwipeqzvread-onlydefaultguidedautofull-access移除",
+        "新来的成员 · mmwiq16qoread-onlydefaultguidedautofull-access移除",
         "本轮发言秩序主持优先按名单轮排一轮",
         "当前会话的段—开新段",
         "档案补丁条数日志里的补丁条数（历史只追加；移除不解绑旧补丁）。2"
@@ -301,7 +301,7 @@
       "rows": [
         "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
         "示例成员调研 · m-seedread-onlydefaultguidedautofull-access移除",
-        "新来的成员 · mmwipeqzvread-onlydefaultguidedautofull-access移除",
+        "新来的成员 · mmwiq16qoread-onlydefaultguidedautofull-access移除",
         "本轮发言秩序主持优先按名单轮排一轮",
         "排出来的秩序1. 示例成员　2. 新来的",
         "当前会话的段—开新段",
@@ -347,7 +347,7 @@
       "canceled": false,
       "filePaths": []
     },
-    "elapsedMs": 2935,
+    "elapsedMs": 2431,
     "options": {
       "title": "选择壁纸",
       "properties": [
