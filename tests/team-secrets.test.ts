@@ -134,7 +134,7 @@ describe("密钥卡片四跳串起来（申请→审批→注入→脱敏）", (
     expect(canUseSecret(view, "m1", "OPENAI_API_KEY")).toBe(true);
     const target: Record<string, string | undefined> = { OPENAI_API_KEY: "sk-live-abcdef0123456789" };
     const out = await withMemberSecretEnv(view, "m1", async () => {
-      return redactSecrets("调用返回 sk-live-abcdef0123456789 结束", { env: target }).text;
+      return redactSecrets("调用返回 sk-live-abcdef0123456789 结束").text;
     }, target, target);
     expect(out.result).not.toContain("sk-live-abcdef0123456789");
   });

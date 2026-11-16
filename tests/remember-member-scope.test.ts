@@ -7,7 +7,7 @@
 //   ③ 成员层只收记忆笔记（kind=memory），与全局层同一条纪律；
 //   ④ 非法身份（`member`、`members:x`、带点/斜杠）一律拒。
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { remember } from "../src/tools/remember";

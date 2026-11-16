@@ -13,7 +13,7 @@ import { fetchWeather } from "./weather-http";
 import { readWeatherKey, saveWeatherKey } from "./weather-key";
 import { pickWallpaper } from "./wallpaper-pick";
 import { browseDirectory } from "./wallpaper-browse";
-import { pruneDisplays, wallpaperForDisplay } from "../../../../src/wallpaper/displays";
+import { resolveDisplays } from "./displays-view";
 import { appendTeamPatch, readTeamRecords, readTeamRoster, teamLogPath } from "./team-store";
 import { listSessions, readSessionEvents } from "../../../../src/main/sessions";
 import { openSegmentForSession } from "./session-segments";
@@ -1196,15 +1196,11 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   wallpaperDisplays: async () => {
     try {
       const s = await getSettings();
-      const live = screen.getAllDisplays().map((d) => ({ id: String(d.id), width: d.bounds.width, height: d.bounds.height, scaleFactor: d.scaleFactor }));
-      const fallback = s.wallpaper.kind === "none" || s.wallpaper.path === null
-        ? null : { kind: s.wallpaper.kind, path: s.wallpaper.path };
-      const displays = live.map((d) => {
-        const r = wallpaperForDisplay(d.id, s.wallpaper.perDisplay, fallback);
-        return { ...d, source: r.source, ...(r.wallpaper === null ? {} : { path: r.wallpaper.path }) };
-      });
-      const { orphans } = pruneDisplays(s.wallpaper.perDisplay, live.map((d) => d.id));
-      return { ok: true, displays, orphans };
+      const live = screen.getAllDisplays().map((d) => ({
+        id: String(d.id), width: d.bounds.width, height: d.bounds.height, scaleFactor: d.scaleFactor,
+      }));
+      // 视图合成在 `displays-view`（两块屏的输入已有判据；这里只负责把真屏列表喂进去）。
+      return { ok: true, ...resolveDisplays(s.wallpaper, live) };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
     }

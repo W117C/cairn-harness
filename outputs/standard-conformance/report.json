@@ -1,12 +1,12 @@
 {
-  "at": "2026-11-16T07:44:34.505Z",
+  "at": "2026-11-16T09:03:44.495Z",
   "verdict": "pass",
   "parity": {
-    "total": 22,
+    "total": 23,
     "covered": 20,
     "partial": 0,
     "absent": 0,
-    "out": 2
+    "out": 3
   },
   "rows": [
     {

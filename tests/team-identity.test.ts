@@ -63,7 +63,7 @@ describe("成员身份 → 记忆读取（端到端一跳）", () => {
       const task = { task: "成员私有的排期约定", context: {} as never };
       const asMember = await buildWorkerSystemMessages(task, ws, "", "", "member:m1");
       const asWorker = await buildWorkerSystemMessages(task, ws, "", "", "worker-1");
-      const textOf = (msgs: readonly { content: string }[]): string => msgs.map((m) => m.content).join("\n");
+      const textOf = (msgs: readonly { content: string | null }[]): string => msgs.map((m) => m.content ?? "").join("\n");
       expect(textOf(asMember)).toContain("周五前交付");
       expect(textOf(asWorker)).not.toContain("周五前交付");
     } finally {

@@ -43533,3 +43533,51 @@ bot-report: pass
 | `wallpaper.scene-engine` | 明确不做 | 对表理由 |
 | `wallpaper.native-click` | 需人工点一次 | 两次 TIMEOUT + TCC `-1719` |
 | `wallpaper.website` | 两条路不通/需拍板 | `layer-probe.json`（sources=[]） |
+
+## 2026-11-16 · 第 1296 页：「全部做完了吗」现在有一条命令（`verify-all`）＋修掉 3 条存量类型错（`pending`）
+
+### 一、一条命令，一个总判
+
+```bash
+npx tsx scripts/verify-all.ts          # 全量
+npx tsx scripts/verify-all.ts --fast   # 只跑核心门
+```
+
+真机跑出来的读数（`outputs/verify-all/summary.json`）：
+
+```
+verify-all: pass
+  pass  typecheck        exit 0（6s）
+  pass  docs-check       exit 0（1s）
+  pass  bot-report       exit 0（0s）
+  pass  standard-report  exit 0（0s）
+  pass  parity           exit 0（0s）
+  pass  core-suite       exit 0（163s）
+  pass  desktop-suite    exit 0（12s）
+```
+
+口径：**没跑 = `missing`，不算通过**；`fail` 压过 `missing`。判据 `tests/verification-summary.test.ts` 4 条。
+
+### 二、顺手修掉 3 条**存量**类型错（根 typecheck 一直是红的）
+
+这轮第一次跑根 `typecheck`，暴露出三处测试文件里的类型错（vitest 靠 esbuild 抹类型所以平时没响）：
+
+| 文件 | 错 | 修法 |
+|---|---|---|
+| `tests/remember-member-scope.test.ts` | `mkdirSync` 未使用 | 删导入 |
+| `tests/team-identity.test.ts` | `content: string \| null` 传给 `{content:string}` | 断言函数改收 `string \| null` |
+| `tests/team-secrets.test.ts` | 给 `redactSecrets` 传了不存在的 `{env}` | 去掉该选项 |
+
+修完根 `typecheck`：**0 条报错**。
+
+### 三、多显示器：把「两块屏」变成有判据的逻辑
+
+抽 `apps/desktop/src/main/displays-view.ts`（`resolveDisplays`），主进程 handler 直接用它；
+`apps/desktop/tests/displays-view.test.ts` 用**两块屏输入**判：1 号专属、2 号回落、拔掉的 9 号进 orphans。
+真机仍只有 1 块屏 ⇒ **多屏真机仍未验**，但这不再是「只有单屏证据」。
+
+### 四、门禁读数（工作树）
+
+- 核心 `pnpm test:capped`：**707 文件 / 8340 条全绿**，exit 0
+- 桌面 **420 文件 / 2683 条全绿**；真机冒烟 67/67（无渲染层改动，四包有效）
+- 根 `typecheck` 0 报错；`docs-check` 全绿

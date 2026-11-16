@@ -17,6 +17,16 @@
 | S5 可审计 | 事件日志只追加：补丁条数只增不减；授权/申请历史保留 | `npx vitest run --config tests/vitest.config.ts tests/team-members.test.ts tests/team-secrets.test.ts` | 移除写墓碑；后写覆盖前写但历史在 |
 | S6 可复算 | 任何读数都能用仓库内命令重跑；台账每页点名命令/工件 | `npx tsx scripts/docs-check.ts` | 台账 1277 页，凭证对账面红 0 |
 
+## 一页总判（七道门）
+
+```bash
+npx tsx scripts/verify-all.ts          # 全量（含两套测试）
+npx tsx scripts/verify-all.ts --fast   # 只跑核心门
+```
+
+输出 `outputs/verify-all/summary.json`：每道门一个 verdict，**没跑记 `missing`**（不算通过）。
+现读：7/7 pass（typecheck / docs-check / bot-report / standard-report / parity / core-suite / desktop-suite）。
+
 ## 判据怎么用
 
 ```bash
