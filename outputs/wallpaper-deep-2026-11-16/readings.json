@@ -289,7 +289,7 @@
       "rows": [
         "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
         "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-        "新来的成员 · mmwiuq44gread-onlydefaultguidedautofull-accessteammemberproject移除",
+        "新来的成员 · mmwiv9d2fread-onlydefaultguidedautofull-accessteammemberproject移除",
         "本轮发言秩序主持优先按名单轮排一轮",
         "当前会话的段—开新段",
         "权限（成员维）团队档 default · 无裁剪",
@@ -306,7 +306,7 @@
       "rows": [
         "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
         "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-        "新来的成员 · mmwiuq44gread-onlydefaultguidedautofull-accessteammemberproject移除",
+        "新来的成员 · mmwiv9d2fread-onlydefaultguidedautofull-accessteammemberproject移除",
         "本轮发言秩序主持优先按名单轮排一轮",
         "排出来的秩序1. 示例成员　2. 新来的",
         "当前会话的段—开新段",
@@ -378,7 +378,7 @@
       "canceled": false,
       "filePaths": []
     },
-    "elapsedMs": 2083,
+    "elapsedMs": 2092,
     "options": {
       "title": "选择壁纸",
       "properties": [
@@ -468,7 +468,7 @@
         "start": false
       }
     ],
-    "text": "团队成员1示例成员调研read-only已选排出来的秩序1. 示例成员新建群会话已建群会话 s-group-1下一轮下一轮并让 TA 开跑第 N 轮发言：1 · m-seed放进他的线程派活并开跑已派给 m-seed · s-run-1在 设置 › 团队 里管理"
+    "text": "团队成员1示例成员调研read-only已选排出来的秩序1. 示例成员新建群会话已建群会话 s-group-1下一轮下一轮并让 TA 开跑第1轮 user第一轮：一起看下第1轮 member:m-seed我先来第 N 轮发言：1 · m-seed放进他的线程派活并开跑已派给 m-seed · s-run-1在 设置 › 团队 里管理"
   },
   "teamSpeak": {
     "step": "done",
@@ -484,6 +484,13 @@
         "start": true
       }
     ],
-    "text": "团队成员1示例成员调研read-only已选排出来的秩序1. 示例成员新建群会话已建群会话 s-group-1下一轮下一轮并让 TA 开跑第 N 轮发言：2 · m-seed放进他的线程派活并开跑已派给 m-seed · s-speak-2在 设置 › 团队 里管理"
+    "text": "团队成员1示例成员调研read-only已选排出来的秩序1. 示例成员新建群会话已建群会话 s-group-1下一轮下一轮并让 TA 开跑第1轮 user第一轮：一起看下第1轮 member:m-seed我先来第 N 轮发言：2 · m-seed放进他的线程派活并开跑已派给 m-seed · s-speak-2在 设置 › 团队 里管理"
+  },
+  "groupStream": {
+    "step": "done",
+    "rows": [
+      "第1轮 user第一轮：一起看下",
+      "第1轮 member:m-seed我先来"
+    ]
   }
 }

@@ -77,8 +77,8 @@ describe("通道名表完整性", () => {
     // v59：＋teamRoster / teamMemberSave（团队成员档案：名单投影 + 单一写入口）。
     // v60：＋teamRoundPlan（发言权调用方）/ sessionSegmentOpen（段写入点）。
     // v62：＋teamMemberDispatch；v63：＋teamMemberStart；v64：＋teamGroupCreate；v65：＋teamGroupNext；
-    // v67：＋teamSecretGrants / teamSecretGrant；v68：＋teamSecretRequest。
-    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(168);
+    // v67：＋teamSecretGrants / teamSecretGrant；v68：＋teamSecretRequest；v70：＋teamGroupStream。
+    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(169);
     const keys = Object.keys(INVOKE_CHANNELS) as (keyof typeof INVOKE_CHANNELS)[];
     expect(keys.length).toBeGreaterThan(0);
     for (const key of keys) expect(INVOKE_CHANNELS[key]).toBeTruthy();
@@ -340,6 +340,7 @@ describe("通道名表完整性", () => {
       "teamSecretGrants",
       "teamSecretGrant",
       "teamSecretRequest",
+      "teamGroupStream",
     ];
     // ④ fail-loud 白名单（带理由的未接）：B3 修复后为空——39 条全部接真。要留白须在此
     //    逐条列名并注记理由，且 index.ts 的 UNWIRED_FAIL_LOUD 同步加键（下方断言钉死两者一致）。

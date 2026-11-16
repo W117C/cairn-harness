@@ -42561,3 +42561,41 @@ wallpaper-engine，逐行写「它怎么做 / 我们怎么做 / 证据在哪 / *
 - 注入是**进程级**的：两个成员同时跑会互相看见对方注入的键（provider key 注入同形）。
   要真隔离得等「按 run 分环境」，这条写在代码注释与台账里。
 - 缺值不注入空串（空串会让下游以为「配了但为空」），改记 `missing`。
+
+## 2026-11-16 · 第 1272 页：群聊共享流（面板族缺的那一面，协议 v70）（`pending`）
+
+**背景**：面板族一直写「群聊流 UI 缺」。本页把共享流做成真面板——数据面本来就有（群会话自己的事件流）。
+
+### 一、口径
+
+| 规则 | 做法 |
+|---|---|
+| 共享流 = 群会话事件流 | 不另存一份（ADR 0005 单一面） |
+| 只读有效条目 | `effectiveEntries` 抹掉被撤回/覆盖的，meta 补丁不算消息 |
+| 每条带轮与说话人 | 轮的起点从**同一份流里的 `round` 补丁**算；说话人取 `agent_id`，缺省 `main` |
+| 截断如实 | 默认最近 50 条（面板取 20）、单条 4000 字；`dropped` / `truncated` 都回给 UI |
+
+### 二、落点
+
+- `src/agent/team/stream.ts`：`projectGroupStream(events, {limit})`；
+- 协议 v70 `teamGroupStream(sessionId, workspace?, limit?)`；通道 168 → **169**（team 域 10 → 11）；
+- 团队窗格：点「下一轮」后自动拉一次共享流并渲染 `.team-pane-stream`（每行 `第N轮 说话人` + 文本）。
+
+### 三、判卷
+
+- `tests/team-stream.test.ts` 5 条（三类分离 / meta 不算消息 / limit+dropped / 轮标记 / 超长截断）；
+- `team-pane.test.tsx` +1：`initialStream` 缝 ⇒ SSR 出 `data-stream="true"`、`第1轮 member:m1`；
+- 真机冒烟 +1：点「下一轮」⇒ `[data-stream]` 两行真形状（`第1轮 user…` / `第1轮 member:m-seed…`）。
+
+### 四、覆盖率（不变，如实）
+
+面板族仍 `partial`——**记忆面板**没做；`ours` 已改成「成员区/团队/设置/窗格 + 群聊共享流；缺记忆面板」。
+覆盖分维持 **0.947**（阈值 0.94）。
+
+### 五、门禁读数（工作树）
+
+- 核心 `pnpm test:capped`：**695 文件 / 8278 条全绿**，exit 0。
+- 桌面 **408 文件 / 2643 条全绿**；四份密封证据重签全绿。
+- **真机冒烟 52/57**：5 条焦点相关判据这一轮仍拿不到焦点（`document.hasFocus()=false`，最小探针复核过；
+  13:44 那轮是 56/56）。新增的共享流判据 PASS。**不冒充绿。**
+- `typecheck` 0 报错；`docs-check` 全绿。

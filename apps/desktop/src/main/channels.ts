@@ -192,6 +192,7 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   teamSecretGrants: "agent:team-secret-grants",
   teamSecretGrant: "agent:team-secret-grant",
   teamSecretRequest: "agent:team-secret-request",
+  teamGroupStream: "agent:team-group-stream",
   sessionSegmentOpen: "agent:session-segment-open",
   // v9：Tab 想下一条（业主裁 A②）——main 端按上下文单发模型调用（suggestNextMessage），
   // renderer 原样上屏结果/分类文案。
@@ -419,6 +420,7 @@ export const CHANNEL_DOMAINS: { [K in InvokeChannel]: ChannelDomain } = {
   teamSecretGrants: "team",
   teamSecretGrant: "team",
   teamSecretRequest: "team",
+  teamGroupStream: "team",
   sessionSegmentOpen: "session",
   speakText: "app",
   stopSpeaking: "app",

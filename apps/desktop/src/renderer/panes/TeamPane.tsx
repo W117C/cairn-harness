@@ -8,7 +8,12 @@ import type { TeamRosterPayload, TeamRoundPlanPayload } from "../../../../../src
 import { STR } from "../strings";
 import "./team-pane.css";
 
-export function TeamPane(props: { initialRoster?: TeamRosterPayload; initialPlan?: TeamRoundPlanPayload } = {}): React.JSX.Element {
+export function TeamPane(props: {
+  initialRoster?: TeamRosterPayload;
+  initialPlan?: TeamRoundPlanPayload;
+  /** 判卷用的缝：直接喂一份共享流（生产走 teamGroupStream）。 */
+  initialStream?: { items: { seq: number; kind: string; speaker: string; round: number | null; text: string }[]; dropped: number };
+} = {}): React.JSX.Element {
   const [roster, setRoster] = useState<TeamRosterPayload | null>(props.initialRoster ?? null);
   const [plan, setPlan] = useState<TeamRoundPlanPayload | null>(props.initialPlan ?? null);
   const [issue, setIssue] = useState<string | null>(null);
@@ -20,6 +25,8 @@ export function TeamPane(props: { initialRoster?: TeamRosterPayload; initialPlan
   const [groupName, setGroupName] = useState("");
   const [groupCreated, setGroupCreated] = useState<string | null>(null);
   const [groupRound, setGroupRound] = useState<{ round: number; speakers: string[]; unknown: string[] } | null>(null);
+  // v70：群聊共享流（只读投影，带轮与说话人）。
+  const [stream, setStream] = useState<{ items: { seq: number; kind: string; speaker: string; round: number | null; text: string }[]; dropped: number } | null>(props.initialStream ?? null);
 
   const load = useCallback(async (): Promise<void> => {
     try {
@@ -50,11 +57,21 @@ export function TeamPane(props: { initialRoster?: TeamRosterPayload; initialPlan
     }
   };
 
+  const loadStream = async (sessionId: string): Promise<void> => {
+    try {
+      const result = await window.agent.teamGroupStream(sessionId, undefined, 20);
+      if (result.ok === true && result.items !== undefined) {
+        setStream({ items: result.items, dropped: result.dropped ?? 0 });
+      }
+    } catch { /* 读不到就不显示 */ }
+  };
+
   const nextRound = async (start: boolean): Promise<void> => {
     if (groupCreated === null) { setIssue(STR.team.groupNeed); return; }
     try {
       const result = await window.agent.teamGroupNext(groupCreated, undefined, start);
       if (result.ok !== true) { setIssue(result.error ?? STR.team.writeFailed); return; }
+      void loadStream(groupCreated);
       setGroupRound({
         round: Number(result.round ?? 0),
         speakers: result.speakers ?? [String(result.speaker ?? "")],
@@ -153,6 +170,17 @@ export function TeamPane(props: { initialRoster?: TeamRosterPayload; initialPlan
         <button type="button" className="mini-btn" onClick={() => { void nextRound(true); }}>
           {STR.team.groupNextStart}
         </button>
+        {stream !== null && (
+          <div className="team-pane-stream" data-stream="true">
+            {stream.items.map((item) => (
+              <div key={item.seq} className={`team-pane-stream-row ${item.kind}`}>
+                <span className="team-pane-stream-speaker">{`${item.round === null ? "—" : `第${String(item.round)}轮`} ${item.speaker}`}</span>
+                <span className="team-pane-stream-text">{item.text.slice(0, 200)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {groupRound !== null && (
           <span className="ss-static">
             {`${STR.team.groupRound}${String(groupRound.round)} · ${groupRound.speakers.join("、")}`}

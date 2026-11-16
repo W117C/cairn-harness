@@ -11,8 +11,8 @@ import { readRendererFile } from "./helpers/app-surface";
 
 const repo = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 
-it("协议（现 v69）：RunRequest.planRequired 字段与 validator 保留，主进程两路透传不变", () => {
-  expect(IPC_PROTOCOL_VERSION).toBe(69);
+it("协议（现 v70）：RunRequest.planRequired 字段与 validator 保留，主进程两路透传不变", () => {
+  expect(IPC_PROTOCOL_VERSION).toBe(70);
   const protocol = repo("../../../src/main/ipc-protocol.ts");
   expect(protocol).toContain("planRequired?: boolean;");
   const validator = repo("../../../src/main/run-request.ts");

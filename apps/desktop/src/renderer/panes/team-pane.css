@@ -54,3 +54,22 @@
 }
 .team-pane-group .ss-input,
 .team-pane-dispatch .ss-input { flex: 1 1 auto; min-width: 0; }
+
+/* v70：群聊共享流（只读投影；每条带轮与说话人） */
+.team-pane-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 8px 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+.team-pane-stream-row { display: flex; gap: 8px; font-size: 12px; line-height: 1.45; }
+.team-pane-stream-speaker { flex: 0 0 auto; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.team-pane-stream-row.agent .team-pane-stream-text { color: var(--foreground); }
+.team-pane-stream-row.user .team-pane-stream-text { color: var(--primary); }
+.team-pane-stream-text { flex: 1 1 auto; white-space: pre-wrap; word-break: break-word; }

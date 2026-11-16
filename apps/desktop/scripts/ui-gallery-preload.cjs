@@ -1713,6 +1713,16 @@ stub.teamSecretRequest = (memberId, secret) => {
   return Promise.resolve({ ok: true });
 };
 contextBridge.exposeInMainWorld("__cairnSecretRequests", () => teamRequests.map((r) => ({ ...r })));
+// v70 共享流：返回两条真形状的条目（user + agent），带轮与说话人。
+stub.teamGroupStream = () => Promise.resolve({
+  ok: true, dropped: 0, truncated: 0,
+  items: [
+    { seq: 1, kind: "user", speaker: "user", round: 1, text: "第一轮：一起看下", at: null },
+    { seq: 2, kind: "agent", speaker: "member:m-seed", round: 1, text: "我先来", at: null },
+  ],
+});
+contextBridge.exposeInMainWorld("__cairnStreamCalls", () => streamCalls);
+const streamCalls = [];
 stub.teamSecretGrant = (memberId, secret, allow) => {
   teamGrants.push({ memberId, secret, allow: allow === true, at: teamGrants.length + 1 });
   return Promise.resolve({ ok: true });

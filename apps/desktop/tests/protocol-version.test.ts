@@ -85,6 +85,6 @@ describe("协议版本握手接线（§3.5/§12）", () => {
     //   隔离树建在会话自己的工作区，不再回落构造期的启动工作区。
     // v56 → v57：listMessagePins 增可选 workspace，置顶读取按显式根做存在性检查。
     // v58 → v59：壁纸系统暂停推送 + 团队名单/写入两条 invoke 通道。
-    expect(IPC_PROTOCOL_VERSION).toBe(69);
+    expect(IPC_PROTOCOL_VERSION).toBe(70);
   });
 });

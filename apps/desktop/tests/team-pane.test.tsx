@@ -71,4 +71,17 @@ describe("团队会话窗格", () => {
     );
     expect(html).toContain("空名单");
   });
+
+  it("群聊共享流：渲染出带轮与说话人的条目（只读投影）", () => {
+    const html = renderToStaticMarkup(<TeamPane initialRoster={roster} initialStream={{
+      dropped: 2,
+      items: [
+        { seq: 1, kind: "user", speaker: "user", round: 1, text: "第一轮：一起看下" },
+        { seq: 2, kind: "agent", speaker: "member:m1", round: 1, text: "我先来" },
+      ],
+    }} />);
+    expect(html).toContain('data-stream="true"');
+    expect(html).toContain("第1轮 member:m1");
+    expect(html).toContain("我先来");
+  });
 });

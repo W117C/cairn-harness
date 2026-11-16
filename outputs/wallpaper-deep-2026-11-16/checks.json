@@ -612,7 +612,7 @@
         "rows": [
           "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
           "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-          "新来的成员 · mmwiuq44gread-onlydefaultguidedautofull-accessteammemberproject移除",
+          "新来的成员 · mmwiv9d2fread-onlydefaultguidedautofull-accessteammemberproject移除",
           "本轮发言秩序主持优先按名单轮排一轮",
           "当前会话的段—开新段",
           "权限（成员维）团队档 default · 无裁剪",
@@ -636,7 +636,7 @@
       "rows": [
         "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
         "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-        "新来的成员 · mmwiuq44gread-onlydefaultguidedautofull-accessteammemberproject移除",
+        "新来的成员 · mmwiv9d2fread-onlydefaultguidedautofull-accessteammemberproject移除",
         "本轮发言秩序主持优先按名单轮排一轮",
         "当前会话的段—开新段",
         "权限（成员维）团队档 default · 无裁剪",
@@ -656,7 +656,7 @@
         "rows": [
           "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
           "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-          "新来的成员 · mmwiuq44gread-onlydefaultguidedautofull-accessteammemberproject移除",
+          "新来的成员 · mmwiv9d2fread-onlydefaultguidedautofull-accessteammemberproject移除",
           "本轮发言秩序主持优先按名单轮排一轮",
           "排出来的秩序1. 示例成员　2. 新来的",
           "当前会话的段—开新段",
@@ -752,7 +752,7 @@
         "canceled": false,
         "filePaths": []
       },
-      "elapsedMs": 2083,
+      "elapsedMs": 2092,
       "options": {
         "title": "选择壁纸",
         "properties": [
@@ -907,6 +907,17 @@
           "round": 2,
           "start": true
         }
+      ]
+    }
+  },
+  {
+    "name": "群聊共享流真的渲染出来（带轮 + 说话人，来自 teamGroupStream）",
+    "ok": true,
+    "detail": {
+      "step": "done",
+      "rows": [
+        "第1轮 user第一轮：一起看下",
+        "第1轮 member:m-seed我先来"
       ]
     }
   }

@@ -15,6 +15,7 @@ import { defaultStartDeps, dispatchToMember, startMemberWithSecrets, startToMemb
 import { createTeamGroup } from "./team-group";
 import { advanceGroupRound, groupTaskOf } from "./team-round";
 import { grantPatch, projectSecretGrants, requestPatch } from "../../../../src/agent/team/secrets";
+import { projectGroupStream } from "../../../../src/agent/team/stream";
 import { planRound } from "../../../../src/orchestration/speech";
 import { memberPatch } from "../../../../src/agent/team/members";
 import { TEAM_USAGE_SESSION_CAP, memoryScopes, permissionRows, usageAcrossSessions } from "../../../../src/agent/team/insights";
@@ -900,6 +901,20 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     );
     if (started.ok !== true) return { ...advanced, error: started.error ?? "开跑失败" };
     return { ...advanced, sessionId: started.sessionId };
+  },
+  // v70 群聊共享流：读群会话自己的事件流（单一面），带轮与说话人，截断如实。
+  teamGroupStream: async (sessionId, workspace, limit) => {
+    const root = await explicitSessionsRoot(typeof workspace === "string" ? workspace : undefined);
+    if (root === undefined) return { ok: false, error: "没有可用的会话根" };
+    const id = typeof sessionId === "string" ? sessionId : "";
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) return { ok: false, error: "会话 id 不合法" };
+    try {
+      const events = await readSessionEvents(root, id);
+      const view = projectGroupStream(events, typeof limit === "number" && limit > 0 ? { limit } : {});
+      return { ok: true, items: view.items, dropped: view.dropped, truncated: view.truncated };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
   },
   // v68 密钥申请：成员发起 pending（人审批走 teamSecretGrant，它会把申请置终态）。
   teamSecretRequest: async (rawMember, rawSecret) => {

@@ -94,12 +94,13 @@
       "id": "bot.panels",
       "capability": "面板族（成员区/团队/设置）",
       "reference": "104 个客户端文件",
-      "ours": "侧栏成员区 + 设置团队 + 团队窗格",
+      "ours": "成员区/团队/设置/团队窗格 + 群聊共享流（v70，带轮与说话人）；缺记忆面板",
       "status": "partial",
       "evidence": [
-        "apps/desktop/tests/team-section.test.tsx",
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs",
         "apps/desktop/tests/team-pane.test.tsx",
-        "apps/desktop/scripts/wallpaper-csp-smoke.cjs"
+        "apps/desktop/tests/team-section.test.tsx",
+        "tests/team-stream.test.ts"
       ]
     },
     {

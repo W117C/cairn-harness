@@ -976,6 +976,23 @@ async function main() {
     speakFlow.step === "done" && speakFlow.calls.some((c) => c.start === true)
       && String(speakFlow.text).includes("s-speak-"),
     { step: speakFlow.step, calls: speakFlow.calls });
+  // ⑪f 群聊共享流（v70）：点「下一轮」后，面板里出现带轮与说话人的条目（真调 teamGroupStream）。
+  const streamFlow = await pjs(`(async () => {
+    const btn = [...document.querySelectorAll('.mini-btn')].find((b) => (b.textContent || "").trim() === "下一轮");
+    if (!btn) return { step: "no-button" };
+    btn.click();
+    await new Promise((r) => setTimeout(r, 800));
+    const box = document.querySelector('[data-stream="true"]');
+    if (!box) return { step: "no-stream" };
+    const rows = [...box.querySelectorAll('.team-pane-stream-row')];
+    return { step: "done", rows: rows.map((r) => (r.textContent || "").trim()) };
+  })()`);
+  readings.groupStream = streamFlow;
+  check("群聊共享流真的渲染出来（带轮 + 说话人，来自 teamGroupStream）",
+    streamFlow.step === "done" && streamFlow.rows.length === 2
+      && streamFlow.rows[0].includes("第1轮") && streamFlow.rows[1].includes("member:m-seed"),
+    { step: streamFlow.step, rows: streamFlow.rows });
+
   await shot(paneWin, "12-team-pane-1440x900");
   paneWin.destroy();
 
