@@ -41,8 +41,9 @@ describe("变更窗格 · 分栏审阅器", () => {
     // 渲染差异的地方只在右栏，且只在选中时
     expect(src).toContain("selected === null ? (");
     expect(src).toContain("diff.payload.hunks");
-    // 不许出现「一轮全取」的入口（那会把长会话一次拉爆）
-    expect(src).not.toMatch(/files\.map\([^)]*\)\s*\.map\([^)]*changeDiff/);
+    // 不许出现「一轮全取」的入口（那会把长会话一次拉爆）——全应用禁令，读面不读单文件
+    // （第 1252 页：预取代码搬到 use-change-stats / Stream 后，单文件否定会空过）。
+    expect(readAppSurface()).not.toMatch(/files\.map\([^)]*\)\s*\.map\([^)]*changeDiff/);
   });
 
   it("④ 多条评注 ⌘Enter 一次性提交不许退化", () => {

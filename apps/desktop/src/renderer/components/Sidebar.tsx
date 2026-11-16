@@ -14,7 +14,7 @@ import * as DropdownMenu from "./ui/dropdown-menu";
 import { Archive, Check, ChevronRight, Folder, GitBranch, Loader2, MoreHorizontal, Pencil, Pin, Plus, Search, X } from "lucide-react";
 import type { ProjectRecord } from "../../../../../src/main/ipc-protocol";
 import { relativeTime } from "../projections";
-import { keysOf } from "../shortcuts";
+import { fillKeys, keysOf, withKeys } from "../shortcuts";
 import { countSessionsByFilter, filterSessions, groupByWorkspace, projectMenuItems, projectSections, sessionFilterInfo, sessionStatus, sessionTime, splitArchived, workspaceLabel, OTHER_WORKSPACE, SESSION_FILTERS, type SessionFilterId, type TimeBucket, type WorkspaceSession } from "../sessions-view";
 import { draftKeyFor } from "../drafts";
 import { runKey, sessionKeyOf } from "../state/session-identity";
@@ -46,12 +46,6 @@ const BUCKET_LABEL: Record<TimeBucket, string> = {
   past7: STR.sidebar.bucketPast7,
   earlier: STR.sidebar.bucketEarlier,
 };
-
-/** tooltip 键位与 SHORTCUTS 表同源（P3-3）：表里改键，这里自动跟。 */
-function withKeys(base: string, id: string): string {
-  const k = keysOf(id);
-  return k === null ? base : `${base}（${k}）`;
-}
 
 // 筛选纯函数与词表迁居 sessions-view.ts（判据一字未动）；re-export 保旧引用面（P3-3 收进 ⌘K）。
 export { SESSION_FILTERS, SESSION_FILTER_NOTE, filterSessions, matchSession, type SessionFilterId } from "../sessions-view";
@@ -720,7 +714,7 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
           </div>
         )}
         {props.loading !== true && props.loadError !== true && visibleCount === 0 && !searchOpen && filter === "all" && (
-          <div className="side-empty">{STR.sidebar.emptyList}</div>
+          <div className="side-empty">{fillKeys(STR.sidebar.emptyList, "new-session")}</div>
         )}
         {/* 筛选无命中：不能说「还没有任务」——列表里可能有任务，只是不在这个筛选下。 */}
         {props.loading !== true && props.loadError !== true && visibleCount === 0 && !searchOpen && filter !== "all" && (

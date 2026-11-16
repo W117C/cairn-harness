@@ -16,16 +16,11 @@ import { changeLabel } from "../derived/change-labels";
 import { DiffView } from "./DiffView";
 import { TimelinePane } from "./TimelinePane";
 import { STR } from "../strings";
+import { fillKeys } from "../shortcuts";
+import { tabNavigationTarget } from "../radio-nav";
 
-/** Inspector 是水平 tablist：方向键循环，Home/End 到首尾，其他键留给原生焦点移动。 */
-export function inspectorTabIndexForKey(key: string, index: number, count: number): number | null {
-  if (count <= 0 || index < 0 || index >= count) return null;
-  if (key === "ArrowRight") return (index + 1) % count;
-  if (key === "ArrowLeft") return (index - 1 + count) % count;
-  if (key === "Home") return 0;
-  if (key === "End") return count - 1;
-  return null;
-}
+/** Inspector 是水平 tablist：方向键循环，Home/End 到首尾，其他键留给原生焦点移动。
+ *  下标算法与设置面单选组、窗格标签、浏览器/供应商标签共用 `radio-nav.ts` 一份实现。 */
 
 /** 改动 Tab：文件行（点击展开 diff；有快照的行可撤销——撤销后收起旧 diff，下次点开重新拉）。 */
 function ChangesTab(props: {
@@ -129,7 +124,7 @@ export function Inspector(props: InspectorProps): React.JSX.Element {
               className={"isp-tab" + (selected === t.id ? " active" : "")}
               onClick={() => { setTab(t.id); }}
               onKeyDown={(e) => {
-                const next = inspectorTabIndexForKey(e.key, index, available.length);
+                const next = tabNavigationTarget(e.key, index, available.length);
                 if (next === null) return;
                 e.preventDefault();
                 const target = e.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next];
@@ -154,7 +149,7 @@ export function Inspector(props: InspectorProps): React.JSX.Element {
         {/* 关闭钮（2026-10-20 真机：「右边侧栏打开就没有关闭」）：此前只有 ⌘⌥I 一条路，
             鼠标用户把面板打开了却找不到出口。复用 .isp-add 的图标钮样式——同排同形，不新造一套。 */}
         {props.onClose !== undefined && (
-          <button className="isp-add isp-close" aria-label={STR.inspector.closeAria} title={STR.inspector.closeTitle} onClick={() => { props.onClose?.(); }}>
+          <button className="isp-add isp-close" aria-label={STR.inspector.closeAria} title={fillKeys(STR.inspector.closeTitle, "inspector")} onClick={() => { props.onClose?.(); }}>
             <X size={13} />
           </button>
         )}

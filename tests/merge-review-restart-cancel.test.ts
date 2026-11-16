@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Orchestrator, orchestratorForMerge, scriptedWorkerModel, type SpawnArgs } from "../src/agent/orchestrator";
+import { WORKTREE_ROOT_DIR } from "../src/agent/worktree";
 import { createEventLog, type AgentEvent } from "../src/events";
 import type { ModelOutput } from "../src/providers";
 
@@ -83,12 +84,19 @@ describe("评审重启与取消树（B3/B7 同族）", () => {
     expect(orchestratorForMerge(id)).toBe(orch); // 合并塔路由在场 = 可评审重启态
     orch.cancelAll(); // 主会话取消：root.abort()；终态 worker 的监听已被终态回收摘除
     const before = events.length; // 断言范围 = injectComment 之后（原跑的 running 状态在场是正常的）
+    // 现场快照要在 injectComment 之前取：树本来在不在都行，要钉的是「这次调用没动它」。
+    // 旧写法 `existsSync(join(repo,"worktrees",...)) === false || true` 有两处病：
+    //   ① `|| true` 把条件钉成恒真，整条断言是空的；
+    //   ② 路径本身也错了——真实树在 `.agents/wt-<id>`（WORKTREE_ROOT_DIR），`worktrees/` 永不出现。
+    // 两处一起修，才让这一格能红：目录被这次调用造出来或被删掉，前后快照就不同。
+    const tree = join(repo, WORKTREE_ROOT_DIR, "wt-" + id);
+    const treeBefore = existsSync(tree);
     const r = await orch.injectComment(id, "a.ts", 1, "这里改成两行");
     expect(r.injected).toBe(false);
     expect(r.error).toContain("主会话已取消");
     // 没有重启：终态维持（injectComment 之后无新的 running 状态、agent_result 仍只有一条）
     expect(events.slice(before).some((e) => e.type === "agent_status" && e.status === "running")).toBe(false);
     expect(events.filter((e) => e.type === "agent_result" && e.agent_id === id)).toHaveLength(1);
-    expect(existsSync(join(repo, "worktrees", "wt-" + id)) === false || true).toBe(true); // 现场不被本次调用改动
+    expect(existsSync(tree), "被拒的重启改动了现场：`" + tree + "` 的存在性前后不一致").toBe(treeBefore);
   }, 60_000);
 });

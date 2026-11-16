@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 import { IPC_PROTOCOL_VERSION } from "../../../src/main/ipc-protocol";
-import { readRendererFile } from "./helpers/app-surface";
+import { readAppSurface, readRendererFile } from "./helpers/app-surface";
 
 const repo = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 
@@ -25,31 +25,28 @@ it("协议（现 v58）：RunRequest.planRequired 字段与 validator 保留，�
 });
 
 it("renderer 不再有用户武装面：Composer 开关、设置默认值、按轮 override 全部撤下", () => {
-  const composer = readRendererFile("components/Composer.tsx");
-  expect(composer).not.toContain("planRequired");
-  expect(composer).not.toContain("onPlanRequiredChange");
-  expect(composer).not.toContain("plan-ctl");
-  const workbench = readRendererFile("state/workbench.ts");
-  expect(workbench).not.toContain("planOverride");
-  expect(workbench).not.toContain("planRequiredRef");
-  expect(workbench).not.toContain("changePlanRequired");
-  const queue = readRendererFile("state/run-queue.ts");
-  expect(queue).not.toContain("planRequired");
-  const settings = readRendererFile("components/settings-sections.tsx");
-  expect(settings).not.toContain("planRequiredByDefault");
-  // 第 1069 页：权限段已拆到 settings/，负断言随正文扩扫新文件（保覆盖不放宽）。
-  const permissions = readRendererFile("components/settings/PermissionsSection.tsx");
-  expect(permissions).not.toContain("planRequiredByDefault");
-  // patch 白名单同步出列（UI 不再写这个键）
-  // 第 1072 页：白名单随纯函数资产解耦到叶子 settings/provider-assets.ts——正断言读新落位（值逐字不变），
-  // 负断言（不许重新混入 planRequiredByDefault）随白名单扩扫该叶子（保覆盖不放宽）。
-  const providerAssets = readRendererFile("components/settings/provider-assets.ts");
-  expect(providerAssets).not.toContain("planRequiredByDefault");
-  expect(providerAssets).toContain('export const PANEL_PATCH_KEYS = ["provider", "model", "mode", "theme", "locale"] as const;');
-  const strings = readRendererFile("strings.ts");
+  // 「撤下」= 整个渲染层不许再有，不是某一个文件里恰好没有：读应用面（第 1252 页口径），
+  // 否则开关代码搬去 hook/子组件后，单文件否定断言会空过。
+  const appSrc = readAppSurface();
+  expect(appSrc).not.toContain("onPlanRequiredChange");
+  expect(appSrc).not.toContain("plan-ctl");
+  expect(appSrc).not.toContain("planOverride");
+  expect(appSrc).not.toContain("planRequiredRef");
+  expect(appSrc).not.toContain("changePlanRequired");
+  // 第 1069 页：权限段已拆到 settings/；第 1072 页：白名单解耦到叶子 provider-assets.ts。
+  // 三处同一条禁令（不许重新混入默认值/白名单键），读应用面后不必再按文件各抄一遍。
+  expect(appSrc).not.toContain("planRequiredByDefault");
   for (const gone of ["planLabel", "planAria", "planOnTip", "planOffTip", "planOnNotice", "planOffNotice"]) {
-    expect(strings).not.toContain(gone);
+    expect(appSrc).not.toContain(gone);
   }
+  // 位置敏感：协议字段名 `planRequired` 在 state/workbench.ts:210 还有一行解释性注释，
+  // 读应用面会把「注释提到」误判成「又接上了」⇒ 这两处仍按各自文件职责读单文件。
+  expect(readRendererFile("components/Composer.tsx")).not.toContain("planRequired");
+  expect(readRendererFile("state/run-queue.ts")).not.toContain("planRequired");
+  // 正断言仍读白名单所在叶子（值逐字不变）
+  expect(readRendererFile("components/settings/provider-assets.ts")).toContain(
+    'export const PANEL_PATCH_KEYS = ["provider", "model", "mode", "theme", "locale"] as const;',
+  );
 });
 
 it("自治判进系统提示词：纪律 2 由 agent 自判是否先出方案（judgment 面非用户开关）", () => {

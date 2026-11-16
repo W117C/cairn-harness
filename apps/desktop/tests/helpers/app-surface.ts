@@ -97,7 +97,17 @@ const APP_PAGE_FILES = new Set([
 
 /** 应用页表面 = AppPage.tsx 编排宿主 + 拆出的各面板与共享壳件（覆盖拆分前 AppPage.tsx 的完整范围）。 */
 export function readAppPageSurface(): string {
-  const files = appSurfaceFiles().filter(
+  const all = appSurfaceFiles();
+  // 清单是硬编码的：文件被重命名/搬走时 filter 会**静默**少读一格，下面那些 not.toContain
+  // 就变成对空面断言（空过不是通过）。缺席即抛，逼更新清单而不是让判卷悄悄失明。
+  const missing = [...APP_PAGE_FILES].filter((rel) => !all.includes(rel));
+  if (missing.length > 0) {
+    throw new Error(
+      `应用页表面清单已失效：${missing.join("、")} 不在渲染层里——同步更新 APP_PAGE_FILES，` +
+        "否则否定断言会对缺了那一格的面空过",
+    );
+  }
+  const files = all.filter(
     (rel) => APP_PAGE_FILES.has(rel) || rel.startsWith("components/plugins/"),
   );
   return files.map((rel) => readFileSync(join(RENDERER_DIR, rel), "utf8")).join("\n");

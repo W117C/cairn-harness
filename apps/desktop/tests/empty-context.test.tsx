@@ -9,6 +9,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { EmptyContext } from "../src/renderer/components/EmptyContext";
 import { pickRecentSessions } from "../src/renderer/derived/recent-sessions";
+import { readAppSurface } from "./helpers/app-surface";
 
 const css = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
 const view = readFileSync(fileURLToPath(new URL("../src/renderer/panes/WorkbenchView.tsx", import.meta.url)), "utf8");
@@ -55,8 +56,9 @@ describe("接线：数据来自 sessions，点击回到那段对话", () => {
   it("承接行坐在 .empty-tail 内，onOpen 走 openSession(id, ws)", () => {
     expect(view).toMatch(/<div className="empty-tail">\s*<EmptyContext/s);
     expect(view).toContain("onOpen={(id, ws) => { openSession(id, ws); }}");
-    // 弹性空带里现在有可交互内容，旧的 aria-hidden 必须撤掉
-    expect(view).not.toContain('className="empty-tail" aria-hidden="true"');
+    // 弹性空带里现在有可交互内容，旧的 aria-hidden 必须撤掉——读整个应用面，
+    // 承接块哪天拆进 EmptyContext 子组件，只读 WorkbenchView 会空过。
+    expect(readAppSurface()).not.toContain('className="empty-tail" aria-hidden="true"');
   });
 });
 

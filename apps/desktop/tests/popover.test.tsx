@@ -68,7 +68,32 @@ describe("菜单键盘导航（菜单按钮 / 项目弹层共用）", () => {
     expect(menuNavIndex("ArrowUp", 0, 3)).toBe(2);
     expect(menuNavIndex("Home", 1, 5)).toBe(0);
     expect(menuNavIndex("End", 1, 5)).toBe(4);
+    expect(menuNavIndex("Home", -1, 5)).toBe(0);
+    expect(menuNavIndex("End", -1, 5)).toBe(4);
     expect(menuNavIndex("Tab", 1, 5)).toBeNull();
     expect(menuNavIndex("ArrowDown", 0, 0)).toBeNull();
+  });
+
+  it("路径右键菜单接上同一契约（↑↓ / Home / End / Tab 关闭）", () => {
+    const src = read("../src/renderer/components/PathMenu.tsx");
+    expect(src).toContain('role="menu"');
+    expect(src).toContain("menuNavIndex(e.key, items.indexOf(document.activeElement as HTMLButtonElement), items.length)");
+    expect(src).toContain('if (e.key === "Tab") { props.onClose(); return; }');
+  });
+
+  it("首项聚焦只随挂载跑一次（失败提示重渲染不抢回焦点）", () => {
+    const src = read("../src/renderer/components/PathMenu.tsx");
+    const focusAt = src.indexOf("first.current?.focus()");
+    expect(focusAt).toBeGreaterThan(-1);
+    expect(src.indexOf("}, []);", focusAt)).toBeGreaterThan(focusAt);
+    expect(src).toContain("}, [props.onClose]);");
+  });
+
+  // 第 1260 页：菜单关闭 = 菜单项随卸载消失，焦点会掉回 body。只在确实丢了时交还右键那一刻的控件。
+  it("路径菜单关闭把焦点交还打开它的控件（有去处时不抢）", () => {
+    const src = read("../src/renderer/components/PathMenu.tsx");
+    expect(src).toContain("document.activeElement instanceof HTMLElement ? document.activeElement : null");
+    expect(src).toContain("if (cur !== null && cur !== document.body) return;");
+    expect(src).toContain("back !== null && back.isConnected && back !== document.body");
   });
 });

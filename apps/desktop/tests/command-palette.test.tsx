@@ -115,8 +115,11 @@ describe("③ 同源哨兵（tooltip 与表同源，防漂移）", () => {
     // 2026-11-03：账户菜单搬到全局轨底部（AccountMenu），键位同源判据跟着走。
     expect(accountSrc).toContain('withKeys(STR.footer.settingsTip, "settings")');
     expect(sidebarSrc).toContain('title={STR.sidebar.searchTip}');
-    expect(sidebarSrc).not.toContain('withKeys(STR.sidebar.searchTip, "palette")');
-    expect(sidebarSrc).toContain("keysOf(id)");
+    expect(appSrc).not.toContain('withKeys(STR.sidebar.searchTip, "palette")');
+    // withKeys 本身也搬进表模块（单一实现）：侧栏/头像/收起轨共用，不再各抄一份。
+    // 2026-11-16（第 1250 页）：空列表提示也回表（fillKeys + {key} 占位），一并钉住。
+    expect(sidebarSrc).toMatch(/import \{[^}]*\bwithKeys\b[^}]*\} from "\.\.\/shortcuts";/);
+    expect(sidebarSrc).toContain('fillKeys(STR.sidebar.emptyList, "new-session")');
   });
 
   it("命令面板每个 shortcutId 都能在 SHORTCUTS 里取到键（不引表外 id——取不到就静默不显示键）", () => {
@@ -126,11 +129,14 @@ describe("③ 同源哨兵（tooltip 与表同源，防漂移）", () => {
     expect(missing).toEqual([]);
   });
 
-  it("strings.ts 三处 tooltip 不再手写键位，搜索只描述会话筛选", () => {
-    expect(stringsSrc).not.toContain("新任务（⌘N）");
-    expect(stringsSrc).not.toContain("搜索会话与命令（⌘K）");
+  it("三处 tooltip 不再手写键位（读整个应用面），搜索只描述会话筛选", () => {
+    // 只读 strings.ts 会让「抄在别的组件里」空过：收起轨的 SidebarRail 曾手写「（⌘N）」「（⌘K）」，
+    // 表里改键它不会跟——那正是本组判据要防的漂移。否定断言读整个应用面。
+    expect(appSrc).not.toContain("新任务（⌘N）");
+    expect(appSrc).not.toContain("搜索会话与命令（⌘K）");
+    expect(appSrc).not.toContain("设置（⌘,）");
+    // 裸词组是「strings.ts 里搜索只描述会话筛选」的原判据（命令面板本来就可以这样说），仍读表文件。
     expect(stringsSrc).not.toContain("搜索会话与命令");
-    expect(stringsSrc).not.toContain("设置（⌘,）");
     expect(stringsSrc).toContain('search: "搜索会话"');
     expect(stringsSrc).toContain('searchTip: "搜索会话"');
   });

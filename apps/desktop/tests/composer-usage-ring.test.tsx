@@ -8,6 +8,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { Composer } from "../src/renderer/components/Composer";
 import { UsageMeter } from "../src/renderer/components/UsageMeter";
 import { STR } from "../src/renderer/strings";
+import { readAppSurface } from "./helpers/app-surface";
 
 const base = {
   mode: "default" as const,
@@ -84,7 +85,8 @@ describe("批 4 输入区：状态条拆入环 / 强调发送 / 运行中红底�
   const meterSrc = readFileSync(new URL("../src/renderer/components/UsageMeter.tsx", import.meta.url), "utf8");
 
   it("状态条整行已拆：组件与样式层无 status-strip 残留；环 title 带 轮/步/tok/缓存", () => {
-    expect(src).not.toContain("status-strip");
+    // 残留清到整个应用面（旧状态条若换个组件挂回来，只读 Composer 会空过）
+    expect(readAppSurface()).not.toContain("status-strip");
     expect(css).not.toMatch(/\.status-strip\s*{/);
     const html = renderToStaticMarkup(
       <Composer
@@ -195,6 +197,14 @@ describe("用量浮层：高度预算 + 剩余行的说法", () => {
     // 高度预算写在 styles.css（.meter-pop），本仓只断言接线面
     expect(styles).toMatch(/\.meter-pop\s*{[^}]*max-height:[^}]*overflow-y:\s*auto/s);
     expect(styles).toMatch(/\.meter-pop \.menu-item\s*{[^}]*position:\s*sticky/s);
+  });
+
+  it("读数面板不是菜单：role=dialog + 名字，且没有冒充 menuitem", () => {
+    const html = meter();
+    expect(html).toContain('role="dialog"');
+    expect(html).toContain(`aria-label="${STR.composer.meterTitle}"`);
+    expect(html).not.toContain('role="menu"');
+    expect(html).not.toContain('role="menuitem"');
   });
 
   it("标题行右值 = 「{pct}%（{used} / {max}）」（剩余不再单列一行：低水位走警示行）", () => {

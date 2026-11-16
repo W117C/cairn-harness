@@ -9,7 +9,7 @@ const css = readFileSync(join(__dirname, "..", "src", "renderer", "styles.css"),
 describe("侧栏骨架微光", () => {
   it("底条仍是静态可读的 bg-300 + breathe", () => {
     expect(css).toMatch(/\.side-skeleton-row\s*\{[^}]*background:\s*hsl\(var\(--bg-300\)\)/s);
-    expect(css).toMatch(/\.side-skeleton-row\s*\{[^}]*animation:\s*breathe 1\.6s/s);
+    expect(css).toMatch(/\.side-skeleton-row\s*\{[^}]*animation:\s*breathe\s+var\(--t-breathe\)/s);
   });
 
   it("扫光是独立伪元素，不换底", () => {

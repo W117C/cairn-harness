@@ -127,7 +127,10 @@ describe("G-B 注入工具三面对账", () => {
   });
 
   it("只读档的摘除面与声明一致（只查静态表：运行期注入项由各自的开关管）", () => {
-    for (const s of INJECTED_TOOLS.filter((x) => x.specFace === "static")) {
+    const staticFace = INJECTED_TOOLS.filter((x) => x.specFace === "static");
+    // specFace 的取值改名时这一面会整条空过（`report()` 的静态分支也读同一个字面量）。
+    expect(staticFace.length, "静态面一条都不剩 ⇒ 摘除面对账空过").toBeGreaterThan(5);
+    for (const s of staticFace) {
       expect(gateToolSpecs("read-only").some((t) => t.function.name === s.name)).toBe(s.reachableWhenReadOnly);
     }
   });

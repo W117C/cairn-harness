@@ -36,13 +36,26 @@ it("命令面板：文件搜索走 workspaceSearch，错误/截断如实呈现�
 it("接线：选中文件 → 开文件窗格 + fileTarget；PaneDock 激活 file 标签；FilePane 展开并预览", () => {
   expect(workbench).toContain("onOpenFile={(path) => {");
   expect(workbench).toContain('openPane("file")');
-  expect(workbench).toContain("setFileTarget((prev) => ({ path, seq: (prev?.seq ?? 0) + 1 }))");
+  expect(workbench).toContain("setFileTarget((prev) => ({ path, seq: (prev?.seq ?? 0) + 1, workspace: activeWorkspace }))");
   expect(workbench).toContain("fileTarget !== null ? { fileTarget } : {}");
-  expect(paneDock).toContain("fileTarget?: { path: string; seq: number };");
-  expect(paneDock).toContain('if (props.fileTarget !== undefined) setFocusedPane("file");');
-  expect(paneDock).toContain("openTarget: props.fileTarget");
+  expect(paneDock).toContain("fileTarget?: { path: string; seq: number; workspace: string | null };");
+  // 目标只对设置时的项目生效：换项目后旧相对路径不是同一个文件，不能抢焦点或拿来预览。
+  expect(paneDock).toContain("props.fileTarget.workspace === (props.workspace ?? null)");
+  expect(paneDock).toContain('if (fileTargetCurrent !== undefined) setFocusedPane("file");');
+  expect(paneDock).toContain("openTarget: fileTargetCurrent");
   expect(filePane).toContain("openTarget?: { path: string; seq: number };");
   expect(filePane).toContain("const parents = ancestorDirsOf(target.path);");
   expect(filePane).toContain("openFile(target.path);");
   expect(filePane).toContain("if (dirs[parent] === undefined) loadDir(parent);");
+});
+
+// 第 1260 页：头注释承诺「打开预览并聚焦行」，此前只开了预览——焦点留在命令面板的触发钮上。
+// 行要等父目录数据回来、窗格切到前台才真实可见；意图挂起，三者齐了才搬一次。
+it("快速打开把焦点落到目标行（等目录数据 + 前台标签，只搬一次）", () => {
+  expect(filePane).toContain("focusIntentRef.current = target.path;");
+  expect(filePane).toContain('[...treeRef.current.querySelectorAll<HTMLElement>(".fp-row")]');
+  expect(filePane).toContain("focusIntentRef.current = null;");
+  expect(filePane).toContain("}, [props.active, focusPath, dirs, expanded]);");
+  expect(paneDock).toContain("active={kind === active}");
+  expect(paneDock).toContain("<FilePane");
 });

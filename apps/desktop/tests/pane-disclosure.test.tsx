@@ -5,6 +5,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { PaneDock } from "../src/renderer/components/PaneDock";
 import { AppRail } from "../src/renderer/components/AppRail";
 import { SidebarRail } from "../src/renderer/components/SidebarRail";
+import { keysOf } from "../src/renderer/shortcuts";
+import { readAppSurface } from "./helpers/app-surface";
 const noop = () => undefined;
 it("单窗格占满：两块常驻、只显示激活窗格，标签切换、＋开新窗格、关闭入口在标签对应的块头上", () => {
   const html = renderToStaticMarkup(<PaneDock tabs={["changes", "plan"]} events={[]} onClose={noop} onOpen={noop} />);
@@ -35,9 +37,13 @@ it("收起侧栏仍可新建、搜索、打开文件和设置，且同一入口�
       <SidebarRail onNewTask={noop} onSearch={noop} onFiles={noop} onTerminal={noop} />
     </>,
   );
-  for (const label of ["新建任务", "搜索会话与命令", "打开文件窗格", "打开终端窗格", "设置、外观与用量"]) {
+  for (const label of ["新任务", "命令面板", "打开文件窗格", "打开终端窗格", "设置、外观与用量"]) {
     expect(html).toContain(`aria-label="${label}"`);
   }
+  // tooltip 键位与 SHORTCUTS 表同源：表里改键，收起轨跟着改。
+  // 2026-11-16 抓到漂移：这里曾手抄「（⌘N）」「（⌘K）」，表改了不会跟，判卷只读 strings.ts 也看不见。
+  expect(html).toContain(`title="新任务（${keysOf("new-session")}）"`);
+  expect(html).toContain(`title="命令面板（${keysOf("palette")}）"`);
   expect((html.match(/aria-label="设置、外观与用量"/g) ?? []).length).toBe(1);
   expect(html).not.toContain('aria-label="展开侧栏"');
 });
@@ -50,9 +56,9 @@ it("账户菜单固定在轨底部：任意目的地/收起/专注态都只有�
     expect((html.match(/aria-label="设置、外观与用量"/g) ?? []).length, destination).toBe(1);
     expect(html).not.toContain('aria-label="设置"');
   }
-  const src = readFileSync(fileURLToPath(new URL("../src/renderer/panes/WorkbenchSidebar.tsx", import.meta.url)), "utf8");
-  expect(src).not.toContain("footerMenuVisible");
-  expect(src).toContain("account={props.account ?? { onOpenSettings: props.onSettings }}");
+  expect(readAppSurface()).not.toContain("footerMenuVisible");
+  const sidebarHost = readFileSync(fileURLToPath(new URL("../src/renderer/panes/WorkbenchSidebar.tsx", import.meta.url)), "utf8");
+  expect(sidebarHost).toContain("account={props.account ?? { onOpenSettings: props.onSettings }}");
 });
 
 it("关掉最后一个窗格：焦点回到工具栏入口，不掉到 document.body", () => {

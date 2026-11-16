@@ -7,13 +7,14 @@
 //
 // 本格的第一条活证据是 BLOCKED 待办 #56：D7 的快照路径把 `Date.now()` 编进了目录名 ⇒
 // `changedFiles` 两次跑只差一串毫秒，`gym-check` B1「明卷两次跑逐字段一致」当场红 4 条。
-// 注意它**不是** D7 的错，是「身份字段可以带时钟」这个漏洞没人守。
+// 第 1257 页已还清：快照目录名改为 `<callId>--<原件摘要>`，唯一性由输入决定，不再看时钟。
+// 注意它当初**不是** D7 的错，是「身份字段可以带时钟」这个漏洞没人守；那条守则仍然成立。
 //
 // 口径：
 // - `ts`（事件上的可选时间戳）**只准用于观测**：任何人拿它参与投影/判定/身份，都算泄漏。
 //   本仓今天没有任何代码读 `ts`——这条把「今天成立」钉成「一直成立」。
 // - 已知的债走**会过期的白名单**：每条债必须真的命中，不命中就红（债偿了就要删条目，
-//   否则白名单变成下一个漏洞的藏身处）。
+//   否则白名单变成下一个漏洞的藏身处）。当前登记表已清零（第 1257 页），单测把「空表」钉住。
 //
 // 叶子模块：零运行时依赖，门与测例共用同一只判据。
 
@@ -83,24 +84,9 @@ export interface IdentityDebt {
 }
 
 /** 已知并登记的身份债。**登记 = 认领 + 到期条件**，不是免罪：
- *  命中几处会在门的读数里如实打印，#56 修好后这些条目就该删（分类器那条复查会指出没被用到的条目）。 */
-export const IDENTITY_DEBTS: readonly IdentityDebt[] = [
-  {
-    id: "D7-snapshot-path-ms",
-    pathPrefix: "changedFiles[",
-    paidWhen: "快照路径不再含毫秒（BLOCKED 待办 #56 选 A：changedFiles 排除 .agent/snapshots/**；或选 B：snapshotIdOf 不含 Date.now()）",
-    why: "D7 覆盖前快照的目录名带 Date.now()（`src/tools/snapshot.ts` 的 `snapshotIdOf`），两次跑必然差一串毫秒",
-  },
-  {
-    // 同一条债的**另一半**，而且是更要紧的那半：毫秒不只进了判卷字段，还进了**模型每轮看到的文本**。
-    // 实测（本轮 `replay-determinism-check`）：同一次覆盖两次跑，`ToolResult.output` 差一串毫秒
-    // ⇒ 每次覆盖都让已发出的前缀多断一段（与 prefix-churn 那格同一族代价），且 e2e/靶面逐字段比对必红。
-    id: "D7-snapshot-note-ms",
-    pathPrefix: "result.",
-    paidWhen: "快照提示与 snapshotId 都不含毫秒：提示里只给「同一会话内可复取的路径」（例如 callId + 相对路径），或 changedFiles/output 走 #56 的修法 A",
-    why: "`snapshotNote(id)` 把含毫秒的路径拼进 write_file 的 output（模型可见文本），两次跑逐字不同",
-  },
-];
+ *  命中几处会在门的读数里如实打印；债偿了条目就必须删（分类器那条复查会指出没被用到的条目）。
+ *  第 1257 页 #56 清偿后此表为空——空表由 `tests/reproducibility.test.ts` 钉住，新债必须显式登记。 */
+export const IDENTITY_DEBTS: readonly IdentityDebt[] = [];
 
 export interface DebtFinding {
   absorbed: string[];

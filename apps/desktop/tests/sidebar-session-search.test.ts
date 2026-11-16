@@ -10,6 +10,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { filterSessions, matchSession } from "../src/renderer/sessions-view";
+import { readAppSurface } from "./helpers/app-surface";
 
 const sidebarSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/Sidebar.tsx", import.meta.url)), "utf8");
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
@@ -60,7 +61,7 @@ describe("Sidebar 搜索接线", () => {
   it("筛选状态进入两处 filterSessions（不再硬编码 all），其余四档有菜单入口", () => {
     expect(sidebarSrc).toMatch(/filterSessions\(activeSessions, \{ search: searchTerm, filter, running: props\.running \}\)/);
     expect(sidebarSrc).toMatch(/filterSessions\(archivedSessions, \{ search: searchTerm, filter, running: props\.running \}\)/);
-    expect(sidebarSrc).not.toContain('filter: "all", running: props.running');
+    expect(readAppSurface()).not.toContain('filter: "all", running: props.running');
     // 2026-11-01：筛选菜单从 Radix DropdownMenu 换成仓库自己的 Popover 基座
     // （Radix 2.2 的 popper 在侧栏里退成 position:static，浮层跑到左缘）。
     expect(sidebarSrc).toContain("<SessionFilterMenu");
@@ -88,9 +89,9 @@ describe("Sidebar 搜索接线", () => {
     expect(sidebarSrc).toContain("{showSearch && (");
     expect(sidebarSrc).toContain("setSearchExpanded(true)");
     expect(sidebarSrc).toContain("title={STR.sidebar.searchTip}");
-    expect(sidebarSrc).not.toContain('withKeys(STR.sidebar.searchTip, "palette")');
-    // 反向：那个按钮仍只服务侧栏列表搜索，不直接打开命令面板
-    expect(sidebarSrc).not.toContain("aria-label={STR.sidebar.search} title={withKeys(STR.sidebar.searchTip, \"palette\")} onClick={props.onOpenPalette}");
+    // 反向：搜索不冒充命令面板——否定断言读整个应用面（按钮哪天拆进子组件，读 Sidebar 会空过）
+    expect(readAppSurface()).not.toContain('withKeys(STR.sidebar.searchTip, "palette")');
+    expect(readAppSurface()).not.toContain("aria-label={STR.sidebar.search} title={withKeys(STR.sidebar.searchTip, \"palette\")} onClick={props.onOpenPalette}");
   });
 
   it("无命中有明确文案（不闪回空列表——那会被读成「你什么都没有」）", () => {

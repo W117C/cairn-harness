@@ -18,7 +18,7 @@
 4. **组件面很大**：`git ls-tree -r --name-only HEAD apps/desktop/src/renderer/components | wc -l` = 140 个文件；
    没有 `components/ui/` 这样的统一原语层。
 5. **视觉契约已经独立于组件库**：CDS token 逐字节 vendored，`apps/desktop/tests/cds-parity.test.ts` 钉
-   adapter 与 `outputs/cds-parity-verify/values.json` 的实测值；换主题库会先撞这条判据，而不是先撞产品。
+   adapter 与 `apps/desktop/outputs/cds-parity-verify/values.json` 的实测值；换主题库会先撞这条判据，而不是先撞产品。
 6. **ADR 0003 的 D1 原则**是「标准控件优先来自组件库；禁止在页面里重写完整交互与样式」；现状满足的只有
    dropdown 一族，dialog/select/tooltip/switch 仍有手写实现。
 

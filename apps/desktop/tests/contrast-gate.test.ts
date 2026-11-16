@@ -101,6 +101,7 @@ describe("原橙只许留在品牌/装饰标上（令牌注释「只用于品牌
   it("逐个点名：名单外的规则不许再用 hsl(var(--accent-brand)) 当 color", () => {
     const offenders: string[] = [];
     const keyframeHues: string[] = [];
+    let scannedRules = 0;
     for (const rel of CSS_FILES) {
       const raw = read(rel).replace(/\/\*[\s\S]*?\*\//g, "");
       // @keyframes 的步进（`20% { … }`）不是状态色，单独走下面的名单核对；
@@ -110,11 +111,14 @@ describe("原橙只许留在品牌/装饰标上（令牌注释「只用于品牌
       }
       const src = raw.replace(/@keyframes\s+[\w-]+\s*\{[\s\S]*?\n\}/g, "");
       for (const m of src.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+        scannedRules++;
         if (!/(^|[^-\w])color:\s*hsl\(var\(--accent-brand\)/.test(m[2])) continue;
         const sel = m[1].trim().replace(/\s+/g, " ");
         if (!ALLOW.some((a) => sel.startsWith(a))) offenders.push(`${rel} :: ${sel}`);
       }
     }
+    // 规则正则被新写法打败时 offenders 恒为 []——先证明它真扫到了规则体。
+    expect(scannedRules, "一条规则都没扫到 ⇒ 上面的名单判据是 0=[] 假绿").toBeGreaterThan(500);
     expect(offenders, "以原橙作前景的非标记规则：\n" + offenders.join("\n")).toEqual([]);
     // 2026-11-09 逐字入场动效撤除：不再有任何 @keyframes 拿原橙当文字前景。
     expect(keyframeHues, "以原橙作前景的 @keyframes：" + keyframeHues.join(",")).toEqual([]);

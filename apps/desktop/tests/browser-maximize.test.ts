@@ -8,10 +8,12 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { readAppSurface } from "./helpers/app-surface";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 const src = read("../src/renderer/components/PaneDock.tsx");
 const styles = read("../src/renderer/styles.css");
+const app = readAppSurface();
 
 describe("浏览器窗格放大（2026-11-03 业主）", () => {
   it("放大态挂在 pane-workbench 上，CSS 是覆盖工作区的 fixed 层（盖住对话）", () => {
@@ -31,6 +33,12 @@ describe("浏览器窗格放大（2026-11-03 业主）", () => {
     expect(src).toContain("const [maximized, setMaximized] = useState(false)");
     expect(src).toContain('if (active !== "browser" && maximized) setMaximized(false)');
     expect(src).toContain('if (e.key === "Escape")');
+    // 第 1259 页：放大态自己持 Esc，一次只做一件事——全局智慧停止无条件让路（焦点掉在 body
+    // 时 escOwns 读不到）；放大监听器把模态面 / 仍开着的浮层 / 焦点所在的自持控件让过去。
+    expect(app).toContain(`if (document.querySelector('.pane-workbench[data-maximized="true"]') !== null) return;`);
+    expect(src).toContain("const gate = readGateInput(false);");
+    expect(src).toContain("gate.modalSurfaceOpen || gate.escOwnsTarget || floatingSurfaceOpen()");
+    expect(src).toContain('window.addEventListener("keydown", onKey, true)');
     // 左边界按中心列的真实矩形量（量法在 use-maximized-left hook 里），侧栏拖宽/收起/窗口缩放都要重新贴合。
     const maxHook = read("../src/renderer/components/use-maximized-left.ts");
     expect(maxHook).toContain('data-dsh-claude-part="center-column"');

@@ -1,4 +1,4 @@
-# L1 自动兜底（M9）：typecheck + 全量判卷 + 快门面。推上去才生效，本地零影响。
+# L1 自动兜底（M9）：typecheck + 全量判卷 + 快门面 + 深门（认证面外的 4 道重门）。推上去才生效，本地零影响。
 # 取舍、成本、以及"为什么这里排除了两道门"见 scripts/ci/README.md（L2 pre-commit 已裁定不做，
 # 理由与一键启用路径也在那里）。
 #
@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 # 并发组：同一个 ref 上只留最新的一趟在跑，旧的被取消。
-# 为什么加这一格（2026-10-25）：本仓每趟 verify 要跑完整判卷 + 25 道快门，
+# 为什么加这一格（2026-10-25）：本仓每趟 verify 要跑完整判卷 + 26 道快门，
 # 连续推送时会叠出好几趟并行——重复的是同一份树，浪费的是计费分钟。
 # 取消的是**被取代**的那一趟，不是最新那趟：最新那趟仍会跑完并给出读数。
 concurrency:
@@ -70,7 +70,7 @@ jobs:
         # 同一套核心测试，固定两个 worker；命令与本地可复现入口同源。
         run: pnpm test:capped
       # desktop-test 在下方认证门集合中执行一次，包含桌面测试与边界检查。
-      # 快门面 = CERT_GATES 那 25 道，逐字点名（`pnpm gates` 不加参数跑的是 GATES 全集，比认证面慢、面也不同）。
+      # 快门面 = CERT_GATES 那 26 道，逐字点名（`pnpm gates` 不加参数跑的是 GATES 全集，比认证面慢、面也不同）。
       # 道数由 `tests/ci-cert-face-parity.test.ts` 钉：两份名单必须逐字相等，且**今天还在生效的**标注必须等于条数。
       # 这一行从前**排除**过两道已知红：gate-check 的 H7 与 mutate-needles-check 的 4 支失针锚点。
       # 两条理由到 10-02 都已结案 ⇒ 名单补回来。当时那笔认证的原文（**历史读数，不随门表演化**）：
@@ -80,8 +80,20 @@ jobs:
       # 该读数只覆盖该远端提交，不代表当前本地 HEAD 或未提交工作树通过；详见 scripts/ci/README.md。
       # “本仓没有 git remote / workflow 从未真跑过”是 10-02 的历史状态，现已过时。
       # 2026-10-12：cert face 23 → 25（买进 `e2e` 与 `desktop-test`，理由见 `scripts/gate-manifest.ts`
-      # 的 `CERT_GATES` 那两条买入注）。这条名单被 `tests/cert-gate-face.test.ts` 钉着与门面集合相等。
-      - name: fast gates (cert face, 25)
+      # 的 `CERT_GATES` 那两条买入注）。2026-11-16：25 → 26（买进 `renderer-layer-check`：
+      # 面外唯一「≤1.5s 且无人覆盖」的一道；同名买入注见 `CERT_GATES`）。
+      # 这条名单被 `tests/cert-gate-face.test.ts` 钉着与门面集合相等。
+      # 另：`tests/cert-gate-face.test.ts` 还钉三态分区（认证面 ∪ 永不进面 ∪ 面外登记 = GATES），
+      # 面外 10 道的理由在 `CERT_GATE_OUTSIDE`。
+      - name: fast gates (cert face, 26)
         run: >-
           pnpm gates
-          --only=no-progress-check,prune-check,fork-check,compaction-check,docs-check,memory-check,head-import-check,autonomy-check,sandbox:check,security-check,provider:check,routing-check,model-surface-check,prefix-churn-check,prompt-surface-check,replay-determinism-check,cost-per-progress-check,web-fetch-check,gym-check,evidence-typecheck-check,gate-check,mutate-needles-check,repo-hygiene-check,e2e,desktop-test
+          --only=no-progress-check,prune-check,fork-check,compaction-check,docs-check,memory-check,head-import-check,autonomy-check,sandbox:check,security-check,provider:check,routing-check,model-surface-check,prefix-churn-check,prompt-surface-check,replay-determinism-check,cost-per-progress-check,web-fetch-check,gym-check,evidence-typecheck-check,gate-check,mutate-needles-check,repo-hygiene-check,e2e,desktop-test,renderer-layer-check
+      # 深门步骤（2026-11-16 第 1254 页）：4 道重门超 1.5s 快门线，从前**任何自动化路径都不跑**——
+      # `plugins-check` 就这样红着没人发现（F2 信任表 guard 上线后，脚本仍把 trustFile 放在工作区内）。
+      # 它们不进快门面（CERT_GATES 的 75s 预算不变），但同一个 job 每趟 push 都跑；
+      # 名单 = `CERT_GATE_DEEP`，由 `tests/ci-cert-face-parity.test.ts` 钉住逐字相等。
+      - name: deep gates (outside cert face, 4)
+        run: >-
+          pnpm gates
+          --only=tools-check,supervisor-check,plugins-check,map-check

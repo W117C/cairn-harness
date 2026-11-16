@@ -4,10 +4,13 @@
 // 同一枚键位从此有两份事实源：改绑定后速查表与面板会说不一样的话。
 // 本判卷把那句注释变成会红的检查：凡是 `keysOf("x")` / `shortcutId: "x"` 引用到的 id，
 // 必须存在于 SHORTCUTS；缺一个就是界面上**静默少一枚提示**（不报错、不红，肉眼扫不出来）。
+// 2026-11-16（第 1250 页）：`withKeys(STR.x, "id")` / `fillKeys(STR.x, "id")` 也是引用面——
+// 补进清点，否则 id 打错时 tooltip 只是少一截，和当初手抄 F2 是同一种静默。
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { SHORTCUTS } from "../src/renderer/shortcuts";
+import { STR } from "../src/renderer/strings";
 
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
@@ -24,6 +27,7 @@ describe("键位 id 引用完整性", () => {
     const src = readFileSync(f, "utf8");
     for (const m of src.matchAll(/keysOf\("([\w-]+)"\)/g)) referenced.add(m[1]);
     for (const m of src.matchAll(/shortcutId: "([\w-]+)"/g)) referenced.add(m[1]);
+    for (const m of src.matchAll(/(?:withKeys|fillKeys)\([^,()]+,\s*"([\w-]+)"\)/g)) referenced.add(m[1]);
   }
 
   it("被引用的 id 全部在表里", () => {
@@ -39,5 +43,22 @@ describe("键位 id 引用完整性", () => {
     const palette = readFileSync(fileURLToPath(new URL("../src/renderer/components/CommandPalette.tsx", import.meta.url)), "utf8");
     const literals = [...palette.matchAll(/className="cp-keys">([^<{][^<]*)</g)].map((m) => m[1].trim());
     expect(literals, "手抄的键位提示：" + literals.join(" / ")).toEqual([]);
+  });
+
+  it("可见提示串里的键位回表：词表只留 {key} 占位，键位从 SHORTCUTS 填", () => {
+    // 第 1250 页：这六条此前直接把 ⌘N / ⌘O / ⌘⌥I 抄进句子，改绑定后提示照旧说老键位。
+    // 现在词表留占位、消费面 fillKeys 填；这里钉「词表不再含键位字形」这一半。
+    const tips = [
+      STR.sidebar.emptyList,
+      STR.addProject.titleTip,
+      STR.addProject.openFolderTip,
+      STR.shortcut.noSession,
+      STR.shortcut.alreadyHome,
+      STR.inspector.closeTitle,
+    ];
+    for (const s of tips) {
+      expect(s, "提示串没有 {key} 占位：" + s).toContain("{key}");
+      expect(s, "提示串里又出现了手抄键位：" + s).not.toMatch(/[⌘⇧⏎⌥⌃]/);
+    }
   });
 });

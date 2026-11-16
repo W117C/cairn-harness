@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { createSession } from "../../../src/main/sessions";
+import { createSession, sessionExists } from "../../../src/main/sessions";
 import { handleAgentRun } from "../../../src/main/agent-runner";
 import { createKernelHost, type KernelHost } from "../src/main/kernel-host";
 
@@ -102,3 +102,22 @@ it("rejects malformed ids and steering content without changing the active run",
   expect(over.signal?.aborted).toBe(false);
   expect(over.steering?.take()).toBeUndefined();
 }));
+
+it("explicit workspace cannot host a run for a session that exists only elsewhere", async () => {
+  // 同 id 跨工作区合法（beforeEach 建了两份 "same"），但「只在 B、A 里没有」不能按显式根
+  // 信任：core 会在 A 里 createEventLog ⇒ 这条消息被写进另一个项目，还凭空多出一条同名会话。
+  await createSession(join(b, ".agent", "sessions"), "only-b");
+  const res = await host.run({ sessionId: "only-b", workspace: a, message: "wrong root", mode: "default" });
+  expect(res).toMatchObject({ ok: false, accepted: false });
+  expect(res.error).toMatch(/不属于工作区/u);
+  expect(handleAgentRun).not.toHaveBeenCalled();
+  expect(await sessionExists(join(a, ".agent", "sessions"), "only-b")).toBe(false);
+});
+
+it("a brand-new id (on no disk root) still runs under the explicit root", async () => {
+  // 存在性才是边界：盘上哪儿都没有 = 新会话，继续放行（renderer 先 createSession 的常规路径不变）。
+  vi.mocked(handleAgentRun).mockResolvedValueOnce({ ok: true });
+  const res = await host.run({ sessionId: "fresh", workspace: a, message: "first", mode: "default" });
+  expect(res).toMatchObject({ ok: true });
+  expect(handleAgentRun).toHaveBeenCalledTimes(1);
+});

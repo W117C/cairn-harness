@@ -14,7 +14,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { frozenJudgePathSet } from "../frozen";
 import { assertNotFrozenReal } from "./base";
-import { SNAPSHOT_ROOT, snapshotIdOf } from "./snapshot";
+import { SNAPSHOT_ROOT, snapshotDigestOf, snapshotIdOf } from "./snapshot";
 
 /** 守卫回执的两个固定片段：判卷与调用方都从这里取（照抄字面量会被 prose-needle 记成顶包候选）。 */
 export const FROZEN_GUARD_TAG = "[判卷面守卫]";
@@ -108,7 +108,7 @@ export async function enforceFrozenBaseline(
     tampered: true,
     note:
       FROZEN_GUARD_TAG + " 本条命令改动了冻结判卷文件：" + named +
-      "。已按调用前内容逐字节复原（改动前的字节留档在 " + SNAPSHOT_ROOT + "/frozen-guard/）。" +
+      "。已按调用前内容逐字节复原（改动前的字节留档在 " + SNAPSHOT_ROOT + "/frozen-guard--<原件摘要>/<原相对路径>）。" +
       FROZEN_GUARD_TAINT + "——判卷面在命令执行期间已被改写；要改判据请写 BLOCKED.md 换判据，不许改文件。",
   };
 }
@@ -117,7 +117,7 @@ export async function enforceFrozenBaseline(
  *  留的是**被改动后的内容**——它是这次越界的证据）。留档失败不影响复原。 */
 async function quarantine(workspace: string, rel: string, bytes: Buffer): Promise<void> {
   try {
-    const id = snapshotIdOf(rel, "frozen-guard");
+    const id = snapshotIdOf(rel, "frozen-guard", snapshotDigestOf(bytes));
     const dest = join(workspace, id);
     await mkdir(dirname(dest), { recursive: true });
     await writeFile(dest, bytes);

@@ -18,7 +18,7 @@ import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { readRendererFile } from "./helpers/app-surface";
-import { staleEvidenceReason } from "./helpers/renderer-evidence";
+import { evidenceMissingMessage, staleEvidenceReason } from "./helpers/renderer-evidence";
 
 const composer = readRendererFile("components/Composer.tsx");
 const picker = readRendererFile("components/ModelPicker.tsx");
@@ -56,6 +56,7 @@ describe("浮层互斥 · 接线层", () => {
     expect(picker).toContain("props.onOpenChange(next);");
     // 触发钮的 toggle 走受控出口（不再自己 toggle 一个 Composer 不知道的态）。
     expect(picker).toContain("setOpen(!open)");
+    // 位置敏感：`setOpen((v) => !v)` 在 WorkStatusPanel 仍是合法写法；这里钉的是受控 picker 不用它。
     expect(picker).not.toContain("setOpen((v) => !v)");
   });
 
@@ -86,6 +87,13 @@ describe("浮层互斥 · 真机层（取料面）", () => {
     const smoke = readFileSync(fileURLToPath(new URL("../scripts/overlay-mutex-smoke.cjs", import.meta.url)), "utf8");
     expect(smoke).toContain("mp-pop");
     expect(smoke).toContain("overlay-mutex-");
+  });
+
+  it("证据在场（随仓库入库；缺席即红——跳过不等于通过）", () => {
+    expect(
+      hasMeasured,
+      evidenceMissingMessage("outputs/overlay-mutex-752/checks.json", "electron scripts/overlay-mutex-smoke.cjs outputs/overlay-mutex-752"),
+    ).toBe(true);
   });
 
   it.skipIf(!hasMeasured)("证据盖的是当前 renderer 源与当前构建（旧读数不许冒充通过）", () => {

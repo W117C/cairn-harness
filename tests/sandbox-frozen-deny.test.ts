@@ -9,7 +9,7 @@
 // run_shell 的跑后校验（tests/frozen-shell-guard.test.ts），不是本文件。
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -42,13 +42,30 @@ suite("判卷面写保护：真 Seatbelt 逐形状判卷", () => {
     if (root !== "") await rm(root, { recursive: true, force: true }).catch(() => undefined);
   });
 
-  async function attempt(command: string): Promise<void> {
-    await writeFile(join(root, judgeRel), "original", "utf8");
-    await exec(SANDBOX, ["-p", profile, "bash", "-c", command], {
-      cwd: root,
-      env: { ...process.env, TMPDIR: join(root, ".tmp") },
-      timeout: 20_000,
-    }).catch(() => undefined); // 被拒的命令返回非零是**预期**，这里只关心盘上结果
+  /** 每条命令执行前把靶子写回基线，并取一份前后可比的 stat。
+   *  只查内容还不够：`chmod` 与 `touch` 即使被放行也不改内容，会在这条判卷里空过。
+   *  `denied` 直接读命令的退出码：盘上状态是结果，退出码是「OS 真的拒了」这条因果。 */
+  async function attempt(command: string): Promise<{
+    mode: number; mtimeMs: number; beforeMode: number; beforeMtimeMs: number; denied: boolean;
+  }> {
+    const target = join(root, judgeRel);
+    await writeFile(target, "original", "utf8");
+    const before = statSync(target);
+    let denied = false;
+    try {
+      await exec(SANDBOX, ["-p", profile, "bash", "-c", command], {
+        cwd: root,
+        env: { ...process.env, TMPDIR: join(root, ".tmp") },
+        timeout: 20_000,
+      });
+    } catch (error) {
+      const { code, signal, killed } = error as { code?: unknown; signal?: unknown; killed?: unknown };
+      // 超时（我们自己杀的，killed=true）不算「OS 拒绝」；被 Seatbelt 直接以信号杀掉同样是拒绝，
+      // 只认退出码会把它误判成「放行」而红在别的机器上。
+      denied = killed !== true && ((typeof code === "number" && code !== 0) || typeof signal === "string");
+    }
+    const after = statSync(target);
+    return { mode: after.mode, mtimeMs: after.mtimeMs, beforeMode: before.mode, beforeMtimeMs: before.mtimeMs, denied };
   }
 
   it("profile 里每个冻结文件（含表自身）都有一条 literal 拒绝，且排在 allow 之后", () => {
@@ -86,8 +103,12 @@ suite("判卷面写保护：真 Seatbelt 逐形状判卷", () => {
       "echo {} > scripts/frozen-sha256.json",
     ];
     for (const command of shapes) {
-      await attempt(command);
+      const after = await attempt(command);
+      expect(after.denied, `${command}：命令没有被 OS 拒绝（退出码为 0 或超时）`).toBe(true);
       expect(await readFile(join(root, judgeRel), "utf8"), command).toBe("original");
+      // `chmod` / `touch` 是两种「不改内容也能造成改动」的形状：内容断言单独看会空过。
+      expect(after.mode, `${command}：冻结文件的权限位被改了`).toBe(after.beforeMode);
+      expect(after.mtimeMs, `${command}：冻结文件的 mtime 被改了`).toBe(after.beforeMtimeMs);
     }
     expect(await readFile(join(root, tableRel), "utf8")).toContain("fixtures/mock/judge.ts");
   });

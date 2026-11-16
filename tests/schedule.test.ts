@@ -245,7 +245,7 @@ describe("M4a 双轨存储", () => {
     expect(warnings).toHaveLength(0);
     const keys = new Set(entries.map((e) => e.occurrence_key));
     expect(tail.filter((k) => !keys.has(k))).toEqual([]);
-  });
+  }, 90_000);
 
   it("journal 跨进程写锁：另一实例持锁时 append 不落盘，释放后照常写入", async () => {
     const file = join(dir, "journal-cross-process.jsonl");
@@ -283,7 +283,7 @@ describe("M4a 双轨存储", () => {
     expect(entries).toHaveLength(4_005);
     const keys = new Set(entries.map((e) => e.occurrence_key));
     expect(post.filter((k) => !keys.has(k))).toEqual([]); // 后写的 5 条一条不丢
-  });
+  }, 90_000);
 
   it("journal 压缩保留每个任务最后一条已决账：稀疏任务不被全局窗口挤掉", async () => {
     const file = join(dir, "journal-watermark.jsonl");

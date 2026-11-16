@@ -122,7 +122,9 @@ export function UsageMeter(props: {
           ) : STR.composer.dash}
         </b>
       </button>
-      <Popover open={props.open} up role="menu" className="meter-pop" style={{ left: "auto", right: 0 }}>
+      {/* 这是一块读数面板，不是菜单：没有 menuitem，标成 menu 会让读屏进入「菜单模式」却
+          找不到可选项、方向键也没有响应。改成非模态 dialog 并给出名字。 */}
+      <Popover open={props.open} up role="dialog" aria-label={STR.composer.meterTitle} className="meter-pop" style={{ left: "auto", right: 0 }}>
         <div className="meter-detail">
           {/* ① 标题行：上下文容量 + 右对齐「{pct}%（{used} / {max}）」——截图同形。 */}
           <div className="ctx-cap-head">

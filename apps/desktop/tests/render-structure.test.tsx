@@ -13,8 +13,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { runKey } from "../src/renderer/state/session-identity";
 import { ModelMenu, ModelPicker, type ModelOption } from "../src/renderer/components/ModelPicker";
 import { STR } from "../src/renderer/strings";
+import { keysOf } from "../src/renderer/shortcuts";
 import type { ProviderInfo } from "../../../src/main/ipc-protocol";
-import { readRendererFile } from "./helpers/app-surface";
+import { readAppSurface, readRendererFile } from "./helpers/app-surface";
 
 describe("Agent OS shell wiring", () => {
   it("mounts durable pages beside an inert, still-mounted chat workspace", () => {
@@ -340,7 +341,7 @@ describe("⑤ 会话行：「临时对话」组 ＋ 空列表文案 ＋ 行 titl
 
   it("全空 ⇒ 空列表文案（⌘N 指路，不摆空壳）", () => {
     const html = sidebarHtml({ projects: [], sessions: [] });
-    expect(html).toContain("还没有任务，按 ⌘N 开始");
+    expect(html).toContain(`还没有任务，按 ${keysOf("new-session")} 开始`);
   });
 
   it("行 title 属性 = 完整标题（省略号只截视觉）；相对时间在位", () => {
@@ -491,8 +492,8 @@ describe("设置页左侧导航：一处事实源，不许重复", () => {
   });
 
   it("不再出现第二个硬编码的导航渲染（回归哨兵）", () => {
-    const src = readFileSync(new URL("../src/renderer/components/SettingsPanel.tsx", import.meta.url), "utf8");
-    expect(src).not.toContain('{["行为与成本", "记忆与数据"].map');
+    // 读整个应用面：硬编码导航若换个设置子组件复活，只读 SettingsPanel 会空过。
+    expect(readAppSurface()).not.toContain('{["行为与成本", "记忆与数据"].map');
   });
 });
 
@@ -610,7 +611,7 @@ describe("思考正文：投影与渲染", () => {
       ev({ type: "assistant_delta", callId: "c1", text: "答案是" }),
     ]);
     const live = rows.find((r) => r.kind === "assistant" && r.live === true);
-    expect(live).toBeDefined();
+    expect(live?.kind, "找不到 live 的 assistant 行 ⇒ 下面两条断言一条都没量到").toBe("assistant");
     if (live?.kind !== "assistant") return;
     expect(live.thinking).toBe("先算一下再核对");
     expect(live.text).toBe("答案是"); // 正文没被思考污染
@@ -623,6 +624,7 @@ describe("思考正文：投影与渲染", () => {
       ev({ type: "assistant_message", content: "终稿" }),
     ]);
     const final = rows.find((r) => r.kind === "assistant" && r.live !== true);
+    expect(final?.kind, "找不到结稿的 assistant 行 ⇒ 下面那条断言没量到").toBe("assistant");
     if (final?.kind !== "assistant") return;
     expect(final.thinking).toBe("想想");
   });
@@ -733,6 +735,8 @@ describe("思考段合并单面（P2-2；触发条短档词族）", () => {
       <ModelPicker infos={[info]} value="deepseek-chat" onChange={() => undefined} running thinkingSupported thinking="low" onThinkingChange={() => undefined} />,
     );
     const trigger = /<button[^>]*aria-label="模型选择"[^>]*>/.exec(html)?.[0] ?? "";
+    // 匹配落空时 trigger 是 ""，否定断言会空过。
+    expect(trigger).toContain('aria-label="模型选择"');
     expect(trigger).not.toContain("disabled");
     expect(html).toContain("deepseek-chat · 思考 low");
   });

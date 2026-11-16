@@ -10,18 +10,37 @@
 // 判据为什么值得有：这类「看起来该有、其实不存在」的键名，tsc 一次就能抓到，但只有真的
 // 跑 typecheck 才会抓。本判据把它变成桌面套件里的常驻红——CI 不跑打包链也不会漏。
 // 同时正向钉住窗口持久化的三个要件仍在场（bounds 显式传 / 夹工作区 / close 时落盘）。
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const main = readFileSync(fileURLToPath(new URL("../src/main/index.ts", import.meta.url)), "utf8");
+
+/** 主进程整个源面：否定断言必须读全，而不是只读今天恰好住着窗口构造的那一个文件。
+ *  同一族纪律见 `renderer/LAYERING.md`：单文件 `not.toContain` 会在代码搬家后空过。 */
+function readMainSurface(): string {
+  const root = fileURLToPath(new URL("../src/main", import.meta.url));
+  const out: string[] = [];
+  const walk = (dir: string): void => {
+    for (const ent of readdirSync(dir, { withFileTypes: true })) {
+      const abs = join(dir, ent.name);
+      if (ent.isDirectory()) walk(abs);
+      else if (ent.name.endsWith(".ts")) out.push(readFileSync(abs, "utf8"));
+    }
+  };
+  walk(root);
+  return out.join("\n");
+}
+
+const mainSurface = readMainSurface();
 
 describe("BrowserWindow 构造选项", () => {
   it("不传 Electron 不存在的选项（restorable 曾让 tsc 报 TS2353）", () => {
     // 反向锚点：这行必须在删掉之后依然为真——若有人把 restorable 加回来，这里立刻红。
     // 只匹配「真的作为选项传进 BrowserWindow」的形态（行首缩进 + 键 + 冒号），
     // 不去匹配注释里的字面量——修法注释里点名了这个键名，那是有意的文档，不是回归。
-    expect(main).not.toMatch(/^\s*restorable:/m);
+    expect(mainSurface).not.toMatch(/^\s*restorable:/m);
   });
 
   it("窗口位置持久化三要件在场（读回 → 夹工作区 → 落盘）", () => {

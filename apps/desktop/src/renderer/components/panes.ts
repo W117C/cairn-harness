@@ -9,7 +9,7 @@ import { turnChanges } from "../projections";
 import { PANE_META, type PaneKind } from "../pane-registry";
 // 窗格登记表（类型/标签表/重排/⌘\ 选窗格）已搬到顶层 pane-registry.ts（Phase 2 · 批 2.3）：
 // state/ 不许 import components/，而那份是数据与纯函数、不是组件。导出面照旧从本文件转出。
-export { PANE_META, PANE_OPENABLE, lastOpenedPane, movePane, paneTabTargetForKey, type PaneKind } from "../pane-registry";
+export { PANE_META, PANE_OPENABLE, lastOpenedPane, movePane, type PaneKind } from "../pane-registry";
 
 /** 独立窗口路由：`#pane=<kind>[&session=<id>][&workspace=<ws>]` → 目标窗格；非该形状（含未知 kind）返回 null
  *  （主窗口模式——不猜、不部分匹配）。 */

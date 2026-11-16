@@ -239,6 +239,8 @@ describe("未收尾请求与 worker 分域", () => {
     const broken = await readSessionView({ workspace: ws, sessionId: "broken" }, root);
     expect(broken.verify).toBeUndefined();
     const brokenText = projectViewContext(broken).map((m) => String(m.content ?? "")).join("\n");
+    // 投影为空时下面两条否定断言会空过；先证这一屏确实带上了本会话的消息。
+    expect(brokenText).toContain("BROKEN_USER");
     expect(brokenText).not.toContain("Task Acceptance Contract");
     expect(brokenText).not.toContain("pnpm parent-test");
   });

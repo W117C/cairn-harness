@@ -4,6 +4,7 @@
  * 立门的直接原因是 BLOCKED 待办 #56：D7 快照把 `Date.now()` 编进目录名 ⇒ `changedFiles` 两次跑
  * 只差一串毫秒 ⇒ `gym-check` B1「明卷两次跑逐字段一致」当场红 4 条。那不是我那一格的错，
  * 是「身份字段可以带时钟」这件事没人守。业界同一类痛叫 **跑不出两遍一样的**，评测因此只能取均值。
+ * 第 1257 页已清偿：快照目录名 = `<callId>--<原件摘要>`，RD1 不再靠债表吸收毫秒。
  *
  * 四条判据：
  *  RD1 真写盘路径跑两遍（两个临时工作区、同一输入）⇒ 结果 / 快照 id / 变更面规范化后等值
@@ -95,14 +96,14 @@ function verdict(diffs: readonly FieldDiff[]): { ok: boolean; detail: string } {
   const finding = classifyDivergence(diffs);
   const v = reproducibleVerdict(finding);
   return v.ok && finding.absorbed.length > 0
-    ? { ok: true, detail: v.detail + "（**登记的债**，见 BLOCKED #56；修好后要删条目）" }
+    ? { ok: true, detail: v.detail + "（**登记的债**，见 src/agent/reproducibility.ts 的 IDENTITY_DEBTS；修好后要删条目）" }
     : v;
 }
 
 export const REPRO_RULES: readonly ReproRule[] = [
   {
     id: "RD1-同一输入两次写盘逐字段等值",
-    why: "判卷靠「重跑一次应当一样」。wall-clock 漏进身份字段（#56：D7 快照目录名）会让这条静默失效——功能测试全绿，判卷层开始飘",
+    why: "判卷靠「重跑一次应当一样」。wall-clock 漏进身份字段（#56 当初就是 D7 快照目录名）会让这条静默失效——功能测试全绿，判卷层开始飘",
     run: async () => {
       // 同一 callId：否则比的就不是「同一输入」，而是两组输入（callId 会进快照路径尾段）
       const a = await captureOnce("call-x");
@@ -163,7 +164,9 @@ export const REPRO_RULES: readonly ReproRule[] = [
       return {
         ok: unusable.length === 0,
         detail: unusable.length === 0
-          ? "登记 " + String(IDENTITY_DEBTS.length) + " 条债，逐条构造同形差异都能吸收"
+          ? (IDENTITY_DEBTS.length === 0
+            ? "登记表为空（身份债已清零）；新债必须显式登记并同步改 tests/reproducibility.test.ts"
+            : "登记 " + String(IDENTITY_DEBTS.length) + " 条债，逐条构造同形差异都能吸收")
           : "吸收不了的条目（登记写错了？）：" + unusable.join("、"),
       };
     },
@@ -248,7 +251,7 @@ async function main(): Promise<void> {
     if (!v.ok) console.log(`     为什么要有这条：${rule.why}`);
   }
   console.log(failed === 0
-    ? `[replay-determinism-check] ${String(REPRO_RULES.length)}/${String(REPRO_RULES.length)} 通过（RD1 若报「吸收登记债 N 处」= 那条债还活着；#56 修好后该条目吸收不到东西，就该从表里删）`
+    ? `[replay-determinism-check] ${String(REPRO_RULES.length)}/${String(REPRO_RULES.length)} 通过（RD1 报「吸收登记债 N 处」= 那条债还活着；债偿清了就该删条目，当前登记表见 reproducibleVerdict 的读数）`
     : `[replay-determinism-check] ❌ ${String(failed)} 条不过`);
   process.exit(failed === 0 ? 0 : 1);
 }

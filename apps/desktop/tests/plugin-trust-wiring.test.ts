@@ -13,7 +13,8 @@ describe("技能信任接线", () => {
   it("设置页开关传 name（不是 invoke）", () => {
     const pane = readAppPageSurface();
     expect(pane).toContain("window.agent.pluginDecide(selected.name, next, props.workspace ?? undefined)");
-    expect(pane).not.toContain("pluginDecide(selected.invoke");
+    // 否定断言读整个应用面：只看 AppPage 面，把信任开关搬进 settings/ 再改成 invoke 会空过。
+    expect(readAppSurface()).not.toContain("pluginDecide(selected.invoke");
   });
 
   it("主进程 decide 收工作区参数；快照按工作区缓存并在决议后作废", () => {
@@ -37,7 +38,8 @@ describe("技能信任接线", () => {
     const pane = read("../src/renderer/components/SkillsPane.tsx");
     expect(pane).toContain("window.agent.skillBody(selectedName, props.workspace ?? undefined)");
     expect(pane).toContain('className="skill-body"');
-    expect(pane).not.toContain("快照不含正文");
+    // 旧「快照不含正文」提示若搬进别的组件，读单文件会空过——读整个应用面。
+    expect(readAppSurface()).not.toContain("快照不含正文");
     expect(read("../src/renderer/styles.css")).toMatch(/\.skill-body\s*{/);
     expect(read("../../../src/main/ipc-protocol.ts")).toContain("skillBody(name: string, workspace?: string)");
     expect(read("../src/main/channels.ts")).toContain('skillBody: "agent:skill-body"');

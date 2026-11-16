@@ -230,6 +230,7 @@ describe("批 6：模型与 Provider 三段", () => {
     const src = readFileSync(new URL("../src/renderer/components/settings/ShortcutsSection.tsx", import.meta.url), "utf8");
     // 分组表由 SHORTCUT_GROUPS 驱动；核心键 SHORTCUTS 只承担 tooltip 取键。
     expect(src).toContain("SHORTCUT_GROUPS.map");
+    // 位置敏感：`SHORTCUTS.map` 在快捷键弹层那份消费面是合法写法；这里钉的是设置页不渲染精简表。
     expect(src).not.toContain("SHORTCUTS.map");
     // 分组标题要出现在设置页（与弹层同一份标题族）。
     expect(src).toContain("{g.title}");
@@ -244,8 +245,8 @@ describe("批 6：模型与 Provider 三段", () => {
     expect(src).toContain('className="sp-dim ss-version-meta"');
     expect(css).toMatch(/\.ss-version\s*\{[^}]*flex-direction:\s*column/s);
     expect(css).toMatch(/\.ss-version-meta\s*\{[^}]*overflow-wrap:\s*anywhere/s);
-    // 非 passed 不许原文打印；统一读「未通过」。
-    expect(src).not.toContain('? "已过" : props.build.packagedSmoke');
+    // 非 passed 不许原文打印；统一读「未通过」。否定断言读整个应用面（换组件打印也算回潮）。
+    expect(readAppSurface()).not.toContain('? "已过" : props.build.packagedSmoke');
     // 第 1078 页：冒烟文案收编进 STR 后源文只剩键——钉键形＋两枚值锚（原意不放宽）。
     expect(src).toContain("? STR.about.smokePassed : STR.about.smokeFailed");
     expect(STR.about.smokePassed).toBe("已通过");
@@ -394,13 +395,14 @@ describe("批 6：权限与安全段（OptionCard 四档 + danger 智能审批/�
     const h = perms();
     expect(h).toContain("ss-opt danger");
     expect(h).toContain("ss-opt-warn");
-    // 口径与 PermissionMenu 的 MODE_LABEL 同源：auto 免的是"逐笔问写"，不是"什么都不问"
+    // 口径与 PermissionMenu 的 MODE_LABEL 同源（设置面直接读那份词表，不再抄第二份）
     // （riskAskAt 仍是 high）。旧文案「全部放行」让用户以为切了就万事大吉 ⇒ 实测读成"切换没用"。
-    expect(h).toContain("低风险直接做，高风险出卡");
+    expect(h).toContain("低风险直接做，高风险再出卡");
     expect(h).not.toContain("全部放行");
-    // 最松档同样带警示：风险线 / critical 也不再询问（硬边界仍在文案里说明）。
+    // 最松档同样带警示：风险线 / critical 也不再询问；硬边界（评测判卷文件）必须写在说明里。
     expect(h).toContain("最松档");
-    expect(h).toContain("出网与方案门也放行");
+    expect(h).toContain("禁止规则都放行");
+    expect(h).toContain("评测判卷文件仍受保护");
   });
 
   it("安全段：方案开关已撤（agent 自判，2026-11-03）；网络 = 只读说明行（无控件）", () => {

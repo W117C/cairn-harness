@@ -23,6 +23,8 @@ export function QueueDock(props: {
   setQueueFor: (sid: string, list: QueuedSend[], workspace?: string | null) => void;
   cancelRunHeal: (sid: string, workspace?: string | null) => void;
   resumeQueueFor: (sid: string, workspace?: string | null) => void;
+  /** 队列整条移除后焦点落回输入框（行内控件已卸载，焦点不该掉回 body）；缺省不搬。 */
+  onFocusFallback?: () => void;
 }) {
   // 打断并发送 / 移出 / 编辑：都按目标会话的限定键读当前表，再交给纯函数改一条。
   const items = props.queue.current.get(runKey(props.activeWorkspace, props.activeId)) ?? [];
@@ -64,6 +66,7 @@ export function QueueDock(props: {
       onRemove={(index) => { editAt(index, (list, at) => dropQueued(list, at)); }}
       onEdit={(index, text) => { editAt(index, (list, at) => editQueued(list, at, text)); }}
       onMove={(index, delta) => { editAt(index, (list, at) => moveQueued(list, at, delta)); }}
+      onFocusFallback={props.onFocusFallback}
       {...(!props.running && !blocked && !props.pendingSend && props.pendingClarify === null && props.pendingPlan === null
         ? { onResume: () => { props.resumeQueueFor(props.activeId, props.activeWorkspace); } }
         : {})}

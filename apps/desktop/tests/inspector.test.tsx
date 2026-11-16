@@ -9,8 +9,10 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AgentEvent } from "../../../src/events";
 import { changedFilesOf } from "../src/renderer/components/panes";
-import { Inspector, inspectorTabIndexForKey } from "../src/renderer/components/Inspector";
+import { Inspector } from "../src/renderer/components/Inspector";
+import { tabNavigationTarget } from "../src/renderer/radio-nav";
 import { STR } from "../src/renderer/strings";
+import { fillKeys, keysOf } from "../src/renderer/shortcuts";
 import { readAppSurface } from "./helpers/app-surface";
 
 const appSrc = readAppSurface();
@@ -100,12 +102,12 @@ describe("④ Inspector SSR", () => {
     expect(html).toContain('role="tabpanel"');
     expect(html).toContain('tabindex="0"');
     expect(html).toContain('tabindex="-1"');
-    expect(inspectorTabIndexForKey("ArrowRight", 0, 3)).toBe(1);
-    expect(inspectorTabIndexForKey("ArrowRight", 2, 3)).toBe(0);
-    expect(inspectorTabIndexForKey("ArrowLeft", 0, 3)).toBe(2);
-    expect(inspectorTabIndexForKey("Home", 2, 3)).toBe(0);
-    expect(inspectorTabIndexForKey("End", 0, 3)).toBe(2);
-    expect(inspectorTabIndexForKey("Tab", 0, 3)).toBeNull();
+    expect(tabNavigationTarget("ArrowRight", 0, 3)).toBe(1);
+    expect(tabNavigationTarget("ArrowRight", 2, 3)).toBe(0);
+    expect(tabNavigationTarget("ArrowLeft", 0, 3)).toBe(2);
+    expect(tabNavigationTarget("Home", 2, 3)).toBe(0);
+    expect(tabNavigationTarget("End", 0, 3)).toBe(2);
+    expect(tabNavigationTarget("Tab", 0, 3)).toBeNull();
   });
 });
 
@@ -123,7 +125,7 @@ describe("④b 检查器文案走 STR 单源（第 1064 页收编）", () => {
       addPaneAria: "打开窗格",
       addPaneTitle: "打开窗格（文件 / 终端 / 浏览器 / 旁路…）",
       closeAria: "关闭检查器",
-      closeTitle: "关闭检查器（⌘⌥I）",
+      closeTitle: "关闭检查器（{key}）",
       planApproved: "已批准",
       planRejected: "已拒绝",
       planPending: "待决",
@@ -137,7 +139,7 @@ describe("④b 检查器文案走 STR 单源（第 1064 页收编）", () => {
     const changes = renderToStaticMarkup(<Inspector events={events} onRestore={() => undefined} onClose={() => undefined} />);
     expect(changes).toContain(STR.inspector.undoTitle.replace("{path}", "b.ts"));
     expect(changes).toContain(`>${STR.inspector.undo}<`);
-    expect(changes).toContain(STR.inspector.closeTitle);
+    expect(changes).toContain(fillKeys(STR.inspector.closeTitle, "inspector"));
     const plan = renderToStaticMarkup(<Inspector events={events} initialTab="plan" />);
     expect(plan).toContain(STR.inspector.planFiles.replace("{count}", "1"));
     expect(plan).toContain(STR.inspector.planPending);
@@ -148,7 +150,7 @@ describe("⑤b 关闭钮（2026-10-20 真机：「右边侧栏打开就没有关
   it("给了 onClose 才摆 × 钮；没给不摆（判卷/嵌用面没有右 Panel 可关）", () => {
     const withClose = renderToStaticMarkup(<Inspector events={events} onClose={() => undefined} />);
     expect(withClose).toContain('aria-label="关闭检查器"');
-    expect(withClose).toContain("关闭检查器（⌘⌥I）"); // 键位写在 title 里，鼠标用户也能学会
+    expect(withClose).toContain(`关闭检查器（${keysOf("inspector")}）`); // 键位写在 title 里，鼠标用户也能学会（值从表来）
     expect(withClose).toContain("lucide-x");
     const withoutClose = renderToStaticMarkup(<Inspector events={events} />);
     expect(withoutClose).not.toContain('aria-label="关闭检查器"');

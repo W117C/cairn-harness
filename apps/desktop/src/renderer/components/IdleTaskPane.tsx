@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { IdleTask, IdleTaskAction, IdleTaskInput, IdleTaskSnapshot, IdleTaskStatus } from "../../../../../src/main/idle-tasks";
 import { fullTime } from "../memory-view";
 import { PAGE_CONTEXT_ITEMS } from "../navigation";
+import { windowWorkspaceApplied } from "../state/window-workspace";
 import { PageFrame } from "./PageFrame";
 
 const statusLabels: Record<IdleTaskStatus, string> = {
@@ -47,6 +48,11 @@ export function IdleTaskPane({ tabs, filter, onFilter }: { tabs: React.ReactNode
       if (reading) return;
       reading = true;
       try {
+        // 列表按窗口工作区取（主进程 resolveWorkspace），切项目时本组件靠 key 重挂载；
+        // 重挂载的第一拍上报可能还没落定，不等就会把上一个项目的任务列在新项目名下，
+        // 这一拍里的暂停/取消也会落到旧项目。
+        await windowWorkspaceApplied();
+        if (!alive) return;
         const next = await window.agent.idleTaskList();
         if (alive) {
           setSnapshot(next);

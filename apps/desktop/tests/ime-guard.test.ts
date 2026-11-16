@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { isCompositionEnter } from "../src/renderer/ime";
 import { appSurfaceFiles, readRendererFile } from "./helpers/app-surface";
-import { staleEvidenceReason } from "./helpers/renderer-evidence";
+import { evidenceMissingMessage, staleEvidenceReason } from "./helpers/renderer-evidence";
 
 const composer = readRendererFile("components/Composer.tsx");
 const smoke = readFileSync(fileURLToPath(new URL("../scripts/ime-guard-smoke.cjs", import.meta.url)), "utf8");
@@ -127,6 +127,13 @@ describe("IME 组字守卫 · 真机层（取料面）", () => {
     expect(smoke).toContain("compositionstart");
     expect(smoke).toContain("isComposing");
     expect(smoke).toContain("ime-guard-");
+  });
+
+  it("证据在场（随仓库入库；缺席即红——跳过不等于通过）", () => {
+    expect(
+      hasMeasured,
+      evidenceMissingMessage("outputs/ime-guard-749/checks.json", "electron scripts/ime-guard-smoke.cjs outputs/ime-guard-749"),
+    ).toBe(true);
   });
 
   it.skipIf(!hasMeasured)("证据盖的是当前 renderer 源与当前构建（旧读数不许冒充通过）", () => {

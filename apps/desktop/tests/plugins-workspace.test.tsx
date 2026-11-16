@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import { readAppSurface } from "./helpers/app-surface";
 import type { MarketplaceEntry } from "../../../src/agent/plugins/marketplace";
 import type {
   InstalledPluginRecord,
@@ -155,7 +156,8 @@ describe("PluginsWorkspace", () => {
     );
     // 标签条直写视图状态，不吃筛选回调；筛选只碰分类 / 精选。
     expect(src).toContain("onClick={() => { state.setView(id); }}");
-    expect(src).not.toContain("state.setView(id as \"discover\" | \"installed\" | \"updates\")");
+    // 旧参数化写法全应用不许再有（挪到插件目录里的另一个视图文件同样算回退）。
+    expect(readAppSurface()).not.toContain('state.setView(id as "discover" | "installed" | "updates")');
     // 旧视图 id 仍被兼容（命令面板 / 持久化筛选可能送来），但不参与筛选显示。
     expect(src).toContain("normalizeView(props.activeFilter, state.view)");
   });

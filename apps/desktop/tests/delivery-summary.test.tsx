@@ -115,6 +115,12 @@ describe("DSH 交付卡：壳与逻辑钉", () => {
     expect(src).toContain('className="change-preview"');
     expect(src).toContain('role="dialog"');
     expect(src).toContain('if (e.key === "Escape")');
+    // 第 1259 页：预览在场且焦点在卡内时 Esc 归卡片自己——只收预览，不让全局把它当「智慧停止」；
+    // 焦点离开卡片（或排期未到点就 Esc）时把预览/排期一并收掉。
+    expect(src).toContain('{...(preview !== null ? { "data-esc-owns": "true" } : {})}');
+    expect(src).toContain("e.stopPropagation();");
+    expect(src).toContain("window.clearTimeout(previewTimer.current)");
+    expect(src).toContain("next instanceof Node && e.currentTarget.contains(next)");
     const css = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
     const preview = css.match(/\.change-preview\s*\{[^}]*\}/s)?.[0] ?? "";
     expect(preview).toContain("left: 24px");
@@ -135,6 +141,8 @@ describe("DSH 交付卡：壳与逻辑钉", () => {
   it("内容面不再引用验证词表/四问结构；行数由 useChangeStats 逐文件读 changeDiff", () => {
     const src = readFileSync(new URL("../src/renderer/components/ChangeSummaryCard.tsx", import.meta.url), "utf8");
     expect(src).toContain("useChangeStats(d.files)");
+    // 位置敏感：这几个词在卡片之外仍是**合法**的（verificationLabel / unverifiedFiles / nextAction
+    // 还在 derived/trail.ts 与 ChangesPane 里用）。这里钉的是「这张卡不摆它们」，不能读应用面。
     expect(src).not.toContain("verificationLabel");
     expect(src).not.toContain("delivery-list");
     expect(src).not.toContain("STATUS_CHIP");

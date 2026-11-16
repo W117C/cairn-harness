@@ -52,15 +52,9 @@ export const settingsStrings = {
   permissions: {
     modesTitle: "权限档",
     modesHint: "下一轮派活生效",
-    modeReadOnly: "只读",
-    modeReadOnlyDesc: "写工具一律拒",
-    modeDefault: "需要审批",
-    modeDefaultDesc: "每次写 / 跑都出卡",
-    modeAuto: "智能审批",
-    modeAutoDesc: "低风险直接做，高风险出卡",
+    // 档位名 / 说明不在这里：单一事实源是 components/PermissionMenu 的 MODE_LABEL（菜单、确认框、设置面同读一份）。
+    // 设置面只补风险警示行——这两句是"选了会怎样"的补充，不是档位语义的副本。
     modeAutoWarn: "不设逐笔防线——确认后果再开。",
-    modeFull: "完全允许",
-    modeFullDesc: "不再出任何审批卡，出网与方案门也放行",
     modeFullWarn: "最松档——风险线与 critical 也不再询问。确认你在受信任的仓库里。",
     confirmSwitch: "确认切换",
     securityTitle: "安全",

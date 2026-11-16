@@ -12,6 +12,7 @@ import type { AgentEvent } from "../../../../../src/main/ipc-protocol";
 import type { SessionView } from "../../../../../src/events";
 import { findSessionByRef, type DeleteConfirmTarget, type SessionConfirmTarget, type WorkspaceSession } from "../sessions-view";
 import { STR } from "../strings";
+import { fillKeys } from "../shortcuts";
 import { toast } from "../toast";
 import { runKey } from "./session-identity";
 import { deleteSessionWaitingForRun, type SessionDeleteResult } from "./session-delete";
@@ -117,7 +118,7 @@ export function useSessionOps(deps: SessionOpsDeps): SessionOpsState {
   /** 切换会话（键位双入口与菜单共用一处出口）：无会话时给回执——静默无响应会被读成「键坏了」。
    *  这条回执此前在三个键位里各抄一份；菜单再抄两份就是五份，改口径时必然漏。 */
   const cycleSessionOrToast = useCallback((dir: 1 | -1): void => {
-    if (!cycleSession(dir)) toast(STR.shortcut.noSession);
+    if (!cycleSession(dir)) toast(fillKeys(STR.shortcut.noSession, "new-session"));
   }, [cycleSession]);
   /** 关闭当前会话回主页（⌘W 与菜单「关闭会话」同一出口）：主页按 = 可见回执；
    *  在跑的一轮回主页后仍在后台，也要说清楚（否则用户以为它被关掉了）。 */
@@ -128,7 +129,7 @@ export function useSessionOps(deps: SessionOpsDeps): SessionOpsState {
       newSession();
       if (wasRunning) toast(STR.shortcut.leftRunning);
     } else {
-      toast(STR.shortcut.alreadyHome);
+      toast(fillKeys(STR.shortcut.alreadyHome, "new-session"));
     }
   }, [newSession]);
 

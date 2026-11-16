@@ -67,6 +67,8 @@ describe("Composer 运行中可沟通（C-18 / C-22）", () => {
     const modeBtn = /<button[^>]*class="ctl"[^>]*>/.exec(html)?.[0] ?? "";
     const picker = /<button[^>]*aria-label="模型选择"[^>]*>/.exec(html)?.[0] ?? "";
     expect(modeBtn).toContain("disabled");
+    // 选择器没匹配到时 picker 是 ""，否定断言会空过。
+    expect(picker).toContain('aria-label="模型选择"');
     expect(picker).not.toContain("disabled");
   });
 

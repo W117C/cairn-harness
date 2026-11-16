@@ -2,9 +2,11 @@
 // 自动/完全允许必须先确认，确认前不落盘。
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { permissionNeedsConfirm } from "../src/renderer/permission-labels";
-import { permissionConfirmCopy } from "../src/renderer/components/PermissionMenu";
+import { PermissionConfirm, permissionConfirmCopy } from "../src/renderer/components/PermissionMenu";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 
@@ -58,5 +60,42 @@ describe("接线：命令面板 + ConfirmScrims", () => {
     const src = read("../src/renderer/components/PermissionMenu.tsx");
     expect(src).toContain("const copy = permissionConfirmCopy(props.mode);");
     expect(src).toContain("onConfirm={() => {");
+  });
+});
+
+// 第 1258 页：确认卡顶替列表后，被点的行随列表卸载——焦点、Esc、弹层语义都不能掉在地上。
+describe("内联确认卡的焦点与语义", () => {
+  const menu = read("../src/renderer/components/PermissionMenu.tsx");
+  const shell = read("../src/renderer/components/ComposerPermissionMenu.tsx");
+
+  it("确认卡自己吃 Esc（只退一层）并默认落在安全项「取消」", () => {
+    expect(menu).toContain('if (e.key === "Escape")');
+    expect(menu).toContain("e.stopPropagation()");
+    expect(menu).toContain("cancelRef.current?.focus()");
+    expect(menu).toContain("ref={cancelRef}");
+    expect(menu).toContain("ref={okRef}");
+  });
+
+  it("取消回列表把焦点交回被点的那一行", () => {
+    expect(menu).toContain("returnModeRef.current = target");
+    expect(menu).toContain(".perm-item[data-mode=");
+  });
+
+  it("确认卡在场时弹层不再是 menu：role 与 haspopup 随内容改口", () => {
+    expect(shell).toContain('role={confirming === null ? "menu" : "alertdialog"}');
+    expect(shell).toContain('aria-haspopup={confirming === null ? "menu" : "dialog"}');
+    expect(shell).toContain("onConfirmingChange={setConfirming}");
+  });
+
+  it("embedded 卡不再重复声明 alertdialog（宿主弹层承担语义）", () => {
+    const hosted = renderToStaticMarkup(
+      createElement(PermissionConfirm, { mode: "auto", embedded: true, onCancel: () => undefined, onConfirm: () => undefined }),
+    );
+    expect(hosted).toContain("perm-confirm");
+    expect(hosted).not.toContain('role="alertdialog"');
+    const standalone = renderToStaticMarkup(
+      createElement(PermissionConfirm, { mode: "auto", onCancel: () => undefined, onConfirm: () => undefined }),
+    );
+    expect(standalone).toContain('role="alertdialog"');
   });
 });

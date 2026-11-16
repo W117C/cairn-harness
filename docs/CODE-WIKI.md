@@ -19,7 +19,7 @@ This checkout is core-first: the agent kernel (`src/`) is electron-free. The for
 **为什么它是契约而不只是日志**：`replay(path)` 必须能把一份 JSONL 原样读回来，
 所以每条事件的字段都是重放面的一部分。三条由此推出的纪律：
 
-1. **落盘前脱敏，但不改编事件形状**。`src/agent/loop.ts` 的 `redactValue` 只换**字符串叶子**，
+1. **落盘前脱敏，但不改编事件形状**。`src/events/redact.ts` 的 `redactValue` 只换**字符串叶子**，
    非字符串值原样返回——事件形状是重放契约，不能因为脱敏顺手改掉。
    命中即掩码而不是抛错：工具已经跑完、模型已经看过，抛错会吞掉一次真实结果。
 2. **「缺席」与「零」不是一回事**，每个可选字段都写明了这一格代表什么。例：
@@ -46,7 +46,7 @@ This checkout is core-first: the agent kernel (`src/`) is electron-free. The for
 
 ## ①b 完成契约：声明、证据、交付三件事分开
 
-`VerifyDeclaration` 是用户/宿主写进 `session_meta` / `session_meta_update.verify` 的验收命令清单；模型不能自提判据。`src/events/verify-declaration.ts` 的 `findEffectiveVerifyDeclaration()` 按当前任务窗口取最后一条合法声明，坏声明 fail-closed、不跨新用户轮次继承；`projectContext()` 再由 `acceptance-contract.ts` 把它渲染成有界、经控制标签中和的 user 资料信封。`replay()` 仍逐字返回原事件，投影不改日志。
+`VerifyDeclaration` 是用户/宿主写进 `session_meta` / `session_meta_update.verify` 的验收命令清单；模型不能自提判据。`src/events/verify-declaration.ts` 的 `findEffectiveVerifyDeclaration()` 按当前任务窗口取最后一条合法声明，坏声明 fail-closed、不跨新用户轮次继承；`projectContext()` 再由 `src/agent/context.ts` 把它渲染成有界、经控制标签中和的 user 资料信封。`replay()` 仍逐字返回原事件，投影不改日志。
 
 三格证据不能互相顶替：
 - `verify_result.source="task"` 证明这一拍跑的是宿主声明的命令，`verify_result.ok` 证明它绿；
@@ -81,8 +81,8 @@ L4         风险层：L4-critical（任何档强制审批，allow 规则也批�
   `verify-unwired` / `hook` / `permission` / `unknown-tool`。
   ⚠️ 未知工具名是 **fail-closed**（记 `unknown-tool`），与「未知档位取问」方向相反，别改反。
 - **沙箱与权限是两道独立的闸**：`run_shell` 在 macOS 走 Seatbelt（`src/main/sandbox.ts`），
-  权限层管审批。网络默认全拒，三条同时成立才出网（判为网络类 + 真的问过并获批 + 非无人值守）。
-  **没有「网络开关」**：不放行环境变量、不读配置项。
+  权限层管审批。网络默认全拒，三条同时成立才出网（判为网络类 + 真的问过并获批 + 非无人值守）。桌面「联网免批」（`webAutoApprove`，缺省关）只免那张审批卡，SSRF 判据与沙箱闸不变。
+  **CLI 不读环境变量、不读配置项**：能改「问不问」的只有上面那个桌面开关，网络本身仍由 Seatbelt 与审批两道拦。
 - **判卷面两条闸都有落点**：`src/permissions/shell-write-targets.ts` 的 `shellWriteTargetsOf` 只做
   词法快拒（`evaluate` 与 `run_shell` 共用一份）；真正的强制在 `buildSandboxProfile` 生成的
   Seatbelt literal 写拒绝（每个冻结文件一条，表自身也在冻结集里），无沙箱宿主由
@@ -131,7 +131,7 @@ git 只隔离**文本**冲突：两个 worker 各改各的文件、却动同一�
 - **清单即事实源**：门表在 `scripts/gate-manifest.ts` 的 `GATES`。
   `checkGateManifest` 兜底「scripts 侧无孤儿」——新增 `*-check` 脚本却忘了登记，
   会得到一道**从不运行的门**（历史实例：`provider:check`）。
-- **未证 ≠ 通过**：`gates.ts` 的 `countUnverified` / `gateUnverified` 统计未证项；
+- **未证 ≠ 通过**：`scripts/assertion-health.ts` 的 `countUnverified` / `gateUnverified` 统计未证项（`scripts/gates.ts` 只转出）；
   `DSH_STRICT_UNVERIFIED=1` 或 `--strict-unverified` 让未证直接判红。
   绿而零输出的门按未证计入——「查了没发现」与「没查」同形。
 - **认证面 ≠ HEAD**：工作树可以替 HEAD 遮红（本仓实测过 86 笔提交跑在红灯上）。

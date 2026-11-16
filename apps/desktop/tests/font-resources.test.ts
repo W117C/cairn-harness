@@ -10,10 +10,15 @@ const manifest = JSON.parse(readFileSync(resolve(renderer, "vendor/dsh-claude-st
   files: { file: string; sha256: string }[];
 };
 
+const fontUrls = [...css.matchAll(/url\("([^\"]+\.(?:woff2|ttf))"\)/g)].map((m) => m[1]!);
+
 describe("bundled font resources", () => {
-  for (const [, relative] of css.matchAll(/url\("([^\"]+\.(?:woff2|ttf))"\)/g)) {
+  it("取料面非空：一条字体声明都扫不到＝正则被新写法打败，下面会零用例假绿", () => {
+    expect(fontUrls.length, "css 里没有 url(\"…woff2|ttf\") ⇒ 本组会变成空套件").toBeGreaterThan(0);
+  });
+  for (const relative of fontUrls) {
     it(`${relative} is available offline and matches its pinned upstream bytes`, () => {
-      const path = resolve(renderer, relative!);
+      const path = resolve(renderer, relative);
       expect(existsSync(path), `Missing font: ${path}`).toBe(true);
       const entry = manifest.files.find((file) => resolve(renderer, file.file) === path);
       expect(entry, `Missing provenance in ${dirname(path)}`).toBeDefined();

@@ -132,7 +132,7 @@ python3 apps/desktop/scripts/extract-cds-tokens.py --check
 - 新上游 CSS 的**关键帧时长/缓动未逐条量**（只量了名单、时长令牌与 `cubic-bezier` 取值集合），
   故上游动效的细节差异仍可能存在未登记项。
 - `cds-parity.test.ts` 与 `cds-components.test.ts` 里依赖**真机 renderer** 的那几格
-  （`outputs/cds-parity-verify/values.json`）本轮**未跑**（本机 Electron 起不来）⇒ 那是 skip，**不是通过**。
+  （`apps/desktop/outputs/cds-parity-verify/values.json`）本轮**未跑**（本机 Electron 起不来）⇒ 那是 skip，**不是通过**。
 - 本批**零视觉改动**：vendor 重抽后本仓消费面零变化（第二节三条现读核对），但**真机观感仍需业主验收**
   （本轮不构成「视觉已验」）。
 - 本批未落地 ADR 0010 的其余三条待办（桥面归属域 / `[data-reduce-motion]` 属性开关 / 插件描述写法）。

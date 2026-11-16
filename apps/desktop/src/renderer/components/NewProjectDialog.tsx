@@ -6,6 +6,7 @@ import { useRef, useState } from "react";
 import { isCompositionEnter } from "../ime";
 import { Atom, BarChart3, ClipboardList, FolderPlus, LayoutTemplate, X } from "lucide-react";
 import { STR } from "../strings";
+import { applyRadioNavigation } from "../radio-nav";
 import { ModalSurface } from "./ModalSurface";
 
 export interface TemplateCard {
@@ -21,17 +22,6 @@ function templateIcon(id: string): React.JSX.Element {
   if (id === "data-panel") return <BarChart3 size={16} />;
   if (id === "react-vite") return <Atom size={16} />;
   return <FolderPlus size={16} />;
-}
-
-/** 单选组键盘目标：方向键循环，Home/End 到首尾；其他键留给控件本身。 */
-export function templateNavigationTarget(key: string, current: number, count: number): number | null {
-  if (count <= 0) return null;
-  const at = current >= 0 && current < count ? current : 0;
-  if (key === "ArrowRight" || key === "ArrowDown") return (at + 1) % count;
-  if (key === "ArrowLeft" || key === "ArrowUp") return (at - 1 + count) % count;
-  if (key === "Home") return 0;
-  if (key === "End") return count - 1;
-  return null;
 }
 
 /** 名字实时校验（纯判据内联；返回错误文案或 null）。 */
@@ -113,15 +103,10 @@ export function NewProjectDialog(props: {
                 onClick={() => { setTemplateId(t.id); }}
                 onKeyDown={(e) => {
                   const current = props.templates.findIndex((template) => template.id === templateId);
-                  const next = templateNavigationTarget(e.key, current, props.templates.length);
-                  if (next === null) return;
-                  const target = props.templates[next];
-                  if (target === undefined) return;
-                  e.preventDefault();
-                  setTemplateId(target.id);
-                  e.currentTarget.parentElement
-                    ?.querySelectorAll<HTMLButtonElement>('[role="radio"]')
-                    [next]?.focus();
+                  applyRadioNavigation(e, current, props.templates.length, (index) => {
+                    const target = props.templates[index];
+                    if (target !== undefined) setTemplateId(target.id);
+                  });
                 }}
               >
                 <span className="tpl-ico" aria-hidden="true">{templateIcon(t.id)}</span>

@@ -91,7 +91,8 @@ describe("页体并入设置（v7.1 业主裁）：AppPageBody + 事实源", () 
 
   it("工作树未解析（无可用工作区）时给说明与出路，不是一行状态字（2026-11-02 真机）", () => {
     const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/AppPage.tsx", import.meta.url)), "utf8");
-    expect(src).not.toContain('stateFrame("工作区未解析（无可用工作区）")');
+    // 否定断言读应用页整面：旧状态字搬到同组拆出的面板里也算回退（第 1251 页分类迁移）。
+    expect(readAppPageSurface()).not.toContain('stateFrame("工作区未解析（无可用工作区）")');
     expect(src).toContain("还没有可分析的工作区");
     expect(src).toMatch(/还没有可分析的工作区[\s\S]{0,400}先在侧栏打开一个文件夹/);
   });
@@ -121,13 +122,13 @@ describe("记忆页重做（2026-10-16 业主裁 · D/E/F · 源码哨兵）", (
     expect(src).toContain("<ConfirmDialog");
     expect(src).toContain("setTopicAsk({ layer: selLayer as \"project\" | \"global\", topic: selected.topic })");
     expect(src).toContain('confirmLabel="删除"');
-    expect(src).not.toContain("window.confirm(");
+    expect(readAppPageSurface()).not.toContain("window.confirm(");
   });
 
   it("E：索引逐行渲染（indexLines + renderInline）——** 不再原样上屏", () => {
     expect(src).toContain("indexLines(selectedLayer.index)");
     expect(src).toContain("renderInline(line)");
-    expect(src).not.toContain('<pre className="ap-index"');       // 旧直出体下架
+    expect(readAppPageSurface()).not.toContain('<pre className="ap-index"');       // 旧直出体下架
   });
 
   it("F：元信息相对时间（列表与抽屉），悬停给完整时间", () => {
@@ -145,7 +146,7 @@ describe("记忆页重做（2026-10-16 业主裁 · D/E/F · 源码哨兵）", (
     expect(rowAt).toBeGreaterThan(-1);
     expect(bodyAt).toBeGreaterThan(rowAt);
     expect(footAt).toBeGreaterThan(bodyAt);
-    expect(src).not.toContain('className="sp-tag">{r.layer === "project"');
+    expect(readAppPageSurface()).not.toContain('className="sp-tag">{r.layer === "project"');
   });
 
   it("G/H/E 样式哨兵：统计等分整行、名称可省略、标签不缩、索引行渲染样式在", () => {
@@ -154,9 +155,8 @@ describe("记忆页重做（2026-10-16 业主裁 · D/E/F · 源码哨兵）", (
     // 反向钉：统计卡类名不许再出现在样式表与页体里（两个页面必须同一形态）。
     expect(css).not.toContain(".ap-stats {");
     expect(css).not.toMatch(/\.ap-stat\s*\{/);
-    expect(src).not.toContain("function Stats(");
-    expect(src).not.toContain('className="ap-stats"');
-    expect(css).toContain(".ap-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-md); }");
+    expect(readAppPageSurface()).not.toContain("function Stats(");
+    expect(readAppPageSurface()).not.toContain('className="ap-stats"');    expect(css).toContain(".ap-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-md); }");
     // H：名称单行省略 + 标签不缩
     expect(css).toMatch(/\.ap-item \.nm \{[^}]*text-overflow: ellipsis/);
     // E：索引逐行卡内样式在
@@ -263,10 +263,13 @@ describe("自动化页：时间口径与历史截断要说清", () => {
 
 describe("目的地错误不泄漏到对话", () => {
   it("AppPage 的 reportError 只写本页 operationError，不再回调工作台 lastError", () => {
-    const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/AppPage.tsx", import.meta.url)), "utf8");
-    expect(src).not.toContain("props.onError?.(message)");
+    expect(readAppPageSurface()).not.toContain("props.onError?.(message)");
     const view = readFileSync(fileURLToPath(new URL("../src/renderer/panes/WorkbenchView.tsx", import.meta.url)), "utf8");
-    const pageCall = view.slice(view.indexOf("<AppPageBody"), view.indexOf("/>", view.indexOf("<AppPageBody")) + 2);
+    const bodyAt = view.indexOf("<AppPageBody");
+    // indexOf 落空时 slice(-1, …) 读到文件尾巴，否定断言会空过。
+    expect(bodyAt, "WorkbenchView 里找不到 <AppPageBody ⇒ 下面的否定断言会读文件尾巴空过").toBeGreaterThan(-1);
+    const pageCall = view.slice(bodyAt, view.indexOf("/>", bodyAt) + 2);
+    expect(pageCall).toContain("<AppPageBody");
     expect(pageCall).not.toContain("onError=");
   });
 });

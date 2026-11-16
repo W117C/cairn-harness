@@ -19,6 +19,7 @@ import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { UpdateOffer, checkUpdateState, withOpenError } from "../src/renderer/components/SettingsPanel";
+import { readAppSurface } from "./helpers/app-surface";
 
 const DOWNLOAD_URL = "https://downloads.example.com/cairn/2.0.0/cairn.dmg";
 const VERSION = "2.0.0";
@@ -148,7 +149,10 @@ describe("接线守卫：面板真的用上了更新通道", () => {
   });
 
   it("渲染层不自己开外链：没有 window.open( 调用，也没有 location.href 赋值", () => {
-    expect(src).not.toMatch(/window\.open\s*\(/);
-    expect(src).not.toMatch(/location\s*\.\s*href\s*=/);
+    // 这是「整个渲染层」的禁令，不是 SettingsPanel 一个文件的形状：读应用面，
+    // 否则外链代码搬去别的组件后，单文件否定断言会空过（第 1252 页口径）。
+    const appSrc = readAppSurface();
+    expect(appSrc).not.toMatch(/window\.open\s*\(/);
+    expect(appSrc).not.toMatch(/location\s*\.\s*href\s*=/);
   });
 });

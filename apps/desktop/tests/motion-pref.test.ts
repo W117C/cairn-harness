@@ -85,3 +85,51 @@ describe("appMotionReduced（系统事实 ∪ 应用内开关）", () => {
     expect(surface).not.toContain('if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;');
   });
 });
+
+// 第 1256 页：应用内开关与系统偏好在 CSS 上必须同语义。
+// 此前属性块只写了本仓自有的 5 个选择器 ⇒ 插件页 spinner / 骨架、网络设置 spinner、
+// 主题点呼吸、侧栏骨架扫光只在系统偏好下才停；侧栏「外观」里那句
+// 「应用内强制减弱动效（与系统设置无关）」是假的。
+describe("应用内减弱动效与系统偏好同语义（整域中和 + 可读帧例外）", () => {
+  const APP = '[data-reduce-motion="true"]';
+
+  /** 从某个选择器起点取它所在规则的规则体（含花括号）。 */
+  function bodyAt(start: number): string {
+    const open = css.indexOf("{", start);
+    if (open === -1) return "";
+    return css.slice(open, css.indexOf("}", open) + 1);
+  }
+
+  it("整域中和：*, *::before, *::after 与系统块同值同范围", () => {
+    const at = css.indexOf(`${APP} *,`);
+    // 锚点找不到时 bodyAt(-1) 会从文件第一个花括号开始读，后面四条会假绿。
+    expect(at, "缺少应用内整域中和规则").toBeGreaterThan(-1);
+    const prelude = css.slice(at, css.indexOf("{", at));
+    expect(prelude).toContain(`${APP} *::before`);
+    expect(prelude).toContain(`${APP} *::after`);
+    const body = bodyAt(at);
+    expect(body).toContain("animation-duration: 0.01ms !important");
+    expect(body).toContain("animation-iteration-count: 1 !important");
+    expect(body).toContain("transition-duration: 0.01ms !important");
+    expect(body).toContain("scroll-behavior: auto !important");
+  });
+
+  it("带 stagger 延迟/末帧不可读的动效停成可读帧（与系统块同一组例外）", () => {
+    const exceptions: [string, string[]][] = [
+      [`${APP} .cairn-loader path`, ["animation: none", "opacity: 1"]],
+      [`${APP} .side-skeleton-row::after`, ["animation: none", "transform: translateX(100%)"]],
+      [`${APP} .gen-bar[data-running="true"]`, ["animation: none", "hsl(var(--accent-brand) / 40%)"]],
+      [`${APP} .dot.running`, ["animation: none"]],
+      [`${APP} .dot.waiting::after`, ["animation: none"]],
+      [`${APP} .glyph.pending svg`, ["animation: none"]],
+      [`${APP} .row.think[data-running="true"]::before`, ["animation: none", "opacity: .6", "transform: none"]],
+      [`${APP} .change-preview`, ["animation: none"]],
+    ];
+    for (const [sel, decls] of exceptions) {
+      const at = css.indexOf(sel);
+      expect(at, `${sel} 缺失`).toBeGreaterThan(-1);
+      const body = bodyAt(at);
+      for (const d of decls) expect(body, `${sel} 缺 ${d}`).toContain(d);
+    }
+  });
+});

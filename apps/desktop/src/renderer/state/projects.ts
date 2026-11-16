@@ -60,9 +60,12 @@ export function useProjectActions(deps: ProjectActionsDeps) {
     refreshSessions();
     setActiveWorkspace(record.path);
     activeWorkspaceRef.current = record.path;
+    // 切过去就是换工作区：旧 activeId 留在上一项目，继续发送会把同一 sessionId 写进
+    // 新克隆项目的空日志（与侧栏 / 命令面板切项目同一出口语义）。
+    newSessionRef.current?.();
     toast.success(STR.toast.projectCloned.replace("{name}", record.name));
     void diagnoseImported(record.name, record.path);
-  }, [refreshProjects, refreshSessions, diagnoseImported]);
+  }, [refreshProjects, refreshSessions, diagnoseImported, newSessionRef]);
 
   /** 显示名 / 默认运行位置：同路径 upsert（addProject 既有语义，零新通道）。 */
   const handleUpdateProject = useCallback(async (p: ProjectRecord, patch: { name?: string; defaultLocation?: string }): Promise<void> => {
@@ -81,8 +84,17 @@ export function useProjectActions(deps: ProjectActionsDeps) {
   const doRemoveProject = useCallback(async (p: ProjectRecord): Promise<void> => {
     await window.agent.removeProject(p.id);
     await refreshProjects();
+    // 移除的正是当前项目：状态里不能再停在一个已注销的根上。主进程按显式根校验，
+    // 之后的每个读/发都会回「工作区未登记」，而界面上已经没有这个项目的出口。
+    // 清窗口工作区并回主页（旧会话也属于那个根，继续发送只会失败）。
+    if (activeWorkspaceRef.current === p.path) {
+      setActiveWorkspace(null);
+      activeWorkspaceRef.current = null;
+      newSessionRef.current?.();
+      toast.success(STR.toast.projectRemovedActive.replace("{name}", p.name));
+    }
     refreshSessions();
-  }, [refreshProjects, refreshSessions]);
+  }, [refreshProjects, refreshSessions, setActiveWorkspace, activeWorkspaceRef, newSessionRef]);
   const handleRemoveProject = useCallback(async (p: ProjectRecord): Promise<void> => {
     setProjectRemoveConfirm(p);
   }, []);
@@ -95,13 +107,16 @@ export function useProjectActions(deps: ProjectActionsDeps) {
       if (activeWorkspaceRef.current === p.path) {
         setActiveWorkspace(updated.path);
         activeWorkspaceRef.current = updated.path;
+        // 根换了：旧目录里的会话日志不跟着搬家，而当前 activeId 仍属于旧路径——
+        // 继续发送会把同一 sessionId 写进新根。回新根的空聊天面。
+        newSessionRef.current?.();
       }
       refreshSessions();
       toast.success(STR.toast.projectRelocated.replace("{name}", updated.name));
     } catch (err) {
       toast.error(`项目重新定位失败：${err instanceof Error ? err.message : String(err)}`);
     }
-  }, [refreshProjects, refreshSessions, setActiveWorkspace, activeWorkspaceRef]);
+  }, [refreshProjects, refreshSessions, setActiveWorkspace, activeWorkspaceRef, newSessionRef]);
 
   const handleRevealProject = useCallback((p: ProjectRecord): void => {
     void window.agent.revealInFinder(p.path).then((r) => {

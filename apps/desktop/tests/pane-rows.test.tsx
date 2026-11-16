@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import { readAppSurface } from "./helpers/app-surface";
 import {
   MIN_PANE_PCT,
   decodePaneRows,
@@ -120,16 +121,13 @@ describe("PaneDock 接线（单窗格模式）", () => {
 
 describe("TokenPanel 死组件清理", () => {
   it("用量环组件改从 format-tokens 取纯函数；TokenPanel.tsx 已删", () => {
-    const composer = readFileSync(
-      fileURLToPath(new URL("../src/renderer/components/Composer.tsx", import.meta.url)),
-      "utf8",
-    );
     const meter = readFileSync(
       fileURLToPath(new URL("../src/renderer/components/UsageMeter.tsx", import.meta.url)),
       "utf8",
     );
     expect(meter).toContain('import { formatTokens } from "./format-tokens";');
-    expect(composer).not.toContain("./TokenPanel");
+    // TokenPanel 已整文件下架：全应用不许再 import 它（第 1251 页分类迁移）。
+    expect(readAppSurface()).not.toContain("./TokenPanel");
     expect(() => readFileSync(
       fileURLToPath(new URL("../src/renderer/components/TokenPanel.tsx", import.meta.url)),
       "utf8",

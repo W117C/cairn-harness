@@ -10,6 +10,7 @@ import { Composer, fileIconKind } from "../src/renderer/components/Composer";
 import { ModelMenu, ModelPicker, THINKING_LEVELS, type ModelOption } from "../src/renderer/components/ModelPicker";
 import { MODE_DOT, PermissionMenu } from "../src/renderer/components/PermissionMenu";
 import { STR } from "../src/renderer/strings";
+import { keysOf, withKeys } from "../src/renderer/shortcuts";
 import { readAppSurface } from "./helpers/app-surface";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
@@ -217,12 +218,15 @@ describe("Composer 控件视觉层级", () => {
 describe("P2-2 发送/停止钮 title", () => {
   it("空闲：发送钮 title 含 ⏎；运行中：停止钮 title 含 ⌘.", () => {
     const idle = renderToStaticMarkup(<Composer {...base} stopped={false} running={false} />);
-    const sendAt = idle.indexOf(`title="${STR.composer.sendTitle}"`);
+    const sendAt = idle.indexOf(`title="${withKeys(STR.composer.sendTitle, "send")}"`);
     expect(sendAt).toBeGreaterThan(-1);
-    expect(STR.composer.sendTitle).toContain("⏎");
+    // 键位只在 SHORTCUTS 表里；词表与组件都不许再抄一份（抄的那份不会跟表改）。
+    expect(keysOf("send")).toBe("⏎");
+    expect(STR.composer.sendTitle).not.toContain("⏎");
     const running = renderToStaticMarkup(<Composer {...base} stopped={false} running />);
-    expect(running).toContain(`title="${STR.composer.stopTitle}"`);
-    expect(STR.composer.stopTitle).toContain("⌘.");
+    expect(running).toContain(`title="${withKeys(STR.composer.stopTitle, "stop")}"`);
+    expect(keysOf("stop")).toBe("⌘.");
+    expect(STR.composer.stopTitle).not.toContain("⌘.");
   });
 
   it("⌘. 挂在 Composer keydown 通道（onCancel）", () => {

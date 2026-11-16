@@ -8,10 +8,12 @@
 //   ③ 空探针证人：解析必须真找到 `--only=` 那一行且解析出 ≥10 个名字。
 //      否则 workflow 一改名（`--only` 换成别的写法、名单挪进行号），①②会同时变成「两边都空 ⇒ 相等」的恒真。
 //      （本仓反复踩的那一格：一片 0 先怀疑取料，不是先报喜。）
+//   ④ 深门（第 1254 页）：面外重门 4 道必须真的在 CI 里跑，名单 = CERT_GATE_DEEP，且与认证面不相交。
+//      从前它们只在 `pnpm gates` 全量时跑，CI 只跑认证面 ⇒ `plugins-check` 红着没人发现。
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CERT_GATES } from "../scripts/gate-manifest";
+import { CERT_GATE_DEEP, CERT_GATES, CERT_GATE_OUTSIDE } from "../scripts/gate-manifest";
 
 const WF = readFileSync(join(process.cwd(), ".github", "workflows", "verify.yml"), "utf8");
 
@@ -25,6 +27,15 @@ function ciGateNames(): string[] {
 /** CERT_GATES 的门名（复用清单自己产出的那份名字，不手抄）。 */
 function certGateNames(): string[] {
   return CERT_GATES.map((g) => (typeof g === "string" ? g : g.name));
+}
+
+/** 从 `deep gates` 那一步的 run 里取门名清单（取料面＝CI 那份名单）。 */
+function ciDeepGateNames(): string[] {
+  const after = WF.split("- name: deep gates")[1];
+  if (after === undefined) throw new Error("workflow 里找不到 deep gates 步骤 ⇒ 取料面变了，别让它恒真");
+  const m = after.match(/--only=([A-Za-z0-9:._,-]+)/u);
+  if (!m) throw new Error("deep gates 步骤里找不到 --only= 名单 ⇒ 取料面变了");
+  return m[1].split(",").map((s) => s.trim()).filter(Boolean);
 }
 
 describe("CI 快门面 = 认证面（同一件事，不许两份名单各漂各的）", () => {
@@ -43,6 +54,18 @@ describe("CI 快门面 = 认证面（同一件事，不许两份名单各漂各�
       认证有而CI没有: [],
       CI有而认证没有: [],
     });
+  });
+
+  it("深门 4 道真的在 CI 里跑：名单 = CERT_GATE_DEEP，且与认证面不相交", () => {
+    const deep = ciDeepGateNames();
+    expect(deep.length, "deep gates 名单只解析出 " + String(deep.length) + " 道").toBeGreaterThan(0);
+    expect(deep).toEqual([...CERT_GATE_DEEP]);
+    expect(deep.filter((n) => cert.includes(n)), "深门混进了认证面 ⇒ 同一笔账付两次").toEqual([]);
+    const outside = Object.keys(CERT_GATE_OUTSIDE);
+    expect(deep.filter((n) => !outside.includes(n)), "深门不在 CERT_GATE_OUTSIDE 登记表里").toEqual([]);
+    const step = WF.match(/deep gates \(outside cert face, (\d{1,3})\)/u);
+    expect(step, "深门步骤名里那个道数没解析到").not.toBeNull();
+    expect(Number(step?.[1]), "深门步骤标称道数与 CERT_GATE_DEEP 条数不一致").toBe(CERT_GATE_DEEP.length);
   });
 
   it("workflow 里**今天还在生效的那两个标注**等于 CERT_GATES 条数（历史凭证原文不许被这条顶改）", () => {

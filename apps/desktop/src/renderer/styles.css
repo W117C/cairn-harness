@@ -270,7 +270,7 @@ body[data-resizing="sidebar"] .side-wrap { transition: none; }
   position: relative; overflow: hidden;
   height: 12px; border-radius: var(--radius-sm);
   background: hsl(var(--bg-300));
-  animation: breathe 1.6s ease-in-out infinite;
+  animation: breathe var(--t-breathe) infinite;
 }
 /* 骨架微光（2026-10-21，v3 skeleton-sheen）：只加一条低对比扫光，不换底、不抢内容；
    reduced-motion 块统一把 animation 停到 0.01ms，扫光停在屏外，底条仍是可读的静态占位。 */
@@ -441,7 +441,7 @@ body[data-resizing="sidebar"] .side-wrap { transition: none; }
 }
 
 .dot { position: absolute; left: 10px; width: 6px; height: 6px; border-radius: 50%; }
-.dot.running { background: hsl(var(--color-run)); animation: breathe 1.6s ease-in-out infinite; }
+.dot.running { background: hsl(var(--color-run)); animation: breathe var(--t-breathe) infinite; }
 .dot.waiting { background: hsl(var(--accent-100)); }
 .dot.waiting::after { content: ""; position: absolute; inset: -2px; border-radius: 50%; box-shadow: 0 0 0 0 hsl(var(--accent-100) / 45%); animation: pulse-ring var(--t-pulse-ring); }
 .dot.error { background: hsl(var(--color-danger)); }
@@ -474,7 +474,7 @@ body[data-resizing="sidebar"] .side-wrap { transition: none; }
    「工具栏内的会话名与窗格按钮」形态。 */
 .cc-phase { display: flex; align-items: center; gap: 6px; padding: 7px 12px 0; font-size: var(--fs-caption-sm); color: hsl(var(--text-300)); }
 .cc-phase-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: hsl(var(--text-400)); }
-.cc-phase-dot[data-running="true"] { background: hsl(var(--accent-brand)); animation: breathe 1.6s ease-in-out infinite; }
+.cc-phase-dot[data-running="true"] { background: hsl(var(--accent-brand)); animation: breathe var(--t-breathe) infinite; }
 /* 2026-10-24 业主：加载动效不摆输入框——对话流里助手行标记才是它的位置（见 Stream 的 .spark）。 */
 .cc-phase-dim { color: hsl(var(--text-400)); font-variant-numeric: tabular-nums; }
 .goal-chip {
@@ -607,10 +607,6 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
   background-size: 32% 100%;
   background-repeat: no-repeat;
   animation: genbar-sweep var(--t-genbar-sweep) infinite;
-}
-[data-reduce-motion="true"] .gen-bar[data-running="true"] {
-  animation: none;
-  background: hsl(var(--accent-brand) / 40%);
 }
 @keyframes genbar-sweep { from { background-position: -32% 0; } to { background-position: 132% 0; } }
 .reading {
@@ -767,7 +763,7 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
    与那三段同一基准、同一条列（见 .reading 的声明）。 */
 .row.assistant .t { min-width: 0; font-size: var(--fs-body-md); line-height: 1.7; color: hsl(var(--text-000)); }
 .row.assistant .meta { grid-column: 2; justify-self: end; }
-.cursor { display: inline-block; width: 7px; height: 15px; margin-left: 2px; background: hsl(var(--accent-brand)); vertical-align: text-bottom; animation: breathe 1.6s ease-in-out infinite; }
+.cursor { display: inline-block; width: 7px; height: 15px; margin-left: 2px; background: hsl(var(--accent-brand)); vertical-align: text-bottom; animation: breathe var(--t-breathe) infinite; }
 
 .row.error-row { display: flex; gap: 8px; align-items: flex-start; margin: 24px var(--cds-assistant-message-text-stop) 0 0; color: hsl(var(--color-danger-ink)); }
 /* 错误正文降到正文色（2026-10-22 减法）：此前**整段**错误文案都是危险色，四行散文在阅读面里
@@ -2255,6 +2251,7 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 /* 供应商管理 split（2026-10-24 参照 Codex 供应商页）：左列表选通道（状态点=已存 key）+ 右详情表单。 */
 .pv-split { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: var(--space-lg); align-items: start; }
 .pv-list { display: flex; flex-direction: column; gap: 2px; }
+.pv-tablist { display: flex; flex-direction: column; gap: 2px; }
 .pv-item { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: var(--radius-sm); font-size: var(--fs-body-sm); color: hsl(var(--text-200)); text-align: left; }
 .pv-item:hover { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover)); }
 .pv-item.on { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-selected)); color: hsl(var(--text-000)); }
@@ -3363,15 +3360,32 @@ body[data-dsh-claude-style] .md-body .md-code pre { font-size: var(--fs-code); l
 /* ── 应用内「减弱动效」（2026-10-28 第 758 页 · 对标 Claude 的 `data-reduce-motion` 根属性）──
    系统那条媒体查询只管「系统开了减弱」；这条管**用户自己在应用里**要求减弱。
    两路事实汇到同一个根属性（state/motion-pref.ts 落位），CSS 只认这一个属性。
-   覆盖的是本仓自己加的动效：逐词到达、芯片弹一下、流式光标、逐格加载标。 */
+   第 1256 页：范围与系统块**逐条对齐**。此前这里只写了本仓自有的 5 个选择器 ⇒
+   应用内开关打开时，插件页 spinner / 骨架、网络设置 spinner、主题点呼吸、侧栏骨架扫光
+   仍在动（只有系统偏好能停），与侧栏「外观」里「应用内强制减弱动效（与系统设置无关）」
+   的承诺不符。现在整域中和 + 同一组「停动后要落在可读帧」的例外；日后新加的动效
+   自动落进第一条（plugins / network 等分文件的动画同样被这条 !important 压住）。 */
+[data-reduce-motion="true"] *,
+[data-reduce-motion="true"] *::before,
+[data-reduce-motion="true"] *::after {
+  animation-duration: 0.01ms !important; animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important; scroll-behavior: auto !important;
+}
+/* 停动后不能「跑完就完」的几处：带 stagger 延迟（等不到末帧）或末帧不可读。
+   与系统块同一组例外；前两个是本仓自有，系统块没有对应物。 */
 [data-reduce-motion="true"] .md-word,
 [data-reduce-motion="true"] .mp-name,
+[data-reduce-motion="true"] .dot.running,
+[data-reduce-motion="true"] .dot.waiting::after,
 [data-reduce-motion="true"] .cursor,
-[data-reduce-motion="true"] .cairn-loader path {
+[data-reduce-motion="true"] .glyph.pending svg {
   animation: none;
 }
-[data-reduce-motion="true"] .cairn-loader path { opacity: 1; }
+[data-reduce-motion="true"] .cairn-loader path { animation: none; opacity: 1; }
 [data-reduce-motion="true"] .row.think[data-running="true"]::before { animation: none; opacity: .6; transform: none; }
+[data-reduce-motion="true"] .side-skeleton-row::after { animation: none; transform: translateX(100%); }
+[data-reduce-motion="true"] .gen-bar[data-running="true"] { animation: none; background: hsl(var(--accent-brand) / 40%); }
+[data-reduce-motion="true"] .change-preview { animation: none; }
 
 /* ══ ⌘/ 快捷键速查（§3.6「查看全部」）═══════════════════════════════ */
 .sheet-scrim {

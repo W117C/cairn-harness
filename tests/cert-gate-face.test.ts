@@ -7,7 +7,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { CERT_GATES, CERT_GATE_EXCLUDED, GATES } from "../scripts/gate-manifest";
+import { CERT_GATES, CERT_GATE_DEEP, CERT_GATE_EXCLUDED, CERT_GATE_OUTSIDE, GATES } from "../scripts/gate-manifest";
 import { certGateCell, certGatePlan, certGateVerdict, onlyListDiff, onlyListsIn, parseCertGateRows } from "../scripts/lib/head-cert-deps";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
@@ -220,30 +220,54 @@ describe("预算与注释实测成对：改单价必须同时改两处", () => {
  * 而本仓没有 git remote ⇒ workflow 至今没真跑过，这类漂移没有任何人会看到。
  *
  * 取料面刻意是**仓里真实存在的那两份手抄件**（不是合成的样本）：
- * 合成样本只能证明解析器会认字，证明不了"此刻这两份是对的"。 */
-describe("手抄的第二份名单必须与唯一事实源逐项相等（第 319 页）", () => {
+ * 合成样本只能证明解析器会认字，证明不了"此刻这两份是对的"。
+ *
+ * 第 1254 页：CI 多了一份**深门**名单（认证面之外的 4 道重门，名单定义在 `CERT_GATE_DEEP`）。
+ * 于是这一格从「每份名单都必须等于 CERT_GATES」扩成「每份名单必须逐字等于**两张面之一**」：
+ *   - 认证面（`CERT_GATES`）必须至少出现一份——少一份就是快门面被换掉了；
+ *   - 深门面（`CERT_GATE_DEEP`）在两份手抄件里各必须**恰好一份**——少一份＝重门又退回"只在本地全量时跑"，
+ *     多一份＝有人在文档里另写了一张没被钉住的名单。
+ * 任何第三张名单（既不等认证面也不等深门面）仍然当场红：放宽的是"允许存在第二张面"，不是"不再对账"。 */
+describe("手抄的第二份名单必须与两张面逐项相等（第 319 页 / 第 1254 页扩深门）", () => {
   /** 仓里两份手抄件：CI 真正会跑的那一串、以及给人粘贴的那一串。 */
   const HAND_COPIED: readonly { label: string; text: string }[] = [
     { label: "工作流的 --only", text: read("../.github/workflows/verify.yml") },
     { label: "CI 说明页的复跑块", text: read("../scripts/ci/README.md") },
   ];
   const SOURCE_NAMES = CERT_GATES.map((g) => g.name);
+  const DEEP_NAMES: readonly string[] = CERT_GATE_DEEP;
 
-  it("两份手抄件里的每一份名单都与 CERT_GATES 集合相等，且一份都不许少", () => {
+  /** 一份手抄名单属于哪张面；既不是认证面也不是深门面 ⇒ null（当场红）。 */
+  const classifyHandList = (names: readonly string[]): "cert" | "deep" | null => {
+    if (onlyListDiff(names, SOURCE_NAMES).same) return "cert";
+    if (onlyListDiff(names, DEEP_NAMES).same) return "deep";
+    return null;
+  };
+
+  it("两份手抄件里的每一份名单都逐字等于认证面或深门面，且认证面一份都不许少", () => {
     for (const h of HAND_COPIED) {
       const lists = onlyListsIn(h.text);
       // 抽不到 ≠ 没漂：这一格要是恒空，下面那个循环就一次都不跑（空尺也绿）。
       expect(lists, h.label + " 里一份名单都抽不到 ⇒ 这一格没量到，不是「没漂」").not.toBeNull();
       expect((lists ?? []).length, h.label + " 的手抄件数量为 0＝尺没落在任何东西上").toBeGreaterThan(0);
+      let cert = 0;
+      let deep = 0;
       for (const one of lists ?? []) {
-        const d = onlyListDiff(one.names, SOURCE_NAMES);
-        expect(
-          d.same,
-          h.label + " 第 " + String(one.line) + " 行与门面不相等：缺 " + d.missing.join("、")
-            + (d.extra.length > 0 ? "；多 " + d.extra.join("、") : "")
-            + "（手抄份与 CERT_GATES 只准集合相等，顺序不限）",
-        ).toBe(true);
+        const kind = classifyHandList(one.names);
+        if (kind === "cert") cert++;
+        else if (kind === "deep") deep++;
+        else {
+          const d = onlyListDiff(one.names, SOURCE_NAMES);
+          expect(
+            kind,
+            h.label + " 第 " + String(one.line) + " 行既不是认证面也不是深门面：对认证面缺 " + d.missing.join("、")
+              + (d.extra.length > 0 ? "；对认证面多 " + d.extra.join("、") : "")
+              + "（手抄份只准逐字等于两张面之一，顺序不限）",
+          ).not.toBeNull();
+        }
       }
+      expect(cert, h.label + " 里没有一份认证面名单 ⇒ 这份手抄件已经不代表快门面").toBeGreaterThan(0);
+      expect(deep, h.label + " 里的深门名单必须恰好一份（名单 = CERT_GATE_DEEP）").toBe(1);
     }
   });
 
@@ -271,10 +295,86 @@ describe("手抄的第二份名单必须与唯一事实源逐项相等（第 319
     expect(onlyListDiff(after.names, SOURCE_NAMES).same, "少一道门却仍判对齐＝这条判据是恒真的").toBe(false);
   });
 
+  it("深门那份名单也有牙：摘掉一道深门，分类必须落空（不许被认证面「收留」）", () => {
+    const wf = read("../.github/workflows/verify.yml");
+    const deepOne = (onlyListsIn(wf) ?? []).find((l) => classifyHandList(l.names) === "deep");
+    expect(deepOne, "工作流里抽不到深门名单 ⇒ 有牙这一条没东西可咬").toBeDefined();
+    const dropped = deepOne!.names[0]!;
+    const mutated = wf.replace("--only=" + deepOne!.names.join(","), "--only=" + deepOne!.names.slice(1).join(","));
+    expect(mutated, "替换打了个空＝下面那半证的不是这条判据").not.toBe(wf);
+    const after = (onlyListsIn(mutated) ?? []).find((l) => l.line === deepOne!.line);
+    expect(after, "突变副本里那一行不见了 ⇒ 下面那半证的不是这条判据").toBeDefined();
+    expect(after!.names).not.toContain(dropped);
+    expect(classifyHandList(after!.names), "深门少一道却仍被判成某张面＝这条判据是恒真的").toBeNull();
+  });
+
   it("差异函数自己有牙：空对空不算对齐（一把什么也没量到的尺没有分辨力）", () => {
     expect(onlyListDiff([], []).same, "两侧皆空被判对齐＝恒真式").toBe(false);
     expect(onlyListDiff(["a"], []).same).toBe(false);
     expect(onlyListDiff([], ["a"]).same).toBe(false);
     expect(onlyListDiff(["b", "a"], ["a", "b"]).same, "顺序不同不算漂（只准集合相等）").toBe(true);
+  });
+});
+
+/* 三态分区（第 1251 页）：每一道门都必须有认证面身份。
+ *
+ * 动因：`GATES` 与 `CERT_GATES` 都是手写的，两者之间没有机械校验——新增一道门只写进 `GATES`，
+ * 它就**永远不在任何自动化认证路径上跑**，而 `pnpm gates` 全绿会让人以为它被认证过。
+ * 第 1251 页数出来：面外 11 道（`GATES` 40 − 认证面 25 − 永不进面 4）；逐道问「谁在认证路径上看它」后，
+ * 只有 `renderer-layer-check` 同时满足「≤1.5s」与「无人覆盖」⇒ 买进认证面；余下 10 道逐条登记理由。
+ * 这一格钉：`GATES` 恰好 = 认证面 ∪ 永不进面 ∪ 面外登记，不重不漏；每条理由非空。 */
+describe("认证面三态分区：没有一道门可以「不在任何认证路径上」还悄悄绿着（第 1251 页）", () => {
+  interface Partition {
+    unassigned: string[];
+    ghosts: string[];
+    duplicated: string[];
+    reasonless: string[];
+  }
+
+  function partition(
+    gates: readonly string[],
+    cert: readonly string[],
+    excluded: readonly string[],
+    outside: Readonly<Record<string, string>>,
+  ): Partition {
+    const certSet = new Set(cert);
+    const excludedSet = new Set(excluded);
+    const outsideNames = Object.keys(outside);
+    const outsideSet = new Set(outsideNames);
+    return {
+      unassigned: gates.filter((g) => !certSet.has(g) && !excludedSet.has(g) && !outsideSet.has(g)),
+      ghosts: [...certSet, ...excludedSet, ...outsideSet].filter((g) => !gates.includes(g)),
+      duplicated: gates.filter((g) => [certSet.has(g), excludedSet.has(g), outsideSet.has(g)].filter(Boolean).length > 1),
+      reasonless: outsideNames.filter((g) => (outside[g] ?? "").trim().length < 20),
+    };
+  }
+
+  it("真表：不重不漏，且每条面外理由都写清了", () => {
+    const p = partition(GATES, CERT_GATES.map((g) => g.name), CERT_GATE_EXCLUDED, CERT_GATE_OUTSIDE);
+    expect(
+      p.unassigned,
+      "这些门不在任何认证路径上（也不在永不进面表）⇒ 要么买进 CERT_GATES，要么登记进 CERT_GATE_OUTSIDE 写明理由",
+    ).toEqual([]);
+    expect(p.ghosts, "这些名字在分区表里，却不在 GATES ⇒ 陈旧登记").toEqual([]);
+    expect(p.duplicated, "同一道门出现在两张表里 ⇒ 归属不清").toEqual([]);
+    expect(p.reasonless, "面外登记的理由太短/为空 ⇒ 等于无声放行").toEqual([]);
+    // 分母：三张表刚好覆盖 GATES 一次（上面的三条各自为空时这是推论；写成等式是让漏项当场可见）。
+    expect(CERT_GATES.length + CERT_GATE_EXCLUDED.length + Object.keys(CERT_GATE_OUTSIDE).length).toBe(GATES.length);
+  });
+
+  it("这条判据有牙：新增一道门只进 GATES ⇒ 当场未归属", () => {
+    const p = partition([...GATES, "brand-new-check"], CERT_GATES.map((g) => g.name), CERT_GATE_EXCLUDED, CERT_GATE_OUTSIDE);
+    expect(p.unassigned).toEqual(["brand-new-check"]);
+  });
+
+  it("这条判据有牙：面外那道挪进认证面却忘了删登记 ⇒ 当场重复", () => {
+    const outside: Record<string, string> = { ...CERT_GATE_OUTSIDE };
+    const name = Object.keys(outside)[0]!;
+    delete outside[name];
+    const cert = [...CERT_GATES.map((g) => g.name), name];
+    // 正常：删掉登记、挪进认证面 ⇒ 干净。
+    expect(partition(GATES, cert, CERT_GATE_EXCLUDED, outside).duplicated).toEqual([]);
+    // 异常：两处都留 ⇒ 重复。
+    expect(partition(GATES, cert, CERT_GATE_EXCLUDED, { ...outside, [name]: "理由" }).duplicated).toEqual([name]);
   });
 });

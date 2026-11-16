@@ -63,7 +63,7 @@ export interface WorkbenchOverlaysProps {
   setSettingsOpen: Dispatch<SetStateAction<boolean>>;
   openDestination: (destination: AppDestination) => void;
   openPane: (kind: PaneKind) => void;
-  setFileTarget: Dispatch<SetStateAction<{ path: string; seq: number } | null>>;
+  setFileTarget: Dispatch<SetStateAction<{ path: string; seq: number; workspace: string | null } | null>>;
   handlePaletteAction: (action: PaletteAction) => void;
   skills: readonly SlashSkill[];
   injectText: (text: string) => void;
@@ -185,7 +185,8 @@ export function WorkbenchOverlays(props: WorkbenchOverlaysProps): React.JSX.Elem
             onOpenFile={(path) => {
               setPaletteOpen(false);
               openPane("file");
-              setFileTarget((prev) => ({ path, seq: (prev?.seq ?? 0) + 1 }));
+              // 目标带上它属于哪个项目：换项目后这份相对路径作废（同名路径不是同一个文件）。
+              setFileTarget((prev) => ({ path, seq: (prev?.seq ?? 0) + 1, workspace: activeWorkspace }));
               focusComposer();
             }}
             onAction={(action) => { setPaletteOpen(false); handlePaletteAction(action); }}

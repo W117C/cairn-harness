@@ -183,9 +183,9 @@ describe("restoreSnapshot（v11 检查器「撤销此文件改动」）", () => 
     expect(r.ok).toBe(true);
     expect(await readFile(join(ws, "src", "a.ts"), "utf8")).toBe("const x = 1;\n");
 
-    // 还原前版本进了新快照（`<ms>--undo/<rel>`），内容 = 被覆盖掉的 "const x = 2;\n"
+    // 还原前版本进了新快照（`undo--<原件摘要>/<rel>`），内容 = 被覆盖掉的 "const x = 2;\n"
     const dirs = await readdir(join(ws, SNAPSHOT_ROOT));
-    const undoDir = dirs.find((d) => d.endsWith("--undo"));
+    const undoDir = dirs.find((d) => d.startsWith("undo--"));
     expect(undoDir).toBeTypeOf("string");
     expect(await readFile(join(ws, SNAPSHOT_ROOT, undoDir!, "src", "a.ts"), "utf8")).toBe("const x = 2;\n");
   });

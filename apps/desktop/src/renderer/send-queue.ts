@@ -72,6 +72,21 @@ export function moveQueued(list: readonly QueuedSend[], index: number, delta: -1
   return out;
 }
 
+/** 磁盘快照能否覆盖本地队列：读取发起前后都没有未落盘写，且飞行期间本窗口没有改过这张表。
+ *  `*AtRead` 必须是**发起读取之前**取的快照——回包时再取「此刻」再与此刻比是恒等式，
+ *  读取在飞期间刚落盘的新消息会被旧快照覆盖回去。 */
+export function queueSnapshotAdoptable(args: {
+  key: string;
+  dirtyAtRead: ReadonlySet<string>;
+  revisionsAtRead: ReadonlyMap<string, number>;
+  dirtyNow: ReadonlySet<string>;
+  revisionsNow: ReadonlyMap<string, number>;
+}): boolean {
+  return !args.dirtyAtRead.has(args.key)
+    && !args.dirtyNow.has(args.key)
+    && args.revisionsNow.get(args.key) === args.revisionsAtRead.get(args.key);
+}
+
 /** 落盘载荷只保留用户消息本身；id 与占位旗是渲染态，不进磁盘。 */
 export function toSessionQueueEntries(list: readonly QueuedSend[]): SessionQueueEntry[] {
   return list.filter((item) => item.blocked !== true).map((item) => ({ text: item.text, attachments: [...item.attachments] }));

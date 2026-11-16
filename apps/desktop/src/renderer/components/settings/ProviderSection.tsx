@@ -1,7 +1,7 @@
 // 模型与 Provider 段（第 1072 页从 settings-sections.tsx 按区拆分）——当前通道与密钥 / 能力两分区。
 // 私有 PROVIDER_LABELS 随段走；纯函数资产（providerStatusParts / providerNeedsKey / visionCapabilityLabel）
 // 从叶子模块 ./provider-assets 读（不 import monolith，无回流环）；monolith 重导出保旧 import 面。
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import type { MutableRefObject } from "react";
 import { Plus } from "lucide-react";
 import type { AppSettings } from "../../../../../../src/main/ipc-protocol";
@@ -9,6 +9,7 @@ import { Badge, Field, SettingsSection, SettingsRow, StatusDot } from "../settin
 import { STR } from "../../strings";
 import { CustomProviderForm } from "../CustomProviderForm";
 import { providerNeedsKey, providerStatusParts, visionCapabilityLabel } from "./provider-assets";
+import { tabNavigationTarget } from "../../radio-nav";
 
 // ── 模型与 Provider 三段（当前通道与密钥 / 联网搜索 / 自定义接口）──────────
 
@@ -82,6 +83,39 @@ export function ProviderSection(props: {
     });
   }, [activeCustom, addMode, props.onCustomSaved]);
   const editingEntry = useMemo(() => activeCustom !== null ? customEntries.find((e) => e.id === activeCustom) ?? null : null, [customEntries, activeCustom]);
+  // 左列表是 tablist：内置（需要 key 的）在前、自定义在后，两个分组共用一条方向键序列。
+  // roving tabindex 的兜底：当前 keyProvider 不在需要密钥的清单里时没有选中项，第一颗仍要能 Tab 到。
+  const detailId = useId();
+  const keyedProviders = props.providers.filter((p) => !p.custom && providerNeedsKey(p.id));
+  const tabCount = keyedProviders.length + customs.length;
+  const tabDomId = (id: string): string => `${detailId}-tab-${id}`;
+  // 新增表单不是一颗 tab：addMode 期间所有页签都取消选中（否则「添加供应商」按钮与旧通道
+  // 同时高亮 —— 一屏两处「当前」），详情区由 addProvider 命名、不挂 aria-labelledby。
+  const builtinSelected = (id: string): boolean => !addMode && activeCustom === null && props.keyProvider === id;
+  const selectedTabId = addMode
+    ? undefined
+    : activeCustom !== null
+      ? tabDomId(activeCustom)
+      : keyedProviders.some((p) => builtinSelected(p.id)) ? tabDomId(props.keyProvider) : undefined;
+  const noTabSelected = selectedTabId === undefined;
+  /** 方向键换页：内置/自定义两组共用一条序，选中即生效（自动激活），焦点跟到目标 tab。
+   *  列表是**垂直** tablist，换页键是 ↑/↓（←/→ 留给页面横向滚动，不劫持）。 */
+  const moveTab = (e: React.KeyboardEvent<HTMLButtonElement>, absolute: number): void => {
+    const next = tabNavigationTarget(e.key, absolute, tabCount, "vertical");
+    if (next === null) return;
+    e.preventDefault();
+    const target = next < keyedProviders.length ? keyedProviders[next] : customs[next - keyedProviders.length];
+    if (target === undefined) return;
+    if (next < keyedProviders.length) {
+      setCustomSelId(null);
+      setAddMode(false);
+      props.onKeyProviderChange(target.id);
+    } else {
+      setAddMode(false);
+      setCustomSelId(target.id);
+    }
+    e.currentTarget.closest('[role="tablist"]')?.querySelectorAll<HTMLElement>('[role="tab"]')[next]?.focus();
+  };
   return (
     <>
       {/* 摘要进分区头（第 892 页）：分区名已经写着「当前通道与密钥」，下面第一行又贴一次
@@ -92,34 +126,46 @@ export function ProviderSection(props: {
         {/* 供应商管理（2026-10-24 参照 Codex 供应商页）：左列表（状态点=已存 key）选通道，
             右侧详情 = 该通道的密钥表单（标签在上、字段整行）。换选中即清空 key 输入框。 */}
         <div className="pv-split">
-          <div className="pv-list" role="tablist" aria-label={STR.provider.providersAria}>
-            {(props.providers.filter((p) => !p.custom && providerNeedsKey(p.id))).map((p) => (
-              <button
-                key={p.id}
-                className={"pv-item" + (activeCustom === null && props.keyProvider === p.id ? " on" : "")}
-                role="tab"
-                aria-selected={activeCustom === null && props.keyProvider === p.id}
-                onClick={() => { setCustomSelId(null); setAddMode(false); props.onKeyProviderChange(p.id); }}
-              >
-                <StatusDot tone={props.status.stored.includes(p.id) ? "ok" : "off"} />
-                <span className="pv-item-name">{PROVIDER_LABELS[p.id] ?? p.label}</span>
-                {props.settings?.provider === p.id && <span className="sp-tag">{STR.provider.currentTag}</span>}
-              </button>
-            ))}
-            {customs.length > 0 && <div className="pv-list-label">{STR.provider.customGroup}</div>}
-            {customs.map((p) => (
-              <button
-                key={p.id}
-                className={"pv-item" + (activeCustom === p.id ? " on" : "")}
-                role="tab"
-                aria-selected={activeCustom === p.id}
-                onClick={() => { setAddMode(false); setCustomSelId(p.id); }}
-              >
-                <StatusDot tone={props.status.stored.includes(p.id) ? "ok" : "off"} />
-                <span className="pv-item-name">{p.label}</span>
-                {props.settings?.provider === p.id && <span className="sp-tag">{STR.provider.currentTag}</span>}
-              </button>
-            ))}
+          {/* tablist 里只放 tab：「自定义」小标题与「添加供应商」按钮留在外面——
+              它们不是页签，混进 tablist 会让方向键数与朗读序都多出两站。 */}
+          <div className="pv-list">
+            <div className="pv-tablist" role="tablist" aria-label={STR.provider.providersAria} aria-orientation="vertical">
+              {keyedProviders.map((p, i) => (
+                <button
+                  key={p.id}
+                  id={tabDomId(p.id)}
+                  className={"pv-item" + (builtinSelected(p.id) ? " on" : "")}
+                  role="tab"
+                  aria-selected={builtinSelected(p.id)}
+                  aria-controls={detailId}
+                  tabIndex={builtinSelected(p.id) || (noTabSelected && i === 0) ? 0 : -1}
+                  onClick={() => { setCustomSelId(null); setAddMode(false); props.onKeyProviderChange(p.id); }}
+                  onKeyDown={(e) => moveTab(e, i)}
+                >
+                  <StatusDot tone={props.status.stored.includes(p.id) ? "ok" : "off"} />
+                  <span className="pv-item-name">{PROVIDER_LABELS[p.id] ?? p.label}</span>
+                  {props.settings?.provider === p.id && <span className="sp-tag">{STR.provider.currentTag}</span>}
+                </button>
+              ))}
+              {customs.length > 0 && <div className="pv-list-label">{STR.provider.customGroup}</div>}
+              {customs.map((p, j) => (
+                <button
+                  key={p.id}
+                  id={tabDomId(p.id)}
+                  className={"pv-item" + (activeCustom === p.id ? " on" : "")}
+                  role="tab"
+                  aria-selected={activeCustom === p.id}
+                  aria-controls={detailId}
+                  tabIndex={activeCustom === p.id || (noTabSelected && keyedProviders.length === 0 && j === 0) ? 0 : -1}
+                  onClick={() => { setAddMode(false); setCustomSelId(p.id); }}
+                  onKeyDown={(e) => moveTab(e, keyedProviders.length + j)}
+                >
+                  <StatusDot tone={props.status.stored.includes(p.id) ? "ok" : "off"} />
+                  <span className="pv-item-name">{p.label}</span>
+                  {props.settings?.provider === p.id && <span className="sp-tag">{STR.provider.currentTag}</span>}
+                </button>
+              ))}
+            </div>
             <button
               className={"pv-add" + (addMode ? " on" : "")}
               aria-pressed={addMode}
@@ -129,7 +175,13 @@ export function ProviderSection(props: {
               <span>{STR.provider.addProvider}</span>
             </button>
           </div>
-          <div className="pv-detail">
+          <div
+            className="pv-detail"
+            id={detailId}
+            role="tabpanel"
+            aria-labelledby={addMode ? undefined : selectedTabId}
+            aria-label={addMode ? STR.provider.addProvider : selectedTabId === undefined ? STR.provider.channelTitle : undefined}
+          >
             {activeCustom !== null ? (
               <>
                 <div className="pv-detail-head">

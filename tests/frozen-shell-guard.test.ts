@@ -45,8 +45,8 @@ describe("run_shell 判卷面执行层闸（无沙箱地板）", () => {
     // 回执里那句「已按调用前内容逐字节复原」是对模型可见的能力断言：逐字点住它，别让文案漂走。
     expect(r.output).toContain("已按调用前内容逐字节复原");
     expect(await judge(), "盘上必须逐字节回到调用前").toBe("original");
-    // 改动前的字节留档（审计面）——看得见才叫证据（留档目录带时间戳，按后缀找）。
-    const dirs = (await readdir(join(ws, SNAPSHOT_ROOT))).filter((d) => d.endsWith("--frozen-guard"));
+    // 改动前的字节留档（审计面）——看得见才叫证据（目录名 = `frozen-guard--<原件摘要>`）。
+    const dirs = (await readdir(join(ws, SNAPSHOT_ROOT))).filter((d) => d.startsWith("frozen-guard--"));
     expect(dirs.length, "必须留下一次守卫留档").toBe(1);
     expect(await readFile(join(ws, SNAPSHOT_ROOT, dirs[0]!, "fixtures", "mock", "judge.ts"), "utf8")).toBe("hacked");
   });

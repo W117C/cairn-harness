@@ -82,7 +82,8 @@ describe("设计面·减法", () => {
     // 独立窗格窗口确实声明了它
     expect(popout).toMatch(/<PaneDock[\s\S]{0,400}?inPopout/);
     // 2026-10-24 单窗格模式：「恢复多面板布局」按钮随网格整体撤下（主窗也没有了）。
-    expect(dock).not.toContain('aria-label="恢复多面板布局"');
+    // 读整个应用面：按钮若换个组件挂回来，只读 PaneDock 会空过。
+    expect(readAppSurface()).not.toContain('aria-label="恢复多面板布局"');
   });
 
   it("⑦ markdown 表格只留横线（阅读面里不摆 Excel）", () => {

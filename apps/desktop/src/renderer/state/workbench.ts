@@ -3,7 +3,7 @@ import { useConversationNavigation } from "./conversation-navigation";
 import { useEmptySurfaceEffects } from "./empty-surface";
 import { useProjectActions } from "./projects";
 import { useRunQueue } from "./run-queue";
-import { noteWorkspaceContext } from "./window-workspace";
+import { noteWorkspaceContext, windowWorkspaceApplied } from "./window-workspace";
 import { useSessionPrefsHydration } from "./session-prefs";
 import { useRunReadings } from "./run-readings";
 import { inheritedDisplayIndexes, mergeViewEvents, refsByDisplayIndex } from "../derived/event-reference";
@@ -31,7 +31,7 @@ import { changedFileCount } from "../changed-files";
 import { nextPermissionMode } from "../permission-labels";
 import { usePermissionConfirm } from "./use-permission-confirm";
 import { deliveryTrail,formatRevertNotice,mergeSessionSnapshot,projectStream,turnDelivery,usageAggregate,usageSummary } from "../projections";
-import { composerLockReason,fromSessionQueueEntries,type QueuedSend } from "../send-queue";
+import { composerLockReason,fromSessionQueueEntries,queueSnapshotAdoptable,type QueuedSend } from "../send-queue";
 import type { DeleteConfirmTarget, SessionConfirmTarget, WorkspaceSession } from "../sessions-view";
 import { findSessionByRef } from "../sessions-view";
 import type { SlashSkill } from "../slash";
@@ -365,6 +365,19 @@ export function useWorkbenchModel() {
     applyWorkspaceContext(workspace);
     setActiveWorkspaceState(workspace);
   }, [applyWorkspaceContext]);
+  // 模型目录跟着窗口工作区换：主进程在 `setWorkspaceContext` 成功后把该项目的
+  // `.agent/providers.json` 装进进程级注册表（`providerInfo()` 读的就是它）。不重读的话
+  // 选择器仍列着上一个项目的自定义模型——选中后 run 按项目 provider 校验，直接报「未知 provider」。
+  // 读侧同样等上报落定：选择成功才装注册表，早一拍读到的还是旧目录。
+  useEffect(() => {
+    let alive = true;
+    void windowWorkspaceApplied().then(() => {
+      if (!alive) return;
+      void refreshProviderInfo();
+      void refreshProviderKeys();
+    });
+    return () => { alive = false; };
+  }, [activeWorkspace, refreshProviderInfo, refreshProviderKeys]);
   // v33：上报窗口可见会话（通知判「你不在看那个会话」；主页/无会话报 null）。
   useEffect(() => { void window.agent.reportViewing(activeId, activeWorkspace ?? ""); }, [activeId, activeWorkspace]);
   useEffect(() => {
@@ -459,7 +472,7 @@ export function useWorkbenchModel() {
     // 可能仍是 null（没有选项目），此前 diff/文件窗格会因「没有已知的工作区」整块不可用。
     // 2026-10-18：**渲染层状态也要跟**——此前只通知了主进程，activeWorkspace 仍停在旧项目：
     // 空屏项目 chip、预览、斜杠技能清单都会读错工作区。会话归属已知即以它为准；
-    // 未知（host 缺省根里的会话）只把窗口指针归位，当前浏览的项目不动。
+    // 归属未知先归位窗口指针（不拿旧项目的根读这条会话），回包里解析出真实根后再采纳。
     if (sessionWs !== null) setActiveWorkspace(sessionWs);
     else applyWorkspaceContext(null);
     const seq = ++openSeq.current;
@@ -477,12 +490,24 @@ export function useWorkbenchModel() {
     // 先例，不动 ipc-protocol）：main 侧运行实况。换渲染层实例（HMR/重载）后陈旧的「运行中」
     // 标记没有主人（收束时旧实例的 finally 已随实例销毁），打开即用 main 真值收敛：在跑补上、
     // 已收束摘掉。收束补发终态是正路，这条是每次开会话自愈一次的兜底，两者互不依赖。
+    // 归属未知（sessionWs = null）时 main 从盘上解析出的根才是这条会话的工作区，
+    // 队列键与运行旗都要按它算（下面 opened 里回填）。
+    let resolvedQueueWs: string | null = sessionWs;
     const opened = (window.agent.openSession(id, sessionWs ?? undefined) as Promise<{ events: AgentEvent[]; view?: SessionView; session?: SessionRef; running?: boolean; startedAt?: number }>).then((r) => {
       if (seq !== openSeq.current) return;
+      resolvedQueueWs = r.session?.workspace ?? resolvedQueueWs;
       if (openPending.current === pending) openPending.current = null;
       setSessionView(r.view ?? null);
       setEvents(mergeSessionSnapshot(r.events, pending.events));
-      const runId = runKey(r.session?.workspace ?? sessionWs ?? activeWorkspace, id);
+      // 归属未知（清单里还没有这一行 / 通知没带根）：回包里解析出的根就是这条会话的归属，
+      // 采纳它——否则 send 把旧 activeWorkspace 当显式根，会被 run 收口的归属闸拒掉，会话继续不了。
+      // 判据是「这次打开仍是当前会话」：切项目 / 切会话都会 newSession 自增 openSeq，迟到回包已返回。
+      if (sessionWs === null && r.session !== undefined && activeIdRef.current === id) {
+        setActiveWorkspace(r.session.workspace);
+        // 归属刚解析出来：最近打开序也要补记（入口按 sessionWs 记，未知归属时被跳过）。
+        touchWorkspace(r.session.workspace);
+      }
+      const runId = runKey(resolvedQueueWs ?? activeWorkspace, id);
       if (typeof r.running === "boolean") {
         const was = runningSet.current.has(runId);
         if (r.running) runningSet.current.add(runId); else runningSet.current.delete(runId);
@@ -499,13 +524,25 @@ export function useWorkbenchModel() {
       if (openPending.current === pending) openPending.current = null;
       failures.push(`会话打开失败：${err instanceof Error ? err.message : String(err)}`);
     });
-    const queueKey = runKey(sessionWs ?? activeWorkspace, id);
-    const queueReadRevision = queueRevision.current.get(queueKey);
-    const queueWasDirty = queueDirty.current.has(queueKey);
-    const queued = window.agent.queueGet(id, sessionWs ?? undefined).then(({ items }) => {
+    // 快照判据取在**发起读取之前**：读取在飞期间本窗口可能已改过队列（写已落盘、dirty 已清）；
+    // 回包时拿「此刻」的 revision 与它自己比是恒等式，会把新消息覆盖成旧快照。
+    const queueRevisionsAtRead = new Map(queueRevision.current);
+    const queueDirtyAtRead = new Set(queueDirty.current);
+    const queueRead = window.agent.queueGet(id, sessionWs ?? undefined);
+    // 读取仍并行，但落键必须等打开回包：归属未知时键要用 `r.session.workspace`，两个回包的
+    // 到达顺序没有保证；`queueGet` 先回就落旧键（搬运分支已在归属采纳后删除）。
+    const queued = Promise.all([queueRead, opened]).then(([{ items }]) => {
       if (seq !== openSeq.current) return;
+      // 键按回包后的归属算（opened 已落定）；快照判据仍是读取发起时的那一份。
+      const queueKey = runKey(resolvedQueueWs ?? activeWorkspace, id);
       // 保存失败或仍有写入时，磁盘快照比本窗口的 desired 队列旧；切走再回来不能覆盖未保存消息。
-      if (!queueWasDirty && !queueDirty.current.has(queueKey) && queueRevision.current.get(queueKey) === queueReadRevision) {
+      if (queueSnapshotAdoptable({
+        key: queueKey,
+        dirtyAtRead: queueDirtyAtRead,
+        revisionsAtRead: queueRevisionsAtRead,
+        dirtyNow: queueDirty.current,
+        revisionsNow: queueRevision.current,
+      })) {
         setQueueLocal(queueKey, fromSessionQueueEntries(items, () => ++queueSeq.current));
       }
     }).catch((err: unknown) => {
@@ -516,13 +553,14 @@ export function useWorkbenchModel() {
       setSessionLoadIssue(failures.length === 0 ? null : { seq, message: failures.join("\n") });
       setQueueLoading(false);
     });
-  }, [activate, openDestination, setLastError, setQueueLocal, touchWorkspace, activeWorkspace]);
+  }, [activate, openDestination, setLastError, setQueueLocal, setActiveWorkspace, touchWorkspace, activeWorkspace]);
 
   const sessionLoadError = activeId !== null && sessionLoadIssue?.seq === openSeq.current
     ? sessionLoadIssue.message : null;
   const retrySessionOpen = useCallback(() => {
     const id = activeIdRef.current;
-    if (id !== null && !queueLoading) openSession(id, activeWorkspaceRef.current ?? undefined);
+    // 重试重走归属推导（清单 → 盘上解析）；把窗口当前项目当显式根会让别处的会话永远打不开。
+    if (id !== null && !queueLoading) openSession(id);
   }, [openSession, queueLoading]);
 
   // 完成通知点击（v21）：主进程已把窗口拉到前台，这里只负责打开目标会话。

@@ -129,7 +129,11 @@ describe("BYOK 装配接线守卫（index.ts 源文——wired 覆盖守卫同�
     expect(indexTs).toMatch(/console\.log\(`\[byok-inject\]/); // 成功路径：结果一行（boolean 文案，无值）
     expect(indexTs).toMatch(/console\.error\("\[byok-inject\]/); // 拒绝被吞：fire-and-forget 必须带失败留痕
     // 明文零落盘三处纪律的日志面：注入段不得把 env 值/key 串进 console（注入调用点到文件尾扫描）
-    const injectSegment = indexTs.slice(indexTs.indexOf("injectStoredProviderKey("));
+    const injectAt = indexTs.indexOf("injectStoredProviderKey(");
+    // 调用点改名时 slice(-1) 只读到文件末尾一个字符，下面两条「日志不泄漏 key」会假绿。
+    expect(injectAt, "找不到注入调用点 ⇒ 日志泄漏扫描会读文件尾巴空过").toBeGreaterThan(-1);
+    const injectSegment = indexTs.slice(injectAt);
+    expect(injectSegment).toContain("injectStoredProviderKey(");
     expect(injectSegment).not.toMatch(/console\.\w+\([^\n]*process\.env/);
     expect(injectSegment).not.toMatch(/console\.\w+\([^\n]*getProviderKey/);
   });

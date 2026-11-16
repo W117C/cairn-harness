@@ -3,7 +3,7 @@
 // 组件与 App 只消费这几个出口，不各算一份。
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { askBelongsToSession, composerLockReason, composerLocked, continueAfterRun, drainQueue, dropQueued, editQueued, enqueueQueued, fromSessionQueueEntries, interruptAfterSend, moveQueued, promoteQueued, shouldHealStaleRun, steerAccepted, steerRouteOf, takeQueued, toSessionQueueEntries, type QueuedSend, type SendDisposition } from "../src/renderer/send-queue";
+import { askBelongsToSession, composerLockReason, composerLocked, continueAfterRun, drainQueue, dropQueued, editQueued, enqueueQueued, fromSessionQueueEntries, interruptAfterSend, moveQueued, promoteQueued, queueSnapshotAdoptable, shouldHealStaleRun, steerAccepted, steerRouteOf, takeQueued, toSessionQueueEntries, type QueuedSend, type SendDisposition } from "../src/renderer/send-queue";
 import { readAppSurface } from "./helpers/app-surface";
 
 const item = (id: number): QueuedSend => ({ id, text: `消息${String(id)}`, attachments: [] });
@@ -317,5 +317,56 @@ describe("第 9 点·插话的三条路（纯函数判据，不依赖 DOM/运行
     expect(steerAccepted({ ok: true })).toBe(true);
     expect(steerAccepted({})).toBe(false); // ← 兜底值这条必须判成"没送进去"
     expect(steerAccepted({ ok: false })).toBe(false);
+  });
+});
+
+describe("queueSnapshotAdoptable（磁盘快照能否覆盖本地队列）", () => {
+  const key = "ws-a/session-1";
+  const clean = (revisions: ReadonlyMap<string, number>) => queueSnapshotAdoptable({
+    key,
+    dirtyAtRead: new Set<string>(),
+    revisionsAtRead: new Map([[key, 1]]),
+    dirtyNow: new Set<string>(),
+    revisionsNow: revisions,
+  });
+
+  it("读取期间没有本地改动 ⇒ 采纳磁盘快照", () => {
+    expect(clean(new Map([[key, 1]]))).toBe(true);
+    // 读取前从未改过（revision 缺席）且之后也没改：同样采纳。
+    expect(queueSnapshotAdoptable({
+      key,
+      dirtyAtRead: new Set<string>(),
+      revisionsAtRead: new Map<string, number>(),
+      dirtyNow: new Set<string>(),
+      revisionsNow: new Map<string, number>(),
+    })).toBe(true);
+  });
+
+  it("★ 读取在飞期间本地改过（revision 前进）⇒ 拒绝：旧快照不许覆盖刚落盘的新消息", () => {
+    expect(clean(new Map([[key, 2]]))).toBe(false);
+  });
+
+  it("★ 读取前就有未落盘写 ⇒ 拒绝（磁盘比本地旧）", () => {
+    expect(queueSnapshotAdoptable({
+      key,
+      dirtyAtRead: new Set([key]),
+      revisionsAtRead: new Map([[key, 1]]),
+      dirtyNow: new Set([key]),
+      revisionsNow: new Map([[key, 1]]),
+    })).toBe(false);
+  });
+
+  it("读取后才出现未落盘写 ⇒ 拒绝（回包不许把正在排队的内容抹掉）", () => {
+    expect(queueSnapshotAdoptable({
+      key,
+      dirtyAtRead: new Set<string>(),
+      revisionsAtRead: new Map([[key, 1]]),
+      dirtyNow: new Set([key]),
+      revisionsNow: new Map([[key, 2]]),
+    })).toBe(false);
+  });
+
+  it("别的会话改了不算：判据只认这张表的键", () => {
+    expect(clean(new Map([[key, 1], ["ws-a/other", 5]]))).toBe(true);
   });
 });

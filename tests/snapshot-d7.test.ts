@@ -12,7 +12,7 @@ import { runLoop } from "../src/agent/loop";
 import type { ModelOutput } from "../src/providers";
 import { edit_file } from "../src/tools/edit_file";
 import { write_file } from "../src/tools/write_file";
-import { snapshotIdOf } from "../src/tools/snapshot";
+import { snapshotDigestOf, snapshotIdOf } from "../src/tools/snapshot";
 
 /** macOS 的 /tmp 实为 /private/tmp：沙箱规则与路径比较都要 realpath 后的串（AGENTS.md 环境注意）。 */
 async function freshWorkspace(): Promise<string> {
@@ -36,6 +36,10 @@ describe("D7 覆盖前快照", () => {
     expect(r.output).toContain("覆盖前原件已存");
     const back = await readFile(join(ws, r.snapshotId as string), "utf8");
     expect(back, "取回的必须是覆盖前的原件，不是新内容").toBe(original);
+    // 快照路径只由输入决定：同 callId、同原件 ⇒ 每次重跑都落在同一处（第 1257 页偿清 D7 快照债）。
+    expect(r.snapshotId).toBe(
+      snapshotIdOf(rel, "call-1", snapshotDigestOf(Buffer.from(original, "utf8"))),
+    );
     expect(await readFile(join(ws, rel), "utf8")).toBe("export const a = 2;\n");
   });
 
@@ -45,9 +49,25 @@ describe("D7 覆盖前快照", () => {
     expect(r.ok).toBe(true);
     expect(r.snapshotId, "没有原件可保 ⇒ 不该有快照").toBeUndefined();
     expect(existsSync(join(ws, ".agent", "snapshots"))).toBe(false);
-    expect(snapshotIdOf("src/a.ts", "call/1 ?:x", 1700000000000)).toBe(
-      join(".agent/snapshots", "1700000000000--call_1___x", "src/a.ts"),
+    const digest = snapshotDigestOf(Buffer.from("original"));
+    expect(snapshotIdOf("src/a.ts", "call/1 ?:x", digest)).toBe(
+      join(".agent/snapshots", "call_1___x--" + digest, "src/a.ts"),
     );
+  });
+
+  it("同一 callId 复写同一文件：原件不同 ⇒ 两次快照并存；原件相同 ⇒ 同一路径", async () => {
+    const ws = await freshWorkspace();
+    const rel = "twice.ts";
+    await writeFile(join(ws, rel), "v1\n", "utf8");
+    const a = await write_file.run({ path: rel, content: "x\n" }, ctxOf(ws, "same-call"));
+    await writeFile(join(ws, rel), "v2\n", "utf8");
+    const b = await write_file.run({ path: rel, content: "y\n" }, ctxOf(ws, "same-call"));
+    expect(a.snapshotId).toBeTypeOf("string");
+    expect(b.snapshotId).toBeTypeOf("string");
+    // 不许靠时钟区分：原件内容不同 ⇒ 目录不同，第一次留档不会被第二次顶掉。
+    expect(a.snapshotId).not.toBe(b.snapshotId);
+    expect(await readFile(join(ws, a.snapshotId as string), "utf8")).toBe("v1\n");
+    expect(await readFile(join(ws, b.snapshotId as string), "utf8")).toBe("v2\n");
   });
 
   it("空文件不占快照", async () => {

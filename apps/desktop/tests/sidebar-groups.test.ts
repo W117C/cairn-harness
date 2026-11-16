@@ -129,8 +129,9 @@ describe("对话菜单对齐原型 v3-lite（第十四遍；词面单源 STR—�
     const { STR } = await import("../src/renderer/strings");
     expect(STR.sidebar.pinned).toBe("已置顶");
     expect(sidebarSrc).toContain("STR.sidebar.pinned"); // 行上 Pin 标记（此前置顶后零标记）
-    expect(sidebarSrc).not.toContain("已固定");
-    expect(sidebarSrc).not.toContain("取消固定");
+    // 旧词面全清（读整个应用面：抄进别的组件也算回潮）
+    expect(readAppSurface()).not.toContain("已固定");
+    expect(readAppSurface()).not.toContain("取消固定");
   });
 
   it("分叉接线：App 走 round=0 全量分叉哨兵 + 菜单回调上抛 + 落点是 openSession（载转录，不是裸切 activeId），失败 fail-visible", () => {
@@ -155,7 +156,8 @@ describe("文件夹行整行展开/收起（第二十二遍；P1 合同重订—
     expect(sidebarSrc).toContain('className="group-toggle"');
     expect(sidebarSrc).toContain("aria-expanded={!isCollapsed}");
     expect(sidebarSrc).toContain("toggleGroup(key)");
-    expect(sidebarSrc).not.toContain("e.stopPropagation(); toggleGroup(key)");
+    // 旧点击形态清零；否定断言读整个应用面（组头哪天搬进 SidebarGroups，读单文件会空过）
+    expect(readAppSurface()).not.toContain("e.stopPropagation(); toggleGroup(key)");
   });
 
   it("归属语义在行上「＋」（切归属 + 新任务面）；哨兵组无＋（新任务不能落未注册工作区）", () => {
@@ -165,8 +167,8 @@ describe("文件夹行整行展开/收起（第二十二遍；P1 合同重订—
     // 哨兵守卫：临时对话组不渲染项目菜单与＋（两处都以 project !== null 为闸）
     expect(sidebarSrc).toContain("{project !== null && (");
     // 旧形态清零：组头不再是「点了只为切归属」的幽灵行为；旧徽标文案不再出现
-    expect(sidebarSrc).not.toContain("if (!switchable) return;");
-    expect(sidebarSrc).not.toContain("在这个文件夹里新对话");
+    expect(readAppSurface()).not.toContain("if (!switchable) return;");
+    expect(readAppSurface()).not.toContain("在这个文件夹里新对话");
   });
 });
 

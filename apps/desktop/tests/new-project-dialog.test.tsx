@@ -6,7 +6,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { NewProjectDialog, templateNavigationTarget, validateProjectName } from "../src/renderer/components/NewProjectDialog";
+import { NewProjectDialog, validateProjectName } from "../src/renderer/components/NewProjectDialog";
+import { radioNavigationTarget } from "../src/renderer/radio-nav";
 import { templateCatalog } from "../../../src/main/project-templates";
 import { STR } from "../src/renderer/strings";
 
@@ -36,16 +37,16 @@ describe("validateProjectName（纯函数）", () => {
   });
 });
 
-describe("templateNavigationTarget（单选组方向键）", () => {
+describe("radioNavigationTarget（单选组方向键，模板卡与设置面共用）", () => {
   it("左右/上下方向键循环移动，Home/End 落到首尾，其他键不劫持", () => {
-    expect(templateNavigationTarget("ArrowRight", 0, 4)).toBe(1);
-    expect(templateNavigationTarget("ArrowLeft", 0, 4)).toBe(3);
-    expect(templateNavigationTarget("ArrowDown", 2, 4)).toBe(3);
-    expect(templateNavigationTarget("ArrowUp", 3, 4)).toBe(2);
-    expect(templateNavigationTarget("Home", 2, 4)).toBe(0);
-    expect(templateNavigationTarget("End", 1, 4)).toBe(3);
-    expect(templateNavigationTarget("Enter", 1, 4)).toBeNull();
-    expect(templateNavigationTarget("ArrowRight", 0, 0)).toBeNull();
+    expect(radioNavigationTarget("ArrowRight", 0, 4)).toBe(1);
+    expect(radioNavigationTarget("ArrowLeft", 0, 4)).toBe(3);
+    expect(radioNavigationTarget("ArrowDown", 2, 4)).toBe(3);
+    expect(radioNavigationTarget("ArrowUp", 3, 4)).toBe(2);
+    expect(radioNavigationTarget("Home", 2, 4)).toBe(0);
+    expect(radioNavigationTarget("End", 1, 4)).toBe(3);
+    expect(radioNavigationTarget("Enter", 1, 4)).toBeNull();
+    expect(radioNavigationTarget("ArrowRight", 0, 0)).toBeNull();
   });
 });
 

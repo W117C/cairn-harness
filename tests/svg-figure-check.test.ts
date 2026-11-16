@@ -18,7 +18,7 @@
  *
  *  断言一律走子进程（这就是 verify 调用它的方式），不在进程里 import 后调 main。 */
 import { execFileSync } from "node:child_process";
-import { mkdirSync, rmSync, writeFileSync, copyFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -75,16 +75,32 @@ describe("正向：结构正确的图形必须退 0", () => {
   it("三条**外部 ground truth**（SOTA 产出）不许被判红——本格的分母在仓库外", () => {
     // 这三份来自基准正源 simonw/pelican-bicycle，是"画对了"的真值。
     // 少一份绿就等于这把尺在把正确的产物判红，那比假绿更糟。
-    for (const name of ["claude-3-5-sonnet-20241022", "gpt-4o", "o1-mini"]) {
+    //
+    // ⚠️ 2026-11-15 修的假绿：这三份文件从不入库（`.tmp/` 未跟踪），旧写法在 `catch` 里
+    //   `continue`，于是干净检出上循环体一次 `expect` 都不执行，用例**照样绿**。
+    //   现在的形状是「如实记账」：三份都必须被交代（在场则必须判绿，缺席则计入未证），
+    //   分母恒等于 3 ⇒ 循环再也不可能整个空转过去。
+    //   真正的修法是把这 3 份 SVG 收进 `fixtures/svg-ground-truth/` 并入库；在那之前，
+    //   这一格每轮都会把 `unverified` 印出来，而不是假装全绿。
+    const names = ["claude-3-5-sonnet-20241022", "gpt-4o", "o1-mini"] as const;
+    const unverified: string[] = [];
+    let verified = 0;
+    for (const name of names) {
       const src = join(ROOT, ".tmp", "gt-" + name + ".svg");
-      let dst = "";
-      try {
-        dst = write(name + ".svg", "");
-        copyFileSync(src, join(dir, name + ".svg"));
-      } catch {
-        continue; // 外部真值不在本地时跳过：不假装它是绿的
+      if (!existsSync(src)) {
+        unverified.push(name); // 外部真值不在本地：记成未证，不假装它是绿的
+        continue;
       }
+      const dst = write(name + ".svg", "");
+      copyFileSync(src, join(dir, name + ".svg"));
       expect(run([dst]).code, "外部 ground truth 被判红：" + name).toBe(0);
+      verified++;
+    }
+    // 分母记账：在场 + 缺席 必须正好等于 3（少一份就是漏跑，不是通过）
+    expect(verified + unverified.length, "三份外部真值必须各有交代（漏掉一份 = 循环空转）").toBe(3);
+    if (unverified.length > 0) {
+      // 印出来而不是静默：跑整套的人能看见「本格只证了 n/3」
+      console.warn("[svg-figure] 外部 ground truth 未证 " + unverified.length + "/3：" + unverified.join(", "));
     }
   });
 });

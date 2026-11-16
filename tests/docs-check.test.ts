@@ -1180,7 +1180,10 @@ describe("分页点谓词 PAGE_HEAD_RE：h2 页与 h3 页各钉一条（#61②�
       "本页自己点名的证人必须算在本页头上（合并态它们整片挂在「第 307 页」身上）",
     ).toBe(true);
     // 伪页那一格：合并态「第 307 页」一条挂 118 条 refs（本轮现读），逐页化之后只剩它自己的两条
-    for (const p of pages.filter((x) => x.key === "第 307 页")) {
+    const pseudo = pages.filter((x) => x.key === "第 307 页");
+    // 页整条消失时下面的循环会空过（「不替别人挂账」变成一句没人验的话）。
+    expect(pseudo.length, "第 307 页在台账里不存在 ⇒ 挂账上限那条判据空过").toBeGreaterThan(0);
+    for (const p of pseudo) {
       expect(p.refs.length, `第 307 页又在替别人挂账：${String(p.refs.length)} 条`).toBeLessThanOrEqual(2);
     }
   });

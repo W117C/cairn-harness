@@ -62,8 +62,26 @@ describe("会话作用域调用的工作区路由", () => {
     expect(mainSrc).toContain("handleSessionAssignProject(sessionId as string, projectId as string | null, await explicitSessionsRoot(workspace))");
   });
 
+  it("目标写入：显式根里没有这条会话、却登记在别处 ⇒ 拒（goal_set 会 createEventLog，不能造幽灵）", () => {
+    // goal_set 先于 run 落盘：放过去会先造出一条幽灵会话，下一次 run 再看到「本根有日志」便放行，
+    // run 收口的归属闸被提前绕过。判据放在 wired 表这一层，与显式根的解析同拍。
+    expect(mainSrc).toContain("async function assertSessionLivesHere(root: string, sessionId: string): Promise<void> {");
+    expect(mainSrc).toContain("if (root !== undefined && sessionId !== undefined) await assertSessionLivesHere(root, sessionId);");
+  });
+
+  it("切项目回空聊天面：侧栏 / 顶栏不在旧会话上继续发（同一 sessionId 不能写进新工作区）", () => {
+    // 命令面板早就这么做（2026-11-05 审计），侧栏行与顶栏项目 chip 此前漏了：
+    // 旧 activeId 留在原项目，而 send 带的是 activeWorkspace ⇒ 下一条消息落到新工作区的空日志上。
+    expect(app).toContain("const switched = p !== activeWorkspace;");
+    expect(app).toContain("const switched = p.path !== activeWorkspace;");
+    expect(app).toContain("if (switched && activeId !== null) newSession();");
+  });
+
   it("主窗重载后窗口指针归零（渲染层状态归零，主进程不能还停在上一个项目）", () => {
-    expect(mainSrc).toContain('win.webContents.on("did-navigate", () => { windowWorkspaces.forget(win.webContents); });');
+    expect(mainSrc).toContain('win.webContents.on("did-navigate", () => {\n    windowWorkspaces.forget(win.webContents);');
+    // 进程级自定义供应商注册表也要归零：重载后首页选择器不能还挂着上一个项目的自定义模型
+    // （选中后 run 按目标工作区校验，报「未知 provider」）。
+    expect(mainSrc).toContain("installCustomProviders([]);");
   });
 });
 
@@ -74,7 +92,8 @@ describe("窗口工作区的上报 → 读因果", () => {
     expect(app).toContain("const setActiveWorkspace = useCallback((workspace: string | null): void => {");
     expect(app).toMatch(/applyWorkspaceContext\(workspace\);\s*setActiveWorkspaceState\(workspace\);/);
     expect(app).not.toContain("useEffect(() => { applyWorkspaceContext(activeWorkspace); }");
-    // 打开归属未知的会话（host 缺省根）：只把窗口指针归位，当前浏览的项目不动。
+    // 打开归属未知的会话（host 缺省根）：开打前先只把窗口指针归位（不拿旧项目的根去读这条会话）；
+    // 回包里解析出的真实根在 opened 中按「这次打开仍是当前会话」采纳（下一条用例钉住）。
     expect(app).toContain("if (sessionWs !== null) setActiveWorkspace(sessionWs);");
     expect(app).toContain("else applyWorkspaceContext(null);");
   });
@@ -110,11 +129,79 @@ describe("窗口工作区的上报 → 读因果", () => {
   it("应用页 / 插件面 / 插件市场在切换工作区后重取快照（删除、信任写进新项目，清单不能还是旧的）", () => {
     expect(app).toContain("}, [props.page, props.workspace, refresh]);");
     expect(app).toContain("void windowWorkspaceApplied().then(() => {");
-    expect(app).toMatch(/换项目：旧清单的行不能再可点[\s\S]{0,80}?setSnap\(null\);/);
+    // 换项目那一帧就不能再渲染旧清单（渲染期按快照所属工作区判定，不等 effect 晚一拍）。
+    expect(app).toContain("const current = snap !== null && snap.forWorkspace === (props.workspace ?? null) ? snap.value : null;");
+    expect(app).toContain("snapshotState.page === props.page && snapshotState.workspace === props.workspace");
     expect(app).toContain("void windowWorkspaceApplied().then(() => window.agent.getState())");
     // 插件市场的三个读取面（runtime 走 getState）也在同一道门闩后发车；连切两次只让最新那次跑。
     expect(app).toContain("const id = ++refreshSeq.current;");
     expect(app).toContain("if (id !== refreshSeq.current) return;");
+    // 闲时队列按窗口工作区取：切项目重挂载的第一读数也要等上报落定。
+    expect(app).toContain("await windowWorkspaceApplied();\n        if (!alive) return;\n        const next = await window.agent.idleTaskList();");
+  });
+
+  it("换项目后模型目录重取（自定义 provider 是项目级的：选择器不能列着上一个项目的模型）", () => {
+    // 主进程这半：选择成功后才把该项目的 providers.json 装进注册表；渲染层这半：换项目
+    // 等上报落定再重读目录。少任意一半，选择器与 run 的校验就会各说各话。
+    expect(mainSrc).toContain("const current = workspaceContext();");
+    expect(mainSrc).toContain('installCustomProviders(loaded?.kind === "ok" ? loaded.derived : []);');
+    expect(app).toMatch(/windowWorkspaceApplied\(\)\.then\(\(\) => \{[\s\S]{0,120}?void refreshProviderInfo\(\);[\s\S]{0,60}?void refreshProviderKeys\(\);/);
+    expect(app).toContain("}, [activeWorkspace, refreshProviderInfo, refreshProviderKeys]);");
+  });
+
+  it("命令面板的「打开文件」目标属于设置时的项目（换项目后不拿旧相对路径预览新项目）", () => {
+    expect(app).toContain("setFileTarget((prev) => ({ path, seq: (prev?.seq ?? 0) + 1, workspace: activeWorkspace }))");
+    expect(app).toContain("props.fileTarget.workspace === (props.workspace ?? null)");
+    expect(app).toContain("{...(fileTargetCurrent !== undefined ? { openTarget: fileTargetCurrent } : {})}");
+  });
+
+  it("换项目后文件窗格换根（旧树不能留在屏幕上，第一读等上报落定）", () => {
+    expect(app).toContain('<FilePane\n                  key={props.workspace ?? ""}');
+    expect(app).toContain('void windowWorkspaceApplied().then(() => { if (alive) loadDir(""); });');
+  });
+
+  it("移除当前项目 = 退出该工作区并回主页（不把界面留在已注销的根上）", () => {
+    expect(app).toContain("if (activeWorkspaceRef.current === p.path) {\n      setActiveWorkspace(null);\n      activeWorkspaceRef.current = null;\n      newSessionRef.current?.();");
+    expect(app).toContain("toast.success(STR.toast.projectRemovedActive.replace(\"{name}\", p.name));");
+  });
+
+  it("克隆后切过去 / 重新定位后换根：都回新根的空聊天面（旧 sessionId 属于旧根）", () => {
+    // 克隆成功会切到新项目、重新定位会把根换成新路径：两种情况下 activeId 都还属于旧根，
+    // 不回空聊天面就会把同一 sessionId 写进新根的空日志（侧栏 / 命令面板已收口，这两条通道此前漏了）。
+    expect(app).toMatch(/setActiveWorkspace\(record\.path\);\s*activeWorkspaceRef\.current = record\.path;\s*\/\/ 切过去[\s\S]{0,160}?newSessionRef\.current\?\.\(\);/);
+    expect(app).toMatch(/activeWorkspaceRef\.current = updated\.path;\s*\/\/ 根换了[\s\S]{0,160}?newSessionRef\.current\?\.\(\);/);
+  });
+
+  it("归属未知的会话：回包后采纳解析出的根（send 与队列键都不再拿旧 activeWorkspace）", () => {
+    // 通知没带根 / 清单还没到：打开时不知道归属，但主进程回包里有（r.session.workspace）。
+    // 不采纳 ⇒ 下一条 send 带着旧项目当显式根，run 收口会拒绝（拒绝好过写错，但会话也继续不了）。
+    // 判据是「这次打开仍是当前会话」而不是「窗口没有项目」：用户切项目/切会话都会走
+    // newSession 自增 openSeq，迟到回包已先行返回；而「正停在项目 A 时打开一条属于别处的会话」
+    // 恰恰是最需要采纳的形态——chip / 队列键 / 运行旗都该跟会话真实的根。
+    expect(app).toContain("resolvedQueueWs = r.session?.workspace ?? resolvedQueueWs;");
+    expect(app).toContain("if (sessionWs === null && r.session !== undefined && activeIdRef.current === id) {");
+    expect(app).toContain("setActiveWorkspace(r.session.workspace);");
+    // 队列键与运行旗按回包后的归属算；落键等 opened 落定——两个 IPC 的到达顺序没有保证，
+    // 读取保持并行，否则 queueGet 先回时键仍停在旧 activeWorkspace，待发消息会挂错键。
+    expect(app).toContain("const runId = runKey(resolvedQueueWs ?? activeWorkspace, id);");
+    expect(app).toContain("const queueKey = runKey(resolvedQueueWs ?? activeWorkspace, id);");
+    expect(app).toContain("const queued = Promise.all([queueRead, opened])");
+    expect(app).toContain("const queueRead = window.agent.queueGet(id, sessionWs ?? undefined);");
+    // 快照判据取在发起读取**之前**：读取在飞期间本窗口写过的队列不能被旧磁盘快照覆盖
+    // （在回包里拿「此刻」的 revision 与它自己比是恒等式，等于没有这道闸）。
+    const readAt = app.indexOf("const queueRead = window.agent.queueGet");
+    const snapshotAt = app.indexOf("const queueRevisionsAtRead = new Map(queueRevision.current);");
+    expect(snapshotAt).toBeGreaterThan(-1);
+    expect(snapshotAt).toBeLessThan(readAt);
+    // 判据本体在 send-queue 的纯函数里（语义由 send-queue.test.ts 逐条判）；这里钉接线
+    // 传的是读取前那一份快照，且“此刻”的两张表也一并交给它。
+    expect(app).toContain("queueSnapshotAdoptable({");
+    expect(app).toContain("dirtyAtRead: queueDirtyAtRead");
+    expect(app).toContain("revisionsAtRead: queueRevisionsAtRead");
+    expect(app).toContain("dirtyNow: queueDirty.current");
+    expect(app).toContain("revisionsNow: queueRevision.current");
+    // 重试也必须重走归属推导：把窗口当前项目当显式根，会话属于另一个根时永远打不开。
+    expect(app).toMatch(/if \(id !== null && !queueLoading\) openSession\(id\);/);
   });
 
   it("换工作区丢掉上一份快照：旧行上的信任决议不能落到新项目（决议带行自己的根）", () => {

@@ -42,5 +42,6 @@ it("没有 snapshotId 的 tool_result 不伪造快照字段", () => {
     { type: "tool_result", callId: "b", ok: true, output: "已修改", change: "modified" },
   ] as AgentEvent[], false);
   const row = rows[0];
+  expect(row?.kind, "没成 tool 行 ⇒ 下面那条「不伪造快照字段」没量到").toBe("tool");
   if (row?.kind === "tool") expect(row.snapshotId).toBeUndefined();
 });

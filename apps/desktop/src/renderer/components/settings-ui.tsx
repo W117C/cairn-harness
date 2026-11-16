@@ -1,6 +1,6 @@
 // 设置页公共组件：页头、分组、标签/控件行，以及共享表单状态。
 // 设置页的紧凑布局在 settings-refinement.css 中，并限定于 .sp-page。
-import type { ReactNode } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import { STR } from "../strings";
 
 export function SettingsPage(props: { title: string; desc?: string; children: ReactNode }): React.JSX.Element {
@@ -67,6 +67,9 @@ export function OptionCard(props: {
   tone?: "normal" | "warn" | "danger";
   /** 危险档的额外警示行（显示在说明下方）。 */
   warn?: string;
+  /** 单选组里只有选中项是 Tab 停点（方向键移动由组的 helper 处理）。 */
+  tabIndex?: 0 | -1;
+  onKeyDown?: (e: KeyboardEvent<HTMLButtonElement>) => void;
   onSelect: () => void;
 }): React.JSX.Element {
   return (
@@ -74,6 +77,8 @@ export function OptionCard(props: {
       type="button"
       role="radio"
       aria-checked={props.checked}
+      {...(props.tabIndex === undefined ? {} : { tabIndex: props.tabIndex })}
+      {...(props.onKeyDown === undefined ? {} : { onKeyDown: props.onKeyDown })}
       className={"ss-opt"
         + (props.checked ? " on" : "")
         + (props.danger === true ? " danger" : "")

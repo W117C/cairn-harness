@@ -25,7 +25,8 @@ describe("插件窗格", () => {
     expect(dock).toContain("{kind === \"plugins\" && <PluginSurface workspace={props.workspace ?? null} />}");
     expect(surface).toContain("window.agent.getState()");
     expect(surface).toContain("s.plugins === undefined");
-    expect(surface).toContain("<PluginsPane snap={snap}");
+    // 快照带上所属工作区，渲染期只把「当前工作区那一份」交给窗格（换项目的那一帧不显示旧清单）。
+    expect(surface).toContain("<PluginsPane snap={current}");
     expect(surface).toContain("onError={setError}");
     expect(surface).toContain("{STR.pluginSurface.retry}");
     expect(surface).toContain("const id = ++seq.current");

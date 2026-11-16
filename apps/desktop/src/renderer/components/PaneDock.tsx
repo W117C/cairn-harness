@@ -6,6 +6,7 @@
 //   空态诚实：无数据即说明（不摆空壳）；价格不可知显式写"价格不可知"（不当 0）。
 // 数据面全部来自 panes.ts 纯投影 + turnDelivery（既有）+ changeDiff（v4 通道，懒加载）。
 import { isCompositionEnter } from "../ime";
+import { floatingSurfaceOpen, readGateInput } from "../command-gate";
 import { memo, useEffect, useRef, useState, type CSSProperties } from "react";
 import "@xterm/xterm/css/xterm.css";
 import "./pane-tabs.css";
@@ -32,7 +33,8 @@ import { OrchestrationPane } from "./OrchestrationPane";
 import { PathMenu } from "./PathMenu";
 import { ChangesPane, type ChangesFocus } from "./ChangesPane";
 import { TerminalPane } from "./TerminalPane";
-import { PANE_META, PANE_OPENABLE, paneTabTargetForKey, projectPlans, projectWorkers, reorderTarget, sitePermissionFor, workerCardAction, type PaneKind, type WorkerPaneItem } from "./panes";
+import { PANE_META, PANE_OPENABLE, projectPlans, projectWorkers, reorderTarget, sitePermissionFor, workerCardAction, type PaneKind, type WorkerPaneItem } from "./panes";
+import { tabNavigationTarget } from "../radio-nav";
 import { pushAllowedHosts } from "../allowed-hosts";
 // PaneKind / PANE_META 的唯一事实源在 panes.ts（独立窗口路由同用）；此处 re-export 保接口。
 export { PANE_META, PANE_OPENABLE, type PaneKind } from "./panes";
@@ -100,6 +102,9 @@ const BrowserPane = memo(function BrowserPane(props: {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const addrRef = useRef<HTMLInputElement | null>(null);
   const permitFirstRef = useRef<HTMLButtonElement | null>(null);
+  const tabsBarRef = useRef<HTMLDivElement | null>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const clearCancelRef = useRef<HTMLButtonElement | null>(null);
   const allowedRef = useRef<ReadonlySet<string>>(new Set());
 
   // latest-ref 组：监听器/定时回调只订阅一次，闭包每次渲染取最新值。
@@ -113,9 +118,42 @@ const BrowserPane = memo(function BrowserPane(props: {
 
   // 站点授权弹出时把焦点送进对话框（2026-10-18）：否则键盘用户还停在地址栏，
   // Tab 要穿过整条工具栏才能到「允许/拒绝」。默认聚焦允许本次（与浏览器首访语义一致）。
+  // 关闭时只在焦点确实丢了（按钮随弹层卸载 → body）才交还打开前的控件；用户点别处不抢。
+  const permitReturnRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
-    if (pending !== null) permitFirstRef.current?.focus();
+    if (pending === null) return;
+    permitReturnRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    permitFirstRef.current?.focus();
+    return () => {
+      const cur = document.activeElement;
+      if (cur !== null && cur !== document.body) return;
+      const back = permitReturnRef.current;
+      if (back !== null && back.isConnected && back !== document.body) back.focus();
+      else addrRef.current?.focus();
+    };
   }, [pending]);
+
+  // 清除确认（2026-11-16）：菜单项被选中后 Radix 关菜单、焦点掉回 body——默认落安全项「取消」；
+  // Esc 只退这一层。关闭时焦点若确实丢了，交还菜单触发钮（连不上则地址栏）。
+  const clearReturnRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!confirmClear) return;
+    clearReturnRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // Radix 关菜单会先排一个 setTimeout 把焦点还给触发钮；等它落定再搬进确认卡。
+    let inner = 0;
+    const outer = window.setTimeout(() => {
+      inner = window.setTimeout(() => { clearCancelRef.current?.focus(); }, 0);
+    }, 0);
+    return () => {
+      window.clearTimeout(outer);
+      window.clearTimeout(inner);
+      const cur = document.activeElement;
+      if (cur !== null && cur !== document.body) return;
+      const back = clearReturnRef.current;
+      if (back !== null && back.isConnected && back !== document.body) back.focus();
+      else (menuTriggerRef.current ?? addrRef.current)?.focus();
+    };
+  }, [confirmClear]);
 
   useEffect(() => {
     const hosts = loadAllowedHosts();
@@ -359,26 +397,41 @@ const BrowserPane = memo(function BrowserPane(props: {
     setUrlDraft("");
     requestAnimationFrame(() => { addrRef.current?.focus(); });
   };
-  const closeTab = (key: number): void => {
+  const closeTab = (key: number, from?: HTMLElement | null): void => {
     const tab = tabsRef.current.find((x) => x.key === key);
     if (tab === undefined) return;
+    // 授权卡的宿主标签被关掉（第 1260 页）：目标视图已经没了，卡片不能继续挂着——
+    // 否则点「允许」只会命中 allowAndGo 的兜底分支，静默什么也不发生。关标签就撤掉这一问。
+    if (pending !== null && pending.tabKey === key) setPending(null);
+    // 关闭钮随行一起卸载：先记「焦点是不是在这一行」，关完把它交给邻居；
+    // 从两个标签关到只剩一个时 tab 条整条不渲染，落点改到地址栏。
+    const hadFocus = from !== undefined && from !== null && document.activeElement === from;
     void window.agent.browserClose(tab.viewId);
     setTabStates((prev) => { const next = { ...prev }; delete next[key]; return next; });
     const rest = tabsRef.current.filter((x) => x.key !== key);
+    const idx = tabsRef.current.findIndex((x) => x.key === key);
     if (rest.length === 0) {
       // 常留至少一个标签（浏览器式习惯）：关掉最后一个 = 换成一张空白页
       const nk = nextKeyRef.current++;
       setTabs([{ key: nk, viewId: `${base}-t${nk}` }]);
       setActiveKey(nk);
       setUrlDraft("");
+      if (hadFocus) requestAnimationFrame(() => { addrRef.current?.focus(); });
       return;
     }
     setTabs(rest);
+    const neighbor = rest[Math.max(0, idx - 1)] ?? rest[0];
     if (key === activeKeyRef.current) {
-      const idx = tabsRef.current.findIndex((x) => x.key === key);
-      const neighbor = rest[Math.max(0, idx - 1)] ?? rest[0];
       setActiveKey(neighbor.key);
       setUrlDraft(tabStatesRef.current[neighbor.key]?.url ?? "");
+    }
+    if (hadFocus) {
+      requestAnimationFrame(() => {
+        const main = rest.length === 1
+          ? null
+          : tabsBarRef.current?.querySelector<HTMLButtonElement>(`.bp-tab[data-tab-key="${String(neighbor.key)}"] .bp-tab-main`) ?? null;
+        (main ?? addrRef.current)?.focus();
+      });
     }
   };
   const titleOf = (t: BpTab): string => {
@@ -397,19 +450,29 @@ const BrowserPane = memo(function BrowserPane(props: {
       {/* 2026-11-04 业主：单标签时不再叠第二条 tab 条——外层「浏览器」窗格标签已表明身份，
           再来一条「新标签页 ×」纯属重复。≥2 个标签时 tab 条才出现，「+」也随之回到条上。 */}
       {tabs.length > 1 ? (
-      <div className="bp-tabs" role="tablist" aria-label="浏览器标签页">
+      <div className="bp-tabs" role="tablist" aria-label="浏览器标签页" ref={tabsBarRef}>
         {tabs.map((t) => (
-          <div key={t.key} className={`bp-tab${t.key === activeKey ? " on" : ""}`}>
+          <div key={t.key} className={`bp-tab${t.key === activeKey ? " on" : ""}`} data-tab-key={t.key}>
             <button
               className="bp-tab-main"
               role="tab"
               aria-selected={t.key === activeKey}
+              tabIndex={t.key === activeKey ? 0 : -1}
               title={tabStates[t.key]?.url ?? ""}
               onClick={() => switchTab(t.key)}
+              onKeyDown={(e) => {
+                const next = tabNavigationTarget(e.key, tabs.findIndex((x) => x.key === t.key), tabs.length);
+                if (next === null) return;
+                e.preventDefault();
+                const target = tabs[next];
+                if (target === undefined) return;
+                switchTab(target.key);
+                e.currentTarget.closest('[role="tablist"]')?.querySelectorAll<HTMLElement>('[role="tab"]')[next]?.focus();
+              }}
             >
               <span className="bp-tab-title">{titleOf(t)}</span>
             </button>
-            <button className="bp-tab-x" aria-label="关闭标签页" title="关闭标签页" onClick={() => closeTab(t.key)}>
+            <button className="bp-tab-x" aria-label="关闭标签页" title="关闭标签页" onClick={(e) => { closeTab(t.key, e.currentTarget); }}>
               <X size={10} />
             </button>
           </div>
@@ -460,7 +523,7 @@ const BrowserPane = memo(function BrowserPane(props: {
         ) : null}
         <DropdownMenu.Root onOpenChange={setMenuOpen}>
           <DropdownMenu.Trigger asChild>
-            <button className="iconbtn sm" aria-label="浏览器菜单" title="浏览器菜单"><MoreHorizontal size={13} /></button>
+            <button ref={menuTriggerRef} className="iconbtn sm" aria-label="浏览器菜单" title="浏览器菜单"><MoreHorizontal size={13} /></button>
           </DropdownMenu.Trigger>
           <DropdownMenu.Content className="pop-rd" side="bottom" align="end" sideOffset={4}>
             <DropdownMenu.Item className="menu-item" onSelect={toggleKeepCookies}>
@@ -504,6 +567,7 @@ const BrowserPane = memo(function BrowserPane(props: {
           className="bp-permit"
           role="alertdialog"
           aria-label="站点授权"
+          data-esc-owns="true"
           onKeyDown={(e) => {
             if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setPending(null); }
           }}
@@ -517,13 +581,20 @@ const BrowserPane = memo(function BrowserPane(props: {
         </div>
       )}
       {confirmClear && (
-        <div className="bp-permit" role="alertdialog" aria-label="清除浏览数据">
+        <div
+          className="bp-permit"
+          role="alertdialog" aria-label="清除浏览数据"
+          data-esc-owns="true"
+          onKeyDown={(e) => {
+            if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setConfirmClear(false); }
+          }}
+        >
           <div className="bp-permit-text">
             清除本窗格的浏览数据{keepCookies ? "（保留 cookies）" : "（含 cookies）"}？此操作不可撤销。
           </div>
           <div className="bp-permit-actions">
             <button className="mini-btn danger-text" onClick={() => { setConfirmClear(false); doClear(); }}>清除</button>
-            <button className="mini-btn" onClick={() => { setConfirmClear(false); }}>取消</button>
+            <button ref={clearCancelRef} className="mini-btn" onClick={() => { setConfirmClear(false); }}>取消</button>
           </div>
         </div>
       )}
@@ -704,8 +775,8 @@ export function PaneDock(props: {
   inPopout?: boolean;
   /** 交付卡点行：打开变更窗格并选中该轮该文件（seq 递增触发一次）。 */
   changesFocus?: ChangesFocus;
-  /** 命令面板快速打开：文件路径 + 递增序号；PaneDock 激活文件标签，FilePane 展开并预览。 */
-  fileTarget?: { path: string; seq: number };
+  /** 命令面板快速打开：文件路径 + 递增序号 + 所属项目；PaneDock 激活文件标签，FilePane 展开并预览。 */
+  fileTarget?: { path: string; seq: number; workspace: string | null };
   /** 顶栏工具的显式导航；已挂载的目标也要切到前台，不靠 toggle 卸载重建。 */
   paneTarget?: { kind: PaneKind; seq: number };
   /** ⌘+点击侧栏会话：预览目标（可继续发送；seq 递增，新目标自动激活「会话」标签）。 */
@@ -750,11 +821,18 @@ export function PaneDock(props: {
     if (active !== "browser" && maximized) setMaximized(false);
   }, [active, maximized]);
   // Esc 还原：放大后焦点在网页原生视图里，渲染层收不到按键 ⇒ 同时在 browser 工具栏留还原钮；
-  // 这里兜住「焦点还在 DOM」的那一半（地址栏/工具栏）。
+  // 这里兜住「焦点还在 DOM」的那一半（地址栏/工具栏）。Esc 的主权按层让：模态面 / 仍开着、
+  // 自己会关的浮层 / 焦点所在的自持控件（授权、清除确认、inline 编辑）都先接管——放大层
+  // 只在没人接时才还原，一次 Esc 只做一件事。全局智慧停止那边由 app-commands 对放大态让路
+  // （焦点掉在 body 时 escOwns 读不到，只靠标记会漏）。
   useEffect(() => {
     if (!maximized) return;
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === "Escape") { e.preventDefault(); setMaximized(false); }
+      if (e.key !== "Escape") return;
+      const gate = readGateInput(false);
+      if (gate.modalSurfaceOpen || gate.escOwnsTarget || floatingSurfaceOpen()) return;
+      e.preventDefault();
+      setMaximized(false);
     };
     window.addEventListener("keydown", onKey, true);
     return () => { window.removeEventListener("keydown", onKey, true); };
@@ -837,9 +915,14 @@ export function PaneDock(props: {
   useEffect(() => {
     if (props.browserLinkTarget !== undefined) setFocusedPane("browser");
   }, [props.browserLinkTarget]);
+  // 目标属于哪个项目就只对哪个项目生效：换项目后旧相对路径不是同一个文件，不能拿它抢焦点/预览。
+  const fileTargetCurrent = props.fileTarget !== undefined
+    && props.fileTarget.workspace === (props.workspace ?? null)
+    ? props.fileTarget
+    : undefined;
   useEffect(() => {
-    if (props.fileTarget !== undefined) setFocusedPane("file");
-  }, [props.fileTarget]);
+    if (fileTargetCurrent !== undefined) setFocusedPane("file");
+  }, [fileTargetCurrent]);
   // ⌘+点击侧栏会话：新目标即激活「会话」标签（即使它早已开着但不在前台）。
   useEffect(() => {
     if (props.sessionPreview !== undefined && props.sessionPreview !== null) setFocusedPane("session");
@@ -857,7 +940,11 @@ export function PaneDock(props: {
     );
   }
   return (
-    <div className="pane-workbench" data-maximized={maximized ? "true" : "false"} style={maximized ? ({ "--pane-max-left": `${maxLeft}px` } as CSSProperties) : undefined}>
+    <div
+      className="pane-workbench"
+      data-maximized={maximized ? "true" : "false"}
+      style={maximized ? ({ "--pane-max-left": `${maxLeft}px` } as CSSProperties) : undefined}
+    >
     {/* 面板导航行只对「多窗格同屏」有意义：独立窗格窗口里它是死按钮（见 inPopout 注释）。 */}
     {props.inPopout !== true && (
     <nav className="pane-nav" aria-label="面板导航" ref={navRef}>
@@ -880,7 +967,7 @@ export function PaneDock(props: {
                   return;
                 }
                 const i = props.tabs.indexOf(kind);
-                const next = paneTabTargetForKey(e.key, i, props.tabs.length);
+                const next = tabNavigationTarget(e.key, i, props.tabs.length);
                 if (next === null) return;
                 e.preventDefault();
                 const nextKind = props.tabs[next];
@@ -941,9 +1028,13 @@ export function PaneDock(props: {
               {kind === "plan" && <PlanPane events={props.events} />}
               {kind === "tasks" && <><OrchestrationPane workspace={props.workspace ?? null} sessionId={props.sessionId ?? null} active={kind === active} /><TasksPane events={props.events} workspace={props.workspace ?? null} /></>}
               {kind === "file" && (
+                // 换项目即换根：文件树/预览按窗口工作区读（`workspaceListDir("")` 走指针），
+                // 不重挂载就会把上一个项目的树留在屏幕上，点旧行读的是新项目里的同名路径。
                 <FilePane
+                  key={props.workspace ?? ""}
                   onPathMenu={openPathMenu}
-                  {...(props.fileTarget !== undefined ? { openTarget: props.fileTarget } : {})}
+                  active={kind === active}
+                  {...(fileTargetCurrent !== undefined ? { openTarget: fileTargetCurrent } : {})}
                 />
               )}
               {kind === "terminal" && <TerminalPane />}

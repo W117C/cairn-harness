@@ -3,18 +3,20 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { readAppSurface } from "./helpers/app-surface";
 
 const composer = readFileSync(join(__dirname, "..", "src", "renderer", "components", "Composer.tsx"), "utf8");
-const strings = readFileSync(join(__dirname, "..", "src", "renderer", "strings.ts"), "utf8");
 const css = readFileSync(join(__dirname, "..", "src", "renderer", "styles.css"), "utf8");
 
 describe("插件命令按需发现", () => {
   it("不再在 composer 上方常驻插件命令带", () => {
-    expect(composer).not.toContain('className="plugin-strip"');
-    expect(composer).not.toContain('className="plugin-chip"');
-    expect(composer).not.toContain("STR.composer.pluginStripAria");
-    expect(strings).not.toContain("pluginStripAria:");
-    expect(strings).not.toContain("pluginStripLabel:");
+    // 否定断言读整个应用面：插件带若换个组件挂回来，只读 Composer.tsx 会空过。
+    const app = readAppSurface();
+    expect(app).not.toContain('className="plugin-strip"');
+    expect(app).not.toContain('className="plugin-chip"');
+    expect(app).not.toContain("STR.composer.pluginStripAria");
+    expect(app).not.toContain("pluginStripAria:");
+    expect(app).not.toContain("pluginStripLabel:");
     expect(css).not.toContain(".plugin-strip");
     expect(css).not.toContain(".plugin-chip");
   });

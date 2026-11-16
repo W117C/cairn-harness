@@ -104,8 +104,10 @@ export function AppPageBody(props: {
   }, [props.page, props.workspace, refresh]);
   useEffect(() => { setOperationError(null); }, [props.page]);
 
-  const snapshot = snapshotState.page === props.page ? snapshotState.snapshot : null;
-  const loadError = snapshotState.page === props.page ? snapshotState.loadError : null;
+  // 渲染期就判定快照属于哪个工作区：换项目的那一帧不能再渲染旧清单（effect 里的 start 晚一拍）。
+  const currentSurface = snapshotState.page === props.page && snapshotState.workspace === props.workspace;
+  const snapshot = currentSurface ? snapshotState.snapshot : null;
+  const loadError = currentSurface ? snapshotState.loadError : null;
 
   const stateFrame = (message: string, error = false): React.JSX.Element => (
     <PageFrame title={PAGE_FRAME_TITLE[props.page]} onRefresh={refresh}>

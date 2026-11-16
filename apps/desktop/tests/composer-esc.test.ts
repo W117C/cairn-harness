@@ -4,8 +4,11 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { readAppSurface } from "./helpers/app-surface";
 
 const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/Composer.tsx", import.meta.url)), "utf8");
+// 否定断言读整面：旧豁免/旧 Esc 门一旦搬到别的组件，单文件读会空过（第 1251 页分类迁移）。
+const appSrc = readAppSurface();
 
 describe("Composer 浮层 Esc", () => {
   it("斜杠/mention 都受 menuDismissed 控制，文本变化复位", () => {
@@ -25,7 +28,7 @@ describe("Composer 浮层 Esc", () => {
     // 现在只豁免 ①菜单（点选要走自己的 click）②textarea（继续打字），
     // 卡片内其它控件 = 用户去了别处，先收菜单。
     expect(src).toContain('t.closest(".slash-menu, .mention-menu, textarea") !== null');
-    expect(src).not.toContain("cardRef.current?.contains(t) === true");
+    expect(appSrc).not.toContain("cardRef.current?.contains(t) === true");
     // 卡片内仍挂 onDrop/onDragOver（cardRef 未被删，只是不再当豁免边界）
     expect(src).toContain("ref={cardRef}");
   });
@@ -38,6 +41,6 @@ describe("Composer 浮层 Esc", () => {
     expect(src).toContain('setMenuDismissed("slash")');
     expect(src).toContain('setMenuDismissed("mention")');
     // 旧行为（只在命中>0 时 Esc）已移除
-    expect(src).not.toContain("if (mention !== null && mentionList.length > 0) {");
+    expect(appSrc).not.toContain("if (mention !== null && mentionList.length > 0) {");
   });
 });

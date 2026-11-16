@@ -22,10 +22,12 @@ const corpus = all.map((p) => ({ p, src: readFileSync(p, "utf8") }));
 describe("死面：导出的组件必须被真正渲染", () => {
   it("components/panes 里每个导出组件都在 renderer 某处出现 JSX 用法", () => {
     const orphans: string[] = [];
+    let exportsChecked = 0;
     for (const { p, src } of corpus.filter((c) => componentFiles.includes(c.p))) {
       // 只认组件形状的导出：大写字母开头（React 约定）。同文件里的助手
       // （visionCapabilityLabel / parseBudgetField 这类小写导出）不是"没渲染的面"。
       for (const m of src.matchAll(/^export function ([A-Z]\w*)\(/gm)) {
+        exportsChecked += 1;
         const name = m[1];
         // 同文件内自渲染算活（一个文件里 Destination 包着 Workspace 是正常形状）。
         const live = corpus.some((c) => new RegExp(`<${name}[\\s/>]`).test(c.src)
@@ -33,6 +35,8 @@ describe("死面：导出的组件必须被真正渲染", () => {
         if (!live) orphans.push(`${basename(p)} → ${name}`);
       }
     }
+    // 清点面读空 ⇒ 孤儿表恒空、这条判卷静默全绿。目录过滤或导出正则失配必须先在这里红。
+    expect(exportsChecked, "组件清点面读空：目录过滤或导出正则失配，孤儿表会恒真").toBeGreaterThan(0);
     expect(orphans, `这些组件产品里没人渲染（只有测试在跑它 = 死面）：\n${orphans.join("\n")}`).toEqual([]);
   });
 

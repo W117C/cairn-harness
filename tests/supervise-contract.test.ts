@@ -81,6 +81,9 @@ describe("规格面与解析面同源", () => {
     const sup = props.supervise as { type: string; properties?: Record<string, { description?: string }> };
     expect(sup, "规格里没有 supervise 这一支 ⇒ 模型只能猜嵌套，而策略文案已经在教它写 maxStages").toBeTruthy();
     expect(sup.type).toBe("object");
+    // 字段表是规格与判卷的同源分母：它被清空时下面那条等式会 0=0 通过、描述循环也空过。
+    expect(fieldNames).toContain("maxStages");
+    expect(fieldNames).toContain("forbidden");
     expect(Object.keys(sup.properties!).sort()).toEqual([...fieldNames].sort());
     // 每个申报字段都得有描述：光给名字等于让模型猜语义
     for (const [k, v] of Object.entries(sup.properties!)) expect(v.description, k + " 缺描述").toBeTruthy();

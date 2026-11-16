@@ -91,3 +91,17 @@ export const SHORTCUTS: readonly ShortcutSpec[] = [
 export function keysOf(id: string): string | null {
   return SHORTCUTS.find((s) => s.id === id)?.keys ?? null;
 }
+
+/** tooltip 文案后缀 = 表里的键位；表里没有这个 id 就原样返回（不摆假键位）。
+ *  单一实现在这里：消费面（侧栏/头像菜单/收起轨）不许各抄一份——抄的那份不会跟表改。 */
+export function withKeys(base: string, id: string): string {
+  const k = keysOf(id);
+  return k === null ? base : `${base}（${k}）`;
+}
+
+/** 句子中间嵌键位：词表写 `{key}` 占位，消费面把表里的键填进去。
+ *  词表不能 import 本模块（本模块 import 词表），所以占位留在词表、值在消费面取。
+ *  id 写错时留空而不是留一个旧键位——宁可少一个键，不摆一个骗人的键。 */
+export function fillKeys(template: string, id: string): string {
+  return template.replace("{key}", keysOf(id) ?? "");
+}

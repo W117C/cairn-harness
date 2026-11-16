@@ -67,6 +67,8 @@ describe("运行中：插话与排队的两个入口不混", () => {
     expect(html).toContain(`aria-label="${STR.composer.stopAria}"`);
     expect(html).not.toContain("回车排队");
     const ta = /<textarea[^>]*>/.exec(html)?.[0] ?? "";
+    // 匹配落空时 ta 是 ""，否定断言会空过。
+    expect(ta).toContain("<textarea");
     expect(ta).not.toContain("disabled"); // 运行中仍可打字（插话的前提）
   });
 });

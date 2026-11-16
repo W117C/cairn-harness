@@ -319,7 +319,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
   const [greeting] = useState(() => greetingFor(new Date().getHours()));
   const [pluginUpdateCount, setPluginUpdateCount] = useState(0);
   // 命令面板快速打开的文件目标（本地信号；递增 seq 允许连续打开同一文件）。
-  const [fileTarget, setFileTarget] = useState<{ path: string; seq: number } | null>(null);
+  const [fileTarget, setFileTarget] = useState<{ path: string; seq: number; workspace: string | null } | null>(null);
   // ⌘+点击侧栏会话：右侧预览目标（可继续发送；seq 允许连续预览同一会话）。
   const [sessionPreview, setSessionPreview] = useState<{ id: string; workspace?: string; title: string; seq: number } | null>(null);
   const [paneTarget, setPaneTarget] = useState<{ kind: PaneKind; seq: number } | null>(null);
@@ -388,6 +388,20 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
     const ro = new ResizeObserver(place);
     ro.observe(row);
     return () => { window.removeEventListener("resize", place); ro.disconnect(); };
+  }, [chipOpen, chipRef]);
+  // 项目弹层是「搜索 + 最近项目清单」的对话框，不是纯菜单：打开时焦点进入搜索框
+  // （键盘用户不必从触发按钮逐格 Tab）；关闭后焦点若仍在弹层里或掉回 body，
+  // 还给触发按钮。外点关闭不抢焦点（用户点哪儿焦点就在哪儿）。
+  const chipTriggerRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    if (!chipOpen) return;
+    const row = chipRef.current;
+    row?.querySelector<HTMLInputElement>(".chip-search")?.focus();
+    return () => {
+      const active = document.activeElement;
+      const lost = active === null || active === document.body || (row !== null && row.contains(active));
+      if (lost) chipTriggerRef.current?.focus();
+    };
   }, [chipOpen, chipRef]);
   // 统一工具栏 · 左翼工作区上下文（2026-10-21 设计重做）：会话内把工作区名从输入区
   // 搬到这里——同一语义只留一处，输入区回到纯粹的写作面。
@@ -487,7 +501,8 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                 <div className="empty-chip-row" ref={chipRef}>
                   <button
                     className="empty-chip"
-                    aria-haspopup="true"
+                    ref={chipTriggerRef}
+                    aria-haspopup="dialog"
                     aria-expanded={chipOpen}
                     title={STR.empty.pickProject}
                     onClick={openChipPopover}
@@ -510,6 +525,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                     open={chipOpen}
                     up
                     className="chip-pop"
+                    role="dialog"
                     aria-label={STR.empty.projectsLabel}
                     onKeyDown={(e) => {
                       const items = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>(".chip-list .menu-item:not(:disabled)"));
@@ -545,15 +561,21 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                             onClick={() => {
                               closeChip();
                               if (registered) {
+                                const switched = p.path !== activeWorkspace;
                                 setActiveWorkspace(p.path);
                                 activeWorkspaceRef.current = p.path;
                                 touchWorkspace(p.path);
+                                // 切项目 = 回该项目的空聊天面：旧会话留在原项目，继续发送会把同一
+                                // sessionId 写进新工作区（2026-11-05 审计确认的数据串写）。
+                                if (switched && activeId !== null) newSession();
                               } else {
                                 // 最近但已移除：点 = 重新添加 + 切过去（空屏点项目就是要用它）。
+                                const switched = p.path !== activeWorkspace;
                                 void handleAddProject(p.path).then(() => {
                                   setActiveWorkspace(p.path);
                                   activeWorkspaceRef.current = p.path;
                                   touchWorkspace(p.path);
+                                  if (switched && activeId !== null) newSession();
                                 }).catch((err: unknown) => { setLastError(`添加项目失败：${err instanceof Error ? err.message : String(err)}`); });
                               }
                             }}
@@ -772,6 +794,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                 queueLoading={queueLoading || deps.sessionLoadError !== null} pendingSend={pendingSend} pendingClarify={pendingClarify} pendingPlan={pendingPlan}
                 queueSaving={deps.queueSaving} queueSaveFailed={deps.queueSaveFailed}
                 setQueueFor={setQueueFor} cancelRunHeal={cancelRunHeal} resumeQueueFor={resumeQueueFor}
+                onFocusFallback={focusComposer}
               />
             )}
             {activeId !== null && (

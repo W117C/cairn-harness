@@ -72,6 +72,21 @@ export function overlayBlocked(input: GateInput): boolean {
   return input.modalSurfaceOpen || input.paletteOpen;
 }
 
+/** 会自己吞掉 Esc 的浮层（自绘弹层 / Radix 菜单与对话框 / 斜杠 / 提及 / 非侧栏列表）。
+ *  全局智慧停止与放大窗格的还原**共用这一处选择器**——两处各抄一份，迟早一处加了新形态、
+ *  另一处没加，于是同一次 Esc 关掉浮层又还原窗格。`.sidenav` 常驻侧栏不算（收起时也在 DOM 里）；
+ *  Radix 的 `data-state="open"` 是它自己处理 Esc 的信号（命令面板、菜单走这套）。 */
+const ESC_FLOATING_SURFACE =
+  ".pop.show, .pop-rd, .slash-menu, .mention-menu, " +
+  "[role='menu'][data-state='open'], [role='dialog'][data-state='open'], [role='alertdialog'][data-state='open'], " +
+  "[role='listbox']:not(.sidenav)";
+
+/** 浮层在不在（`ESC_FLOATING_SURFACE` 的唯一读法）。DOM 缺席（node 环境）⇒ false。 */
+export function floatingSurfaceOpen(dom?: GateDom): boolean {
+  const d = dom ?? (globalThis as { document?: GateDom }).document;
+  return d !== undefined && d.querySelector(ESC_FLOATING_SURFACE) !== null;
+}
+
 /** 这条命令此刻**该不该动作**（纯函数）。
  *
  *  @param id 菜单命令 id（键盘路径传一个不可能命中的 id：键盘路径自己按 case 分派）。

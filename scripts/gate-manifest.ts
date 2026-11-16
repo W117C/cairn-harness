@@ -157,18 +157,20 @@ export const GATES: readonly string[] = [
   //   （把本来就绿的写进 failToPass ⇒ 永远转绿成功）要么整格 unmatched。所以这道门每次现跑靶子。
   //   实测（同笔，主树，独占）：**这道门 1.76s**（16 条靶子各跑一次判卷命令；B12/L30 那两条最贵，
   //   各 20/30 个文件，合计约 1.2s）；`--check` 在配平的盘上退 0。
-  //   **为什么不进 CERT_GATES，尽管它落在 1.5s 那条线内**：那条线是「买得起」不是「必须买」，
+  //   **为什么不进 CERT_GATES**：那条线是「买得起」不是「必须买」，
   //   而这一格有更便宜的同源观测者——`tests/bench-judge-spec.test.ts` 在 `test` 那道门里，
   //   它判「形状成立 ＋ 两列与盘上现读逐字一致」（逐条 spawn 靶子，约 5s）。真正只在本门里量的
   //   只剩「漂了但形状仍成立」这一种，而它已经被那条判据的同一次 spawn 覆盖 ⇒ 双买等于付两次同样的账。
-  //   登记在 GATES 而不在 CERT_GATES，理由换成：**它的价值在交笔那人跑一次 `--check`**，
-  //   而不是替 HEAD 遮红（HEAD 若漂了，`test` 那道门先红）。
-  //   判据宿主 `tests/bench-judge-spec.test.ts` 在 `test` 那道门里，规格漂到「形状不成立」会被它当场咬，
-  //   而「形状仍成立、内容与盘上不符」只在这一道门里量 ⇒ 这一格必须留人手跑，不许假装它在认证面上。
+  //   ⚠️ 原文这里接着写「这一格必须留人手跑，不许假装它在认证面上」——那句与上一段自相矛盾，
+  //   也与 `tests/bench-judge-spec.test.ts` 的第 ⑵ 组（两列 ↔ 盘上现读逐字一致）矛盾，第 1251 页删掉；
+  //   同段的「落在 1.5s 线内」也是笔误：单价 1.76s 本就超线。归属登记在 `CERT_GATE_OUTSIDE`。
   "bench-judge-spec-check",
   // 桌面端单向依赖红线（AGENTS.md 分层规则的机器面）：src → apps/desktop 或 electron 即红。
   // 原先只挂在 apps/desktop test 链尾——core-only 会话跑根门永远不触发；注册进默认门表补上这个洞
-  // （终审 #4）。快尺：纯文本扫 src/，亚秒档；不进 CERT_GATES——门面预算线快到头（见那张表头），不再顺手多买。
+  // （终审 #4）。快尺：纯文本扫渲染层，亚秒档。
+  // 第 1251 页按「≤1.5s 全进」买进认证面（买入注在 `CERT_GATES` 那道门旁边）：它是面外 11 道里
+  // **唯一**既在线内、又没有任何别的认证面门覆盖的一道——`tests/renderer-layer.test.ts` 只在临时
+  // 目录造坏样本，真树只有这支脚本在量。
   "renderer-layer-check",
   "event-semantics-check",
   "session-semantics-check",
@@ -277,6 +279,15 @@ export const CERT_GATES: readonly { name: string; budgetMs: number }[] = [
      对一趟 ~265s 的认证是 +1.6%（量纲分开记：预算之和是登记口径，墙钟是实测口径）。 */
   { name: "e2e", budgetMs: 4000 },            // 实测 1995ms（闭环 e2e：mock provider 驱动生产 loop 修冻结靶子）
   { name: "desktop-test", budgetMs: 10000 },  // 实测 4660ms 冷／2280ms 热（apps/ 145 条判卷 ＋ 桌面边界）
+  /* 第 1251 页买进认证面（2026-11-16）：三态分区体检的结果。
+     做法：把 `GATES` 减 `CERT_GATES` 减 `CERT_GATE_EXCLUDED`，面外剩 11 道——逐道问「谁在认证路径上看它」。
+     其中 10 道有归属（5 道已被 `test`／`desktop-test` 同源跑过、4 道超线待裁决、1 道同源判据更便宜），
+     只有这一道脚踩两条：**快**（亚秒）且**无人覆盖**（`tests/renderer-layer.test.ts` 只在临时目录造坏样本，
+     真树的分层/行数帽只有这支脚本在量）。按门面那条线「≤1.5s 全进」买进；预算 800ms 是两倍档。
+     单价现读 **335ms**（主检出工作树、2026-11-16、`pnpm gates --only=renderer-layer-check`）
+     ⇒ 门面预算之和 72700 → **73500ms**，仍在判卷钉的 ≤75000ms 线内。
+     同笔新增 `CERT_GATE_OUTSIDE` 登记剩下 10 道，并加一条三态分区判据：新增门没写认证面身份就红。 */
+  { name: "renderer-layer-check", budgetMs: 800 }, // 实测 335ms（渲染层分层＋行数帽的真树扫描）
 ];
 
 /** 永远不许进认证面的门：认证这一趟已经自己跑过（`typecheck`／全量判卷），
@@ -287,6 +298,52 @@ export const CERT_GATE_EXCLUDED: readonly string[] = [
   // （见 `CERT_GATES` 里那两道的买入注）。撤出后它按「每笔交笔都要成立」那一类进门面。
   "test", "typecheck", "head-cert-check", "mutate-verify",
 ];
+
+/**
+ * 面外重门（超 1.5s 快门线）：不进 `CERT_GATES`（快门面预算不涨），但**进 L1 的 deep gates 步骤**，
+ * 每趟 push 都跑（第 1254 页）。
+ *
+ * 为什么不再「待裁决」：这四道从前只在 `pnpm gates` 全量时跑，而 CI 只跑认证面 ⇒ 它们
+ * **任何自动化路径都不跑**。`plugins-check` 就这样红着没人发现（F2 的信任表 guard 上线后，
+ * 脚本仍把 8 处 `trustFile` 放在临时工作区里，被 fail-loud 直接拒掉）。
+ * 四道之和约 2 分钟，放在同一个 job 的单独步骤里，不动快门面的 75s 预算。
+ *
+ * 名单由 `tests/ci-cert-face-parity.test.ts` 钉住与 workflow 的 `--only=` 逐字相等。
+ */
+export const CERT_GATE_DEEP: readonly string[] = [
+  "tools-check",
+  "supervisor-check",
+  "plugins-check",
+  "map-check",
+];
+
+/**
+ * 认证面之外、且**不属于**「永远不许」的那些门的理由表（第 1251 页）。
+ *
+ * 为什么需要第三张表：`GATES` 40 道、`CERT_GATES` 26 道、`CERT_GATE_EXCLUDED` 4 道，
+ * 剩下 10 道既不在认证面、也没有机器可读的理由。
+ * 三态分区（`tests/cert-gate-face.test.ts` 钉住）：`GATES` = 认证面 ∪ 永不进面 ∪ 本表，不重不漏。
+ * 新增门忘了登记 ⇒ 当场红，不再靠人记得问「它在不在认证面」。
+ *
+ * 本表不是「永不入门面」：`CERT_GATE_EXCLUDED` 是「认证这趟已自跑／分钟级，永不重复」；
+ * 这里每一条都可以随一次裁决迁进 `CERT_GATES`（迁走时删掉这一行，判卷会提醒补预算与 CI 名单）。
+ * `CERT_GATE_DEEP` 那四道已由 L1 深门步骤每趟 push 跑；余下六道由更便宜的同源观测者覆盖。
+ */
+export const CERT_GATE_OUTSIDE: Readonly<Record<string, string>> = {
+  // —— 超 1.5s 线：不进快门面，但进 L1 deep gates（名单见 `CERT_GATE_DEEP`，第 1254 页）。
+  // 单价必须连着「跑它的那棵树」记（第 226 页那条：同是 map-check，主树 53.0s、认证树 4.8s）。
+  "tools-check": "主树现读 8.6s（第 226 页逐道实测，取料 outputs/hard-gate-block-witness-2026-09-30/gates-14-unmeasured.log）⇒ 超 1.5s 快门线；进 L1 deep gates，每趟 push 跑",
+  "supervisor-check": "主树现读 8.0s（同上取料）⇒ 超 1.5s 快门线；进 L1 deep gates，每趟 push 跑",
+  "plugins-check": "主树现读 15.4s（同上取料）⇒ 超 1.5s 快门线；进 L1 deep gates，每趟 push 跑",
+  "map-check": "主树现读 53.0s、认证树 4.8s（第 226 页；十倍差来自取料面：主树刚被写过要重建影响面，规则 276）⇒ 超 1.5s 快门线；进 L1 deep gates，每趟 push 跑",
+  // —— 已有更便宜的同源观测者：认证面里再买一次 = 同一笔账付两次。
+  "bench-judge-spec-check": "同源观测者是 test 门里的 tests/bench-judge-spec.test.ts：逐条 spawn 靶子并比对两列与盘上逐字一致；本门只剩『漂了但形状仍成立』，双买无新覆盖面。原文『落在 1.5s 线内』是笔误——单价 1.76s 本就超线（第 1251 页更正）",
+  "event-semantics-check": "断言与 tests/event-semantics.test.ts 同源（文件头写明『互为两把尺』），随 test 门在全量判卷里跑；脚本是给人读的第二把尺，认证面不重复计数",
+  "session-semantics-check": "断言与 tests/session-semantics.test.ts 同源，随 test 门跑；脚本是给人读的第二把尺",
+  "session-search-check": "同源判据在 tests/session-search.test.ts（三态：空查询／无匹配／可匹配），随 test 门跑；脚本是第二把尺",
+  "motion-policy-check": "tests/motion-policy.test.ts 在**同一批真实样式表**上跑同一个 checkMotionPolicy 并钉七条规则全过；脚本是第二把尺",
+  "desktop-boundary-check": "它本来就是 desktop-test script 的第二步（`vitest … && node --import tsx scripts/desktop-boundary-check.ts`），而 desktop-test 已在认证面 ⇒ 再列一次只是同一道门的重复计数",
+};
 
 /** 形如验收脚本的 script 名（这些必须有归宿：要么进 GATES，要么进 EXEMPT）。
  *  H5（审查 P2）：词根匹配——旧实现只认 `-check`/`:check` 结尾，`foo-check.mjs`、

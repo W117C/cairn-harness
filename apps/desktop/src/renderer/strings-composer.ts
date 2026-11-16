@@ -66,9 +66,9 @@ export const composerStrings = {
     meterCompact: "压缩历史…",
     dash: "—",
     sendAria: "发送",
-    sendTitle: "发送（⏎）",
+    sendTitle: "发送",
     stopAria: "停止",
-    stopTitle: "停止（⌘.）",
+    stopTitle: "停止",
     queueAria: "加入队列",
     queueTitle: "加入队列：本轮结束后自动发送（⌘↩ 打断并立即发送）",
     // 排队占位（2026-11-04 业主截图：运行中输入框明说排队语义——撤销 2026-11-0x「不摆常驻提示」旧裁）。

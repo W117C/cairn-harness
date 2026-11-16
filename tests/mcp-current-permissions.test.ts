@@ -255,12 +255,30 @@ describe("run 中途批准的插件：模型看得见，执行面也必须动得
     expect(src).toContain("resolveLivePluginTool");
   });
 
-  it("未证：真会话里「运行中批准 ⇒ 下一轮模型就调它」这一条**没有端到端判据**", () => {
-    // 如实记着：这一格要串起「run 起跑 → 中途批准 → 模型下一轮调它」，
-    // 需要脚本化模型 + 真 MCP server + 并发（批准走的是桌面 IPC 通道，不在 runAgent 内部）。
-    // 本文件覆盖的是两端各自的判据（loop 会问 resolveTool；解析器能给得出入口），
-    // 串起来的并发那一跳**未证**——不把两端当一端。
-    expect(true).toBe(true);
+  it("中途批准后「下一轮模型面」立刻能看到它，且执行面同时给得出入口（活引用，不需要重启 run）", async () => {
+    // 这一格此前是 `expect(true).toBe(true)`——用例名自认「未证」，却占了一个绿名额。
+    // 现在钉的是这条链上真的能测的那一段：**模型面是不是活引用**。
+    //   「下一轮模型调它」的前提有两个：① 下一轮 requestFace 里得列出这个名字；② resolveTool 得给得出入口。
+    //   ①② 都在这里用「起跑时的脸 → 中途批准 → 下一轮的脸」比出来，不需要重启 run。
+    // 仍未证的那一跳（如实留在注释里，不拿恒真断言冒充）：批准动作走桌面 IPC（handlePluginDecide），
+    // 要把它接进真 runLoop 的并发窗口需要真 Electron 宿主——本文件只到两端各自的判据。
+    const s = await setupPending();
+    // 起跑那一刻的模型面（此刻还没批准，脸里不该有它）
+    const faceAtStart = pluginToolSpecsFromRuntime(s.runtime).map((t) => t.name);
+    expect(faceAtStart, "起点就没批准，脸里不该有它").not.toContain(lateName);
+    // 中途批准 + 连接 + 激活（桌面 IPC 那两步在这里直接调，见上面注释的边界）
+    expect(await s.runtime.trustDecide("late", true)).toBe(true);
+    await s.runtime.connectMcp();
+    expect(s.runtime.activateMcpServer("late/stub").ok).toBe(true);
+    // 下一轮的脸：同一个 runtime 再算一次，必须自己长出来（活引用，不是起点快照）
+    const faceNextRound = pluginToolSpecsFromRuntime(s.runtime).map((t) => t.name);
+    expect(faceNextRound, "中途批准后下一轮的脸里必须有它，否则模型根本看不见").toContain(lateName);
+    // ② 执行面：光看得见不够，解析器得给得出入口，而且真的跑得起来。
+    const resolved = resolveLivePluginTool(lateName, s.runtime);
+    expect(resolved, "脸里有它而解析器给不出入口 ⇒ 模型看到的是把跑不起来的工具").toBeDefined();
+    const result = await resolved!.run({}, s.ctx);
+    expect(result.ok).toBe(true);
+    expect(s.calls).toEqual([{ plugin: "late", tool: "work" }]);
   });
 
   it("反向：撤销后 mcpTools 里没有它 ⇒ 解析器不给入口（补表不放行已撤回的工具）", async () => {

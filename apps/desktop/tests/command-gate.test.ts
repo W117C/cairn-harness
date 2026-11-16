@@ -3,6 +3,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import {
   CARET_YIELDING_COMMANDS,
   commandAllowed,
+  floatingSurfaceOpen,
   overlayBlocked,
   readGateInput,
   type GateDom,
@@ -27,10 +28,13 @@ afterAll(() => {
   else delete g.Element;
 });
 
-/** 假 DOM：回答门真正问的几件事（模态面 / 可编辑焦点 / 自持 Esc 的焦点）。 */
-function fakeDom(opts: { modal?: boolean; editable?: boolean; composer?: boolean; escOwns?: boolean } = {}): GateDom {
+/** 假 DOM：回答门真正问的几件事（模态面 / 浮层 / 可编辑焦点 / 自持 Esc 的焦点）。 */
+function fakeDom(opts: { modal?: boolean; editable?: boolean; composer?: boolean; escOwns?: boolean; floating?: boolean } = {}): GateDom {
   return {
-    querySelector: (selectors: string) => (opts.modal === true && selectors.includes("modal-surface") ? {} : null),
+    querySelector: (selectors: string) =>
+      (opts.modal === true && selectors.includes("modal-surface")) || (opts.floating === true && selectors.includes("pop.show"))
+        ? {}
+        : null,
     activeElement: opts.editable === true || opts.composer === true || opts.escOwns === true
       ? new FakeElement(opts.editable === true || opts.composer === true, opts.escOwns === true, opts.composer === true)
       : null,
@@ -69,6 +73,16 @@ describe("命令门：浮层与焦点（键盘路径与菜单路径共用）", (
     expect(overlayBlocked(readGateInput(false, fakeDom()))).toBe(false);
     expect(overlayBlocked(readGateInput(false, fakeDom({ modal: true })))).toBe(true);
     expect(overlayBlocked(readGateInput(true, fakeDom()))).toBe(true);
+  });
+
+  it("会自己关自己的浮层（第 1259 页）：全局智慧停止与放大窗格读同一处", () => {
+    expect(floatingSurfaceOpen(fakeDom())).toBe(false);
+    expect(floatingSurfaceOpen(fakeDom({ floating: true }))).toBe(true);
+    const src = appSrc();
+    // 选择器只在 command-gate.ts 定义一次；两个消费者都走函数，不各抄一份。
+    expect(src).toContain("export function floatingSurfaceOpen");
+    expect(src).toContain("if (floatingSurfaceOpen()) return;");
+    expect(src).toContain("gate.modalSurfaceOpen || gate.escOwnsTarget || floatingSurfaceOpen()");
   });
 
   it("模态面在场 ⇒ 菜单命令不动作（那正是 ⌘W 关掉会话、而确认卡还开着那个形状）", () => {

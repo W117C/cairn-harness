@@ -28,6 +28,7 @@ describe("运行状态条", () => {
     expect(src).toContain('<span className="cc-phase-dim" aria-hidden="true">{String(props.elapsedSec)}s</span>');
     // 2026-10-24 业主：输入框不放加载动效（只有呼吸点）；动效在对话流的助手行标记上（Stream .spark）。
     expect(src).toContain('<span className="cc-phase-dot" data-running={props.running ? "true" : "false"} aria-hidden="true" />');
+    // 位置敏感：CairnLoader 仍在 Stream/ThinkingLive 合法（对话流标记），这里钉的是输入框不带它。
     expect(src).not.toContain("CairnLoader");
     expect(src).toContain("{props.phaseLabel}");
     expect(src).toContain("{(props.runSteps ?? 0) > 0 &&");

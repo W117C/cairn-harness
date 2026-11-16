@@ -23,7 +23,7 @@ describe("快捷键静默死点（F6/F7 + F5）", () => {
     // 2026-10-20 起这两条回执收在一处出口（⌘W 与原生菜单「关闭会话」共用），
     // 判据跟着从「键位块里有这两行」升到「出口里有这两行 + 两个入口都走它」。
     expect(app).toContain("const closeSessionToHome = useCallback((): void => {");
-    expect(app).toContain("toast(STR.shortcut.alreadyHome)");
+    expect(app).toContain('toast(fillKeys(STR.shortcut.alreadyHome, "new-session"))');
     expect(app).toContain("const wasRunning = runningSet.current.has(runKey(activeWorkspaceRef.current, sid));");
     expect(app).toContain("if (wasRunning) toast(STR.shortcut.leftRunning);");
     expect(app).toContain("h.closeSessionToHome();");
@@ -38,7 +38,7 @@ describe("快捷键静默死点（F6/F7 + F5）", () => {
   it("会话循环无会话时给回执（Ctrl+Tab / ⌘⇧[ / ⌘⇧] 三处 + 菜单两项，同一出口）", () => {
     // 2026-10-20：回执从「三个键位各抄一份」收成一处出口（菜单也走它），
     // 判据不再数散落的字面量，而是钉出口 + 入口数——散抄的那种写法改口径必漏。
-    expect(app.match(/toast\(STR\.shortcut\.noSession\)/g)?.length).toBe(1);
+    expect(app.match(/toast\(fillKeys\(STR\.shortcut\.noSession, "new-session"\)\)/g)?.length).toBe(1);
     expect(app).toContain("const cycleSessionOrToast = useCallback((dir: 1 | -1): void => {");
     expect(app).toContain("const cycleSession = useCallback((dir: 1 | -1): boolean => {");
     // 五个入口：Ctrl+Tab、⌘⇧]、⌘⇧[、菜单「上一个/下一个会话」
@@ -112,7 +112,13 @@ describe("侧栏首屏：加载 ≠ 空，失败 ≠ 空", () => {
     expect(app).toContain("const [sessionsLoadError, setSessionsLoadError] = useState(false);");
     expect(app).toContain("setSessionsLoadError(true);");
     // 反向锚：失败分支里不许出现 setSessionsLoaded(true)（成功分支里有且仅有一处）
-    const failBranch = app.slice(app.indexOf("setSessionsLoadError(true);"), app.indexOf("}, []);", app.indexOf("setSessionsLoadError(true);")));
+    const failAt = app.indexOf("setSessionsLoadError(true);");
+    const failEnd = app.indexOf("}, []);", failAt);
+    // 收尾锚找不到时切片为空，下面那条反向锚会空过。
+    expect(failAt).toBeGreaterThan(-1);
+    expect(failEnd, "失败分支找不到依赖数组收尾 ⇒ 反向锚会空过").toBeGreaterThan(failAt);
+    const failBranch = app.slice(failAt, failEnd);
+    expect(failBranch).toContain("setSessionsLoadError(true);");
     expect(failBranch).not.toContain("setSessionsLoaded(true)");
     expect(app).toContain("loading={!sessionsLoaded && !sessionsLoadError}");
     expect(app).toContain("const retrySessions = useCallback(() => {");
@@ -122,7 +128,7 @@ describe("侧栏首屏：加载 ≠ 空，失败 ≠ 空", () => {
 
   it("CSS：骨架条只表示读取中（reduced-motion 由全局块停掉动画）", () => {
     expect(css).toContain(".side-skeleton-row {");
-    expect(css).toContain("animation: breathe 1.6s ease-in-out infinite;");
+    expect(css).toContain("animation: breathe var(--t-breathe) infinite;");
   });
 });
 

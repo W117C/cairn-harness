@@ -15,6 +15,7 @@ import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { readAppSurface } from "./helpers/app-surface";
+import { evidenceMissingMessage, staleEvidenceReason } from "./helpers/renderer-evidence";
 
 const vendorDir = fileURLToPath(new URL("../src/renderer/vendor/cds-official/", import.meta.url));
 const rendererDir = fileURLToPath(new URL("../src/renderer/", import.meta.url));
@@ -274,10 +275,25 @@ describe("真机几何：官方契约变量在 renderer 里解析成官方值", 
   const hasMeasured = existsSync(measuredPath);
   const measured = (hasMeasured ? JSON.parse(readFileSync(measuredPath, "utf8")) : {}) as {
     appRendered?: boolean;
+    rendererDigest?: string;
+    buildFresh?: boolean;
     light?: { geometry?: Record<string, Record<string, string | null> | null> };
   };
   const geom = (name: string): Record<string, string | null> =>
     (measured.light?.geometry?.[name] ?? {}) as Record<string, string | null>;
+
+  it("证据在场（随仓库入库；缺席即红——跳过不等于通过）", () => {
+    expect(
+      hasMeasured,
+      evidenceMissingMessage("outputs/cds-parity-verify/values.json", "electron scripts/cds-values-probe.cjs outputs/cds-parity-verify/values.json"),
+    ).toBe(true);
+  });
+
+  // 与 cds-parity 同一份读数 ⇒ 同一道保质期章。这里从前不查章：只跑本文件时，
+  // 旧构建的几何可以冒充当前 renderer。
+  it("证据盖的是当前 renderer 源与当前构建（旧读数不许冒充通过）", () => {
+    expect(staleEvidenceReason(measured)).toBeNull();
+  });
 
   it.skipIf(!hasMeasured)("探针必须真的渲染出界面（否则下面的 null 会被误读成 0）", () => {
     expect(measured.appRendered).toBe(true);

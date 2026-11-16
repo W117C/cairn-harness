@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { UsageLedgerPayload } from "../../../src/main/ipc-protocol";
@@ -52,9 +50,8 @@ describe("usage dashboard", () => {
     // 第 936 页：与用量环同一把尺（k/m），不再是中文紧凑写法「1.4万」
     expect(usageTokenLabel(14_000, 1)).toBe("14.0k");
     expect(usageTokenLabel(1_250_000, 1)).toBe("1.3m");
-    const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/settings/usage-dashboard-data.ts", import.meta.url)), "utf8");
-    expect(src).not.toContain('notation: "compact"');
-  });
+    // 旧紧凑写法全应用不许再有（第 1251 页分类迁移：这句是「全应用不得再有」类）。
+    expect(readAppSurface()).not.toContain('notation: "compact"');  });
 
   it("uses the scanner timezone for the calendar boundary, even if the renderer timezone differs", () => {
     const base = { ...data.analytics!, generatedAt: Date.UTC(2026, 9, 24, 23, 30) };

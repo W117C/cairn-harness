@@ -461,6 +461,7 @@ describe("工具行原始参数（阶段 2 · 展开区数据源）", () => {
       ev({ type: "tool_call", id: "t1", name: "run_shell", args: { command: "x".repeat(2000) } }),
     ]);
     const row = rows[0]!;
+    expect(row.kind, "工具调用没成 tool 行 ⇒ 下面那条截断断言没量到").toBe("tool");
     if (row.kind === "tool") {
       expect(row.args!.length).toBeLessThanOrEqual(1501);
       expect(row.args!.endsWith("…")).toBe(true);
@@ -472,6 +473,7 @@ describe("工具行原始参数（阶段 2 · 展开区数据源）", () => {
       ev({ type: "agent_spawned", agent_id: "a1", task: "查一下" }),
     ]);
     const row = rows[0]!;
+    expect(row.kind, "agent_spawned 没成 tool 行 ⇒ 下面那条「不造假 JSON」没量到").toBe("tool");
     if (row.kind === "tool") expect(row.args).toBeUndefined();
   });
 

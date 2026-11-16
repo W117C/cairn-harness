@@ -3,7 +3,7 @@
 // 2026-11-04 业主截图形制重排：每行 = 抓手 | 正文（单行省略）+ 附件文件名行 | [↑ 立即] 胶囊 +
 // 编辑(铅笔) + 移出(垃圾桶)；上移/下移退到悬停显现（默认观感与截图一致，重排能力不丢）；
 // 头部只在「异常 / 等待恢复」时在场——正常排队时输入框那句「继续输入以排队后续修改」就是状态说明。
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { QueuedSend } from "../send-queue";
 import { STR } from "../strings";
 import { ArrowUp, ChevronDown, ChevronUp, GripVertical, Pencil, Trash2 } from "lucide-react";
@@ -30,12 +30,43 @@ export function SendQueueStrip(props: {
   onMove?: (index: number, delta: -1 | 1) => void;
   /** 重启恢复入口：不运行时显式继续发送队列头；缺省 = 不显示入口。 */
   onResume?: () => void;
+  /** 队列被整条移除后的焦点落点（通常交给输入框）：行内操作把焦点所在控件卸载时，
+   *  焦点不能掉回 body。缺省 = 不搬（旧调用面字节不变）。 */
+  onFocusFallback?: () => void;
 }) {
   // 按 id 记正在编辑的那条（队列可能在编辑期间被移出/重排；index 会漂）。
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
   // 键盘收尾后主动 blur 会在真实窗口里再补一个 blur 事件；跳过它，避免同一次编辑提交两遍。
   const skipBlurRef = useRef(false);
+  // 行内焦点收尾：记住最后聚焦的行 / 编辑收尾要回到的那条（都按 id，重排不漂）。
+  const rowsRef = useRef<HTMLDivElement | null>(null);
+  const activeRowRef = useRef(0);
+  const prevCountRef = useRef(props.items.length);
+  const editReturnId = useRef<number | null>(null);
+  useEffect(() => {
+    const prev = prevCountRef.current;
+    prevCountRef.current = props.items.length;
+    if (props.items.length >= prev) return;
+    // 只在焦点确实丢了（body）时补位：鼠标点了别处时不抢。
+    const active = document.activeElement;
+    if (active !== null && active !== document.body) return;
+    const rows = rowsRef.current?.querySelectorAll<HTMLElement>(".queue-item") ?? [];
+    const row = rows[Math.min(activeRowRef.current, rows.length - 1)];
+    const target = row?.querySelector<HTMLElement>(".q-actions button:not([disabled])") ?? null;
+    if (target !== null) target.focus();
+    else props.onFocusFallback?.();
+  }, [props.items.length, props.onFocusFallback]);
+  useEffect(() => {
+    if (editingId !== null) return;
+    const id = editReturnId.current;
+    if (id === null) return;
+    editReturnId.current = null;
+    const row = rowsRef.current?.querySelector<HTMLElement>(`.queue-item[data-queue-id="${String(id)}"]`) ?? null;
+    const target = row?.querySelector<HTMLElement>(".q-edit-btn, .q-actions button:not([disabled])") ?? null;
+    if (target !== null) target.focus();
+    else props.onFocusFallback?.();
+  }, [editingId, props.onFocusFallback]);
   if (props.items.length === 0 && !props.saving && !props.saveFailed) return null;
   const commit = (id: number): void => {
     if (props.disabled) return;
@@ -47,6 +78,7 @@ export function SendQueueStrip(props: {
   // focusout（离屏实例实测），只靠 onBlur 会让编辑框关不掉。
   const finish = (id: number, apply: boolean): void => {
     skipBlurRef.current = true;
+    editReturnId.current = id;
     setEditingId(null);
     if (apply) commit(id);
   };
@@ -85,11 +117,17 @@ export function SendQueueStrip(props: {
           )}
         </span>
       )}
-      <div className="queue-items">
+      <div className="queue-items" ref={rowsRef}>
       {props.items.map((item, index) => {
         const names = item.attachments.map((a) => basenameOf(a.path));
         return (
-        <div className="queue-item" role="listitem" key={item.id}>
+        <div
+          className="queue-item"
+          role="listitem"
+          key={item.id}
+          data-queue-id={item.id}
+          onFocus={() => { activeRowRef.current = index; }}
+        >
           <span className="q-grip" aria-hidden="true"><GripVertical size={12} /></span>
           <div className="q-main">
             {editingId === item.id ? (
@@ -107,9 +145,13 @@ export function SendQueueStrip(props: {
                   if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); finish(item.id, true); e.currentTarget.blur(); }
                   else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finish(item.id, false); e.currentTarget.blur(); }
                 }}
-                onBlur={() => {
+                onBlur={(e) => {
                   if (skipBlurRef.current) { skipBlurRef.current = false; return; }
-                  if (editingId !== null) { setEditingId(null); commit(editingId); }
+                  if (editingId !== null) {
+                    // 焦点有明确去处（点了另一个控件）就让它去；掉回 body 才补回本行。
+                    if (e.relatedTarget === null) editReturnId.current = editingId;
+                    setEditingId(null); commit(editingId);
+                  }
                 }}
               />
             ) : (
@@ -143,7 +185,7 @@ export function SendQueueStrip(props: {
           )}
           {props.onEdit !== undefined && editingId !== item.id && (
             <button
-              className="btn-ghost"
+              className="btn-ghost q-edit-btn"
               aria-label={`编辑排队项：${item.text}`}
               title="编辑这条排队消息"
               disabled={props.disabled}

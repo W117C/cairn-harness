@@ -9,7 +9,7 @@ import { CircleUser } from "lucide-react";
 import { useState } from "react";
 import { readMotionPref, setMotionPref, type MotionPref } from "../state/motion-pref";
 import { useAvailableUpdate } from "../state/update-notice";
-import { keysOf } from "../shortcuts";
+import { keysOf, withKeys } from "../shortcuts";
 import { STR } from "../strings";
 import type { ThemePref } from "../theme";
 
@@ -20,12 +20,6 @@ const THEME_CHOICES: readonly { id: ThemePref; label: string }[] = [
   { id: "dark", label: STR.footer.themeDark },
 ];
 const THEME_BY_ID = new Map(THEME_CHOICES.map((t) => [t.id, t] as const));
-
-/** tooltip 键位与 SHORTCUTS 表同源（P3-3）：表里改键，这里自动跟。 */
-function withKeys(base: string, id: string): string {
-  const k = keysOf(id);
-  return k === null ? base : `${base}（${k}）`;
-}
 
 export interface AccountMenuProps {
   onOpenSettings: () => void;

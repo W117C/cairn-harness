@@ -4,6 +4,7 @@
 import type { AppSettings } from "../../../../../../src/main/ipc-protocol";
 import type { TextSizeSetting, UiSizeSetting } from "../../../../../../src/main/settings";
 import { STR } from "../../strings";
+import { applyRadioNavigation } from "../../radio-nav";
 import { SettingsSection, SettingsRow } from "../settings-ui";
 import { Switch } from "../Switch";
 
@@ -66,8 +67,16 @@ export function GeneralSection(props: {
                 type="button"
                 role="radio"
                 aria-checked={props.settings.theme === t.id}
+                tabIndex={props.settings.theme === t.id ? 0 : -1}
                 className={"theme-opt" + (props.settings.theme === t.id ? " on" : "")}
                 onClick={() => props.onSave({ theme: t.id })}
+                onKeyDown={(e) => {
+                  const current = THEME_OPTIONS.findIndex((o) => o.id === props.settings.theme);
+                  applyRadioNavigation(e, current, THEME_OPTIONS.length, (index) => {
+                    const target = THEME_OPTIONS[index];
+                    if (target !== undefined) props.onSave({ theme: target.id });
+                  });
+                }}
               >
                 {/* 2026-10-24 业主：不要色块小预览——主题选择就是三个词，文字直给。 */}
                 <span>{t.label}</span>
@@ -83,8 +92,16 @@ export function GeneralSection(props: {
                 type="button"
                 role="radio"
                 aria-checked={props.textSize === t.id}
+                tabIndex={props.textSize === t.id ? 0 : -1}
                 className={"theme-opt" + (props.textSize === t.id ? " on" : "")}
                 onClick={() => props.onTextSize(t.id)}
+                onKeyDown={(e) => {
+                  const current = TEXT_SIZE_OPTIONS.findIndex((o) => o.id === props.textSize);
+                  applyRadioNavigation(e, current, TEXT_SIZE_OPTIONS.length, (index) => {
+                    const target = TEXT_SIZE_OPTIONS[index];
+                    if (target !== undefined) props.onTextSize(target.id);
+                  });
+                }}
               >
                 <span className="ts-thumb" data-ts={t.id} aria-hidden="true">A</span>
                 <span>{t.label}</span>
@@ -100,8 +117,16 @@ export function GeneralSection(props: {
                 type="button"
                 role="radio"
                 aria-checked={props.uiSize === t.id}
+                tabIndex={props.uiSize === t.id ? 0 : -1}
                 className={"theme-opt" + (props.uiSize === t.id ? " on" : "")}
                 onClick={() => props.onUiSize(t.id)}
+                onKeyDown={(e) => {
+                  const current = UI_SIZE_OPTIONS.findIndex((o) => o.id === props.uiSize);
+                  applyRadioNavigation(e, current, UI_SIZE_OPTIONS.length, (index) => {
+                    const target = UI_SIZE_OPTIONS[index];
+                    if (target !== undefined) props.onUiSize(target.id);
+                  });
+                }}
               >
                 <span>{t.label}</span>
               </button>

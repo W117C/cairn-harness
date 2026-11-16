@@ -9,6 +9,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { readAppSurface } from "./helpers/app-surface";
 
 const sidebar = readFileSync(fileURLToPath(new URL("../src/renderer/components/Sidebar.tsx", import.meta.url)), "utf8");
 
@@ -28,7 +29,8 @@ describe("侧栏会话列表 ARIA 结构", () => {
     expect(sidebar).toContain("const flatOrder: WorkspaceSession[] = [];");
     expect(sidebar).toContain("const positionOf = new Map<WorkspaceSession, number>();");
     expect(sidebar).toContain("posInSet={positionOf.get(s) ?? 1}");
-    expect(sidebar).not.toContain("posInSet={flatOrder.indexOf(s) + 1}");
+    // 否定断言读整个应用面：位置读数若搬进行组件，读 Sidebar 单文件会空过
+    expect(readAppSurface()).not.toContain("posInSet={flatOrder.indexOf(s) + 1}");
     expect(sidebar).toContain("setSize={flatOrder.length}");
     expect(sidebar).toContain("positionOf.set(s, flatOrder.length);");
     // 归档组在末尾（与渲染顺序一致，不能漏）
@@ -37,7 +39,10 @@ describe("侧栏会话列表 ARIA 结构", () => {
 
   it("不再把行当裸 button（那会儿读屏报不出位置）", () => {
     const rowAt = sidebar.indexOf('data-session-id={s.id}');
-    const row = sidebar.slice(rowAt - 200, rowAt + 200);
+    // 锚点找不到时 slice(-201, 199) 会读文件尾巴（非空），下面那条否定断言就会空过。
+    expect(rowAt, "Sidebar 里找不到会话行的 data-session-id ⇒ 反向锚会读文件尾巴空过").toBeGreaterThan(-1);
+    const row = sidebar.slice(Math.max(0, rowAt - 200), rowAt + 200);
+    expect(row).toContain("data-session-id={s.id}");
     expect(row).not.toContain('role="button"');
   });
 });
@@ -59,8 +64,8 @@ describe("↑↓ 在会话之间移动焦点", () => {
   it("只把看得见的行算进移动序列（折叠组仍在 DOM 里）", () => {
     expect(sidebar).toContain('.querySelectorAll<HTMLElement>(".session")');
     expect(sidebar).toContain("el.getClientRects().length > 0");
-    // 反向：不能用 [inert] 判（折叠组用的是 visibility:hidden，不是 inert）
-    expect(sidebar).not.toContain('".session:not([inert])"');
+    // 反向：不能用 [inert] 判（折叠组用的是 visibility:hidden，不是 inert）；读整个应用面
+    expect(readAppSurface()).not.toContain('".session:not([inert])"');
   });
 
   it("Shift+F10 / ContextMenu 可从键盘打开行菜单（右键等价）", () => {
@@ -79,8 +84,9 @@ describe("↑↓ 在会话之间移动焦点", () => {
 
   it("到边界不环绕（rows[at±1] 为 undefined 时静默不动）", () => {
     expect(sidebar).toContain("next?.focus()");
-    // 没有取模 ⇒ 首行按 ↑、末行按 ↓ 都是 no-op，不跳到另一端
-    expect(sidebar).not.toMatch(/rows\[\(at \+ [^)]*\) % rows\.length\]/);
+    // 没有取模 ⇒ 首行按 ↑、末行按 ↓ 都是 no-op，不跳到另一端。全应用禁令：读面不读
+    // Sidebar 单文件（行移动逻辑搬去 hook/子组件后，单文件否定会空过；第 1252 页口径）。
+    expect(readAppSurface()).not.toMatch(/rows\[\(at \+ [^)]*\) % rows\.length\]/);
   });
 
   it("行内「…」按钮的方向键不冒泡触发行移动（只在宿主聚焦时处理）", () => {

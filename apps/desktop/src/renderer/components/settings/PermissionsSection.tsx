@@ -5,20 +5,24 @@ import { useState } from "react";
 import type { AppSettings, PermissionMode } from "../../../../../../src/main/ipc-protocol";
 import { selectablePermissionMode } from "../../../../../../src/permissions/modes";
 import { STR } from "../../strings";
+import { applyRadioNavigation } from "../../radio-nav";
 import { OptionCard, SettingsSection, SettingsRow } from "../settings-ui";
 import { ConfirmDialog } from "../ConfirmDialog";
-import { permissionConfirmCopy } from "../PermissionMenu";
+import { MODE_LABEL, permissionConfirmCopy } from "../PermissionMenu";
 
-export const MODE_OPTIONS: readonly { id: PermissionMode; label: string; desc: string; warn?: string }[] = [
-  { id: "read-only", label: STR.permissions.modeReadOnly, desc: STR.permissions.modeReadOnlyDesc },
-  { id: "default", label: STR.permissions.modeDefault, desc: STR.permissions.modeDefaultDesc },
-  // 2026-11-03 业主：引导与自动两档文案重叠，合并成一个「智能审批」入口（持久化 id 仍是 auto）。
-  // 它免的是"逐笔问写"，不是"什么都不问"：风险 ≥ high 的动作照样出卡。
-  { id: "auto", label: STR.permissions.modeAuto, desc: STR.permissions.modeAutoDesc, warn: STR.permissions.modeAutoWarn },
-  // 2026-11-03 业主：完全允许 = 什么都允许。除评测判卷文件的冻结闸外，出网、方案门、
-  // 禁止规则与风险线都不再拦（旧文案说"出网仍一次性批准"已作废）。
-  { id: "full-access", label: STR.permissions.modeFull, desc: STR.permissions.modeFullDesc, warn: STR.permissions.modeFullWarn },
-];
+// 档位名与说明只在 MODE_LABEL 里写一份（芯片菜单 / 确认框 / 设置面同源）。
+// 此前设置面抄了第二份，已经漂了：最松档的说明漏掉「评测判卷文件仍受硬闸保护」这条硬边界。
+// 设置面自己只多一行风险警示（warn），其余一律取词表。
+const SETTINGS_MODE_IDS = ["read-only", "default", "auto", "full-access"] as const;
+
+export const MODE_OPTIONS: readonly { id: PermissionMode; label: string; desc: string; warn?: string }[] =
+  SETTINGS_MODE_IDS.map((id) => {
+    const info = MODE_LABEL[id];
+    // 2026-11-03 业主：引导与自动两档文案重叠，合并成一个「智能审批」入口（持久化 id 仍是 auto）。
+    // 它免的是"逐笔问写"，不是"什么都不问"：风险 ≥ high 的动作照样出卡。
+    const warn = id === "auto" ? STR.permissions.modeAutoWarn : id === "full-access" ? STR.permissions.modeFullWarn : undefined;
+    return { id, label: info.label, desc: info.desc, ...(warn === undefined ? {} : { warn }) };
+  });
 
 export function PermissionsSection(props: {
   settings: AppSettings;
@@ -33,6 +37,7 @@ export function PermissionsSection(props: {
     props.onSave({ mode: id });
   };
   const confirmCopy = confirmMode === null ? null : permissionConfirmCopy(confirmMode);
+  const selectedIndex = MODE_OPTIONS.findIndex((m) => m.id === selectablePermissionMode(props.settings.mode));
   return (
     <>
       <SettingsSection title={STR.permissions.modesTitle} hint={STR.permissions.modesHint}>
@@ -43,6 +48,13 @@ export function PermissionsSection(props: {
               checked={selectablePermissionMode(props.settings.mode) === m.id}
               title={m.label}
               desc={m.desc}
+              tabIndex={selectablePermissionMode(props.settings.mode) === m.id ? 0 : -1}
+              onKeyDown={(e) => {
+                applyRadioNavigation(e, selectedIndex, MODE_OPTIONS.length, (index) => {
+                  const target = MODE_OPTIONS[index];
+                  if (target !== undefined) requestMode(target.id);
+                });
+              }}
               {...(m.warn !== undefined ? { danger: true, warn: m.warn } : {})}
               // 2026-11-02 真机：五档里「自动」和「完全允许」此前同样红描边，风险梯度读不出。
               // 自动 = 警告级（黄），完全允许 = 危险级（红），与权限菜单的档位色点口径一致。

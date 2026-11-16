@@ -7,6 +7,7 @@
 // #100（2026-10-05 业主拍板 C2）把它加进了 .gitignore：按字节抄的原件可能带着被覆盖文件里的凭据，
 // 而外泄通道是 commit 不是 copy。**仍在的代价**说清楚：明文第二副本留在本地盘上，没有帽也没有 TTL
 // （那一半留给 #56 与帽/TTL，别把「已忽略」读成「已管住」）。判卷 tests/snapshot-dir-not-distributed.test.ts。
+import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { mkdir, open, rename, unlink, type FileHandle } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
@@ -32,10 +33,21 @@ function safeCallPart(callId: string | undefined): string {
   return s === "" ? "run" : s;
 }
 
-/** 快照 id：`.agent/snapshots/<毫秒>--<callId>/<原相对路径>`——保留原相对路径，
- *  一次覆盖一个目录，事后「这一轮把哪些文件覆盖成了什么」是列目录就能读出来的事实。 */
-export function snapshotIdOf(rel: string, callId: string | undefined, at = Date.now()): string {
-  return join(SNAPSHOT_ROOT, String(at) + "--" + safeCallPart(callId), rel);
+/** 原件字节的短摘要：快照目录名的第二段。同一输入（同 callId、同原件）⇒ 同一路径，
+ *  这正是「重跑一次应当逐字一样」要的身份；内容不同则路径不同，两次覆盖互不覆盖。 */
+export function snapshotDigestOf(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex").slice(0, 12);
+}
+
+/** 快照 id：`.agent/snapshots/<callId>--<原件摘要>/<原相对路径>`——保留原相对路径，
+ *  一次覆盖一个目录，事后「这一轮把哪些文件覆盖成了什么」是列目录就能读出来的事实。
+ *
+ *  目录名**不含时钟**（第 1257 页偿清身份债表里的 D7 快照债）：原先用 `Date.now()` 保证「同名复写不互相覆盖」，
+ *  代价是同一输入两次跑快照路径不同 ⇒ 判卷字段与模型可见文本都跟着漂。现在唯一性由
+ *  ① callId（provider 每次调用唯一）② 原件摘要（同一次调用里被覆盖两次而内容不同）共同保证，
+ *  且两者都只由输入决定。 */
+export function snapshotIdOf(rel: string, callId: string | undefined, digest: string): string {
+  return join(SNAPSHOT_ROOT, safeCallPart(callId) + "--" + digest, rel);
 }
 
 /** 覆盖前抄一份原件。**best-effort**：任何失败都不得改写盘结果——写入是用户要的动作，
@@ -55,25 +67,26 @@ export async function snapshotBeforeOverwrite(
     source = opened.fh;
     if (!opened.stat.isFile() || opened.stat.size === 0) return null;
     const size = opened.stat.size;
-    const id = snapshotIdOf(rel, callId);
-    const target = join(workspace, id);
-    await mkdir(dirname(target), { recursive: true });
-    const parentAbs = dirname(target);
-    const parentIdentity = await captureContainedPath(workspace, parentAbs, "snapshot-before-overwrite");
+    // 目标目录名要等原件读完、摘要算出来才知道 ⇒ 临时文件先落在快照根里，最后 rename 进目标目录。
+    // 根目录在复制前后各做一次身份复查（与原先对目标父目录做的事同量级）。
+    const rootAbs = join(workspace, SNAPSHOT_ROOT);
+    await mkdir(rootAbs, { recursive: true });
+    const rootIdentity = await captureContainedPath(workspace, rootAbs, "snapshot-before-overwrite");
     const guard = (): Promise<void> => assertContainedPathIdentity(
       workspace,
-      parentAbs,
+      rootAbs,
       "snapshot-before-overwrite",
-      parentIdentity,
+      rootIdentity,
     );
     await guard();
 
-    tmp = tmpPathFor(target);
+    tmp = tmpPathFor(join(rootAbs, "snapshot"));
     dest = await open(
       tmp,
       constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0),
       0o666,
     );
+    const hash = createHash("sha256");
     const chunk = Buffer.allocUnsafe(Math.min(1024 * 1024, size));
     let copied = 0;
     while (copied < size) {
@@ -82,6 +95,7 @@ export async function snapshotBeforeOverwrite(
       if (read.bytesRead === 0) {
         throw new Error(`source ended after ${String(copied)} of ${String(size)} bytes`);
       }
+      hash.update(chunk.subarray(0, read.bytesRead));
       let written = 0;
       while (written < read.bytesRead) {
         const write = await dest.write(chunk, written, read.bytesRead - written, copied + written);
@@ -103,7 +117,15 @@ export async function snapshotBeforeOverwrite(
     }
     await dest.close();
     dest = null;
+    const id = snapshotIdOf(rel, callId, hash.digest("hex").slice(0, 12));
+    const target = join(workspace, id);
+    const parentAbs = dirname(target);
+    await mkdir(parentAbs, { recursive: true });
+    // 与旧实现同一道复查：目标父目录（含 rel 里的中间目录）建好后再取一次身份，
+    // rename 之前再比一次——预置的软链会让落点跑到区外。
+    const parentIdentity = await captureContainedPath(workspace, parentAbs, "snapshot-before-overwrite");
     await guard();
+    await assertContainedPathIdentity(workspace, parentAbs, "snapshot-before-overwrite", parentIdentity);
     await rename(tmp, target);
     tmp = null;
     return id;

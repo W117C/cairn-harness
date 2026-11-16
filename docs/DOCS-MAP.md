@@ -1,6 +1,6 @@
 # Documentation map
 
-This checkout is core-first. The desktop shell lives in `apps/desktop/` (reintroduced 2026-10-02; see `adr/0001-core-only-vs-desktop.md`); root gates do not scan `apps/`.
+This checkout is core-first. The desktop shell lives in `apps/desktop/` (reintroduced 2026-10-02; see `adr/0001-core-only-vs-desktop.md`); its suite and `desktop-boundary-check` are inside the root `GATES`/`CERT_GATES`.
 
 | Area | Location |
 |---|---|

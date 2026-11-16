@@ -100,11 +100,14 @@ describe("工具与思考的收起态排版", () => {
     // clamp 只许落在内层 .tool-group-failure-detail（无 padding 的纯文字盒）；
     // 卡片层 .tool-group-failure 只管底/圆角/占位——两层叠加时 Chromium 会把第三行漏出来。
     const failureRule = decls(css).match(/\.tool-group-failure\s*\{[^}]*\}/s)?.[0] ?? "";
+    // 选择器改名时 failureRule 是 ""，下面三条否定断言会一起空过。
+    expect(failureRule).toContain("tool-group-failure");
     expect(failureRule).not.toMatch(/-webkit-line-clamp/);
     expect(failureRule).not.toMatch(/-webkit-box/);
     expect(failureRule).not.toMatch(/overflow:\s*hidden/);
     // 孤行调整（text-wrap: pretty）与 line-clamp 同框会漏行 ⇒ 过程轨里不许再写它。
     const clusterRule = decls(processCss).match(/\.toolcluster \.tool-group-failure\s*\{[^}]*\}/s)?.[0] ?? "";
+    expect(clusterRule).toContain("tool-group-failure");
     expect(clusterRule).not.toMatch(/text-wrap:\s*pretty/);
   });
 
@@ -113,6 +116,8 @@ describe("工具与思考的收起态排版", () => {
     expect(processCss).toMatch(/\.toolcluster \.tool-group-main > \.glyph,[\s\S]*?background:\s*transparent/s);
     // 展开的思考体此前外层 border-left + inner border-left 并排成两根线。
     const bodyRule = processCss.match(/\.row\.think \.think-body \{([^}]*)\}/s)?.[1] ?? "";
+    // 选择器改名时 bodyRule 是 ""，否定断言会空过。
+    expect(processCss).toContain(".row.think .think-body {");
     expect(bodyRule).not.toMatch(/(^|\n)\s*border-left\s*:/);
     expect(processCss).toMatch(/\.row\.think \.think-icon \{[^}]*background:\s*transparent/s);
   });

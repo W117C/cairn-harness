@@ -495,6 +495,7 @@
      错峰延迟是第三类（--t-stagger-*）：延迟位只收时长、收不了缓动。 */
   --t-sheen: 1.8s var(--ease-in-out);         /* 骨架扫光（skeleton-sheen） */
   --t-pulse-ring: 1.8s var(--ease-out);       /* 等待态扩散环（pulse-ring） */
+  --t-breathe: 1.6s var(--ease-in-out);       /* 呼吸（breathe）：running 点 / live 光标 / 首屏骨架 */
   /* 消息动作揭示（Claude `--cds-message-actions-reveal-*`，2026-10-30 实测）：
      出现 120ms + **100ms 延迟**，收起 60ms，两向同缓动 --ease-snap。
      **只动 opacity**：官方 reveal-scale = none —— 不位移、不缩放。延迟位只收时长。 */

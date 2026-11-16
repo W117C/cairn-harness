@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { ChevronRight, FileText, Folder } from "lucide-react";
 import type { DirEntryView } from "../../../../../src/main/workspace-fs";
 import { formatBytes } from "../derived/format-bytes";
+import { windowWorkspaceApplied } from "../state/window-workspace";
 
 /** 快速打开的目标路径 → 需要预展开的祖先目录（不含文件本身）。
  *  纯函数，判卷可直接钉；命令面板的文件快速打开与 FilePane 的树展开共用这一把尺。 */
@@ -17,6 +18,8 @@ export function ancestorDirsOf(path: string): string[] {
 export function FilePane(props: {
   onPathMenu?: (rel: string, kind: "file" | "directory", x: number, y: number) => void;
   openTarget?: { path: string; seq: number };
+  /** 窗格标签是否在前台。快速打开的焦点只在窗格真实可见时才搬（隐藏的 display:none 行 focus() 静默失败）。 */
+  active?: boolean;
 }): React.JSX.Element {
   type DirNode = { entries: DirEntryView[]; truncated: boolean } | { error: string };
   const [dirs, setDirs] = useState<Record<string, DirNode>>({});
@@ -26,6 +29,10 @@ export function FilePane(props: {
   // 请求归属（2026-10-21）：同一目录/预览的旧响应晚到，不能覆盖新请求的结果。
   const dirSeq = useRef(new Map<string, number>());
   const previewSeq = useRef(0);
+  const treeRef = useRef<HTMLDivElement | null>(null);
+  // 快速打开的焦点意图（第 1260 页）：行要等父目录数据回来、窗格切到前台才真实可见，
+  // 所以先登记路径，由下面那只 effect 在行出现且窗格在前台时搬一次（搬完即清）。
+  const focusIntentRef = useRef<string | null>(null);
   const root = dirs[""];
   const firstPath = root !== undefined && "entries" in root ? root.entries[0]?.name : undefined;
 
@@ -52,8 +59,13 @@ export function FilePane(props: {
       setDirs((prev) => ({ ...prev, [rel]: { error: err instanceof Error ? err.message : String(err) } }));
     });
   };
-  // 首次挂载拉根目录（懒加载树的唯一根；子层展开时才拉）。
-  useEffect(() => { loadDir(""); }, []);
+  // 首次挂载拉根目录（懒加载树的唯一根；子层展开时才拉）。换项目由 PaneDock 的 key 重挂载，
+  // 第一读等窗口工作区上报落定——不等就会把上一个项目的根列在新项目名下。
+  useEffect(() => {
+    let alive = true;
+    void windowWorkspaceApplied().then(() => { if (alive) loadDir(""); });
+    return () => { alive = false; };
+  }, []);
 
   // 命令面板快速打开：把父目录一路展开、把还没取过的目录补拉，再打开文件预览。
   // 只随 target 对象（seq）变化，不随 dirs/函数身份重跑；旧请求有各自序号守卫。
@@ -73,8 +85,23 @@ export function FilePane(props: {
     }
     openFile(target.path);
     setFocusPath(target.path);
+    focusIntentRef.current = target.path;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.openTarget]);
+
+  // 快速打开的落点（第 1260 页）：父目录数据回来、行真实渲染、窗格已在前台，三者齐了才搬焦点。
+  // 少了这一步，命令面板选中的文件只开预览，键盘焦点还留在面板触发钮上——头注释承诺的
+  // 「打开预览并聚焦行」只兑现了一半。
+  useEffect(() => {
+    const want = focusIntentRef.current;
+    if (want === null || props.active === false) return;
+    const row = treeRef.current === null
+      ? null
+      : [...treeRef.current.querySelectorAll<HTMLElement>(".fp-row")].find((r) => r.dataset.path === want) ?? null;
+    if (row === null) return;
+    focusIntentRef.current = null;
+    row.focus();
+  }, [props.active, focusPath, dirs, expanded]);
 
   const child = (rel: string, name: string): string => (rel === "" ? name : `${rel}/${name}`);
   const toggleDir = (rel: string): void => {
@@ -215,7 +242,7 @@ export function FilePane(props: {
 
   return (
     <div className="file-pane">
-      <div className="file-tree" role="tree" aria-label="文件树" onKeyDown={onTreeKeyDown}>{renderDir("", 0)}</div>
+      <div className="file-tree" role="tree" aria-label="文件树" onKeyDown={onTreeKeyDown} ref={treeRef}>{renderDir("", 0)}</div>
       <div className="file-preview">
         {preview === null && (
           <div className="pane-empty">左边选一个文件，这里看内容。<br />预览只读；改文件走 agent 的审批卡。</div>

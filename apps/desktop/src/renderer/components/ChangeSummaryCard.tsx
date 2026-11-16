@@ -132,7 +132,32 @@ export function ChangeSummaryCard(props: {
               : <><span className="cf-add">+0</span><span className="cf-del">−0</span></>;
   return (
     <>
-      <div className="changes-card" data-single={single !== null ? "true" : "false"} onMouseLeave={closePreview}>
+      <div
+        className="changes-card"
+        data-single={single !== null ? "true" : "false"}
+        // 预览开着且焦点在卡内时，Esc 归这张卡（只收预览）：否则一次 Esc 会顺带停掉正在跑的本轮。
+        {...(preview !== null ? { "data-esc-owns": "true" } : {})}
+        onMouseLeave={closePreview}
+        onKeyDown={(e) => {
+          if (e.key !== "Escape") return;
+          // 预览还没到点（500ms 悬停/聚焦延迟）也把这次排期取消：Esc 之后不该再弹出来。
+          if (previewTimer.current !== null) {
+            window.clearTimeout(previewTimer.current);
+            previewTimer.current = null;
+          }
+          if (preview === null) return; // 没有可见预览时不拦：Esc 仍是全局智慧停止
+          e.preventDefault();
+          e.stopPropagation();
+          closePreview();
+        }}
+        onBlur={(e) => {
+          // 焦点触发的预览（悬停有 onMouseLeave 兜底）在焦点离开卡片时收掉；
+          // relatedTarget 为 null（焦点移出窗口）同样算离开。排期未到点的也一并取消。
+          const next = e.relatedTarget;
+          if (next instanceof Node && e.currentTarget.contains(next)) return;
+          closePreview();
+        }}
+      >
         <button
           type="button"
           className="changes-head"

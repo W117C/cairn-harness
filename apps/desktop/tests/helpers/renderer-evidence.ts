@@ -40,6 +40,55 @@ export interface SealedEvidence {
   buildFresh?: boolean;
 }
 
+/** 被判卷消费的真机证据台账（单一事实源）。
+ *
+ *  为什么要有这张表：四支判卷在读数缺席时把整组断言 `it.skipIf(!hasMeasured)` 掉。
+ *  「跳过 ≠ 通过」只写在注释里，而汇总行里一片 skip 的绿与真验过的绿同形——把证据文件删掉，
+ *  桌面套件仍然全绿，只是悄悄少验了一格。这些读数随仓库入库（tracked），缺席只可能是被删。
+ *  台账把三件事绑在一起：产物（探针写它）、探针（还能再产一次）、消费者（判卷读它且复算保质期）。
+ *  判卷 `tests/evidence-ledger.test.ts` 逐条核这三件事，并反向收口「tests/ 里出现的每份读数」。 */
+export interface EvidenceRecord {
+  /** 相对 apps/desktop 的证据文件。 */
+  readonly file: string;
+  /** 产出它的探针（相对 apps/desktop）。 */
+  readonly producer: string;
+  /** 读它的判卷（相对 tests/）。 */
+  readonly consumers: readonly string[];
+}
+
+export const EVIDENCE_LEDGER: readonly EvidenceRecord[] = [
+  {
+    file: "outputs/cds-parity-verify/values.json",
+    producer: "scripts/cds-values-probe.cjs",
+    consumers: ["cds-parity.test.ts", "cds-components.test.ts"],
+  },
+  {
+    file: "outputs/ime-guard-749/checks.json",
+    producer: "scripts/ime-guard-smoke.cjs",
+    consumers: ["ime-guard.test.ts"],
+  },
+  {
+    file: "outputs/queue-key-750/checks.json",
+    producer: "scripts/queue-key-smoke.cjs",
+    consumers: ["queue-key.test.ts"],
+  },
+  {
+    file: "outputs/overlay-mutex-752/checks.json",
+    producer: "scripts/overlay-mutex-smoke.cjs",
+    consumers: ["overlay-mutex.test.ts"],
+  },
+];
+
+/** 证据文件的绝对路径（本 helper 在 tests/helpers ⇒ 上两级是 apps/desktop）。 */
+export function evidenceFile(rel: string): string {
+  return fileURLToPath(new URL(`../../${rel}`, import.meta.url));
+}
+
+/** 证据缺席时那句话（判卷侧统一措辞：缺席是删了证据，不是「没验也算过」）。 */
+export function evidenceMissingMessage(rel: string, producer: string): string {
+  return `缺少 ${rel}：这份读数随仓库入库，缺席说明被删除；改过 renderer 后重跑 ${producer} 并提交新读数`;
+}
+
 /** null = 证据盖的是当前源与当前构建；否则返回可操作的原因。 */
 export function staleEvidenceReason(measured: SealedEvidence): string | null {
   const actual = rendererDigest();

@@ -38,7 +38,8 @@ describe("主会话运行旗：worker 终态不得摘旗", () => {
 
 describe("打开会话：先清旧流，读盘期间的增量要合并", () => {
   it("openSession 在发 IPC 前清空事件，并把 live 增量收集到 openPending", () => {
-    const open = between(app, "const openSession = useCallback", "const queued = window.agent.queueGet");
+    // 结束锚点跟着实现走：队列读取现在叫 queueRead（落键等 opened，见 workbench 归属采纳）。
+    const open = between(app, "const openSession = useCallback", "const queueRead = window.agent.queueGet");
     const clearAt = open.indexOf("setEvents([]);");
     const pendingAt = open.indexOf("openPending.current = pending;");
     const callAt = open.indexOf("window.agent.openSession(id, sessionWs ?? undefined)");

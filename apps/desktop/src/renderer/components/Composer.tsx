@@ -35,6 +35,7 @@ import { ComposerAttachMenu } from "./ComposerAttachMenu";
 import { ComposerPermissionMenu } from "./ComposerPermissionMenu";
 export { fileIconKind, formatSize, showQueueButton } from "./composer-helpers";
 import { STR } from "../strings";
+import { withKeys } from "../shortcuts";
 import { slashItems, slashMatches, type SlashSkill } from "../slash";
 import { DRAFTS_KEY, HOME_DRAFT_KEY, draftKeyFor, sessionIdOfDraftKey } from "../drafts";
 import { pickedElementContext, type PickedElement, type PickedElementSignal } from "../picked-element";
@@ -1052,11 +1053,11 @@ export function Composer(props: {
             </button>
           )}
           {props.running ? (
-            <button className="send-btn stop" aria-label={STR.composer.stopAria} title={STR.composer.stopTitle} onClick={props.onCancel}>
+            <button className="send-btn stop" aria-label={STR.composer.stopAria} title={withKeys(STR.composer.stopTitle, "stop")} onClick={props.onCancel}>
               <Square size={12} fill="currentColor" aria-hidden="true" />
             </button>
           ) : (
-            <button className="send-btn" aria-label={STR.composer.sendAria} title={STR.composer.sendTitle} disabled={!canSend} onClick={() => { submit(); }}>
+            <button className="send-btn" aria-label={STR.composer.sendAria} title={withKeys(STR.composer.sendTitle, "send")} disabled={!canSend} onClick={() => { submit(); }}>
               <ArrowUp size={14} />
             </button>
           )}

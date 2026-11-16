@@ -63,7 +63,15 @@ export function WorkbenchSidebarHost({ deps, chatSidebarVisible, pageItems, plug
         },
         onNewTask: newSession,
         onOpenPalette: handleOpenPalette,
-        onSwitchWorkspace: (p) => { setActiveWorkspace(p); activeWorkspaceRef.current = p; touchWorkspace(p); },
+        onSwitchWorkspace: (p) => {
+          const switched = p !== activeWorkspace;
+          setActiveWorkspace(p);
+          activeWorkspaceRef.current = p;
+          touchWorkspace(p);
+          // 切项目 = 回该项目的空聊天面：旧 activeId 留在原项目，继续发送会把同一 sessionId
+          // 写进新工作区（2026-11-05 审计确认的数据串写；命令面板早这么做了，侧栏此前漏了）。
+          if (switched && activeId !== null) newSession();
+        },
         onAddProject: handleAddProject,
         onCloneProject: handleCloneProject,
         onOpenNewProjectDialog: () => setNewProjectOpen(true),

@@ -50,6 +50,15 @@ function fx(...parts: string[]): string {
   return join(FX, ...parts);
 }
 
+// F2 余项（2026-11-12）：信任表位于工作区内 = 项目给自己签发信任，运行时直接 fail-loud。
+// 本脚本所有场景的 workspace 都是临时工作区，所以信任表统一放在**同级的独立 tmp 目录**，
+// 否则场景一开跑就被守卫拒掉（旧写法 8 处全在工作区内）。
+let trustRoot: string | null = null;
+async function trustPath(tag: string): Promise<string> {
+  if (trustRoot === null) trustRoot = await mkdtemp(join(tmpdir(), "m2e-check-trust-"));
+  return join(trustRoot, tag + ".json");
+}
+
 /** 临时工作区 .agent/plugins/echo-suite 用符号链接指回 fixtures（判卷不复制、不污染；
  *  stub server.mjs 的裸导入 @modelcontextprotocol/sdk 经 ESM realpath 解析回仓库 node_modules）。 */
 async function makeWorkspace(tag: string): Promise<{ ws: string; pluginRoot: string }> {
@@ -109,7 +118,7 @@ async function main(): Promise<void> {
       looseRoots: [fx("loose")],
       workspace: scratch,
       pluginDataRoot: join(scratch, "data-a"),
-      trustFile: join(scratch, "trust-a.json"),
+      trustFile: await trustPath("a"),
     });
     assert(rt.manifest.plugins.some((p) => p.name === "hello-plugin" && p.scope === "user"), "A1 用户级作用域发现（user/plugins）");
     assert(rt.manifest.plugins.some((p) => p.name === "echo-suite" && p.scope === "project"), "A2 项目级作用域发现（.agent/plugins）");
@@ -137,7 +146,7 @@ async function main(): Promise<void> {
     assert(r.truncated && r.text.length <= SKILL_ROUTING_CHAR_LIMIT, "B1 清单超 1536 字符被截断（len=" + String(r.text.length) + "）");
     // 触发全文：runAgent 事件流实证（信任预置 → skill 工具在统一注册表）
     const wsB = await makeWorkspace("skill");
-    const trustB = join(wsB.ws, "trust.json");
+    const trustB = await trustPath("b");
     await new TrustStore(trustB).decide(wsB.pluginRoot, true, await pluginFingerprint(wsB.pluginRoot));
     const evB = await run(wsB.ws, "skill-flow.jsonl", trustB, "skill");
     const res = resultOf(evB, "c-skill");
@@ -187,7 +196,7 @@ async function main(): Promise<void> {
   console.log("-- C hook（exit2 阻断 / JSON 放行 / 超时强杀）--");
   {
     const wsC = await makeWorkspace("hook");
-    const trustC = join(wsC.ws, "trust.json");
+    const trustC = await trustPath("c");
     await new TrustStore(trustC).decide(wsC.pluginRoot, true, await pluginFingerprint(wsC.pluginRoot));
     const t0 = Date.now();
     const evC = await run(wsC.ws, "hook-flow.jsonl", trustC, "hook");
@@ -244,7 +253,7 @@ async function main(): Promise<void> {
     // 宿主总开关：开着，但表里没有自带服务器 ⇒ 出现的服务器只可能来自插件那条路。
     await mkdir(join(wsLsp.ws, ".agent"), { recursive: true });
     await writeFile(join(wsLsp.ws, ".agent", "lsp.json"), JSON.stringify({ lsp: {} }), "utf8");
-    const trustLsp = join(wsLsp.ws, "trust.json");
+    const trustLsp = await trustPath("lsp");
     await new TrustStore(trustLsp).decide(wsLsp.pluginRoot, true, await pluginFingerprint(wsLsp.pluginRoot));
     const rtLsp = await PluginRuntime.load({
       projectPluginsDir: join(wsLsp.ws, ".agent", "plugins"),
@@ -268,7 +277,7 @@ async function main(): Promise<void> {
   console.log("-- D 信任门（未信任只列出 / 信任后生效）--");
   {
     const wsD = await makeWorkspace("trust");
-    const trustD = join(wsD.ws, "trust.json");
+    const trustD = await trustPath("d");
     // 未信任：hook 不执行（read_file 真执行了，未被 [hook blocked]）、MCP 不连接
     const evD1 = await run(wsD.ws, "hook-flow.jsonl", trustD, "untrusted");
     const unblocked = resultOf(evD1, "c-read");
@@ -303,7 +312,7 @@ async function main(): Promise<void> {
   console.log("-- E MCP（scoped 名 / call 回传 / 权限门）--");
   {
     const wsE = await makeWorkspace("mcp");
-    const trustE = join(wsE.ws, "trust.json");
+    const trustE = await trustPath("e");
     await new TrustStore(trustE).decide(wsE.pluginRoot, true, await pluginFingerprint(wsE.pluginRoot));
     const rtE = await PluginRuntime.load({
       projectPluginsDir: join(wsE.ws, ".agent", "plugins"),
@@ -366,6 +375,7 @@ async function main(): Promise<void> {
 
   // 收尾
   await rm(scratch, { recursive: true, force: true });
+  if (trustRoot !== null) await rm(trustRoot, { recursive: true, force: true }).catch(() => {});
   console.log("");
   if (unverified.length > 0) {
     console.log("未证项（连网/凭据限制，未跑到的断言——不等于通过）：");
@@ -543,7 +553,7 @@ async function darkBox(): Promise<void> {
       projectPluginsDir: join(target, "community-plugins"),
       workspace: target,
       pluginDataRoot: join(target, ".plugin-data"),
-      trustFile: join(target, "trust.json"),
+      trustFile: await trustPath("f3"),
     });
     const td = rt.manifest.plugins.find((p) => p.name === "testdino");
     assert(td !== undefined && td.skills.length === 7, "F3 testdino 7 个 skill 免改加载", "实际 " + String(td?.skills.length ?? 0));
@@ -657,7 +667,7 @@ async function darkBox(): Promise<void> {
       looseRoots: [skillsRoot],
       workspace: target,
       pluginDataRoot: join(target, ".plugin-data-2"),
-      trustFile: join(target, "trust-2.json"),
+      trustFile: await trustPath("f18"),
     });
   } catch {
     rt2 = null;

@@ -634,6 +634,17 @@ export function createKernelHost(deps: KernelHostDeps): KernelHost {
       const ws = await resolveSessionWs(sessionId, req.workspace);
       const root = wsRoot(ws);
       const logPath = pathOf(root, sessionId);
+      // 显式工作区必须落在这条会话**自己的**根里：同 id 跨工作区是合法语义，但会话已在别处
+      // 存在、本根却没有 ⇒ core 会在这里 createEventLog，把消息写进另一个项目的日志（幽灵会话）。
+      // 归属未知（盘上哪儿都没有 = 新建会话）照常放行。只在 run 收口，不动全局解析：
+      // 删除/归档/重命名等通道的「按显式根操作」语义不在这里重判。
+      if (req.workspace !== undefined && !(await sessionExists(root, sessionId))) {
+        for (const other of workspaces) {
+          if (other !== ws && await sessionExists(wsRoot(other), sessionId)) {
+            return { ok: false, accepted: false, error: `会话 ${sessionId} 不属于工作区 ${ws}（它在另一个工作区里），已拒绝写入` };
+          }
+        }
+      }
       // 会话级 worktree 隔离（§3.7 · G4）：隔离会话的 run 工作区 = 它自己那棵 worktree
       // （工具 cwd / 写面 / 验证全在里面，主 checkout 不被并行会话踩）。会话存储**不受影响**：
       // logPath 已显式钉在主 checkout 侧，而 worktree 里的 `.agent` 是指回主 checkout 的 symlink

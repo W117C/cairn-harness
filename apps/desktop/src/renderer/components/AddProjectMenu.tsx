@@ -6,6 +6,7 @@ import * as DropdownMenu from "./ui/dropdown-menu";
 import { FolderOpen, FolderPlus, GitBranch, History, X } from "lucide-react";
 import type { ProjectRecord } from "../../../../../src/main/ipc-protocol";
 import { STR } from "../strings";
+import { fillKeys } from "../shortcuts";
 import { scheduleAfterOverlayDismissal } from "./overlay-focus";
 import { repoNameFromUrl } from "../../../../../src/git-url";
 
@@ -81,13 +82,13 @@ export function AddProjectMenu(props: {
         onOpenChange={(open) => { if (open) loadRecent(); }}
       >
         <DropdownMenu.Trigger asChild>
-          <button className="add-project-btn" title={STR.addProject.titleTip} disabled={cloneBusy}>
+          <button className="add-project-btn" title={fillKeys(STR.addProject.titleTip, "open-folder")} disabled={cloneBusy}>
             <FolderPlus size={13} />
             {STR.addProject.title}
           </button>
         </DropdownMenu.Trigger>
         <DropdownMenu.Content className="pop-rd" side="top" align="start" sideOffset={4}>
-          <DropdownMenu.Item className="menu-item" title={STR.addProject.openFolderTip} onSelect={pickFolder}>
+          <DropdownMenu.Item className="menu-item" title={fillKeys(STR.addProject.openFolderTip, "open-folder")} onSelect={pickFolder}>
             <span className="mi-ico" aria-hidden="true"><FolderOpen size={12} /></span>
             {STR.addProject.openFolder}
           </DropdownMenu.Item>

@@ -37,8 +37,8 @@ describe("可复现性判据：纯函数", () => {
     expect(differsOnlyByWallClock("no-ms-here", "no-ms-here-2")).toBe(false);
   });
 
-  it("登记的每条债，前缀都必须真的能吸收同形差异（写错前缀 = 泄漏看起来被批准了）", () => {
-    expect(IDENTITY_DEBTS.length).toBeGreaterThan(0);
+  it("身份债已清零：登记表为空，新债必须显式登记并同步改这条判据", () => {
+    expect(IDENTITY_DEBTS).toEqual([]);
     for (const debt of IDENTITY_DEBTS) expect(debtProbeIsAbsorbable(debt), "条目 " + debt.id + " 吸收不了自己的同形差异").toBe(true);
   });
 
@@ -63,8 +63,13 @@ describe("可复现性判据：纯函数", () => {
     // 「等值」在仓里有 3 处字面量（RD 的其它条目名里也有）⇒ 钉这一支真正给出的那句结论
     expect(reproducibleVerdict(clean).detail).toContain("两次跑逐字段等值");
     expect(reproducibleVerdict(clean).detail).not.toContain("该删条目"); // 文案与判定必须同一个式子
-    expect(reproducibleVerdict(clean, { requireDebtHit: true }).ok).toBe(false); // RD4：条目没被用到就要报
-    expect(reproducibleVerdict(clean, { requireDebtHit: true }).detail).toContain("该删条目");
+    // 登记表当前为空 ⇒ 用一条显式条目验「没被用到就要报」这只机制本身。
+    const debt = { id: "probe-debt", pathPrefix: "x.", paidWhen: "", why: "判据自证" };
+    const cleanWithDebt = classifyDivergence([], [debt]);
+    expect(reproducibleVerdict(cleanWithDebt, { requireDebtHit: true }).ok).toBe(false); // RD4：条目没被用到就要报
+    // 判据要**点名是哪条债**（派生自 finding，不抄生产文案的句子）。
+    expect(reproducibleVerdict(cleanWithDebt, { requireDebtHit: true }).detail).toContain(debt.id);
+    expect(reproducibleVerdict(cleanWithDebt).ok).toBe(true); // 普通判据不因「这次没踩到债」而红
   });
 });
 

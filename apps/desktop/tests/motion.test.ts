@@ -3,6 +3,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { readAppSurface } from "./helpers/app-surface";
 
 const css = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
 
@@ -24,8 +25,9 @@ describe("动效批", () => {
     expect(css).toMatch(/\.group\[data-collapsed="true"\] \.group-body\s*{[^}]*grid-template-rows:\s*0fr/s);
     const sidebar = readFileSync(fileURLToPath(new URL("../src/renderer/components/Sidebar.tsx", import.meta.url)), "utf8");
     expect(sidebar).toContain('className="group-body-inner"');
-    // 归档组同批接入：不再条件渲染（常驻 + inner 才能过渡）
-    expect(sidebar).not.toContain('!collapsed.has("\\u0000archived") &&');
+    // 归档组同批接入：不再条件渲染（常驻 + inner 才能过渡）。否定断言读整个应用面：
+    // 归档组哪天搬进 SidebarGroups，读 Sidebar 单文件会因「组里没有这串」空过。
+    expect(readAppSurface()).not.toContain('!collapsed.has("\\u0000archived") &&');
   });
 
   it("输入类控件只走全局三层 box-shadow 焦点环，不再叠 outline 双环", () => {

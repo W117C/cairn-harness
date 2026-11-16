@@ -9,8 +9,9 @@
  *   ① **好标本仍绿**——本仓现读的 styles.css / tokens.css / useStickyScroll.ts 必须
  *      七条全过（否则这把尺在把正确产物判红）。
  *   ② **每条规则各造一个坏标本**——M1…M7 逐条钉（少一格就等于那条规则是装饰）。
- *   ③ **豁免必须窄**——`visibility 0s` 该过、`visibility 200ms` 该拒；被桌面判卷钉住的
- *      breathe 家族该过、换个时长就该拒。豁免一旦变成「一整类放过」，M2 就废了。
+ *   ③ **豁免必须窄**——`visibility 0s` 该过、`visibility 200ms` 该拒；breathe 只能走
+ *      `--t-breathe` 令牌，写回字面量（1.6s 或别的值）都必须红。豁免一旦变成
+ *      「一整类放过」，M2 就废了。
  *
  *  判卷数据落在 `.tmp/<uuid>` 下（跑完删）：坏标本是**拼出来的**，绝不改真文件。
  */
@@ -109,6 +110,19 @@ function replaceReducedMotionBlock(css: string, replacement: string): string {
   return css.slice(0, at) + replacement + css.slice(close + 1);
 }
 
+/**
+ * 只换应用内整域中和规则的**规则体**（选择器原样保留 ⇒ 降级面还在，内容坏了）。
+ * 为什么单独造：两路入口各有自己的归零/滚动让路；只换系统块测不到应用内那一半。
+ */
+function replaceAppReducedDecls(css: string, body: string): string {
+  const at = css.indexOf('[data-reduce-motion="true"] *,');
+  if (at === -1) throw new Error("本仓样式表里找不到应用内整域中和规则");
+  const open = css.indexOf("{", at);
+  const close = css.indexOf("}", open);
+  if (open === -1 || close === -1) throw new Error("应用内整域中和规则没有闭合");
+  return css.slice(0, open + 1) + "\n  " + body + "\n" + css.slice(close);
+}
+
 describe("好标本仍绿（本仓现读面）", () => {
   const outcome = checkMotionPolicy({
     styles: STYLES,
@@ -131,12 +145,10 @@ describe("好标本仍绿（本仓现读面）", () => {
     const ids = (r: RuleResult): string[] => r.exempted.map((e) => e.id);
     // visibility 0s 七处（含窄窗第 1051 页与第 863 页补的展开——都是瞬时翻转，沿用 E1 的规范理由）。
     expect(ids(m2).filter((i) => i === "E1")).toHaveLength(7);
-    // breathe 家族：4 处 1.6s（被桌面判卷逐字钉住 ⇒ 豁免）。
-    // 1.2s 那格随思考行三点呼吸一起退役（改逐格加载标）⇒ E3 豁免撤名，不再占名额。
-    expect(ids(m2).filter((i) => i === "E2")).toHaveLength(4);
-    expect(ids(m2).filter((i) => i === "E3")).toHaveLength(0);
-    // 降级块内按位置豁免的两条时长声明
-    expect(ids(m2).filter((i) => i === "E0")).toHaveLength(2);
+    // breathe 已改走 --t-breathe：按值的 E2 豁免撤名，四条现场回归令牌路径（牌子不许再出现）。
+    expect(ids(m2).filter((i) => i === "E2")).toHaveLength(0);
+    // 降级面内按位置豁免的时长声明：系统块 2 条 + 应用内根属性块 2 条（第 1256 页两路同语义）。
+    expect(ids(m2).filter((i) => i === "E0")).toHaveLength(4);
     const m7 = ruleOf(outcome, "M7");
     expect(ids(m7).filter((i) => i === "E4")).toHaveLength(2);
     expect(ids(m7).filter((i) => i === "E5")).toHaveLength(1);
@@ -146,7 +158,7 @@ describe("好标本仍绿（本仓现读面）", () => {
     }
   });
 
-  it("降级块是实的：* / *::before / *::after + 两条归零 + scroll-behavior:auto", () => {
+  it("降级面是实的：* / *::before / *::after + 两条归零 + scroll-behavior:auto", () => {
     const m5 = ruleOf(outcome, "M5");
     expect(m5.findings).toEqual([]);
     const texts = m5.exempted.map((e) => e.text);
@@ -211,14 +223,22 @@ describe("M2 — 时长必须是令牌（豁免要窄）", () => {
     expect(m2.findings[0].message).toContain("裸时长 200ms");
   });
 
-  it("该过的过：被桌面判卷钉住的 breathe 家族被放过（E2/E3）", () => {
-    const { css } = withExtraRule(stylesText, ".ok { animation: breathe 1.6s ease-in-out infinite; }");
+  it("该过的过：breathe 走动作令牌（字面量豁免已撤，只剩令牌路径）", () => {
+    const { css } = withExtraRule(stylesText, ".ok { animation: breathe var(--t-breathe) infinite; }");
     const m2 = ruleOf(specimen({ styles: css }), "M2");
     expect(m2.findings).toEqual([]);
-    expect(m2.exempted.some((e) => e.id === "E2")).toBe(true);
+    expect(m2.exempted.some((e) => e.id === "E2")).toBe(false);
   });
 
-  it("该拒的拒：breathe 换个时长就红（E2 是精确值匹配，不是家族通配）", () => {
+  it("breathe 的字面量时长现在也红（E2 已撤：不允许再靠按值豁免）", () => {
+    const { css, line } = withExtraRule(stylesText, ".bad { animation: breathe 1.6s ease-in-out infinite; }");
+    const m2 = ruleOf(specimen({ styles: css }), "M2");
+    expect(m2.findings).toHaveLength(1);
+    expect(m2.findings[0].line).toBe(line);
+    expect(m2.findings[0].message).toContain("裸时长 1.6s");
+  });
+
+  it("breathe 换个时长也红（豁免撤了不等于整族放过）", () => {
     const { css, line } = withExtraRule(stylesText, ".bad { animation: breathe 3s ease-in-out infinite; }");
     const m2 = ruleOf(specimen({ styles: css }), "M2");
     expect(m2.findings).toHaveLength(1);
@@ -236,6 +256,21 @@ describe("M2 — 时长必须是令牌（豁免要窄）", () => {
 
   it("animation-delay 也要走令牌", () => {
     const { css, line } = withExtraRule(stylesText, ".bad { animation-delay: 0.3s; }");
+    const m2 = ruleOf(specimen({ styles: css }), "M2");
+    expect(m2.findings).toHaveLength(1);
+    expect(m2.findings[0].line).toBe(line);
+  });
+
+  it("块外伪装：`.bad[data-reduce-motion=\"true\"]` 上的 0.01ms 仍红（豁免只认根属性作用域）", () => {
+    const { css, line } = withExtraRule(stylesText, '.bad[data-reduce-motion="true"] { transition-duration: 0.01ms; }');
+    const m2 = ruleOf(specimen({ styles: css }), "M2");
+    expect(m2.findings).toHaveLength(1);
+    expect(m2.findings[0].line).toBe(line);
+    expect(m2.findings[0].message).toContain("裸时长 0.01ms");
+  });
+
+  it("根属性后紧贴复合选择器也不算降级域（[data-reduce-motion=\"true\"].bad 仍红）", () => {
+    const { css, line } = withExtraRule(stylesText, '[data-reduce-motion="true"].bad { transition-duration: 0.01ms; }');
     const m2 = ruleOf(specimen({ styles: css }), "M2");
     expect(m2.findings).toHaveLength(1);
     expect(m2.findings[0].line).toBe(line);
@@ -297,7 +332,7 @@ describe("M4 — 颜色必须是令牌", () => {
   });
 });
 
-describe("M5 — reduced-motion 块必须是实的", () => {
+describe("M5 — 两路降级入口都必须是实的", () => {
   it("只有注释的块要红（注释不算声明）", () => {
     const css = replaceReducedMotionBlock(
       stylesText,
@@ -341,6 +376,38 @@ describe("M5 — reduced-motion 块必须是实的", () => {
     const m5 = ruleOf(specimen({ styles: stripped }), "M5");
     expect(m5.findings.map((f) => f.message).join(" | ")).toContain("没有 @media");
   });
+
+  it("应用内整域中和被换成注释要红（异常规则不算整域中和）", () => {
+    const css = replaceAppReducedDecls(stylesText, "/* 只剩注释 */");
+    const m5 = ruleOf(specimen({ styles: css }), "M5");
+    expect(m5.findings.map((f) => f.message).join(" | ")).toContain("没有同时作用到 * / *::before / *::after");
+  });
+
+  it("应用内整域把时长写成 300ms 要红（两路入口同一套判据）", () => {
+    const css = replaceAppReducedDecls(
+      stylesText,
+      "animation-duration: 300ms !important; transition-duration: 300ms !important; scroll-behavior: auto !important;",
+    );
+    const m5 = ruleOf(specimen({ styles: css }), "M5");
+    expect(m5.findings.map((f) => f.message).join(" | ")).toContain("近零");
+  });
+
+  it("应用内整域少了 scroll-behavior: auto 要红", () => {
+    const css = replaceAppReducedDecls(
+      stylesText,
+      "animation-duration: 0.01ms !important; transition-duration: 0.01ms !important;",
+    );
+    const m5 = ruleOf(specimen({ styles: css }), "M5");
+    expect(m5.findings.map((f) => f.message).join(" | ")).toContain("scroll-behavior: auto");
+  });
+
+  it("整个应用内降级面被删掉要红（系统块还在，不许只守一半）", () => {
+    const stripped = stylesText.replace(/\[data-reduce-motion="true"\][^{]*\{[^}]*\}\n?/g, "");
+    expect(stripped.length).toBeLessThan(stylesText.length);
+    expect(stripped.includes('[data-reduce-motion="true"]'), "删完还剩根属性规则 ⇒ 标本没造干净").toBe(false);
+    const m5 = ruleOf(specimen({ styles: stripped }), "M5");
+    expect(m5.findings.map((f) => f.message).join(" | ")).toContain("应用内降级面缺席");
+  });
 });
 
 describe("M6 — JS 侧平滑滚动必须降级", () => {
@@ -377,7 +444,7 @@ describe("M6 — JS 侧平滑滚动必须降级", () => {
   });
 });
 
-describe("M7 — 降级块之外不许 !important", () => {
+describe("M7 — 降级面之外不许 !important", () => {
   it("块外的 !important 要红", () => {
     const { css, line } = withExtraRule(stylesText, ".bad { color: red !important; }");
     const m7 = ruleOf(specimen({ styles: css }), "M7");
@@ -386,10 +453,17 @@ describe("M7 — 降级块之外不许 !important", () => {
     expect(m7.findings[0].message).toContain("!important");
   });
 
-  it("降级块里的 !important 不红（那正是它该待的地方）", () => {
+  it("降级面里的 !important 不红（两路入口都是它该待的地方）", () => {
     const m7 = ruleOf(specimen({}), "M7");
     expect(m7.findings).toEqual([]);
     expect(m7.exempted.some((e) => e.id === "E0")).toBe(true);
+  });
+
+  it("块外伪装：组件级 [data-reduce-motion] 规则上的 !important 仍红", () => {
+    const { css, line } = withExtraRule(stylesText, '.bad[data-reduce-motion="true"] { color: red !important; }');
+    const m7 = ruleOf(specimen({ styles: css }), "M7");
+    expect(m7.findings).toHaveLength(1);
+    expect(m7.findings[0].line).toBe(line);
   });
 });
 

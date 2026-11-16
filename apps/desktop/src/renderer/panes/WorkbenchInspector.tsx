@@ -13,7 +13,7 @@ export function WorkbenchInspector({ deps, paneTarget, changesFocus, fileTarget,
   deps: WorkbenchViewDeps;
   paneTarget: { kind: PaneKind; seq: number } | null;
   changesFocus: ChangesFocus | null;
-  fileTarget: { path: string; seq: number } | null;
+  fileTarget: { path: string; seq: number; workspace: string | null } | null;
   sessionPreview: { id: string; workspace?: string; title: string; seq: number } | null;
   setSessionPreview: React.Dispatch<React.SetStateAction<{ id: string; workspace?: string; title: string; seq: number } | null>>;
   browserLinkTarget: { url: string; seq: number } | null;

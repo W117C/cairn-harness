@@ -6,6 +6,7 @@
 // 真机复现（2026-10-16 隔离实例）：active 行 rgba(29,29,31,.1) 与 hover 行 rgba(29,29,31,.05) 同时在场。
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
+import { readAppSurface } from "./helpers/app-surface";
 
 const styles = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
 const filterCss = readFileSync(new URL("../src/renderer/components/sidebar-filter.css", import.meta.url), "utf8");
@@ -74,10 +75,10 @@ describe("#71 侧栏选中态（唯一 + 强调条 + hover 瞬时清除）", () 
     expect(drop).toContain("STR.footer.usage");
     expect(drop).toContain("props.onOpenSettings()");
     expect(drop).toContain("pop-account");
-    // 侧栏不再有页脚入口，也没有第二个设置钮
-    const sidebar = readFileSync(new URL("../src/renderer/components/Sidebar.tsx", import.meta.url), "utf8");
-    expect(sidebar).not.toContain("side-foot");
-    expect(sidebar).not.toContain('className="foot-settings"');
+    // 侧栏不再有页脚入口，也没有第二个设置钮（读整个应用面：页脚入口搬到别的组件也算回潮）。
+    const surface = readAppSurface();
+    expect(surface).not.toContain("side-foot");
+    expect(surface).not.toContain('className="foot-settings"');
     const styles = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
     expect(styles).not.toMatch(/\.foot-settings\s*\{/);
   });

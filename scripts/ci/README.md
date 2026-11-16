@@ -7,8 +7,9 @@
 ## L1（已落地，零打扰）：`.github/workflows/verify.yml`
 
 - **覆盖**：`pnpm install --frozen-lockfile` → `pnpm typecheck` → `pnpm test:capped`（全量核心判卷，maxWorkers=2）→
-  **快门面** `pnpm gates --only=…`（= `CERT_GATES` 那 25 道，唯一定义在 `scripts/gate-manifest.ts`，
-  逐道点名在 workflow 里；10-02 起不再减门，见下一节）。
+  **快门面** `pnpm gates --only=…`（= `CERT_GATES` 那 26 道，唯一定义在 `scripts/gate-manifest.ts`，
+  逐道点名在 workflow 里；10-02 起不再减门，见下一节）→ **深门** `pnpm gates --only=…`
+  （= `CERT_GATE_DEEP` 那 4 道，见下面「深门」一节）。
 - **工具链版本钉在一处**（第 475 页）：`package.json` 的 `packageManager` 与 workflow 里的
   `pnpm/action-setup` 同大版本（现读 11）。这不是洁癖——pnpm 9 与 11 **读 overrides 的地方不是一个**
   （9 读 package.json 的 `pnpm` 字段、11 读 `pnpm-workspace.yaml`），差一个大版本就会让同一份锁文件
@@ -27,8 +28,26 @@
   pnpm typecheck
   pnpm test:capped
   # 2026-10-12：cert face 23 → 25（买进 e2e 与 desktop-test，理由见 scripts/gate-manifest.ts 的 CERT_GATES 买入注）
-  pnpm gates --only=no-progress-check,prune-check,fork-check,compaction-check,docs-check,memory-check,head-import-check,autonomy-check,sandbox:check,security-check,provider:check,routing-check,model-surface-check,prefix-churn-check,prompt-surface-check,replay-determinism-check,cost-per-progress-check,web-fetch-check,gym-check,evidence-typecheck-check,gate-check,mutate-needles-check,repo-hygiene-check,e2e,desktop-test
+  # 2026-11-16：25 → 26（买进 renderer-layer-check：面外唯一「≤1.5s 且无人覆盖」的一道）
+  pnpm gates --only=no-progress-check,prune-check,fork-check,compaction-check,docs-check,memory-check,head-import-check,autonomy-check,sandbox:check,security-check,provider:check,routing-check,model-surface-check,prefix-churn-check,prompt-surface-check,replay-determinism-check,cost-per-progress-check,web-fetch-check,gym-check,evidence-typecheck-check,gate-check,mutate-needles-check,repo-hygiene-check,e2e,desktop-test,renderer-layer-check
   ```
+
+### 深门：认证面之外的 4 道重门（必须在 CI 里跑）
+
+**为什么有这一节**：这 4 道门超出快门面的 1.5s 线，因此不在 `CERT_GATES` 里；而在这一笔之前，
+它们**只在本地 `pnpm gates` 全量时跑**，CI 只跑认证面 ⇒ 它们红着也没有任何一趟会自动发现
+（`plugins-check` 就是这么红的：F2 信任守卫上线后，脚本自己的 8 处信任表仍落在临时工作区内，
+`pnpm gates` 一开跑就被拒，而 CI 从不跑它）。名单唯一定义在 `scripts/gate-manifest.ts` 的
+`CERT_GATE_DEEP`，workflow 逐字点名，`tests/ci-cert-face-parity.test.ts` 与
+`tests/cert-gate-face.test.ts` 双向往回钉。
+
+```sh
+pnpm gates --only=tools-check,supervisor-check,plugins-check,map-check
+```
+
+**成本**：本机实测合计约 2 分钟（最贵的是 `map-check`），不占快门面 75s 的预算；它们与认证面
+不相交，不会让同一道门在一趟 CI 里被跑两次。日后若某道门降到 1.5s 线内，按第 273 页那条判据
+先把它买进 `CERT_GATES`，再从 `CERT_GATE_DEEP` 里摘掉——两份名单不许同时收录同一道门。
 
 - **校验状态（按提交区分）**：YAML 曾用 `ruby -ryaml` 解析通过；那一串命令在本机按同序跑过
   （历史读数见 `outputs/m9-ci-2026-10-01/`）。GitHub Actions 的真实运行已验证：2026-10-14 11:47Z，
@@ -47,6 +66,7 @@
 就是 workflow 里那句注释预留的动作，10-02 兑现。名单与 `CERT_GATES` 的**集合相等**由
 `tests/cert-gate-face.test.ts` 的「手抄的第二份名单必须与唯一事实源逐项相等」逐趟钉住
 （两份手抄件：workflow 那句 `--only=` 与本页下面那个复跑块；顺序不要求一致）。
+深门那份名单（`CERT_GATE_DEEP`）同样由那两份判卷逐字钉住，见上面「深门」一节。
 > ⚠️ 第 319 页勘误：这一段原先写「**由脚本核过**（两边各 22 道、双向差集为空）」——那是 10-02
 > **人工核对**的记录，被写成了常态性质的样子，而当时**并不存在**这样一份判据（全仓 `grep` 无任何
 > 引用 `.github/workflows` 的判据）。代价当场就出现了：写这句话的时候，**本页自己的复跑块少了
@@ -58,6 +78,9 @@
 `head-cert-check`（实测 **123.7s**，含全量判卷）与 `mutate-verify`（**18–25 分钟**）不进每次 push 的
 CI——它们是**合并/收尾**那一档的动作（路线图 §5.3 的合并前清单），不是每笔提交的保险丝。
 需要时用 `workflow_dispatch` 手动触发（或按 §5.3 在本地跑）。
+
+`tools / supervisor / plugins / map` 这 4 道重门是另一档：它们超快门面 1.5s 线，但**必须**每趟 push
+跑——名单、成本与理由见上面「深门」一节；不要把它们与本节的合并档混为一谈。
 
 ## L2（**裁决定案：不做**）：pre-commit 钩子
 
@@ -83,7 +106,7 @@ git config core.hooksPath .githooks     # 撤销：git config --unset core.hooks
 ## L1 的增量（2026-10-25 仓库标准化）
 
 这一段记的是**在 L1 之上加的东西**，以及**为什么这么加**。
-L1 本身的取舍（快门面 25 道、更重的门不进每次 push、pre-commit 不做）一个字没动。
+L1 本身的取舍（快门面 26 道、`head-cert`/`mutate-verify` 不进每次 push、pre-commit 不做）一个字没动。
 
 ### 并发组：同一 ref 上只留最新的一趟
 

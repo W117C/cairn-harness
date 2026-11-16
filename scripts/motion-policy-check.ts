@@ -10,9 +10,9 @@
 //    M2 时长必须是 --t-* 令牌（transition/animation 简写 + duration/delay 声明）
 //    M3 缓动必须是 --ease-* 令牌
 //    M4 颜色必须是令牌（零 hex、零 hsl()/rgb() 字面量）
-//    M5 prefers-reduced-motion 块是**实的**（不是一行注释）
+//    M5 两路降级入口都是**实的**（系统媒体查询 + 应用内根属性，不是一行注释）
 //    M6 JS 侧平滑滚动已降级（useStickyScroll 守卫 + renderer 内无裸 "smooth"）
-//    M7 降级块之外无 !important
+//    M7 降级面之外无 !important
 //
 //  它**判什么、不判什么**（不许越界冒充）：
 //   · 判的是**纪律**（字面量 vs 令牌、降级面在不在、!important 的位置），
@@ -84,18 +84,10 @@ export interface ExemptionDef {
   why: string;
 }
 
-/** M2/M3 共享：被桌面端判卷**逐字钉住**的动画声明（整条精确匹配）。 */
-export const ANIMATION_EXEMPTIONS: readonly ExemptionDef[] = [
-  {
-    id: "E2",
-    what: "animation: breathe 1.6s ease-in-out infinite",
-    match: "breathe 1.6s ease-in-out infinite",
-    why:
-      "被两份桌面端判卷逐字钉住：apps/desktop/tests/interaction-deadends.test.ts:119 " +
-      "（toContain 整串）与 apps/desktop/tests/skeleton-shimmer.test.ts:12（正则锚 breathe 1.6s）。" +
-      "本批无权编辑 apps/desktop/tests/** ⇒ 保留字面量。改法：把那份判卷改成令牌形态后撤掉本条。",
-  },
-];
+/** M2/M3 共享：被桌面端判卷**逐字钉住**的动画声明（整条精确匹配 · 显式登记）。
+ *  当前为空：breathe 已改走 `--t-breathe`（第 1257 页），两份桌面判卷改为钉令牌名。
+ *  空表由 tests/motion-policy.test.ts 钉住——再出现按值的豁免必须先在这里登记理由。 */
+export const ANIMATION_EXEMPTIONS: readonly ExemptionDef[] = [];
 
 /** M2：visibility 的 0s（规范指定的唯一时长豁免）。 */
 export const VISIBILITY_EXEMPTION: ExemptionDef = {
@@ -119,7 +111,7 @@ export const COLOR_EXEMPTIONS: readonly ExemptionDef[] = [
   },
 ];
 
-/** M7：降级块之外的 !important（每条带理由，命中按 选择器+属性 精确匹配）。 */
+/** M7：降级面之外的 !important（每条带理由，命中按 选择器+属性 精确匹配）。 */
 export const IMPORTANT_EXEMPTIONS: readonly {
   id: string;
   selector: string;
@@ -155,9 +147,12 @@ export const IMPORTANT_EXEMPTIONS: readonly {
   },
 ];
 
-/** 降级块（prefers-reduced-motion）里的 0.01ms：**按位置**豁免，不按值。 */
+/** 降级面里的 0.01ms：**按位置**豁免，不按值。两路入口同语义：
+ *  ① `@media (prefers-reduced-motion: reduce)`（系统偏好）；
+ *  ② `[data-reduce-motion="true"]` 根属性作用域（应用内开关，落在 `html` 上）。 */
 export const REDUCED_MOTION_NOTE =
-  "@media (prefers-reduced-motion: reduce) 块内的 0.01ms 是规范 §4.10 亲自规定的降级值（按**位置**豁免，不按值豁免）。";
+  "@media (prefers-reduced-motion: reduce) 块内与 [data-reduce-motion=\"true\"] 根属性作用域内的 0.01ms " +
+  "是规范 §4.10 亲自规定的降级值（按**位置**豁免，不按值豁免）。";
 
 // ── 小工具：注释剥离（保行号：注释内容换成空格，换行保留）───────────────────────
 /** CSS 注释 → 等长空格（换行保留 ⇒ 行号不变）。字符串里的 /* 不算注释。 */
@@ -356,8 +351,36 @@ export function scanDeclarations(src: string): Decl[] {
 
 const REDUCED_MOTION_QUERY = /@media\s*\(\s*prefers-reduced-motion\s*:\s*reduce\s*\)/i;
 
+/** 应用内降级入口的根属性（`state/motion-pref.ts` 把它写在 `document.documentElement` 上）。
+ *  只认**选择器开头**的根属性：`.foo[data-reduce-motion="true"]` 是组件级写法，不是降级域。 */
+const APP_REDUCED_ATTR = /\[data-reduce-motion\s*=\s*["']?true["']?\]/i;
+const APP_REDUCED_ROOT = /^(?:html)?\[data-reduce-motion\s*=\s*["']?true["']?\]/i;
+
+/** 一条选择器在根属性作用域里的「目标部分」（`*`、`.md-word`…）；不在作用域里 ⇒ null。
+ *  根属性后面只许为空（写在根元素自身）或跟一个组合符（后代/子/兄弟）；
+ *  `.bad`、`[data-reduce-motion="true"].bad` 这类紧贴的复合选择器不算——那会把「降级域」
+ *  偷换成单点规则，`0.01ms !important` 也就不该再按位置豁免。 */
+function appScopeTargets(d: Decl): string[] | null {
+  const parts = splitTop(d.selector).map((s) => normalize(s)).filter((s) => s !== "");
+  if (parts.length === 0) return null;
+  const out: string[] = [];
+  for (const p of parts) {
+    if (!APP_REDUCED_ROOT.test(p)) return null;
+    const rest = p.replace(APP_REDUCED_ROOT, "");
+    if (rest !== "" && !/^[\s>+~]/.test(rest)) return null;
+    out.push(rest.trim());
+  }
+  return out;
+}
+
+/** 这条声明是否落在**任一**降级入口内（系统媒体查询 ∪ 应用内根属性作用域）。 */
 function inReducedMotion(d: Decl): boolean {
-  return d.atRules.some((a) => REDUCED_MOTION_QUERY.test(a));
+  return d.atRules.some((a) => REDUCED_MOTION_QUERY.test(a)) || appScopeTargets(d) !== null;
+}
+
+function firstMatchLine(src: string, re: RegExp): number {
+  const m = re.exec(src);
+  return m === null ? 1 : countLines(src, m.index);
 }
 
 const DURATION_PROPS = new Set([
@@ -438,7 +461,7 @@ function ruleM2(
   for (const d of decls) {
     if (!DURATION_PROPS.has(d.prop)) continue;
     if (inReducedMotion(d)) {
-      // 按**位置**豁免（不按值）：块内的 0.01ms 是规范 §4.10 亲自规定的降级值。
+      // 按**位置**豁免（不按值）：降级面（媒体块 / 根属性作用域）内的 0.01ms 是规范 §4.10 亲自规定的降级值。
       // 只有真的带时长的声明才登记（animation: none 之类不占豁免名额）。
       if (maskVarRefs(d.value).match(RAW_TIME) !== null) {
         exempted.push({
@@ -466,7 +489,7 @@ function ruleM2(
           });
           continue;
         }
-        // E2/E3：被桌面端判卷逐字钉住的动画声明（精确值匹配）。
+        // E2：显式登记的按值动画豁免（当前表为空；breathe 已改走 --t-breathe）。
         const animEx = d.prop === "animation" ? animationExemptionId(d.value) : null;
         if (animEx !== null) {
           const def = ANIMATION_EXEMPTIONS.find((e) => e.id === animEx);
@@ -485,7 +508,7 @@ function ruleM2(
           line: d.line,
           message:
             `裸时长 ${raw}（${d.prop}: ${normalize(d.value)}）——时长必须是 var(--t-*) 令牌；` +
-            `唯一豁免是 visibility 的 0s（E1）与被桌面判卷钉住的 breathe 家族（E2/E3）。`,
+            `降级面之外没有按值的时长豁免（E1 = visibility 的 0s 是仅剩的一条）。`,
         });
       }
     }
@@ -604,89 +627,127 @@ function ruleM4(decls: Decl[], file: string, stylesSrc: string, defined: Set<str
   return { rule: "M4", title: "颜色必须是令牌（零 hex、零 hsl()/rgb() 字面量）", findings, exempted };
 }
 
+interface ReducedFace {
+  /** 人话标签（写进判红文案）。 */
+  label: string;
+  /** 这一面在不在（媒体查询块 / 根属性规则）。 */
+  present: boolean;
+  /** 判红时指的位置：块首行；整面缺席时指文件头。 */
+  line: number;
+  /** 这一面里的全部声明。 */
+  inner: Decl[];
+  /** 这一面的「整域中和」规则：作用域同时覆盖 * / *::before / *::after。 */
+  coversAll: (d: Decl) => boolean;
+  /** 整面缺席时的文案。 */
+  absent: string;
+}
+
 function ruleM5(decls: Decl[], file: string, stylesSrc: string): RuleResult {
   const findings: Finding[] = [];
   const exempted: ExemptionHit[] = [];
-  const m = REDUCED_MOTION_QUERY.exec(stylesSrc);
-  if (m === null) {
-    findings.push({
-      rule: "M5",
-      file,
-      line: 1,
-      message: "没有 @media (prefers-reduced-motion: reduce) 块——降级面缺席。",
-    });
-    return { rule: "M5", title: "prefers-reduced-motion 块是实的（不是一行注释）", findings, exempted };
-  }
-  // 块体：注释已剥 ⇒ 只写注释的块在这里是空的（M5(iv) 天然判红）。
-  const inner = decls.filter((d) => d.atRules.some((a) => REDUCED_MOTION_QUERY.test(a)));
-  if (inner.length === 0) {
-    findings.push({
-      rule: "M5",
-      file,
-      line: countLines(stylesSrc, m.index),
-      message: "reduced-motion 块里没有**真实声明**（注释不算）——这一块现在是装饰。",
-    });
-  }
-  // (i) 作用域：* / *::before / *::after
-  const scope = inner.find((d) => {
-    const parts = splitTop(d.selector).map((s) => normalize(s));
-    return parts.includes("*") && parts.includes("*::before") && parts.includes("*::after");
-  });
-  if (scope === undefined) {
-    findings.push({
-      rule: "M5",
-      file,
-      line: countLines(stylesSrc, m.index),
-      message: "reduced-motion 块没有同时作用到 * / *::before / *::after（伪元素上的动效会逃出去）。",
-    });
-  }
-  // (ii) transition-duration / animation-duration 归零
   const nearZero = (v: string): boolean => {
     const t = /^(\d*\.?\d+)(ms|s)$/.exec(normalize(stripImportant(v)));
     if (t === null) return false;
     const n = Number(t[1]);
     return t[2] === "s" ? n * 1000 <= 1 : n <= 1;
   };
-  for (const prop of ["transition-duration", "animation-duration"]) {
-    const hit = inner.find((d) => d.prop === prop && nearZero(d.value));
-    if (hit === undefined) {
+  // 降级面有**两路**入口，判据逐面跑同一套：在不在 / 有没有真声明 / 作用域全不全 / 归零 / 滚动让路。
+  // 只查系统那一路时，应用内那一块被删掉不会有任何一道门变红（第 1256 页扩宽后它已是完整降级域）。
+  const faces: ReducedFace[] = [
+    {
+      label: "@media (prefers-reduced-motion: reduce)",
+      present: REDUCED_MOTION_QUERY.test(stylesSrc),
+      line: firstMatchLine(stylesSrc, REDUCED_MOTION_QUERY),
+      inner: decls.filter((d) => d.atRules.some((a) => REDUCED_MOTION_QUERY.test(a))),
+      coversAll: (d) => {
+        const parts = splitTop(d.selector).map((s) => normalize(s));
+        return parts.includes("*") && parts.includes("*::before") && parts.includes("*::after");
+      },
+      absent: "没有 @media (prefers-reduced-motion: reduce) 块——系统降级面缺席。",
+    },
+    {
+      label: '[data-reduce-motion="true"]',
+      present: APP_REDUCED_ATTR.test(stylesSrc),
+      line: firstMatchLine(stylesSrc, APP_REDUCED_ATTR),
+      inner: decls.filter((d) => appScopeTargets(d) !== null),
+      coversAll: (d) => {
+        const targets = appScopeTargets(d);
+        return targets !== null && ["*", "*::before", "*::after"].every((t) => targets.includes(t));
+      },
+      absent: '没有 [data-reduce-motion="true"] 根属性规则——应用内降级面缺席（应用内开关打开时动效不会停）。',
+    },
+  ];
+  for (const face of faces) {
+    if (!face.present) {
+      findings.push({ rule: "M5", file, line: face.line, message: face.absent });
+      continue;
+    }
+    // 块体：注释已剥 ⇒ 只写注释的块在这里是空的（M5(iv) 天然判红）。
+    if (face.inner.length === 0) {
       findings.push({
         rule: "M5",
         file,
-        line: countLines(stylesSrc, m.index),
-        message: `reduced-motion 块里没有把 ${prop} 压到近零（规范 §4.10 写的是 0.01ms）。`,
+        line: face.line,
+        message: `「${face.label}」里没有**真实声明**（注释不算）——这一块现在是装饰。`,
       });
       continue;
     }
-    exempted.push({
-      id: "E0",
-      file,
-      line: hit.line,
-      text: `${prop}: ${normalize(hit.value)}`,
-      why: REDUCED_MOTION_NOTE,
-    });
+    // (i) 作用域：* / *::before / *::after
+    if (face.inner.find(face.coversAll) === undefined) {
+      findings.push({
+        rule: "M5",
+        file,
+        line: face.line,
+        message: `「${face.label}」没有同时作用到 * / *::before / *::after（伪元素上的动效会逃出去）。`,
+      });
+    }
+    // (ii) transition-duration / animation-duration 归零
+    for (const prop of ["transition-duration", "animation-duration"]) {
+      const hit = face.inner.find((d) => d.prop === prop && nearZero(d.value));
+      if (hit === undefined) {
+        findings.push({
+          rule: "M5",
+          file,
+          line: face.line,
+          message: `「${face.label}」里没有把 ${prop} 压到近零（规范 §4.10 写的是 0.01ms）。`,
+        });
+        continue;
+      }
+      exempted.push({
+        id: "E0",
+        file,
+        line: hit.line,
+        text: `${prop}: ${normalize(hit.value)}`,
+        why: REDUCED_MOTION_NOTE,
+      });
+    }
+    // (iii) scroll-behavior: auto
+    const scroll = face.inner.find(
+      (d) => d.prop === "scroll-behavior" && normalize(stripImportant(d.value)) === "auto",
+    );
+    if (scroll === undefined) {
+      findings.push({
+        rule: "M5",
+        file,
+        line: face.line,
+        message: `「${face.label}」里没有 scroll-behavior: auto（平滑滚动会让路，滚动本身也得让）。`,
+      });
+    } else {
+      exempted.push({
+        id: "E0",
+        file,
+        line: scroll.line,
+        text: "scroll-behavior: auto",
+        why: REDUCED_MOTION_NOTE,
+      });
+    }
   }
-  // (iii) scroll-behavior: auto
-  const scroll = inner.find(
-    (d) => d.prop === "scroll-behavior" && normalize(stripImportant(d.value)) === "auto",
-  );
-  if (scroll === undefined) {
-    findings.push({
-      rule: "M5",
-      file,
-      line: countLines(stylesSrc, m.index),
-      message: "reduced-motion 块里没有 scroll-behavior: auto（平滑滚动会让路，滚动本身也得让）。",
-    });
-  } else {
-    exempted.push({
-      id: "E0",
-      file,
-      line: scroll.line,
-      text: "scroll-behavior: auto",
-      why: REDUCED_MOTION_NOTE,
-    });
-  }
-  return { rule: "M5", title: "prefers-reduced-motion 块是实的（不是一行注释）", findings, exempted };
+  return {
+    rule: "M5",
+    title: "两路降级入口都是实的（系统媒体查询 + 应用内根属性）",
+    findings,
+    exempted,
+  };
 }
 
 interface RendererFile {
@@ -809,11 +870,11 @@ function ruleM7(decls: Decl[], file: string): RuleResult {
       file,
       line: d.line,
       message:
-        `降级块之外的 !important（${normalize(d.selector)} { ${d.prop}: ${normalize(d.value)} }）——` +
-        "!important 是最后手段；降级块之外用它＝用权重掩盖结构问题。",
+        `降级面之外的 !important（${normalize(d.selector)} { ${d.prop}: ${normalize(d.value)} }）——` +
+        "!important 是最后手段；降级面之外用它＝用权重掩盖结构问题。",
     });
   }
-  return { rule: "M7", title: "降级块之外无 !important", findings, exempted };
+  return { rule: "M7", title: "降级面之外无 !important", findings, exempted };
 }
 
 // ── 门面 ────────────────────────────────────────────────────────────────────

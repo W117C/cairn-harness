@@ -5,6 +5,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { SECTIONS, sectionById, sectionLabel } from "../src/renderer/components/settings-nav";
+import { readAppSurface } from "./helpers/app-surface";
 import { resolveValue, SRC_VALUE } from "./helpers/str-source";
 
 const ROOT = join(import.meta.dirname, "..");
@@ -21,7 +22,8 @@ describe("设置分区标题只有一个出口（第 949 页）", () => {
   });
 
   it("页头不再写字面量，且六个分区都走 sectionLabel", () => {
-    expect(panel).not.toContain('SettingsPage title="');
+    // 字面量页头全应用不许再有（拆到 settings/*.tsx 的页也算回退；第 1251 页分类迁移）。
+    expect(readAppSurface()).not.toContain('SettingsPage title="');
     for (const id of ["general", "provider", "permissions", "shortcuts", "advanced", "about"]) {
       expect(panel).toContain(`<SettingsPage title={sectionLabel("${id}")}>`);
     }

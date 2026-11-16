@@ -13,7 +13,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { rendererDigest } from "./helpers/renderer-evidence";
+import { evidenceMissingMessage, staleEvidenceReason } from "./helpers/renderer-evidence";
 
 const officialPath = fileURLToPath(new URL("../src/renderer/vendor/cds-official/tokens.css", import.meta.url));
 const upstreamPath = fileURLToPath(new URL("../src/renderer/vendor/cds-official/UPSTREAM.json", import.meta.url));
@@ -193,8 +193,13 @@ describe("实测值对得上官方（证据来自真实 renderer 的 getComputed
     expect(measured.officialSheetLoaded).toBe(true);
   });
 
-  it("证据存在时才算数（缺席不等于通过，见本组注释）", () => {
-    expect(typeof hasMeasured).toBe("boolean");
+  it("证据在场（随仓库入库；缺席即红——跳过不等于通过）", () => {
+    // 从前这里是一条恒真断言（`typeof hasMeasured` 永远是 "boolean"）；它挡不住「删掉证据文件 ⇒
+    // 整组 skip ⇒ 套件仍然全绿」。证据文件是入库件，缺席只可能是被删，所以这里必须红。
+    expect(
+      hasMeasured,
+      evidenceMissingMessage("outputs/cds-parity-verify/values.json", "electron scripts/cds-values-probe.cjs outputs/cds-parity-verify/values.json"),
+    ).toBe(true);
   });
 
   it.skipIf(!hasMeasured)("surface 四档亮色 = gray-20 / gray-10 / gray-0 / gray-0", () => {
@@ -250,13 +255,10 @@ describe("画出来的颜色 = 官方档位（2026-10-28 补：令牌对但元�
     expect(hex(m.dark.paint?.composerCard as string)).toBe("#30302e");
   });
 
-  it.skipIf(!hasMeasured)("证据与当前 renderer 源同一代（旧证据必须重跑探针，不许冒充通过）", () => {
-    expect(measured.rendererDigest, "旧证据没有摘要或缺席：重跑 electron scripts/cds-values-probe.cjs outputs/cds-parity-verify/values.json").toBe(rendererDigest());
-  });
-
-  it.skipIf(!hasMeasured)("证据量的是当前构建（源改了没 build 时，探针不许冒充通过）", () => {
-    // 摘要只能证明「量完之后源没再变」。反方向的洞：先改源、不重建就跑探针，
-    // 量到的是旧 dist，摘要却按新源写。探针记下源与产物的最晚修改时刻，这里要求源不晚于产物。
-    expect(measured.buildFresh, "renderer 源比 dist 新：先 pnpm --filter cairn-desktop build，再重跑探针").toBe(true);
+  it.skipIf(!hasMeasured)("证据与当前 renderer 源、当前构建同一代（旧读数必须重跑探针）", () => {
+    // 两件事合成一条（同一实现在 helpers/renderer-evidence.ts，四个消费者共用）：
+    //   · 摘要对不上 ⇒ 量完之后源又变了；
+    //   · buildFresh 非 true ⇒ 先改源、没重建就跑探针（量到旧 dist，摘要却按新源写）。
+    expect(staleEvidenceReason(measured)).toBeNull();
   });
 });

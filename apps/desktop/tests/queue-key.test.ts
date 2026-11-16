@@ -17,8 +17,8 @@ import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { runKey, sessionKeyOf } from "../src/renderer/state/session-identity";
-import { appSurfaceFiles, readRendererFile } from "./helpers/app-surface";
-import { staleEvidenceReason } from "./helpers/renderer-evidence";
+import { appSurfaceFiles, readAppSurface, readRendererFile } from "./helpers/app-surface";
+import { evidenceMissingMessage, staleEvidenceReason } from "./helpers/renderer-evidence";
 
 /** 找出所有「按裸 id 读队列表」的调用点。 */
 function bareIdQueueReads(): { file: string; line: number; text: string }[] {
@@ -67,17 +67,18 @@ describe("发送队列键一致性 · 接线层", () => {
     const strip = readRendererFile("panes/WorkbenchView.tsx");
     const dock = readRendererFile("panes/QueueDock.tsx");
     const sub = readRendererFile("state/session-subscription.ts");
+    // 裸 id 读法全应用不许再有（挪到别的消费面同样会清空队列；第 1251 页分类迁移）。
+    const appSrc = readAppSurface();
     // 渲染条 + 三个改写点（打断并发送 / 移出 / 编辑）都住在 QueueDock
     expect(dock).toContain("queue.current.get(runKey(props.activeWorkspace, props.activeId))");
     expect(dock).toContain("const key = runKey(props.activeWorkspace, sid);");
-    expect(dock).not.toContain("queue.current.get(sid)");
+    expect(appSrc).not.toContain("queue.current.get(sid)");
     // 分叉沉淀跳过守卫
     expect(strip).toContain("sendQueue.current.get(runKey(activeWorkspace, ctx.forkId))");
-    expect(strip).not.toContain("sendQueue.current.get(sid)");
+    expect(appSrc).not.toContain("sendQueue.current.get(sid)");
     // 订阅：沉淀跳过守卫（同样按限定键读，否则那条守卫永远不触发）
     expect(sub).toContain("const askKey = sid === \"\" ? \"\" : runKey(askWorkspace, sid);");
     expect(sub).toContain("sendQueue.current.get(askKey)");
-    expect(sub).not.toContain("sendQueue.current.get(sid)");
   });
 });
 
@@ -95,6 +96,13 @@ describe("发送队列键一致性 · 真机层（取料面）", () => {
     expect(smoke).toContain("打断并发送");
     expect(smoke).toContain("移出队列");
     expect(smoke).toContain("queue-key-");
+  });
+
+  it("证据在场（随仓库入库；缺席即红——跳过不等于通过）", () => {
+    expect(
+      hasMeasured,
+      evidenceMissingMessage("outputs/queue-key-750/checks.json", "electron scripts/queue-key-smoke.cjs outputs/queue-key-750"),
+    ).toBe(true);
   });
 
   // 取料缺席时 skip 并明说「跳过 ≠ 通过」（与 cds-parity 判卷同一口径）。

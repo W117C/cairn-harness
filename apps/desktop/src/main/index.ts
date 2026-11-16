@@ -81,7 +81,7 @@ import {
   handleSessionSetPinned,
   resolveSessionRoot,
 } from "../../../../src/main/session-handlers";
-import { workspaceOfSessionsRoot } from "../../../../src/main/sessions";
+import { sessionExists,workspaceOfSessionsRoot } from "../../../../src/main/sessions";
 import { getLastWorkspace } from "../../../../src/main/runner-workspace";
 import { TerminalHost } from "./terminal-host";
 import { BrowserHost } from "./browser-host";
@@ -477,6 +477,19 @@ async function explicitSessionsRoot(workspace: unknown): Promise<string | undefi
   const canonical = await canonicalKnownProjectPath(String(workspace));
   if (canonical === null) throw new Error(`未注册的工作区，已拒绝：${String(workspace)}`);
   return join(canonical, ".agent", "sessions");
+}
+
+/** 会 `createEventLog` 的显式根写入（goal_set 等）共用的归属闸：这个根里没有这条会话、
+ *  它却登记在别的根里 ⇒ 拒。放过去就是在另一个项目里造一条幽灵会话；更糟的是下一次 run
+ *  会看到「本根有这份日志」而放行，消息便跟着写进错误的项目（run 收口那道闸被提前绕过）。 */
+async function assertSessionLivesHere(root: string, sessionId: string): Promise<void> {
+  if (await sessionExists(root, sessionId)) return;
+  for (const project of await knownProjectRoots(true)) {
+    const candidate = join(project, ".agent", "sessions");
+    if (candidate !== root && await sessionExists(candidate, sessionId)) {
+      throw new Error(`会话 ${sessionId} 不属于该工作区（它在另一个工作区里），已拒绝写入`);
+    }
+  }
 }
 
 async function mutateSession<T>(
@@ -878,6 +891,9 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     try {
       const { workspace, ...rest } = (req ?? {}) as { workspace?: string; [key: string]: unknown };
       const root = await explicitSessionsRoot(workspace);
+      // 显式根 + 会话只在别处 ⇒ 拒：goal_set 会 createEventLog，放过去就是幽灵会话（同 run 收口一判据）。
+      const sessionId = typeof rest.sessionId === "string" ? rest.sessionId : undefined;
+      if (root !== undefined && sessionId !== undefined) await assertSessionLivesHere(root, sessionId);
       return await handleGoalSet({ ...rest, ...(root !== undefined ? { sessionsRoot: root } : {}) } as never);
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) };
@@ -1407,7 +1423,12 @@ const createWindow = () => {
   // ⌘R / 崩溃后「重新载入」会让渲染层状态归零（activeWorkspace 从 null 起），主进程的窗口指针
   // 必须同步归零：否则界面显示「没开项目」，插件/快照读却仍按重载前的项目取。
   // 只挂主窗——弹窗的上下文是打开时继承的，重载后仍应停在同一个项目。
-  win.webContents.on("did-navigate", () => { windowWorkspaces.forget(win.webContents); });
+  win.webContents.on("did-navigate", () => {
+    windowWorkspaces.forget(win.webContents);
+    // 进程级自定义供应商注册表也归零：重载后窗口没有项目，选择器不能还挂着上一个项目的
+    // 自定义模型（选中后 run 按目标工作区校验，只有等到工作区恢复才装回来）。
+    installCustomProviders([]);
+  });
   // 渲染层的 console 错误也进主日志：打包态没有 devtools 时，这是用户能带走的唯一现场。
   win.webContents.on("console-message", (event) => {
     if (event.level === "error") {

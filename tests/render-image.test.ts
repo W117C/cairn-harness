@@ -212,7 +212,9 @@ describe("权限面：render_image 与 lsp 同族（执行进程、不改盘、�
 describe("真渲染（用本仓那份 fixtures/artifacts/cycling-animation.html）", () => {
   it("Chrome 在 ⇒ 1.2s 量级出图，且是一张真的 PNG", async () => {
     const html = join(process.cwd(), "fixtures/artifacts/cycling-animation.html");
-    if (!existsSync(html)) return; // 文件不在（被清掉）就不硬跑这一格
+    // 取料是入库的 fixture：不在＝有人把它清掉了，不是"这台机器没有"。静默 return 会把
+    // 「没量到」读成「绿」——本仓反复踩的那一格，所以缺席当场红。
+    expect(existsSync(html), "取料 fixture 不在 ⇒ 这一格没量到，不许静默跳过").toBe(true);
     const tool = makeRenderImage(); // 真 findChrome + 真 shoot
     const r = await tool.run({ path: "fixtures/artifacts/cycling-animation.html", width: 400 }, { workspace: process.cwd() });
     // 本机没装 Chrome 时这一格如实跳过，不假装通过

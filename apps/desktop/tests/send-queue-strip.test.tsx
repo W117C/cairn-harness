@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { SendQueueStrip } from "../src/renderer/components/SendQueueStrip";
 import { STR } from "../src/renderer/strings";
+import { readRendererFile } from "./helpers/app-surface";
 import type { QueuedSend } from "../src/renderer/send-queue";
 
 const item: QueuedSend = {
@@ -72,5 +73,37 @@ describe("排队条 · 截图形制", () => {
     );
     expect(on).toMatch(/<button class="q-sendnow" aria-label="立即发送：看这两个文件"/);
     expect(on).not.toMatch(/class="q-sendnow" disabled/);
+  });
+});
+
+// 2026-11-16（第 1257 页）：行内动作会卸载焦点所在的控件（移出 / 立即 / 编辑收尾），
+// 此前焦点一律掉回 body——键盘用户下一步得从文档头开始 Tab。下面钉住补位规则。
+describe("排队条 · 焦点收尾", () => {
+  const strip = readRendererFile("components/SendQueueStrip.tsx");
+  const dock = readRendererFile("panes/QueueDock.tsx");
+  const view = readRendererFile("panes/WorkbenchView.tsx");
+
+  it("行带 id 与焦点序号，补位只在焦点真丢了（body）时发生", () => {
+    const html = renderToStaticMarkup(
+      <SendQueueStrip items={[item]} running sendNowEnabled onInterruptSend={noop} onRemove={noop} onEdit={noop} />,
+    );
+    expect(html).toContain('data-queue-id="1"');
+    expect(html).toContain("q-edit-btn");
+    expect(strip).toContain("if (active !== null && active !== document.body) return;");
+    expect(strip).toContain("activeRowRef.current = index");
+    expect(strip).toContain('row?.querySelector<HTMLElement>(".q-actions button:not([disabled])")');
+  });
+
+  it("编辑收尾回本行；队列被整条移空则交给输入框", () => {
+    expect(strip).toContain("editReturnId.current = id;");
+    expect(strip).toContain("if (e.relatedTarget === null) editReturnId.current = editingId;");
+    expect(strip).toContain(".q-edit-btn, .q-actions button:not([disabled])");
+    expect(strip).toContain("else props.onFocusFallback?.();");
+  });
+
+  it("接线：QueueDock 递入落点，WorkbenchView 给的是 focusComposer", () => {
+    expect(dock).toContain("onFocusFallback?: () => void;");
+    expect(dock).toContain("onFocusFallback={props.onFocusFallback}");
+    expect(view).toContain("onFocusFallback={focusComposer}");
   });
 });

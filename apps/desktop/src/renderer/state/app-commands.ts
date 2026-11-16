@@ -7,7 +7,7 @@ import type { AskPayload,ProjectRecord } from "../../../../../src/main/ipc-proto
 import type { MenuCommandId } from "../../shared/menu-commands";
 import type { PaletteAction,SectionId } from "../app-controls";
 import { type FindBarHandle } from "../app-controls";
-import { commandAllowed,isEditableTarget,overlayBlocked,readGateInput } from "../command-gate";
+import { commandAllowed,floatingSurfaceOpen,isEditableTarget,overlayBlocked,readGateInput } from "../command-gate";
 import { type PaneKind } from "../pane-registry";
 import { paneShortcutFor } from "../pane-shortcuts";
 import { classifyDrop } from "../sessions-view";
@@ -120,6 +120,10 @@ export function useAppCommands(deps: AppCommandsDeps) {
       if (e.key === "Escape") {
         // 站点授权弹层自己吃 Esc（2026-10-18）：全局这里让路，否则按 Esc 想关弹层会顺带停掉本轮。
         if (document.querySelector('.bp-permit[role="alertdialog"]') !== null) return;
+        // 放大窗格自己持 Esc（第 1259 页）：还原由 PaneDock 的放大监听器做，它还会把内层自持
+        // Esc 的控件与仍开着的浮层让过去。这里必须无条件让路——焦点掉在 body 时 escOwns 读不到，
+        // 只靠窗格上的 data-esc-owns 会让一次 Esc 既还原又停掉正在跑的本轮。
+        if (document.querySelector('.pane-workbench[data-maximized="true"]') !== null) return;
         // 自持 Esc 的就地编辑（排队项）：Esc 只取消这次编辑，不许被智慧停止吃掉（捕获阶段先到这里）。
         if (gate.escOwnsTarget) return;
         // 侧栏搜索 / 浏览器地址栏 / 设置搜索等二级输入框：Esc 归字段自己。
@@ -138,7 +142,8 @@ export function useAppCommands(deps: AppCommandsDeps) {
         if (h.gatePending) return;
         // 侧栏是常驻 `role=listbox`（收起时 display:none 也照样命中），不能把它当「浮层开着」。
         // 只让真正会出现的浮层短路：侧栏排除后，Esc 才能按速查表承诺停掉本轮。
-        if (document.querySelector(".pop.show, .pop-rd, .slash-menu, .mention-menu, [role='menu'][data-state='open'], [role='listbox']:not(.sidenav)") !== null) return;
+        // 选择器只有一处（command-gate.ts）：放大窗格的 Esc 让路读的也是它。
+        if (floatingSurfaceOpen()) return;
         if (h.running && h.activeId !== null) { e.preventDefault(); h.cancelRun(h.activeId); }
         return;
       }

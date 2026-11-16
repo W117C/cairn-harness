@@ -48,6 +48,10 @@ const rows = SHORTCUT_GROUPS.flatMap((g) => g.rows);
 const paneKeys = new Set(PANE_SHORTCUTS.map((s) => s.keys));
 
 describe("速查表防漂：每一行都有 dispatch 证人", () => {
+  it("行表与见证表同规模（表被清空或漏行时，下面两条不再恒真）", () => {
+    expect(rows.length).toBe(Object.keys(WITNESSES).length + paneKeys.size);
+  });
+
   it("行表没有重复键", () => {
     expect(new Set(rows.map((r) => r.keys)).size).toBe(rows.length);
   });

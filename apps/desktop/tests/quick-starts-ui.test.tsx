@@ -154,6 +154,15 @@ describe("项目选择弹层方向", () => {
     expect(appSrc).toMatch(/<Popover\s+open=\{chipOpen\}\s+up\s+className="chip-pop"/);
   });
 
+  it("chip 弹层自称对话框：焦点进搜索框、关闭后归还触发按钮", () => {
+    const chipAt = appSrc.indexOf('className="empty-chip"');
+    expect(chipAt).toBeGreaterThan(-1);
+    expect(appSrc.slice(chipAt, chipAt + 160)).toContain('aria-haspopup="dialog"');
+    expect(appSrc).toMatch(/<Popover\s+open=\{chipOpen\}\s+up\s+className="chip-pop"\s+role="dialog"/);
+    expect(appSrc).toContain('row?.querySelector<HTMLInputElement>(".chip-search")?.focus()');
+    expect(appSrc).toContain("if (lost) chipTriggerRef.current?.focus();");
+  });
+
   // 2026-10-24 业主截图：上开弹层压到 hero 问候线（10-18 大字 hero 正好悬在弹层路径上）。
   // 焦点礼让：弹层向上盖到问候线时才淡出（向下开时不淡，2026-10-24 第二版）。
   it("弹层向上盖到问候线时才淡出（data-picking → 子元素 opacity）", () => {

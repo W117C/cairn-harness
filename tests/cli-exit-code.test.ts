@@ -8,7 +8,7 @@
 // 任何把 cairn 接进脚本 / CI 的人，都会把这两例读成成功。
 //
 // 这组钉两半：
-//   A. `runFailed` 纯函数五个输入的边界（含**反向对照**：全 0 必须不判红，
+//   A. `runFailed` 每一格输入的边界（含**反向对照**：全 0 必须不判红，
 //      否则「退出码变严」会退化成「永远 exit 1」，那是另一种骗人）；
 //   B. 真跑 bin（demo 通道，零凭据、离线、确定性）断言真实退出码，而不是只测纯函数。
 import { spawnSync } from "node:child_process";
@@ -122,7 +122,7 @@ describe("runFailed：退出码判据（纯函数，五个输入各自能单独�
     expect(runFailed({ ...CLEAN, plainToolFailures: 1 })).toBe(true);
   });
 
-  it("五项各自单独命中都要判红（不许有哪一项被写成死代码）", () => {
+  it("每一格输入各自单独命中都要判红（不许有哪一项被写成死代码）", () => {
     const each = [
       { ...CLEAN, errorEvents: 2 },
       { ...CLEAN, verifyRed: true },
@@ -161,21 +161,19 @@ describe("真跑 bin：demo 通道的退出码（零凭据、离线、确定性�
       timeout: 120_000,
       killSignal: "SIGKILL",
     });
-    // 断言的是**退出码与事件流一致**：先数事件流里到底有没有失败面，
-    // 再由它决定期望值——写死 1 会在剧本改成全成功时误报红（那是判据脆，不是代码错）。
+    // 前提钉死：demo 剧本在空工作区里必然产生失败工具调用（read_file 找不到文件、
+    // run_shell 没有 package.json）。若哪天这点不再成立，本用例已测不到 exit 1，
+    // 必须红——否则它会静默改判 exit 0，而标题仍宣称测的是失败路径。
     const sessionDir = join(ws, ".agent", "sessions");
-    const logName = spawnSync("ls", [sessionDir], { encoding: "utf8" }).stdout.trim().split("\n")[0] ?? "";
-    expect(logName).not.toBe("");
-    const events = spawnSync("cat", [join(sessionDir, logName)], { encoding: "utf8" }).stdout
+    const logName = readdirSync(sessionDir)[0] ?? "";
+    expect(logName, "demo 运行没有落会话日志 ⇒ 下面的失败面统计读不到").not.toBe("");
+    const events = readFileSync(join(sessionDir, logName), "utf8")
       .trim().split("\n").filter((l) => l !== "").map((l) => JSON.parse(l) as Record<string, unknown>);
     const failedTools = events.filter((e) => e["type"] === "tool_result" && e["ok"] === false
       // 会话末沉淀轮不算（X- 层）：它在管道里本来就会被拒
       && ((e["gate"] as { layer?: string } | undefined)?.layer ?? "").startsWith("X-") === false);
-    if (failedTools.length > 0) {
-      expect(r.status, "剧本里有失败工具调用，退出码必须是 1").toBe(1);
-    } else {
-      expect(r.status).toBe(0);
-    }
+    expect(failedTools.length, "demo 剧本不再产生失败工具调用 ⇒ 本用例已测不到 exit 1").toBeGreaterThan(0);
+    expect(r.status, "剧本里有失败工具调用，退出码必须是 1").toBe(1);
   }, 180_000);
 
   it("CLI 已落交付红时仍按最终文件状态 exit 1", () => {

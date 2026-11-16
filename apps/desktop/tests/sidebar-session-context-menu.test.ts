@@ -8,6 +8,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { readAppSurface } from "./helpers/app-surface";
 
 const sidebar = readFileSync(fileURLToPath(new URL("../src/renderer/components/Sidebar.tsx", import.meta.url)), "utf8")
   + "\n"
@@ -31,8 +32,8 @@ describe("会话行右键菜单", () => {
   it("复用同一个 Radix 菜单（受控 open），不另写一套自绘", () => {
     expect(sidebar).toContain("open={ctxOpen} onOpenChange={setCtxOpen}");
     expect(sidebar).toContain("const [ctxOpen, setCtxOpen] = useState(false)");
-    // 反向：不该出现第二套会话菜单组件
-    expect(sidebar).not.toContain("SessionContextMenu");
+    // 反向：不该出现第二套会话菜单组件（拆到别的侧栏文件同样算第二套；第 1251 页分类迁移）
+    expect(readAppSurface()).not.toContain("SessionContextMenu");
   });
 
   it("没有行操作可做时不接管右键（让默认菜单出来）", () => {
