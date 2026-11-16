@@ -257,5 +257,5 @@
       "evidence": []
     }
   ],
-  "thresholdNote": "目标 0.95；现读 1.000（评分面 19 格全 covered，0 partial / 0 absent；阈值按棘轮抬到 0.96）。两格 out 写明理由：scene-engine 明确不做；native-click 需人工点一次（脚本已备）。"
+  "thresholdNote": "目标 0.95；现读 1.000（评分面 20 格全 covered，0 partial / 0 absent；阈值 0.96）。两格 out 各带理由：scene-engine 明确不做；native-click 需人工点一次（脚本已备）。标准对照报告由真机读数生成：outputs/standard-conformance/report.json（五条全 pass）。"
 }

@@ -285,6 +285,19 @@ async function main() {
     };
   })()`);
   readings.layer = layer;
+  // Electron 安全清单的**真机**读数（不是读代码猜）：渲染层拿不到 require / process，
+  // 但 preload 暴露的面（window.agent）必须在。这三项是 contextIsolation + sandbox 的直接后果。
+  const isolation = await js(`(() => ({
+    hasRequire: typeof window.require,
+    hasProcess: typeof window.process,
+    hasAgent: typeof window.agent,
+    hasNodeGlobals: [typeof window.module, typeof window.Buffer, typeof window.global].join(","),
+  }))()`);
+  readings.rendererIsolation = isolation;
+  check("Electron 安全清单：渲染层没有 require/process/node 全局，只留 window.agent",
+    isolation.hasRequire === "undefined" && isolation.hasProcess === "undefined"
+      && isolation.hasAgent === "object" && !isolation.hasNodeGlobals.includes("object"),
+    isolation);
   check("壁纸图真加载（naturalWidth>0，地址走壁纸协议）",
     layer.natural !== null && layer.natural[0] > 0 && layer.natural[1] > 0 && String(layer.src).startsWith(`${WALLPAPER_SCHEME}://`), layer);
   check("开壁纸时 body 画布透明、两个接缝属性都在",

@@ -1,6 +1,6 @@
 // 对照报告判卷：读数缺失必须是 missing（不许默认绿）；颜色换算走同一份对比度函数。
 import { describe, expect, it } from "vitest";
-import { buildConformanceReport, parseCssRgb, reportVerdict, worstContrastOf } from "../src/verification/conformance";
+import { buildConformanceReport, isolationChecks, parseCssRgb, reportVerdict, worstContrastOf } from "../src/verification/conformance";
 
 const parity = { total: 22, covered: 20, partial: 0, absent: 0, out: 2 };
 
@@ -47,6 +47,33 @@ describe("公开标准对照报告", () => {
     expect(reportVerdict(rows)).toBe("fail");
   });
 
+  it("Electron 隔离四项：缺项少一项就不算 pass；读数缺失 ⇒ missing", () => {
+    expect(isolationChecks(null)).toBeNull();
+    const good = { hasRequire: "undefined", hasProcess: "undefined", hasAgent: "object", hasNodeGlobals: "undefined,undefined,undefined" };
+    expect(isolationChecks(good)).toBe(4);
+    expect(isolationChecks({ ...good, hasRequire: "function" })).toBe(3);
+    const rows = buildConformanceReport({
+      readingsPath: "/tmp/r.json", parity,
+      readings: { dark: { worst: 5 }, light: { worst: 5 }, negativeControl: { cspViolations: 1 } },
+      isolation: { ...good, hasRequire: "function" },
+    });
+    expect(rows.find((r) => r.standard.startsWith("Electron"))!.verdict).toBe("fail");
+  });
+
+  it("OWASP A09：脱敏后还有残留 ⇒ fail；没有脱敏读数 ⇒ missing", () => {
+    const base = {
+      readingsPath: "/tmp/r.json", parity,
+      readings: { dark: { worst: 5 }, light: { worst: 5 }, negativeControl: { cspViolations: 1 } },
+      isolation: { hasRequire: "undefined", hasProcess: "undefined", hasAgent: "object", hasNodeGlobals: "none" },
+    };
+    expect(buildConformanceReport({ ...base, redaction: { occurrencesAfter: 1 } })
+      .find((r) => r.clause.includes("A09"))!.verdict).toBe("fail");
+    expect(buildConformanceReport({ ...base, redaction: null })
+      .find((r) => r.clause.includes("A09"))!.verdict).toBe("missing");
+    expect(buildConformanceReport({ ...base, redaction: { occurrencesAfter: 0 } })
+      .find((r) => r.clause.includes("A09"))!.verdict).toBe("pass");
+  });
+
   it("全部达标 ⇒ pass；parseCssRgb 兼容空格与逗号两种写法", () => {
     expect(parseCssRgb("rgb(1 2 3)")).toEqual({ r: 1, g: 2, b: 3 });
     expect(parseCssRgb("rgb(1, 2, 3)")).toEqual({ r: 1, g: 2, b: 3 });
@@ -57,6 +84,8 @@ describe("公开标准对照报告", () => {
         light: { text: "rgb(11 11 11)", canvas: "rgb(252 252 251)" },
         negativeControl: { cspViolations: 1 },
       },
+      isolation: { hasRequire: "undefined", hasProcess: "undefined", hasAgent: "object", hasNodeGlobals: "undefined,undefined,undefined" },
+      redaction: { occurrencesAfter: 0 },
     });
     expect(reportVerdict(rows)).toBe("pass");
   });

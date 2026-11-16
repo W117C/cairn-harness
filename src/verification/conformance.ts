@@ -44,6 +44,10 @@ export interface ConformanceInput {
   readingsPath: string;
   /** 对表统计。 */
   parity: { total: number; covered: number; partial: number; absent: number; out: number };
+  /** PW：渲染层隔离读数（真机）。 */
+  isolation?: unknown;
+  /** OWASP A09：拿一个真会泄露的样本跑一遍脱敏，数还剩几次。 */
+  redaction?: { occurrencesAfter: number } | null;
 }
 
 export function buildConformanceReport(input: ConformanceInput): ConformanceRow[] {
@@ -66,6 +70,24 @@ export function buildConformanceReport(input: ConformanceInput): ConformanceRow[
       source: input.readingsPath,
     },
     {
+      standard: "Electron 安全清单", clause: "contextIsolation / 无 nodeIntegration / sandbox / 无 node 全局",
+      threshold: 4, unit: "checks",
+      measured: isolationChecks(input.isolation),
+      verdict: isolationChecks(input.isolation) === null
+        ? "missing"
+        : isolationChecks(input.isolation)! >= 4 ? "pass" : "fail",
+      source: input.readingsPath,
+    },
+    {
+      standard: "OWASP Top 10 2021", clause: "A09 敏感值不得进日志（脱敏后残留）",
+      threshold: 0, unit: "occurrences",
+      measured: input.redaction === undefined || input.redaction === null ? null : input.redaction.occurrencesAfter,
+      verdict: input.redaction === undefined || input.redaction === null
+        ? "missing"
+        : input.redaction.occurrencesAfter === 0 ? "pass" : "fail",
+      source: "scripts/standard-report.ts",
+    },
+    {
       standard: "本方对表", clause: "评分面 covered 比例",
       threshold: 1, unit: "ratio",
       measured: input.parity.covered + input.parity.partial + input.parity.absent === 0
@@ -75,6 +97,19 @@ export function buildConformanceReport(input: ConformanceInput): ConformanceRow[
       source: "fixtures/parity/checklist.json",
     },
   ];
+}
+
+/** 三条隔离读数各算一项；读数缺失 ⇒ null（不是 0，也不是 3）。 */
+export function isolationChecks(isolation: unknown): number | null {
+  const i = isolation as { hasRequire?: unknown; hasProcess?: unknown; hasAgent?: unknown; hasNodeGlobals?: unknown } | null | undefined;
+  if (i === null || i === undefined) return null;
+  let ok = 0;
+  if (i.hasRequire === "undefined") ok += 1;
+  if (i.hasProcess === "undefined") ok += 1;
+  if (i.hasAgent === "object") ok += 1;
+  if (typeof i.hasNodeGlobals === "string" && !i.hasNodeGlobals.includes("object")) ok += 1;
+  // 四项里 hasNodeGlobals 是加分项；阈值按前三项 + 没有 node 全局 = 4 项算
+  return ok;
 }
 
 export function reportVerdict(rows: readonly ConformanceRow[]): "pass" | "fail" | "incomplete" {

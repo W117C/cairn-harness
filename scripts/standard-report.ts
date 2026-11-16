@@ -5,6 +5,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildConformanceReport, reportVerdict } from "../src/verification/conformance";
+import { redactSecrets } from "../src/events/redact";
 
 const root = process.cwd();
 const outDir = join(root, "outputs", "standard-conformance");
@@ -36,7 +37,14 @@ const parity = {
 
 // 冒烟里暗色那一臂叫 `darkContrast`（含 text/canvas 与算好的 worst），亮色叫 `light`。
 const raw = readings?.data as { darkContrast?: unknown; light?: unknown; negativeControl?: unknown } | undefined;
+// OWASP A09：拿一个**真会泄露**的样本跑一遍产品自己的脱敏，数残留（不是读代码猜）。
+const SAMPLE_SECRET = "sk-live-abcdef0123456789";
+const masked = redactSecrets(`curl -H "Authorization: Bearer ${SAMPLE_SECRET}"`).text;
+const occurrencesAfter = masked.split(SAMPLE_SECRET).length - 1;
+
 const rows = buildConformanceReport({
+  isolation: (raw as { rendererIsolation?: unknown } | undefined)?.rendererIsolation,
+  redaction: { occurrencesAfter },
   readings: raw === undefined ? null : { dark: raw.darkContrast, light: raw.light, negativeControl: raw.negativeControl },
   readingsPath: readings?.path ?? "(没有真机读数)",
   parity,

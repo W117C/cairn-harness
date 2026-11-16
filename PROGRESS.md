@@ -43059,3 +43059,40 @@ standard-report: pass
 - 核心 `pnpm test:capped`：**699 文件 / 8296 条全绿**，exit 0
 - 桌面 415 文件 / 2666 条全绿；真机冒烟 60/60（读数来源）；四包密封证据有效
 - `typecheck` 0 报错；`docs-check` 全绿
+
+## 2026-11-16 · 第 1284 页：标准对照从三条扩到五条，且**每条都有真机实测**（`pending`）
+
+**背景**：上一页的报告只有 WCAG / CSP / 对表三条，Electron 与 OWASP 还是散文。这一页把它们变成实测。
+
+### 一、新增两条，都是量出来的
+
+| 标准 | 怎么测 | 现读 |
+|---|---|---|
+| Electron 安全清单 | 真机在渲染层读 `typeof window.require / process / agent / global`（不是读代码猜） | **4/4** checks（`hasRequire=undefined`、`hasProcess=undefined`、`hasAgent=object`、node 全局全 `undefined`） |
+| OWASP Top 10 2021 A09 | 报告生成时拿真样本 `sk-live-…` 跑**产品自己的脱敏**，数残留 | **0 次**（阈值 0） |
+
+第一条同时成了冒烟第 61 条判据（`PASS Electron 安全清单…`），**61/61**。
+
+### 二、报告现在的全貌
+
+```
+standard-report: pass
+  pass  WCAG 2.2 · SC 1.4.3 Contrast Minimum｜实测 4.526 ratio｜阈值 4.5
+  pass  CSP Level 3 · 越权取图必须被 CSP 拦下｜实测 1 violations｜阈值 1
+  pass  Electron 安全清单 · contextIsolation / 无 nodeIntegration / sandbox / 无 node 全局｜4 checks
+  pass  OWASP Top 10 2021 · A09 敏感值不得进日志（脱敏后残留）｜0 occurrences｜阈值 0
+  pass  本方对表 · 评分面 covered 比例｜实测 1 ratio｜阈值 1
+```
+
+`outputs/standard-conformance/report.json` / `report.md` 都是**生成的**，谁都能重跑。
+
+### 三、判卷
+
+`tests/conformance-report.test.ts` → **7 条**（新增 2）：隔离四项缺一项就不算 pass、读数缺失 ⇒ missing；
+脱敏有残留 ⇒ fail、无脱敏读数 ⇒ missing、残留 0 ⇒ pass。
+
+### 四、门禁读数（工作树）
+
+- 核心 `pnpm test:capped`：**699 文件 / 8298 条全绿**，exit 0
+- 桌面 415 文件 / 2666 条全绿；真机冒烟 **61/61**；四包密封证据有效（渲染层未改）
+- `typecheck` 0 报错；`docs-check` 全绿
