@@ -29,6 +29,11 @@ describe("行业最高标准（本方口径）", () => {
     }
   });
 
+  it("标准文档指向差距表（没有差距表就不算「最高」）", () => {
+    expect(doc).toContain("docs/gaps-vs-reference.md");
+    expect(existsSync(`${root}docs/gaps-vs-reference.md`)).toBe(true);
+  });
+
   it("明确不做的两格都写了理由（≥8 字）", () => {
     const outs = doc.split("\n").filter((l) => /^\|\s*`wallpaper\./.test(l));
     expect(outs.length).toBeGreaterThanOrEqual(2);

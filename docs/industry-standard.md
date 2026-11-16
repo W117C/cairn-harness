@@ -41,6 +41,14 @@ npx tsx scripts/docs-check.ts
 | Electron 安全清单（contextIsolation / 无 nodeIntegration / 沙箱 / 无 node 全局） | 四项都为「是」 | **4/4**（真机读 `typeof window.require/process/agent/global`，不是读代码猜） | `apps/desktop/scripts/wallpaper-csp-smoke.cjs` |
 | OWASP Top 10 2021 A09（安全日志与监控） | 敏感值不得进日志 | 报告生成时拿真样本跑产品脱敏：**残留 0 次** | `scripts/standard-report.ts` `tests/team-secrets.test.ts` |
 
+## 差距表（我们**没有**的能力）
+
+只在「做到了什么」上打勾，永远能得出「行业最高」。所以差距单独列一份：
+`docs/gaps-vs-reference.md`——网站壁纸（参照 Plash，已见其标语）、多显示器分别设壁纸、定时切换、
+三维场景、原生点选自动化，逐条给「参照是否支持 + 依据等级 + 我们的状态」。
+判据 `tests/gaps-vs-reference.test.ts` 钉住：至少五条、至少三条差距、`已见` 必须带来源。
+**这份表被删空，判据会红。**
+
 ## 明确不做（out，带理由）
 
 | 能力 | 为什么不做/判不了 |
