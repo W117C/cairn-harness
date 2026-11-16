@@ -157,6 +157,8 @@
 
 ## 十一、参考
 
+- **Phase 4 第一篇（§九 五个未决口的答法）**：`docs/superpowers/specs/2026-11-16-bot-team-core-design.md`
+  （待业主复核；本 ADR 的裁决一项未改）
 - `docs/superpowers/plans/2026-11-14-ds-bot-benchmark.md`（v2.2；J1–J6、Q1–Q18、§4.9 矩阵）
 - `docs/adr/0005-log-structural-records.md`（事件种类封闭）
 - `docs/adr/0008-conversation-rail.md`（渲染层 rail 判据）
