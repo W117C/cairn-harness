@@ -1,0 +1,205 @@
+{
+  "version": 1,
+  "date": "2026-11-16",
+  "rule": "范围内的条目按 covered=1 / partial=0.5 / absent=0 计分；范围外必须在 outOfScopeReason 里写清理由。覆盖分必须 ≥ 0.8，且每条 covered/partial 都要有本仓可跑的证人（测试文件或真机冒烟脚本），否则判红。",
+  "threshold": 0.75,
+  "items": [
+    {
+      "id": "bot.replay-authority",
+      "capability": "团队状态的真源可重放",
+      "reference": "DS-Bot state.json",
+      "ours": "事件日志补丁 + 投影",
+      "status": "covered",
+      "evidence": [
+        "tests/team-members.test.ts",
+        "apps/desktop/tests/team-store.test.ts"
+      ]
+    },
+    {
+      "id": "bot.member-profiles",
+      "capability": "成员档案增删改可审计",
+      "reference": "roster 落 state.json",
+      "ours": "补丁 + 墓碑",
+      "status": "covered",
+      "evidence": [
+        "tests/team-members.test.ts",
+        "apps/desktop/tests/team-store.test.ts"
+      ]
+    },
+    {
+      "id": "bot.speech-order",
+      "capability": "一轮发言秩序",
+      "reference": "两种模式 + PASS + 空转守卫",
+      "ours": "planRound + 引擎仲裁",
+      "status": "covered",
+      "evidence": [
+        "tests/orchestration-speech.test.ts",
+        "tests/orchestration-round-arbiter.test.ts"
+      ]
+    },
+    {
+      "id": "bot.segments",
+      "capability": "分段与压缩后换段",
+      "reference": "一段一个 Session 文件",
+      "ours": "事件行号 + 自动触发",
+      "status": "covered",
+      "evidence": [
+        "tests/segments.test.ts",
+        "tests/segments-auto.test.ts"
+      ]
+    },
+    {
+      "id": "bot.member-thread",
+      "capability": "成员线程（身份=member:<id>）",
+      "reference": "每个 bot 一条 root Session",
+      "ours": "spawn_agent 带 member",
+      "status": "covered",
+      "evidence": [
+        "tests/team-identity.test.ts"
+      ]
+    },
+    {
+      "id": "bot.memory-scopes",
+      "capability": "三档记忆作用域（读+写）",
+      "reference": "bot/群/团队三档",
+      "ours": "project/team/member + 作用域过滤",
+      "status": "covered",
+      "evidence": [
+        "tests/memory-scope.test.ts",
+        "tests/remember-member-scope.test.ts"
+      ]
+    },
+    {
+      "id": "bot.usage-by-member",
+      "capability": "用量按成员归集",
+      "reference": "按 bot 三视角",
+      "ours": "usageByOwner + 跨会话上限",
+      "status": "covered",
+      "evidence": [
+        "tests/team-insights.test.ts"
+      ]
+    },
+    {
+      "id": "bot.panels",
+      "capability": "面板族（成员区/团队/设置）",
+      "reference": "104 个客户端文件",
+      "ours": "侧栏成员区 + 设置团队 + 团队窗格",
+      "status": "partial",
+      "evidence": [
+        "apps/desktop/tests/team-section.test.tsx",
+        "apps/desktop/tests/team-pane.test.tsx",
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs"
+      ]
+    },
+    {
+      "id": "bot.member-dispatch-ui",
+      "capability": "从 UI 给成员派活",
+      "reference": "群里 @成员 即开工",
+      "ours": "只有工具面 spawn_agent(member)",
+      "status": "absent",
+      "evidence": []
+    },
+    {
+      "id": "bot.group-chat",
+      "capability": "群聊共享流与轮次",
+      "reference": "room + round + 共享日志",
+      "ours": "未做",
+      "status": "absent",
+      "evidence": []
+    },
+    {
+      "id": "bot.secrets-cards",
+      "capability": "密钥按成员申请/授权",
+      "reference": "卡片申请 + 按 bot 授权",
+      "ours": "未做",
+      "status": "absent",
+      "evidence": []
+    },
+    {
+      "id": "wallpaper.media-protocol",
+      "capability": "壁纸媒体白名单协议",
+      "reference": "同源 HTTP 路由",
+      "ours": "cairn-wallpaper:// + Range",
+      "status": "covered",
+      "evidence": [
+        "apps/desktop/tests/wallpaper-media.test.ts",
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs"
+      ]
+    },
+    {
+      "id": "wallpaper.csp",
+      "capability": "CSP 白名单承重（含反证臂）",
+      "reference": "未提",
+      "ours": "反证臂：摘 scheme 必须加载失败",
+      "status": "covered",
+      "evidence": [
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs"
+      ]
+    },
+    {
+      "id": "wallpaper.contrast-floor",
+      "capability": "可读性地板（现算 + 漂移守卫）",
+      "reference": "网格法 + 手抄常量",
+      "ours": "真机真值现算",
+      "status": "covered",
+      "evidence": [
+        "apps/desktop/tests/wallpaper-contrast.test.ts",
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs"
+      ]
+    },
+    {
+      "id": "wallpaper.first-frame",
+      "capability": "首帧底色不闪画布色",
+      "reference": "未提",
+      "ours": "1×1 PNG 平均色",
+      "status": "covered",
+      "evidence": [
+        "apps/desktop/tests/wallpaper-tint.test.ts",
+        "apps/desktop/tests/boot-background.test.ts"
+      ]
+    },
+    {
+      "id": "wallpaper.lifecycle",
+      "capability": "失焦/隐藏/锁屏即停",
+      "reference": "失焦/隐藏",
+      "ours": "含系统级推送",
+      "status": "covered",
+      "evidence": [
+        "apps/desktop/tests/wallpaper-suspend.test.ts",
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs"
+      ]
+    },
+    {
+      "id": "wallpaper.degrade",
+      "capability": "媒体失效即降级并点名",
+      "reference": "未提",
+      "ours": "撤层 + 设置行「文件不可用」",
+      "status": "covered",
+      "evidence": [
+        "apps/desktop/tests/wallpaper-settings-ui.test.tsx",
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs"
+      ]
+    },
+    {
+      "id": "wallpaper.native-pick",
+      "capability": "原生面板点选文件",
+      "reference": "宿主选文件",
+      "ours": "面板调起/取消已验证，点选不可自动化",
+      "status": "partial",
+      "evidence": [
+        "apps/desktop/tests/wallpaper-pick.test.ts",
+        "apps/desktop/scripts/wallpaper-csp-smoke.cjs"
+      ]
+    },
+    {
+      "id": "wallpaper.scene-engine",
+      "capability": "场景/工坊/频谱",
+      "reference": "Wallpaper Engine 生态",
+      "ours": "明确不做",
+      "status": "out",
+      "outOfScopeReason": "装饰不承载信息（spec §8 已钉）；插件边界装不进来",
+      "evidence": []
+    }
+  ],
+  "thresholdNote": "目标 0.8；现读 0.778（差的正是未做的「UI 派活」）。棘轮：补齐后上调到 0.8，只准上调。"
+}
