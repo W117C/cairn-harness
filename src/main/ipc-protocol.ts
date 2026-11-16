@@ -140,8 +140,36 @@ export type { SearchProvider } from "../tools/web-search";
  *  v57 = 置顶清单读取带 workspace：listMessagePins 与写入路径共用显式根存在性检查，
  *        同 id 跨工作区不再拿另一根的结果冒充。
  *  v58 = AskPayload 显式携带 workspace：审批卡/等门计数与推送队列按目标根寻址，
- *        同 id 跨工作区的卡不再互相覆盖。 */
-export const IPC_PROTOCOL_VERSION = 58;
+ *        同 id 跨工作区的卡不再互相覆盖。
+ *  v59 = 壁纸媒体暂停推送（onWallpaperSuspend）：系统休眠/锁屏时主进程推一次
+ *        `{paused:true, reason}`，唤醒/解锁推 `{paused:false}`——视频壁纸不必靠猜 document 可见性。 */
+export const IPC_PROTOCOL_VERSION = 59;
+
+/** 团队名单（v59）：成员档案是投影，`records` 是补丁条数（面板据此说「有几条历史」）。 */
+export interface TeamRosterPayload {
+  members: { id: string; name: string; role: string; tier: string; model?: string; thinking?: string; capabilities: string[] }[];
+  /** 被团队档裁剪过的成员（裁剪出声，不静默降级）。 */
+  clamped: { id: string; requested: string; applied: string }[];
+  /** 被拒的补丁（坏输入不静默）。 */
+  rejected: { at: number; id: string | null; error: string }[];
+  /** 日志里的补丁条数。 */
+  records: number;
+}
+
+/** 写一条成员档案（v59）：`remove` 为真时写墓碑（`removed=1`），不删历史。 */
+export interface TeamMemberInput {
+  id: string;
+  name?: string;
+  role?: string;
+  tier?: string;
+  remove?: boolean;
+}
+
+/** 壁纸媒体的系统级暂停信号（v59）。`reason` 只描述「为什么停」，不描述渲染层怎么做。 */
+export interface WallpaperSuspendPayload {
+  paused: boolean;
+  reason: "suspend" | "lock-screen" | "resume" | "unlock-screen";
+}
 
 export type SettingsMigrationSource = "claude-code" | "codex";
 export interface SettingsMigrationItem {
@@ -536,6 +564,12 @@ export interface AgentApi {
   onAskDone(cb: (p: AskOutcomePayload) => void): () => void;
   /** v21：用户点击完成通知 → 主进程已聚焦窗口，渲染层据此打开目标会话。 */
   onNotificationOpen(cb: (p: RunNotificationPayload) => void): () => void;
+  /** v59：系统休眠/锁屏 ⇒ 暂停视频壁纸；唤醒/解锁 ⇒ 恢复。只在壁纸挂视频时才有意义。 */
+  onWallpaperSuspend(cb: (p: WallpaperSuspendPayload) => void): () => void;
+  /** v59：团队名单（成员档案＝投影；读的是团队事件日志，不是 JSON 配置文件）。 */
+  teamRoster(): Promise<TeamRosterPayload>;
+  /** v59：写一条成员档案（新增/改档/删人都是同一条通道；删＝写墓碑，不删历史）。 */
+  teamMemberSave(input: TeamMemberInput): Promise<{ ok: boolean; error?: string; roster?: TeamRosterPayload }>;
   getState(): Promise<StateResponse>;
   /** Provider/model/capability catalog derived from the same registry used by workers. */
   getProviderInfo(): Promise<ProviderInfo>;

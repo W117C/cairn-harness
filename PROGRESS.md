@@ -41656,3 +41656,49 @@ ADR 0015 的未决口、并落了壁纸首帧底色；本页把**能验的部分
 
 - 本笔**只动主进程与冒烟脚本**，renderer 一个字没改 ⇒ 四份密封证据（`rendererDigest`）不需要重签，仍是第 1248 页那一代。
 - 仍未验：系统休眠暂停（需真休眠）、真·系统选文件对话框（冒烟里被桩替代）。
+
+## 2026-11-16 · 第 1250 页：协议 v59 —— 系统休眠暂停、团队通话与面板、真系统选文件面板（`pending`）
+
+**背景**：第 1248 / 1249 页之后剩下的三格被判为「未做完」：壁纸的系统休眠暂停、真系统选文件对话框、
+bot 的接线与面板。本页把三格一起关掉，代价是协议从 v58 升到 **v59**。
+
+### 一、壁纸：两格老账
+
+| 格 | 做法 | 真机读数 |
+|---|---|---|
+| 系统休眠/锁屏暂停 | 新增 push 通道 `onWallpaperSuspend`；主进程 `powerMonitor` 的 suspend/lock-screen ⇒ `paused:true`，resume/unlock-screen ⇒ `false`；渲染层 `shouldPauseMedia(focused, visible, systemPaused)` | 锁屏推送 ⇒ `video.paused=true`（窗口**仍聚焦、仍可见**，这一格只有系统级信号能抓到）；解锁推送 ⇒ 续播 |
+| 真·系统选文件对话框 | 选文件决策抽成 `wallpaper-pick.ts`（取消语义 / 白名单 / 校验顺序），冒烟里用**真** `dialog.showOpenDialog` 调起真面板，关窗取消 | 面板把 Promise 攥住 2.6s（真开过），关窗即结算 `{canceled:false, filePaths:[]}`；面板参数与产品同一份 |
+
+装配层与决策层另有判卷：`wallpaper-suspend.test.ts`（4 条，假 `powerMonitor` + 死窗口/坏窗口）与
+`wallpaper-pick.test.ts`（4 条，含「面板白名单与媒体分类同一组」的反向断言）。
+
+### 二、bot：接线与面板（ADR 0015 转 Accepted）
+
+业主 2026-11-16 10:43 的「全部做完」指令作为放行依据 ⇒ ADR 0015 从 Proposed 转 **Accepted**，
+落点仍按原裁决。第一批落的是三件最小件的纯逻辑；本批把**成员档案**接到底：
+
+| 层 | 落点 |
+|---|---|
+| 存储 | `apps/desktop/src/main/team-store.ts`：团队事件日志（`<userData>/team/events.jsonl`）→ 补丁记录 → 投影。没有 `team.json` |
+| 协议 | 两条 invoke：`teamRoster` / `teamMemberSave`（v59）；新域 `team` |
+| 面板 | 设置 →「团队」（`components/settings/TeamSection.tsx`）：名单、档位选择器、添加、移除；被拒与被裁剪都在页面上点名 |
+| 判卷 | `team-store.test.ts`（6 条：空用户 / 写读 / 可重建 / 墓碑 / 裁剪 / 空补丁拒写）、`team-section.test.tsx`（4 条：名单 / 空态 / 裁剪与拒绝 / 条数） |
+
+**仍未接线（说清楚）**：发言权没有调用方、段没有写入点。原因不是「来不及」——是触发条件属产品裁决
+（谁在何时开新段、一轮由谁仲裁），spec §2 只定了语义与判据。
+
+### 三、门禁读数（工作树）
+
+- 核心 `pnpm test:capped`（`--maxWorkers=2`）：**685 文件 / 8219 条**（本批最后一次读数见下方补记）。
+- 桌面 `vitest run --config vitest.config.ts`：**402 文件 / 2605 条全绿**，exit 0。
+- 壁纸真机冒烟：**43/43**；四份密封证据（`rendererDigest`）用真机重签后全绿。
+- `typecheck` 0 条报错；`renderer-layer-check` 绿（248 文件）；`desktop-boundary-check` 绿；`docs-check` 全绿。
+- 协议版本钉同步：`protocol-version` / `ipc-protocol-version` / `channel-domains` / `channels` /
+  `mustWire` / README 的 invoke 计数（157 → 159）与五处 `marketplace/*-wiring` 的版本断言。
+
+### 四、边界
+
+- `powerMonitor` 的**真事件**没有真机读数（真休眠会把宿主会话一起睡掉）；判的是「事件 → 推送 → 渲染层暂停」
+  这条链的每一跳，以及注入面下的装配。
+- 真面板验到「调起 + 取消」；**在面板里点选文件**这一步没有自动化（原生 UI，无 API、无焦点可编程）。
+- 本页不宣称提交态 HEAD 认证与变异复验。

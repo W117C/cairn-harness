@@ -10,9 +10,9 @@ import { readRendererFile } from "./helpers/app-surface";
 
 const repo = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 
-it("推送通道与协议版本：v21 增 onNotificationOpen，当前 v58", () => {
+it("推送通道与协议版本：v21 增 onNotificationOpen，当前 v59", () => {
   expect(PUSH_CHANNELS.onNotificationOpen).toBe("agent:notification-open");
-  expect(IPC_PROTOCOL_VERSION).toBe(58);
+  expect(IPC_PROTOCOL_VERSION).toBe(59);
   const protocol = repo("../../../src/main/ipc-protocol.ts");
   expect(protocol).toContain("export interface RunNotificationPayload");
   expect(protocol).toContain("onNotificationOpen(cb: (p: RunNotificationPayload) => void)");

@@ -43,9 +43,14 @@ export function wallpaperViewOf(settings: AppSettings): WallpaperView {
   return { kind: w.kind, url: wallpaperUrl(w.revision) };
 }
 
-/** 失焦或不可见 ⇒ 暂停视频（省电）。系统休眠时机器本就不跑，不另设通道。 */
-export function shouldPauseMedia(focused: boolean, visible: boolean): boolean {
-  return !focused || !visible;
+/**
+ * 失焦 / 不可见 / **系统休眠或锁屏** ⇒ 暂停视频（省电）。
+ *
+ * 第三个入参是 v59 的推送（主进程 `powerMonitor` 的 suspend/lock-screen）：锁屏时窗口既没失焦
+ * 也没隐藏，只靠前两个判据抓不到——那才是最该省电的时刻（人不在，机器还醒着）。
+ */
+export function shouldPauseMedia(focused: boolean, visible: boolean, systemPaused = false): boolean {
+  return systemPaused || !focused || !visible;
 }
 
 /** 接缝属性的唯一写者（body 上是上游接缝、html 上是我们自己的权重属性）。
@@ -71,6 +76,8 @@ let current: WallpaperView = { kind: "none", url: null };
  * 失败只影响这一轮显示。任何一次视图重设（新选文件、重读设置）都把它清掉 = 自动重试。
  */
 let failed = false;
+/** 系统级暂停（v59 推送）：锁屏/休眠时窗口既没失焦也没隐藏，只能由主进程告诉我们。 */
+let systemPaused = false;
 const listeners = new Set<() => void>();
 
 export function setWallpaperView(view: WallpaperView): void {
@@ -90,6 +97,21 @@ export function markWallpaperUnavailable(): void {
 
 export function wallpaperFailed(): boolean {
   return failed;
+}
+
+/** 主进程推来的系统级暂停态（唯一写者是推送订阅，见 `bootWallpaper`）。 */
+export function setSystemPaused(paused: boolean): void {
+  if (systemPaused === paused) return;
+  systemPaused = paused;
+  for (const l of listeners) l();
+}
+
+export function wallpaperSystemPaused(): boolean {
+  return systemPaused;
+}
+
+export function useWallpaperSystemPaused(): boolean {
+  return useSyncExternalStore(subscribeWallpaper, wallpaperSystemPaused, wallpaperSystemPaused);
 }
 
 /** 设置行读它来显示「文件不可用」（与视图同一份订阅）。 */
@@ -167,9 +189,12 @@ export function applyThemeVars(settings: AppSettings): void {
   root.setProperty("--cw-scrim", String(settings.wallpaper.scrim));
 }
 
-/** 启动：读一次设置、落位属性与变量，并订阅主题变化重算地板。 */
+/** 启动：读一次设置、落位属性与变量，订阅主题变化重算地板，并订阅系统级暂停推送。 */
 export function bootWallpaper(): void {
   void refreshWallpaper().catch(() => undefined);
+  try {
+    window.agent.onWallpaperSuspend((p) => { setSystemPaused(p.paused === true); });
+  } catch { /* 老协议没有这条推送（v59 之前）：不订阅，也不炸 */ }
   try {
     const observer = new MutationObserver(() => {
       void window.agent.getSettings().then((s) => { applyThemeVars(s); }).catch(() => undefined);

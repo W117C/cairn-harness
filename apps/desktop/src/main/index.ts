@@ -1,11 +1,15 @@
 // Electron main 装配根（M1-6）：kernel-host 单点装配 + IPC 薄映射。
 // 装载通道：entry.cjs 注册 repo 根 tsx 后 require 本 TS 源——core 链零打包零漂移
 // （esbuild 打包会把 agent-runner 的 ROOT 漂进 <repo>/apps，fixtures 运行时静默落空）。
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, Notification, powerSaveBlocker, protocol, safeStorage, screen, shell, webContents, type IpcMainInvokeEvent, type WebContents } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, Notification, powerMonitor, powerSaveBlocker, protocol, safeStorage, screen, shell, webContents, type IpcMainInvokeEvent, type WebContents } from "electron";
 import { clampToWorkArea, readWindowState, writeWindowState } from "./window-state";
 import { bootBackgroundFor, normalizeThemePreference, resolveBootTheme, type ThemePreference } from "./boot-theme";
 import { parseBootWallpaper, bootBackgroundForWallpaper, createTintMemo, NO_WALLPAPER, type BootWallpaper } from "./boot-background";
 import type { TintSource } from "./wallpaper-tint";
+import { installSuspendPause } from "./wallpaper-suspend";
+import { pickWallpaper } from "./wallpaper-pick";
+import { appendTeamPatch, readTeamRoster, teamLogPath } from "./team-store";
+import { memberPatch } from "../../../../src/agent/team/members";
 import { windowVibrancyOptions } from "./window-vibrancy";
 import { focusedWindowViewing, notificationClickWindow, runNotificationCopy, runNotificationTarget, shouldNotifyRunSettled } from "./run-notification";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -739,6 +743,57 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     if (!r.ok) return { ok: false, error: r.message };
     return { ok: true, dest: r.dest, copiedFiles: r.copiedFiles };
   },
+  // v59 团队名单：读团队事件日志 → 投影成名单。团队档取当前用户档（成员不得宽于团队）。
+  teamRoster: async () => {
+    const s = await getSettings();
+    // 团队档＝用户当前档（`settings.mode`）；成员档不得超过它。
+    const roster = await readTeamRoster(teamLogPath(app.getPath("userData")), s.mode);
+    return {
+      members: roster.members.map((m) => ({
+        id: m.id, name: m.name, role: m.role, tier: m.tier, capabilities: m.capabilities,
+        ...(m.model === undefined ? {} : { model: m.model }),
+        ...(m.thinking === undefined ? {} : { thinking: m.thinking }),
+      })),
+      clamped: roster.clamped,
+      rejected: roster.rejected,
+      records: roster.records,
+    };
+  },
+  // v59 写一条成员档案：新增 / 改档 / 移除都是同一条通道。移除＝写墓碑，不删历史。
+  teamMemberSave: async (raw) => {
+    const input = (raw ?? {}) as { id?: unknown; name?: unknown; role?: unknown; tier?: unknown; remove?: unknown };
+    const id = String(input.id ?? "");
+    const path = teamLogPath(app.getPath("userData"));
+    let patch: Record<string, string>;
+    try {
+      patch = input.remove === true
+        ? memberPatch(id, { removed: "1" })
+        : memberPatch(id, {
+          ...(input.name === undefined ? {} : { name: String(input.name) }),
+          ...(input.role === undefined ? {} : { role: String(input.role) }),
+          ...(input.tier === undefined ? {} : { tier: String(input.tier) }),
+        });
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+    if (Object.keys(patch).length === 0) return { ok: false, error: "没有要写的字段" };
+    await appendTeamPatch(path, patch);
+    const s = await getSettings();
+    const roster = await readTeamRoster(path, s.mode);
+    return {
+      ok: true,
+      roster: {
+        members: roster.members.map((m) => ({
+          id: m.id, name: m.name, role: m.role, tier: m.tier, capabilities: m.capabilities,
+          ...(m.model === undefined ? {} : { model: m.model }),
+          ...(m.thinking === undefined ? {} : { thinking: m.thinking }),
+        })),
+        clamped: roster.clamped,
+        rejected: roster.rejected,
+        records: roster.records,
+      },
+    };
+  },
   // v6 连接自检：GET 模型清单（不产生 token 费用）。
   providerCheck: (provider) => checkProviderConnection({ provider: String(provider) }),
   // 斜杠菜单技能清单（2026-10-18）：显式传工作区，切项目时不吃竞态。
@@ -847,17 +902,20 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   // 路径只回给 renderer 一次、由它写进 settings.json；媒体本身经 cairn-wallpaper:// 取，
   // 渲染层拿不到任意读文件的能力。
   wallpaperPick: async () => {
+    // 决策壳在 ./wallpaper-pick（取消语义、白名单、校验顺序都是纯逻辑，判卷不碰原生面板）。
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null;
-    const options = {
-      title: "选择壁纸",
-      properties: ["openFile" as const],
-      filters: [
-        { name: "图片与视频", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp", "mp4", "webm", "mov"] },
-      ],
-    };
-    const picked = win === null ? await dialog.showOpenDialog(options) : await dialog.showOpenDialog(win, options);
-    if (picked.canceled || picked.filePaths.length === 0) return { ok: false, canceled: true };
-    return validateWallpaperFile(picked.filePaths[0]!);
+    return await pickWallpaper({
+      openDialog: async (options) => {
+        // readonly → 可变：Electron 的 Options 是可变数组类型（我们不能改它的 d.ts）。
+        const electronOptions = {
+          title: options.title,
+          properties: ["openFile" as const],
+          filters: options.filters.map((f) => ({ name: f.name, extensions: [...f.extensions] })),
+        };
+        return win === null ? await dialog.showOpenDialog(electronOptions) : await dialog.showOpenDialog(win, electronOptions);
+      },
+      validate: validateWallpaperFile,
+    });
   },
   // v9：Tab 想下一条（业主裁 A②）：按「当前选中模型（会话覆盖 > 设置缺省）」单发一次上下文建议。
   // 不走会话归属/漂移——单发不进会话流、不落 JSONL；解析失败（模型未登记等）也分类返回，
@@ -1541,6 +1599,15 @@ app.whenReady().then(() => {
       range: request.headers.get("range"),
       open: openWallpaperStream,
     });
+  });
+  // 系统休眠/锁屏 ⇒ 暂停视频壁纸（设计规格 §6 的「系统休眠」行）。
+  // 真事件测不了（真休眠会把宿主一起睡掉），所以装配写成可注入的纯函数，由单测判卷；
+  // 这里只把 Electron 的真事件源与真窗口递进去。
+  installSuspendPause({
+    source: powerMonitor,
+    targets: () => BrowserWindow.getAllWindows(),
+    channel: PUSH_CHANNELS.onWallpaperSuspend,
+    onError: (error) => { console.error("[cairn] 壁纸暂停推送失败", error); },
   });
   if (process.env.CAIRN_SMOKE === "1") console.error("[cairn-smoke] app ready");
   if (process.platform === "darwin" && appIcon !== undefined) app.dock?.setIcon(appIcon);

@@ -39,6 +39,7 @@ import { NetworkSection } from "./settings/NetworkSection";
 import { MigrationSection } from "./settings/MigrationSection";
 import { PersonalizationSection } from "./settings/PersonalizationSection";
 import { SubagentsSection } from "./settings/SubagentsSection";
+import { TeamSection } from "./settings/TeamSection";
 import { SETTINGS_PAGE_ORDER, SECTIONS, filterSections, sectionById, sectionLabel, type SectionId } from "./settings-nav";
 import { destinationForSection } from "../navigation";
 import { STR } from "../strings";
@@ -65,6 +66,7 @@ const SETTINGS_DENSITY: Readonly<Record<SectionId, "single" | "table" | "compact
   general: "single",
   personalization: "single",
   subagents: "compact",
+  team: "single",
   mcp: "table",
   hooks: "compact",
   network: "single",
@@ -589,7 +591,7 @@ export function SettingsPanel(props: {
           )}
           {error !== null && <div className="sp-note err" role="alert">{error}</div>}
           <SettingsIssueBanner issue={settingsIssue} onReload={() => { void reloadFromDisk(); }} reloading={reloadingSettings} />
-          {settings === null && !["about", "usage", "network", "evolve", "migration"].includes(section) && !PAGE_SECTION_IDS.has(section) && <div className="sp-note">正在载入设置…</div>}
+          {settings === null && !["about", "usage", "network", "evolve", "migration", "team"].includes(section) && !PAGE_SECTION_IDS.has(section) && <div className="sp-note">正在载入设置…</div>}
 
           {/* 分区各自成界：一个分区渲染炸了不许把整窗打回启动占位。
               key={section}：切分区即重挂，换到好分区自动恢复，不需要先点重试。 */}
@@ -688,6 +690,8 @@ export function SettingsPanel(props: {
           {section === "usage" && <UsageSection />}
 
           {section === "evolve" && <EvolveSection />}
+
+          {section === "team" && <TeamSection />}
 
           {section === "permissions" && settings !== null && (
             <SettingsPage title={sectionLabel("permissions")}>

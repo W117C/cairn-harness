@@ -165,10 +165,14 @@
 | 发言权 | `src/orchestration/speech.ts` | `tests/orchestration-speech.test.ts`（9 条） | 一轮谁先说（主持优先 / 按序）、点名即并行、静默即不发言、空转守卫停机、未知 id 交回上层 |
 | 成员档案 | `src/agent/team/members.ts` | `tests/team-members.test.ts`（8 条） | 补丁 → 名单的投影、权限单调继承（裁剪出声）、坏输入进 `rejected` 且**不留半个档案** |
 
-**还没做（说清楚，免得被当成「做完了」）**：
+**接线（2026-11-16 第二批，协议 v59）**：
 
-- 三件都**没有接线**：没有 IPC 通道、没有 §5 的任何一个面板、没有把段/发言权接进
-  `orchestrator` 的一轮实际调度。
+- **成员档案已接线**：`apps/desktop/src/main/team-store.ts`（事件日志 → 投影）+ 两条 invoke 通道
+  `teamRoster` / `teamMemberSave` + 设置页「团队」面板（`components/settings/TeamSection.tsx`）。
+  写入口只有一条；移除写墓碑（`removed=1`），历史不删。真机冒烟验了「面板能进、名单能渲染、
+  加人真的多一行」与「真主进程里写→读→墓碑闭环」。
+- **仍未接线的两件**：发言权还没有调用方（`orchestrator` 不读它）、段还没有写入点
+  （谁在何时开新段属产品裁决，spec §2 给了三个 `segment_reason`，但触发条件没定）。
 - 成员档案的载体（编排日志里的 `member.<id>.<字段>` 补丁键）只有读写两侧的 helper，
   **没有落盘入口**——谁在何时写这条补丁属接线阶段，须等 ADR 0015 从 Proposed 转 Accepted。
 - 上游 12 机制里的 M10 全文索引（先量体量）、M12 密钥卡片仍是「另案」状态。

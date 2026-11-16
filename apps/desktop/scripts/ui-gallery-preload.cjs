@@ -1612,4 +1612,39 @@ if (wallpaperVideoPath !== "") {
   });
 }
 
+// v59 壁纸系统暂停：桩里**真收集**订阅（与 onAsk 同式），主进程用 executeJavaScript 调
+// `__cairnPushWallpaperSuspend` 推进来。判的是「锁屏时窗口既没失焦也没隐藏」那一格。
+const wallpaperSuspendListeners = new Set();
+stub.onWallpaperSuspend = (fn) => { wallpaperSuspendListeners.add(fn); return () => wallpaperSuspendListeners.delete(fn); };
+contextBridge.exposeInMainWorld("__cairnPushWallpaperSuspend", (payload) => {
+  for (const fn of wallpaperSuspendListeners) { try { fn(payload); } catch { /* 一个订阅者抛了不该挡住别人 */ } }
+});
+
+// v59 团队面板夹具：桩里给一份**真形状**的名单（不是 {}），面板才能判渲染面；
+// 写入按同一条通道的口径改内存名单（增/改档/墓碑），回包给新名单。
+// 真落盘那一段属主进程（`team-store`），冒烟另行判它的读写闭环。
+const teamMembers = [{ id: "m-seed", name: "示例成员", role: "调研", tier: "read-only", capabilities: [] }];
+const teamRosterPayload = () => ({
+  members: teamMembers.map((m) => ({ ...m })),
+  clamped: [],
+  rejected: [],
+  records: teamMembers.length,
+});
+stub.teamRoster = () => Promise.resolve(teamRosterPayload());
+stub.teamMemberSave = (input) => {
+  const id = String(input && input.id ? input.id : "");
+  if (input && input.remove === true) {
+    const at = teamMembers.findIndex((m) => m.id === id);
+    if (at >= 0) teamMembers.splice(at, 1);
+  } else if (input && typeof input.name === "string" && input.name !== "") {
+    teamMembers.push({
+      id, name: input.name,
+      role: typeof input.role === "string" && input.role !== "" ? input.role : "成员",
+      tier: typeof input.tier === "string" ? input.tier : "read-only",
+      capabilities: [],
+    });
+  }
+  return Promise.resolve({ ok: true, roster: teamRosterPayload() });
+};
+
 contextBridge.exposeInMainWorld("agent", stub);

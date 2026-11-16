@@ -10,7 +10,7 @@
 //
 // 跑法：pnpm --filter cairn-desktop build
 //       pnpm --filter cairn-desktop exec electron scripts/wallpaper-csp-smoke.cjs [输出目录]
-const { app, BrowserWindow, nativeImage, nativeTheme, net, protocol } = require("electron");
+const { app, BrowserWindow, dialog, nativeImage, nativeTheme, net, protocol } = require("electron");
 const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
 const { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
 const { join, resolve } = require("node:path");
@@ -26,6 +26,7 @@ const { CSP_CONTENT } = require(join(__dirname, "../src/main/csp.ts"));
 // 首帧底色（规格 §10 的 v1.1 项）：真 nativeImage 喂进去，判卷侧不复制它的解码逻辑。
 const { bootBackgroundWithTint, wallpaperTintFor } = require(join(__dirname, "../src/main/wallpaper-tint.ts"));
 const { bootBackgroundForWallpaper } = require(join(__dirname, "../src/main/boot-background.ts"));
+const { wallpaperDialogOptions } = require(join(__dirname, "../src/main/wallpaper-pick.ts"));
 // 对比度模型（地板判据的唯一一份）：真机读到的地板要过模型的最差格。
 const { CONTRAST_TARGET, LIGHT_SPEC, DARK_SPEC, floorFor, worstContrast } =
   require(join(__dirname, "../src/renderer/derived/wallpaper-contrast.ts"));
@@ -527,6 +528,24 @@ async function main() {
   readings.videoResumed = videoResumed;
   check("回焦即续播（判据 3 的反向臂：不是一次性停掉）",
     videoResumed.has === true && videoResumed.paused === false, videoResumed);
+  // ⑨b v59：系统级暂停（锁屏）——窗口既没失焦也没隐藏，只有主进程推得动这一格。
+  // 这里走的是真 preload 订阅 + 真推送名（`__cairnPushWallpaperSuspend` 由画廊 preload 收集订阅后转发）。
+  await vjs(`window.__cairnPushWallpaperSuspend({ paused: true, reason: "lock-screen" })`);
+  await pause(600);
+  const locked = await videoState();
+  readings.videoLocked = locked;
+  check("锁屏推送 ⇒ 暂停（窗口仍聚焦、仍可见：这一格只有 v59 的系统级信号能抓到）",
+    locked.has === true && locked.paused === true && locked.focused === true && locked.hidden === false, locked);
+  await vjs(`window.__cairnPushWallpaperSuspend({ paused: false, reason: "unlock-screen" })`);
+  let videoUnlocked = { has: false };
+  for (let i = 0; i < 30; i++) {
+    videoUnlocked = await videoState();
+    if (videoUnlocked.has === true && videoUnlocked.paused === false) break;
+    await pause(200);
+  }
+  readings.videoUnlocked = videoUnlocked;
+  check("解锁推送 ⇒ 续播（系统级暂停不是单向门）",
+    videoUnlocked.has === true && videoUnlocked.paused === false, videoUnlocked);
   await shot(videoWin, "08-video-wallpaper-resumed-1440x900");
   videoWin.destroy();
   currentPath = wallpaperPath;
@@ -563,6 +582,106 @@ async function main() {
   await shot(degradeWin, "09-degraded-file-unavailable-1440x900");
   degradeWin.destroy();
   currentPath = wallpaperPath;
+
+  // ⑪ 团队面板（v59 的第一刀界面）：设置里能进「团队」、名单渲染、能加人、能移除。
+  // 桩给的是**真形状**的名单（`teamRoster`/`teamMemberSave`），真落盘那一段由下面 ⑫ 判。
+  const teamWin = await makeWindow(join(distDir, "index.html"), []);
+  const tjs = jsOf(teamWin);
+  for (let i = 0; i < 100; i++) { if (await tjs(`!!document.querySelector('.avatar')`)) break; await pause(); }
+  await tjs(`(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', code: 'Comma', metaKey: true, bubbles: true })); })()`);
+  await pause(500);
+  const navClicked = await tjs(`(() => {
+    const btn = [...document.querySelectorAll('.sp-nav-item')].find((b) => (b.textContent || "").includes("团队"));
+    if (!btn) return { found: false };
+    btn.click();
+    return { found: true, text: btn.textContent };
+  })()`);
+  await pause(600);
+  const teamPanel = await tjs(`(() => {
+    const body = document.querySelector('.sp-body, .sp-page, .sp-content') ?? document.body;
+    const html = body ? body.textContent : "";
+    return {
+      html: String(html).slice(0, 4000),
+      rows: [...document.querySelectorAll('.ss-row')].map((r) => r.textContent || ""),
+      selects: document.querySelectorAll('.ss-select').length,
+      inputs: document.querySelectorAll('.ss-input').length,
+    };
+  })()`);
+  readings.teamPanel = { navClicked, rows: teamPanel.rows.slice(0, 8), selects: teamPanel.selects, inputs: teamPanel.inputs };
+  check("设置里能进「团队」并且面板渲染出名单（种子成员 + 档位选择器）",
+    navClicked.found === true && teamPanel.html.includes("示例成员") && teamPanel.selects >= 2, readings.teamPanel);
+  // 真指针点「添加」：填名字 → 点按钮 → 名单里多一个人
+  const typed = await tjs(`(() => {
+    const input = document.querySelector('.ss-input');
+    if (!input) return { ok: false };
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    setter.call(input, "新来的");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    return { ok: true, value: input.value };
+  })()`);
+  await pause(200);
+  const addClicked = await tjs(`(() => {
+    const btn = [...document.querySelectorAll('.mini-btn')].find((b) => (b.textContent || "").includes("添加"));
+    if (!btn) return { found: false };
+    btn.click();
+    return { found: true };
+  })()`);
+  await pause(700);
+  const afterAdd = await tjs(`(() => ({ rows: [...document.querySelectorAll('.ss-row')].map((r) => r.textContent || "") }))()`);
+  readings.teamPanel.add = { typed, addClicked, rows: afterAdd.rows.slice(0, 8) };
+  check("在面板里加一个人 ⇒ 名单真的多一行（写入口只有一条通道）",
+    addClicked.found === true && afterAdd.rows.some((r) => r.includes("新来的")), readings.teamPanel.add);
+  await shot(teamWin, "10-team-panel-1440x900");
+  teamWin.destroy();
+
+  // ⑫ 真落盘：主进程的团队存储在**真 Electron 进程里**跑一遍写→读→墓碑闭环。
+  // 这一段不走渲染层，判的是 `team-store`（IPC handler 背后唯一的那条路）。
+  const { appendTeamPatch, readTeamRoster, teamLogPath } = require(join(__dirname, "../src/main/team-store.ts"));
+  const { memberPatch } = require(join(repoRoot, "src/agent/team/members.ts"));
+  const teamDir = mkdtempSync(join(tmpdir(), "cairn-team-store-"));
+  const teamFile = teamLogPath(teamDir);
+  await appendTeamPatch(teamFile, memberPatch("m-real", { name: "真成员", role: "实现", tier: "guided" }));
+  const afterWrite = await readTeamRoster(teamFile, "guided");
+  await appendTeamPatch(teamFile, memberPatch("m-real", { removed: "1" }));
+  const afterRemove = await readTeamRoster(teamFile, "guided");
+  readings.teamStore = {
+    afterWrite: { members: afterWrite.members, records: afterWrite.records },
+    afterRemove: { members: afterRemove.members, records: afterRemove.records },
+  };
+  check("团队存储在真主进程里写→读→墓碑闭环（补丁条数只增不减）",
+    afterWrite.members.length === 1 && afterWrite.members[0].name === "真成员"
+      && afterRemove.members.length === 0 && afterRemove.records === 2, readings.teamStore);
+
+  // ⑬ 真·系统选文件对话框：真面板真的被调起，关窗即取消。
+  // 原生面板没法在自动化里点选（没有 API，也拿不到无障碍焦点），但「面板存在过」是可验的：
+  // 面板攥着 Promise，直到窗口关闭才结算 —— 若它根本没开，Promise 会**立刻**返回。
+  const pickWin = new BrowserWindow({ width: 520, height: 340, show: true });
+  await pickWin.loadURL("data:text/html,<p>wallpaper pick probe</p>");
+  const dialogOptions = wallpaperDialogOptions();
+  const pickStarted = Date.now();
+  const pickPromise = dialog.showOpenDialog(pickWin, {
+    title: dialogOptions.title,
+    properties: ["openFile"],
+    filters: dialogOptions.filters.map((f) => ({ name: f.name, extensions: [...f.extensions] })),
+  });
+  // 用 close() 而不是 destroy()：close 会走正常收起路径（sheet 随窗口一起消失），
+  // destroy 直接把窗口抽掉，附着的面板可能留在原地理都不理（实测：Promise 一直挂着）。
+  setTimeout(() => { try { pickWin.close(); } catch { /* 已销毁 */ } }, 1200);
+  const pickResult = await Promise.race([
+    pickPromise,
+    new Promise((resolve) => setTimeout(() => resolve({ timeout: true }), 8000)),
+  ]);
+  const pickElapsedMs = Date.now() - pickStarted;
+  readings.pickDialog = { result: pickResult, elapsedMs: pickElapsedMs, options: dialogOptions };
+  check("真·系统选文件对话框：真面板被调起（Promise 被面板攥住 ≥1s，关窗即结算）",
+    pickResult.timeout !== true && pickElapsedMs >= 1000 && Array.isArray(pickResult.filePaths),
+    readings.pickDialog);
+  check("面板参数与产品同一份（单选 openFile + 同一组扩展名）",
+    String(dialogOptions.title) === "选择壁纸"
+      && dialogOptions.properties.length === 1 && dialogOptions.properties[0] === "openFile"
+      && dialogOptions.filters[0].extensions.includes("png")
+      && dialogOptions.filters[0].extensions.includes("mp4"),
+    dialogOptions);
 
   writeFileSync(join(out, "checks.json"), JSON.stringify(checks, null, 2));
   writeFileSync(join(out, "readings.json"), JSON.stringify(readings, null, 2));

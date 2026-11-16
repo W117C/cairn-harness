@@ -18,7 +18,7 @@ import { clampTier } from "../worker-report";
 export const MEMBER_KEY_PREFIX = "member.";
 
 /** 档案字段白名单（多一个都要改这里，避免「随手加个键就成字段」）。 */
-export const MEMBER_FIELDS = ["name", "role", "model", "thinking", "workdir", "tier", "capabilities"] as const;
+export const MEMBER_FIELDS = ["name", "role", "model", "thinking", "workdir", "tier", "capabilities", "removed"] as const;
 export type MemberField = (typeof MEMBER_FIELDS)[number];
 
 export interface MemberProfile {
@@ -117,6 +117,10 @@ export function projectMembers(records: readonly MemberPatchRecord[], teamTier: 
         group.errors.push(`档位认不出：${JSON.stringify(raw)}（既有五档：${AGENT_PERMISSION_MODES.join(" / ")}）`);
         continue;
       }
+      if (field === "removed" && raw !== "0" && raw !== "1") {
+        group.errors.push(`removed 只收 "0" / "1"，实测 ${JSON.stringify(raw)}`);
+        continue;
+      }
       group.ops.push({ field: field as MemberField, raw });
     }
 
@@ -156,6 +160,8 @@ export function projectMembers(records: readonly MemberPatchRecord[], teamTier: 
   const members: MemberProfile[] = [];
   for (const entry of [...state.values()].sort((a, b) => a.order - b.order)) {
     const p = entry.profile;
+    // 墓碑：removed="1" 的成员不进名单（历史仍在补丁里，删掉也能重放出来）。
+    if ((p as Record<string, unknown>).removed === "1") continue;
     if (typeof p.name !== "string" || p.name === "" || typeof p.role !== "string" || p.role === "") {
       rejected.push({ at: entry.order, id: p.id, error: "档案不完整（name 与 role 都必须有值）" });
       continue;

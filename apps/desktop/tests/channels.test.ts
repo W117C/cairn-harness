@@ -10,10 +10,10 @@ import { INVOKE_CHANNELS, PUSH_CHANNELS, type PushChannel } from "../src/main/ch
 // 静态裁决。运行时用例只验推送三键与 invoke 表非空。
 
 describe("通道名表完整性", () => {
-  it("推送通道恰为九条且通道名非空", () => {
+  it("推送通道恰为十条且通道名非空", () => {
     // 2026-10-20：＋onMenu（原生菜单栏 → 渲染层命令分发，蓝本 §5.2 菜单树）。
     // 2026-10-25（v21）：＋onNotificationOpen（完成通知点击直达会话）。
-    expect(Object.keys(PUSH_CHANNELS).sort()).toEqual(["onAsk", "onAskDone", "onBrowserState", "onEvent", "onMenu", "onNotificationOpen", "onPreviewState", "onTerminalData", "onTerminalExit"]);
+    expect(Object.keys(PUSH_CHANNELS).sort()).toEqual(["onAsk", "onAskDone", "onBrowserState", "onEvent", "onMenu", "onNotificationOpen", "onPreviewState", "onTerminalData", "onTerminalExit", "onWallpaperSuspend"]);
     for (const channel of Object.values(PUSH_CHANNELS)) expect(channel).toBeTruthy();
   });
 
@@ -74,7 +74,8 @@ describe("通道名表完整性", () => {
     // 2026-11-05 「继续」：＋hooksUserConfig/hooksUserSave（用户级 hooks 管理面读写）⇒ 145。
     // v53：角色 4 项、迁移 2 项、闲时任务 3 项、后台命令 2 项。
     // v54：＋wallpaperPick（桌面端壁纸选文件；单选 + 扩展名过滤）。
-    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(157);
+    // v59：＋teamRoster / teamMemberSave（团队成员档案：名单投影 + 单一写入口）。
+    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(159);
     const keys = Object.keys(INVOKE_CHANNELS) as (keyof typeof INVOKE_CHANNELS)[];
     expect(keys.length).toBeGreaterThan(0);
     for (const key of keys) expect(INVOKE_CHANNELS[key]).toBeTruthy();
@@ -325,6 +326,8 @@ describe("通道名表完整性", () => {
       // 2026-11-14（设计规格 §3.3）：桌面端壁纸选文件——单选 + 扩展名过滤。
       // 必须接真：它是设置页「壁纸」行唯一的入口，落进 fail-loud 就等于用户点了没反应。
       "wallpaperPick",
+      "teamRoster",
+      "teamMemberSave",
     ];
     // ④ fail-loud 白名单（带理由的未接）：B3 修复后为空——39 条全部接真。要留白须在此
     //    逐条列名并注记理由，且 index.ts 的 UNWIRED_FAIL_LOUD 同步加键（下方断言钉死两者一致）。

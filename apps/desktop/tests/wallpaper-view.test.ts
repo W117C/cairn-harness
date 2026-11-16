@@ -45,10 +45,13 @@ describe("壁纸视图投影", () => {
     expect(wallpaperFailed()).toBe(false);
   });
 
-  it("暂停判据：失焦或不可见即停", () => {
+  it("暂停判据：失焦 / 不可见 / 系统休眠（锁屏）即停", () => {
     expect(shouldPauseMedia(true, true)).toBe(false);
     expect(shouldPauseMedia(false, true)).toBe(true);
     expect(shouldPauseMedia(true, false)).toBe(true);
     expect(shouldPauseMedia(false, false)).toBe(true);
+    // 锁屏：窗口既没失焦也没隐藏，只有系统级推送能抓到这一格
+    expect(shouldPauseMedia(true, true, true)).toBe(true);
+    expect(shouldPauseMedia(true, true, false)).toBe(false);
   });
 });
