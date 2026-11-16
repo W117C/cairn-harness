@@ -198,6 +198,8 @@ async function recallSection(args: {
   limit: number;
   nowISO: string;
   embedding?: { provider: EmbeddingProvider; signal?: AbortSignal };
+  /** 允许读的记忆作用域（ADR 0015 S1）。缺席 = 不过滤（老路径逐字不变）。 */
+  scopes?: readonly string[];
 }): Promise<{
   section: Section | null;
   picked: string[];
@@ -246,6 +248,7 @@ async function recallSection(args: {
     k: args.limit,
     nowISO: args.nowISO,
     ...(args.embedding ? { embedding: args.embedding } : {}),
+    ...(args.scopes === undefined ? {} : { scopes: args.scopes }),
   });
   const picks = outcome.picks;
   if (picks.length === 0) {

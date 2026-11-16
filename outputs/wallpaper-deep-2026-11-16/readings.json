@@ -205,7 +205,7 @@
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": false,
-    "t": 0.03,
+    "t": 0.02,
     "ready": 4,
     "duration": 2,
     "focused": true,
@@ -215,7 +215,7 @@
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": true,
-    "t": 0.31,
+    "t": 0.3,
     "ready": 4,
     "duration": 2,
     "focused": false,
@@ -289,7 +289,7 @@
       "rows": [
         "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
         "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-        "新来的成员 · mmwiqtg4hread-onlydefaultguidedautofull-accessteammemberproject移除",
+        "新来的成员 · mmwir0czeread-onlydefaultguidedautofull-accessteammemberproject移除",
         "本轮发言秩序主持优先按名单轮排一轮",
         "当前会话的段—开新段",
         "权限（成员维）团队档 default · 无裁剪",
@@ -306,7 +306,7 @@
       "rows": [
         "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
         "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-        "新来的成员 · mmwiqtg4hread-onlydefaultguidedautofull-accessteammemberproject移除",
+        "新来的成员 · mmwir0czeread-onlydefaultguidedautofull-accessteammemberproject移除",
         "本轮发言秩序主持优先按名单轮排一轮",
         "排出来的秩序1. 示例成员　2. 新来的",
         "当前会话的段—开新段",
@@ -356,7 +356,7 @@
       "canceled": false,
       "filePaths": []
     },
-    "elapsedMs": 2138,
+    "elapsedMs": 2450,
     "options": {
       "title": "选择壁纸",
       "properties": [

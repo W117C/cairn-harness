@@ -5,8 +5,10 @@
 //   ② 缺字段的 usage 事件不补零、不猜（只认数字）；
 //   ③ 记忆作用域三桶都给出来（空桶也要有，面板才知道「这一类没人」）；
 //   ④ 权限行把「请求档 / 生效档」并排，裁剪单独点名。
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { memoryScopes, permissionRows, usageAcrossSessions, usageByOwner } from "../src/agent/team/insights";
+import { TEAM_USAGE_SESSION_CAP, memoryScopes, permissionRows, usageAcrossSessions, usageByOwner } from "../src/agent/team/insights";
 import type { AgentEvent } from "../src/events";
 
 const usage = (agent_id: string | undefined, inputTokens: unknown, outputTokens: unknown): AgentEvent =>
@@ -47,6 +49,13 @@ describe("团队三维读数", () => {
     ]);
     // 空输入 ⇒ 空读数（不是 NaN）
     expect(usageAcrossSessions([])).toEqual({ byOwner: [], totalEvents: 0 });
+  });
+
+  it("用量口径是**可见的默认值**：主进程读同一个常量，不抄第二遍数字", () => {
+    expect(TEAM_USAGE_SESSION_CAP).toBe(10);
+    const source = readFileSync(fileURLToPath(new URL("../apps/desktop/src/main/index.ts", import.meta.url)), "utf8");
+    expect(source).toContain("TEAM_USAGE_SESSION_CAP");
+    expect(source).not.toMatch(/const USAGE_SESSION_CAP/);
   });
 
   it("记忆作用域：三桶都给出来，空桶也在", () => {

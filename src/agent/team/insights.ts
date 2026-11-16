@@ -63,6 +63,13 @@ export function usageByOwner(events: readonly AgentEvent[]): UsageInsight {
  * 拼接顺序由调用方给（按会话新旧），汇总本身的排序仍由 `usageByOwner` 决定（总量降序 + 字典序），
  * 所以「读了几份」不影响同名归属者的数值，只影响总量。
  */
+/**
+ * 「哪些会话算同一个团队」的**默认口径**：同一会话根下最近的 N 个会话。
+ * 这是一个**可见的默认值**，不是物理常量：业主改口径时只改这一处与台账，
+ * 主进程读的就是它（判卷钉住「主进程用的是这个数」）。
+ */
+export const TEAM_USAGE_SESSION_CAP = 10;
+
 export function usageAcrossSessions(logs: readonly (readonly AgentEvent[])[]): UsageInsight {
   return usageByOwner(logs.flat());
 }
