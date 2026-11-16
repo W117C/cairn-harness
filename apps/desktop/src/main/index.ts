@@ -4,7 +4,8 @@
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, Notification, powerSaveBlocker, protocol, safeStorage, screen, shell, webContents, type IpcMainInvokeEvent, type WebContents } from "electron";
 import { clampToWorkArea, readWindowState, writeWindowState } from "./window-state";
 import { bootBackgroundFor, normalizeThemePreference, resolveBootTheme, type ThemePreference } from "./boot-theme";
-import { bootBackgroundWithTint, wallpaperTintFor, type TintSource } from "./wallpaper-tint";
+import { parseBootWallpaper, bootBackgroundForWallpaper, createTintMemo, NO_WALLPAPER, type BootWallpaper } from "./boot-background";
+import type { TintSource } from "./wallpaper-tint";
 import { windowVibrancyOptions } from "./window-vibrancy";
 import { focusedWindowViewing, notificationClickWindow, runNotificationCopy, runNotificationTarget, shouldNotifyRunSettled } from "./run-notification";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -166,30 +167,18 @@ const readThemePreference = (): ThemePreference => {
     return "system";
   }
 };
-/** 首帧底色要看的那两个壁纸字段（`AppSettings.wallpaper` 的子集）。 */
-type BootWallpaper = { kind: "none" | "image" | "video"; path: string | null };
 /**
- * 壁纸的首帧底色（设计规格 §10「启动首帧」的 v1.1 项；规格 §11 表 3 已把「放 v1.1」定为默认裁决）。
- *
- * 图片壁纸取 1×1 平均色当 `BrowserWindow.backgroundColor` ⇒ 启动时先闪的是「壁纸的平均色调」，
- * 不再是「一块主题画布色」。视频不走近路（首帧像素要解码才拿得到，代价大于收益），一律回落画布色。
- * 读不出（文件没了 / 解码失败 / 几乎全透明）同等回落 —— 与今天的行为逐字节一致。
- * 换算与回落判据在 ./wallpaper-tint（纯函数，判卷不启动 Electron）。
+ * 首帧底色的**决策**在 `./boot-background`（纯函数，判卷不启动 Electron）；这里只把
+ * Electron 的真东西递进去：settings.json 的读盘、`nativeImage` 的解码、主题底色的算法。
  */
 const readWallpaperPreference = (): BootWallpaper => {
   try {
     const raw = JSON.parse(readFileSync(join(app.getPath("userData"), "settings.json"), "utf8")) as {
-      wallpaper?: { kind?: unknown; path?: unknown };
+      wallpaper?: unknown;
     };
-    const kind = raw.wallpaper?.kind;
-    const path = raw.wallpaper?.path;
-    // 与 settings.ts 的校验同口径：kind 从属 path，路径必须是绝对路径（相对路径没有解析基准）。
-    if ((kind === "image" || kind === "video") && typeof path === "string" && path !== "" && isAbsolute(path)) {
-      return { kind, path };
-    }
-    return { kind: "none", path: null };
+    return parseBootWallpaper(raw.wallpaper, isAbsolute);
   } catch {
-    return { kind: "none", path: null };
+    return NO_WALLPAPER;
   }
 };
 /**
@@ -203,16 +192,12 @@ const nativeImageOf = (path: string): TintSource | null => {
   return img.resize({ width: 1, height: 1, quality: "good" });
 };
 /** 同一张图在启动期只解码一次（主窗与弹窗创建各调一次 `bootBackground()`）。 */
-let bootTintMemo: { key: string; tint: string | null } | null = null;
+const tintMemo = createTintMemo();
 const bootBackground = (): string => {
   const themeBackground = bootBackgroundFor(resolveBootTheme(readThemePreference(), nativeTheme.shouldUseDarkColors));
   const wallpaper = readWallpaperPreference();
   if (wallpaper.kind !== "image") return themeBackground;
-  const key = wallpaper.path ?? "";
-  if (bootTintMemo === null || bootTintMemo.key !== key) {
-    bootTintMemo = { key, tint: wallpaperTintFor(wallpaper, nativeImageOf) };
-  }
-  return bootBackgroundWithTint(themeBackground, bootTintMemo.tint);
+  return tintMemo(wallpaper.path ?? "", () => bootBackgroundForWallpaper({ themeBackground, wallpaper, load: nativeImageOf }));
 };
 const readWindowVibrancyPreference = (): boolean => {
   try {

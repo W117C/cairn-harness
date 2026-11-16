@@ -182,6 +182,10 @@
     "missingTint": null,
     "fallback": "#1b1b1b"
   },
+  "bootBackground": {
+    "bootTint": "#7e457f",
+    "appliedBackground": "#7E457F"
+  },
   "light": {
     "theme": "light",
     "img": [
@@ -201,7 +205,7 @@
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": false,
-    "t": 0.05,
+    "t": 0.07,
     "ready": 4,
     "duration": 2,
     "focused": true,
@@ -211,7 +215,7 @@
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": true,
-    "t": 0.32,
+    "t": 0.34,
     "ready": 4,
     "duration": 2,
     "focused": false,
@@ -221,7 +225,7 @@
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": false,
-    "t": 0.32,
+    "t": 0.34,
     "ready": 4,
     "duration": 2,
     "focused": true,

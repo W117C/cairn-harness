@@ -25,6 +25,7 @@ const { handleWallpaperMedia, openWallpaperStream, registerWallpaperScheme, WALL
 const { CSP_CONTENT } = require(join(__dirname, "../src/main/csp.ts"));
 // 首帧底色（规格 §10 的 v1.1 项）：真 nativeImage 喂进去，判卷侧不复制它的解码逻辑。
 const { bootBackgroundWithTint, wallpaperTintFor } = require(join(__dirname, "../src/main/wallpaper-tint.ts"));
+const { bootBackgroundForWallpaper } = require(join(__dirname, "../src/main/boot-background.ts"));
 // 对比度模型（地板判据的唯一一份）：真机读到的地板要过模型的最差格。
 const { CONTRAST_TARGET, LIGHT_SPEC, DARK_SPEC, floorFor, worstContrast } =
   require(join(__dirname, "../src/renderer/derived/wallpaper-contrast.ts"));
@@ -423,6 +424,22 @@ async function main() {
   readings.tint = { imageTint, expect: expectTint, rgb: tintRgb, near: tintNear,
     videoTint, missingTint, fallback: bootBackgroundWithTint("#1b1b1b", missingTint) };
   check("图片壁纸的首帧底色＝真解码的平均色（与生成式均值差 ≤6/通道）", tintNear, readings.tint);
+  // ⑦b 真 Electron 认这个底色：同一份决策拼一个窗口，把窗口底色读回来。
+  // 只验纯函数是不够的——「算得出颜色」与「窗口真的铺这个颜色」是两件事。
+  const bootTint = bootBackgroundForWallpaper({
+    themeBackground: "#1b1b1b",
+    wallpaper: { kind: "image", path: wallpaperPath },
+    load: loadPortrait,
+  });
+  const bootProbeWin = new BrowserWindow({
+    show: false, width: 200, height: 120, backgroundColor: bootTint,
+  });
+  const appliedBackground = bootProbeWin.getBackgroundColor();
+  bootProbeWin.destroy();
+  readings.bootBackground = { bootTint, appliedBackground };
+  check("真 Electron 接受首帧底色（窗口底色读回＝平均色，不是主题底色）",
+    String(appliedBackground).toLowerCase() === String(imageTint).toLowerCase(), readings.bootBackground);
+
   check("视频壁纸与读不出的文件都不出色，回落主题底色",
     videoTint === null && missingTint === null && bootBackgroundWithTint("#1b1b1b", missingTint) === "#1b1b1b",
     { videoTint, missingTint });
