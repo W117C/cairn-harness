@@ -885,6 +885,7 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     const roster = await readTeamRoster(teamLogPath(app.getPath("userData")), settings.mode);
     const advanced = await advanceGroupRound({
       sessionsRoot: root, sessionId: id, memberIds: roster.members.map((m) => m.id),
+      members: roster.members.map((m) => ({ id: m.id, name: m.name })),
     });
     if (advanced.ok !== true || start !== true || advanced.speaker === undefined) return advanced;
     // 轮到谁，就把群里最后一句交给谁开跑（任务书＝群里最后一条 user_message；没有就不派）。

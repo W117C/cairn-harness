@@ -634,7 +634,7 @@ export interface AgentApi {
   teamSecretGrant(memberId: string, secret: string, allow: boolean): Promise<{ ok: boolean; error?: string }>;
   /** v65：群里推进一轮——轮次序号落群会话补丁，下一位发言者按名单轮转。
    *  v66：`start` 为真时顺带把「群里最后一句」当作任务书交给那位成员开跑。 */
-  teamGroupNext(sessionId: string, workspace?: string, start?: boolean): Promise<{ ok: boolean; round?: number; speaker?: string; sessionId?: string; error?: string }>;
+  teamGroupNext(sessionId: string, workspace?: string, start?: boolean): Promise<{ ok: boolean; round?: number; speaker?: string; speakers?: string[]; unknownMentions?: string[]; sessionId?: string; error?: string }>;
   /** v60：给会话开新段（段的第一个写入点：追加一条 `session_meta_update`，序数由日志算）。 */
   sessionSegmentOpen(sessionId?: string, workspace?: string): Promise<{ ok: boolean; segment?: number; error?: string }>;
   getState(): Promise<StateResponse>;

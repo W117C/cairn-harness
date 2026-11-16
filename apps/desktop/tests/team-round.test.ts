@@ -31,12 +31,12 @@ describe("群的一轮", () => {
     const { root: r, id } = await group();
     const members = ["m1", "m2", "m3"];
     expect(await advanceGroupRound({ sessionsRoot: r, sessionId: id, memberIds: members }, deps))
-      .toEqual({ ok: true, round: 1, speaker: "m1" });
+      .toMatchObject({ ok: true, round: 1, speaker: "m1", speakers: ["m1"] });
     expect(await advanceGroupRound({ sessionsRoot: r, sessionId: id, memberIds: members }, deps))
-      .toEqual({ ok: true, round: 2, speaker: "m2" });
+      .toMatchObject({ ok: true, round: 2, speaker: "m2", speakers: ["m2"] });
     await advanceGroupRound({ sessionsRoot: r, sessionId: id, memberIds: members }, deps);
     expect(await advanceGroupRound({ sessionsRoot: r, sessionId: id, memberIds: members }, deps))
-      .toEqual({ ok: true, round: 4, speaker: "m1" });
+      .toMatchObject({ ok: true, round: 4, speaker: "m1" });
   });
 
   it("轮次从日志读：重开同一份日志得同一个数", async () => {
@@ -46,6 +46,22 @@ describe("群的一轮", () => {
     expect(roundOf(events)).toBe(1);
     // 群标记还在（轮次没有把群身份覆盖掉）
     expect(await groupOfSession(r, id)).toEqual({ name: "攻坚" });
+  });
+
+  it("@ 路由优先：最后一句点了谁，这一轮就由谁（同时）说；没点 ⇒ 轮转", async () => {
+    const { root: r, id } = await group();
+    const members = [{ id: "m1", name: "阿岚" }, { id: "m2", name: "小北" }];
+    // 群里最后一句点了两个人 ⇒ 同一批（并行）
+    await createEventLog(pathOf(r, id)).append({ type: "user_message", content: "@小北 @阿岚 一起看下" } as AgentEvent);
+    const first = await advanceGroupRound({ sessionsRoot: r, sessionId: id, memberIds: ["m1", "m2"], members }, deps);
+    expect(first.speakers).toEqual(["m2", "m1"]);
+    expect(first.speaker).toBe("m2");
+    // 认不出的 @ 交回给 UI
+    await createEventLog(pathOf(r, id)).append({ type: "user_message", content: "@查无此人 你来" } as AgentEvent);
+    const second = await advanceGroupRound({ sessionsRoot: r, sessionId: id, memberIds: ["m1", "m2"], members }, deps);
+    expect(second.unknownMentions).toEqual(["查无此人"]);
+    // 没命中 ⇒ 回到轮转：这是第 2 轮 ⇒ 名单第 2 位
+    expect(second.speakers).toEqual(["m2"]);
   });
 
   it("空名单 / 全是非法 id ⇒ 拒", async () => {

@@ -1700,7 +1700,7 @@ stub.teamGroupNext = (sessionId, _workspace, start) => {
   groupRoundNo += 1;
   groupNexts.push({ sessionId, round: groupRoundNo, start: start === true });
   return Promise.resolve({
-    ok: true, round: groupRoundNo, speaker: "m-seed",
+    ok: true, round: groupRoundNo, speaker: "m-seed", speakers: ["m-seed"],
     ...(start === true ? { sessionId: "s-speak-" + String(groupRoundNo) } : {}),
   });
 };

@@ -7,6 +7,7 @@
 // 内部次序，那要等编排引擎把群会话当计划来跑，属下一批；本层只回答「下一位是谁、第几轮」。
 import { createEventLog, type AgentEvent } from "../../../../src/events";
 import { pathOf, readSessionEvents } from "../../../../src/main/sessions";
+import { parseMemberMentions, type MentionMember } from "../../../../src/agent/team/mentions";
 
 export const ROUND_KEY = "round";
 
@@ -14,8 +15,12 @@ export interface GroupRoundResult {
   ok: boolean;
   /** 这一轮的序号（1-based）。 */
   round?: number;
-  /** 下一位发言者（成员 id）。 */
+  /** 下一位发言者（成员 id）：没人被 @ 时按名单轮转。 */
   speaker?: string;
+  /** 这一轮的发言批（被 @ 的人**同时**说；没 @ 时只有一个人）。 */
+  speakers?: string[];
+  /** 认不出的 @ 片段（不猜、不吞，交回给 UI 说清）。 */
+  unknownMentions?: string[];
   error?: string;
 }
 
@@ -46,7 +51,13 @@ export function groupTaskOf(events: readonly AgentEvent[]): string | null {
 
 /** 下一轮：round+1，发言者按名单轮转（名单为空 ⇒ 拒）。 */
 export async function advanceGroupRound(
-  input: { sessionsRoot: string; sessionId: string; memberIds: readonly string[] },
+  input: {
+    sessionsRoot: string;
+    sessionId: string;
+    memberIds: readonly string[];
+    /** 成员名字表（给了才做 @ 路由；不给 ⇒ 纯轮转，老行为）。 */
+    members?: readonly MentionMember[];
+  },
   deps: {
     read: (root: string, id: string) => Promise<AgentEvent[]>;
     append: (path: string, event: AgentEvent) => Promise<void>;
@@ -58,7 +69,12 @@ export async function advanceGroupRound(
   const events = await deps.read(input.sessionsRoot, input.sessionId).catch(() => [] as AgentEvent[]);
   const current = roundOf(events);
   const next = current + 1;
-  const speaker = members[(next - 1) % members.length]!;
+  // @ 路由优先：群里最后一句点了谁，这一轮就由谁（同时）说；没点 ⇒ 按名单轮转。
+  const task = groupTaskOf(events);
+  const mentions = task === null || input.members === undefined ? { ids: [] as string[], unknown: [] as string[] } : parseMemberMentions(task, input.members);
+  const mentioned = mentions.ids.filter((id) => members.includes(id));
+  const speakers = mentioned.length > 0 ? mentioned : [members[(next - 1) % members.length]!];
+  const speaker = speakers[0]!;
   try {
     await deps.append(deps.pathOf(input.sessionsRoot, input.sessionId), {
       type: "session_meta_update",
@@ -67,5 +83,8 @@ export async function advanceGroupRound(
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
-  return { ok: true, round: next, speaker };
+  return {
+    ok: true, round: next, speaker, speakers,
+    ...(mentions.unknown.length === 0 ? {} : { unknownMentions: mentions.unknown }),
+  };
 }

@@ -70,6 +70,17 @@
       ]
     },
     {
+      "id": "bot.mention-routing",
+      "capability": "群里的 @ 路由（点名并行）",
+      "reference": "mentionSpans + 名字长者优先",
+      "ours": "parseMemberMentions（整名匹配/长者优先/认不出进 unknown）+ 群轮次按被点名人成批",
+      "status": "covered",
+      "evidence": [
+        "tests/team-mentions.test.ts",
+        "apps/desktop/tests/team-round.test.ts"
+      ]
+    },
+    {
       "id": "bot.usage-by-member",
       "capability": "用量按成员归集",
       "reference": "按 bot 三视角",
@@ -107,7 +118,7 @@
       "id": "bot.group-chat",
       "capability": "群聊共享流与轮次",
       "reference": "room + round + 共享日志",
-      "ours": "群会话（group=1）+ 共享流（会话自身事件流）+ 轮次 + 轮到谁就交给谁开跑（@ 路由仍未做，另案）",
+      "ours": "群会话（group=1）+ 共享流 + 轮次（@ 命中即并行批，否则轮转）+ 轮到谁就交给谁开跑",
       "status": "covered",
       "evidence": [
         "apps/desktop/tests/team-group.test.ts",
@@ -214,5 +225,5 @@
       "evidence": []
     }
   ],
-  "thresholdNote": "目标 0.95；现读 0.917（无 absent；面板族/密钥注入/原生点选/群 @ 路由仍 partial）。棘轮：只准上调。"
+  "thresholdNote": "目标 0.95；现读 0.921（无 absent；密钥注入/脱敏、面板族、原生点选仍 partial）。棘轮：只准上调。"
 }
