@@ -1,8 +1,8 @@
 # Cairn / DSH —— 现态
 
-rev: 9d6aaae6
+rev: 67cb76ae
 
-核对日期 2026-11-16（Asia/Shanghai）。`rev` 是代码笔基线（`9d6aaae6`，第 1266 页；协议 v65）；
+核对日期 2026-11-16（Asia/Shanghai）。`rev` 是代码笔基线（`67cb76ae`，第 1267 页；协议 v66）；
 更早四趟提交态 HEAD 认证见第 1239 / 1240 / 1242 / 1246 页。其余提交只追加台账与凭证，不改产品代码。分支与门禁状态见[仓库状态与分支](docs/REPOSITORY-STATUS.md)，
 历史证据见 `PROGRESS.md` 与 `outputs/`；可复跑的测量值见 `pnpm facts`。
 
