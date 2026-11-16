@@ -29,7 +29,12 @@ describe("消息过程摘要的真实状态", () => {
     // 只给一行人话；原文仍可达——悬停提示（title）里给截断版。
     expect(html).toContain("read_file 调用失败");
     expect(html).toContain("原始报错：Permission denied: src/example.ts");
-    expect(html).toMatch(/class="tool-group-body" hidden=""/);
+    // 2026-11-17：折叠体改 Grid 0fr→1fr 折叠过渡（与思考体同一套手感），hidden 属性换成
+    // aria-hidden + CSS visibility 延迟（收起动画结束后正文按钮不再被 Tab 到）。
+    expect(html).toMatch(/class="tool-group-body" aria-hidden="true"/);
+    const css = readFileSync(new URL("../src/renderer/styles.css", import.meta.url), "utf8");
+    expect(css).toMatch(/\.tool-group-body\s*\{[^}]*grid-template-rows:\s*0fr/s);
+    expect(css).toMatch(/\.tool-group-body\s*\{[^}]*visibility:\s*hidden/s);
   });
 
   it("历史思考只显示记录，不凭挂载时间生成 0s 耗时或完成状态", () => {

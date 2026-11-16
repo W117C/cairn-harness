@@ -113,10 +113,10 @@
 }
 .toolcluster .tool-group-toggle + .tool-group-body {
   margin: 2px 0 4px 13px;
+}
+.toolcluster .tool-group-toggle + .tool-group-body > .tool-group-body-inner {
   padding-left: 12px;
   border-left: 1px solid var(--hairline);
-  max-height: none;
-  overflow: visible;
 }
 .toolcluster .tool-head {
   min-height: 32px;

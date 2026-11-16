@@ -1,9 +1,13 @@
-import { useEffect, useRef, type HTMLAttributes, type RefObject } from "react";
+import { useEffect, useRef, useState, type HTMLAttributes, type RefObject } from "react";
+import { appMotionReduced } from "../state/motion-pref";
 
 const FOCUSABLE_SELECTOR =
   "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [contenteditable='true'], [tabindex]:not([tabindex='-1'])";
 
 const MODAL_STACK: HTMLElement[] = [];
+
+/** 消失过渡时长：与进场（scrim-in --t-fast / panel-in --t-med）对称的一拍，收场不硬切。 */
+const EXIT_MS = 150;
 
 interface HiddenState {
   el: HTMLElement;
@@ -60,6 +64,27 @@ export function ModalSurface(props: ModalSurfaceProps): React.JSX.Element {
   escapeRef.current = onEscapeKeyDown;
   initialRef.current = initialFocusRef;
   returnRef.current = returnFocusRef;
+  // 消失过渡（对标 Claude/Codex 的收场拍）：关闭请求先落 data-closing 播退场，过渡完再真卸载。
+  // reduced-motion 直接关（不装模）；收场期间的重复请求幂等忽略。
+  const [closing, setClosing] = useState(false);
+  const closingRef = useRef(false);
+  const requestClose = (close: () => void): void => {
+    if (closingRef.current) return;
+    if (appMotionReduced()) { close(); return; }
+    closingRef.current = true;
+    setClosing(true);
+    window.setTimeout(() => { closingRef.current = false; close(); }, EXIT_MS);
+  };
+
+  useEffect(() => {
+    if (!closing) return;
+    const surface = surfaceRef.current;
+    if (surface !== null) {
+      surface.setAttribute("data-closing", "true");
+      // backdrop 族（modal-backdrop/sheet 外包一层）的遮罩层在父级：一并标记，遮罩与卡同拍淡出。
+      surface.parentElement?.setAttribute("data-closing", "true");
+    }
+  }, [closing]);
 
   useEffect(() => {
     const surface = surfaceRef.current;
@@ -78,7 +103,7 @@ export function ModalSurface(props: ModalSurfaceProps): React.JSX.Element {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
-        if (!canceled) closeRef.current();
+        if (!canceled) requestClose(() => closeRef.current());
         return;
       }
       if (e.key !== "Tab") return;

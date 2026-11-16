@@ -50,15 +50,17 @@ describe("③ 工具卡折叠行：图标 + 摘要 + 耗时（有 then 显示）
     expect(formatDuration(120000)).toBe("2m");
   });
 
-  it("tool_result 收口 ⇒ 折叠行渲染耗时；未收口（无 then）不渲染耗时", () => {
+  it("tool_result 收口 ⇒ 折叠行渲染耗时真值；执行中 ⇒ 实时已运行位（不摆假精度、不造假真值）", () => {
     const withPending = [
       ...events,
       { type: "tool_call", id: "t2", name: "read_file", args: { path: "a.ts" }, ts: 4000 },
     ] as unknown as AgentEvent[];
     const html = renderToStaticMarkup(<Stream rows={projectStream(withPending)} />);
-    // 仅 t1 有 then（3300-2100=1.2s）；t2 pending 无耗时
-    expect(html.match(/class="tdur"/g)?.length).toBe(1);
+    // t1 收口给真值（3300-2100=1.2s）；t2 执行中给实时已运行位（此前 pending 无任何耗时位，
+    // 等待 30s 与等待 3s 观感一样；Codex/Claude 同款运行中计时）。
+    expect(html.match(/class="tdur"/g)?.length).toBe(2);
     expect(html).toContain(">1.2s<");
+    expect(html).toContain("进行中，已运行");
     // 状态符与摘要仍在（折叠行三件套不丢）。但**实现名不再上屏**（2026-10-31 R1：
     // 有中文动词的行只说人话——`run_shell` 紧跟「运行 ls」是把一件事说两遍）。
     expect(html).not.toContain("run_shell");

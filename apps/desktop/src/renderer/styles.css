@@ -811,11 +811,12 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 .chev { color: hsl(var(--text-400)); transition: transform var(--t-fast); flex: none; }
 .tool.open .chev { transform: rotate(90deg); }
 .glyph { display: inline-flex; flex: none; align-items: center; justify-content: center; }
-/* 三态字形（brief §二.4）：成功灰勾 / 运行中性旋转 / 失败琥珀叹号——大红叉与彩对勾下架。 */
+/* 三态字形（brief §二.4）：成功灰勾 / 运行逐格点亮 / 失败琥珀叹号——大红叉与彩对勾下架。
+   执行中字形是 CairnLoader（图形不转、7 格逐格点亮），此前的 svg 自旋规则已删：
+   Loader2 换 CairnLoader 后 spin 没撤，运行中字形一边自转一边逐格点亮，两套动效打架。 */
 .glyph.ok { color: hsl(var(--text-400)); }
 .glyph.failed { color: hsl(var(--color-risk)); }
 .glyph.pending { color: hsl(var(--text-400)); }
-.glyph.pending svg { animation: spin var(--t-spin); }
 /* 层级：工具名 = 标签档（mono，但它是个标识符）；摘要 = 正文档（**正文字体**，不再整段 mono）；
    耗时 = 元数据档。摘要不再 flex:1 ⇒ 耗时紧跟其后，不被推到最右。 */
 .tname { font-family: var(--mono); font-size: var(--fs-caption-sm); color: hsl(var(--text-400)); flex: none; }
@@ -841,7 +842,19 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 .row.think { position: relative; margin: 2px 0; margin-right: var(--cds-assistant-message-text-stop); padding: 3px 5px 3px 0; border-radius: var(--radius-sm); cursor: pointer; }
 /* 推理氛围光（2026-10-31，移植自 open-claude-ui `ReasoningAmbientGlow`）。
    只取光场物理：运行中的思考行背后一层陶土径向光，2.8s 呼吸；不换 Cairn 逐格加载标，
-   也不改 Normal 档默认折叠的既有裁决。光层不接指针，内容层压在它上面。 */
+   也不改 Normal 档默认折叠的既有裁决。光层不接指针，内容层压在它上面。
+   基础规则留一枚 opacity:0 的光层（不 anim）：运行中升到 1，停转经 --t-med 淡出——
+   此前 running 声明只在 data-running 下存在，收束那一刻光、字、计时同帧硬切。 */
+.row.think::before {
+  content: "";
+  position: absolute;
+  inset: -3px -6px;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: var(--radius-md);
+  opacity: 0;
+  transition: opacity var(--t-med);
+}
 .row.think[data-running="true"]::before {
   content: "";
   position: absolute;
@@ -856,6 +869,7 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
     radial-gradient(42% 120% at 10% 50%, hsl(var(--text-000) / 6%), transparent 72%),
     radial-gradient(48% 110% at 62% 45%, hsl(var(--text-000) / 3.5%), transparent 78%);
   filter: blur(7px);
+  opacity: 1;
   animation: think-glow-breathe var(--t-think-glow) infinite;
 }
 .row.think > * { position: relative; z-index: 1; }
@@ -1732,6 +1746,10 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 /* 向上开的浮层（composer 贴窗底，菜单只能向上开）：从下往上浮，与下落方向相反才自然。
    此前 up/down 共用 fade-in，方向感丢失——上下弹出的菜单看起来一模一样。 */
 .pop.up.show { animation-name: pop-in-up; }
+/* 生长原点跟锚走：向下开的从触发器缘（top left）长出，向上开的从底缘（bottom left）长出。
+   此前无人认领 transform-origin，scale 以盒中心为原点，锚定菜单从「肚子中间」长出来。 */
+.pop.down { transform-origin: top left; }
+.pop.up { transform-origin: bottom left; }
 .pop-label { padding: 2px var(--space-sm) 5px; font-size: var(--fs-caption-xs); color: hsl(var(--text-400)); font-weight: var(--fw-bold); }
 .menu-item {
   display: flex; align-items: center; gap: var(--space-xs); width: 100%;
@@ -2596,7 +2614,9 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 
 /* 自定义接口的模型选择弹窗（2026-11-04 业主裁：对齐开源 ZCode 设置面的模型行语言 ——
    Switch 开关 + mono 名 + 描边徽标（窗口/价/思考），元数据长串收进行 title。 */
-.cp-overlay { position: fixed; inset: 0; z-index: 90; background: var(--scrim); display: flex; align-items: center; justify-content: center; animation: scrim-in var(--t-med); }
+/* 模型选择浮窗（供应商表单内的二级模态）：90 掉在菜单层，被 sheet/confirm/modal 全族压住；
+   提到 135——高于 modal-backdrop(130)，低于灯箱(140)。 */
+.cp-overlay { position: fixed; inset: 0; z-index: 135; background: var(--scrim); display: flex; align-items: center; justify-content: center; animation: scrim-in var(--t-med); }
 .cp-modal {
   width: min(560px, 90vw); max-height: 70vh; display: flex; flex-direction: column;
   background: hsl(var(--bg-000)); border: 1px solid var(--hairline-strong);
@@ -2744,6 +2764,16 @@ body[data-dsh-claude-style] .md-body .md-code pre { font-size: var(--fs-code); l
 .img-lightbox {
   position: fixed; inset: 0; z-index: 140;
   background: var(--lightbox-scrim); color: hsl(var(--fg-on-accent));
+  animation: scrim-in var(--t-med);
+}
+/* 缩放/平移插值（此前 transform 直接写值，1x↔2x 与 wheel 缩放瞬时跳变）：
+   拖拽时不插值（跟手优先，插值反而拖泥带水）；reduced-motion 全局块压到 0.01ms。 */
+.il-img {
+  max-width: calc(100vw - 80px); max-height: calc(100vh - 120px);
+  object-fit: contain; user-select: none; -webkit-user-drag: none; will-change: transform;
+}
+.il-viewport:not([data-dragging="true"]) .il-img {
+  transition: transform var(--t-fast);
 }
 .il-shell { display: flex; flex-direction: column; width: 100%; height: 100%; }
 .il-bar { display: flex; align-items: center; gap: 6px; flex: none; padding: 10px 14px; }
@@ -2773,10 +2803,6 @@ body[data-dsh-claude-style] .md-body .md-code pre { font-size: var(--fs-code); l
 }
 .il-viewport[data-zoomed="true"] { cursor: grab; }
 .il-viewport[data-dragging="true"] { cursor: grabbing; }
-.il-img {
-  max-width: calc(100vw - 80px); max-height: calc(100vh - 120px);
-  object-fit: contain; user-select: none; -webkit-user-drag: none; will-change: transform;
-}
 .il-hint {
   position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
   font-size: var(--fs-caption-2xs); color: hsl(var(--fg-on-accent) / 42%);
@@ -2926,7 +2952,6 @@ body[data-dsh-claude-style] .md-body .md-code pre { font-size: var(--fs-code); l
 .pane-card { border: 1px solid var(--hairline-strong); border-radius: var(--radius-lg); background: hsl(var(--bg-000)); overflow: hidden; }
 .wk-actions { display: flex; gap: var(--space-xs); padding-top: var(--space-xs); }
 .diff-patch { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 62vh; overflow: auto; margin: 0; padding: var(--space-sm) var(--space-md); font-family: var(--mono); font-size: var(--fs-caption-xs); line-height: 1.55; background: hsl(var(--bg-000)); }
-.diff-modal { max-width: 880px; }
 .diff-modal-head { padding: var(--space-sm) var(--space-md); font-weight: var(--fw-bold); border-bottom: 1px solid var(--hairline); }
 .pane-card-head { display: flex; align-items: center; gap: var(--space-xs); padding: var(--space-sm) var(--space-md); border-bottom: 1px solid var(--hairline); min-width: 0; }
 .pc-title { font-size: var(--fs-body-sm); font-weight: var(--fw-bold); flex: none; }
@@ -3312,7 +3337,7 @@ body[data-dsh-claude-style] .md-body .md-code pre { font-size: var(--fs-code); l
    会话切换时整屏一起淡入，比硬切更像 Claude。--t-fast 在 reduced-motion 下被压成 0.01ms。 */
 @keyframes row-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
 @keyframes gate-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-.row.user, .row.assistant, .row.error-row, .toolcluster { animation: row-in var(--t-fast); }
+.row.user, .row.assistant, .row.error-row, .toolcluster, .row.tool { animation: row-in var(--t-fast); }
 /* 等待占位入场（2026-11-08 第 1046 页，对标 Claude 桌面 `cds-placeholder-reveal 150ms ease-out`）：
    等待行原先只继承 row-in（140ms + 3px 抬升），与「模型还没开始说」的静默感不符；
    单独一档 150ms + 2px 微抬，只动 opacity/transform（不推布局、不占滚动）。
@@ -3377,7 +3402,6 @@ body[data-dsh-claude-style] .md-body .md-code pre { font-size: var(--fs-code); l
   }
   .dot.running, .dot.waiting::after, .cursor { animation: none; }
   .cairn-loader path { animation: none; opacity: 1; }  /* 逐格加载标停格为全色（启动屏同款纪律） */
-  .glyph.pending svg { animation: none; }
   .row.think[data-running="true"]::before { animation: none; opacity: .6; transform: none; }
   .side-skeleton-row::after { animation: none; transform: translateX(100%); }
   /* P3-1 生成中细条：静态实色（不做跑马灯） */
@@ -3406,8 +3430,7 @@ body[data-dsh-claude-style] .md-body .md-code pre { font-size: var(--fs-code); l
 [data-reduce-motion="true"] .mp-name,
 [data-reduce-motion="true"] .dot.running,
 [data-reduce-motion="true"] .dot.waiting::after,
-[data-reduce-motion="true"] .cursor,
-[data-reduce-motion="true"] .glyph.pending svg {
+[data-reduce-motion="true"] .cursor {
   animation: none;
 }
 [data-reduce-motion="true"] .cairn-loader path { animation: none; opacity: 1; }
@@ -3688,8 +3711,42 @@ body[data-dsh-claude-style] .md-body .md-code pre { font-size: var(--fs-code); l
   border-radius: var(--radius-composer); box-shadow: var(--shadow-pop);
   animation: panel-in var(--t-slow);
 }
+/* 改动预览模态（worktree 窗格「查看改动」）：套标准 modal-card 形制（居中 + 遮罩 + 进出场），
+   宽度放宽到 patch 需要的档位（变体规则放基规则之后——motion-gaps 判卷按「首个含类名的规则」取规则）。 */
+.modal-card.diff-modal { width: min(880px, calc(100vw - 72px)); }
+
+/* 消失过渡（与进场同拍对称；ModalSurface 关闭先落 data-closing，150ms 退场再卸载）：
+   surface 即 scrim 的族（confirm/sheet/lightbox）标记落在自身；backdrop 族（外包一层
+   .modal-backdrop）由 ModalSurface 同步父级标记，遮罩与卡同拍淡出。
+   transition 从当前帧滑向 0，无需 keyframes；reduced-motion 全局块压到 0.01ms（瞬时关闭）。 */
+.confirm-scrim[data-closing="true"],
+.sheet-scrim[data-closing="true"],
+.modal-backdrop[data-closing="true"],
+.img-lightbox[data-closing="true"],
+.confirm-scrim[data-closing="true"] > .confirm-card,
+.sheet-scrim[data-closing="true"] > .sheet,
+.modal-backdrop[data-closing="true"] > .modal-card,
+.img-lightbox[data-closing="true"] > .il-shell {
+  opacity: 0;
+  transition: opacity var(--t-fast), transform var(--t-fast);
+}
+.confirm-scrim[data-closing="true"] > .confirm-card,
+.sheet-scrim[data-closing="true"] > .sheet,
+.modal-backdrop[data-closing="true"] > .modal-card,
+.img-lightbox[data-closing="true"] > .il-shell {
+  transform: translateY(4px) scale(0.992);
+}
 .modal-wide { width: min(600px, calc(100vw - 72px)); }
-.modal-head { display: flex; align-items: center; justify-content: space-between; font-size: var(--fs-heading-md); font-weight: var(--fw-bold); }
+.modal-head {
+  /* 长内容滚动时标题被卷走（.sheet-head 已 sticky，两族不一致）：sticky 贴 scrollport 顶，
+     负外距拉通全卡宽 + 自带 padding 与底边发丝线，滚动内容从它背后走过。 */
+  position: sticky; top: 0; z-index: 1;
+  margin: calc(-1 * var(--space-lg)) calc(-1 * var(--space-lg)) 0;
+  padding: 0 var(--space-lg) var(--space-sm);
+  border-bottom: 1px solid var(--hairline);
+  background: hsl(var(--bg-000));
+  display: flex; align-items: center; justify-content: space-between; font-size: var(--fs-heading-md); font-weight: var(--fw-bold);
+}
 .modal-field { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-caption-sm); color: hsl(var(--text-200)); }
 .modal-row { display: flex; align-items: center; gap: 6px; }
 .modal-path {
@@ -3761,9 +3818,30 @@ body[data-dsh-claude-style] .md-body .md-code pre { font-size: var(--fs-code); l
   /* 两行截断住这一层：无 padding 的纯文字盒，clamp 才不会漏行（2026-11-01 真机订正）。 */
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
 }
-.tool-group-body { display: flex; flex-direction: column; gap: 6px; }
-.tool-group-body[hidden] { display: none; }
-.tool-group-toggle + .tool-group-body { margin: 4px 0 6px 14px; max-height: min(400px, 50vh); overflow: auto; }
+/* 折叠体 = Grid 0fr→1fr（与 .think-body 同一套手感）：此前 hidden 属性硬切，点「N 次工具调用」
+   整簇瞬间弹出/消失。visibility 的 0s 延迟只为收起动画期间保留可访问树，收起结束后不可聚焦
+   （正文里的工具行不再被 Tab 到）；aria-hidden 由 Stream.tsx 同步落。 */
+.tool-group-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+  transition: grid-template-rows var(--t-think-expand) var(--ease-out), opacity var(--t-fast), visibility 0s var(--ease-linear) var(--t-think-expand);
+}
+.tool-group-body > .tool-group-body-inner {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.toolcluster[data-open="true"] .tool-group-body {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+  transition: grid-template-rows var(--t-think-expand) var(--ease-out), opacity var(--t-fast), visibility 0s;
+}
+.tool-group-toggle + .tool-group-body { margin: 4px 0 6px 14px; }
 .tool-body > .kv + .kv { margin-top: 10px; }
 /* 失败工具的**输出正文**同样降到正文色（失败标记是那一行的红三角 + 折叠摘要，不靠正文喊）。 */
 .tool-output[data-failed="true"] pre { color: hsl(var(--text-200)); }

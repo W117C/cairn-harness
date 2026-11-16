@@ -734,11 +734,13 @@ const TasksPane = memo(function TasksPane(props: { events: readonly AgentEvent[]
       ))}
     </div>
     {diff !== null && (
-      <ModalSurface className="diff-modal" label={`${diff.agentId} 的改动`} onClose={() => setDiff(null)}>
-        <div className="diff-modal-head">{diff.agentId} · 改动</div>
-        {diff.hunks.length > 0 ? <DiffView hunks={diff.hunks} truncated={diff.truncated} /> : <pre className="diff-patch">{diff.text}</pre>}
-        {diff.truncated && <div className="diff-note">patch 超过 {String(200000)} 字符，预览已截断；完整内容请走变更窗格/命令行。</div>}
-      </ModalSurface>
+      <div className="modal-backdrop" role="presentation" onClick={(e) => { if (e.target === e.currentTarget) setDiff(null); }}>
+        <ModalSurface className="modal-card diff-modal" label={`${diff.agentId} 的改动`} onClose={() => setDiff(null)}>
+          <div className="modal-head"><span>{diff.agentId} · 改动</span></div>
+          {diff.hunks.length > 0 ? <DiffView hunks={diff.hunks} truncated={diff.truncated} /> : <pre className="diff-patch">{diff.text}</pre>}
+          {diff.truncated && <div className="diff-note">patch 超过 {String(200000)} 字符，预览已截断；完整内容请走变更窗格/命令行。</div>}
+        </ModalSurface>
+      </div>
     )}
     {ask !== null && (
       <ConfirmDialog

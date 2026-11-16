@@ -1,5 +1,6 @@
 import { BrainCircuit, ChevronRight, Copy } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { formatClock } from "../derived/format-duration";
 import { lastThinkingLine } from "../derived/thinking-line";
 import { Markdown } from "../markdown";
 import type { StreamActions } from "../stream-actions";
@@ -13,7 +14,9 @@ import { truncateSummary } from "./stream-model";
 function ThinkingTicker({ line }: { line: { key: string; text: string } }): React.JSX.Element {
   const ref = useRef<HTMLSpanElement | null>(null);
   const [overflowing, setOverflowing] = useState(false);
-  useEffect(() => {
+  // useLayoutEffect（此前 useEffect）：新行先以行头绘一帧再跳行尾的「闪一下再归位」，
+  // 改在绘制前定位一次；布局读到溢出即在首帧就位。
+  useLayoutEffect(() => {
     const el = ref.current;
     if (el === null) return;
     const measure = (): void => {
@@ -99,7 +102,7 @@ export function ThinkingLive(props: { seq: number; thinking?: string; running?: 
           <BrainCircuit className="think-icon" size={14} aria-hidden="true" />
           <span className="think-label">{running ? "思考中" : "思考记录"}</span>
           {running && <span className="think-live" aria-hidden="true"><CairnLoader /></span>}
-          {elapsed !== null && <span className="think-elapsed" role="timer" aria-label={`已思考 ${String(elapsed)} 秒`} title="本次在界面中观察到的时长，不代表完整思考耗时">{elapsed}s</span>}
+          {elapsed !== null && <span className="think-elapsed" role="timer" aria-label={`已思考 ${String(elapsed)} 秒`} title="本次在界面中观察到的时长，不代表完整思考耗时">{formatClock(elapsed)}</span>}
         </span>
         {!open && hasBody && (tickerLine !== null
           ? <ThinkingTicker line={tickerLine} />

@@ -121,7 +121,8 @@ describe("应用内减弱动效与系统偏好同语义（整域中和 + 可读�
       [`${APP} .gen-bar[data-running="true"]`, ["animation: none", "hsl(var(--accent-brand) / 40%)"]],
       [`${APP} .dot.running`, ["animation: none"]],
       [`${APP} .dot.waiting::after`, ["animation: none"]],
-      [`${APP} .glyph.pending svg`, ["animation: none"]],
+      // 2026-11-17：glyph.pending 的 svg 自旋规则已删（执行中字形 = CairnLoader 逐格点亮，
+      // 图形不转），app 内块里的对应例外随之退役——与系统块保持同一组例外。
       [`${APP} .row.think[data-running="true"]::before`, ["animation: none", "opacity: .6", "transform: none"]],
       [`${APP} .change-preview`, ["animation: none"]],
     ];

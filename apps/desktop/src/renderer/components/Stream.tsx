@@ -21,6 +21,7 @@ import { TOOL_VERBS, toolVerb } from "../derived/tool-verbs";
 import { toolFailureReasonOf, toolFailureSummary } from "../derived/tool-failure";
 import { collectToolClusterStats } from "../derived/tool-cluster-stats";
 import { isPlainShortOutput } from "../derived/tool-output";
+import { formatDuration } from "../derived/format-duration";
 import { finalAnswerIndex, summarizeProcess } from "../derived/process-fold";
 import { ProcessFold } from "./ProcessFold";
 import { STR } from "../strings";
@@ -77,18 +78,9 @@ function LiveRowTime({ ts }: { ts: number }) {
 
 // 词表本体在派生层（第 918 页）：时间线的步骤标签与这里共用同一份，见 `derived/tool-verbs.ts`。
 export { TOOL_VERBS, toolVerb };
-/** 工具耗时文本（P3-1 · 折叠行「图标 + 摘要 + 耗时 + 状态符」的耗时位）：
- *  <1s 毫秒 / <10s 一位小数秒 / <60s 整数秒 / 其余「XmYs」（秒为 0 省「s」）。负值/非数按 0。 */
-export function formatDuration(ms: number): string {
-  const v = Number.isFinite(ms) && ms > 0 ? ms : 0;
-  if (v < 1000) return `${String(Math.round(v))}ms`;
-  const s = v / 1000;
-  if (s < 10) return `${s.toFixed(1)}s`;
-  if (s < 60) return `${String(Math.round(s))}s`;
-  const m = Math.floor(s / 60);
-  const rs = Math.round(s - m * 60);
-  return rs === 0 ? `${String(m)}m` : `${String(m)}m${String(rs)}s`;
-}
+// 时长格式化下沉派生层（第 918 页同例）：ThinkingLive 与这里读同一份；组件层保留同名出口
+// 供既有判卷 import。思考计时用 formatClock（秒档起步），工具耗时用 formatDuration（毫秒档起步）。
+export { formatDuration } from "../derived/format-duration";
 
 /** 工具类型字形（2026-10-31，R1）：先认得出「在跑什么」，再看状态。
  *  认不出的工具给通用文件图标，不猜语义。 */
@@ -98,6 +90,19 @@ function ToolKindGlyph({ tool }: { tool: string }): React.JSX.Element {
   if (tool === "read_image") return <ImageIcon size={12} />;
   if (tool === "spawn_agent") return <GitBranch size={12} />;
   return <FileText size={12} />;
+}
+
+/** 执行中工具的实时耗时（对标 Claude/Codex 的运行中步骤计时）：pending 期间本地 1s 心跳，
+ *  按 call 侧 ts 算 live 值；tool_result 收口后由真值（then − ts）接管，同位无缝切换。
+ *  自带 interval 不走 useNow 共享钟——共享钟是 60s 一档，1s 档会卡在别人的档位上；
+ *  pending 行同时在跑的通常只有一把，本地心跳成本可忽略。 */
+function LiveToolDuration(props: { ts: number }): React.JSX.Element {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  return <span className="tdur" title={`进行中，已运行 ${formatDuration(Math.max(0, now - props.ts))}`}>{formatDuration(Math.max(0, now - props.ts))}</span>;
 }
 
 /** 工具状态机（2026-10-31 归一）：中断 > 执行中 > 失败 > 完成 > 未知。
@@ -164,9 +169,13 @@ const ToolRow = memo(function ToolRow(props: Extract<StreamRow, { kind: "tool" }
         {verb === null && <span className="tname">{r.tool}</span>}
         <span className="tsum">{verb !== null ? `${verb} ${r.summary}` : `· ${r.summary}`}</span>
         {state !== "done" && <span className="tool-status">{status}</span>}
-        {r.ts !== undefined && r.then !== undefined && Number.isFinite(r.ts) && Number.isFinite(r.then) && r.then >= r.ts && (
-          <span className="tdur">{formatDuration(r.then - r.ts)}</span>
-        )}
+        {/* 耗时位（P3-1）：收口后 = 真值（then−ts）；执行中 = 实时耗时（LiveToolDuration 心跳），
+            等待 30s 与等待 3s 观感分开，收口后被真值同位接管。 */}
+        {state === "pending" && r.ts !== undefined && Number.isFinite(r.ts)
+          ? <LiveToolDuration ts={r.ts} />
+          : (r.ts !== undefined && r.then !== undefined && Number.isFinite(r.ts) && Number.isFinite(r.then) && r.then >= r.ts && (
+            <span className="tdur">{formatDuration(r.then - r.ts)}</span>
+          ))}
         {/* 2026-10-17：工具行不再挂绝对时间戳。brief §二.4 的折叠行要素 = 图标 + 摘要 + 耗时 + 状态；
             同一行同时出现「5.9s」和「15 分钟前」两份时间，读起来是噪音（真机目验）。
             绝对时间仍可从时间线窗格/事件日志取得，不丢信息。 */}
@@ -304,11 +313,16 @@ const ToolCluster = memo(function ToolCluster(props: { rows: Extract<StreamRow, 
           ) : null}
         </button>
       )}
-      <div id={id} className="tool-group-body" hidden={!open}>
-        {props.rows.map((r) => <ToolRow key={r.seq} {...r}
-          {...(props.view !== undefined ? { view: props.view } : {})}
-          {...(props.onCopyText !== undefined ? { onCopyText: props.onCopyText } : {})}
-          {...(props.onOpenArtifact !== undefined ? { onOpenArtifact: props.onOpenArtifact } : {})} />)}
+      {/* 折叠体走 Grid 0fr→1fr 过渡（与 .think-body 同一套手感）：此前 hidden 属性硬切，
+          点「N 次工具调用」整簇瞬间弹出/消失，与思考行的平滑展开不同档。
+          aria-hidden + visibility 延迟收起后不可聚焦（正文按钮不再被 Tab 到）。 */}
+      <div id={id} className="tool-group-body" aria-hidden={!open}>
+        <div className="tool-group-body-inner">
+          {props.rows.map((r) => <ToolRow key={r.seq} {...r}
+            {...(props.view !== undefined ? { view: props.view } : {})}
+            {...(props.onCopyText !== undefined ? { onCopyText: props.onCopyText } : {})}
+            {...(props.onOpenArtifact !== undefined ? { onOpenArtifact: props.onOpenArtifact } : {})} />)}
+        </div>
       </div>
     </div>
   );

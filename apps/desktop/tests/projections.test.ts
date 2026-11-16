@@ -167,7 +167,7 @@ describe("投影 v2 补钉（钉死条款里任务书用例未直接覆盖的面
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ kind: "tool", tool: "read_file", pending: false, ok: false, ts: 111 });
   });
-  it("live 行归位到首 delta 的 seq；终稿到达后 live 行消失、终稿行按自身 seq 成行", () => {
+  it("live 行归位到首 delta 的 seq；终稿到达后 live 行消失、终稿行**继承桶的 seq**（不重挂、不跳位）", () => {
     const rows = projectStream([
       ev({ type: "assistant_delta", callId: "c1", text: "a" }),
       ev({ type: "tool_call", id: "t1", name: "run_shell", args: {} }),
@@ -181,8 +181,12 @@ describe("投影 v2 补钉（钉死条款里任务书用例未直接覆盖的面
       ev({ type: "tool_call", id: "t1", name: "run_shell", args: {} }),
       ev({ type: "assistant_message", content: "ab" }),
     ]);
-    expect(done.map((r) => r.kind)).toEqual(["tool", "assistant"]);
-    expect(done[1]).toMatchObject({ text: "ab", live: false });
+    // 终稿行继承被取代桶的首 delta seq：live 行 → 终稿行同键，DOM 节点不重建（row-in 与
+    // 逐词到达动画不重播），行序也稳定在流式开始的位置，不再跳到终稿事件之后。
+    expect(done.map((r) => r.kind)).toEqual(["assistant", "tool"]);
+    expect(done[0]).toMatchObject({ text: "ab", live: false, seq: 0 });
+    // eventId 仍是终稿事件自身的 1-based 行号（赞/踩与跳转锚不漂移）。
+    expect(done[0]).toMatchObject({ eventId: 3 });
   });
   it("phase 补钉：error 在尾=idle；delta 早于最后 tool_result 不判 thinking；pendingPlan", () => {
     expect(deriveRunPhase([ev({ type: "tool_call", id: "t", name: "x", args: {} }), ev({ type: "error", message: "e" })], false, false, false)).toBe("idle");

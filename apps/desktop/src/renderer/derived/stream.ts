@@ -186,14 +186,20 @@ export function projectStream(events: readonly AgentEvent[], running: boolean = 
       }
       case "assistant_message":
         // 终稿到达：AssistantMessageEvent 无 callId，无法按桶匹配 ⇒ 全部未结桶被终稿行取代
-        //（live=false），此后不再输出这些桶的 live 行。
+        //（live=false），此后不再输出这些桶的尾随 live 行。
         // 终稿到达：思考桶里的正文**挂到终稿行上再清**——这样输出结束后用户仍能看到那一轮想了什么
         //（清空后消失的话，"思考过程"只在流式那几秒可见，等于没展示）。
+        // 终稿行**继承被取代桶的首 delta seq**：live 行与终稿行同键，DOM 节点不重建 ⇒
+        // row-in 与逐词到达动画不重播（此前每收一段终稿，整段回复闪一次——第 1042 页
+        // 「一闪一闪」家族的残留：桶行 seq 与终稿 seq 不同，key 变 ⇒ 节点重建）。
+        // eventId 不动（锚= assistant_message 事件自身的 1-based 行号，赞/踩与跳转锚不漂移）；
+        // ts 同理取终稿事件的时间戳。
         const carriedThinking = [...thinkingBuckets.values()].join("") || undefined;
+        const bucketSeq = [...buckets.values()][0]?.seq ?? seq;
         buckets.clear();
         thinkingBuckets.clear();
         rows.push({
-          kind: "assistant", text: e.content, live: false, ts: e.ts, seq, eventId: seq + 1, round: rounds,
+          kind: "assistant", text: e.content, live: false, ts: e.ts, seq: bucketSeq, eventId: seq + 1, round: rounds,
           ...(carriedThinking !== undefined ? { thinking: carriedThinking } : {}),
         });
         break;

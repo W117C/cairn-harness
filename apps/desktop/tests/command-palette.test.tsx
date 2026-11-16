@@ -189,8 +189,8 @@ describe("⑤ 面板压层（真机遮挡缺陷的意图钉）", () => {
     expect(styles).toMatch(/\.cp-scrim\s*\{[^}]*z-index:\s*115/);
     expect(styles).toMatch(/\.cp-panel\s*\{[^}]*z-index:\s*116/);
   });
-  it("旧模型选择弹窗的 cp-overlay 保持 90（不被命令面板的压层拖走）", () => {
-    expect(styles).toMatch(/\.cp-overlay\s*\{[^}]*z-index:\s*90/);
+  it("旧模型选择弹窗的 cp-overlay 135：供应商表单内的二级模态不再掉进菜单层（高于 modal-backdrop 130、低于灯箱 140）", () => {
+    expect(styles).toMatch(/\.cp-overlay\s*\{[^}]*z-index:\s*135/);
   });
 });
 
