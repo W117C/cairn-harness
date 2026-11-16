@@ -75,7 +75,7 @@ describe("域不是名存实亡：每个域都有通道、都有说明", () => {
 });
 
 describe("各域的通道数被钉住（改归属是显式动作）", () => {
-  it("invoke 侧 164 条按 19 个域分布，计数如下", () => {
+  it("invoke 侧 165 条按 19 个域分布，计数如下", () => {
     const counts: Record<string, number> = {};
     for (const domain of Object.values(CHANNEL_DOMAINS)) {
       counts[domain] = (counts[domain] ?? 0) + 1;
@@ -99,7 +99,7 @@ describe("各域的通道数被钉住（改归属是显式动作）", () => {
       lsp: 1,
       sidechat: 4,
       feedback: 2,
-      team: 6,
+      team: 7,
     });
     expect(Object.values(counts).reduce((a, b) => a + b, 0)).toBe(invokeKeys.length);
   });

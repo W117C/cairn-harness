@@ -19,6 +19,7 @@ export function TeamPane(props: { initialRoster?: TeamRosterPayload; initialPlan
   // 群会话（v64）：建一条带 group=1 的会话；共享流是它自己的事件流。
   const [groupName, setGroupName] = useState("");
   const [groupCreated, setGroupCreated] = useState<string | null>(null);
+  const [groupRound, setGroupRound] = useState<{ round: number; speaker: string } | null>(null);
 
   const load = useCallback(async (): Promise<void> => {
     try {
@@ -43,6 +44,18 @@ export function TeamPane(props: { initialRoster?: TeamRosterPayload; initialPlan
       if (result.ok !== true) { setIssue(result.error ?? STR.team.writeFailed); return; }
       setGroupCreated(String(result.sessionId ?? ""));
       setGroupName("");
+      setIssue(null);
+    } catch (error) {
+      setIssue(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const nextRound = async (): Promise<void> => {
+    if (groupCreated === null) { setIssue(STR.team.groupNeed); return; }
+    try {
+      const result = await window.agent.teamGroupNext(groupCreated);
+      if (result.ok !== true) { setIssue(result.error ?? STR.team.writeFailed); return; }
+      setGroupRound({ round: Number(result.round ?? 0), speaker: String(result.speaker ?? "") });
       setIssue(null);
     } catch (error) {
       setIssue(error instanceof Error ? error.message : String(error));
@@ -126,6 +139,14 @@ export function TeamPane(props: { initialRoster?: TeamRosterPayload; initialPlan
         </button>
       </div>
       {groupCreated !== null && <div className="team-pane-hint">{`${STR.team.groupCreated}${groupCreated}`}</div>}
+      <div className="team-pane-group">
+        <button type="button" className="mini-btn" onClick={() => { void nextRound(); }}>
+          {STR.team.groupNext}
+        </button>
+        {groupRound !== null && (
+          <span className="ss-static">{`${STR.team.groupRound}${String(groupRound.round)} · ${groupRound.speaker}`}</span>
+        )}
+      </div>
 
       <div className="team-pane-dispatch">
         <input

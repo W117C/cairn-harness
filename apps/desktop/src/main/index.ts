@@ -13,6 +13,7 @@ import { listSessions, readSessionEvents } from "../../../../src/main/sessions";
 import { openSegmentForSession } from "./session-segments";
 import { defaultStartDeps, dispatchToMember, startToMember } from "./team-dispatch";
 import { createTeamGroup } from "./team-group";
+import { advanceGroupRound } from "./team-round";
 import { planRound } from "../../../../src/orchestration/speech";
 import { memberPatch } from "../../../../src/agent/team/members";
 import { TEAM_USAGE_SESSION_CAP, memoryScopes, permissionRows, usageAcrossSessions } from "../../../../src/agent/team/insights";
@@ -872,6 +873,18 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     const root = await explicitSessionsRoot(typeof workspace === "string" ? workspace : undefined);
     if (root === undefined) return { ok: false, error: "没有可用的会话根" };
     return await createTeamGroup({ sessionsRoot: root, ...(typeof name === "string" && name.trim() !== "" ? { name } : {}) });
+  },
+  // v65 群的一轮：轮次落群会话补丁，下一位按名单轮转（成员从团队日志读，空名单拒）。
+  teamGroupNext: async (sessionId, workspace) => {
+    const root = await explicitSessionsRoot(typeof workspace === "string" ? workspace : undefined);
+    if (root === undefined) return { ok: false, error: "没有可用的会话根" };
+    const id = typeof sessionId === "string" ? sessionId : "";
+    if (id === "") return { ok: false, error: "没有指定群会话" };
+    const settings = await getSettings();
+    const roster = await readTeamRoster(teamLogPath(app.getPath("userData")), settings.mode);
+    return await advanceGroupRound({
+      sessionsRoot: root, sessionId: id, memberIds: roster.members.map((m) => m.id),
+    });
   },
   // v60 一轮的发言秩序（发言权的第一个调用方）：名单从团队事件日志读，秩序由核心纯函数算。
   teamRoundPlan: async (raw) => {

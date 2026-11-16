@@ -892,6 +892,23 @@ async function main() {
     groupFlow.step === "done" && groupFlow.calls.length === 1
       && groupFlow.calls[0].name === "壁纸攻坚" && String(groupFlow.text).includes("s-group-1"),
     { step: groupFlow.step, calls: groupFlow.calls });
+  // ⑮e 群的一轮（v65）：点「下一轮」⇒ 真调到 teamGroupNext，面板显示第几轮 + 下一位。
+  const roundFlow = await pjs(`(async () => {
+    const btn = [...document.querySelectorAll('.mini-btn')].find((b) => (b.textContent || "").trim() === "下一轮");
+    if (!btn) return { step: "no-round-button" };
+    btn.click();
+    await new Promise((r) => setTimeout(r, 500));
+    return {
+      step: "done",
+      calls: window.__cairnGroupNexts ? window.__cairnGroupNexts() : [],
+      text: (document.querySelector('[data-team-pane="true"]') || {}).textContent || "",
+    };
+  })()`);
+  readings.teamPround = roundFlow;
+  check("「下一轮」真的调到 teamGroupNext，并画出轮次与发言人",
+    roundFlow.step === "done" && roundFlow.calls.length === 1
+      && String(roundFlow.text).includes("1") && String(roundFlow.text).includes("m-seed"),
+    { step: roundFlow.step, calls: roundFlow.calls });
   await shot(paneWin, "12-team-pane-1440x900");
   paneWin.destroy();
 

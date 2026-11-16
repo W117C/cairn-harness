@@ -151,8 +151,9 @@ export type { SearchProvider } from "../tools/web-search";
  *        任务书写成它的第一条 user_message；**不自动开跑**（按不按发送仍由人决定）。
  *  v63 = 派活并开跑（`teamMemberStart`）：同一条归属会话，交给正常 run 通道跑起来（不另写任务书，
  *        避免同一条任务写两遍）。
- *  v64 = 团队会话（`teamGroupCreate`）：建一条带 `group=1` 标记的会话；共享流就是它自己的事件流。 */
-export const IPC_PROTOCOL_VERSION = 64;
+ *  v64 = 团队会话（`teamGroupCreate`）：建一条带 `group=1` 标记的会话；共享流就是它自己的事件流。
+ *  v65 = 群的一轮（`teamGroupNext`）：轮次序号写进群会话补丁，下一位发言者按名单轮转。 */
+export const IPC_PROTOCOL_VERSION = 65;
 
 /** 团队名单（v59）：成员档案是投影，`records` 是补丁条数（面板据此说「有几条历史」）。 */
 export interface TeamRosterPayload {
@@ -624,6 +625,8 @@ export interface AgentApi {
   teamMemberStart(memberId: string, task: string, workspace?: string): Promise<{ ok: boolean; sessionId?: string; error?: string }>;
   /** v64：建一条团队会话（`group=1`）。共享流＝该会话自己的事件流；轮次仲裁尚未接。 */
   teamGroupCreate(name?: string, workspace?: string): Promise<{ ok: boolean; sessionId?: string; error?: string }>;
+  /** v65：群里推进一轮——轮次序号落群会话补丁，下一位发言者按名单轮转。 */
+  teamGroupNext(sessionId: string, workspace?: string): Promise<{ ok: boolean; round?: number; speaker?: string; error?: string }>;
   /** v60：给会话开新段（段的第一个写入点：追加一条 `session_meta_update`，序数由日志算）。 */
   sessionSegmentOpen(sessionId?: string, workspace?: string): Promise<{ ok: boolean; segment?: number; error?: string }>;
   getState(): Promise<StateResponse>;

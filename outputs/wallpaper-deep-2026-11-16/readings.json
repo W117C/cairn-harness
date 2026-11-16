@@ -205,7 +205,7 @@
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": false,
-    "t": 0.04,
+    "t": 0.03,
     "ready": 4,
     "duration": 2,
     "focused": true,
@@ -215,7 +215,7 @@
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": true,
-    "t": 0.32,
+    "t": 0.31,
     "ready": 4,
     "duration": 2,
     "focused": false,
@@ -225,7 +225,7 @@
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": false,
-    "t": 0.32,
+    "t": 0.31,
     "ready": 4,
     "duration": 2,
     "focused": true,
@@ -235,7 +235,7 @@
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": true,
-    "t": 0.32,
+    "t": 0.31,
     "ready": 4,
     "duration": 2,
     "focused": true,
@@ -245,7 +245,7 @@
     "has": true,
     "src": "cairn-wallpaper://media/current?v=0",
     "paused": false,
-    "t": 0.32,
+    "t": 0.31,
     "ready": 4,
     "duration": 2,
     "focused": true,
@@ -289,7 +289,7 @@
       "rows": [
         "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
         "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-        "新来的成员 · mmwisz49iread-onlydefaultguidedautofull-accessteammemberproject移除",
+        "新来的成员 · mmwit77p2read-onlydefaultguidedautofull-accessteammemberproject移除",
         "本轮发言秩序主持优先按名单轮排一轮",
         "当前会话的段—开新段",
         "权限（成员维）团队档 default · 无裁剪",
@@ -306,7 +306,7 @@
       "rows": [
         "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
         "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-        "新来的成员 · mmwisz49iread-onlydefaultguidedautofull-accessteammemberproject移除",
+        "新来的成员 · mmwit77p2read-onlydefaultguidedautofull-accessteammemberproject移除",
         "本轮发言秩序主持优先按名单轮排一轮",
         "排出来的秩序1. 示例成员　2. 新来的",
         "当前会话的段—开新段",
@@ -356,7 +356,7 @@
       "canceled": false,
       "filePaths": []
     },
-    "elapsedMs": 2157,
+    "elapsedMs": 2166,
     "options": {
       "title": "选择壁纸",
       "properties": [
@@ -403,7 +403,7 @@
     "paneState": {
       "found": true,
       "rows": 1,
-      "text": "团队成员1示例成员调研read-only派活排出来的秩序1. 示例成员新建群会话放进他的线程派活并开跑在 设置 › 团队 里管理",
+      "text": "团队成员1示例成员调研read-only派活排出来的秩序1. 示例成员新建群会话下一轮放进他的线程派活并开跑在 设置 › 团队 里管理",
       "plan": "排出来的秩序1. 示例成员"
     },
     "roundCalls": 1
@@ -416,7 +416,7 @@
         "task": "把对比度再量一遍"
       }
     ],
-    "text": "团队成员1示例成员调研read-only已选排出来的秩序1. 示例成员新建群会话放进他的线程派活并开跑已派给 m-seed · s-team-1在 设置 › 团队 里管理"
+    "text": "团队成员1示例成员调研read-only已选排出来的秩序1. 示例成员新建群会话下一轮放进他的线程派活并开跑已派给 m-seed · s-team-1在 设置 › 团队 里管理"
   },
   "teamStart": {
     "step": "done",
@@ -426,7 +426,7 @@
         "task": "开跑给我看"
       }
     ],
-    "text": "团队成员1示例成员调研read-only已选排出来的秩序1. 示例成员新建群会话放进他的线程派活并开跑已派给 m-seed · s-run-1在 设置 › 团队 里管理"
+    "text": "团队成员1示例成员调研read-only已选排出来的秩序1. 示例成员新建群会话下一轮放进他的线程派活并开跑已派给 m-seed · s-run-1在 设置 › 团队 里管理"
   },
   "teamGroup": {
     "step": "done",
@@ -435,6 +435,16 @@
         "name": "壁纸攻坚"
       }
     ],
-    "text": "团队成员1示例成员调研read-only已选排出来的秩序1. 示例成员新建群会话已建群会话 s-group-1放进他的线程派活并开跑已派给 m-seed · s-run-1在 设置 › 团队 里管理"
+    "text": "团队成员1示例成员调研read-only已选排出来的秩序1. 示例成员新建群会话已建群会话 s-group-1下一轮放进他的线程派活并开跑已派给 m-seed · s-run-1在 设置 › 团队 里管理"
+  },
+  "teamPround": {
+    "step": "done",
+    "calls": [
+      {
+        "sessionId": "s-group-1",
+        "round": 1
+      }
+    ],
+    "text": "团队成员1示例成员调研read-only已选排出来的秩序1. 示例成员新建群会话已建群会话 s-group-1下一轮第 N 轮发言：1 · m-seed放进他的线程派活并开跑已派给 m-seed · s-run-1在 设置 › 团队 里管理"
   }
 }

@@ -9,8 +9,8 @@ function repo(path: string): string {
 }
 
 describe("plugin marketplace end-to-end wiring", () => {
-  it("keeps protocol v64 and exposes the full marketplace API", () => {
-    expect(IPC_PROTOCOL_VERSION).toBe(64);
+  it("keeps protocol v65 and exposes the full marketplace API", () => {
+    expect(IPC_PROTOCOL_VERSION).toBe(65);
     for (const key of [
       "marketplaceCatalog",
       "marketplacePluginImport",
