@@ -9,6 +9,8 @@ import type { TintSource } from "./wallpaper-tint";
 import { installSuspendPause } from "./wallpaper-suspend";
 import { installActivePush, WALLPAPER_ACTIVE_CHANNEL } from "./wallpaper-active";
 import { installWallpaperRotation, resolveWeatherKind } from "./wallpaper-rotation";
+import { fetchWeather } from "./weather-http";
+import { readWeatherKey, saveWeatherKey } from "./weather-key";
 import { pickWallpaper } from "./wallpaper-pick";
 import { browseDirectory } from "./wallpaper-browse";
 import { pruneDisplays, wallpaperForDisplay } from "../../../../src/wallpaper/displays";
@@ -1160,6 +1162,25 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
       },
       validate: validateWallpaperFile,
     });
+  },
+  // v79 联网天气源（默认关）：只在 source=http 时被调用；key 走钥匙串。
+  wallpaperWeatherFetch: async () => {
+    try {
+      const s = await getSettings();
+      const url = s.wallpaper.rotation.weather.httpUrl;
+      if (url === null) return { ok: false, reason: "没填天气源 URL" };
+      const key = readWeatherKey({ file: join(app.getPath("userData"), "weather-key.bin"), safeStorage });
+      const r = await fetchWeather({ url, apiKey: key });
+      return { ok: true, ...r };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+  wallpaperWeatherSetKey: async (key) => {
+    return saveWeatherKey(
+      { file: join(app.getPath("userData"), "weather-key.bin"), safeStorage },
+      typeof key === "string" ? key : null,
+    );
   },
   // v78 天气来源：manual / file（外部 JSON）；读不到回落手动档并说明。
   wallpaperWeatherNow: async () => {

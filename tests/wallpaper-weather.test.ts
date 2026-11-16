@@ -1,6 +1,6 @@
 // 天气切换判卷：四档、没配不猜、读不出不换、代码映射。
 import { describe, expect, it } from "vitest";
-import { decideWeather, isWeatherKind, weatherFromCode, weatherFromText, WEATHER_KINDS } from "../src/wallpaper/weather";
+import { decideWeather, isWeatherKind, weatherFromCode, weatherFromPayload, weatherFromText, WEATHER_KINDS } from "../src/wallpaper/weather";
 
 describe("按天气切换", () => {
   it("四档固定；未知值不是 WeatherKind", () => {
@@ -42,5 +42,16 @@ describe("天气外部源（离线文件）", () => {
     expect(weatherFromText('{"kind":"hail"}')).toBeNull();
     expect(weatherFromText('"rain"')).toBeNull();
     expect(weatherFromText("{}")).toBeNull();
+  });
+});
+
+describe("联网源载荷（默认关）", () => {
+  it("OpenWeather 形状 / 简化形状都认；其它 ⇒ null", () => {
+    expect(weatherFromPayload({ weather: [{ id: 800 }] })).toBe("clear");
+    expect(weatherFromPayload({ weather: [{ id: "500" }] })).toBe("rain");
+    expect(weatherFromPayload({ kind: "snow" })).toBe("snow");
+    expect(weatherFromPayload({ weather: [] })).toBeNull();
+    expect(weatherFromPayload({ weather: [{ id: "x" }] })).toBeNull();
+    expect(weatherFromPayload(null)).toBeNull();
   });
 });

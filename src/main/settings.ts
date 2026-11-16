@@ -79,8 +79,10 @@ export interface WallpaperRotation {
   weather: {
     kind: "clear" | "clouds" | "rain" | "snow";
     paths: Partial<Record<"clear" | "clouds" | "rain" | "snow", string>>;
-    /** 天气来源：`manual`（面板选）或 `file`（外部写 JSON，我们只读）。 */
-    source: "manual" | "file";
+    /** 天气来源：`manual`（面板选）/ `file`（外部写 JSON）/ `http`（联网，需填 URL，默认关）。 */
+    source: "manual" | "file" | "http";
+    /** `source=http` 时的地址（key 不在这里，走钥匙串）。 */
+    httpUrl: string | null;
     /** `source=file` 时读哪个文件（绝对路径）。 */
     filePath: string | null;
   };
@@ -257,7 +259,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   wallpaper: {
     kind: "none", path: null, opacity: 1, scrim: 0.35, glassAlpha: 0.25, revision: 0,
     rotation: {
-      enabled: false, mode: "interval", weather: { kind: "clear", paths: {}, source: "manual", filePath: null },
+      enabled: false, mode: "interval", weather: { kind: "clear", paths: {}, source: "manual", filePath: null, httpUrl: null },
       latitude: 39.9042, longitude: 116.4074,
       dayPath: null, nightPath: null,
       everyMinutes: 60, paths: [], lastAt: 0,
@@ -351,7 +353,9 @@ function validateRotation(raw: unknown, fallback: WallpaperRotation): WallpaperR
     typeof v === "string" && v.trim() !== "" && v.length <= 4096 ? v : fb;
   const rawWeather = (r.weather ?? {}) as { kind?: unknown; paths?: Record<string, unknown>; source?: unknown; filePath?: unknown };
   const weatherKind = isWeatherKind(rawWeather.kind) ? rawWeather.kind : "clear";
-  const weatherSource = rawWeather.source === "file" ? "file" : "manual";
+  const weatherSource = rawWeather.source === "file" ? "file" : rawWeather.source === "http" ? "http" : "manual";
+  const rawUrl = (rawWeather as { httpUrl?: unknown }).httpUrl;
+  const httpUrl = typeof rawUrl === "string" && /^https?:\/\//i.test(rawUrl) && rawUrl.length <= 4096 ? rawUrl : null;
   const weatherFilePath = typeof rawWeather.filePath === "string" && rawWeather.filePath.trim() !== "" && rawWeather.filePath.length <= 4096
     ? rawWeather.filePath : null;
   const weatherPaths: Partial<Record<"clear" | "clouds" | "rain" | "snow", string>> = {};
@@ -361,7 +365,7 @@ function validateRotation(raw: unknown, fallback: WallpaperRotation): WallpaperR
   }
   return {
     enabled: r.enabled === true, mode,
-    weather: { kind: weatherKind, paths: weatherPaths, source: weatherSource, filePath: weatherFilePath },
+    weather: { kind: weatherKind, paths: weatherPaths, source: weatherSource, filePath: weatherFilePath, httpUrl },
     latitude, longitude,
     dayPath: pick(r.dayPath, fallback.dayPath),
     nightPath: pick(r.nightPath, fallback.nightPath),

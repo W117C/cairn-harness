@@ -172,8 +172,10 @@ export type { SearchProvider } from "../tools/web-search";
  *  v77 = 多显示器壁纸：`wallpaperDisplays` 读每块屏解析结果与孤儿键；`wallpaperSetForDisplay` 把
  *        当前壁纸设为某块屏专属。
  *  v78 = 天气来源可插拔：`wallpaperWeatherNow` 返回当前解析出的天气（manual / file），
- *        file 源读外部 JSON（读不到回落手动档并说明）。 */
-export const IPC_PROTOCOL_VERSION = 78;
+ *        file 源读外部 JSON（读不到回落手动档并说明）。
+ *  v79 = 联网天气源（默认关）：`wallpaperWeatherFetch` 按设置里的 URL 取一次并解析；
+ *        `wallpaperWeatherSetKey` 把 key 交给钥匙串（不明文落盘）。 */
+export const IPC_PROTOCOL_VERSION = 79;
 
 /** 团队名单（v59）：成员档案是投影，`records` 是补丁条数（面板据此说「有几条历史」）。 */
 export interface TeamRosterPayload {
@@ -891,6 +893,10 @@ export interface AgentApi {
     entries?: { name: string; path: string; kind: "dir" | "file" }[];
     error?: string;
   }>;
+  /** v79：按设置里的 URL 取一次天气（联网源；默认关，只有 source=http 才会用到）。 */
+  wallpaperWeatherFetch(): Promise<{ ok: boolean; kind?: string | null; reason?: string; status?: number; error?: string }>;
+  /** v79：把天气源 key 交给钥匙串（`null` = 清除）。 */
+  wallpaperWeatherSetKey(key: string | null): Promise<{ ok: boolean; error?: string }>;
   /** v78：当前解析出的天气（manual / file；file 读不到会回落并说明）。 */
   wallpaperWeatherNow(): Promise<{ ok: boolean; kind?: string; source?: string; detail?: string; error?: string }>;
   /** v77：多显示器——每块屏解析结果（专属 / 回落 / 无）+ 孤儿键。 */

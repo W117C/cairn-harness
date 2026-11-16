@@ -43410,3 +43410,45 @@ PASS 按天气：切到 weather + 选「雨」+ 设为该天气 ⇒ weather.path
 | 联网天气源（HTTP + key） | 未做 —— 需业主批准外联 |
 | 网站作为壁纸 | 未做 —— 需业主批准放开受限 CSP |
 | 原生点选自动化 | 判不到 —— 需人工点一次 |
+
+## 2026-11-16 · 第 1293 页：联网天气源（默认关，key 进钥匙串）（`pending`）
+
+### 一、纪律先说（这是「联网」最容易翻车的地方）
+
+| 约束 | 做法 |
+|---|---|
+| 默认关 | `weather.source` 默认 `manual`；只有用户切到 `http` 并填 URL 才会发请求 |
+| 超时 | **3 秒**，只发一次 GET（不重试风暴） |
+| key 不落明文 | `safeStorage`（钥匙串）加密后写文件；钥匙串不可用 ⇒ **拒存**并说明 |
+| key 不进 URL | URL 里出现 `key/appid/api_key` 一律拒绝（会被日志/历史泄露） |
+| 失败不抛 | 网络/状态码/载荷任何一种失败都返回 `{kind: null, reason}`，页面回落手动档 |
+
+### 二、落点
+
+- `src/wallpaper/weather.ts`：`weatherFromPayload`（OpenWeather `{weather:[{id}]}` 与我们简化形状都认）；
+- `apps/desktop/src/main/weather-http.ts`：`fetchWeather`（超时/状态码/载荷/URL 校验）；
+- `apps/desktop/src/main/weather-key.ts`：`saveWeatherKey` / `readWeatherKey`（钥匙串加密）；
+- 协议 v79：`wallpaperWeatherFetch` / `wallpaperWeatherSetKey`；面板：来源三选（手动/文件/联网）+ URL + key + 「测试连接」。
+
+### 三、判据（全部本机，不打外网）
+
+| 判据 | 断言 |
+|---|---|
+| `tests/wallpaper-weather.test.ts`（7 条） | 四档 / 文件源 / **载荷形状**（OpenWeather 与简化）都认，读不懂 ⇒ null |
+| `apps/desktop/tests/weather-http.test.ts`（4 条） | **本机 HTTP 服务**：200 ⇒ rain、key 只走 `x-api-key`；503/怪载荷 ⇒ null 有理由；非 http(s) 与「key 在 URL 里」拒；超时 ⇒ `超时` |
+| `apps/desktop/tests/weather-key.test.ts`（3 条） | 文件里**没有明文**；钥匙串不可用 ⇒ 拒存且不落文件；空值 ⇒ 删 |
+| 真机冒烟 +1 | 切「联网」+ 点「测试连接」⇒ 真 fetch 本机服务 ⇒ 面板显示「读到：rain（http）」⇒ **67/67** |
+
+### 四、门禁读数（工作树）
+
+- 核心 `pnpm test:capped`：**705 文件 / 8333 条全绿**，exit 0
+- 桌面 **419 文件 / 2681 条全绿**；真机冒烟 **67/67**；四包密封证据**已重签**
+- `typecheck` 0 报错；`docs-check` 全绿
+
+### 五、差距表现状（只剩两行 + 一跳）
+
+| 能力 | 状态 |
+|---|---|
+| 定时 / 日出日落 / 多显示器 / 按天气（手动 + 文件 + **联网**） | 已做 |
+| 网站作为壁纸 | 未做 —— 要放开受限 CSP，需业主拍板 |
+| 原生点选自动化 | 判不到 —— 需人工点一次 |

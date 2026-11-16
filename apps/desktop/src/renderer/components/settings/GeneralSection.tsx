@@ -72,6 +72,7 @@ export function GeneralSection(props: {
   const [displayNote, setDisplayNote] = useState<string | null>(null);
   // v78：文件源时把「解析出来的天气」显示出来（面板不只让你填路径，还告诉你读到了什么）。
   const [weatherNow, setWeatherNow] = useState<{ kind: string; source: string } | null>(null);
+  const [weatherKey, setWeatherKey] = useState("");
 
   useEffect(() => {
     const w = props.settings.wallpaper.rotation.weather;
@@ -269,19 +270,65 @@ export function GeneralSection(props: {
                       </button>
                     ))}
                   </span>
-                  <label className="cw-rotation-toggle">
-                    <input
-                      type="checkbox"
-                      aria-label={STR.general.wallpaperWeatherFromFile}
-                      data-wallpaper-weather-source="true"
-                      checked={props.settings.wallpaper.rotation.weather.source === "file"}
-                      onChange={(e) => props.onWallpaperRotation({
-                        ...props.settings.wallpaper.rotation,
-                        weather: { ...props.settings.wallpaper.rotation.weather, source: e.target.checked ? "file" : "manual" },
-                      })}
-                    />
-                    {STR.general.wallpaperWeatherFromFile}
-                  </label>
+                  <span className="cw-rotation-modes" role="group" aria-label={STR.general.wallpaperWeatherSource}>
+                    {([
+                      ["manual", STR.general.wallpaperWeatherSourceManual],
+                      ["file", STR.general.wallpaperWeatherFromFile],
+                      ["http", STR.general.wallpaperWeatherSourceHttp],
+                    ] as const).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        className={`mini-btn${props.settings.wallpaper.rotation.weather.source === value ? " on" : ""}`}
+                        data-weather-source={value}
+                        aria-pressed={props.settings.wallpaper.rotation.weather.source === value}
+                        onClick={() => props.onWallpaperRotation({
+                          ...props.settings.wallpaper.rotation,
+                          weather: { ...props.settings.wallpaper.rotation.weather, source: value },
+                        })}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </span>
+                  {props.settings.wallpaper.rotation.weather.source === "http" && (
+                    <>
+                      <input
+                        className="ss-input cw-weather-url"
+                        aria-label={STR.general.wallpaperWeatherUrl}
+                        placeholder={STR.general.wallpaperWeatherUrl}
+                        value={props.settings.wallpaper.rotation.weather.httpUrl ?? ""}
+                        onChange={(e) => props.onWallpaperRotation({
+                          ...props.settings.wallpaper.rotation,
+                          weather: { ...props.settings.wallpaper.rotation.weather, httpUrl: e.target.value === "" ? null : e.target.value },
+                        })}
+                      />
+                      <input
+                        className="ss-input cw-weather-key"
+                        type="password"
+                        aria-label={STR.general.wallpaperWeatherKey}
+                        placeholder={STR.general.wallpaperWeatherKey}
+                        value={weatherKey}
+                        onChange={(e) => setWeatherKey(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="mini-btn"
+                        data-wallpaper-weather-test="true"
+                        onClick={() => {
+                          void (async () => {
+                            if (weatherKey !== "") await window.agent.wallpaperWeatherSetKey(weatherKey);
+                            const r = await window.agent.wallpaperWeatherFetch();
+                            setWeatherNow(r.kind === undefined || r.kind === null
+                              ? { kind: STR.general.wallpaperWeatherFailed, source: r.reason ?? "" }
+                              : { kind: r.kind, source: "http" });
+                          })();
+                        }}
+                      >
+                        {STR.general.wallpaperWeatherTest}
+                      </button>
+                    </>
+                  )}
                   {weatherNow !== null && (
                     <span className="ss-static" data-wallpaper-weather-now="true">
                       {`${STR.general.wallpaperWeatherNow}${weatherNow.kind}（${weatherNow.source}）`}

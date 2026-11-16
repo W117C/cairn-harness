@@ -59,6 +59,25 @@ export function weatherFromJson(raw: unknown): WeatherKind | null {
   return weatherFromCode(code);
 }
 
+/**
+ * 联网源的**载荷**解析（默认关，只有用户填了 URL 才会走到）：
+ *   `{"weather":[{"id":500}]}` —— OpenWeather 形状
+ *   `{"code":500}` / `{"kind":"rain"}` —— 我们自己约定的简化形状
+ */
+export function weatherFromPayload(raw: unknown): WeatherKind | null {
+  const direct = weatherFromJson(raw);
+  if (direct !== null) return direct;
+  if (typeof raw === "object" && raw !== null) {
+    const arr = (raw as { weather?: unknown }).weather;
+    if (Array.isArray(arr)) {
+      const first = arr[0] as { id?: unknown } | undefined;
+      const id = typeof first?.id === "number" ? first.id : typeof first?.id === "string" ? Number(first.id) : NaN;
+      if (Number.isFinite(id)) return weatherFromCode(id);
+    }
+  }
+  return null;
+}
+
 /** 从文本读（文件源用）：非 JSON 或读不懂 ⇒ null。 */
 export function weatherFromText(text: string): WeatherKind | null {
   try {

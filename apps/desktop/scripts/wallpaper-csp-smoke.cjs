@@ -164,6 +164,8 @@ const { pickWallpaper } = require(join(__dirname, "../src/main/wallpaper-pick.ts
 const { validateWallpaperFile } = require(join(__dirname, "../src/main/wallpaper.ts"));
 const { screen } = require("electron");
 const { resolveWeatherKind } = require(join(__dirname, "../src/main/wallpaper-rotation.ts"));
+const { fetchWeather } = require(join(__dirname, "../src/main/weather-http.ts"));
+const { createServer } = require("node:http");
 // v77 多显示器：用**真 screen** 枚举，handler 记录调用参数（设置写回由 preload 夹具承担）。
 const displayCalls = [];
 ipcMain.handle("agent:wallpaper-displays", () => {
@@ -175,6 +177,31 @@ ipcMain.handle("agent:wallpaper-displays", () => {
 });
 ipcMain.handle("agent:wallpaper-set-for-display", (_e, id) => { displayCalls.push(String(id)); return { ok: true }; });
 // v78 天气来源：真 `resolveWeatherKind` 跑一遍（文件源读真实文件）
+// v79 联网天气源：本机起一个真 HTTP 服务（127.0.0.1），handler 用真 `fetchWeather` 去取。
+let weatherServer = null;
+let weatherUrl = "";
+const startWeatherServer = async () => {
+  if (weatherServer !== null) return weatherUrl;
+  weatherServer = createServer((_req, res) => {
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ weather: [{ id: 500 }] }));
+  });
+  await new Promise((r) => weatherServer.listen(0, "127.0.0.1", () => { r(); }));
+  const addr = weatherServer.address();
+  weatherUrl = `http://127.0.0.1:${addr.port}/weather`;
+  return weatherUrl;
+};
+ipcMain.handle("agent:wallpaper-weather-fetch", async () => {
+  // 判据只关心「真 fetch 能不能把本机载荷解析出来」——URL 一律指向本机起的服务。
+  const target = await startWeatherServer();
+  const r = await fetchWeather({ url: target, apiKey: "smoke-key" });
+  return { ok: true, ...r };
+});
+ipcMain.handle("agent:wallpaper-weather-set-key", (_e, key) => {
+  weatherKeyCalls.push(key === null ? "(null)" : "set");
+  return { ok: true };
+});
+const weatherKeyCalls = [];
 ipcMain.handle("agent:wallpaper-weather-now", (_e, wallpaper) => {
   const r = resolveWeatherKind(wallpaper);
   return { ok: true, kind: r.kind, source: r.source, detail: r.detail };
@@ -465,7 +492,7 @@ async function main() {
   const fileFlow = await js(`(async () => {
     const box = document.querySelector('[data-wallpaper-rotation="true"]');
     if (!box) return { step: "no-box" };
-    const cb = box.querySelector('[data-wallpaper-weather-source="true"]');
+    const cb = box.querySelector('[data-weather-source="file"]');
     if (!cb) return { step: "no-source" };
     cb.click();
     await new Promise((r) => setTimeout(r, 300));
@@ -478,6 +505,32 @@ async function main() {
     const now = await window.agent.wallpaperWeatherNow();
     return { step: "done", kind: now.kind, source: now.source };
   })()`);
+  // 联网源（v79）：切「联网」+ 填本机 URL + 点「测试连接」⇒ 真 fetch 到本机服务，解析出 rain。
+  const httpFlow = await js(`(async () => {
+    const box = document.querySelector('[data-wallpaper-rotation="true"]');
+    if (!box) return { step: "no-box" };
+    const srcBtn = box.querySelector('[data-weather-source="http"]');
+    if (!srcBtn) return { step: "no-source" };
+    srcBtn.click();
+    await new Promise((r) => setTimeout(r, 300));
+    const urlInput = document.querySelector('.cw-weather-url');
+    if (!urlInput) return { step: "no-url" };
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    setter.call(urlInput, "http://127.0.0.1/placeholder");
+    urlInput.dispatchEvent(new Event("input", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 300));
+    const test = document.querySelector('[data-wallpaper-weather-test="true"]');
+    if (!test) return { step: "no-test" };
+    test.click();
+    await new Promise((r) => setTimeout(r, 900));
+    const shown = document.querySelector('[data-wallpaper-weather-now="true"]');
+    return { step: "done", text: shown ? shown.textContent : "" };
+  })()`);
+  readings.weatherHttp = { ...httpFlow, keyCalls: [...weatherKeyCalls], url: weatherUrl };
+  check("联网天气源：点「测试连接」⇒ 真 fetch 本机服务并解析出 rain",
+    httpFlow.step === "done" && String(httpFlow.text).includes("rain"),
+    readings.weatherHttp);
+
   readings.weatherFile = fileFlow;
   check("天气来源：勾「从文件读天气」+ 填 JSON ⇒ 解析出 rain（code 500）",
     fileFlow.step === "done" && fileFlow.kind === "rain" && fileFlow.source === "file",
