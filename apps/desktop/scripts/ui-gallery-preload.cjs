@@ -1722,6 +1722,17 @@ stub.teamGroupStream = () => Promise.resolve({
   ],
 });
 contextBridge.exposeInMainWorld("__cairnStreamCalls", () => streamCalls);
+// v71 记忆面板：三层读数（真形状）
+stub.teamMemoryPanel = () => Promise.resolve({
+  ok: true,
+  total: { topics: 5, bytes: 900 },
+  missingScopes: [],
+  rows: [
+    { scope: "project", dir: "/p", topics: 2, bytes: 300 },
+    { scope: "team", dir: "/t", topics: 2, bytes: 400 },
+    { scope: "member", dir: "/t/members/m-seed", topics: 1, bytes: 200, memberId: "m-seed" },
+  ],
+});
 const streamCalls = [];
 stub.teamSecretGrant = (memberId, secret, allow) => {
   teamGrants.push({ memberId, secret, allow: allow === true, at: teamGrants.length + 1 });

@@ -32,8 +32,8 @@ const INSTALL_CHANNELS = {
 } as const;
 
 describe("plugin install IPC wiring", () => {
-  it("exposes the backend install surface at protocol v70", () => {
-    expect(IPC_PROTOCOL_VERSION).toBe(70);
+  it("exposes the backend install surface at protocol v71", () => {
+    expect(IPC_PROTOCOL_VERSION).toBe(71);
     const channels = INVOKE_CHANNELS as Record<string, string>;
     for (const [key, channel] of Object.entries(INSTALL_CHANNELS)) {
       expect(channels[key]).toBe(channel);

@@ -73,3 +73,20 @@
 .team-pane-stream-row.agent .team-pane-stream-text { color: var(--foreground); }
 .team-pane-stream-row.user .team-pane-stream-text { color: var(--primary); }
 .team-pane-stream-text { flex: 1 1 auto; white-space: pre-wrap; word-break: break-word; }
+
+/* v71：记忆面板（三层主题数，缺层点名） */
+.team-pane-memory {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  margin: 8px 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  font-size: 12px;
+}
+.team-pane-memory-total { font-weight: 600; }
+.team-pane-memory-row { color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.team-pane-memory-missing { color: var(--destructive); }

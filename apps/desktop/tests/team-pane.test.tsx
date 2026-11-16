@@ -84,4 +84,18 @@ describe("团队会话窗格", () => {
     expect(html).toContain("第1轮 member:m1");
     expect(html).toContain("我先来");
   });
+
+  it("记忆面板：三层主题数与合计都在，缺层点名", () => {
+    const html = renderToStaticMarkup(<TeamPane initialRoster={roster} initialMemory={{
+      total: { topics: 5 },
+      missingScopes: ["member"],
+      rows: [
+        { scope: "project", topics: 2 },
+        { scope: "team", topics: 3 },
+      ],
+    }} />);
+    expect(html).toContain('data-memory="true"');
+    expect(html).toContain("记忆：5 个主题");
+    expect(html).toContain("缺层：member");
+  });
 });

@@ -11,6 +11,8 @@ import "./team-pane.css";
 export function TeamPane(props: {
   initialRoster?: TeamRosterPayload;
   initialPlan?: TeamRoundPlanPayload;
+  /** 判卷用的缝：直接喂记忆面板读数（生产走 teamMemoryPanel）。 */
+  initialMemory?: { rows: { scope: string; topics: number; memberId?: string }[]; total: { topics: number }; missingScopes: string[] };
   /** 判卷用的缝：直接喂一份共享流（生产走 teamGroupStream）。 */
   initialStream?: { items: { seq: number; kind: string; speaker: string; round: number | null; text: string }[]; dropped: number };
 } = {}): React.JSX.Element {
@@ -26,6 +28,7 @@ export function TeamPane(props: {
   const [groupCreated, setGroupCreated] = useState<string | null>(null);
   const [groupRound, setGroupRound] = useState<{ round: number; speakers: string[]; unknown: string[] } | null>(null);
   // v70：群聊共享流（只读投影，带轮与说话人）。
+  const [memory, setMemory] = useState<{ rows: { scope: string; topics: number; memberId?: string }[]; total: { topics: number }; missingScopes: string[] } | null>(props.initialMemory ?? null);
   const [stream, setStream] = useState<{ items: { seq: number; kind: string; speaker: string; round: number | null; text: string }[]; dropped: number } | null>(props.initialStream ?? null);
 
   const load = useCallback(async (): Promise<void> => {
@@ -42,8 +45,19 @@ export function TeamPane(props: {
   }, []);
 
   useEffect(() => { if (props.initialRoster === undefined) void load(); }, [load, props.initialRoster]);
+  useEffect(() => { void loadMemory(); }, []);
 
   const members = roster?.members ?? [];
+
+  const loadMemory = async (): Promise<void> => {
+    if (props.initialMemory !== undefined) return;
+    try {
+      const result = await window.agent.teamMemoryPanel();
+      if (result.ok === true && result.rows !== undefined && result.total !== undefined) {
+        setMemory({ rows: result.rows, total: result.total, missingScopes: result.missingScopes ?? [] });
+      }
+    } catch { /* 读不到就不显示 */ }
+  };
 
   const createGroup = async (): Promise<void> => {
     try {
@@ -170,6 +184,20 @@ export function TeamPane(props: {
         <button type="button" className="mini-btn" onClick={() => { void nextRound(true); }}>
           {STR.team.groupNextStart}
         </button>
+        {memory !== null && (
+          <div className="team-pane-memory" data-memory="true">
+            <span className="team-pane-memory-total">{`记忆：${String(memory.total.topics)} 个主题`}</span>
+            {memory.rows.map((row) => (
+              <span key={`${row.scope}-${row.memberId ?? ""}`} className="team-pane-memory-row">
+                {`${row.scope}${row.memberId === undefined ? "" : ` ${row.memberId}`} · ${String(row.topics)}`}
+              </span>
+            ))}
+            {memory.missingScopes.length > 0 && (
+              <span className="team-pane-memory-missing">{`缺层：${memory.missingScopes.join("、")}`}</span>
+            )}
+          </div>
+        )}
+
         {stream !== null && (
           <div className="team-pane-stream" data-stream="true">
             {stream.items.map((item) => (

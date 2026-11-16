@@ -959,6 +959,19 @@ async function main() {
     roundFlow.step === "done" && roundFlow.calls.length === 1
       && String(roundFlow.text).includes("1") && String(roundFlow.text).includes("m-seed"),
     { step: roundFlow.step, calls: roundFlow.calls });
+  // ⑮g 记忆面板（v71）：窗格里出现三层主题数与合计（真调 teamMemoryPanel）。
+  const memoryFlow = await pjs(`(async () => {
+    await new Promise((r) => setTimeout(r, 400));
+    const box = document.querySelector('[data-memory="true"]');
+    if (!box) return { step: "no-memory" };
+    return { step: "done", text: (box.textContent || "").trim(), rows: box.querySelectorAll('.team-pane-memory-row').length };
+  })()`);
+  readings.memoryPanel = memoryFlow;
+  check("记忆面板真的渲染出三层主题数与合计（来自 teamMemoryPanel）",
+    memoryFlow.step === "done" && memoryFlow.rows === 3
+      && memoryFlow.text.includes("5 个主题") && memoryFlow.text.includes("member m-seed"),
+    { step: memoryFlow.step, text: memoryFlow.text, rows: memoryFlow.rows });
+
   // ⑮f 轮次驱动派活（v66）：点「下一轮并让 TA 开跑」⇒ 带 start 调用，回执显示开跑的会话 id。
   const speakFlow = await pjs(`(async () => {
     const btn = [...document.querySelectorAll('.mini-btn')].find((b) => (b.textContent || "").includes("让 TA 开跑"));

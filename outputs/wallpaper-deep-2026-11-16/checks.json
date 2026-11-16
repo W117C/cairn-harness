@@ -612,7 +612,7 @@
         "rows": [
           "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
           "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-          "新来的成员 · mmwiv9d2fread-onlydefaultguidedautofull-accessteammemberproject移除",
+          "新来的成员 · mmwivm9u2read-onlydefaultguidedautofull-accessteammemberproject移除",
           "本轮发言秩序主持优先按名单轮排一轮",
           "当前会话的段—开新段",
           "权限（成员维）团队档 default · 无裁剪",
@@ -636,7 +636,7 @@
       "rows": [
         "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
         "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-        "新来的成员 · mmwiv9d2fread-onlydefaultguidedautofull-accessteammemberproject移除",
+        "新来的成员 · mmwivm9u2read-onlydefaultguidedautofull-accessteammemberproject移除",
         "本轮发言秩序主持优先按名单轮排一轮",
         "当前会话的段—开新段",
         "权限（成员维）团队档 default · 无裁剪",
@@ -656,7 +656,7 @@
         "rows": [
           "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
           "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-          "新来的成员 · mmwiv9d2fread-onlydefaultguidedautofull-accessteammemberproject移除",
+          "新来的成员 · mmwivm9u2read-onlydefaultguidedautofull-accessteammemberproject移除",
           "本轮发言秩序主持优先按名单轮排一轮",
           "排出来的秩序1. 示例成员　2. 新来的",
           "当前会话的段—开新段",
@@ -752,7 +752,7 @@
         "canceled": false,
         "filePaths": []
       },
-      "elapsedMs": 2092,
+      "elapsedMs": 2157,
       "options": {
         "title": "选择壁纸",
         "properties": [
@@ -833,7 +833,7 @@
       "paneState": {
         "found": true,
         "rows": 1,
-        "text": "团队成员1示例成员调研read-only派活排出来的秩序1. 示例成员新建群会话下一轮下一轮并让 TA 开跑放进他的线程派活并开跑在 设置 › 团队 里管理",
+        "text": "团队成员1示例成员调研read-only派活排出来的秩序1. 示例成员新建群会话下一轮下一轮并让 TA 开跑记忆：5 个主题project · 2team · 2member m-seed · 1放进他的线程派活并开跑在 设置 › 团队 里管理",
         "plan": "排出来的秩序1. 示例成员"
       },
       "roundCalls": 1
@@ -889,6 +889,15 @@
           "start": false
         }
       ]
+    }
+  },
+  {
+    "name": "记忆面板真的渲染出三层主题数与合计（来自 teamMemoryPanel）",
+    "ok": true,
+    "detail": {
+      "step": "done",
+      "text": "记忆：5 个主题project · 2team · 2member m-seed · 1",
+      "rows": 3
     }
   },
   {

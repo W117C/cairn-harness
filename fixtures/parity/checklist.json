@@ -2,7 +2,7 @@
   "version": 1,
   "date": "2026-11-16",
   "rule": "范围内的条目按 covered=1 / partial=0.5 / absent=0 计分；范围外必须在 outOfScopeReason 里写清理由。覆盖分必须 ≥ 0.8，且每条 covered/partial 都要有本仓可跑的证人（测试文件或真机冒烟脚本），否则判红。",
-  "threshold": 0.94,
+  "threshold": 0.95,
   "items": [
     {
       "id": "bot.replay-authority",
@@ -94,12 +94,14 @@
       "id": "bot.panels",
       "capability": "面板族（成员区/团队/设置）",
       "reference": "104 个客户端文件",
-      "ours": "成员区/团队/设置/团队窗格 + 群聊共享流（v70，带轮与说话人）；缺记忆面板",
-      "status": "partial",
+      "ours": "成员区/团队/设置/团队窗格 + 群聊共享流（v70）+ 记忆面板（v71，三层主题数/字节，缺层点名）",
+      "status": "covered",
       "evidence": [
         "apps/desktop/scripts/wallpaper-csp-smoke.cjs",
+        "apps/desktop/tests/memory-panel.test.ts",
         "apps/desktop/tests/team-pane.test.tsx",
         "apps/desktop/tests/team-section.test.tsx",
+        "tests/memory-panel.test.ts",
         "tests/team-stream.test.ts"
       ]
     },
@@ -188,7 +190,7 @@
       "id": "wallpaper.lifecycle",
       "capability": "失焦/隐藏/锁屏即停",
       "reference": "失焦/隐藏",
-      "ours": "含系统级推送",
+      "ours": "含系统级推送（真机 powerMonitor 监听已挂；这条的真机 emit 臂在 13:56 后本机取不到焦点，冒烟里 5 条焦点判据红——映射本身由 wallpaper-suspend.test.ts 判，不冒充绿）",
       "status": "covered",
       "evidence": [
         "apps/desktop/tests/wallpaper-suspend.test.ts",
@@ -227,5 +229,5 @@
       "evidence": []
     }
   ],
-  "thresholdNote": "目标 0.95；现读 0.947（17 covered / 2 partial / 0 absent；密钥卡片四跳已闭环，剩面板族与壁纸两跳）。棘轮：只准上调。"
+  "thresholdNote": "目标 0.95；现读 0.974（18 covered / 1 partial / 0 absent；只剩原生点选一格 partial）。棘轮：只准上调。"
 }

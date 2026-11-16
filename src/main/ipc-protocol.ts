@@ -159,8 +159,9 @@ export type { SearchProvider } from "../tools/web-search";
  *  v68 = 密钥申请卡（`teamSecretRequest`）：成员发起 pending，人审批后落 allow/deny 并把申请置终态。
  *  v69 = 成员起跑前注入密钥：`teamMemberStart` 按授权把 `DSH_SECRET_<NAME>` 注入那次 run，
  *        收束后撤销；回包带 `injected` / `missingSecrets` / `deniedSecrets`（只报名字，不报值）。
- *  v70 = 群聊共享流（`teamGroupStream`）：读群会话自己的事件流，带轮与说话人，截断如实。 */
-export const IPC_PROTOCOL_VERSION = 70;
+ *  v70 = 群聊共享流（`teamGroupStream`）：读群会话自己的事件流，带轮与说话人，截断如实。
+ *  v71 = 记忆面板（`teamMemoryPanel`）：三层记忆的主题数/字节数，成员逐个点名，缺层如实。 */
+export const IPC_PROTOCOL_VERSION = 71;
 
 /** 团队名单（v59）：成员档案是投影，`records` 是补丁条数（面板据此说「有几条历史」）。 */
 export interface TeamRosterPayload {
@@ -649,6 +650,14 @@ export interface AgentApi {
     /** v68：申请（pending 排最前）。 */
     requests?: { memberId: string; secret: string; state: "pending" | "approved" | "denied"; at: number }[];
     rejected?: { at: number; error: string }[];
+    error?: string;
+  }>;
+  /** v71：记忆面板（三层：project / team / member；每层主题数 + 字节，缺层点名）。 */
+  teamMemoryPanel(workspace?: string): Promise<{
+    ok: boolean;
+    rows?: { scope: string; dir: string; topics: number; bytes: number; memberId?: string }[];
+    total?: { topics: number; bytes: number };
+    missingScopes?: string[];
     error?: string;
   }>;
   /** v70：群聊共享流（只读有效条目，带轮/说话人；dropped/truncated 如实）。 */

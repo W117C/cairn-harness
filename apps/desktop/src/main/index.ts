@@ -16,6 +16,9 @@ import { createTeamGroup } from "./team-group";
 import { advanceGroupRound, groupTaskOf } from "./team-round";
 import { grantPatch, projectSecretGrants, requestPatch } from "../../../../src/agent/team/secrets";
 import { projectGroupStream } from "../../../../src/agent/team/stream";
+import { memoryPanelFor } from "./memory-panel";
+import { globalMemoryDir, projectMemoryDir } from "../../../../src/agent/memory/store";
+import { memberMemoryDir } from "../../../../src/agent/memory/scope";
 import { planRound } from "../../../../src/orchestration/speech";
 import { memberPatch } from "../../../../src/agent/team/members";
 import { TEAM_USAGE_SESSION_CAP, memoryScopes, permissionRows, usageAcrossSessions } from "../../../../src/agent/team/insights";
@@ -901,6 +904,24 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     );
     if (started.ok !== true) return { ...advanced, error: started.error ?? "开跑失败" };
     return { ...advanced, sessionId: started.sessionId };
+  },
+  // v71 记忆面板：三层目录数一遍（只读、不建目录），交给核心纯投影折成行。
+  teamMemoryPanel: async (workspace) => {
+    try {
+      const settings = await getSettings();
+      const roster = await readTeamRoster(teamLogPath(app.getPath("userData")), settings.mode);
+      const ws = typeof workspace === "string" && workspace !== "" ? workspace : (getLastWorkspace() ?? process.cwd());
+      const home = globalMemoryDir();
+      const view = await memoryPanelFor({
+        projectDir: projectMemoryDir(ws),
+        teamDir: home,
+        memberIds: roster.members.map((m) => m.id),
+        memberDirOf: (id) => memberMemoryDir(home, id),
+      });
+      return { ok: true, rows: view.rows, total: view.total, missingScopes: view.missingScopes };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
   },
   // v70 群聊共享流：读群会话自己的事件流（单一面），带轮与说话人，截断如实。
   teamGroupStream: async (sessionId, workspace, limit) => {

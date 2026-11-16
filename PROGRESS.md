@@ -42599,3 +42599,53 @@ wallpaper-engine，逐行写「它怎么做 / 我们怎么做 / 证据在哪 / *
 - **真机冒烟 52/57**：5 条焦点相关判据这一轮仍拿不到焦点（`document.hasFocus()=false`，最小探针复核过；
   13:44 那轮是 56/56）。新增的共享流判据 PASS。**不冒充绿。**
 - `typecheck` 0 报错；`docs-check` 全绿。
+
+## 2026-11-16 · 第 1273 页：记忆面板（面板族最后一面，协议 v71）——覆盖率 0.974（`pending`）
+
+**背景**：面板族一直因为「缺记忆面板」记 `partial`。本页把它补上：三层记忆的规模摆出来，缺层点名。
+
+### 一、口径
+
+| 规则 | 做法 |
+|---|---|
+| 三层固定都在 | `project` / `team` / `member` 每层一行，0 也出（不许「没显示＝没有」） |
+| 主题数不含索引 | `<dir>/*.md` 里排除 `MEMORY_INDEX.md`（否则永远多 1） |
+| 成员逐个点名 | 成员按 id 排序；**没记忆的成员也出 0 行**（看得出「这人还没记过」） |
+| 合计与行同源 | `total.topics` 必须等于各行之和（判据核这个恒等式） |
+| 缺层要点名 | `missingScopes` 回给 UI，面板红字写「缺层：member」 |
+
+### 二、落点
+
+- 核心纯投影 `src/agent/memory/panel.ts`：`memoryPanelView` / `memoryRowText`；
+- 桌面服务端 `apps/desktop/src/main/memory-panel.ts`：`dirStat` / `memoryPanelFor`（只读、不建目录，读不到算 0）；
+- 协议 v71 `teamMemoryPanel(workspace?)`；通道 169 → **170**（team 域 11 → 12）；
+- 团队窗格：打开即拉一次，渲染 `.team-pane-memory`（合计 + 三层 + 缺层）。
+
+### 三、判卷
+
+- `tests/memory-panel.test.ts` 3 条（三层/排序/合计恒等、缺层点名、行文本同格式）；
+- `apps/desktop/tests/memory-panel.test.ts` 3 条（索引不算主题/目录不存在算 0/三层一起数）；
+- `team-pane.test.tsx` +1：`initialMemory` ⇒ `data-memory="true"`、`记忆：5 个主题`、`缺层：member`；
+- 真机冒烟 +1：窗格里真渲染出 `记忆：5 个主题 / project·2 / team·2 / member m-seed·1`（三行）。
+
+### 四、覆盖率
+
+| 量 | 前 | 后 |
+|---|---|---|
+| covered / partial / absent | 17 / 2 / 0 | **18 / 1 / 0**（`bot.panels` → covered） |
+| **覆盖分** | 0.947 | **0.974** |
+| 阈值 | 0.94 | **0.95**（目标线） |
+
+### 五、门禁读数（工作树）
+
+- 核心 `pnpm test:capped`：**696 文件 / 8281 条全绿**，exit 0。
+- 桌面 **409 文件 / 2647 条全绿**；四份密封证据重签全绿。
+- **真机冒烟 53/58**：5 条焦点判据仍红（`document.hasFocus()=false`，最小探针复核过；13:44 那轮 56/56）。
+  新增的记忆面板判据 PASS。**不冒充绿。**
+- `typecheck` 0 报错；`docs-check` 全绿。
+
+### 六、边界（如实）
+
+`wallpaper.lifecycle` 仍是 covered，但它的**真机 emit 臂**这一轮红着——原因是焦点拿不到，不是映射坏了：
+映射由 `wallpaper-suspend.test.ts` 判，真机上 `powerMonitor` 上确实挂着 1 个监听（`listenerCount:1`）。
+这条备注已写进对表 `ours`，等焦点恢复重跑冒烟即可把这条臂判绿。
