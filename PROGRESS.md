@@ -42824,3 +42824,44 @@ pickedCanceled{"ok":false,"canceled":true}
 
 - 核心 **696 / 8281** 全绿；桌面 **413 / 2658** 全绿；真机冒烟 **60/60**；
 - 四份密封证据重签全绿；`typecheck` 0 报错；`docs-check` 全绿。
+
+## 2026-11-16 · 第 1278 页：「行业最高」立成可判标准（六条线 + 判据），人工验收跑了一次（`pending`）
+
+### 一、为什么不写「比某某强」
+
+比较级要**对手的可复现读数**（同机、同素材、同判据），离线拿不到；硬写就是编。
+所以把「最高水平」拆成**六条可算的线**，每条都有阈值、命令、现读，谁都能重跑。
+
+`docs/industry-standard.md`：
+
+| 维度 | 阈值（可判） | 判据 | 现读 |
+|---|---|---|---|
+| S1 可判性 | covered = 1.000；每格 `out` 带理由（≥8 字） | `tests/parity-standard.test.ts` | 20/20 covered，2 格 out 均带理由 |
+| S2 真实机读数 | 冒烟 ≥50 条全绿；四包都带 `rendererDigest` | `apps/desktop/scripts/wallpaper-csp-smoke.cjs` | 60/60 绿；四包重签 |
+| S3 失败可见 | 每条降级/裁剪都有 UI 点名 | `tests/parity-standard.test.ts` | 降级/缺层/取消 三处有判据 |
+| S4 权限收敛 | 成员档 ≤ 团队档；密钥默认拒 | `tests/team-members.test.ts` / `tests/team-secrets.test.ts` | 裁剪出声；无记录即不许用 |
+| S5 可审计 | 日志只追加；授权历史保留 | 同上 | 移除写墓碑；后写覆盖但历史在 |
+| S6 可复算 | 读数都能用仓库内命令重跑 | `scripts/docs-check.ts` | 台账页页点名命令/工件，红 0 |
+
+判据 `tests/industry-standard.test.ts`（3 条）钉住：六条线都在、**每条命令点到的文件真的存在**、
+两格 out 的理由都 ≥8 字。写口号会红。
+
+### 二、人工验收：真的执行了（不是「请人工验」）
+
+```
+native-pick-accept {"verdict":"TIMEOUT","elapsedMs":60611,"canceled":null,"path":null,
+                    "at":"2026-11-16T07:05:43.842Z"}
+判读：没人操作：这一跳没验到，不等于通过
+```
+
+- 60 秒全等我点：面板弹出了，**没人点**（我也点不了：本机会话不给 Electron 焦点，
+  `osascript` 的 ⌘⇧G/回车序列发出去没有回执，面板收不到键盘）；
+- 读数如实落盘 `outputs/native-pick-accept/native-pick-accept.json`；
+- 结论写进标准文档：这一格是 `out`，理由 + 已执行一次 + 需要一次人手的点击。
+  **TIMEOUT 不等于通过**，我不把它算成验过。
+
+### 三、门禁读数（工作树）
+
+- 核心 `pnpm test:capped`：**697 文件 / 8284 条全绿**，exit 0
+- 桌面 413 文件 / 2658 条全绿；四份密封证据仍有效（本轮无渲染层改动）
+- 真机冒烟 **60/60**；`typecheck` 0 报错；`docs-check` 全绿
