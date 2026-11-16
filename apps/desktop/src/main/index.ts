@@ -11,7 +11,7 @@ import { pickWallpaper } from "./wallpaper-pick";
 import { appendTeamPatch, readTeamRoster, teamLogPath } from "./team-store";
 import { listSessions, readSessionEvents } from "../../../../src/main/sessions";
 import { openSegmentForSession } from "./session-segments";
-import { dispatchToMember } from "./team-dispatch";
+import { defaultStartDeps, dispatchToMember, startToMember } from "./team-dispatch";
 import { planRound } from "../../../../src/orchestration/speech";
 import { memberPatch } from "../../../../src/agent/team/members";
 import { TEAM_USAGE_SESSION_CAP, memoryScopes, permissionRows, usageAcrossSessions } from "../../../../src/agent/team/insights";
@@ -849,6 +849,22 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     const roster = await readTeamRoster(teamLogPath(app.getPath("userData")), settings.mode);
     if (!roster.members.some((m) => m.id === id)) return { ok: false, error: "成员不在名单里（先建档案再派活）" };
     return await dispatchToMember({ sessionsRoot: root, memberId: id, task: typeof task === "string" ? task : "" });
+  },
+  // v63 派活并开跑：建归属会话（只写归属）→ 交给 run 通道写任务书并开跑。
+  // 任务书**不由这里写**：同一条任务只能有一条写入路径，否则会话里会出现两条一样的 user_message。
+  teamMemberStart: async (memberId, task, workspace) => {
+    const root = await explicitSessionsRoot(typeof workspace === "string" ? workspace : undefined);
+    if (root === undefined) return { ok: false, error: "没有可用的会话根" };
+    const id = typeof memberId === "string" ? memberId : "";
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) return { ok: false, error: "成员 id 不合法" };
+    const settings = await getSettings();
+    const roster = await readTeamRoster(teamLogPath(app.getPath("userData")), settings.mode);
+    if (!roster.members.some((m) => m.id === id)) return { ok: false, error: "成员不在名单里（先建档案再派活）" };
+    return await startToMember(
+      { sessionsRoot: root, memberId: id, task: typeof task === "string" ? task : "", mode: settings.mode,
+        ...(typeof workspace === "string" ? { workspace } : {}) },
+      defaultStartDeps(async (req) => await (wired.run as (x: unknown) => Promise<{ ok?: boolean; error?: string }>)(req)),
+    );
   },
   // v60 一轮的发言秩序（发言权的第一个调用方）：名单从团队事件日志读，秩序由核心纯函数算。
   teamRoundPlan: async (raw) => {

@@ -95,8 +95,8 @@
       "id": "bot.member-dispatch-ui",
       "capability": "从 UI 给成员派活",
       "reference": "群里 @成员 即开工",
-      "ours": "团队窗格「派活」→ 开一条归属该成员的会话（不自动开跑）",
-      "status": "partial",
+      "ours": "团队窗格「派活」/「派活并开跑」（后者交给正常 run 通道）",
+      "status": "covered",
       "evidence": [
         "apps/desktop/tests/team-dispatch.test.ts",
         "apps/desktop/tests/team-pane.test.tsx",
@@ -205,5 +205,5 @@
       "evidence": []
     }
   ],
-  "thresholdNote": "目标 0.9；现读 0.806（缺群聊共享流与密钥卡两格 absent + 三格 partial）。棘轮：补齐后上调，只准上调。"
+  "thresholdNote": "目标 0.9；现读 0.833（缺群聊共享流与密钥卡两格 absent + 两格 partial）。棘轮：只准上调。"
 }

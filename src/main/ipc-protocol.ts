@@ -148,8 +148,10 @@ export type { SearchProvider } from "../tools/web-search";
  *  v61 = 团队名单带三维读数（`insights`：权限成员维 / 记忆作用域 / 按成员用量）与成员的
  *        `memoryScope` 字段——面板族剩下三面的数据形状。
  *  v62 = 给成员派活（`teamMemberDispatch`）：开一条归属该成员的会话（`session_meta.member`）并把
- *        任务书写成它的第一条 user_message；**不自动开跑**（按不按发送仍由人决定）。 */
-export const IPC_PROTOCOL_VERSION = 62;
+ *        任务书写成它的第一条 user_message；**不自动开跑**（按不按发送仍由人决定）。
+ *  v63 = 派活并开跑（`teamMemberStart`）：同一条归属会话，交给正常 run 通道跑起来（不另写任务书，
+ *        避免同一条任务写两遍）。 */
+export const IPC_PROTOCOL_VERSION = 63;
 
 /** 团队名单（v59）：成员档案是投影，`records` 是补丁条数（面板据此说「有几条历史」）。 */
 export interface TeamRosterPayload {
@@ -617,6 +619,8 @@ export interface AgentApi {
   teamRoundPlan(input: TeamRoundInput): Promise<{ ok: boolean; error?: string; plan?: TeamRoundPlanPayload }>;
   /** v62：给成员派活——开一条归属该成员的会话，任务书成为它第一句；不自动开跑。 */
   teamMemberDispatch(memberId: string, task: string, workspace?: string): Promise<{ ok: boolean; sessionId?: string; error?: string }>;
+  /** v63：派活并开跑——建归属会话，然后把任务交给正常 run 通道（任务书由 run 写，不重复）。 */
+  teamMemberStart(memberId: string, task: string, workspace?: string): Promise<{ ok: boolean; sessionId?: string; error?: string }>;
   /** v60：给会话开新段（段的第一个写入点：追加一条 `session_meta_update`，序数由日志算）。 */
   sessionSegmentOpen(sessionId?: string, workspace?: string): Promise<{ ok: boolean; segment?: number; error?: string }>;
   getState(): Promise<StateResponse>;

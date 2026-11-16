@@ -846,6 +846,29 @@ async function main() {
       && dispatchFlow.calls[0].task === "把对比度再量一遍"
       && String(dispatchFlow.text).includes("s-team-1"),
     { step: dispatchFlow.step, calls: dispatchFlow.calls });
+  // ⑮c 派活并开跑（v63）：点「派活并开跑」⇒ 真调到 teamMemberStart，回执是 run 建的会话 id。
+  const startFlow = await pjs(`(async () => {
+    const input = document.querySelector('.team-pane-dispatch .ss-input');
+    if (!input) return { step: "no-input" };
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    setter.call(input, "开跑给我看");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 120));
+    const send = [...document.querySelectorAll('.team-pane-dispatch .mini-btn')].find((b) => (b.textContent || "").includes("开跑"));
+    if (!send) return { step: "no-start-button" };
+    send.click();
+    await new Promise((r) => setTimeout(r, 500));
+    return {
+      step: "done",
+      calls: window.__cairnStarts ? window.__cairnStarts() : [],
+      text: (document.querySelector('[data-team-pane="true"]') || {}).textContent || "",
+    };
+  })()`);
+  readings.teamStart = startFlow;
+  check("「派活并开跑」真的调到 teamMemberStart，并把 run 会话 id 画出来",
+    startFlow.step === "done" && startFlow.calls.length === 1
+      && startFlow.calls[0].task === "开跑给我看" && String(startFlow.text).includes("s-run-1"),
+    { step: startFlow.step, calls: startFlow.calls });
   await shot(paneWin, "12-team-pane-1440x900");
   paneWin.destroy();
 

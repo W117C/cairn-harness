@@ -1682,6 +1682,12 @@ stub.teamMemberDispatch = (memberId, task) => {
   return Promise.resolve({ ok: true, sessionId: "s-team-" + String(teamDispatches.length) });
 };
 contextBridge.exposeInMainWorld("__cairnDispatches", () => teamDispatches.map((d) => ({ ...d })));
+const teamStarts = [];
+stub.teamMemberStart = (memberId, task) => {
+  teamStarts.push({ memberId, task });
+  return Promise.resolve({ ok: true, sessionId: "s-run-" + String(teamStarts.length) });
+};
+contextBridge.exposeInMainWorld("__cairnStarts", () => teamStarts.map((d) => ({ ...d })));
 let segmentCounter = 1;
 stub.sessionSegmentOpen = () => {
   segmentCounter += 1;

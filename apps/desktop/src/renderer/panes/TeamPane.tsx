@@ -34,6 +34,21 @@ export function TeamPane(props: { initialRoster?: TeamRosterPayload; initialPlan
 
   const members = roster?.members ?? [];
 
+  const startMember = async (): Promise<void> => {
+    if (dispatchTo === null) return;
+    const task = dispatchTask.trim();
+    if (task === "") { setIssue(STR.team.dispatchEmpty); return; }
+    try {
+      const result = await window.agent.teamMemberStart(dispatchTo, task);
+      if (result.ok !== true) { setIssue(result.error ?? STR.team.writeFailed); return; }
+      setDispatched({ member: dispatchTo, sessionId: String(result.sessionId ?? "") });
+      setDispatchTask("");
+      setIssue(null);
+    } catch (error) {
+      setIssue(error instanceof Error ? error.message : String(error));
+    }
+  };
+
   const dispatch = async (): Promise<void> => {
     if (dispatchTo === null) return;
     const task = dispatchTask.trim();
@@ -93,6 +108,9 @@ export function TeamPane(props: { initialRoster?: TeamRosterPayload; initialPlan
         />
         <button type="button" className="mini-btn" disabled={dispatchTo === null} onClick={() => { void dispatch(); }}>
           {STR.team.dispatchSend}
+        </button>
+        <button type="button" className="mini-btn" disabled={dispatchTo === null} onClick={() => { void startMember(); }}>
+          {STR.team.dispatchStart}
         </button>
       </div>
       {dispatched !== null && (

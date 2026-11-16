@@ -23,6 +23,24 @@ export const defaultDispatchDeps: DispatchDeps = {
   pathOf,
 };
 
+/** 开跑注入面：生产是 main 的 `run` 通道；判卷给假的。 */
+export type StartRun = (req: { message: string; mode: string; sessionId: string; workspace?: string }) => Promise<{ ok?: boolean; error?: string }>;
+
+/** 生产用的依赖包（把「建会话/追加/路径/开跑」四件真东西一次给齐，调用点不再各自 import）。 */
+export function defaultStartDeps(run: StartRun): {
+  createSession: (root: string) => Promise<string>;
+  append: (path: string, event: AgentEvent) => Promise<void>;
+  pathOf: (root: string, id: string) => string;
+  run: StartRun;
+} {
+  return {
+    createSession: (root) => createSession(root),
+    append: (path, event) => createEventLog(path).append(event),
+    pathOf,
+    run,
+  };
+}
+
 export interface DispatchResult {
   ok: boolean;
   sessionId?: string;
@@ -54,6 +72,41 @@ export async function dispatchToMember(
   const path = deps.pathOf(input.sessionsRoot, sessionId);
   await deps.append(path, { type: "session_meta_update", patch: { [MEMBER_SESSION_KEY]: input.memberId } } as AgentEvent);
   await deps.append(path, { type: "user_message", content: task } as AgentEvent);
+  return { ok: true, sessionId };
+}
+
+/**
+ * 派活并开跑：建归属会话（**只写归属，不写任务书**）→ 交给 run 通道写第一句并开跑。
+ * 为什么任务书交给 run：同一条任务只许有一条写入路径；这里再写一遍就会在会话里出现两条
+ * 一模一样的 user_message（一条是派活写的、一条是 run 写的）。
+ */
+export async function startToMember(
+  input: { sessionsRoot: string; memberId: string; task: string; mode: string; workspace?: string },
+  deps: {
+    createSession: (root: string) => Promise<string>;
+    append: (path: string, event: AgentEvent) => Promise<void>;
+    pathOf: (root: string, id: string) => string;
+    run: (req: { message: string; mode: string; sessionId: string; workspace?: string }) => Promise<{ ok?: boolean; error?: string }>;
+  },
+): Promise<DispatchResult> {
+  const task = input.task.trim();
+  if (task === "") return { ok: false, error: "派活内容不能为空" };
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(input.memberId)) {
+    return { ok: false, error: `成员 id 只收字母/数字/下划线/连字符（1-64 位），收到 ${JSON.stringify(input.memberId)}` };
+  }
+  let sessionId: string;
+  try {
+    sessionId = await deps.createSession(input.sessionsRoot);
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+  const path = deps.pathOf(input.sessionsRoot, sessionId);
+  await deps.append(path, { type: "session_meta_update", patch: { [MEMBER_SESSION_KEY]: input.memberId } } as AgentEvent);
+  const started = await deps.run({
+    message: task, mode: input.mode, sessionId,
+    ...(input.workspace === undefined ? {} : { workspace: input.workspace }),
+  });
+  if (started.ok === false) return { ok: false, error: started.error ?? "开跑失败" };
   return { ok: true, sessionId };
 }
 

@@ -142,6 +142,7 @@ export const settingsStrings = {
     dispatchPick: "先在名单里点一个成员",
     dispatchTask: "任务书写什么",
     dispatchSend: "放进他的线程",
+    dispatchStart: "派活并开跑",
     dispatchDone: "已派给 ",
     dispatchEmpty: "任务书不能为空",
     memoryScope: "记忆作用域",

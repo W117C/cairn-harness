@@ -9,7 +9,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { dispatchToMember, memberOfSession, type DispatchDeps } from "../src/main/team-dispatch";
+import { dispatchToMember, memberOfSession, startToMember, type DispatchDeps } from "../src/main/team-dispatch";
 import { createEventLog, type AgentEvent } from "../../../src/events";
 import { createSession, pathOf } from "../../../src/main/sessions";
 
@@ -69,5 +69,40 @@ describe("给成员派活", () => {
     const result = await dispatchToMember({ sessionsRoot: root, memberId: "m1", task: "t" }, deps);
     expect(result.ok).toBe(false);
     expect(String(result.error)).toContain("磁盘满了");
+  });
+});
+
+describe("派活并开跑（v63）", () => {
+  it("建归属会话 → 交给 run 写任务书并开跑；任务书只出现一次（不重复写）", async () => {
+    const created: string[] = [];
+    const appended: { path: string; type: string; content?: string; patch?: Record<string, string> }[] = [];
+    const runs: { message: string; sessionId: string }[] = [];
+    const deps = {
+      createSession: async () => { created.push("s1"); return "s1"; },
+      append: async (path: string, event: AgentEvent) => {
+        const e = event as { type: string; content?: string; patch?: Record<string, string> };
+        appended.push({ path, type: e.type, ...(e.content === undefined ? {} : { content: e.content }), ...(e.patch === undefined ? {} : { patch: e.patch }) });
+      },
+      pathOf: () => "/dev/null",
+      run: async (req: { message: string; sessionId: string }) => { runs.push({ message: req.message, sessionId: req.sessionId }); return { ok: true }; },
+    };
+    const result = await startToMember({ sessionsRoot: "/ws", memberId: "m1", task: "量对比度", mode: "default" }, deps);
+    expect(result).toEqual({ ok: true, sessionId: "s1" });
+    // 只写了归属补丁，任务书交给 run
+    expect(appended).toEqual([{ path: "/dev/null", type: "session_meta_update", patch: { member: "m1" } }]);
+    expect(runs).toEqual([{ message: "量对比度", sessionId: "s1" }]);
+  });
+
+  it("run 失败 ⇒ 如实交回错误（不假装开跑成功）", async () => {
+    const result = await startToMember(
+      { sessionsRoot: "/ws", memberId: "m1", task: "t", mode: "default" },
+      {
+        createSession: async () => "s1",
+        append: async () => undefined,
+        pathOf: () => "/dev/null",
+        run: async () => ({ ok: false, error: "模型没配" }),
+      },
+    );
+    expect(result).toEqual({ ok: false, error: "模型没配" });
   });
 });
