@@ -1,11 +1,11 @@
 {
-  "at": "2026-11-16T10:45:59.558Z",
+  "at": "2026-11-16T11:03:21.392Z",
   "verdict": "pass",
   "parity": {
     "threshold": 0.96,
     "total": 23,
-    "covered": 20,
-    "partial": 1,
+    "covered": 21,
+    "partial": 0,
     "absent": 0,
     "out": 2
   },
@@ -87,7 +87,7 @@
       "clause": "评分面 covered 比例（对表自己声明的阈值）",
       "threshold": 0.96,
       "unit": "ratio",
-      "measured": 0.976,
+      "measured": 1,
       "verdict": "pass",
       "source": "fixtures/parity/checklist.json"
     }

@@ -30,7 +30,14 @@ export const RENDERER_FILE_LINE_CAP = 1200;
 export const APP_TSX_LINE_CAP = 900;
 
 /** 派生层允许的**运行时**依赖（纯模块白名单；type-only 导入不进这张表）。 */
-const DERIVED_RUNTIME_ALLOWLIST = new Set(["src/main/usage-ledger.ts", "src/agent/subflow.ts"]);
+// 派生层可复用的**纯**核心模块（登记≠豁免：传递依赖仍跑同一套纯度检查）。
+// 2026-11-16：WCAG 对比度数学上移到 `src/wallpaper/contrast.ts`（验证层也要用，且 src 不得反向依赖 apps），
+// 渲染层的 derived/wallpaper-contrast.ts 变成它的薄封装。
+const DERIVED_RUNTIME_ALLOWLIST = new Set([
+  "src/main/usage-ledger.ts",
+  "src/agent/subflow.ts",
+  "src/wallpaper/contrast.ts",
+]);
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 /** 渲染层相对仓根的路径（判卷在临时目录里造样本时也用同一套相对路径）。 */

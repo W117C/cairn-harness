@@ -10,33 +10,14 @@
 //   surface = prev×(1-alphaF) + floor×canvas + (1-floor)×glassAlpha×glass
 //
 // 本模块是 derived 层：**纯**（无 DOM、无时钟、无随机、无 IO、无 await、无模块级可变态）。
-export interface Rgb {
-  r: number;
-  g: number;
-  b: number;
-}
+export type { Rgb } from "../../../../../src/wallpaper/contrast";
+import type { Rgb } from "../../../../../src/wallpaper/contrast";
+import { contrastRatio, relativeLuminance } from "../../../../../src/wallpaper/contrast";
+export { contrastRatio, relativeLuminance };
 
 /** 两色线性插值：t=0 全 a，t=1 全 b（与 CSS 里逐层 mix 的口径一致）。 */
 export function mix(a: Rgb, b: Rgb, t: number): Rgb {
   return { r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t };
-}
-
-/** sRGB 通道 → 线性光（WCAG 2.x 的相对亮度口径）。 */
-function channel(v: number): number {
-  const c = v / 255;
-  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-}
-
-/** 相对亮度（WCAG 2.x）。 */
-export function relativeLuminance(c: Rgb): number {
-  return 0.2126 * channel(c.r) + 0.7152 * channel(c.g) + 0.0722 * channel(c.b);
-}
-
-/** 对比度（WCAG 2.x）：黑对白 = 21。 */
-export function contrastRatio(a: Rgb, b: Rgb): number {
-  const la = relativeLuminance(a);
-  const lb = relativeLuminance(b);
-  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }
 
 /**

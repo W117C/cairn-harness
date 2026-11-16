@@ -1,0 +1,252 @@
+{
+  "version": 79,
+  "protocolShots": [
+    {
+      "name": "01-home",
+      "bytes": 75472,
+      "sha256": "69699d20d841fba0"
+    },
+    {
+      "name": "02-session",
+      "bytes": 111433,
+      "sha256": "148ef5de7d3ab83c"
+    },
+    {
+      "name": "03-inspector-changes",
+      "bytes": 118073,
+      "sha256": "f2a1105068dcf616"
+    },
+    {
+      "name": "04-inspector-plan",
+      "bytes": 131470,
+      "sha256": "6bf47f752739cca5"
+    },
+    {
+      "name": "05-inspector-timeline",
+      "bytes": 151984,
+      "sha256": "a2c7e5e81c11a556"
+    },
+    {
+      "name": "06-settings",
+      "bytes": 49886,
+      "sha256": "4875b62692eae2f4"
+    },
+    {
+      "name": "07-settings-general",
+      "bytes": 29722,
+      "sha256": "033e52e273aa62ec"
+    },
+    {
+      "name": "08-settings-provider",
+      "bytes": 80928,
+      "sha256": "371b9765767a57b2"
+    },
+    {
+      "name": "09-settings-personalization",
+      "bytes": 59331,
+      "sha256": "51a709573f6d4384"
+    },
+    {
+      "name": "10-settings-subagents",
+      "bytes": 77471,
+      "sha256": "a9277e3cef272288"
+    },
+    {
+      "name": "11-settings-integrations",
+      "bytes": 59082,
+      "sha256": "6daea343690fea2c"
+    },
+    {
+      "name": "12-settings-hooks",
+      "bytes": 57165,
+      "sha256": "65f740cbe89584be"
+    },
+    {
+      "name": "13-settings-network",
+      "bytes": 62969,
+      "sha256": "5b53fd487e12461a"
+    },
+    {
+      "name": "14-settings-usage",
+      "bytes": 91195,
+      "sha256": "c04ccde96ae48950"
+    },
+    {
+      "name": "15-settings-evolve",
+      "bytes": 87517,
+      "sha256": "5a681e25bcd379fd"
+    },
+    {
+      "name": "16-settings-permissions",
+      "bytes": 81921,
+      "sha256": "01c9a7e897eef317"
+    },
+    {
+      "name": "17-settings-advanced",
+      "bytes": 108741,
+      "sha256": "52daa291aaeeb7b3"
+    },
+    {
+      "name": "18-settings-shortcuts",
+      "bytes": 147335,
+      "sha256": "daf7de9e33399aa0"
+    },
+    {
+      "name": "19-settings-migration",
+      "bytes": 74800,
+      "sha256": "0c0ecf6d8b04e7e6"
+    },
+    {
+      "name": "20-settings-about",
+      "bytes": 102228,
+      "sha256": "c52d7781a85ca977"
+    },
+    {
+      "name": "21-settings-skills",
+      "bytes": 48439,
+      "sha256": "1baa7565216e5027"
+    },
+    {
+      "name": "22-settings-worktrees",
+      "bytes": 44725,
+      "sha256": "042df76c09e27e16"
+    },
+    {
+      "name": "23-settings-team",
+      "bytes": 94332,
+      "sha256": "264085221b080652"
+    },
+    {
+      "name": "23-plugins",
+      "bytes": 47981,
+      "sha256": "cc1a736225a7a884"
+    },
+    {
+      "name": "24-plugins-installed",
+      "bytes": 53443,
+      "sha256": "d3bfaf037de2681a"
+    },
+    {
+      "name": "25-plugins-updates",
+      "bytes": 30677,
+      "sha256": "99c681381e3c850f"
+    },
+    {
+      "name": "27-plugins-detail",
+      "bytes": 71523,
+      "sha256": "5168ac85dc099605"
+    },
+    {
+      "name": "28-memory",
+      "bytes": 127314,
+      "sha256": "6f3a12cff1a4e345"
+    },
+    {
+      "name": "29-memory-detail",
+      "bytes": 120033,
+      "sha256": "56d363d343260bf3"
+    },
+    {
+      "name": "30-automation",
+      "bytes": 107651,
+      "sha256": "85fd782cb267fb49"
+    },
+    {
+      "name": "31-automation-idle",
+      "bytes": 45300,
+      "sha256": "7a7bdf95825eec67"
+    },
+    {
+      "name": "32-clarify-card",
+      "bytes": 82634,
+      "sha256": "179004a4532a031e"
+    },
+    {
+      "name": "33-approval-card",
+      "bytes": 75117,
+      "sha256": "4c4edc55c0d22ff2"
+    },
+    {
+      "name": "34-plan-card",
+      "bytes": 84151,
+      "sha256": "2f32e690bbbe7bbe"
+    },
+    {
+      "name": "35-dark-home",
+      "bytes": 76399,
+      "sha256": "9a6b9f0dfc95d1f5"
+    },
+    {
+      "name": "36-dark-session",
+      "bytes": 112984,
+      "sha256": "b0840e9f3228c6e7"
+    },
+    {
+      "name": "37-dark-plugins",
+      "bytes": 49257,
+      "sha256": "85016ddcdcc97cc6"
+    },
+    {
+      "name": "38-dark-settings",
+      "bytes": 50837,
+      "sha256": "09247e0a2592c4ca"
+    },
+    {
+      "name": "39-narrow-880-plugins",
+      "bytes": 40301,
+      "sha256": "a018bb450f4949fa"
+    },
+    {
+      "name": "40-narrow-880-chat",
+      "bytes": 103296,
+      "sha256": "aa92c04ce416399c"
+    },
+    {
+      "name": "41-1120-chat",
+      "bytes": 107431,
+      "sha256": "a9a6c72c382a1794"
+    },
+    {
+      "name": "42-session-1440",
+      "bytes": 111359,
+      "sha256": "6f244f7f065deda1"
+    }
+  ],
+  "duplicates": [],
+  "misses": [],
+  "pageErrors": [],
+  "themeChecks": [
+    {
+      "want": "light",
+      "got": {
+        "theme": "light",
+        "mode": "light",
+        "dark": false
+      }
+    },
+    {
+      "want": "dark",
+      "got": {
+        "theme": "dark",
+        "mode": "dark",
+        "dark": true
+      }
+    },
+    {
+      "want": "light",
+      "got": {
+        "theme": "light",
+        "mode": "light",
+        "dark": false
+      }
+    }
+  ],
+  "summary": {
+    "shots": 42,
+    "unique": 42,
+    "duplicates": 0,
+    "misses": 0,
+    "pageErrors": 0,
+    "themes": "light,dark,light"
+  }
+}

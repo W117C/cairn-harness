@@ -3,7 +3,7 @@
 // 为什么要有它：「行业最高」如果只是散文，谁都能写。这里每一行都必须
 // ①引用外部标准的条款；②给出阈值；③给出**从读数里算出来的**实测值；④给出判定。
 // 读数缺了就是 `missing`，不许默认通过——那正是「读数没跑却报绿」的经典翻车法。
-import { contrastRatio, type Rgb } from "../../apps/desktop/src/renderer/derived/wallpaper-contrast";
+import { contrastRatio, type Rgb } from "../wallpaper/contrast";
 
 export type ConformanceVerdict = "pass" | "fail" | "missing";
 

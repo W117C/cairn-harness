@@ -43662,3 +43662,36 @@ PASS 网站壁纸：CSP 真在管——http 被拦 1 次、https 未被拦
 - 核心 `pnpm test:capped`：**708 文件 / 8345 条全绿**，exit 0
 - 桌面 421 文件 / 2686 条全绿；真机冒烟 **70/70**；四包密封证据有效（本轮无渲染层改动）
 - `typecheck` 0 报错；`docs-check` 全绿
+
+## 2026-11-16 · 第 1299 页：清账——把「验证层反向依赖渲染层」的红线收掉，文档同步（`pending`）
+
+### 一、红线（上一批留下的）
+
+`desktop-boundary-check` 红：`src/verification/conformance.ts` import 了
+`apps/desktop/src/renderer/derived/wallpaper-contrast`（第 1297 页引入）。规则是 **src 不得依赖 apps**。
+
+改法：把 WCAG 的纯数学上移到 `src/wallpaper/contrast.ts`（`Rgb` / `relativeLuminance` / `contrastRatio`），
+
+- 验证层 `conformance.ts` 改从 core 取；
+- 渲染层 `derived/wallpaper-contrast.ts` 变成薄封装（保留 `glassSurface`/`floorFor` 等渲染专属模型）；
+- `scripts/renderer-layer-check.ts` 的派生层纯模块白名单登记 `src/wallpaper/contrast.ts`（登记≠豁免，传递依赖仍跑纯度检查）。
+
+读数：`desktop-boundary-check: 绿`；`renderer-layer-check: 绿（251 个渲染层源文件）`；`typecheck` 0 报错。
+
+### 二、随之而来的证据重签（渲染层源改了）
+
+`pnpm --filter cairn-desktop build` 后四包重签：cds `errors:0`、ime 6/6、overlay 5/5、queue 6/6。
+桌面套件 **421 文件 / 2687 条全绿**（先重签再跑，避免「旧读数冒充通过」）。
+
+### 三、文档同步（现役答案只留一处）
+
+| 文件 | 改动 |
+|---|---|
+| `docs/industry-standard.md` | 「八条全 pass / 62/62」→ **「九条全 pass / 70/70」**（新增 frame-src 放开面那条；冒烟已到 70） |
+| `AGENTS.md` | 新增一条入口：`npx tsx scripts/verify-all.ts` → `outputs/verify-all/summary.json`，**没跑记 missing 不是 pass**；同时压缩 `outputs/` 那条以守住 8000 字节预算（7966） |
+
+### 四、门禁读数（工作树）
+
+- 核心 `pnpm test:capped`：**708 文件 / 8345 条全绿**，exit 0
+- 桌面 **421 文件 / 2687 条全绿**；`typecheck` 0；`docs-check` 绿；`evidence-typecheck` 12/12 帽内
+- 四包密封证据重签绿
