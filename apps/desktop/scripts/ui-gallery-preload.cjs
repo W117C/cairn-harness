@@ -1601,6 +1601,8 @@ if (wallpaperFixturePath !== "") {
   // preload 只做转发（与产品同一组通道名）。
   stub.wallpaperBrowse = (dir) => ipcRenderer.invoke("agent:wallpaper-browse", dir);
   stub.wallpaperApplyPath = (path) => ipcRenderer.invoke("agent:wallpaper-apply-path", path);
+  stub.wallpaperDisplays = () => ipcRenderer.invoke("agent:wallpaper-displays");
+  stub.wallpaperSetForDisplay = (id) => ipcRenderer.invoke("agent:wallpaper-set-for-display", id);
   contextBridge.exposeInMainWorld("__cairnWallpaper", {
     picks: () => wallpaperPicks.length,
     path: wallpaperFixturePath,

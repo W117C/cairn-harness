@@ -168,8 +168,10 @@ export type { SearchProvider } from "../tools/web-search";
  *  v74 = 群轮次带上下文：轮到谁开跑时，把群里最近几条编进任务书（同一批看得见本批之前的话）。
  *  v75 = 成员 run 串行闸：`teamMemberStart` 回包增 `waitedMs`；一次只跑一个成员，密钥注入窗口不重叠。
  *  v76 = 群一轮的波次：`teamGroupNext(start)` 把被 @ 的人**顺序**跑，每人开跑前重读共享流
- *        （后面的人看得见前面刚说的），回包增 `wave`。 */
-export const IPC_PROTOCOL_VERSION = 76;
+ *        （后面的人看得见前面刚说的），回包增 `wave`。
+ *  v77 = 多显示器壁纸：`wallpaperDisplays` 读每块屏解析结果与孤儿键；`wallpaperSetForDisplay` 把
+ *        当前壁纸设为某块屏专属。 */
+export const IPC_PROTOCOL_VERSION = 77;
 
 /** 团队名单（v59）：成员档案是投影，`records` 是补丁条数（面板据此说「有几条历史」）。 */
 export interface TeamRosterPayload {
@@ -887,6 +889,15 @@ export interface AgentApi {
     entries?: { name: string; path: string; kind: "dir" | "file" }[];
     error?: string;
   }>;
+  /** v77：多显示器——每块屏解析结果（专属 / 回落 / 无）+ 孤儿键。 */
+  wallpaperDisplays(): Promise<{
+    ok: boolean;
+    displays?: { id: string; width: number; height: number; scaleFactor: number; source: "display" | "fallback" | "none"; path?: string }[];
+    orphans?: string[];
+    error?: string;
+  }>;
+  /** v77：把当前壁纸设为某块屏的专属（写 settings.wallpaper.perDisplay）。 */
+  wallpaperSetForDisplay(displayId: string): Promise<{ ok: boolean; error?: string }>;
   /** v73：应用内选择器——按路径应用（跑同一条 validateWallpaperFile，渲染层拿不到没验过的路径）。 */
   wallpaperApplyPath(path: string): Promise<{ ok: boolean; kind?: "image" | "video"; path?: string; error?: string }>;
   /** v2.16 用户反馈沉淀（赞/踩）：落 sidecar `feedback.jsonl`（append-only，不进事件流）。

@@ -9,7 +9,8 @@ const settings = (patch: Partial<AppSettings["wallpaper"]["rotation"]> = {}): Ap
   ...DEFAULT_SETTINGS,
   wallpaper: {
     kind: "image", path: "/tmp/a.png", opacity: 1, scrim: 0.35, glassAlpha: 0.25, revision: 3,
-    rotation: {
+    perDisplay: {},
+  rotation: {
       enabled: true, mode: "interval", latitude: 39.9042, longitude: 116.4074, dayPath: null, nightPath: null,
       everyMinutes: 30, paths: ["/tmp/a.png", "/tmp/b.png"], lastAt: 0, ...patch,
     },

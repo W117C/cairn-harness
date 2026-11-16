@@ -11,6 +11,7 @@ import { installActivePush, WALLPAPER_ACTIVE_CHANNEL } from "./wallpaper-active"
 import { installWallpaperRotation } from "./wallpaper-rotation";
 import { pickWallpaper } from "./wallpaper-pick";
 import { browseDirectory } from "./wallpaper-browse";
+import { pruneDisplays, wallpaperForDisplay } from "../../../../src/wallpaper/displays";
 import { appendTeamPatch, readTeamRecords, readTeamRoster, teamLogPath } from "./team-store";
 import { listSessions, readSessionEvents } from "../../../../src/main/sessions";
 import { openSegmentForSession } from "./session-segments";
@@ -1159,6 +1160,40 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
       },
       validate: validateWallpaperFile,
     });
+  },
+  // v77 多显示器：每块屏解析（专属 > 回落 > 无）+ 孤儿键；设某屏专属。
+  wallpaperDisplays: async () => {
+    try {
+      const s = await getSettings();
+      const live = screen.getAllDisplays().map((d) => ({ id: String(d.id), width: d.bounds.width, height: d.bounds.height, scaleFactor: d.scaleFactor }));
+      const fallback = s.wallpaper.kind === "none" || s.wallpaper.path === null
+        ? null : { kind: s.wallpaper.kind, path: s.wallpaper.path };
+      const displays = live.map((d) => {
+        const r = wallpaperForDisplay(d.id, s.wallpaper.perDisplay, fallback);
+        return { ...d, source: r.source, ...(r.wallpaper === null ? {} : { path: r.wallpaper.path }) };
+      });
+      const { orphans } = pruneDisplays(s.wallpaper.perDisplay, live.map((d) => d.id));
+      return { ok: true, displays, orphans };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  },
+  wallpaperSetForDisplay: async (displayId) => {
+    try {
+      const id = String(displayId ?? "");
+      if (!/^[0-9]{1,20}$/.test(id)) return { ok: false, error: "显示器 id 只收数字" };
+      const s = await getSettings();
+      if (s.wallpaper.kind === "none" || s.wallpaper.path === null) return { ok: false, error: "还没选壁纸" };
+      await setSettings({
+        wallpaper: {
+          ...s.wallpaper,
+          perDisplay: { ...s.wallpaper.perDisplay, [id]: { kind: s.wallpaper.kind, path: s.wallpaper.path } },
+        },
+      } as never);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
   },
   // v73 应用内选择器：列目录 / 按路径应用（同一条校验，渲染层拿不到没验过的路径）。
   wallpaperBrowse: async (dir) => {

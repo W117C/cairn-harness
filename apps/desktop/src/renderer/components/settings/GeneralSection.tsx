@@ -3,7 +3,7 @@
 // 2026-11-12（第 1075 页）：裸中文收编进 STR.general（值一字不改；本文件同时进 strings.test 的 REWORKED_FILES）。
 import type { AppSettings } from "../../../../../../src/main/ipc-protocol";
 import type { TextSizeSetting, UiSizeSetting } from "../../../../../../src/main/settings";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { STR } from "../../strings";
 import { WallpaperBrowser } from "./WallpaperBrowser";
 import { SettingsSection, SettingsRow } from "../settings-ui";
@@ -64,8 +64,22 @@ export function GeneralSection(props: {
   wallpaperUnavailable: boolean;
   /** 定时轮换（2026-11-16）：整块 rotation 交给上层写（走 setSettings 的 wallpaper 合并，不走 panelPatch 白名单）。 */
   onWallpaperRotation: (next: AppSettings["wallpaper"]["rotation"]) => void;
+  /** 多显示器（v77）：判卷缝——直接给解析结果（生产走 wallpaperDisplays）。 */
+  initialDisplays?: { id: string; source: string; path?: string }[];
 }): React.JSX.Element {
   const [browsing, setBrowsing] = useState(false);
+  const [displays, setDisplays] = useState<{ id: string; source: string; path?: string }[]>(props.initialDisplays ?? []);
+  const [displayNote, setDisplayNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (props.initialDisplays !== undefined) return;
+    void (async () => {
+      try {
+        const r = await window.agent.wallpaperDisplays();
+        if (r.ok === true && r.displays !== undefined) setDisplays(r.displays.map((d) => ({ id: d.id, source: d.source, ...(d.path === undefined ? {} : { path: d.path }) })));
+      } catch { /* 读不到就不显示 */ }
+    })();
+  }, [props.initialDisplays]);
   return (
     <>
       <SettingsSection title={STR.general.appearanceTitle}>
@@ -242,6 +256,32 @@ export function GeneralSection(props: {
                 {`${STR.general.wallpaperRotationCount}${String(props.settings.wallpaper.rotation.paths.length)}`}
               </span>
             </div>
+            {/* 多显示器（v77）：每块屏一张；没有专属就回落全局。 */}
+            {displays.length > 0 && (
+              <div className="cw-displays" data-wallpaper-displays="true">
+                {displays.map((d) => (
+                  <span key={d.id} className="ss-static" data-display-id={d.id}>
+                    {`${STR.general.wallpaperDisplayPrefix} ${d.id} · ${d.source === "display" ? STR.general.wallpaperDisplayOwn : d.source === "fallback" ? STR.general.wallpaperDisplayFallback : STR.general.wallpaperDisplayNone}`}
+                  </span>
+                ))}
+                <button
+                  type="button"
+                  className="mini-btn"
+                  data-wallpaper-display-set="true"
+                  disabled={props.settings.wallpaper.path === null}
+                  onClick={() => {
+                    const first = displays[0];
+                    if (first === undefined) return;
+                    void window.agent.wallpaperSetForDisplay(first.id).then((r) => {
+                      setDisplayNote(r.ok === true ? STR.general.wallpaperDisplaySetOk : (r.error ?? STR.general.wallpaperDisplaySetFailed));
+                    });
+                  }}
+                >
+                  {STR.general.wallpaperDisplaySet}
+                </button>
+                {displayNote !== null && <span className="ss-static" data-wallpaper-display-note="true">{displayNote}</span>}
+              </div>
+            )}
             {browsing && props.onWallpaperPickPath !== undefined && (
               <WallpaperBrowser onPickPath={props.onWallpaperPickPath} {...(props.initialBrowser === undefined ? {} : { initial: props.initialBrowser })} />
             )}

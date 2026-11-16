@@ -162,6 +162,17 @@ const { installActivePush, WALLPAPER_ACTIVE_CHANNEL } = require(join(__dirname, 
 const { browseDirectory } = require(join(__dirname, "../src/main/wallpaper-browse.ts"));
 const { pickWallpaper } = require(join(__dirname, "../src/main/wallpaper-pick.ts"));
 const { validateWallpaperFile } = require(join(__dirname, "../src/main/wallpaper.ts"));
+const { screen } = require("electron");
+// v77 多显示器：用**真 screen** 枚举，handler 记录调用参数（设置写回由 preload 夹具承担）。
+const displayCalls = [];
+ipcMain.handle("agent:wallpaper-displays", () => {
+  const all = screen.getAllDisplays().map((d) => ({
+    id: String(d.id), width: d.bounds.width, height: d.bounds.height, scaleFactor: d.scaleFactor,
+    source: "fallback", path: "/tmp/fixture.png",
+  }));
+  return { ok: true, displays: all, orphans: [] };
+});
+ipcMain.handle("agent:wallpaper-set-for-display", (_e, id) => { displayCalls.push(String(id)); return { ok: true }; });
 ipcMain.handle("agent:wallpaper-browse", (_e, dir) => browseDirectory(typeof dir === "string" && dir !== "" ? dir : join(out, "")));
 ipcMain.handle("agent:wallpaper-apply-path", (_e, path) => validateWallpaperFile(String(path ?? "")));
 const wireActive = (win) => {
@@ -417,6 +428,24 @@ async function main() {
     rotationFlow.step === "done" && rotationFlow.enabled === true && rotationFlow.paths === 1
       && String(rotationFlow.countText).includes("1"),
     rotationFlow);
+
+  // ④c 多显示器（v77）：屏数来自真 screen；点「设为这块屏」把真 display.id 传下去。
+  const displayFlow = await js(`(async () => {
+    await new Promise((r) => setTimeout(r, 300));
+    const box = document.querySelector('[data-wallpaper-displays="true"]');
+    if (!box) return { step: "no-box" };
+    const ids = [...box.querySelectorAll('[data-display-id]')].map((n) => n.getAttribute("data-display-id"));
+    const btn = box.querySelector('[data-wallpaper-display-set="true"]');
+    if (!btn) return { step: "no-button", ids };
+    btn.click();
+    await new Promise((r) => setTimeout(r, 400));
+    return { step: "done", ids, note: (document.querySelector('[data-wallpaper-display-note="true"]') || {}).textContent || "" };
+  })()`);
+  readings.displays = { ...displayFlow, calls: [...displayCalls] };
+  check("多显示器：屏数与真 screen 一致，点「设为这块屏」传的是真 display.id",
+    displayFlow.step === "done" && displayFlow.ids.length === screen.getAllDisplays().length
+      && displayCalls.length === 1 && displayCalls[0] === displayFlow.ids[0],
+    readings.displays);
 
   // ⑤ 真指针可达 + 真点击改值（脚本 .click() 不算）。
   const sliderProbe = await pointerClick(win, ".cw-slider:nth-of-type(1) input[type='range']", 0.2);

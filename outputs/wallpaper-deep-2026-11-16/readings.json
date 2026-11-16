@@ -58,7 +58,7 @@
         "label": "壁纸不透明度",
         "columns": "78px 620px",
         "display": "grid",
-        "top": 475,
+        "top": 495,
         "labelWidth": 78,
         "labelLines": 1,
         "rangeWidth": 240,
@@ -70,7 +70,7 @@
         "label": "压暗",
         "columns": "78px 620px",
         "display": "grid",
-        "top": 500,
+        "top": 520,
         "labelWidth": 78,
         "labelLines": 1,
         "rangeWidth": 240,
@@ -82,7 +82,7 @@
         "label": "玻璃透明度",
         "columns": "78px 620px",
         "display": "grid",
-        "top": 524,
+        "top": 544,
         "labelWidth": 78,
         "labelLines": 1,
         "rangeWidth": 240,
@@ -119,6 +119,16 @@
     "enabled": true,
     "paths": 1,
     "countText": "候选：1"
+  },
+  "displays": {
+    "step": "done",
+    "ids": [
+      "1"
+    ],
+    "note": "已设为该屏专属",
+    "calls": [
+      "1"
+    ]
   },
   "sliderPointer": {
     "point": {
@@ -308,7 +318,7 @@
   },
   "degradeMarker": {
     "found": true,
-    "text": "壁纸选择图片或视频浏览本机…清除文件不可用定时轮换分钟把当前壁纸加入轮换固定间隔日出日落当前设为白天当前设为夜里昼/夜：0候选：0壁纸不透明度压暗玻璃透明度"
+    "text": "壁纸选择图片或视频浏览本机…清除文件不可用定时轮换分钟把当前壁纸加入轮换固定间隔日出日落当前设为白天当前设为夜里昼/夜：0候选：0屏 1 · 回落全局把当前壁纸设为这块屏壁纸不透明度压暗玻璃透明度"
   },
   "teamPanel": {
     "navClicked": {
@@ -338,7 +348,7 @@
       "rows": [
         "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
         "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-        "新来的成员 · mmwizgnt9read-onlydefaultguidedautofull-accessteammemberproject移除",
+        "新来的成员 · mmwizuty7read-onlydefaultguidedautofull-accessteammemberproject移除",
         "本轮发言秩序主持优先按名单轮排一轮",
         "当前会话的段—开新段",
         "权限（成员维）团队档 default · 无裁剪",
@@ -355,7 +365,7 @@
       "rows": [
         "新增成员名字必填；角色缺省为「成员」。档案是补丁投影，删人写墓碑，历史不删。read-onlydefaultguidedautofull-access添加",
         "示例成员调研 · m-seedread-onlydefaultguidedautofull-accessteammemberproject移除",
-        "新来的成员 · mmwizgnt9read-onlydefaultguidedautofull-accessteammemberproject移除",
+        "新来的成员 · mmwizuty7read-onlydefaultguidedautofull-accessteammemberproject移除",
         "本轮发言秩序主持优先按名单轮排一轮",
         "排出来的秩序1. 示例成员　2. 新来的",
         "当前会话的段—开新段",
@@ -427,7 +437,7 @@
       "canceled": false,
       "filePaths": []
     },
-    "elapsedMs": 2084,
+    "elapsedMs": 2096,
     "options": {
       "title": "选择壁纸",
       "properties": [

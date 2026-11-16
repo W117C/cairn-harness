@@ -46,6 +46,7 @@ describe("壁纸设置", () => {
         enabled: false, mode: "interval", latitude: 39.9042, longitude: 116.4074,
         dayPath: null, nightPath: null, everyMinutes: 60, paths: [], lastAt: 0,
       },
+      perDisplay: {},
     });
   });
 

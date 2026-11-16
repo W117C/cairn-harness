@@ -48,6 +48,8 @@ export type ProviderKind = "demo" | (typeof ENV_KEYED_PROVIDERS)[number] | (stri
 /** 壁纸类型：none = 无壁纸；image / video = 用户自选的本地文件。
  *  2026-11-14（设计规格 §3.4）：壁纸是**应用内**对话背后的一层，不是系统桌面壁纸。
  *  kind=none 时 path 必为 null——「有路径才有壁纸」是单一事实，两个字段不许各说各话。 */
+import { sanitizeDisplayMap, type DisplayMap } from "../wallpaper/displays";
+
 export type WallpaperKind = "none" | "image" | "video";
 
 export interface WallpaperSettings {
@@ -64,6 +66,8 @@ export interface WallpaperSettings {
   revision: number;
   /** 定时轮换（2026-11-16）：到点换下一张。`paths` 为空时轮换无意义（保持原样）。 */
   rotation: WallpaperRotation;
+  /** 多显示器（2026-11-16）：每屏专属壁纸；没有的屏回落到全局 kind/path。 */
+  perDisplay: DisplayMap;
 }
 
 export interface WallpaperRotation {
@@ -247,6 +251,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
       dayPath: null, nightPath: null,
       everyMinutes: 60, paths: [], lastAt: 0,
     },
+    perDisplay: {},
   },
 };
 
@@ -305,6 +310,7 @@ function validateWallpaper(raw: unknown): WallpaperSettings {
     glassAlpha: glassAlphaOf(r.glassAlpha, d.glassAlpha),
     revision,
     rotation: validateRotation(r.rotation, d.rotation),
+    perDisplay: sanitizeDisplayMap(r.perDisplay).kept,
   };
 }
 
