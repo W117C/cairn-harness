@@ -1,5 +1,5 @@
 {
-  "at": "2026-11-16T12:25:36.075Z",
+  "at": "2026-11-17T02:24:55.788Z",
   "verdict": "pass",
   "parity": {
     "threshold": 0.96,
@@ -17,7 +17,7 @@
       "unit": "ratio",
       "measured": 4.526,
       "verdict": "pass",
-      "source": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/readings.json"
+      "source": "/Users/ze/Downloads/Cairn/cairn/outputs/wallpaper-deep-2026-11-16/readings.json"
     },
     {
       "standard": "CSP Level 3",
@@ -26,7 +26,7 @@
       "unit": "violations",
       "measured": 1,
       "verdict": "pass",
-      "source": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/readings.json"
+      "source": "/Users/ze/Downloads/Cairn/cairn/outputs/wallpaper-deep-2026-11-16/readings.json"
     },
     {
       "standard": "CSP Level 3",
@@ -35,7 +35,7 @@
       "unit": "directives",
       "measured": 3,
       "verdict": "pass",
-      "source": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/readings.json"
+      "source": "/Users/ze/Downloads/Cairn/cairn/outputs/wallpaper-deep-2026-11-16/readings.json"
     },
     {
       "standard": "CSP Level 3",
@@ -44,7 +44,7 @@
       "unit": "occurrences",
       "measured": 0,
       "verdict": "pass",
-      "source": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/readings.json"
+      "source": "/Users/ze/Downloads/Cairn/cairn/outputs/wallpaper-deep-2026-11-16/readings.json"
     },
     {
       "standard": "CSP Level 3",
@@ -53,7 +53,7 @@
       "unit": "ok",
       "measured": 1,
       "verdict": "pass",
-      "source": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/readings.json"
+      "source": "/Users/ze/Downloads/Cairn/cairn/outputs/wallpaper-deep-2026-11-16/readings.json"
     },
     {
       "standard": "Electron 安全清单",
@@ -62,7 +62,7 @@
       "unit": "checks",
       "measured": 4,
       "verdict": "pass",
-      "source": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/readings.json"
+      "source": "/Users/ze/Downloads/Cairn/cairn/outputs/wallpaper-deep-2026-11-16/readings.json"
     },
     {
       "standard": "WCAG 2.2",
@@ -71,7 +71,7 @@
       "unit": "flows",
       "measured": 1,
       "verdict": "pass",
-      "source": "/Users/ze/alma/worktrees/cairn/superior-starfish/outputs/wallpaper-deep-2026-11-16/readings.json"
+      "source": "/Users/ze/Downloads/Cairn/cairn/outputs/wallpaper-deep-2026-11-16/readings.json"
     },
     {
       "standard": "OWASP Top 10 2021",
