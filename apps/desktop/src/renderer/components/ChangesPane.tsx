@@ -136,8 +136,9 @@ export function ChangesPane(props: {
         </div>
         {/* 右栏：选中文件的差异（Codex / Claude 的改审阅就是「文件列表在左、差异在右」） */}
         <div className="review-diff">
+          {/* 2026-11-17（移植设计收敛 R2 A 档）：空态只留动作指向，删实现解释——「让布局说话」。 */}
           {selected === null ? (
-            <div className="pane-empty">左边选一个文件，这里看它改了什么。<br />选中之前不预取差异——点开才读快照与当前文件。</div>
+            <div className="pane-empty">左边选一个文件，这里看它改了什么。</div>
           ) : (
             <>
               <div className="review-diff-head">

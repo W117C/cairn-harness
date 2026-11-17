@@ -203,7 +203,7 @@ const ToolRow = memo(function ToolRow(props: Extract<StreamRow, { kind: "tool" }
             </div>
           ) : (
             <div className="kv">
-              <span className="k">摘要</span>
+              {/* 2026-11-17（移植设计收敛 R2 A 档）：删「摘要」小标题——值本身即摘要。 */}
               <pre>{r.summary}</pre>
             </div>
           )}
@@ -238,7 +238,7 @@ const ToolRow = memo(function ToolRow(props: Extract<StreamRow, { kind: "tool" }
             图标按 kind 选——可预览的页面给「眼睛」，图片给「图」，其余给「源码」。 */}
         {r.artifact !== undefined && props.onOpenArtifact !== undefined && (
           <div className="kv">
-            <span className="k">产物</span>
+            {/* 2026-11-17（移植设计收敛 R2 A 档）：删「产物」小标题——按钮文字已说明。 */}
             <div className="artifact-actions">
               <button className="mini-btn" onClick={() => props.onOpenArtifact!(r.artifact!)}>
                 {r.artifact.kind === "html" || r.artifact.kind === "svg"
@@ -540,8 +540,9 @@ const UserRowView = memo(function UserRowView({ actions, canFold, flash, eventRe
 const AssistantRowView = memo(function AssistantRowView({ actions, caret, eventRef, sourceRow, ...r }: Extract<StreamRow, { kind: "assistant" }> & { actions?: StreamActions; caret: boolean; eventRef?: EventRef; sourceRow?: boolean }) {
   return (
   <div className="row assistant" data-cds="AssistantMessage" data-cds-reply-type="true" data-event-id={String(r.eventId)} {...(eventRef !== undefined ? { "data-event-ref": eventRefKey(eventRef), "data-source-session": eventRef.sessionId } : {})}>
-    {/* 流式中的行：标记 = 启动屏同款逐格加载动效（业主 2026-10-24：动效放在对话里模型说话的地方）；停转即回静态品牌标。 */}
-    <span className="spark" aria-hidden="true">{caret ? <CairnLoader /> : <CairnMark />}</span>
+    {/* 流式中的行：标记 = 启动屏同款逐格加载动效（业主 2026-10-24：动效放在对话里模型说话的地方）；停转即回静态品牌标。
+        2026-11-17（移植 R5 C 档）：粒子只挂 caret 行——历史/等待态没有。 */}
+    <span className="spark" aria-hidden="true">{caret ? <CairnLoader /> : <CairnMark />}{caret && <span className="spark-motes">{Array.from({ length: 8 }, (_, i) => <i key={i} className="mote" />)}</span>}</span>
     <span className="t">
       {/* 追字光标在正文末尾行内（caret 进最后一个文本块），终稿到达或会话停转即消失。 */}
       {r.text !== "" ? (

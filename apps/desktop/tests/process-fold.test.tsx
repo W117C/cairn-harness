@@ -41,7 +41,10 @@ describe("过程带折叠：最终答复落地 ⇒ 答复之前的一切收成�
     expect(out).toContain('class="process-fold"');
     expect(out).toContain('class="process-fold-toggle"');
     expect(out).toContain('aria-expanded="false"');
-    expect(out).toMatch(/class="process-fold-body" hidden=""/);
+    // 2026-11-17（移植设计收敛 R5）：折叠体改 grid-rows 高度过渡（hidden 瞬切退场）；
+    // 收起态 = data-open=false + aria-hidden + fold-inner 裁剪层。
+    expect(out).toMatch(/class="process-fold-body" data-open="false" aria-hidden="true"/);
+    expect(out).toContain('class="fold-inner"');
   });
 
   it("折起来不等于扔掉：思考行与工具簇还在 DOM 里（展开即恢复原样）", () => {

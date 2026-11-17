@@ -214,6 +214,11 @@ export function SettingsPanel(props: {
   const visibleSections = useMemo(() => filterSections(navQuery), [navQuery]);
   // 行级命中（2026-11-17）：分区搜索打到「行」这一级——命中显示「分区 › 行」，点击跳分区。
   const rowHits = useMemo(() => filterSectionRows(navQuery), [navQuery]);
+  // 2026-11-17（批6·审计第 12 条）：切分区 / 清空搜索后，把导航选中项拉回可视区（block:nearest 瞬时，
+  // 无动画——reduce-motion 下也不产生 JS 平滑滚动；scroll-behavior 判卷钉的是 App 的两处 smooth 面，与此无关）。
+  useEffect(() => {
+    navSectionsRef.current?.querySelector<HTMLElement>(".sp-nav-item.on")?.scrollIntoView({ block: "nearest" });
+  }, [section, navQuery]);
   // 第 1167 页：三组导航分区一次分好；设置页局部状态变化不重跑 3 次 filter。
   const navGroups = useMemo(() => (["settings", "workspace", "system"] as const).map((group) => ({
     group,

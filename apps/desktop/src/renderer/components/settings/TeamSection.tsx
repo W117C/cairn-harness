@@ -164,7 +164,10 @@ export function TeamSection(
   const nameOf = (id: string): string => plan?.roster.find((r) => r.id === id)?.name ?? id;
 
   return (
-    <SettingsSection title={STR.team.title}>
+    <>
+      {/* 2026-11-17（批6·审计第 7 条）：团队页 17 行挤在一张卡 → 名单 / 本轮协作 / 密钥授权 三段。
+          行与数据全部不动，只拆容器；段名避行标签（成员与名单 ⊅ 成员名单）。 */}
+      <SettingsSection title={STR.team.rosterTitle}>
       <SettingsRow label={STR.team.add} desc={STR.team.addDesc}>
         <div className="team-add">
           <input
@@ -249,6 +252,9 @@ export function TeamSection(
         </SettingsRow>
       )}
 
+      </SettingsSection>
+
+      <SettingsSection title={STR.team.coopTitle}>
       <SettingsRow label={STR.team.roundTitle}>
         <div className="team-member">
           <select
@@ -318,6 +324,9 @@ export function TeamSection(
         </SettingsRow>
       )}
 
+      </SettingsSection>
+
+      <SettingsSection title={STR.team.secretSectionTitle}>
       <SettingsRow label={STR.team.secretTitle}>
         <div className="team-member">
           <select
@@ -367,11 +376,10 @@ export function TeamSection(
       </SettingsRow>
 
       {issue !== null && (
-        <SettingsRow label={STR.team.issue}>
-          <span className="ss-static">{issue}</span>
-        </SettingsRow>
+        <p className="sp-note err" role="alert">{STR.team.issue}：{issue}</p>
       )}
-    </SettingsSection>
+      </SettingsSection>
+    </>
   );
 }
 

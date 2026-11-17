@@ -144,8 +144,9 @@ describe("好标本仍绿（本仓现读面）", () => {
     const m2 = ruleOf(outcome, "M2");
     const ids = (r: RuleResult): string[] => r.exempted.map((e) => e.id);
     // visibility 0s 九处（含窄窗第 1051 页与第 863 页补的展开——都是瞬时翻转，沿用 E1 的规范理由）。
-    // 2026-11-17（批1+2 流面动效，3cc4dddf）：工具折叠/思考带折叠新增两处 grid-rows + visibility 0s 翻转到场，
-    // 登记 7→9；判卷侧只数「visibility 0s」这一形，新增同形必须同步登记。
+    // 2026-11-17：批1+2（3cc4dddf）工具折叠新增两处（登记 7→9）；移植设计收敛 R5 过程带折叠过渡
+    // 的 visibility 0s 在 stream-process.css——M2 读面是 styles.css 单文件（既有边界，见 checkMotionPolicy），
+    // 不在本计数内；该文件规则已用 --t-* / --ease-* 令牌自洽（台账 1315 记录此边界）。
     expect(ids(m2).filter((i) => i === "E1")).toHaveLength(9);
     // breathe 已改走 --t-breathe：按值的 E2 豁免撤名，四条现场回归令牌路径（牌子不许再出现）。
     expect(ids(m2).filter((i) => i === "E2")).toHaveLength(0);

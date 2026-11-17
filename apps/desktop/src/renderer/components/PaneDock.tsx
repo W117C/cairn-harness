@@ -43,12 +43,12 @@ export { PANE_META, PANE_OPENABLE, type PaneKind } from "./panes";
 /** 窗格空态统一形制（2026-11-17）：图标锚 + 标题 + 次级说明，替代此前两行灰字无出路。
  *  panes-structure 判卷钉的文案锚（没有打开的窗格 / 本会话还没有…）逐字保留。
  *  定义放文件前部：pane-browser-memo 判卷钉着 BrowserPane 结尾与「方案窗格」注释的源码衔接。 */
-function PaneEmpty(props: { mark: React.ReactNode; title: string; note: string }): React.JSX.Element {
+function PaneEmpty(props: { mark: React.ReactNode; title: string; note?: string }): React.JSX.Element {
   return (
     <div className="pane-empty">
       <div className="pane-empty-mark" aria-hidden="true">{props.mark}</div>
       <p className="pane-empty-title">{props.title}</p>
-      <p className="pane-empty-note">{props.note}</p>
+      {props.note !== undefined && <p className="pane-empty-note">{props.note}</p>}
     </div>
   );
 }
@@ -571,7 +571,8 @@ const BrowserPane = memo(function BrowserPane(props: {
             >忘记全部已授权站点</DropdownMenu.Item>
             <DropdownMenu.Separator className="menu-sep" />
             <DropdownMenu.Item className="menu-item" disabled>
-              <span className="menu-note">清除只及本窗格的独立 profile（persist:cairn-browser），不动你的个人浏览器</span>
+              {/* 2026-11-17（移植设计收敛 R2 A 档）：删浏览器 profile 内部 id，保留安全边界措辞。 */}
+              <span className="menu-note">清除只及本窗格的独立浏览数据，不动你的个人浏览器</span>
             </DropdownMenu.Item>
           </DropdownMenu.Content>
         </DropdownMenu.Root>
@@ -627,7 +628,7 @@ const BrowserPane = memo(function BrowserPane(props: {
 const PlanPane = memo(function PlanPane(props: { events: readonly AgentEvent[] }): React.JSX.Element {
   const plans = projectPlans(props.events);
   if (plans.length === 0) {
-    return <PaneEmpty mark={<ClipboardList size={18} />} title="本会话还没有提交过方案。" note="模型提请计划后会在审核后留档在这里。" />;
+    return <PaneEmpty mark={<ClipboardList size={18} />} title="本会话还没有提交过方案。" />;
   }
   const stateWord = (s: string): string => (s === "approved" ? "已批准" : s === "rejected" ? "已拒绝" : "待决");
   const stateCls = (s: string): string => (s === "approved" ? "ok" : s === "rejected" ? "bad" : "warn");

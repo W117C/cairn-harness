@@ -145,7 +145,7 @@ export function PluginsPane(props: {
             <section className="ap-sec">
               <h3>技能（{String(selected.skills?.length ?? 0)}）</h3>
               {(selected.skills ?? []).length === 0
-                ? <div className="ap-empty">该插件没有技能条目</div>
+                ? null
                 : (selected.skills ?? []).map((sk) => (
                   <div key={sk.invoke} className="plugin-skill">
                     <div className="ap-li">
@@ -165,7 +165,7 @@ export function PluginsPane(props: {
             <section className="ap-sec">
               <h3>命令（{String(selected.commands?.length ?? 0)}）</h3>
               {(selected.commands ?? []).length === 0
-                ? <div className="ap-empty">该插件没有命令条目</div>
+                ? null
                 : (selected.commands ?? []).map((c) => (
                   <div key={c.invoke} className="ap-li"><span className="kind mono-k">{c.invoke}</span><span className="p">{c.description}</span>{props.onInvoke !== undefined && <button className="mini-btn" onClick={() => { props.onInvoke?.(c.invoke); }}>{STR.pluginSurface.fill}</button>}</div>
                 ))}
@@ -173,7 +173,7 @@ export function PluginsPane(props: {
             <section className="ap-sec">
               <h3>配置（{String(selected.userConfig?.length ?? 0)}）</h3>
               {(selected.userConfig ?? []).length === 0
-                ? <div className="ap-empty">该插件没有声明 userConfig</div>
+                ? null
                 : (selected.userConfig ?? []).map((f) => {
                   const key = selected.name + "::" + f.key;
                   return (
@@ -243,8 +243,8 @@ export function PluginsPane(props: {
               </section>
             )}
             <section className="ap-sec">
-              <h3>该插件 MCP</h3>
-              {selectedMcp.length === 0 && <div className="ap-empty">无 MCP 服务</div>}
+              {/* 2026-11-17（移植设计收敛 R2 A 档）：二次报零收敛为标题计数。 */}
+              <h3>该插件 MCP（{String(selectedMcp.length)}）</h3>
               {selectedMcp.map((m) => {
                 const key = selected.name + "/" + m.server;
                 const toolPrefix = "mcp__plugin_" + selected.name + "_" + m.server + "__";

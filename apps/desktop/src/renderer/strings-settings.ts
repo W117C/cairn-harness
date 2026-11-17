@@ -162,6 +162,10 @@ export const settingsStrings = {
     tier: "权限档",
     addAction: "添加",
     remove: "移除",
+    // 2026-11-17（批6）：团队页拆三段；段名不取行标签超集。
+    rosterTitle: "成员与名单",
+    coopTitle: "本轮协作",
+    secretSectionTitle: "密钥与授权",
     list: "成员名单",
     empty: "还没有成员。",
     emptyValue: "空名单",

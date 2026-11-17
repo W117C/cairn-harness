@@ -114,7 +114,8 @@ export function SkillsPane(props: {
           <Drawer key={selected.invoke} title={selected.invoke} sub={selected.description} onClose={() => setSel(null)}>
             <section className="ap-sec">
               <h3>来源</h3>
-              <div className="ap-kv">独立技能（loose）· 信任态 {selected.trust}</div>
+              {/* 2026-11-17（移植设计收敛 R2 A 档）：删「(loose)」内部词。 */}
+              <div className="ap-kv">信任态 {selected.trust}</div>
               <Switch
                 label="信任该技能"
                 checked={selected.trust === "trusted"}
@@ -151,7 +152,7 @@ export function SkillsPane(props: {
           </Drawer>
         )}
       </div>
-      <div className="ap-note">输入技能名即可调用。</div>
+
     </PageFrame>
   );
 }

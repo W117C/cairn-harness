@@ -15,6 +15,9 @@
    放宽到 880px（仍留出可读行长），标题抬到与页面标题同一档。 */
 .sp-page .sp-body > .ss-page { max-width: 880px; margin: 0 auto; width: 100%; }
 .sp-page .ss-head { margin-bottom: 28px; }
+/* 2026-11-17（批6·审计第 12 条）：长分区滚动时页头滚走——贴顶 + 底色 + 发丝线，标题始终在场。
+   不碰 .ss-title 规则（判卷锚 font-size: 26px 钉它在原位）。 */
+.sp-page .ss-head { position: sticky; top: 0; z-index: 3; background: hsl(var(--bg-100)); padding: 14px 0 12px; margin-bottom: 14px; border-bottom: 1px solid var(--hairline); }
 .sp-page .ss-head > .ss-title {
   margin: 0;
   font-family: inherit;

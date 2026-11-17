@@ -16,7 +16,7 @@ const KIND_WORD: Record<TimelineItem["kind"], string> = {
 export function TimelinePane(props: { items: readonly TimelineItem[]; onJump?: (eventId: number) => void }): React.JSX.Element {
   const now = useNow();
   if (props.items.length === 0) {
-    return <div className="isp-empty">本会话还没有可列的事件。<br />对话开始后，每一步会按事件日志在这里排队。</div>;
+    return <div className="isp-empty">本会话还没有可列的事件。</div>;
   }
   return (
     <ol className="tl-list">

@@ -393,6 +393,8 @@
 .process-fold-label { flex: none; color: hsl(var(--text-300)); font-weight: var(--fw-medium); }
 .process-fold-detail { min-width: 0; overflow: hidden; color: hsl(var(--text-400)); text-overflow: ellipsis; white-space: nowrap; }
 .process-fold-failure { flex: none; color: hsl(var(--color-risk)); }
-.process-fold-body { display: flex; flex-direction: column; gap: 4px; }
-.process-fold-body[hidden] { display: none; }
-.process-fold-toggle + .process-fold-body { margin: 4px 0 6px 14px; }
+/* 2026-11-17（移植设计收敛 R5 B 档）：过程带折叠体做高度过渡——grid-rows 0fr↔1fr + visibility 延迟
+   （hidden 瞬切退场，与工具簇同一套手感）；竖向间距移进 .fold-inner，0fr 时才收得干净。 */
+.process-fold-body { display: grid; grid-template-rows: 0fr; visibility: hidden; transition: grid-template-rows var(--t-med) var(--ease-out), visibility 0s var(--t-med); }
+.process-fold[data-open="true"] .process-fold-body { grid-template-rows: 1fr; visibility: visible; transition: grid-template-rows var(--t-med) var(--ease-out), visibility 0s; }
+.process-fold-body > .fold-inner { overflow: hidden; min-height: 0; display: flex; flex-direction: column; gap: 4px; padding: 4px 0 6px 14px; }

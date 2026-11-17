@@ -29,7 +29,9 @@ export function ProcessFold(props: { children: React.ReactNode; summary: Process
         {s.thinks > 0 && <span className="process-fold-detail">{STR.processFold.thinkCount.replace("{n}", String(s.thinks))}</span>}
         {s.failures > 0 && <span className="process-fold-failure">{STR.processFold.failureCount.replace("{n}", String(s.failures))}</span>}
       </button>
-      <div id={id} className="process-fold-body" hidden={!expanded}>{props.children}</div>
+      {/* 2026-11-17（移植设计收敛 R5 B 档）：hidden 瞬切 → grid-rows 高度过渡 + fold-inner 裁剪层
+           （与工具簇同一套手感）；收起态 data-open=false + aria-hidden（正文按钮收起后不可聚焦）。 */}
+      <div id={id} className="process-fold-body" data-open={expanded ? "true" : "false"} aria-hidden={!expanded}><div className="fold-inner">{props.children}</div></div>
     </div>
   );
 }

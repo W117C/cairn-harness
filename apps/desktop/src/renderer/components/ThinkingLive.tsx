@@ -132,7 +132,7 @@ export function ThinkingLive(props: { seq: number; thinking?: string; running?: 
           ) : (
             <>
               正在思考（可以调档位；这家没吐思考正文时这里就是空的）。
-              <span className="off-note">思考与正文分开落事件，不把推理内容混进转录。</span>
+  
             </>
           )}
         </div>
