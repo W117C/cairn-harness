@@ -197,6 +197,14 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   teamMemberStart: "agent:team-member-start",
   teamGroupCreate: "agent:team-group-create",
   teamGroupNext: "agent:team-group-next",
+  // v80 IM 通道：连接清单/增删改/配对/重连（表单面由 imList 返回的 platforms 渲染）。
+  imList: "agent:im-list",
+  imAdd: "agent:im-add",
+  imUpdate: "agent:im-update",
+  imRemove: "agent:im-remove",
+  imPair: "agent:im-pair",
+  imUnpair: "agent:im-unpair",
+  imRetry: "agent:im-retry",
   teamSecretGrants: "agent:team-secret-grants",
   teamSecretGrant: "agent:team-secret-grant",
   teamSecretRequest: "agent:team-secret-request",
@@ -264,6 +272,7 @@ export type ChannelDomain =
   | "app"
   | "team"
   | "integration"
+  | "im"
   | "evolve"
   | "orchestration"
   | "usage"
@@ -273,6 +282,7 @@ export type ChannelDomain =
 
 export const CHANNEL_DOMAIN_DESC: { [K in ChannelDomain]: string } = {
   team: "团队（成员档案的名单与写入；档案是补丁投影，删人写墓碑不删历史）",
+  im: "IM 通道（飞书/邮件连接的增删改、配对审批与重连；密钥值只在 safeStorage）",
   run: "跑一轮与助手动作（发起、决策、澄清、计划、目标、取消、插话、压缩、建议下一条、卡片动作）",
   session: "会话生命周期与队列（建/开/改名/删/分叉/回滚、偏好、worktree、检索、日志、置顶、发送队列、导出）",
   project: "项目与工作区（项目增删改、模板与诊断、工作区上下文与文件浏览、路径动作、项目内检索、变更与 git 两闸）",
@@ -433,6 +443,13 @@ export const CHANNEL_DOMAINS: { [K in InvokeChannel]: ChannelDomain } = {
   teamMemberStart: "team",
   teamGroupCreate: "team",
   teamGroupNext: "team",
+  imList: "im",
+  imAdd: "im",
+  imUpdate: "im",
+  imRemove: "im",
+  imPair: "im",
+  imUnpair: "im",
+  imRetry: "im",
   teamSecretGrants: "team",
   teamSecretGrant: "team",
   teamSecretRequest: "team",

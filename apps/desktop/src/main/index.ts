@@ -113,7 +113,9 @@ import { BrowserHost } from "./browser-host";
 import { makeBrowserAgentTools } from "./browser-agent-tools";
 import { registerBrowserAgentTools } from "../../../../src/agent/browser-agent";
 import type { ClarifyAnswerMap } from "../../../../src/events";
-import { installProviderKeyBackend } from "../../../../src/main/provider-keys";
+import { installProviderKeyBackend, providerKeyBackend } from "../../../../src/main/provider-keys";
+import { createDesktopImHost, type DesktopImHostInput } from "./im-host";
+import type { ImHost } from "../../../../src/im/host";
 import { installSafeStorageBackend } from "../../../../src/agent/plugins/secrets";
 import { pluginDataRootOf } from "../../../../src/agent/plugins";
 import { validateUserMcpServer } from "../../../../src/agent/plugins/user-mcp";
@@ -445,6 +447,19 @@ const host = createKernelHost({
     broadcastToWindows(PUSH_CHANNELS[channel], payload);
   },
 });
+
+// v80 IM 通道宿主：密钥后端在 whenReady 才装（installProviderKeyBackend），所以宿主
+// 惰性挂载；run/会话根/档位全部走与团队派活同一条真通道。boot + 15s 对账在 whenReady；
+// 退出 will-quit stopAll。
+const imDeps: DesktopImHostInput = {
+  dir: join(userData, "im"),
+  run: async (req) => await (host.run as (x: unknown) => Promise<{ ok?: boolean; error?: string }>)(req),
+  sessionsRoot: async () => await explicitSessionsRoot(undefined) ?? undefined,
+  mode: async () => (await getSettings()).mode,
+  backend: null,
+};
+let imHost: ImHost | null = null;
+let imReconcile: ReturnType<typeof setInterval> | null = null;
 
 // v5 terminal 窗格：PTY 宿主（推送用与 kernel host 同一广播面）。退出时 killAll 不留孤儿 shell。
 const terminalHost = new TerminalHost((e) => {
@@ -951,6 +966,76 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
+  },
+  // ---- v80 IM 通道：宿主端点薄映射（宿主为空 = 未挂载，fail-visible 不装死）──────
+  imList: async () => {
+    if (imHost === null) return { ok: false, error: "IM 宿主未就绪" };
+    return { ok: true, ...imHost.view() };
+  },
+  imAdd: async (input) => {
+    if (imHost === null) return { ok: false, error: "IM 宿主未就绪" };
+    const raw = (input ?? {}) as { platform?: unknown; fields?: unknown; sessionId?: unknown; workspace?: unknown };
+    const fields = typeof raw.fields === "object" && raw.fields !== null ? (raw.fields as Record<string, string>) : {};
+    const result = await imHost.add({
+      platform: String(raw.platform ?? ""),
+      fields,
+      ...(typeof raw.sessionId === "string" && raw.sessionId !== "" ? { sessionId: raw.sessionId } : {}),
+      ...(typeof raw.workspace === "string" && raw.workspace !== "" ? { workspace: raw.workspace } : {}),
+      putSecret: async (storeKey, value) => {
+        const backend = providerKeyBackend();
+        if (backend === null) return { ok: false, error: "安全存储不可用（headless 或 safeStorage 不可用），密钥拒存" };
+        try {
+          await backend.set(storeKey, value);
+          return { ok: true };
+        } catch {
+          return { ok: false, error: "密钥保存失败：请检查安全存储与权限" };
+        }
+      },
+    });
+    return result;
+  },
+  imUpdate: async (input) => {
+    if (imHost === null) return { ok: false, error: "IM 宿主未就绪" };
+    const raw = (input ?? {}) as { id?: unknown; sessionId?: unknown; enabled?: unknown; fields?: unknown };
+    return await imHost.update({
+      id: String(raw.id ?? ""),
+      ...(typeof raw.sessionId === "string" ? { sessionId: raw.sessionId } : {}),
+      ...(raw.enabled !== undefined ? { enabled: raw.enabled === true } : {}),
+      ...(typeof raw.fields === "object" && raw.fields !== null ? { fields: raw.fields as Record<string, string> } : {}),
+      putSecret: async (storeKey, value) => {
+        const backend = providerKeyBackend();
+        if (backend === null) return { ok: false, error: "安全存储不可用，密钥拒存" };
+        try {
+          await backend.set(storeKey, value);
+          return { ok: true };
+        } catch {
+          return { ok: false, error: "密钥保存失败：请检查安全存储与权限" };
+        }
+      },
+    });
+  },
+  imRemove: async (id) => {
+    if (imHost === null) return { ok: false, error: "IM 宿主未就绪" };
+    const result = await imHost.remove(String(id ?? ""));
+    // 密钥条目随连接删除（键名从移除前的记录里拿）。
+    if (result.ok === true && result.secretKeys !== undefined) {
+      const backend = providerKeyBackend();
+      for (const storeKey of Object.values(result.secretKeys)) await backend?.delete(storeKey).catch(() => undefined);
+    }
+    return { ok: result.ok, ...(result.error === undefined ? {} : { error: result.error }) };
+  },
+  imPair: async (id, senderId, allow) => {
+    if (imHost === null) return { ok: false, error: "IM 宿主未就绪" };
+    return await imHost.pair(String(id ?? ""), String(senderId ?? ""), allow === true);
+  },
+  imUnpair: async (id, senderId) => {
+    if (imHost === null) return { ok: false, error: "IM 宿主未就绪" };
+    return await imHost.unpair(String(id ?? ""), String(senderId ?? ""));
+  },
+  imRetry: async (id) => {
+    if (imHost === null) return { ok: false, error: "IM 宿主未就绪" };
+    await imHost.retry(String(id ?? ""));
+    return { ok: true };
   },
   // v70 群聊共享流：读群会话自己的事件流（单一面），带轮与说话人，截断如实。
   teamGroupStream: async (sessionId, workspace, limit) => {
@@ -2020,6 +2105,11 @@ app.whenReady().then(() => {
     join(userData, "provider-keys.json"),
   );
   if (process.env.CAIRN_SMOKE === "1") console.error("[cairn-smoke] provider storage initialized");
+  // v80 IM 通道宿主：后端已装好，挂载 + boot + 15s 对账。
+  imHost = createDesktopImHost({ ...imDeps, backend: providerKeyBackend() });
+  void imHost.boot().catch(() => undefined);
+  imReconcile = setInterval(() => { void imHost?.sync().catch(() => undefined); }, 15_000);
+  imReconcile.unref?.();
   // 插件 userConfig 的敏感值同样要有后端：此前 installSafeStorageBackend 全仓零调用点 ⇒
   // getPluginSecret 恒 null、所有 sensitive 字段恒 missing（带字面占位符去连远端）。
   if (!installSafeStorageBackend(
@@ -2136,6 +2226,8 @@ app.on("before-quit", (event) => {
 // 调度器随应用退出停表（清 timer；与 CLI SIGINT → stop 同语义）。
 app.on("will-quit", () => {
   stopDesktopScheduler?.();
+  if (imReconcile !== null) clearInterval(imReconcile);
+  void imHost?.stopAll();
   terminalHost.killAll();
   browserHost.closeAll();
   // v7：朗读进程随应用退出回收（不停会念到退出后）。

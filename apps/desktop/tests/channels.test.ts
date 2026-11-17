@@ -78,7 +78,8 @@ describe("通道名表完整性", () => {
     // v60：＋teamRoundPlan（发言权调用方）/ sessionSegmentOpen（段写入点）。
     // v62：＋teamMemberDispatch；v63：＋teamMemberStart；v64：＋teamGroupCreate；v65：＋teamGroupNext；
     // v67：＋teamSecretGrants / teamSecretGrant；v68：＋teamSecretRequest；v70：＋teamGroupStream。
-    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(177);
+    // v80：＋imList / imAdd / imUpdate / imRemove / imPair / imUnpair / imRetry（IM 通道七件）。
+    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(184);
     const keys = Object.keys(INVOKE_CHANNELS) as (keyof typeof INVOKE_CHANNELS)[];
     expect(keys.length).toBeGreaterThan(0);
     for (const key of keys) expect(INVOKE_CHANNELS[key]).toBeTruthy();
@@ -342,6 +343,14 @@ describe("通道名表完整性", () => {
       "teamSecretRequest",
       "teamGroupStream",
       "teamMemoryPanel",
+      // v80：IM 通道七件全接真（宿主为空时 fail-visible 返回「IM 宿主未就绪」）。
+      "imList",
+      "imAdd",
+      "imUpdate",
+      "imRemove",
+      "imPair",
+      "imUnpair",
+      "imRetry",
       "wallpaperBrowse",
       "wallpaperApplyPath",
       "wallpaperDisplays",

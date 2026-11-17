@@ -77,6 +77,18 @@ describe("玻璃样式与模型的漂移守卫", () => {
     expect(glassBlock).toContain("backdrop-filter");
   });
 
+  it("玻璃材质三件套在面规则里：saturate 耦合 / 分层内阴影 / 外部景深", () => {
+    // 2026-11-17 材质升级的防回归：blur×saturate 是「透而不灰」的一半；sheen/shade/edge
+    // 三层内阴影 + 外部落影是「有厚度的玻璃」。这四样缺一样，玻璃就退化回「半透明色块」。
+    const glassBlock =
+      CSS.split("}").find((block) => block.includes("color-mix(in srgb, var(--cw-canvas)")) ?? "";
+    expect(glassBlock).toContain("saturate(var(--cw-glass-saturate");
+    expect(glassBlock).toContain("inset 0 1px 0 var(--cw-glass-sheen)");
+    expect(glassBlock).toContain("inset 0 -1px 0 var(--cw-glass-shade)");
+    expect(glassBlock).toContain("inset 0 0 0 1px var(--cw-glass-edge)");
+    expect(glassBlock).toContain("var(--cw-glass-shadow)");
+  });
+
   it("设置行的三个类都有样式：.cw-settings / .cw-settings-actions / .cw-slider 不许是裸 HTML", () => {
     // 2026-11-15 实测：GeneralSection 里写了这三个类名，但没有任何样式表定义它们 ⇒
     // 三个没有名字的蓝条与「未设置/清除」两个按钮挤在同一 flex 行里互相压缩。

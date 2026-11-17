@@ -175,7 +175,7 @@ export type { SearchProvider } from "../tools/web-search";
  *        file 源读外部 JSON（读不到回落手动档并说明）。
  *  v79 = 联网天气源（默认关）：`wallpaperWeatherFetch` 按设置里的 URL 取一次并解析；
  *        `wallpaperWeatherSetKey` 把 key 交给钥匙串（不明文落盘）。 */
-export const IPC_PROTOCOL_VERSION = 79;
+export const IPC_PROTOCOL_VERSION = 80;
 
 /** 团队名单（v59）：成员档案是投影，`records` 是补丁条数（面板据此说「有几条历史」）。 */
 export interface TeamRosterPayload {
@@ -232,6 +232,24 @@ export interface TeamRoundPlanPayload {
   unknown: string[];
   /** 参与这一轮的全部成员 id（按声明顺序）；UI 用它把 id 翻成名字。 */
   roster: { id: string; name: string; tier: string }[];
+}
+
+/** v80：IM 通道连接视图（ImHostView.connection 的镜像；状态如实点名）。 */
+export interface ImConnectionViewPayload {
+  id: string;
+  platform: string;
+  account: { id: string; name: string } | null;
+  sessionId: string;
+  workspace?: string;
+  settings: Record<string, string>;
+  /** 密钥键名（值在 safeStorage；UI 只显示「已存/缺失」）。 */
+  secretKeys: Record<string, string>;
+  enabled: boolean;
+  paired: { id: string; name: string; at: number }[];
+  requests: { id: string; name: string; chat: { key: string; kind: string; title: string }; at: number }[];
+  chats: Record<string, { key: string; kind: string; title: string }>;
+  createdAt: number;
+  status: { state: "off" | "connecting" | "ready" | "retrying" | "error"; error?: string; at?: number };
 }
 
 /** 壁纸媒体的系统级暂停信号（v59）。`reason` 只描述「为什么停」，不描述渲染层怎么做。 */
@@ -708,6 +726,21 @@ export interface AgentApi {
     wave?: { memberId: string; sessionId?: string; sawPrior: boolean }[];
     error?: string;
   }>;
+  // ---- v80：IM 通道（飞书/邮件）────────────────────────────────────────────────
+  /** v80：连接清单（含状态与待审申请；平台表单面由返回的 platforms 渲染）。 */
+  imList(): Promise<{ ok: boolean; error?: string; connections?: ImConnectionViewPayload[]; platforms?: { id: string; name: string; ws: boolean; fields: { key: string; label: string; secret?: boolean; hint?: string }[]; textLimit: number }[] }>;
+  /** v80：加连接（check 失败=拒存；密钥值落 safeStorage，记录里只有键名）。 */
+  imAdd(input: { platform: string; fields: Record<string, string>; sessionId?: string; workspace?: string }): Promise<{ ok: boolean; error?: string; id?: string }>;
+  /** v80：改绑定会话/启用开关/改字段（含重存密钥）。 */
+  imUpdate(input: { id: string; sessionId?: string; enabled?: boolean; fields?: Record<string, string> }): Promise<{ ok: boolean; error?: string }>;
+  /** v80：移除连接（主进程顺带删 safeStorage 条目）。 */
+  imRemove(id: string): Promise<{ ok: boolean; error?: string }>;
+  /** v80：审批外部发件人的连接申请（allow=false 拒绝并撤下申请）。 */
+  imPair(id: string, senderId: string, allow: boolean): Promise<{ ok: boolean; error?: string }>;
+  /** v80：解除某发件人的配对。 */
+  imUnpair(id: string, senderId: string): Promise<{ ok: boolean; error?: string }>;
+  /** v80：手动重连（停适配器再对账）。 */
+  imRetry(id: string): Promise<{ ok: boolean; error?: string }>;
   /** v60：给会话开新段（段的第一个写入点：追加一条 `session_meta_update`，序数由日志算）。 */
   sessionSegmentOpen(sessionId?: string, workspace?: string): Promise<{ ok: boolean; segment?: number; error?: string }>;
   getState(): Promise<StateResponse>;

@@ -40,6 +40,7 @@ import { MigrationSection } from "./settings/MigrationSection";
 import { PersonalizationSection } from "./settings/PersonalizationSection";
 import { SubagentsSection } from "./settings/SubagentsSection";
 import { TeamSection } from "./settings/TeamSection";
+import { ChannelsSection } from "./settings/ChannelsSection";
 import { NAV_GROUP_LABEL, SETTINGS_PAGE_ORDER, SECTIONS, filterSectionRows, filterSections, sectionById, sectionLabel, type SectionId } from "./settings-nav";
 import { destinationForSection } from "../navigation";
 import { STR } from "../strings";
@@ -67,6 +68,7 @@ const SETTINGS_DENSITY: Readonly<Record<SectionId, "single" | "table" | "compact
   personalization: "single",
   subagents: "compact",
   team: "single",
+  channels: "single",
   mcp: "table",
   hooks: "compact",
   network: "single",
@@ -758,6 +760,7 @@ export function SettingsPanel(props: {
           {section === "evolve" && <EvolveSection />}
 
           {section === "team" && <TeamSection />}
+          {section === "channels" && <ChannelsSection />}
 
           {section === "permissions" && settings !== null && (
             <SettingsPage title={sectionLabel("permissions")}>

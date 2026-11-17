@@ -1,5 +1,5 @@
 // 设置导航的轻量单源：命令面板只需要分区 id/标签，不应因此把设置页正文与工作台一起拉进首屏。
-import { BarChart3, BookOpen, Brain, Bot, Users, Clock, FolderInput, GitBranch, Globe, KeyRound, Keyboard, Plug, Puzzle, RotateCw, Shield, SlidersHorizontal, Sparkles, UserRound, Webhook, Wrench } from "lucide-react";
+import { BarChart3, BookOpen, Brain, Bot, Cable, Users, Clock, FolderInput, GitBranch, Globe, KeyRound, Keyboard, Plug, Puzzle, RotateCw, Shield, SlidersHorizontal, Sparkles, UserRound, Webhook, Wrench } from "lucide-react";
 import { STR } from "../strings";
 
 import type { PageId } from "../app-controls";
@@ -30,6 +30,8 @@ export const SECTIONS: readonly { id: SectionId; label: string; icon: React.JSX.
   { id: "subagents", label: "子 Agent", icon: <Bot size={14} /> },
   // 2026-11-16（v59）：团队成员——档案是补丁投影，名单与写入口都走团队事件日志。
   { id: "team", label: "团队", icon: <Users size={14} /> },
+  // 2026-11-17（v80）：IM 通道——飞书/邮件连接，消息进主 bot 会话，回信出通道。
+  { id: "channels", label: "通道", icon: <Cable size={14} /> },
   // 用户级 MCP 服务器（ZCode 独立管理对应面，2026-11-05）：<appData>/mcp.json 的管理面。
   { id: "mcp", label: "MCP 服务器", icon: <Plug size={14} /> },
   // 用户级 Hooks（ZCode HooksSection 对应面，2026-11-05）：<appData>/hooks.json 的管理面。
@@ -80,6 +82,7 @@ export const SECTION_KEYWORDS: Readonly<Record<SectionId, string>> = {
   personalization: "全局 自定义 指令 提示词 prompt 个性化 工作偏好",
   subagents: "子代理 子智能体 并行 worker 角色 委派 subagent",
   team: "团队 成员 成员档案 团队档 名单 roster 团队日志",
+  channels: "通道 连接 飞书 lark 邮件 邮箱 email imap smtp 微信 wecom 机器人",
   migration: "迁移 导入 claude code codex 兼容 配置",
   provider: "模型 通道 api key 密钥 接口 glm openai anthropic gemini deepseek 自定义 识图 视觉",
   mcp: "mcp server 服务器 工具 模型上下文协议 stdio sse http 接入",

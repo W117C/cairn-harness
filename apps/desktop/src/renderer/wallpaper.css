@@ -3,9 +3,13 @@
  * 色值纪律：本文件**零字面色值**（连注释里也不写色值）——画布色、文字色、玻璃色、
  * 地板权重全部由 state/wallpaper.ts 从真实计算样式读出后写成 CSS 变量（--cw-*）。变量契约：
  *   --cw-canvas           画布色（主题画布色）
- *   --cw-glass            玻璃叠色，**alpha 写进颜色值本身**（不是另设一个变量）
+ *   --cw-glass            玻璃叠色，**alpha 写进颜色值本身**（不是另设一个变量）；釉色主题化——
+ *                         暗色主题暗釉、亮色主题白釉（state/wallpaper.ts 单点写）
  *   --cw-floor            可读性地板权重，**百分比字符串**（数值由模型算，不手抄）
- *   --cw-glass-blur       玻璃模糊半径
+ *   --cw-glass-blur       玻璃模糊半径（随强度档联动）
+ *   --cw-glass-saturate   模糊耦合的饱和度（「透而不灰」的另一半）
+ *   --cw-glass-sheen / --cw-glass-edge / --cw-glass-shade   顶部高光 / 内描边 / 底部内影
+ *   --cw-glass-shadow     外部景深落影
  *   --cw-wallpaper-opacity / --cw-scrim  壁纸自身不透明度 / 压暗强度
  *
  * 地板公式（与 derived/wallpaper-contrast.ts 的 glassSurface 逐字对应）：
@@ -77,11 +81,19 @@ html[data-theme][data-cairn-wallpaper] body[data-we-wallpaper] :is(
   /* 只写标准写法：Chromium（Electron 44 / Chromium 142）不认 `-webkit-backdrop-filter`，
      而 CSS 压缩器去重时会**优先留带前缀那条** ⇒ 两条都写反而把标准写法丢掉
      （实测：构建产物只剩 -webkit- 前缀，计算值 = none）。本应用只发布 Electron 壳，
-     不需要为老 Safari 保留前缀。 */
-  backdrop-filter: blur(var(--cw-glass-blur, 14px));
-  /* 2026-11-17（玻璃质感打磨）：顶部 1px 高光 + 内描边——没有这两条，玻璃面贴壁纸时
-     读作「半透明色块」而不是「玻璃」。色值来自 state/wallpaper.ts 写的 --cw-glass-*，本文件零字面。 */
-  box-shadow: inset 0 1px 0 var(--cw-glass-sheen), inset 0 0 0 1px var(--cw-glass-edge);
+     不需要为老 Safari 保留前缀。
+     saturate 是液态玻璃「透而不灰」的一半：模糊把壁纸颜色抹匀，饱和度把抹匀过程中
+     洗掉的色彩浓度拉回来（白釉靠它压住发灰，暗釉靠它压住发闷）。 */
+  backdrop-filter: blur(var(--cw-glass-blur, 14px)) saturate(var(--cw-glass-saturate, 1.4));
+  /* 2026-11-17（玻璃质感升级）：三层内阴影 + 外部景深——
+     顶部 1px 高光（受光缘）、底部 1px 内影（厚度缘）、1px 内描边（轮廓）、外部落影（浮起）。
+     没有这组边，玻璃面贴壁纸时读作「半透明色块」而不是「一块有厚度的玻璃」。
+     色值来自 state/wallpaper.ts 写的 --cw-glass-*，本文件零字面。 */
+  box-shadow:
+    inset 0 1px 0 var(--cw-glass-sheen),
+    inset 0 -1px 0 var(--cw-glass-shade),
+    inset 0 0 0 1px var(--cw-glass-edge),
+    var(--cw-glass-shadow);
 }
 
 /* 预览小样（2026-11-17 玻璃质感打磨）：壁纸缩略 + 迷你玻璃卡。玻璃卡用与真身**同一条**
@@ -108,8 +120,12 @@ html[data-theme][data-cairn-wallpaper] body[data-we-wallpaper] :is(
   inset: 10px 12px;
   border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--cw-canvas) var(--cw-floor), var(--cw-glass) calc(100% - var(--cw-floor)));
-  backdrop-filter: blur(6px);
-  box-shadow: inset 0 1px 0 var(--cw-glass-sheen), inset 0 0 0 1px var(--cw-glass-edge);
+  backdrop-filter: blur(6px) saturate(var(--cw-glass-saturate, 1.4));
+  box-shadow:
+    inset 0 1px 0 var(--cw-glass-sheen),
+    inset 0 -1px 0 var(--cw-glass-shade),
+    inset 0 0 0 1px var(--cw-glass-edge),
+    var(--cw-glass-shadow);
 }
 
 /* 玻璃强度三档：与轮换依据同一族（mini-btn on/aria-pressed）。 */

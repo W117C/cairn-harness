@@ -191,7 +191,14 @@ export function readThemeColors(): { canvas: Rgb; text: Rgb } | null {
  * 把玻璃面要用的变量写到根元素：
  *  · --cw-canvas / --cw-text / --cw-glass / --cw-floor（地板百分比）/ --cw-glass-alpha
  *  · --cw-wallpaper-opacity / --cw-scrim
+ *  · --cw-glass-sheen / --cw-glass-edge / --cw-glass-shade / --cw-glass-shadow / --cw-glass-saturate
  * 地板权重由 derived 的对比度模型**算出来**（不手抄），所以换主题不用改常量。
+ *
+ * 2026-11-17（玻璃质感升级）：釉色**主题化**——暗色主题用暗玻璃（白玻璃在暗底上读作
+ * 一层洗白的雾，是「玻璃发灰发白」观感的主因），亮色主题维持白釉；高光/描边/底影/景深
+ * 阴影与饱和度耦合随主题分两档，色值由 TS 单点写（CSS 保持零字面纪律）。
+ * 地板模型仍按白釉算（保守方向）：暗玻璃的真实表面比模型假设的更暗 ⇒ 亮字对比度真实值
+ * **高于**模型保证值，可读性地板不被破坏（详见 derived/wallpaper-contrast.ts 的注释）。
  */
 /** 2026-11-17（玻璃质感打磨）：玻璃强度档 → 模糊半径（轻 8 / 中 14 / 重 22）。
  *  纯函数：设置页三档与真机身共用同一条映射，判卷直接钉这张表。 */
@@ -202,9 +209,13 @@ export function glassBlurPx(glassAlpha: number): number {
 export function applyThemeVars(settings: AppSettings): void {
   const colors = readThemeColors();
   if (colors === null) return;
+  // 主题方向：文字是亮色 ⇒ 暗色主题（暗玻璃、更收敛的高光、更重的景深）。
+  const dark = colors.text.r > 128;
   const spec: ThemeContrastSpec = {
     text: colors.text,
     canvas: colors.canvas,
+    // 地板模型按白釉算：这是**保守方向**——暗色主题真实用暗玻璃，表面比模型假设的更暗，
+    // 亮字的真实对比度只会更高；亮色主题玻璃就是白，逐字吻合。
     glass: { r: 255, g: 255, b: 255 },
     // 最不利的壁纸 = 与文字同极性的那个极端像素：白字遇白壁纸（读不出）、黑字遇黑壁纸（读不出）。
     // ⚠️ 方向别写反：写反了会算出「地板 33%」，而按真最差格只有 2.18:1 ⇒ 暗色主题遇白壁纸直接破线。
@@ -214,13 +225,30 @@ export function applyThemeVars(settings: AppSettings): void {
   const root = document.documentElement.style;
   root.setProperty("--cw-canvas", `rgb(${String(spec.canvas.r)} ${String(spec.canvas.g)} ${String(spec.canvas.b)})`);
   root.setProperty("--cw-text", `rgb(${String(spec.text.r)} ${String(spec.text.g)} ${String(spec.text.b)})`);
-  root.setProperty("--cw-glass", "rgb(255 255 255 / var(--cw-glass-alpha))");
+  // 釉色主题化：暗色主题用暗釉（白釉在暗底上读作一层洗白的雾），亮色维持白釉。
+  // alpha 仍由 --cw-glass-alpha（三档强度）控制，颜色本身不带 alpha。
+  root.setProperty(
+    "--cw-glass",
+    dark
+      ? "rgb(16 20 28 / var(--cw-glass-alpha))"
+      : "rgb(255 255 255 / var(--cw-glass-alpha))",
+  );
   root.setProperty("--cw-floor", `${String(Math.round(floor * 1000) / 10)}%`);
   root.setProperty("--cw-glass-alpha", String(settings.wallpaper.glassAlpha));
-  // 2026-11-17（玻璃质感打磨）：顶部 1px 高光 + 内描边（色值由 TS 单点写，CSS 零字面）；
-  // 模糊半径随强度档联动（见 glassBlurPx）。
-  root.setProperty("--cw-glass-sheen", "rgb(255 255 255 / 0.55)");
-  root.setProperty("--cw-glass-edge", "rgb(255 255 255 / 0.10)");
+  // 2026-11-17（玻璃质感升级）：分层质感变量，随主题分两档（色值由 TS 单点写，CSS 零字面）：
+  //  · sheen  顶部 1px 高光（暗色下调——暗玻璃上 0.55 的白高光会亮成一条白线）
+  //  · edge   1px 内描边（暗色下稍亮，让玻璃面在暗底上有轮廓）
+  //  · shade  底部 1px 内影（给面一个「厚度」的下缘）
+  //  · shadow 外部景深阴影（整面浮在壁纸上的落影；暗色更深）
+  //  · saturate 模糊耦合的饱和度提升（液态玻璃的「透而不灰」主要来自它，不只是 blur）
+  root.setProperty("--cw-glass-sheen", dark ? "rgb(255 255 255 / 0.14)" : "rgb(255 255 255 / 0.55)");
+  root.setProperty("--cw-glass-edge", dark ? "rgb(255 255 255 / 0.12)" : "rgb(255 255 255 / 0.10)");
+  root.setProperty("--cw-glass-shade", dark ? "rgb(0 0 0 / 0.30)" : "rgb(0 0 0 / 0.06)");
+  root.setProperty(
+    "--cw-glass-shadow",
+    dark ? "0 10px 32px rgb(0 0 0 / 0.42)" : "0 8px 28px rgb(0 0 0 / 0.12)",
+  );
+  root.setProperty("--cw-glass-saturate", "1.4");
   root.setProperty("--cw-glass-blur", `${String(glassBlurPx(settings.wallpaper.glassAlpha))}px`);
   root.setProperty("--cw-wallpaper-opacity", String(settings.wallpaper.opacity));
   root.setProperty("--cw-scrim", String(settings.wallpaper.scrim));
