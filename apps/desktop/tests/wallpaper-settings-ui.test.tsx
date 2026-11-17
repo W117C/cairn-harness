@@ -3,6 +3,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { GeneralSection } from "../src/renderer/components/settings/GeneralSection";
+import { glassBlurPx } from "../src/renderer/state/wallpaper";
 import { DEFAULT_SETTINGS, type AppSettings } from "../../../src/main/settings";
 
 const noop = (): void => undefined;
@@ -35,10 +36,35 @@ function markup(over: Partial<AppSettings["wallpaper"]> = {}, unavailable = fals
 }
 
 describe("壁纸设置行", () => {
-  it("外观分段里有壁纸行与三个滑杆", () => {
+  it("外观分段里有壁纸行：两张滑杆 + 玻璃强度三档（2026-11-17 玻璃质感打磨）", () => {
     const html = markup();
     expect(html).toContain("壁纸");
-    expect((html.match(/type="range"/g) ?? []).length).toBe(3);
+    // 玻璃从连续滑杆改离散三档（模糊半径随档联动，见 glassBlurPx）；壁纸/压暗两张滑杆保留。
+    expect((html.match(/type="range"/g) ?? []).length).toBe(2);
+    expect(html).toContain('data-glass-tiers="true"');
+    for (const tier of ["mild", "mid", "strong"]) expect(html).toContain(`data-glass-tier="${tier}"`);
+    // 当前档 = mid（DEFAULT_SETTINGS.wallpaper.glassAlpha = 0.25），恰一枚 aria-pressed=true。
+    expect((html.match(/aria-pressed="true"[^>]*data-glass-tier="mid"/) ?? []).length).toBe(1);
+    // 玻璃组内恰一枚选中（组外还有轮换依据的 aria-pressed，不能全局计数）。
+    const group = html.slice(html.indexOf('data-glass-tiers="true"'), html.indexOf("</span>", html.indexOf('data-glass-tiers="true"')));
+    expect((group.match(/aria-pressed="true"/g) ?? []).length).toBe(1);
+  });
+
+  it("玻璃强度 → 模糊半径映射钉死（轻 8 / 中 14 / 重 22）", () => {
+    expect(glassBlurPx(0.12)).toBe(8);
+    expect(glassBlurPx(0.16)).toBe(8);
+    expect(glassBlurPx(0.25)).toBe(14);
+    expect(glassBlurPx(0.3)).toBe(14);
+    expect(glassBlurPx(0.45)).toBe(22);
+  });
+
+  it("效果预览：设了壁纸出小样、没设不出；图片型用媒体地址", () => {
+    expect(markup()).not.toContain('data-wallpaper-preview="true"');
+    const set = markup({ kind: "image", path: "/tmp/a.png", revision: 7 });
+    expect(set).toContain('data-wallpaper-preview="true"');
+    expect(set).toMatch(/cw-preview-media[^>]*src="cairn-wallpaper:\/\/[^"]*7/);
+    // 预览里那块玻璃卡用真身同一条地板公式（不是另画示意图）。
+    expect(set).toContain("cw-preview-glass");
   });
 
   it("降级：设了壁纸但媒体读不出 ⇒ 行里点名「文件不可用」；没设壁纸不点名", () => {

@@ -193,6 +193,12 @@ export function readThemeColors(): { canvas: Rgb; text: Rgb } | null {
  *  · --cw-wallpaper-opacity / --cw-scrim
  * 地板权重由 derived 的对比度模型**算出来**（不手抄），所以换主题不用改常量。
  */
+/** 2026-11-17（玻璃质感打磨）：玻璃强度档 → 模糊半径（轻 8 / 中 14 / 重 22）。
+ *  纯函数：设置页三档与真机身共用同一条映射，判卷直接钉这张表。 */
+export function glassBlurPx(glassAlpha: number): number {
+  return glassAlpha <= 0.16 ? 8 : glassAlpha <= 0.3 ? 14 : 22;
+}
+
 export function applyThemeVars(settings: AppSettings): void {
   const colors = readThemeColors();
   if (colors === null) return;
@@ -211,6 +217,11 @@ export function applyThemeVars(settings: AppSettings): void {
   root.setProperty("--cw-glass", "rgb(255 255 255 / var(--cw-glass-alpha))");
   root.setProperty("--cw-floor", `${String(Math.round(floor * 1000) / 10)}%`);
   root.setProperty("--cw-glass-alpha", String(settings.wallpaper.glassAlpha));
+  // 2026-11-17（玻璃质感打磨）：顶部 1px 高光 + 内描边（色值由 TS 单点写，CSS 零字面）；
+  // 模糊半径随强度档联动（见 glassBlurPx）。
+  root.setProperty("--cw-glass-sheen", "rgb(255 255 255 / 0.55)");
+  root.setProperty("--cw-glass-edge", "rgb(255 255 255 / 0.10)");
+  root.setProperty("--cw-glass-blur", `${String(glassBlurPx(settings.wallpaper.glassAlpha))}px`);
   root.setProperty("--cw-wallpaper-opacity", String(settings.wallpaper.opacity));
   root.setProperty("--cw-scrim", String(settings.wallpaper.scrim));
 }

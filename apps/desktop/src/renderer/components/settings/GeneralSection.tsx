@@ -6,6 +6,7 @@ import type { TextSizeSetting, UiSizeSetting } from "../../../../../../src/main/
 import { useEffect, useState } from "react";
 import { STR } from "../../strings";
 import { applyRadioNavigation } from "../../radio-nav";
+import { wallpaperUrl } from "../../state/wallpaper";
 import { WallpaperBrowser } from "./WallpaperBrowser";
 import { SettingsSection, SettingsRow } from "../settings-ui";
 import { Switch } from "../Switch";
@@ -27,6 +28,17 @@ const TEXT_SIZE_OPTIONS: readonly { id: TextSizeSetting; label: string }[] = [
 /** 组件尺寸五档（2026-10-20 · 双轴变体的尺寸轴，销 G2）。
  *  依据 Claude 实测 data-step="1…5"（step2 = 缺省 = --size-scale 1，step4 = comfortable 密度）。
  *  id 与 tokens.css 的 `html[data-ui-size="…"]` 逐字对应。 */
+/** 玻璃强度三档（2026-11-17 玻璃质感打磨）：连续滑杆改离散三档，模糊半径随档联动
+ *  （state/wallpaper.ts 的 glassBlurPx：轻 8 / 中 14 / 重 22）。阈值与 glassBlurPx 逐字对齐。 */
+const GLASS_TIERS: readonly { id: "mild" | "mid" | "strong"; value: number; label: string }[] = [
+  { id: "mild", value: 0.12, label: STR.general.wallpaperGlassMild },
+  { id: "mid", value: 0.25, label: STR.general.wallpaperGlassMid },
+  { id: "strong", value: 0.45, label: STR.general.wallpaperGlassStrong },
+];
+function glassTierOf(glassAlpha: number): "mild" | "mid" | "strong" {
+  return glassAlpha <= 0.16 ? "mild" : glassAlpha <= 0.3 ? "mid" : "strong";
+}
+
 const UI_SIZE_OPTIONS: readonly { id: UiSizeSetting; label: string }[] = [
   { id: "1", label: STR.general.uiSize1 },
   { id: "2", label: STR.general.uiSize2 },
@@ -197,6 +209,16 @@ export function GeneralSection(props: {
             轮换依据 / 天气 / 昼夜这类从属行只在相关时出现。 */}
         <SettingsRow label={STR.general.wallpaperCurrent}>
           <div className="cw-settings">
+            {/* 2026-11-17（玻璃质感打磨）：效果预览小样——壁纸缩略 + 一块真实地板公式的迷你玻璃卡，
+                不用先应用就能看见「这张图 + 这档玻璃」长什么样。 */}
+            {props.settings.wallpaper.kind !== "none" && (
+              <div className="cw-preview" role="img" aria-label={STR.general.wallpaperPreview} data-wallpaper-preview="true">
+                {props.settings.wallpaper.kind === "image"
+                  ? <img className="cw-preview-media" src={wallpaperUrl(props.settings.wallpaper.revision)} alt="" aria-hidden="true" />
+                  : <span className="cw-preview-media cw-preview-web" aria-hidden="true">{props.settings.wallpaper.kind === "web" ? STR.general.wallpaperPreviewWeb : STR.general.wallpaperUnavailable}</span>}
+                <span className="cw-preview-glass" aria-hidden="true" />
+              </div>
+            )}
             <div className="cw-settings-actions">
               {/* 「未设置」是状态词，不是动作：放在按钮左边当静态回执。
                   2026-11-15 真机实测：旧写法把它塞进按钮文案，已设壁纸时按钮反而读「未设置」。 */}
@@ -550,21 +572,22 @@ export function GeneralSection(props: {
                     />
                     <span className="cw-slider-value">{pct(wp.scrim)}</span>
                   </label>
-                  <label className="cw-slider">
+                  <div className="cw-slider cw-glass-tier-row">
                     <span>{STR.general.wallpaperGlass}</span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={0.6}
-                      step={0.05}
-                      value={wp.glassAlpha}
-                      onChange={(e) => { setSliderDraft({ ...wp, glassAlpha: Number(e.target.value) }); }}
-                      onPointerUp={commit}
-                      onKeyUp={commit}
-                      onBlur={commit}
-                    />
+                    <div className="cw-glass-tiers" role="group" aria-label={STR.general.wallpaperGlass} data-glass-tiers="true">
+                      {GLASS_TIERS.map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          className={"mini-btn" + (glassTierOf(wp.glassAlpha) === t.id ? " on" : "")}
+                          aria-pressed={glassTierOf(wp.glassAlpha) === t.id}
+                          data-glass-tier={t.id}
+                          onClick={() => { props.onWallpaperGlass(t.value); }}
+                        >{t.label}</button>
+                      ))}
+                    </div>
                     <span className="cw-slider-value">{pct(wp.glassAlpha)}</span>
-                  </label>
+                  </div>
                 </>
               );
             })()}
