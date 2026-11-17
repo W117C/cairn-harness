@@ -72,6 +72,8 @@ export function GeneralSection(props: {
   onWallpaperOpacity: (next: number) => void;
   onWallpaperScrim: (next: number) => void;
   onWallpaperGlass: (next: number) => void;
+  /** 2026-11-17：三格一起落盘（滑杆松手）。缺省时回落三笔单独回调（保留给老调用方/单测）。 */
+  onWallpaperDisplay?: (next: { opacity: number; scrim: number; glassAlpha: number }) => void;
   onWallpaperClear: () => void;
   /** 设计规格 §7 降级链：媒体读不出时设置行点名「文件不可用」（运行期状态，不是设置字段）。 */
   wallpaperUnavailable: boolean;
@@ -535,9 +537,16 @@ export function GeneralSection(props: {
               const pct = (v: number): string => `${String(Math.round(v * 100))}%`;
               const commit = (): void => {
                 if (sliderDraft === null) return;
-                props.onWallpaperOpacity(sliderDraft.opacity);
-                props.onWallpaperScrim(sliderDraft.scrim);
-                props.onWallpaperGlass(sliderDraft.glassAlpha);
+                // 2026-11-17（真机 bug 修）：此前松手发三笔 setSettings（opacity/scrim/glassAlpha 各一笔），
+                // 后两笔用**旧 settings 快照**展开壁纸对象 ⇒ 把第一笔刚写进去的新值覆盖回旧值，
+                // 表现是「拖完弹回原位」。合并成一笔：一次 setSettings 带全三格，落盘只有一个快照。
+                if (props.onWallpaperDisplay !== undefined) {
+                  props.onWallpaperDisplay({ opacity: sliderDraft.opacity, scrim: sliderDraft.scrim, glassAlpha: sliderDraft.glassAlpha });
+                } else {
+                  props.onWallpaperOpacity(sliderDraft.opacity);
+                  props.onWallpaperScrim(sliderDraft.scrim);
+                  props.onWallpaperGlass(sliderDraft.glassAlpha);
+                }
                 setSliderDraft(null);
               };
               return (

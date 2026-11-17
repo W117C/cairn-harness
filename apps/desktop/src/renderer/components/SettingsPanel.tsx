@@ -680,6 +680,7 @@ export function SettingsPanel(props: {
                 onWallpaperOpacity={(next) => { void saveWallpaper({ opacity: next }); }}
                 onWallpaperScrim={(next) => { void saveWallpaper({ scrim: next }); }}
                 onWallpaperGlass={(next) => { void saveWallpaper({ glassAlpha: next }); }}
+                onWallpaperDisplay={(next) => { void saveWallpaper(next); }}
                 onWallpaperClear={() => { void saveWallpaper({ kind: "none", path: null }); }}
                 wallpaperUnavailable={wallpaperUnavailable}
               />

@@ -1,5 +1,7 @@
 // 壁纸设置行判卷（2026-11-14 · 设计规格 §5.4）：
 // 外观分段里出现壁纸行、三个滑杆，以及选/清两个动作。
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { GeneralSection } from "../src/renderer/components/settings/GeneralSection";
@@ -90,5 +92,23 @@ describe("壁纸设置行", () => {
     expect(markup()).not.toContain("清除");
     const set = markup({ kind: "image", path: "/tmp/a.png" });
     expect(set).toContain("清除");
+  });
+});
+
+// 2026-11-17 真机 bug 修：松手三连写（opacity/scrim/glassAlpha 各一笔 setSettings），
+// 后两笔用旧 settings 快照展开壁纸 ⇒ 把第一笔的新值覆盖回旧值，表现「拖完弹回原位」。
+// 现在固定为**一笔合并写**（onWallpaperDisplay → 一次 setSettings 带全三格）。
+describe("滑杆松手一次落盘（三连写覆盖 bug 的防回归）", () => {
+  const src = readFileSync(fileURLToPath(new URL("../src/renderer/components/settings/GeneralSection.tsx", import.meta.url)), "utf8");
+  const panel = readFileSync(fileURLToPath(new URL("../src/renderer/components/SettingsPanel.tsx", import.meta.url)), "utf8");
+  it("commit 以合并写为首选（onWallpaperDisplay），三笔单独回调只作回落", () => {
+    expect(src).toContain("props.onWallpaperDisplay({");
+    expect(src).toMatch(/if \(props\.onWallpaperDisplay !== undefined\)/);
+    // 三笔调用仍在，但只能在 else 分支（回落），不能是唯一路径
+    const commitBlock = src.slice(src.indexOf("const commit = (): void => {"), src.indexOf("return (", src.indexOf("const commit = (): void => {")));
+    expect(commitBlock).toContain("onWallpaperDisplay");
+  });
+  it("SettingsPanel 把合并写接到同一笔 saveWallpaper（一次 setSettings）", () => {
+    expect(panel).toContain("onWallpaperDisplay={(next) => { void saveWallpaper(next); }}");
   });
 });
