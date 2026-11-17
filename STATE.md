@@ -1,6 +1,6 @@
 # Cairn / DSH —— 现态
 
-rev: 52e2b28a
+rev: e740780f
 
 核对日期 2026-11-17（Asia/Shanghai）。两条同架构的线已合流（closeout 归档见
 [docs/archive/state-2026-11-16-merge.md](docs/archive/state-2026-11-16-merge.md)）：`qoder/ui` 键盘契约 /
