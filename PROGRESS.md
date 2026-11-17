@@ -44501,3 +44501,58 @@ PASS 网站壁纸：CSP 真在管——http 被拦 1 次、https 未被拦
 - 核心 `pnpm test:capped`：**708 文件 / 8345 条全绿**，exit 0
 - 桌面 **421 文件 / 2687 条全绿**；`typecheck` 0；`docs-check` 绿；`evidence-typecheck` 12/12 帽内
 - 四包密封证据重签绿
+
+## 2026-11-17 · 第 1314 页：批6 收口——About 三段拆分＋设计收敛 R3/R4 档移植落地＋两支存量核心红收掉（zcode 断档续跑）
+
+### 一、背景
+
+zcode 会话「桌面端布局与动效打磨优化」（sess_1e76f3e9）跑批 1–6 至 `a9262bbb` 后因 GLM 配额
+1005 中断，留三样未竟：①设计收敛 R3/R4 A/B 档移植在工作树未提交；②批6 余下项 AboutSection
+拆分（todo 第 5 条）；③四包证据 JSON 重签后未暂存。本页收口三样并顺带清掉两支存量核心红。
+
+### 二、设计收敛移植（R3/R4 A/B 档，随本页落地）
+
+- 撤三段 hint：「Episode 证据」（EvolvePanel 快环提醒）、「人工开关」（治理）、「完整速查表按 ⌘/…」（按键一览）。
+- 裁 7 条可推导半句（只留不可推导那半句）：autoMemory / impactAnalysis / promptCache / subagentTools /
+  autoVerifyRepair / scheduleCap / pick（迁移来源）。
+- IntegrationInput 格式 hint 收进 title（hover）＋视觉隐藏 small（aria-describedby 不丢），覆盖 mcp×4/hooks×2。
+- **回补一处移植过界**：hooks/mcp 空态两行 desc 是第 1169 页判卷钉的「下一步指引」（`desc={STR.hooks.emptyDesc}`
+  必须在应用面），不是复述——移植时删键删用法是错，已回补（strings.ts 两键 + HooksSection/McpSection 两处）。
+
+### 三、批6 余下项：AboutSection 拆三段（审计第 4 条）
+
+六件事挤在单个「版本与更新」巨型分区 → 三段：版本与更新（版本/许可证/更新/更新源）、备份与恢复
+（偏好备份）、诊断与细节（运行诊断＋工程细节）。数据与行全部不动，只拆容器。
+段名规避第 892 页「分区标题 ⊃ 行标签」判卷（行标签不许是段名字串）：段名取「备份与恢复」「诊断与细节」。
+
+### 四、批6 小项收尾（同批审计）
+
+- 壁纸轮换开关：原生 checkbox → Switch（全页开关控件家族统一；role=switch + 状态字；审计第 6 条）。
+- 天气 key 失焦即落钥匙串：此前只有点「测试连接」才写，填完不点就丢（审计第 10 条）。
+
+### 五、两支存量核心红（HEAD 即有，非本页引入）
+
+- `format-rulers.test.ts`：PluginMark `size` prop 撞 raw-bytes 尺正则 `{props.size}`（它是样式档位 lg/md
+  不是字节数）→ 改名 `variant`（三文件）。
+- `motion-policy.test.ts`：M2/E1 豁免登记 7 处，实测 9 处——批1+2（3cc4dddf）流面动效新增两处
+  visibility 0s 瞬时翻转未登记 → 登记 7→9（判卷侧只数这一形，新增同形必须同步登记）。
+
+### 六、判卷同步（有意改动随判卷，注明理由）
+
+- design-minimal 次级说明帽 36→35（空态两行 desc 是第 1169 页钉的指引不撤，实读 35）。
+- settings-ui 快捷键判卷：`toContain("完整速查表")` → `not.toContain`（hint 已撤，本页就是完整表）。
+- settings-sections / settings-doctor 两处「运行诊断 ×1」判卷未动（段名避开了行标签）。
+
+### 七、门禁读数（工作树）
+
+- 核心 `pnpm test:capped`：**708 文件 / 8359 条全绿**，exit 0
+- 桌面 **425 文件 / 2770 条全绿**；四包密封证据**重签**（渲染层动了：cds 0 错 / ime 6+6 / overlay 5+5 /
+  queue 6+6，新指纹 `922a892a…`，现源复算 MATCH、buildFresh=true）
+- `typecheck` 0 报错；`docs-check` 全绿（STATE.md 超预算 7051→4511B 迁 closeout 至 docs/archive/、
+  rev 行改真 sha）；`evidence-typecheck` 12/12 帽内；`desktop-boundary-check` 绿
+
+### 八、留待业主
+
+- 审计第 7 条（TeamSection 17 行无子分组）、第 12 条（长分区页头 sticky）未排入本批；第 9 条
+  （权限「安全」空行）与第 892 页判卷互斥（判卷钉「只读说明行无控件」是刻意决定），不改。
+- 设计收敛线 simplify-desktop-design（R2–R5）走向仍待业主裁决。
