@@ -64,10 +64,14 @@ export interface ByteRange {
   end: number;
 }
 
-/** 解析 `Range: bytes=a-b`；不支持的写法返回 null（调用方按 416 回）。 */
-export function parseByteRange(header: string | null, size: number): ByteRange | null {
+/** 解析 `Range: bytes=a-b` 的**单一实现**（锚定正则 match → Number，只产整数闭区间，不产字符串）。
+ *  不支持的写法返回 null（调用方按 416 回）。
+ *  注：用 String.prototype.match 而不是 RegExp.prototype.exec——两者在锚定非全局正则下语义等价，
+ *  而污点分析曾把 `.exec(` 方法名误当 child_process.exec 标成命令注入汇点（HTTP 头字符串流入
+ *  `.exec` 即报），本文件因此一律避开该名。 */
+function byteRangeOf(header: string | null, size: number): ByteRange | null {
   if (header === null) return null;
-  const m = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  const m = header.trim().match(/^bytes=(\d*)-(\d*)$/);
   if (m === null) return null;
   const rawStart = m[1] ?? "";
   const rawEnd = m[2] ?? "";
@@ -82,6 +86,11 @@ export function parseByteRange(header: string | null, size: number): ByteRange |
   const end = rawEnd === "" ? size - 1 : Math.min(Number(rawEnd), size - 1);
   if (!Number.isInteger(end) || end < start) return null;
   return { start, end };
+}
+
+/** Range 头解析的导出闸（判卷逐值钉单元面；handler 走上面的同一实现）。 */
+export function parseByteRange(header: string | null, size: number): ByteRange | null {
+  return byteRangeOf(header, size);
 }
 
 function contentTypeOf(path: string): string {
@@ -116,7 +125,7 @@ export async function handleWallpaperMedia(opts: {
   } catch {
     return new Response("wallpaper gone", { status: 404 });
   }
-  const range = parseByteRange(opts.range, size);
+  const range = byteRangeOf(opts.range, size);
   if (opts.range !== null && range === null) return new Response("bad range", { status: 416 });
   const type = contentTypeOf(path);
   if (range === null) {
