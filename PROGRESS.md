@@ -44556,3 +44556,55 @@ zcode 会话「桌面端布局与动效打磨优化」（sess_1e76f3e9）跑批 
 - 审计第 7 条（TeamSection 17 行无子分组）、第 12 条（长分区页头 sticky）未排入本批；第 9 条
   （权限「安全」空行）与第 892 页判卷互斥（判卷钉「只读说明行无控件」是刻意决定），不改。
 - 设计收敛线 simplify-desktop-design（R2–R5）走向仍待业主裁决。
+
+## 2026-11-17 · 第 1315 页：业主「都做」——TeamSection 拆三段＋设置页头 sticky＋设计收敛线摘取并入（R2/R5）
+
+### 一、任务 1：TeamSection 拆三段（审计第 7 条）
+
+团队页 17 行挤在一张卡 → 三段：成员与名单（新增/名单/裁剪/拒绝/档案条数）、本轮协作（发言秩序/排出的秩序/段/三维读数）、
+密钥与授权（授权/申请/当前授权）。行与数据全不动，只拆容器；段名避行标签（成员与名单 ⊅ 成员名单）。
+状态错误行从 SettingsRow 改 `<p class="sp-note err" role="alert">`（与全页错误语汇统一，审计建议）。
+判卷 team-section 全行级断言，不受影响。
+
+### 二、任务 2：设置页头 sticky＋导航回滚（审计第 12 条）
+
+- `.ss-head` sticky 贴顶（bg-100 底 + 发丝线），长分区滚动时标题始终在场；不碰 `.ss-title` 规则（判卷锚 font-size: 26px 原位）。
+- 切分区/清空搜索后 `scrollIntoView({block:"nearest"})` 把 `.sp-nav-item.on` 拉回可视区；瞬时无动画，
+  与 scroll-behavior 判卷钉的 App 两处 smooth 面无关。
+
+### 三、任务 3：设计收敛线（simplify-desktop-design，R2–R5）摘取并入
+
+先侦察：四提交 R2 文案收敛 / R3 页头收敛 / R4 文案收敛 / R5 动效。对照两线现状逐档裁决：
+
+| 提交 | 裁决 |
+|---|---|
+| R4（27b921ae） | **已移植**（上批 3d90d422 逐字对应 A/B 档），跳过 |
+| R3（82d87fd1） | **跳过**：settings-ui desc 插槽/PageFrame subtitle 与第 1169 页判卷互斥（钉副标题在场）；hint 删除批6 已做 |
+| R2（b8bc36eb） | **摘取**：7 处窗格文案收敛（ChangesPane 空态第二句、PaneDock 内部 id＋方案空态、PluginsPane 空态×3＋MCP 计数进标题、SkillsPane loose 词＋页脚、Stream 摘要/产物 kv 小标题、ThinkingLive 实现解释、TimelinePane 第二句）；PaneEmpty note 改可选。design-copy-audit.ts 脚本**不移植**（两线判卷体系不同，枚举位会漂） |
+| R5（5c7fa27b） | **部分摘取**：② 过程带折叠 grid-rows 过渡＋fold-inner（工具簇批1+2 已同效果）；③ 流式粒子 8 粒 mote-rise（只挂 caret 行）；① 侧栏恒挂载**不摘**——ui 线判卷 workbench-sidebar.test.tsx 钉「收起不渲染」是刻意裁决 |
+
+摘取适配（与 simplify 线不同处）：
+- 粒子动画 `2s ease-out` 裸时长/缓动违反 motion-policy M2/M3（simplify 线未跑该判卷，漏网）→ 新增动作档令牌 `--t-mote: 2s var(--ease-out)`；
+- process-fold 过渡缓动用 `var(--ease-out)`（与工具簇同语言）；
+- 减弱动效两路（根属性 + 系统媒体）都关粒子与折叠过渡。
+- **读面边界（诚实登记）**：motion-policy M2/M3 只扫 styles.css 单文件（既有设计），stream-process.css 的
+  process-fold 过渡不在扫描面——E1 登记保持 9（不虚增），该文件规则已用令牌自洽。
+
+### 四、判卷同步
+
+- process-fold.test：hidden 断言 → data-open=false + aria-hidden + fold-inner；
+- 新增 tests/layout-motion.test.tsx（4 条）：② 折叠过渡（0fr/1fr/fold-inner/两路降级）＋③ 粒子（live 有/历史无/空无＋关键帧＋两路下架）；
+- motion-policy.test：E1 登记保持 9（注释写明 stream-process.css 不在读面）。
+
+### 五、门禁读数（工作树）
+
+- 核心 `pnpm test:capped`：**708 文件 / 8359 条全绿**，exit 0（含 motion-policy 41/41）
+- 桌面 **426 文件 / 2774 条全绿**（+1 文件 layout-motion）；四包重签 cds 0 错 / ime 6+6 / overlay 5+5 / queue 6+6，
+  指纹 `47f9aed6…`（现源复算 MATCH、buildFresh=true）
+- `typecheck` 0 报错（含桌面严格层）；`docs-check` 全绿；`evidence-typecheck` 12/12；`desktop-boundary-check` 绿；verify-all 七门 pass
+
+### 六、留待业主
+
+- 侧栏收起恒挂载（R5 ①）与既有判卷互斥，未做——若业主想要侧栏挤压过渡，需先裁决改判卷意图。
+- design-copy-audit 文案位审计脚本未移植（工具价值低，两线体系不同）。
+- simplify-desktop-design 分支价值摘取完毕；分支与树可归档（continued-reindeer 树保留待业主确认后删）。
