@@ -72,7 +72,8 @@ describe("批 6：设置页公共组件（SSR 结构）", () => {
     expect(h).toContain('class="ss-sec-title kx-group-title">会话');
     expect(h).toContain('class="ss-sec-title kx-group-title">窗格');
     expect(h).toContain('class="ss-sec-title kx-group-title">视图与输入');
-    expect(h).toContain("完整速查表");
+    // 2026-11-17（批6 移植 R3 A 档）：段 hint「完整速查表按 ⌘/ 随时调出」撤——这一页本身就是完整表。
+    expect(h).not.toContain("完整速查表");
     const list = block(styles, ".kx-list");
     expect(list).toContain("repeat(2, minmax(0, 1fr))");
     // 2026-11-02：键帽列改内容自适应（固定 108px 会裁长键位）。

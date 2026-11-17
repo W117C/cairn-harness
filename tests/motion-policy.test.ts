@@ -143,8 +143,10 @@ describe("好标本仍绿（本仓现读面）", () => {
   it("豁免是**显式登记**的，而且条数与登记一致（不是悄悄放过）", () => {
     const m2 = ruleOf(outcome, "M2");
     const ids = (r: RuleResult): string[] => r.exempted.map((e) => e.id);
-    // visibility 0s 七处（含窄窗第 1051 页与第 863 页补的展开——都是瞬时翻转，沿用 E1 的规范理由）。
-    expect(ids(m2).filter((i) => i === "E1")).toHaveLength(7);
+    // visibility 0s 九处（含窄窗第 1051 页与第 863 页补的展开——都是瞬时翻转，沿用 E1 的规范理由）。
+    // 2026-11-17（批1+2 流面动效，3cc4dddf）：工具折叠/思考带折叠新增两处 grid-rows + visibility 0s 翻转到场，
+    // 登记 7→9；判卷侧只数「visibility 0s」这一形，新增同形必须同步登记。
+    expect(ids(m2).filter((i) => i === "E1")).toHaveLength(9);
     // breathe 已改走 --t-breathe：按值的 E2 豁免撤名，四条现场回归令牌路径（牌子不许再出现）。
     expect(ids(m2).filter((i) => i === "E2")).toHaveLength(0);
     // 降级面内按位置豁免的时长声明：系统块 2 条 + 应用内根属性块 2 条（第 1309 页两路同语义）。

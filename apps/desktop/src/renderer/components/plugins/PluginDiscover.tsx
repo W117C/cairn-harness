@@ -39,7 +39,7 @@ function DiscoverRow(props: {
   return (
     <article className="plugin-store-card" data-plugin-row="discover" data-plugin-id={row.id}>
       <button type="button" className="plugin-store-main" onClick={() => { props.onSelect(row.id); }}>
-        <PluginMark id={row.id} name={row.name} size="lg" />
+        <PluginMark id={row.id} name={row.name} variant="lg" />
         <span className="plugin-store-copy">
           <span className="plugin-store-title">
             <strong>{row.name}</strong>

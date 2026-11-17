@@ -155,7 +155,9 @@ export function IntegrationInput({ label, value, onChange, placeholder, options,
   multiline?: boolean;
 }): React.JSX.Element {
   const id = useId();
-  const attrs = { id, value, "aria-describedby": hint ? id + "-hint" : undefined };
+  // 2026-11-16（移植 R4 B 档）：格式 hint 收进 title（hover）＋视觉隐藏 small——常驻小字让位给布局，
+  // 读屏经 aria-describedby 仍读得到，鼠标悬停可见全文。覆盖 mcp.args/headers/env/tools、hooks.matcher/exec。
+  const attrs = { id, value, title: hint, "aria-describedby": hint ? id + "-hint" : undefined };
   return (
     <div className="integrations-field">
       <label htmlFor={id}>{label}</label>
@@ -167,7 +169,7 @@ export function IntegrationInput({ label, value, onChange, placeholder, options,
         : <input {...attrs} type="text" spellCheck={false} placeholder={placeholder}
           onChange={(event) => onChange(event.target.value)} />}
       </Field>
-      {hint && <small id={id + "-hint"}>{hint}</small>}
+      {hint && <small id={id + "-hint"} className="integrations-hint-sr">{hint}</small>}
     </div>
   );
 }

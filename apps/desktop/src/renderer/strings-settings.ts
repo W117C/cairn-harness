@@ -47,7 +47,6 @@ export const settingsStrings = {
   // 2026-11-12（第 1076 页）：快捷键段与权限与安全段裸中文收编——值一字不改；两段都进 REWORKED_FILES。
   shortcutsSection: {
     title: "按键一览",
-    hint: "完整速查表按 ⌘/ 随时调出",
   },
   permissions: {
     modesTitle: "权限档",
@@ -223,6 +222,9 @@ export const settingsStrings = {
   // 2026-11-12（第 1078 页）：关于与更新段收编——值一字不改；许可证/诊断/偏好三条消息族同口径。
   about: {
     sectionTitle: "版本与更新",
+    // 2026-11-17（批6）：关于页拆三段；段名不许是行标签超集（第 892 页「分区标题 ⊃ 行标签」判卷）。
+    preferencesTitle: "备份与恢复",
+    doctorTitle: "诊断与细节",
     version: "版本",
     buildMeta: "构建于 {date} · 签名 {signature} · 打包冒烟 {smoke}",
     smokePassed: "已通过",
@@ -240,7 +242,7 @@ export const settingsStrings = {
     importPreferences: "导入偏好…",
     resetPreferences: "恢复默认…",
     doctor: "运行诊断",
-    doctorDesc: "检查 Node / 凭据 / 档位 / 沙箱 / 工作区 / 设置与会话数据 / 联网搜索 / 插件信任面。只读；会做一次沙箱自检。",
+    doctorDesc: "只读；会做一次沙箱自检。",
     doctorRunning: "诊断中…",
     doctorRun: "运行",
     copyReport: "复制报告",

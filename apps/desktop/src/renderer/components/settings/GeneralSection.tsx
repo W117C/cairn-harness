@@ -253,14 +253,17 @@ export function GeneralSection(props: {
         {/* 定时轮换（2026-11-16）：到点换下一张；候选少于两张时按纯函数口径不轮换。 */}
         <SettingsRow label={STR.general.wallpaperRotation}>
           <div className="cw-rotation" data-wallpaper-rotation="true">
-            <input
-              type="checkbox"
-              aria-label={STR.general.wallpaperRotation}
-              checked={props.settings.wallpaper.rotation.enabled}
-              onChange={(e) => {
-                props.onWallpaperRotation({ ...props.settings.wallpaper.rotation, enabled: e.target.checked });
-              }}
-            />
+            {/* 2026-11-17（批6）：原生 checkbox 换成 Switch——同一页所有开关都是 Switch（role=switch + 状态字），
+                唯独轮换是原生勾选框，控件家族不一致（审计第 6 条）。 */}
+            <span className="cw-rotation-toggle">
+              <Switch
+                checked={props.settings.wallpaper.rotation.enabled}
+                onChange={(next) => {
+                  props.onWallpaperRotation({ ...props.settings.wallpaper.rotation, enabled: next });
+                }}
+                label={STR.general.wallpaperRotation}
+              />
+            </span>
             <input
               className="ss-input cw-rotation-minutes"
               type="number"
@@ -412,6 +415,10 @@ export function GeneralSection(props: {
                     placeholder={STR.general.wallpaperWeatherKey}
                     value={weatherKey}
                     onChange={(e) => setWeatherKey(e.target.value)}
+                    onBlur={() => {
+                      // 2026-11-17（批6）：失焦即落钥匙串——此前只有点「测试连接」才写，填完不点就丢（审计第 10 条）。
+                      if (weatherKey !== "") void window.agent.wallpaperWeatherSetKey(weatherKey);
+                    }}
                   />
                   <button
                     type="button"

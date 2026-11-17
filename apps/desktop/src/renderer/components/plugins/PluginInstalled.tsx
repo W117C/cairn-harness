@@ -44,7 +44,7 @@ function InstalledRow(props: {
       data-plugin-state={props.row.state}
     >
       <button type="button" className="plugin-store-main" onClick={() => { props.state.select(props.row.id); }}>
-        <PluginMark id={props.row.id} name={props.row.name} size="lg" />
+        <PluginMark id={props.row.id} name={props.row.name} variant="lg" />
         <span className="plugin-store-copy">
           <span className="plugin-store-title">
             <strong>{props.row.name}</strong>

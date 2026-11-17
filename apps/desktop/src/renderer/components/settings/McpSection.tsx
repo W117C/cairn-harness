@@ -316,6 +316,7 @@ export function McpSection(): React.JSX.Element {
                   onOpen={() => { if (!store.conflict) store.setError(null); setSelectedName(server.name); }} />
               ))}
             </ul> : config.ok && config.errors.length === 0 && <EmptyState icon={<Plug size={22} />} title={STR.mcp.emptyTitle}
+              // 2026-11-17（批6 回补）：空态 desc 是「下一步指引」——第 1169 页判卷钉它在面里；设置行级的次级说明帽只数那两形，不数这个。
               desc={STR.mcp.emptyDesc}
               action={<button type="button" className="mini-btn primary" disabled={store.blocked} onClick={() => edit()}><Plus size={15} aria-hidden="true" />{STR.mcp.addServer}</button>} />}
             <IntegrationPath path={config.path} onReload={() => { setProbe(null); void store.load(); }} />

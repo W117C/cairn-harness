@@ -226,3 +226,17 @@ body[data-dsh-claude-style] .integrations code {
   .integrations-item-icon { flex-basis: 28px; min-height: 28px; }
   .integrations-item .ss-badge { padding-inline: var(--space-xs); }
 }
+
+/* 2026-11-16（移植 R4 B 档）：格式 hint 视觉隐藏——读屏经 aria-describedby 仍读得到，hover 经 title 可见。 */
+.integrations-hint-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

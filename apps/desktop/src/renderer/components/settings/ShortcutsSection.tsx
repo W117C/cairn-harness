@@ -12,7 +12,8 @@ export function ShortcutsSection(): React.JSX.Element {
     /* 2026-11-02：此前只列 13 条核心键，但 ⌘/ 弹层有 40+ 条（含窗格/视图/查找族）——
        同一件事两份数据，设置页成了精简版。现在直接渲染完整分组表（SHORTCUT_GROUPS，
        与 ⌘/ 弹层同一事实源）；核心键仍由 SHORTCUTS 承担 tooltip 取键。 */
-    <SettingsSection title={STR.shortcutsSection.title} hint={STR.shortcutsSection.hint}>
+    /* 2026-11-16（移植 R3 A 档）：「完整速查表按 ⌘/…」段 hint 删——这一页本身就是完整表。 */
+    <SettingsSection title={STR.shortcutsSection.title}>
       {SHORTCUT_GROUPS.map((g) => (
         <div key={g.title}>
           <h2 className="ss-sec-title kx-group-title">{g.title}</h2>

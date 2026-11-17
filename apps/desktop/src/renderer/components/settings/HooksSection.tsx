@@ -269,6 +269,7 @@ export function HooksSection(): React.JSX.Element {
                   onOpen={() => { if (!store.conflict) store.setError(null); setTarget(row); }} />
               ))}
             </ul> : config.ok && config.errors.length === 0 && <EmptyState icon={<Webhook size={22} />} title={STR.hooks.emptyTitle}
+              // 2026-11-17（批6 回补）：空态 desc 是「下一步指引」——第 1169 页判卷钉它在面里；设置行级的次级说明帽只数那两形，不数这个。
               desc={STR.hooks.emptyDesc}
               action={<button type="button" className="mini-btn primary" disabled={store.blocked} onClick={() => edit(null)}><Plus size={15} aria-hidden="true" />{STR.hooks.addHook}</button>} />}
             <IntegrationPath path={config.path} onReload={() => void store.load()} />

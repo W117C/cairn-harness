@@ -395,7 +395,8 @@ function EvolveReportBody(props: {
         </SettingsRow>
       </SettingsSection>
 
-      <SettingsSection title={STR.evolve.nudgesTitle} hint={STR.evolve.hintEpisode}>
+      {/* 2026-11-16（移植 R4 A 档）：「Episode 证据」英文术语 hint 删——行标签已是白话，去英文术语裁决。 */}
+      <SettingsSection title={STR.evolve.nudgesTitle}>
         <SettingsRow label={STR.evolve.nudgesLabel.replace("{e}", String(report.nudges.episodes)).replace("{n}", String(report.nudges.ids))}>
           <Badge tone={report.nudges.episodes === 0 ? "neutral" : "ok"}>
             {report.nudges.episodes === 0 ? STR.evolve.noHit : STR.evolve.hasHit}
@@ -448,7 +449,8 @@ function EvolveReportBody(props: {
         {report.budget.detail !== null && <p className="sp-note">{report.budget.detail}</p>}
       </SettingsSection>
 
-      <SettingsSection title={STR.evolve.governanceTitle} hint={STR.evolve.hintManualSwitch}>
+      {/* 2026-11-16（移植 R4 A 档）：「人工开关」修饰性小字删——冻结/解冻按钮自明。 */}
+      <SettingsSection title={STR.evolve.governanceTitle}>
         <SettingsRow
           label={report.frozen ? STR.evolve.frozenLabel : STR.evolve.unfrozenLabel}
           desc={report.frozen ? STR.evolve.frozenDesc : STR.evolve.unfrozenDesc}

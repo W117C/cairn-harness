@@ -4,14 +4,14 @@
 import { Puzzle } from "lucide-react";
 import type { CSSProperties } from "react";
 
-export function PluginMark(props: { id: string; name: string; size?: "lg" | "md" }): React.JSX.Element {
+export function PluginMark(props: { id: string; name: string; variant?: "lg" | "md" }): React.JSX.Element {
   let hash = 0;
   for (let i = 0; i < props.id.length; i++) hash = (hash * 31 + props.id.charCodeAt(i)) >>> 0;
   const hue = hash % 360;
   const letter = props.name.trim().charAt(0).toUpperCase();
   return (
     <span
-      className={"plugin-mark" + (props.size === undefined ? "" : ` ${props.size}`)}
+      className={"plugin-mark" + (props.variant === undefined ? "" : ` ${props.variant}`)}
       style={{ "--mark-hue": String(hue) } as CSSProperties}
       aria-hidden="true"
     >

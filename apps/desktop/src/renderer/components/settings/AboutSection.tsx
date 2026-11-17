@@ -252,7 +252,10 @@ export function AboutSection(props: {
   const doctorRowsView = useMemo(() => doctor.status === "ready" ? doctorRows(doctor.report, doctor.keys) : [], [doctor]);
   const doctorVerdict = doctor.status === "ready" ? doctorVerdictText(doctor.report, doctorRowsView) : "";
   return (
-    <SettingsSection title={STR.about.sectionTitle}>
+    <>
+      {/* 2026-11-17（批6 余下项）：「版本与更新」六件事拆成三段——版本/许可/更新源、偏好备份、运行诊断。
+          数据与行全部不动，只拆容器（审计第 4 条：六件事挤在一个巨型分区里，与其他页「分区+短卡片」节奏不一致）。 */}
+      <SettingsSection title={STR.about.sectionTitle}>
       <SettingsRow label={STR.about.version}>
         {/* 2026-11-02 真机：版本 + 构建时间 + 签名 + 冒烟 + commit 全挤在一行，右侧被裁成「已过」。
             版本号单独一行，构建信息另起一行允许折行。 */}
@@ -304,6 +307,9 @@ export function AboutSection(props: {
           </div>
         </SettingsRow>
       )}
+      </SettingsSection>
+
+      <SettingsSection title={STR.about.preferencesTitle}>
       <SettingsRow label={STR.about.preferences} desc={STR.about.preferencesDesc}>
         <div className="ss-inline">
           <button type="button" className="mini-btn" disabled={prefBusy} onClick={() => { void exportPreferences(); }}>
@@ -318,6 +324,9 @@ export function AboutSection(props: {
           {prefMsg !== null && <span className="sp-dim" role="status">{prefMsg}</span>}
         </div>
       </SettingsRow>
+      </SettingsSection>
+
+      <SettingsSection title={STR.about.doctorTitle}>
       <SettingsRow label={STR.about.doctor} desc={STR.about.doctorDesc}>
         <div className="ss-inline">
           <button type="button" className="mini-btn" disabled={doctor.status === "loading"} onClick={() => { void runDoctor(); }}>
@@ -376,6 +385,8 @@ export function AboutSection(props: {
           <div className="ss-diag-body">{props.diagnostics ?? DIAGNOSTICS_TEXT}</div>
         </details>
       </SettingsRow>
+      </SettingsSection>
+
       {pendingImport !== null && (
         <ConfirmDialog
           title={STR.about.importTitle}
@@ -398,6 +409,6 @@ export function AboutSection(props: {
           onClose={() => { setResetOpen(false); }}
         />
       )}
-    </SettingsSection>
+    </>
   );
 }

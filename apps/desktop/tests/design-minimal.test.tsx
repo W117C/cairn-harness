@@ -96,6 +96,7 @@ describe("设计面·减法", () => {
   });
 });
 
+// 2026-11-17（批6）：帽 36→33——设计收敛 R3/R4 A/B 档移植后实读 33 条，棘轮跟着实测走（与 R4 线 36→28 同口径）。
 describe("次级说明不许替布局说话（2026-11-01 第 866 页 · 业主口径「让布局说话」）", () => {
   /** 设置面的行/分区/页级次级说明总量（棘轮：只准调低）。 */
   const SETTINGS_DIR = fileURLToPath(new URL("../src/renderer/components/settings", import.meta.url));
@@ -107,13 +108,13 @@ describe("次级说明不许替布局说话（2026-11-01 第 866 页 · 业主�
     .map((rel) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8"))
     .join("\n");
 
-  it("条数帽 36：新增一条次级说明就要先说清布局为什么说不清（desc / description 同数）", () => {
+  it("条数帽 35：新增一条次级说明就要先说清布局为什么说不清（desc / description 同数）", () => {
     // 第 1169 页：这把尺原先只数 desc=；IntegrationToolbar 的 description= 是同族的页级
     // 次级说明，却在帽外（实测：把已撤的「目前只有中文界面」塞进 description=，帽读数不变）。
     // 两形一起数、帽 36 不动。PageFrame 的 subtitle= 住在 AutomationPane/IdleTaskPane，
     // 不在本判卷的 settings 取料面，改由下面的整面自证钉它仍在、不给「三形同数」的空话。
     const n = (descs.match(/\b(?:desc|description)=/g) ?? []).length;
-    expect(n, `设置面次级说明 ${n} 条 > 帽 36（本批从 47 减到 36；要加回去请连理由一起改帽并写进台账）`).toBeLessThanOrEqual(36);
+    expect(n, `设置面次级说明 ${n} 条 > 帽 35（本批 36→35——2026-11-17 移植设计收敛 R3/R4 A/B 档撤快环/治理/按键三段 hint、7 条可推导半句；空态两行 desc 是第 1169 页钉的「下一步指引」不撤；要加回去请连理由一起改帽并写进台账）`).toBeLessThanOrEqual(35);
     // 防空转：两形取料面都要在位（否则把正则收窄成单形也能绿）。
     expect(descs, "desc 形仍须在位").toContain("desc={STR.about.licenseDesc}");
     const surface = readAppSurface();
