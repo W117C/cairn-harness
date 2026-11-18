@@ -1,9 +1,8 @@
 // 通道分区判卷（v80 IM 通道线的设置面）：连接清单、状态点名、待审请求、平台表单。
 // 手法同 team-section 判卷：SSR 注入读数（生产走 imList IPC）。
 import { renderToStaticMarkup } from "react-dom/server";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { readAppSurface } from "./helpers/app-surface";
 import { ChannelsSection } from "../src/renderer/components/settings/ChannelsSection";
 import type { ImConnectionViewPayload } from "../../../src/main/ipc-protocol";
 
@@ -40,11 +39,10 @@ const CONN = (over: Partial<ImConnectionViewPayload> = {}): ImConnectionViewPayl
   ...over,
 });
 
-/** 本仓无 jsdom（见 composer-steer 头注）：交互流走「SSR 结构 + 源码断言」两面。 */
-const sectionSrc = readFileSync(
-  fileURLToPath(new URL("../src/renderer/components/settings/ChannelsSection.tsx", import.meta.url)),
-  "utf8",
-);
+/** 本仓无 jsdom（见 composer-steer 头注）：交互流走「SSR 结构 + 源码断言」两面。
+ *  源码断言读**整张应用面**（AGENTS.md「读面不读单文件」）——只读一个文件时，代码搬走
+ *  会让 not.toContain 空过；面断言在搬走后仍认得出这段接线。 */
+const sectionSrc = readAppSurface();
 
 /** 扫码平台（微信 iLink）：表单字段不参与建连，入口是二维码。 */
 const QR_PLATFORMS = [{

@@ -44878,3 +44878,40 @@ callback 需公网回调，列入 V2 候选）。
 - 个人微信无官方 API 的口径不变：这条路走的是官方 iLink 机器人（`ilinkai.weixin.qq.com`）。
 
 凭证 @9b5ef007
+
+## 2026-11-18 · 第 1321 页：知识收尾（v81）——wiki/状态页/changelog 与判卷读面对齐
+
+### 一、同步的三处现役说法
+
+- `docs/CODE-WIKI.md` 增「⑪ IM 通道（`src/im/`）」：适配器拥有线协议、宿主拥有其余一切；四条纪律
+  （密钥只以键名入库 / 运行态随连接走 / 出站 URL 过平台自己的闸 / 平台差异只挂 spec）；
+  扫码回包是**待编码文本**、二维码在渲染层本地画；判卷面点名。此前该子系统在符号索引里整块缺席。
+- `docs/REPOSITORY-STATUS.md`：核对日期改 2026-11-18；分支表补当前开发线 `bot、UI、chat`（`cf60aa94`，未推送）；
+  P1 判卷面读数换成当日（core 714/8386、桌面 428/2788、同日 verify-all 七门 pass），旧读降为 2026-11-15 一行。
+- `CHANGELOG.md` `[未发布]` 增「外部通道」一条：飞书/邮件/企业微信/微信 iLink 扫码登录是对外交付面，
+  原来 v80 起这一族一条都没进变更日志（只活在台账里），读者从变更日志看不到任何东西变化过。
+
+### 二、判卷读面（规则 60/78 的落实，非放宽）
+
+- `apps/desktop/tests/channels-settings.test.tsx` 的源码断言从「只读 ChannelsSection.tsx」改为读
+  **整张应用面**（`readAppSurface()`，AGENTS.md「读面不读单文件」）——代码搬到子组件后仍认得出这段接线；
+  SSR 结构断言与 `not.toContain('type="password"')`（渲染产物，不是源文）不变，判卷强度不降。
+
+### 三、复核读数（只读核对，未改产品代码）
+
+- `docs-check` 绿（页号 1321 唯一；D-2/D-4 无新增）；`renderer-layer-check` 绿（257 源文件，派生层纯）；
+  `desktop-boundary-check` 绿；桌面 **428 文件 / 2788 条全绿**（判卷改面后复跑）；
+  四包证据现源复算 **MATCH**（rendererDigest 未变，只改了 tests/docs）。
+- 规则文件（AGENTS.md）未改：本次没有产生需要新规则才不犯的错；既有「读面」与「分层」规则被遵守/落实。
+
+### 四、工作区残留（只预览，未删除；等业主确认后清场）
+
+- 仓内 `.worktrees/gate-head-cert`（干净、detached `2bdac46a`）、`.worktrees/gate-mutate-verify`
+  （1 个脏文件、detached `6d6f5783`）——两次门禁跑批的一次性检出，共约占 1.7G。
+- `~/alma/worktrees/cairn/` 四支：`continued-reindeer`（simplify 线，2 脏）、`cultural-fox`（2 脏）、
+  `single-woodpecker`（3 脏）、`pleased-slug`（干净但含未并入 HEAD 的独有提交）。
+- 仓根空目录 `.scratch` / `工作区`（0B，未被 .gitignore 覆盖）；`.tmp`（33M）与 `.superpowers`（356K）已被忽略。
+- 未并入 HEAD 的分支 15 支在案（含 `audit-optimize-desktop-design`、`integration/security-closure-20261112`）——
+  删除需逐支核 tip 与独有提交，不在本次范围。
+
+凭证 @cf60aa94

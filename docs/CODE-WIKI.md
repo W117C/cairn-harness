@@ -305,6 +305,30 @@ AgentApi，不跑真模型、不触发系统录屏权限）。
 判卷：`tests/plugins-hook-prompt.test.ts`（16 条，其中 4 条直接量 `createHookModelCall` 那层接缝，用替身 transport，
 不碰网络也不碰 key）。
 
+## ⑪ IM 通道（`src/im/`）：适配器拥有线协议，宿主拥有其余一切
+
+真身：`src/im/types.ts`（适配器契约 `connect` / `check`，扫码平台另加 `loginStart` / `loginWait`；
+平台形状挂在 `ImPlatformSpec` 的 `ws` / `login` / `fields` / `textLimit` 上）、`src/im/host.ts`
+（生命周期对账、配对闸、群聊 @ 闸、按聊天发送队列、逐连接运行态）、`src/im/platforms/`
+（飞书长连接 / 邮件 IMAP-SMTP / 企业微信智能机器人 / 微信 iLink）、`src/im/format.ts`（分片与纯文本）。
+
+四条纪律（改这个子系统前先看）：
+
+1. **密钥只以键名入库**：连接记录只有 `secretKeys`（safeStorage 键名），值只在 connect 前由注入面拼进
+   `fields`；扫码确认拿到的 token 同样只经 `putSecret` 落盘，不进连接记录、不进日志。
+2. **运行态随连接走**：游标 `get_updates_buf` 与每用户 `context_token` 写在 `ImConnection.runtime`，
+   由宿主单点 set + 落盘——重启从这条记录续跑，不重放；适配器不自持全局游标。
+3. **出站 URL 必须过平台自己的闸**：服务端回包（如 iLink 的 `baseurl`）是服务端可控 URL，
+   发 token 前钉死协议与官方域，拒回环/私有/保留地址（`assertIlinkEndpoint`）。
+4. **平台差异只挂在 spec 上**：设置面按 `login` 决定表单或二维码流，按 `textLimit` 分片；
+   renderer 不 import 平台实现，IPC 只传视图（平台清单 + 连接清单）。
+
+扫码登录的形状：出码返回**待编码文本**（不是图片），二维码在渲染层本地画
+（`apps/desktop/src/renderer/derived/qr-matrix.ts`，零依赖 ISO/IEC 18004）。
+
+判卷面：`tests/im/host.test.ts`（对账/配对/队列/runtime 落盘/扫码建连）、`tests/im/*.test.ts`
+（四平台协议）、`apps/desktop/tests/channels-settings.test.tsx`、`apps/desktop/tests/qr-matrix.test.ts`。
+
 ## Verification
 
 Use the root `typecheck` and Vitest commands. The root gate manifest also runs the desktop suite: `desktop-test` is in both `GATES` and `CERT_GATES` (`scripts/gate-manifest.ts`), including `desktop-boundary-check`.

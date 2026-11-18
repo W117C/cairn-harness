@@ -1,6 +1,6 @@
 # 仓库状态与分支
 
-核对日期 2026-11-15（Asia/Shanghai）。公开仓库为 [W117C/cairn-harness](https://github.com/W117C/cairn-harness)。
+核对日期 2026-11-18（Asia/Shanghai）。公开仓库为 [W117C/cairn-harness](https://github.com/W117C/cairn-harness)。
 旧分支盘点与对象库修复记录可以在 `bcfff3f2` 的本页与[早期快照](../archive/repository-status-before-2026-11-02.md)回查。
 
 | 分支 | 角色 | 状态 |
@@ -8,6 +8,7 @@
 | `main`、`origin/main` | AGPL 公开主线 | 本地与远端同为 `73e775a6` |
 | `integration/security-closure-20261112` | 本地内测集成入口 | 本地 tip `3c65ef64`（`origin` 同名分支 `2f83624b`）；含权限修复、离线评估证据校验与宿主联网免批，比 `main` 多 282 笔提交 |
 | `fix/spec-summary-double-count` | 本地开发工作树 | tip `8fe17161`，未提交改动仍在原工作树 |
+| `bot、UI、chat` | 当前开发线（IM 通道 v81） | 核对时 tip `cf60aa94`，未推送 |
 | `rescue/*` | 恢复引用 | 保留独有历史 |
 
 远端只公布 `main`。公开修复从 `120d4a87` 移植，内测提交、证据和许可保留在本地。GitHub
@@ -26,7 +27,7 @@
 
 | 优先级 | 事项 | 读数（每条自带日期） |
 |---|---|---|
-| P1 | 判卷面（core + 桌面） | 现读（2026-11-15，`pnpm test:capped`、`maxWorkers=2`）：core **682 文件 / 8194 条全绿**、桌面 **396 文件 / 2574 条全绿**（exit 0）；同轮 HEAD 认证 `85f04fd` 682/8194 绿。旧读（2026-11-13）：core 672/8104、桌面 385/2489 |
+| P1 | 判卷面（core + 桌面） | 现读（2026-11-18，`pnpm test:capped`、`maxWorkers=2`）：core **714 文件 / 8386 条全绿**、桌面 **428 文件 / 2788 条全绿**（exit 0）；同日 `verify-all` 七门全 pass（`cf60aa94`）。旧读（2026-11-15）：core 682/8194、桌面 396/2574 |
 | P1 | 认证面（HEAD） | 旧读（2026-11-04，`aeb577c7`，`maxWorkers=2`）：**25/25 道门绿、635 文件 / 7770 条全绿、exit 0**；修前 `d40962f` 同套 1 条 30s 假超时（35.8s），同用例单跑 1.9s 绿 |
 | P1 | 证据占比与检索噪声 | 旧读 `outputs/` **4960 / 已跟踪 7708 = 64.3%**（2026-11-02，`pnpm repo-hygiene-check` 面①；帽 70%，只准调低） |
 | P1 | 单文件体量 | 旧读 `src` 最大单文件 **2023 行**、`scripts` 最大 **2177 行**（2026-11-02，同一道门的面②/②-b；帽 2600） |
