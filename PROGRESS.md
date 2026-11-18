@@ -45221,3 +45221,48 @@ append-only；`.mimosa` 470M / `.alma-snapshots` 495M（工具态，不是仓的
 `verify-all` 七门 pass；`tests/im/host.test.ts` 9/9；typecheck 0。
 
 凭证 @0ce2c7c7
+
+## 2026-11-18 · 第 1329 页：把「没量过的维度」真的量了一次——80 支真机探针，76 支没人跑
+
+反方复核（第 1328 页）的 A 条裁定是「你量的维度全在门禁里，被强制的当然是绿的」。这一页去量那个维度。
+
+### 一、读数
+
+- `apps/desktop/scripts/*smoke*` 共 **80 支**真机冒烟；被门禁/判卷消费的只有 **4 支**
+  （cds-values / ime-guard / queue-key / overlay-mutex，即四份已封存证据的产出者）。
+- 抽样跑 3 支：`error-boundary-smoke` **2 绿 1 红**、`form-recovery-smoke` **3 绿 1 红**、
+  `dialogs-enter-smoke` **9/9 绿**。
+
+### 二、两支红是什么
+
+| 探针 | 红在哪 | 取证 |
+| --- | --- | --- |
+| `error-boundary-smoke` | 「切到好分区自动恢复（无需先点重试）」：切到「通用」后仍是兜底页（`title:null, fallback:true`） | 该探针注入的是**畸形 settings 快照**；而「通用」自第 1316 页起会读 `wallpaper.rotation.weather`（玻璃/天气控件），畸形快照里没有 `rotation` ⇒ 「通用」在**同一份夹具**下也会抛 |
+| `form-recovery-smoke` | 「renderer 无控制台错误」：`TypeError: Cannot read properties of undefined (reading 'weather')` 反复出现 | 同一个根因：夹具里 `wallpaper.rotation` 缺失 |
+
+`DEFAULT_SETTINGS` 实测形状完整（`wallpaper.rotation.weather` 的键是 kind/paths/source/filePath/httpUrl），
+主进程侧 `validateSettings` 恒补齐 ⇒ **生产路径拿不到半截 settings**。
+所以这两支红是**夹具过期**，不是产品缺陷——但也不能反过来证明产品没问题：它证明的是
+**这两支探针已经不能回答它们名字上的那个问题了**。
+
+### 三、结论（这一页真正要留的东西）
+
+**一支没人跑的真机探针，不是证据。** 76 支探针从「写它的那天」起就没有人再跑，
+它们引用的控件、分区、夹具都在漂——今天随手跑 3 支就有 2 支红，而红的原因全是夹具，
+不是被测方。这比「没有探针」更危险：它给人「有 80 支在看着」的错觉。
+
+修法不是今晚把 76 支全改一遍（那是把 76 份夹具各自重估一遍的工作量），而是定一条纪律并落进下一批：
+
+1. **门禁里登记探针清单**（`smoke:list` 打印，带「上次通过日期」），让腐化可见；
+2. **探针夹具从真源派生**：settings 夹具一律从 `DEFAULT_SETTINGS` 深拷再改字段，
+   而不是手写一份「看起来差不多」的对象；
+3. 每次改设置面/窗格面的批次，至少重跑受影响的探针，把读数写进台账（与四份封存证据同一纪律）。
+
+### 四、未做（诚实边界）
+
+- 没有改 `GeneralSection` 的 20 处 `wallpaper.rotation.weather` 取值为可选链：
+  生产路径由 `validateSettings` 保证完整，改成可选链是「防一个不该出现的状态」，
+  代价是 20 处类型放松 + 判卷语料可能要跟着动。要不要做，等业主裁决（这是产品防御性口径，不是 bug）。
+- 没有重建那两支探针的夹具：那属于「重估 76 份夹具」那条线，单开一批做。
+
+凭证 @8a8960a1
