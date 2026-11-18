@@ -191,11 +191,10 @@ describe("P0 装配账落流", () => {
     expect(a.dropped).toEqual([]);
   });
 
-  it("硬闸拦下：有工具面时盘上留一条账（钉住真值，防 final-budget 判据的零字节契约被悄悄推翻）", async () => {
-    // 这一条**不是**在赞同一个好行为，而是在把一处已知互斥钉成可见的：
-    // `tests/final-budget.test.ts:20` 要求「硬闸拦下时盘上零字节」，而本事件排在硬闸之前。
-    // 今天两条不冲突，只因 final-budget 那个用例**不传工具面**。谁给它补上工具面，
-    // 下面这条会先红并指向 `session-provider.ts` 调用点的取舍说明（判据赢，该动的是落点不是判据）。
+  it("硬闸拦下：盘上零字节（2026-11-19 落点归位——与 final-budget 的零字节契约全组合一致，互斥已消）", async () => {
+    // 旧形状把本事件排在硬闸之前 ⇒「有工具面+被拦下」时盘上多一条账，与 final-budget 的
+    // 「拦下=盘上零字节」在唯一组合上互斥（靠用例不传工具面才不撞）。归位后：fail-closed 的
+    // 语义是「这轮没发生」，观测账不许改写它；账只在**真的发出去**的请求上落。
     const transport = vi.fn(async function* () {
       yield { type: "assistant_message" as const, content: "ok" };
     });
@@ -218,8 +217,7 @@ describe("P0 装配账落流", () => {
       }).rejects.toThrow("context_budget_exceeded");
       expect(transport).not.toHaveBeenCalled();
       const accounts2 = accounts(await replay(path));
-      expect(accounts2).toHaveLength(1);   // ← 有账有请求都没有，但账落了盘
-      expect(accounts2[0]!.attemptSeq).toBe(1);
+      expect(accounts2).toHaveLength(0);   // ← 没发生就没有账：观测不许改写 fail-closed 的事实
     } finally {
       await rm(dir2, { recursive: true, force: true });
     }

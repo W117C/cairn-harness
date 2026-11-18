@@ -266,6 +266,9 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
   const events: EventLog = {
     async append(event) {
       // **原件**交给消费者（落盘/出站那一侧自己擦——见 redactEventForLog 的注释）：
+      // 这意味着同一事件在 loop 副本与盘上副本各擦一遍（2026-11-19 量过：微秒级）——
+      // **刻意不并**：两个面各自在自己边界脱敏（扫描面要原件、盘要副本），并成一次就要
+      // 跨面共享中间产物，省下的 CPU 远不值「每面边界自洽」这条不变量。
       // 安全扫描面要看到真内容（脱敏后的串认不出密钥，那道闸就静默空转了）。
       // 上下文面（seen）仍是脱敏副本：模型读到的与盘上的一致，"live 与盘同式"不破。
       await opts.events.append(event);

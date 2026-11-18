@@ -799,29 +799,13 @@ export function createSessionProvider(
       // 而没有插件/技能的会话根本没有那一块——接在那儿就是「生产者在、消费者不在」。
       const surfaceNoteText = surface?.note ?? "";
       // P0 装配账：**在模型请求发出前**落流（所以序号叫 attempt，不是 request）。
-      //
-      // 落点约束：必须在压缩块之前——`compaction.test.ts:481` 断言 `compaction` 是会话日志最后一条，
-      // 而同文件 `:490-497` 更狠，它**拿数组下标当事件 id**，任何多落的一条都会让两向断言同时错位。
-      // （`compact-wiring.test.ts` / `hook-precompact-producer.test.ts` 也断言同一件事，但它们走
-      //   `runCompaction` 而不是本函数，实际不经这里。）
-      //
-      // ⚠️ **本落点与 `tests/final-budget.test.ts:20` 的契约在唯一一个组合上互斥**：
-      // 那条判据要求「最终硬闸拦下时盘上一个字节都不许多」，而本事件排在硬闸之前 ⇒
-      // **有工具面 + 硬闸拦下**时盘上会留一条账。今天不冲突**只因那条判据的用例不传工具面**
-      // （`surface === null` ⇒ 根本不产账）。这是个**先于 P0 就埋下的地雷**，不是 P0 引入的。
-      //
-      // **取舍：判据赢。** fail-closed 的语义是「这轮没发生」，让观测去改盘就是让它改写了一件事。
-      // 硬闸抛的 `[context_budget_exceeded] final estimated input N; available M` 已经带足了诊断信息，
-      // 不需要靠盘上多一条事件来解释为什么失败。⇒ 将来若真出现那个组合，**该动的是本事件的落点**
-      // （挪到硬闸通过之后），**不是放宽那条判据**。
-      // `tests/surface-account.test.ts` 的「硬闸拦下：有工具面时盘上留一条账」把今天这个真值钉住了，
-      // 有人给 `final-budget.test.ts` 补上工具面时，那条守卫会当场红并指向这里。
-      if (surface) await recordSurfaceAccount(attempt, declaredTools ?? [], surface, {
-        memoryChars,
-        skillsBlockChars: skillsBlock?.length ?? 0,
-        mapChars: mapText?.length ?? 0,
-        attachmentContextChars,
-      });
+      // 落点 = 最终硬闸**之后**（2026-11-19 归位，ADR 式裁定见下）：硬闸拦下的那一轮「这轮没发生」，
+      // fail-closed 的语义是盘上不许多一个字节——观测账不许改写「没发生」这件事。
+      // 落点约束：必须在压缩块之后落（压缩块自身的 compaction 事件仍由 coordinator 落流，
+      // `compaction.test.ts:481` 的「最后一条」断言不受影响：surface_account 现在排在它的后面）。
+      // 详见 tests/surface-account.test.ts「硬闸拦下」一条的新契约（两判据不再互斥）。
+      // （本事件**曾**排在硬闸之前，与 `tests/final-budget.test.ts:20` 的「拦下=盘上零字节」
+      //   在「有工具面+被拦下」组合上互斥；靠用例形状不撞——2026-11-19 按注释自认的修法归位。）
       // 识图：图片只活在进程内存里（不进事件日志，见 image-channel.ts），所以预算的**两边**
       // 都得在这里显式把它们算上。⚠️ 用 `peek` 不用 `take`：硬闸拦下的那一轮什么都没发出去，
       // 不该顺手把图吞掉（2026-11-03 实测：两张 900×1200 的帧被 intake 后请求被拒，重试时模型
@@ -951,6 +935,14 @@ export function createSessionProvider(
         const imageNote = size.images > 0 ? `; images ${imageCountOfMessages(msgs)} ≈ ${size.images} token` : "";
         throw new Error(`[context_budget_exceeded] final estimated input ${size.tokens}; available ${available}${imageNote}; request not sent`);
       }
+      // P0 装配账（2026-11-19 归位）：硬闸**通过**才落——「这轮真的要发出去了」这一刻才有账，
+      // 被拦下的那一轮盘上零字节（与 final-budget 的零字节契约全组合一致）。
+      if (surface) await recordSurfaceAccount(attempt, declaredTools ?? [], surface, {
+        memoryChars,
+        skillsBlockChars: skillsBlock?.length ?? 0,
+        mapChars: mapText?.length ?? 0,
+        attachmentContextChars,
+      });
       // 硬闸过了才清空识图盒：被拦下的那一轮图已经随 `msgs` 组装好却一个字节都没发出去，
       // 先把它们留在盒里，用户点「重试」时同一批帧还能再送一次（take 语义见 image-channel.ts）。
       opts.imageChannel?.take();
