@@ -5,6 +5,7 @@
 // 固定 NOW 断言（不读真钟）：五档边界 + 未来戳 + 解析失败三条路都钉住。
 import { describe, expect, it } from "vitest";
 import { bodyLines, fullTime, indexLines, memorySemanticGroup, relativeTime } from "../src/renderer/memory-view";
+import { relativeTime as relativeTimeMs } from "../src/renderer/relative-time";
 
 const NOW = Date.parse("2026-10-16T12:00:00.000Z");
 
@@ -63,5 +64,30 @@ describe("bodyLines（主题正文切行）", () => {
   it("空正文 ⇒ 空数组（渲染侧给「暂无正文」回落，不摆空壳）", () => {
     expect(bodyLines("")).toEqual([]);
     expect(bodyLines("\n\n")).toEqual([]);
+  });
+});
+
+// 2026-11-18 审计：相对时间此前是**两份**分档实现（各自一段 if 阶梯），漂移已经发生
+// （会话面 7 天改显绝对日期、记忆页 30 天）。现在分档只有一处（relative-time.ts），
+// 两面的差异收成一个显式参数 `absoluteAfterDays`——是**决定**，不是第二份实现。
+// 判据钉两件事：①7 天内两面必须逐字同词；②各自的档外都改显绝对日期（阀值差异不许悄悄没了）。
+describe("相对时间：分档单源（2026-11-18 审计）", () => {
+  const NOW = Date.parse("2026-11-18T12:00:00.000Z");
+  const isoDaysAgo = (d: number): string => new Date(NOW - d * 86_400_000).toISOString();
+
+  it("同一段区间两面逐字同词（此前 8–29 天会分叉：一边 N 天前、一边绝对日期）", () => {
+    for (const days of [1, 3, 6]) {
+      const mem = relativeTime(isoDaysAgo(days), NOW);
+      expect(mem).toBe(`${String(days)} 天前`);
+      expect(mem).toBe(relativeTimeMs(NOW, NOW - days * 86_400_000));
+    }
+  });
+
+  it("档外各自改显绝对日期（记忆页 30 天／会话面 7 天，差异只剩参数）", () => {
+    expect(relativeTime(isoDaysAgo(31), NOW)).toBe("2026-10-18");
+    expect(relativeTimeMs(NOW, NOW - 8 * 86_400_000)).toBe("2026-11-10");
+    // 记忆页 8–29 天仍给相对词（它的龄期语义），会话面已切绝对日期——这两句就是那条许可。
+    expect(relativeTime(isoDaysAgo(20), NOW)).toBe("20 天前");
+    expect(relativeTimeMs(NOW, NOW - 20 * 86_400_000)).toBe("2026-10-29");
   });
 });

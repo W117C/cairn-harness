@@ -61,9 +61,9 @@
       "detail": []
     }
   ],
-  "rendererDigest": "02764f0c85cd2853f8571342e002cac8c8008e95a88b6a0943a0c01891681db8",
-  "generatedAt": "2026-11-18T09:47:05.643Z",
+  "rendererDigest": "6c9fc8473636eebe0b4164d1a80001a24e01645ddc8f9e8192c08e9d9de86d16",
+  "generatedAt": "2026-11-18T12:22:46.547Z",
   "buildFresh": true,
-  "srcMtime": "2026-11-18T09:44:16.461Z",
-  "distMtime": "2026-11-18T09:46:30.174Z"
+  "srcMtime": "2026-11-18T12:01:16.686Z",
+  "distMtime": "2026-11-18T12:06:18.806Z"
 }

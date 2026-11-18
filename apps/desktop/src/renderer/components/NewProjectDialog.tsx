@@ -8,6 +8,7 @@ import { Atom, BarChart3, ClipboardList, FolderPlus, LayoutTemplate, X } from "l
 import { STR } from "../strings";
 import { applyRadioNavigation } from "../radio-nav";
 import { ModalSurface } from "./ModalSurface";
+import { projectNameProblem } from "../../../../../src/main/project-name";
 
 export interface TemplateCard {
   id: string;
@@ -24,12 +25,22 @@ function templateIcon(id: string): React.JSX.Element {
   return <FolderPlus size={16} />;
 }
 
-/** 名字实时校验（纯判据内联；返回错误文案或 null）。 */
+/** 名字实时校验（返回错误文案或 null）。
+ *  **规矩不在本文件**：它是文件夹名的规矩，本体在 `src/main/project-name.ts`，与核心建目录那条
+ *  路径共用一份（2026-11-18 审计：此前这里只查 `\ /` 与控制字符，`a:b`、65 字符、`.隐藏`、`结尾点`
+ *  四档都是「对话框绿、点创建才被核心拒」——实时校验在那些字符上是假的）。这里只把档位翻成 STR 文案。 */
 export function validateProjectName(name: string, existingNames: readonly string[]): string | null {
-  const trimmed = name.trim();
-  if (trimmed === "") return STR.newProject.nameEmpty;
-  if (/[\\/\u0000-\u001f]/.test(trimmed)) return STR.newProject.nameInvalid;
-  if (existingNames.includes(trimmed)) return STR.newProject.nameTaken;
+  const problem = projectNameProblem(name);
+  if (problem !== null) {
+    switch (problem.reason) {
+      case "empty": return STR.newProject.nameEmpty;
+      case "too-long": return STR.newProject.nameTooLong;
+      case "bad-char": return STR.newProject.nameInvalid;
+      case "leading-dot": return STR.newProject.nameLeadingDot;
+      case "trailing-dot": return STR.newProject.nameTrailingDot;
+    }
+  }
+  if (existingNames.includes(name.trim())) return STR.newProject.nameTaken;
   return null;
 }
 

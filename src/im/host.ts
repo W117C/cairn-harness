@@ -181,6 +181,13 @@ export function createImHost(deps: ImHostDeps) {
     }
     // 群聊闸：群消息必须 @ 机器人才收。
     if (msg.chat.kind === "group" && !msg.mentioned) return;
+    // 空文本闸（2026-11-18 审计）：图片/文件/无转写语音在 V1 不承载，适配器归一化后 text 是空串。
+    // 不设这道闸，空串会一路走到 routeInbound：没有会话时先建一个、再起一次空跑——白烧一次
+    // 模型调用，会话里还多一个空气泡。这里回的是一句如实的范围说明，不静默吞掉（沉默会被读成"坏了"）。
+    if (msg.text.trim() === "") {
+      sendTo(conn.id, msg.chat.key, "这条消息里没有文字。当前只收文本与语音转写，图片/文件还不支持。");
+      return;
+    }
     const result = await deps.routeInbound(conn, msg);
     if (result.ok === true && typeof result.reply === "string" && result.reply.trim() !== "") {
       sendTo(conn.id, msg.chat.key, result.reply);

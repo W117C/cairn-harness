@@ -19,6 +19,7 @@ import { clipDiff, parseUnifiedPatch } from "../diff-patch";
 import { ModalSurface } from "./ModalSurface";
 import { RenderErrorBoundary } from "./RenderErrorBoundary";
 import { appMotionReduced } from "../state/motion-pref";
+import { useNativeViewHidden } from "../state/native-view-occlusion";
 import { toast } from "../toast";
 import { DiffView } from "./DiffView";
 import { FilePane } from "./FilePane";
@@ -129,6 +130,10 @@ const BrowserPane = memo(function BrowserPane(props: {
   const activeViewRef = useRef<string | null>(null); activeViewRef.current = activeViewId;
   const activeKeyRef = useRef(activeKey); activeKeyRef.current = activeKey;
   const paneActiveRef = useRef(props.active); paneActiveRef.current = props.active;
+  // 让位账（第 1261 页）：浮层（命令面板/模态面/拖放蒙层/本站菜单）要求视图收走时，
+  // 原生 WebContentsView 必须收成零矩形——它不在 CSS 层叠里，z-index 再高也盖不过。
+  const hiddenByOverlay = useNativeViewHidden();
+  const hiddenRef = useRef(hiddenByOverlay); hiddenRef.current = hiddenByOverlay;
 
   // 站点授权弹出时把焦点送进对话框（2026-10-18）：否则键盘用户还停在地址栏，
   // Tab 要穿过整条工具栏才能到「允许/拒绝」。默认聚焦允许本次（与浏览器首访语义一致）。
@@ -208,7 +213,7 @@ const BrowserPane = memo(function BrowserPane(props: {
   const boundsSync = (): void => {
     // 原生 WebContentsView 不参与 CSS 层叠：窗格标签切走后父容器 visibility:hidden
     // 挡不住它。必须显式把每张视图收成零矩形，回到前台再按容器矩形放回。
-    if (!paneActiveRef.current) { hideAllViews(); return; }
+    if (!paneActiveRef.current || hiddenRef.current) { hideAllViews(); return; }
     const vid = activeViewRef.current;
     const el = containerRef.current;
     if (vid === null || el === null) return;
@@ -279,6 +284,14 @@ const BrowserPane = memo(function BrowserPane(props: {
     // hideAllViews/boundsSync 都是 latest-ref 读取，不随渲染换身份。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.active]);
+
+  // 浮层让位账（2026-11-18 接线）：命令面板/模态面/拖放蒙层任一持有 ⇒ 收走；全部释放 ⇒ 按容器放回。
+  useEffect(() => {
+    if (hiddenByOverlay) hideAllViews();
+    else boundsSync();
+    // hideAllViews/boundsSync 都是 latest-ref 读取，effect 只跟让位账走。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hiddenByOverlay]);
 
   // 菜单展开/收起：展开时收起原生视图给 DOM 菜单让位；收起时按容器矩形放回。
   // hideAllViews/boundsSync 都是 latest-ref 读取，effect 只跟 menuOpen 走。

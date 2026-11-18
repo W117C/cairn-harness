@@ -4,20 +4,15 @@
 //   indexLines    MEMORY.md 索引切行（去空行、剥行首「- 」——标记渲染交 markdown.tsx 的 renderInline）
 //   bodyLines     主题正文切行（去空行；不剥记号——正文是原文。空数组 = 渲染侧「暂无正文」回落）
 // 纯函数面（判卷锚）：UI 只做编排，不在这里塞任何 JSX。
+import { relativeTime as relativeTimeMs } from "./relative-time";
+/** 记忆页的相对时间：ISO 进、委托**唯一实现**（relative-time.ts）出。
+ *  为什么不是自己一份分档：2026-11-18 审计实测两份已经漂了——会话表 7 天后改显绝对日期，
+ *  这里 30 天，同一个「8 天前」在两页显示成两种东西。分档只该有一处；记忆条目活得久，
+ *  所以这一面显式传 30（差异是**参数**，不是第二份实现）。 */
 export function relativeTime(iso: string, now: number): string {
   const t = Date.parse(iso);
-  if (Number.isNaN(t)) return iso;
-  const diff = now - t;
-  if (diff < 60_000) return "刚刚"; // 含未来戳（时钟偏差）：都按「刚刚」——不摆负分钟
-  const minutes = Math.floor(diff / 60_000);
-  if (minutes < 60) return `${String(minutes)} 分钟前`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${String(hours)} 小时前`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${String(days)} 天前`;
-  const d = new Date(t);
-  const p = (n: number): string => String(n).padStart(2, "0");
-  return `${String(d.getFullYear())}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  if (Number.isNaN(t)) return iso; // 解析不了原样返回，不装懂
+  return relativeTimeMs(now, t, 30);
 }
 
 export function fullTime(iso: string): string {

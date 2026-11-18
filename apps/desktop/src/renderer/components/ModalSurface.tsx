@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type HTMLAttributes, type RefObject } from "react";
 import { appMotionReduced } from "../state/motion-pref";
+import { useNativeViewOcclusion } from "../state/native-view-occlusion";
 
 const FOCUSABLE_SELECTOR =
   "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [contenteditable='true'], [tabindex]:not([tabindex='-1'])";
@@ -55,6 +56,9 @@ type ModalSurfaceProps = Omit<HTMLAttributes<HTMLDivElement>, "role" | "aria-mod
 
 export function ModalSurface(props: ModalSurfaceProps): React.JSX.Element {
   const { label, onClose, onEscapeKeyDown, initialFocusRef, returnFocusRef, className, children, ...rest } = props;
+  // 原生视图让位（第 1261 页接线）：模态面挂载期间 WebContentsView 收成零矩形——
+  // z-index 盖不过原生层，唯一让位手段是宿主把视图收走；卸载即释放（计数制，叠开安全）。
+  useNativeViewOcclusion(true);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const closeRef = useRef(onClose);
   const escapeRef = useRef(onEscapeKeyDown);

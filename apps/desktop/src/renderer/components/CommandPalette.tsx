@@ -7,6 +7,7 @@ import { useNow } from "../useNow";
 import { Archive, Brain, Clock3, Copy, Download, FileText, Folder, FolderOpen, FolderPlus, MessageSquare, PanelLeft, PanelRight, Pencil, Plus, Puzzle, Search, Shield, Sun, Trash2, Wand2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { RenderErrorBoundary } from "./RenderErrorBoundary";
+import { useNativeViewOcclusion } from "../state/native-view-occlusion";
 import { SessionSearchResults, type SessionSearchState } from "./SessionSearchResults";
 import { relativeTime } from "../projections";
 import { sessionTime, type WorkspaceSession } from "../sessions-view";
@@ -406,6 +407,8 @@ export function PaletteContent(props: PaletteContentProps): React.JSX.Element {
 
 export function CommandPalette(props: PaletteContentProps & { open: boolean; onClose: () => void }): React.JSX.Element {
   const { open, onClose, ...rest } = props;
+  // 命令面板不走 ModalSurface（cmdk Dialog 自管焦点）：让位账在这里记（第 1261 页接线）。
+  useNativeViewOcclusion(open);
   const [commandRoot, setCommandRoot] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!open) return;

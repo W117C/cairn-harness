@@ -10,6 +10,7 @@ import type { TextSizeSetting, UiSizeSetting } from "../../../../../src/main/set
 import type { AppDestination, SectionId } from "../app-controls";
 import type { PaletteAction } from "../components/CommandPalette";
 import { ModalSurface } from "../components/ModalSurface";
+import { useNativeViewOcclusion } from "../state/native-view-occlusion";
 import { NewProjectDialog } from "../components/NewProjectDialog";
 import { MODE_LABEL } from "../components/PermissionMenu";
 import { SessionLogDialog } from "../components/SessionLogDialog";
@@ -111,6 +112,8 @@ export function WorkbenchOverlays(props: WorkbenchOverlaysProps): React.JSX.Elem
     dragOverApp, newProjectOpen, setNewProjectOpen, templates, handleCreateFromDialog,
   } = props;
 
+  // 拖放蒙层不是模态（无焦点圈禁），但同样盖在窗格区上：亮着就持有让位账（第 1261 页接线）。
+  useNativeViewOcclusion(dragOverApp);
   // 第 1155 页：会话日志标题按 sessions/logTarget 记忆；打开日志时的流式事件不重扫会话表。
   const logTitle = useMemo(() => logTarget === null ? "" : sessions.find((s) => s.id === logTarget)?.title ?? logTarget, [sessions, logTarget]);
   // 第 1179 页：命令面板项目行按 projects 记忆；浮层局部状态变化不再给面板换一份新数组。

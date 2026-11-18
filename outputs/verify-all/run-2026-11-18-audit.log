@@ -1,0 +1,9 @@
+verify-all: pass
+  pass     typecheck       node --import tsx scripts/typecheck.ts ⇒ exit 0（9s）
+  pass     docs-check      npx tsx scripts/docs-check.ts ⇒ exit 0（1s）
+  pass     bot-report      npx tsx scripts/bot-report.ts ⇒ exit 0（0s）
+  pass     standard-report npx tsx scripts/standard-report.ts ⇒ exit 0（0s）
+  pass     parity          npx vitest run --config tests/vitest.config.ts tests/parity-standard.test.ts ⇒ exit 0（0s）
+  pass     core-suite      pnpm test:capped ⇒ exit 0（206s）
+  pass     desktop-suite   npx vitest run --config vitest.config.ts ⇒ exit 0（19s）
+→ /Users/ze/Downloads/Cairn/cairn/outputs/verify-all/summary.json

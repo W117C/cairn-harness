@@ -26,6 +26,21 @@ describe("validateProjectName（纯函数）", () => {
     expect(validateProjectName("a\nb", [])).toBe(STR.newProject.nameInvalid);
   });
 
+  // 2026-11-18 审计：这四档此前是「对话框绿、点创建才被核心拒」——渲染层的校验收得比核心松
+  // （只查 `\ /` 与控制字符），实时校验在它们身上是假的。规矩现在只有一处（src/main/project-name.ts）。
+  it("核心那一套规矩全在这面生效：`:` `*` `?` `\"` `<` `>` `|` / 超长 / 前导点 / 尾随点", () => {
+    for (const bad of ["a:b", "a*b", "a?b", 'a"b', "a<b", "a>b", "a|b"]) {
+      expect(validateProjectName(bad, []), bad).toBe(STR.newProject.nameInvalid);
+    }
+    expect(validateProjectName("x".repeat(65), [])).toBe(STR.newProject.nameTooLong);
+    expect(validateProjectName(".hidden", [])).toBe(STR.newProject.nameLeadingDot);
+    expect(validateProjectName("尾巴点.", [])).toBe(STR.newProject.nameTrailingDot);
+    // 反向锚点：正常名字一个都不许误伤（64 字符边界、带内部点、中文、空格）。
+    for (const ok of ["my-site", "a.b", "x".repeat(64), "我的项目", "with space"]) {
+      expect(validateProjectName(ok, []), ok).toBeNull();
+    }
+  });
+
   it("与在场项目重名 ⇒ 报重名（前后空白不算差异）", () => {
     expect(validateProjectName("my-site", ["my-site"])).toBe(STR.newProject.nameTaken);
     expect(validateProjectName("  my-site  ", ["my-site"])).toBe(STR.newProject.nameTaken);

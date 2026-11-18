@@ -8,6 +8,7 @@
 import { existsSync, mkdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
+import { projectNameProblem } from "./project-name";
 
 export interface CreateProjectInput {
   name: string;
@@ -32,31 +33,24 @@ export function defaultProjectsRoot(home: string = homedir()): string {
   return join(home, "CairnProjects");
 }
 
-const MAX_NAME = 64;
-// Windows 与 POSIX 都别碰的字符 + 控制字符：跨平台一致，省得"在这台机器能建、在那台不行"。
-const BAD_CHARS = /[/\\:*?"<>|\u0000-\u001f]/;
-
-/** 项目名 = 文件夹名。判据按**文件夹名**的规矩来，不是按"好看的标题"来。 */
+/** 项目名 = 文件夹名。判据按**文件夹名**的规矩来，不是按"好看的标题"来。
+ *  规矩本体在 `project-name.ts`（渲染层同一份，见那里的注释）；这里只负责把档位说成人话。 */
 export function validateProjectName(raw: string): { ok: true; name: string } | Extract<CreateProjectResult, { ok: false }> {
   const name = raw.trim();
-  if (name === "") {
-    return { ok: false, reason: "empty-name", message: "项目名不能为空" };
+  const problem = projectNameProblem(raw);
+  if (problem === null) return { ok: true, name };
+  switch (problem.reason) {
+    case "empty":
+      return { ok: false, reason: "empty-name", message: "项目名不能为空" };
+    case "too-long":
+      return { ok: false, reason: "too-long", message: `项目名太长（${String(problem.length)} > ${String(problem.max)} 字符）` };
+    case "bad-char":
+      return { ok: false, reason: "bad-name", message: "项目名不能包含 / \\ : * ? \" < > | 这些字符（它是文件夹名）" };
+    case "leading-dot":
+      return { ok: false, reason: "bad-name", message: "项目名不能以点开头（会被当成隐藏目录）" };
+    case "trailing-dot":
+      return { ok: false, reason: "bad-name", message: "项目名不能以点结尾（部分平台会把它丢掉）" };
   }
-  if (name.length > MAX_NAME) {
-    return { ok: false, reason: "too-long", message: `项目名太长（${String(name.length)} > ${String(MAX_NAME)} 字符）` };
-  }
-  if (BAD_CHARS.test(name)) {
-    return { ok: false, reason: "bad-name", message: "项目名不能包含 / \\ : * ? \" < > | 这些字符（它是文件夹名）" };
-  }
-  if (name === "." || name === ".." || name.startsWith(".")) {
-    return { ok: false, reason: "bad-name", message: "项目名不能以点开头（会被当成隐藏目录）" };
-  }
-  // 只查尾随点：尾随空格在上面 trim 时已经没了（用户粘贴带空格的"项目名 "是常事，
-  // 那种输入该被接受而不是被拒）。尾随点在部分平台会被系统悄悄去掉，那才是真事故。
-  if (name.endsWith(".")) {
-    return { ok: false, reason: "bad-name", message: "项目名不能以点结尾（部分平台会把它丢掉）" };
-  }
-  return { ok: true, name };
 }
 
 /** 建文件夹。**不登记**（登记走 ProjectRegistry.add，由调用方决定顺序与错误面）。 */

@@ -121,6 +121,28 @@ describe("IM 宿主", () => {
     expect(routes).toEqual(["@Cairn 看看这个"]);
   });
 
+  // 2026-11-18 审计：图片/文件/无转写语音归一化后 text 是空串（见 ImInboundMessage 只有 text）。
+  // 空的入站不许进 routeInbound：那里会「没会话先建一个、再起一次空跑」——白烧一次模型调用，
+  // 会话里还多一个空气泡。宿主回一句如实的范围说明（沉默会被读成"坏了"）。
+  it("空文本闸：空串不路由，回一句范围说明", async () => {
+    const { captured, adapter } = captureAdapter();
+    const routes: string[] = [];
+    const { store } = fakeStore([conn()]);
+    const host = createImHost({ store, platforms: { test: SPEC }, adapters: { test: adapter }, env: ENV, secretValue: async () => "sv", routeInbound: async (_c, m) => { routes.push(m.text); return { ok: true, reply: "不该出现的回信" }; } });
+    await host.boot();
+    const handlers = captured.handlers;
+    if (handlers === null) throw new Error("适配器没有交出 handlers");
+    await handlers.onMessage(msgOf("   ", "u1"));
+    expect(routes).toEqual([]);
+    await new Promise((r) => setTimeout(r, 20));
+    // 原句证人（第 311 页那一维：模型可见的能力断言必须有判卷点过）。上面两格是**行为观测者**
+    // （不路由、不建会话）；这一行才是把生产那句边界文案逐字钉住——只钉行为会让文案漂走也没人管。
+    expect(captured.sends.some((s) => s.includes("这条消息里没有文字。当前只收文本与语音转写，图片/文件还不支持。"))).toBe(true);
+    // 反向锚点：有文字的一条照旧路由——闸只挡空串，不吞正常消息。
+    await handlers.onMessage(msgOf("看看构建", "u1"));
+    expect(routes).toEqual(["看看构建"]);
+  });
+
   it("生命周期对账：禁用停适配器、移除即断", async () => {
     const { captured, adapter } = captureAdapter();
     let stoppedCount = 0;
