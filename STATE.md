@@ -1,6 +1,6 @@
 # Cairn / DSH —— 现态
 
-rev: e096678e
+rev: ac08d8c9
 
 核对日期 2026-11-18（Asia/Shanghai）。IM 通道线第 1320 页收口于 `9b5ef007`：**协议 v81**
 （飞书长连接 + 邮件 IMAP/SMTP + 企业微信智能机器人 + 微信 iLink 扫码登录）。微信走官方 iLink
@@ -33,6 +33,11 @@ electron-free、零新依赖，连接记录只有 safeStorage 键名。验证：
 （二十秒收掉残留突变，此前只挂在整表开跑那一拍）。**两处撤回**：「242 条报错降到 0」这个目标本身写坏了
 （剩下 204 条是一次性历史探针的样式账），以及不加 `ImInboundMessage.attachments?`
 （没有消费方的字段只是把「尚未兑现」挪进契约）。
+
+第 1326 页：`head-cert` 在主线抓到一道存量红——`subagent-start-context-not-threaded` 的针脚还写着四参
+形状（`6b927878` 给 `buildWorkerSystemMessages` 加了第 5 个实参），变异成了空操作而表上仍是 ✅。
+按现源改形状后单跑证明确实杀死判据；`mutate-needles-check` 阻断 1 → 0。认证 @`ac08d8c`：
+**26 道跑到 26、绿 26**，六维全过（墙钟 292.11s）。
 
 ## 当前工作
 
