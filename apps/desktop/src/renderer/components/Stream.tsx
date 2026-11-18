@@ -12,7 +12,7 @@
 // data-round-anchor、think-live/think-body/think-elapsed/aria 全套、复制/还原 aria-label ——
 // 全部逐字保留（本文件换形态与图标，不动锚）。
 // 图标 = lucide-react（ADR 0003）。
-import { AlertTriangle, Check, ChevronRight, ChevronUp, CircleDashed, Copy, Eye, FileCode2, FileText, Folder, GitBranch, Globe, History, Image as ImageIcon, Loader2, SquareTerminal, Undo2, Pin, RotateCw, ThumbsDown, ThumbsUp } from "lucide-react";
+import { AlertTriangle, Check, ChevronRight, ChevronUp, CircleDashed, Copy, Eye, FileCode2, FileText, Folder, GitBranch, Globe, History, Image as ImageIcon, Info, Loader2, SquareTerminal, Undo2, Pin, RotateCw, ThumbsDown, ThumbsUp } from "lucide-react";
 import { Fragment,memo,useEffect,useId,useRef,useState } from "react";
 import type { ChangeDiffPayload } from "../../../../../src/main/change-diff";
 import { eventRefKey, type EventRef } from "../../../../../src/events/session-ref";
@@ -733,6 +733,22 @@ export const Stream = memo(function Stream(props: {
           });
           break;
         }
+        case "notice": {
+          // 截断提示行（第 1328 页）：与 error 同族但不带重试钮——续不续由用户下一轮决定，
+          // 摆个钮等于替用户决定"截断需要重试"。也不进过程折叠带（用户必须看见它）。
+          flush();
+          out.push({
+            key: `n${r.seq}`,
+            node: (
+              <div className="row notice-row" data-event-id={String(r.seq + 1)}>
+                <span className="notice-glyph" aria-hidden="true"><Info size={14} /></span>
+                <span className="t">{r.text}</span>
+                <span className="meta"><RowTime ts={r.ts} /></span>
+              </div>
+            ),
+          });
+          break;
+        }
       }
     }
     flush();
@@ -752,7 +768,7 @@ export const Stream = memo(function Stream(props: {
       const finalRow = rows[finalAt]!;
       // 过程带里只许有**过程行**（思考 / 工具 / 旁白）。用户自己说的话（轮中插话）与
       // 错误行不折——用户说过的话不许在转录里消失，错误行也不该被藏进折叠体。
-      const foldable = head.every((r) => r.kind !== "user" && r.kind !== "error");
+      const foldable = head.every((r) => r.kind !== "user" && r.kind !== "error" && r.kind !== "notice");
       // 摘要连**最终答复自己的思考**一起数：那段思考是「答之前」的思考，不该单独占一行。
       const summary = summarizeProcess(finalRow.kind === "assistant" ? [...head, finalRow] : head);
       if (foldable && (summary.tools > 0 || summary.thinks > 0)) {

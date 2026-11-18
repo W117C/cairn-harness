@@ -85,7 +85,7 @@ export const FindBar = forwardRef<FindBarHandle, FindBarProps>(function FindBar(
     const seqs = foldedHitSeqs(props.rows ?? [], props.foldedRounds ?? NO_FOLDS, value);
     const folded = seqs.map((seq): FindHit => {
       const row = (props.rows ?? []).find((r) => r.seq === seq);
-      const round = row === undefined || row.kind === "tool" || row.kind === "error" ? 0 : row.round;
+      const round = row === undefined || row.kind === "tool" || row.kind === "error" || row.kind === "notice" ? 0 : row.round;
       return { seq, round };
     });
     return [...visible, ...folded];

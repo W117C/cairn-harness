@@ -31,7 +31,11 @@ export type StreamRow =
        *  「为什么没执行」的人话摘要据此判（见 derived/tool-failure.ts）。
        *  缺席 = 这次调用没有判定留痕（老日志 / 非门路径）——**不编值**。 */
       gateVerdict?: GateVerdict }
-  | { kind: "error"; text: string; ts?: number; seq: number };
+  | { kind: "error"; text: string; ts?: number; seq: number }
+  /** 第 1328 页反方复核赢下的第二件事：`turn_truncated`（输出预算/内容策略收走的半句话）此前
+   *  渲染层 0 处引用 ⇒ 回复被截断时桌面看起来是完整回答。notice 行让它如实可见——
+   *  与 error 行同族（都是"发生了你没看见的事"），但不带重试钮（续不续由用户下一轮决定）。 */
+  | { kind: "notice"; tone: "truncated"; text: string; ts?: number; seq: number };
 
 type ToolRow = Extract<StreamRow, { kind: "tool" }>;
 
@@ -269,6 +273,19 @@ export function projectStream(events: readonly AgentEvent[], running: boolean = 
       case "error":
         flushBuckets(true);
         rows.push({ kind: "error", text: e.message, ts: e.ts, seq });
+        break;
+      // 第 1328 页：截断是收束语义的事实，不是错误——如实一行（措辞与 context.ts 的
+      // truncationNote 同族：说"没说完"，不编"说完了"）。三档 provider 适配器落的事件
+      // 从此在桌面可见（此前渲染层 0 处引用）。
+      case "turn_truncated":
+        flushBuckets(true);
+        rows.push({
+          kind: "notice", tone: "truncated",
+          text: e.outcome === "output_budget"
+            ? "上一条回复因输出预算被截断——那不是完整结论。"
+            : "上一条回复被内容策略中止——那不是完整结论。",
+          ts: e.ts, seq,
+        });
         break;
       case "agent_status":
         if (isMainSessionTerminalEvent(e)) { flushBuckets(true); interruptTools(); }
