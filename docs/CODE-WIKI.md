@@ -143,6 +143,11 @@ join 面需要 `unknown`（等待超时不是终态），收束面只有终态�
 的问题塞给另一个读者。**换算锚**：AgentStatus 的 waiting_* ≈ AgentRuntimeStatus 的 waiting；
 JoinStatus.unknown 不是 TerminalStatus 的任何值（等待超时 ≠ 终态），别拿它当终态路由。
 
+WorkerHandle 上那五格布尔（finished/terminalResolved/closed/stuckActive/paused）同理**不是阶段机**：
+前三个是重入收尾协议的三道独立闸（评审重启把 finished/terminalResolved 拉回 false 是**合法逆向边**，
+spawn 回滚路径 terminalResolved 合法地永不置位）——写入点全图与撤回枚举的裁定写死在
+`src/agent/orchestrator-types.ts` 的收尾协议注释块，动那五格前先读它。
+
 ## ④ 门禁纪律（改任何判据前先读这一节）
 
 - **清单即事实源**：门表在 `scripts/gate-manifest.ts` 的 `GATES`。

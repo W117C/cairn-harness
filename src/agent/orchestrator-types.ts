@@ -113,6 +113,18 @@ export interface WorkerHandle {
   events: AgentEvent[];
   usage: { inputTokens: number; outputTokens: number };
   toolStats: Record<string, number>;
+  // ── 收尾协议（2026-11-19 写入点全图裁定，见下）────────────────────────────────
+  // 这不是单调阶段机，是**带逆向边的重入协议**——五个布尔是三道独立闸，不是三个阶段：
+  //   finished        = finishInner 已进入（重入门）
+  //   terminalResolved = 等待方已放行（sequencer 同步点；spawn 回滚路径**合法地永不置位**——
+  //                      没有 agent_spawned 就没有等待者，见 orchestrator.ts spawn 回滚：finished+closed 同置）
+  //   closed          = 终态事件全部落完（进程退出闸；activeCount/waitAll 等它）
+  // 两条**合法逆向边**（枚举化会非法化它们，这就是"布尔汤→枚举"被撤回的原因）：
+  //   ① worker-merge.ts 评审重启：finished=false + terminalResolved=false + terminalStatus/lastResult
+  //      一并清掉——旧终态不再算数，重启后等待方必须等这一轮的真 result；
+  //   ② worker-finish.ts finishInner 重入：closed=false（上一次收尾的落完标记随重启作废）。
+  // 异常路径由判卷钉住：收尾中途抛错也必须放行等待方（mutate-verify 表 597 行那条），
+  // 否则 sequencer 在没有超时的等待上永挂。
   finished: boolean;
   /** 终态**值**已可取（lastResult 挂上 / waiters 已解）的那一刻才置真。
    *  与 finished 不是同义反复：finishInner 开头就置 finished=true，但 done 分支在此之前还要
