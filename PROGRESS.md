@@ -45266,3 +45266,29 @@ append-only；`.mimosa` 470M / `.alma-snapshots` 495M（工具态，不是仓的
 - 没有重建那两支探针的夹具：那属于「重估 76 份夹具」那条线，单开一批做。
 
 凭证 @8a8960a1
+
+## 2026-11-19 · 第 1330 页：send-queue 拆分落地 + 内核/认知成本审计（第三遍）
+
+业主令：全模块质量审计、新人接手认知成本评估、反方复核、从第一性原理修复本质问题。
+
+### 一、审计面（只读，声明逐条经源码取证）
+
+- 内核深审（src/agent 175 文件）：真债集中三处——①**双编排栈**：src/agent/orchestrator* 与 src/orchestration/ 词汇重叠，EvidenceState 逐字双份（events/types.ts:550 ≡ orchestration/types.ts:4），双栈词汇已在漂；②**session-provider.ts 1651 行五职责**（gateToolSpecs 651 行规格表住在装配器里，A1/D3）；③**自学习四套并行**（memory/workflow 与 evolve/skills 是同一对标"AWM 最小版"的两份实现）。热路径：loop.ts:629 每步全量投影喂给三个不读 messages 的生产 provider（死投影）；主会话投影每轮全量 O(n)（log.ts 注释自认"收口留位第三批"）；记忆注入每请求 ~30 次文件读（inject.ts 无 mtime 缓存）。
+- 认知成本审计：新人必读 6 份文档 1,145 行 + 代码主干 5 份 6,420 行 ≈ 2–3 个工作日；最大单点 src/main/agent-runner.ts 2,364 行；三个命名陷阱（双 main、双 tests、outputs/ 零容忍）。
+- 行业对标（对照 CC/LangGraph/AutoGen 公开设计）：事件存储/投影/压缩/插件面**顶尖**；权限/编排/provider 层**良好**；主循环/自学习/第二编排栈**及格偏良好**。
+- 本轮取证补充：F1 已知地雷（session-provider.ts:1487 注释自认与 final-budget 契约在唯一组合上互斥，靠用例不传工具面才不红）与 H4（loop.ts:272 + log.ts:191 对同一事件各跑一次 redactValue）均属实。
+
+### 二、本批落地（第 1328 页排期项）
+
+- 发送队列拆出 `src/im/send-queue.ts`（26ca61eb）：状态机边界（窗口期/重试/停靠/permanent 落账）一个答案处；host 只留 deliver/ready/onExhausted 三回调接线，公开 API 逐字不变。
+- 判卷：新判卷面 4 条（FIFO/窗口期/幂等键复用与 permanent 对照/停靠接手）；host.test.ts 9/9 反向锚点不变。**判卷当场抓到接线漏传 retryMs 一处**——不补则既有「重试复用键」判卷必红；判卷文化的价值实证。
+- 验证：IM 面 19 文件/222 条全绿；核心 **715 文件/8396 条全绿**（maxWorkers=2，200s）；桌面 **429 文件/2794 条全绿**；typecheck 0；docs-check 绿；desktop-boundary-check 绿。
+- 文档漂移×2（b7461009）：docs/README.md 标题 DSH core→Cairn core；docs/ROADMAP.md ADR 0015 状态 Proposed→Accepted（实为 2026-11-16 转正）。
+
+### 三、登记不擅自改（业主裁决项）
+
+1. 禁用连接（stop→drop）丢活跃队列：拆分后三种「丢」路径首次可分开命名——窗口期**留**、retry **停靠**、disable **丢**（刻意的：复活后补发过期事实是把旧事实当新消息送）。要不要把 disable 也停靠，业主裁。
+2. renderer 侧已有另一个 send-queue.ts（apps/desktop/src/renderer/send-queue.ts）——名字撞车，本轮不动（renderer 改名要重签四份真机证据）。
+3. 内核排期建议（对抗复核后仍站得住）：双编排栈 ADR 划界（P0）、session-provider 拆分（P1）、Provider 接口分层去死投影（P1）、自学习四套收敛（P1）、worker 生命周期布尔汤→枚举（P1）。
+
+凭证 @26ca61eb / @b7461009
