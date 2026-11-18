@@ -44946,3 +44946,54 @@ callback 需公网回调，列入 V2 候选）。
 - 本次清场未改任何被跟踪文件，无提交。
 
 凭证 @6ff9f355
+
+## 2026-11-18 · 第 1323 页：全仓体检 + 四项根因修复
+
+业主令：「全面检查所有模块和代码，找出问题和没开发完成的地方，分清刻意为之与遗漏，整理改进方案，
+清理工作区，从第一性原理找最本质原因并修复。」报告见 `outputs/audit-2026-11-18/report.md`。
+
+### 一、修掉的四项（都是「同一语义有第二份实现」这一族）
+
+| 项 | 形态 | 根因 | 判卷 |
+| --- | --- | --- | --- |
+| 原生视图让位（第 1261 页） | 账本写好，**零消费者** | 模块先落、消费者后补，中间没有判卷钉「有人持有吗」 | `native-view-occlusion.test.ts`（3 条，读应用面） |
+| IM 入站空文本 | 图片/文件 V1 不承载 ⇒ `text` 空串一路走到起跑 | 「入站消息非空」这条不变量没在任何一处强制；四平台各 `trim()`、零份保证 | `tests/im/host.test.ts` 空文本闸 + 原句证人 |
+| 项目名规矩 | 核心全套 vs 渲染层只查 `\ /`，四档「对话框绿、创建才被拒」 | 规矩是业务事实却抄成两份 UI 判据（`project-create` 带 `node:fs`，进不了浏览器上下文） | 新增 `src/main/project-name.ts` 单源；`new-project-dialog` 补四档 + 五条反向锚点 |
+| 相对时间分档 | 会话面 7 天 / 记忆页 30 天，同一个「8 天前」两页两种样子 | 参数序不同被当成两个函数 ⇒ 各写一段 if 阶梯 | `memory-view.test.ts` 补「同区间逐字同词」+「档外各自回日期」 |
+
+顺带：`.worktrees/gate-mutate-verify` 里一次**未还原的变异**（`src/agent/prompt-surface.ts` 的
+`if (false)`，自 11-17 21:15 挂着）——先逐字节核 `.mutbak` == HEAD 才删备份，再 `git checkout` 还原。
+根因是变异门禁没有独立自愈入口（`restore` 不是子命令，实测「未知 id: restore」），只有整表跑开跑时才自愈。
+
+### 二、分清「刻意」与「遗漏」
+
+**刻意（不追）**：IM 图片/文件 V1 不收（契约只有 `text`，STATE 明写）；群聊只收 @ 机器人（防刷屏，
+无「收全部」开关＝新功能不是 bug）；微信恒 `direct`/`mentioned:true`（iLink 是逐用户会话）；
+插件若干 handler 档装载即拒（fail-closed 点名）；`verify` 未接线时 fail-closed（桌面已接）；
+`outputs/` 203 个 .ts / 242 条 tsc 报错（帽 12 条危险码，ratchet down only）；`PROGRESS.md` 5MB
+append-only；`.mimosa` 470M / `.alma-snapshots` 495M（工具态，不是仓的垃圾）。
+
+**仍欠（排了队）**：证据面 242 条报错逐个降到 0；变异门禁加 `--heal`；IM 契约留 `attachments?` 空缝
+（将来加附件要动 4 适配器 + 宿主 + UI，现在留缝最便宜）；两处真机目验仍待业主。
+
+### 三、工作区
+
+- 仓内已无孤儿文件（昨天清场的成果仍在）；`git status` 现在干净。
+- 可回收的工作树四支（`continued-reindeer` / `cultural-fox` / `single-woodpecker` / `pleased-slug`）
+  合计约 4.6G：每支的「脏」都核过是垃圾（一条 `.alma-snapshots` 忽略规则 + 未跟踪 `outputs/`），
+  **只 `git worktree remove`、不删分支**。留待业主点头——昨天那一页的裁决是「待业主决定」，本页不越权。
+- 不可动：`gate-*` 两棵共享门禁树、`oh-src/README-moved.md`（唯一指针）、`.alma-snapshots`、
+  `outputs/` 926 个日期目录（台账逐页引用）。
+
+### 四、读数
+
+- 核心 **714 文件 / 8387 条全绿**（`pnpm test:capped`，maxWorkers=2；基线 8386，+1）。
+- 桌面 **429 文件 / 2794 条全绿**（基线 428/2788，+1 文件 +6 条）。
+- `verify-all` 七门 **pass**；`desktop-boundary-check` / `renderer-layer-check`（257 文件）/
+  `evidence-typecheck-check`（12/帽 12）绿。
+- 四份真机证据按现源**重签**：CDS 值 0 错、IME 6/6、队列键 6/6、浮层互斥 5/5。
+- 过程读数（留给下一位）：第一次 `verify-all` 是 **fail**——不是逻辑回归，是改过 renderer 源后
+  四份真机证据代次不匹配（`staleEvidenceReason`）；重跑探针的坑：三个冒烟脚本参数收**目录**，
+  传文件会 `EEXIST` 崩在 `mkdirSync` 上并**挂住不退出**（看起来像卡死）。
+
+凭证 @fb9fe76d

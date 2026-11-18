@@ -1,6 +1,6 @@
 # Cairn / DSH —— 现态
 
-rev: 9b5ef007
+rev: fb9fe76d
 
 核对日期 2026-11-18（Asia/Shanghai）。IM 通道线第 1320 页收口于 `9b5ef007`：**协议 v81**
 （飞书长连接 + 邮件 IMAP/SMTP + 企业微信智能机器人 + 微信 iLink 扫码登录）。微信走官方 iLink
@@ -12,6 +12,20 @@ electron-free、零新依赖，连接记录只有 safeStorage 键名。验证：
 四包证据重签 MATCH（rendererDigest `02764f0c…`、buildFresh=true）。
 
 > 设计收敛线 `simplify-desktop-design`（R2–R5）已摘取完毕（第 1315 页）；分支走向仍待业主裁决。
+
+## 全仓体检（第 1323 页，`fb9fe76d`）
+
+四项根因修复，同一个病：**同一语义存在第二份实现，一份动了另一份没跟**。
+
+1. **原生视图让位**（第 1261 页那条「接线未完成」收口）：账本此前零消费者。现在 ModalSurface 恒持有 /
+   CommandPalette 按 `open` / WorkbenchOverlays 按 `dragOverApp`，BrowserPane 订阅并收成零矩形。
+2. **IM 入站空文本闸**：图片/文件 V1 不承载 ⇒ `text` 空串会先建会话再起一次空跑。闸设在唯一漏斗
+   `host.onMessage`，四平台共同受益。
+3. **项目名规矩单源**：`src/main/project-name.ts`（零依赖）同时供核心建目录与渲染层实时校验；
+   此前渲染层只查 `\ /` 与控制字符，`a:b` / 65 字符 / `.hidden` / 尾随点四档「对话框绿、创建才被拒」。
+4. **相对时间分档单源**：会话面 7 天 / 记忆页 30 天的差异收成 `absoluteAfterDays` 参数。
+
+报告（刻意 / 遗漏 / 隐患三分类 + 工作区清单）：`outputs/audit-2026-11-18/report.md`。
 
 ## 当前工作
 
@@ -51,7 +65,8 @@ electron-free、零新依赖，连接记录只有 safeStorage 键名。验证：
 
 ## 下一步
 
-- 微信图片/文件消息按需开（CDN 下载 + AES 解密）。
+- 证据面 242 条 tsc 报错逐个降到 0（危险码帽 12，ratchet down only）。
+- 变异门禁加独立自愈入口（现只有整表跑开跑时才自愈；`restore` 不是子命令）。
+- 微信图片/文件消息按需开（CDN 下载 + AES 解密）——开之前先给 `ImInboundMessage` 留 `attachments?`。
 - 重复 id metadata 归属按 [ADR 0016](docs/adr/0016-legacy-session-metadata-ownership.md) 裁决（第 1241 页）。
-- `native-view-occlusion`（第 1261 页）接线未完成：ModalSurface / BrowserPane 尚未消费。
 - 真机证据：四支判卷消费的读数已按本线现源重签；后续 renderer 改动仍需重建重签。
