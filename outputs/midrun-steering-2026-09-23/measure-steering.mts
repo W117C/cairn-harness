@@ -70,7 +70,7 @@ for (const [tag, evs] of [["轮次边界（结果已全部落流之后）", atBo
   let interjected = false;
   const callAt: Array<{ i: number; ids: Set<string> }> = [];
   msgs.forEach((m, i) => {
-    if (m.role === "assistant" && (m.tool_calls?.length ?? 0) > 0) callAt.push({ i, ids: new Set(m.tool_calls.map((c) => c.id)) });
+    if (m.role === "assistant" && (m.tool_calls?.length ?? 0) > 0) callAt.push({ i, ids: new Set((m.tool_calls ?? []).map((c) => c.id)) });
   });
   for (const { i, ids } of callAt) {
     let lastResult = i;

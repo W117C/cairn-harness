@@ -34,3 +34,17 @@ UI 侧不通：协议与通道名在（`src/main/ipc-protocol.ts:223`、`apps/de
 要加的判卷：runAgent 级接线读数（无调度器 ⇒ 面少五件；先 `initScheduler` ⇒ 五件在）——现判卷只直调 `sessionToolFace`，测不到这格。
 撞面：四条锚点（`scripts/mutate-verify.mjs:7051/7059/7067/7075`；真名 `automation-face-in-read-only`，任务书所列三名之一不存在）apply 目标都在 `glm-session.ts`/`automation-surface.ts`，本改法不触；`tests/tool-surface-parity.test.ts:113` 与 `src/agent/tool-surface.ts:44-48` 读源文本形状与静态面，实现不删就不红；`tests/prompt-surface-check.test.ts:307` 分母走 `sessionToolSpecs`，不受影响。
 风险：`--serve` 里 `:1158` 先定身 ⇒ 之后每场必须算出 true，靠单调判据满足；若首场 run 之后才 `initScheduler`，false→true 当场抛 ⇒ 须沿用 `omittedForever` 的「需要时永久放回」累积纪律。隔壁那一笔（2,482→2,569，余量只剩 31）应先入库。
+
+---
+
+## 附：`head/` 已删（2026-11-18 审计）
+
+本目录原先带一份 `git archive HEAD src` 的完整源码副本（176 个 `.ts`／2.5M，HEAD=`05d3d0f3`）。
+按 AGENTS.md「`outputs/` 是证据面，不许停源码副本——相对导入解析不到会产幽灵危险码；History is the
+backup，记录保持非 TS」删除。副本可逐字节复原：
+
+```bash
+git archive 05d3d0f3 src | tar -x -C <目标目录>
+```
+
+本目录的读数与结论在 `report.md` 与 `measure.ts` 里，不受影响。

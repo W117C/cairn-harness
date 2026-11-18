@@ -975,7 +975,9 @@ describe("印完就退的出口必须同步写：--list 是两把静态尺共同
   it("helper 本体按字节写满、四个出口都经它（一次 writeSync 只交得进内核缓冲那一截）", () => {
     expect(src, "helper 不循环写满 ⇒ 长名单被砍掉尾巴：09-28 第一版实测 920 行只剩几百行").toMatch(
       /\nconst emitAndExit = \(text, code\) => \{[\s\S]{0,320}while \(off < buf\.length\) \{[\s\S]{0,220}writeSync\(1, buf, off\);/);
-    expect((src.match(/\n\s*emitAndExit\(/g) ?? []).length, "四个同步出口：--list 名单／残留提示／针脚汇总／本次耗时").toBe(4);
+    // 2026-11-18：第五个出口是 `--heal`（只处置残留备份的那一支，处置完就退出）。
+    // 数这一格的理由没变——同步写 stdout 的出口必须可枚举，多一个就有人不知道它会在哪儿截断。
+    expect((src.match(/\n\s*emitAndExit\(/g) ?? []).length, "五个同步出口：--list 名单／残留提示／针脚汇总／本次耗时／--heal").toBe(5);
   });
 
   it("真跑：--list 经管道交给读者的行数必须等于表长（少一行＝两把静态尺一起少读一条锚点而不自知）", () => {
@@ -2053,5 +2055,31 @@ describe("指针接线：enclosingSymbol／testCaseBody／auditPointerWiring（�
     expect(script, "存活提示的守卫被拆掉（写成 false、或把阈值挪到 0）＝这一格对所有锚点一律喊，或永远不喊").toMatch(
       /^ {2}const exitCell = r !== undefined && typeof r\.returns === "number" && r\.returns >= 2$/mu);
     expect(script, "hint 不接进存活那条红＝算了不印").toMatch(/\+ exitCell;$/mu);
+  });
+});
+
+// 2026-11-18 审计：残留突变的自愈原先只挂在「整表开跑」那一拍上——门禁树里躺着一个突变体可以活 22 小时
+// （`.worktrees/gate-mutate-verify` 实测：`if (false)` 自 11-17 21:15 挂到 11-18 19:5x），期间任何人
+// 量那棵树都会量到假的东西。`--heal` 就是那条二十秒的收尾入口。
+describe("--heal：只处置残留备份的独立入口（2026-11-18 审计）", () => {
+  it("认这个 flag，且它的模式优先于 list／check-needles（先把地扫干净）", () => {
+    expect(classifyArgs(["--heal"]).mode).toBe("heal");
+    expect(classifyArgs(["--heal"]).unknown).toEqual([]);
+    expect(classifyArgs(["--heal", "--list"]).mode).toBe("heal");
+    expect(classifyArgs(["--heal", "--check-needles"]).mode).toBe("heal");
+    // 反面对照：不开这一支时两个旧模式的判法一个字没变。
+    expect(classifyArgs(["--list"]).mode).toBe("list");
+    expect(classifyArgs(["--check-needles"]).mode).toBe("check-needles");
+    expect(classifyArgs([]).mode).toBe("run");
+  });
+
+  it("分支复用同一个 healLeftoverBackups（判据不抄第二份），且处置完就退出、不接着跑锚点", () => {
+    const script = readFileSync(fileURLToPath(new URL("../scripts/mutate-verify.mjs", import.meta.url)), "utf8");
+    const branch = script.slice(script.indexOf('if (plan.mode === "heal") {'), script.indexOf('if (plan.mode === "list") {'));
+    expect(branch).toContain("const r = healLeftoverBackups();");
+    expect(branch).toContain("emitAndExit(");
+    // 它不许自己再写一份「按 HEAD/备份/当前三份内容判」的逻辑——那正是会漂的第二份实现。
+    expect(branch).not.toContain("leftoverActionOf(");
+    expect(branch).not.toContain("show" + "\" HEAD:")
   });
 });

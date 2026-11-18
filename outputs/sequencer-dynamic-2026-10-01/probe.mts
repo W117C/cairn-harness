@@ -10,7 +10,8 @@ const exec = promisify(execFile);
 
 import { runLoop } from "../../src/agent/loop.js";
 import { orchestratorForApproval } from "../../src/agent/orchestrator.js";
-import type { AgentEvent, ProviderMessage } from "../../src/events/index.js";
+import type { AgentEvent } from "../../src/events/index.js";
+import type { ProviderMessage } from "../../src/providers/index.js";
 
 const work = await mkdtemp(join(tmpdir(), "seq-dynamic-"));
 const repo = join(work, "repo");

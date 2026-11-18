@@ -107,7 +107,7 @@ for (const a of anchors) {
   let b: Bucket;
   if (r.kind === "dead") b = "dead-file";
   else if (r.lines === null) b = "dead-file";
-  else if (r.line > r.lines.length || r.line < 1) b = "out-of-range";
+  else if (a.line > r.lines.length || a.line < 1) b = "out-of-range";
   else if ((r.lines[a.line - 1] ?? "").trim() === "" || /^\s*(?:[)}\];,]|\/\/)/.test(r.lines[a.line - 1] ?? "  ")) b = "blank-ish";
   else b = r.kind === "path" ? "path-ok" : r.kind === "basename-ambiguous" ? "basename-ambiguous" : "basename-unique";
   tally[b]++;

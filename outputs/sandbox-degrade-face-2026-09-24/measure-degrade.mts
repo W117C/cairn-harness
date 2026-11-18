@@ -5,7 +5,8 @@
 import { readFileSync } from "node:fs";
 import { evaluate, newAutonomySession } from "../../src/permissions/autonomy";
 import { sandboxRisk } from "../../src/permissions/risk";
-import type { PermissionMode, ToolName } from "../../src/permissions";
+import type { PermissionMode } from "../../src/permissions";
+import type { ToolName } from "../../src/tools/base";
 
 const MODES: PermissionMode[] = ["auto", "guided", "default", "read-only"];
 const CASES: { label: string; tool: ToolName; args: Record<string, unknown> }[] = [

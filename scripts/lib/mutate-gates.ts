@@ -403,7 +403,7 @@ export function duplicateIds(ids: readonly string[]): DuplicateId[] {
 // 动因（2026-09-19 实踩）：一条还没合进 HEAD 的 `--check-needles` 在主树里被当成「无参数」，
 // 而该脚本的缺省语义是**跑全表**——它会就地改源文件、跑几十分钟。拼错一个 flag 就等于
 // 在别人的写作窗里放火，所以「看不懂」不能退化成「按缺省办」。
-export const MUTATE_FLAGS = ["--list", "--check-needles", "--budget-ms", "--changed-since", "--lock-tag", "--in-worktree"] as const;
+export const MUTATE_FLAGS = ["--list", "--check-needles", "--heal", "--budget-ms", "--changed-since", "--lock-tag", "--in-worktree"] as const;
 /** 带值的 flag：它**下一个** token 是值，不是锚点 id。漏了这条，`--budget-ms 600000` 会把
  *  `600000` 当成一个不存在的锚点 id 报「未知 id」——于是没人能给它设预算（而预算正是
  *  别被外层超时杀在突变那一拍的手段）。`--changed-since HEAD~1` 同一个坑：rev 会被当成 id。 */
@@ -421,7 +421,11 @@ export function isKnownMutateFlag(arg: string): boolean {
 }
 
 export interface ArgPlan {
-  mode: "list" | "check-needles" | "run";
+  /** `heal`：只处置上次没还原的残留备份（`.mutbak`），不跑任何锚点。
+   *  为什么要有这一支（2026-11-18 审计）：残留的自愈原先只挂在**整表开跑**这一拍上——
+   *  于是「门禁树里躺着一个突变体」这件事可以在盘上活 22 小时，期间任何人量那棵树都会量到假的东西。
+   *  给人一条二十秒就能收干净的入口，比让他为了自愈去跑二十分钟的表便宜得多。 */
+  mode: "list" | "check-needles" | "heal" | "run";
   /** 认不出来的 flag：非空即应拒绝执行（不静默降级成全跑）。 */
   unknown: string[];
   /** 位置参数 = 要跑的条目 id。 */
@@ -485,7 +489,8 @@ export function classifyArgs(args: readonly string[]): ArgPlan {
   });
   const unknown = args.filter((a, i) => !consumed.has(i) && a.startsWith("--") && !isKnownMutateFlag(a));
   const targets = args.filter((a, i) => !consumed.has(i) && !a.startsWith("--"));
-  const mode = args.includes("--list") ? "list" : args.includes("--check-needles") ? "check-needles" : "run";
+  // `--heal` 排在最前：它与别的模式叠在一起时，「先把地扫干净」永远是对的，而且它不改任何被跟踪源码的语义。
+  const mode = args.includes("--heal") ? "heal" : args.includes("--list") ? "list" : args.includes("--check-needles") ? "check-needles" : "run";
   return { mode, unknown, targets };
 }
 

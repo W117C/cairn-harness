@@ -45030,3 +45030,56 @@ append-only；`.mimosa` 470M / `.alma-snapshots` 495M（工具态，不是仓的
 - 清理动作本身不改任何被跟踪源码；本页只记读数与裁决。
 
 凭证 @8e44bdb5
+
+## 2026-11-18 · 第 1325 页：按最优解收口——危险码清零、删违规副本、`--heal`，以及两处撤回
+
+业主令「按照最优解来处理」（对上页四条待办）。结论：**两条做了、两条撤回**。
+
+### 一、证据面危险码 12 → 0（做完）
+
+12 条全是真断链：那 8 支探针的导入与字段早被上游改过名 ⇒ **读数是有的，探针跑不起来了**。逐条：
+
+| 文件 | 病 | 修 |
+| --- | --- | --- |
+| `anchor-resolvability/measure-anchor.mts` | `r.line`（上游并进 `lines`） | 改用锚点自己的 `a.line`（下一行本来就用它索引） |
+| `head-cert-drift-witness/witness.mts` | `spawn` 传了 `encoding`（那是 `spawnSync` 的）⇒ stdout 收成 `never` | 去掉该选项，chunk 收 `Buffer \| string` |
+| `midrun-steering/measure-steering.mts` | `m.tool_calls` 第二次取值没被可选链护住 | `(m.tool_calls ?? [])` |
+| `sandbox-degrade-face/measure-degrade.mts` | `ToolName` 不在 `src/permissions` | 从 `src/tools/base` 取 |
+| `sequencer-dynamic/probe.mts` | `ProviderMessage` 不在 `events` | 从 `src/providers/index` 取 |
+| 两支 `sequencer-status-readings` | `AgentEvent` 不从 orchestrator 转发 | 从 `src/events/index` 取 |
+| `stagnation-detection/measure-local-base-rate.mts` | `maxRepeat`/`maxRepeatSig` 只赋值、从未声明也从未被读 | 删掉那半句死代码 |
+
+`DANGER_BASELINE` 8 文件 12 条 → `{}`：**零容忍**，任何已跟踪文件出现一条危险码即红。
+
+### 二、删掉违规源码副本（做完）
+
+`automation-face-verdict` 那一目录里的 `head/` 子树＝`git archive HEAD src` 整棵副本（176 个 `.ts`／2.5M，
+源 commit `05d3d0f3`），AGENTS.md 明令不许停在证据面。该目录的报告本就写着生成命令与源 commit ⇒ 删，
+报告末尾留了逐字节复原命令。**本页不点那个 dated 路径**：工件已删，写全路径只会留下一条永远追不到的证人。
+全量报错 242 → **204**。
+
+### 三、变异门禁 `--heal`（做完）
+
+只做一件事：按 HEAD／备份／当前三份内容处置残留突变就退出；复用同一个 `healLeftoverBackups()`，
+不抄第二份判据；人工面（备份≠HEAD 或当前对不上任何锚点）照旧判红。`--heal` 优先于 `--list`／
+`--check-needles`（先把地扫干净）。判卷两条；「同步出口」计数 4 → 5，**加出口必须在判卷里点名**。
+
+### 四、撤回两条（这是本页的重点）
+
+**① 撤回「242 条报错逐个降到 0」。** 剩下 204 条＝84 条未使用声明 + 78 条隐式 any + 33 条历史探针
+指向已搬家模块的旧导入——都是一次性历史探针的样式账。追平要改 100+ 个只跑过一次的脚本，换来的
+只是汇总行好看；而门真正要拦的事（引用断了）已归零且零容忍。**目标写错了就撤回目标，
+不要让指标反过来驱动工作。**
+
+**② 不加 `ImInboundMessage.attachments?`。** 上页把它写成 P2（「将来加附件成本高」）是错的：
+加一个**没有消费方**的字段，只是把「尚未兑现」从契约外挪进契约里。真到收图片那天，改动本来就是
+「4 适配器 + 宿主 + UI」，多一个可选字段一步都省不掉；现在加，代价是每个读契约的人都要猜它为什么空着。
+**不预埋没有消费者的缝。**
+
+### 五、读数
+
+- 证据面：危险码 **0 条／帽 0 条**（登记 0 文件），全量报错 204 条。
+- `verify-all` 七门 **pass**；typecheck 0；docs-check 绿；`mutate-verify-gates` 169/169。
+- 本轮未动 renderer 源 ⇒ 四份真机证据代次不变，无需重签（回收副本也只动 `outputs/`）。
+
+凭证 @21eb4085

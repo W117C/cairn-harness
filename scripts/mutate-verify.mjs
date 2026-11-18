@@ -679,6 +679,17 @@ if (lockTagRaw.given && lockTagRaw.value === "") {
   console.error("--lock-tag 需要一个标签（空值不等于「用默认那把」；要默认就别带这个参数）");
   process.exit(2);
 }
+if (plan.mode === "heal") {
+  /** 只做一件事：按 HEAD/备份/当前三份内容把残留突变处置干净，然后退出。
+   *  与整表跑共用的仍是同一个 `healLeftoverBackups()`（判据不抄第二份）；差别只在本支跑完就停。
+   *  人工面（备份与 HEAD 不一致 / 当前对不上任何锚点的改法）照旧判红——那说明盘上有别人的在飞改动，
+   *  谁都不许盖。 */
+  const r = healLeftoverBackups();
+  // healLeftoverBackups 在人工面里自己 process.exit(1)，走到这里就一定是处置完或本来就没残留。
+  emitAndExit(r.healed === 0
+    ? "[mutate-verify] --heal：盘上没有残留备份（.mutbak），干净。\n"
+    : `[mutate-verify] --heal：处置 ${String(r.healed)} 处残留，源文件已回到 HEAD 态。\n`, 0);
+}
 if (plan.mode === "list") {
   // 后两列（判卷文件 + JSON 化的 killer 指针）是给判卷用的：`tests/mutate-verify-gates.test.ts`
   // 要走这条**不改源文件**的入口拿到整张表，而不能 spawn `--check-needles`——那会在变异跑到一半时被调用，
@@ -818,7 +829,7 @@ if (refusedCount > 0) {
 function healLeftoverBackups() {
   const allSrcs = [...new Set(MUTATIONS.map((m) => m.src))];
   const leftovers = leftoverBackupPaths(allSrcs, (rel) => existsSync(join(ROOT, rel)));
-  if (leftovers.length === 0) return;
+  if (leftovers.length === 0) return { healed: 0, manual: 0 };
   const gitHeadText = (rel) => {
     try { return execFileSync("git", ["show", "HEAD:" + rel], { cwd: ROOT, encoding: "utf8" }); } catch { return null; }
   };
@@ -855,6 +866,7 @@ function healLeftoverBackups() {
     process.exit(1);
   }
   if (healed.length > 0) console.error("[mutate-verify] 自愈完成，继续本次判定（这些还原本身仍会过一遍收尾校验）");
+  return { healed: healed.length, manual: 0 };
 }
 // 自我预算：外层（`pnpm gates`）对本门有每道约 20 分钟的硬超时，而整张表实测要 20+ 分钟——
 // 被掐死的位置若正好在「源文件是突变体」那一拍，就会留下污染（见 `restoreInFlight` 上面那段）。

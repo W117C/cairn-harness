@@ -10,7 +10,8 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 const exec = promisify(execFile);
 
-import { Orchestrator, scriptedWorkerModel, type AgentEvent } from "../../src/agent/orchestrator.js";
+import { Orchestrator, scriptedWorkerModel } from "../../src/agent/orchestrator.js";
+import type { AgentEvent } from "../../src/events/index.js";
 import { createEventLog } from "../../src/events/index.js";
 
 const work = await mkdtemp(join(tmpdir(), "seq-status-"));

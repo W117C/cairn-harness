@@ -39,11 +39,11 @@ const child = spawn(process.execPath, [
   "--import", "tsx", "scripts/head-cert.ts",
   "--at=HEAD", `--tree=${TREE}`, "--skip-test",
   "--why=只为造一次真并发切树：要的是 drift 那一支的 exit 码与措辞，不是这棵树的认证",
-], { cwd: MAIN, encoding: "utf8" });
+], { cwd: MAIN });
 
 let out = "";
 let switched = false;
-child.stdout.on("data", (chunk: string) => {
+child.stdout.on("data", (chunk: Buffer | string) => {
   out += chunk;
   if (!switched && !NO_SWITCH && out.includes("已核：TREE=")) {
     switched = true;
@@ -51,7 +51,7 @@ child.stdout.on("data", (chunk: string) => {
     console.log(`\n>>> 已在判卷期把树切走（${head.slice(0, 7)} → ${other.slice(0, 7)}），git 退出输出：${r.trim().split("\n").pop() ?? "无输出"}`);
   }
 });
-child.stderr.on("data", (chunk: string) => { out += chunk; });
+child.stderr.on("data", (chunk: Buffer | string) => { out += String(chunk); });
 
 child.on("close", (code) => {
   const checks: [string, boolean][] = NO_SWITCH

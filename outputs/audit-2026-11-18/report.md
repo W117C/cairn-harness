@@ -105,9 +105,10 @@
 
 | P | 项 | 现状 | 依据 |
 | --- | --- | --- | --- |
-| P1 | 证据面 242 条 tsc 报错（12 条危险码） | 帽 12，ratchet down only | `evidence-typecheck-check` 现读 |
-| P1 | 变异门禁无独立自愈入口 | 残留突变只能等下一次整表跑才自愈；`restore` 不是子命令（实测「未知 id: restore」） | `scripts/mutate-verify.mjs` |
-| P2 | IM 契约无附件缝 | 见上表 | `src/im/types.ts` |
+| ✅ P1 | 证据面危险码 **12 → 0**（帽清零） | 8 支探针修到能编译；`DANGER_BASELINE = {}` 即零容忍 | `evidence-typecheck-check` 现读 0/0 |
+| ✅ P1 | 变异门禁加 `--heal` | 二十秒收掉残留突变，不必为自愈跑二十分钟的表 | `--heal` + 2 条判卷 |
+| ⛔ 撤回 | 「242 条报错逐个降到 0」 | 这条目标本身写坏了（见 §六） | — |
+| P2 | IM 契约无附件缝 | 见上表；**评审后决定不加**（见 §六） | `src/im/types.ts` |
 | P2 | 微信扫码全流程待真机目验 | 代码+判卷齐，缺人眼 | STATE 未决 |
 | P2 | 玻璃观感/其余通道真机全流程待目验 | 同上 | STATE 未决 |
 | P2 | `apps/desktop/src/main/index.ts` 2250 行 | 组合根，无帽可依 | 量的是体积，不是判决 |
@@ -153,11 +154,54 @@
 
 ---
 
-## 六、建议路线
+## 六、执行结果与两处「撤回」（业主令「按照最优解来处理」）
 
-1. **P1 证据面收口**：242 条报错里挑 12 条危险码逐个修，帽从 12 → 0（ratchet 只降，改一处降一处）。
-2. **P1 变异门禁加 `--heal`**：现在只有整表跑才会自愈；一条独立入口能在任何人接手那棵树前先归零。
-3. **P2 IM 契约留缝**：`ImInboundMessage` 加可选 `attachments?`，四个适配器各留一个「看不懂就忽略」的分支。
-4. **P2 工作树回收**：上表四支执行，省 4.6G；分支不动。
-5. **长期**：把「同一语义两份实现」当红牌——`relativeTime` 与 `validateProjectName` 都是先有第二份、
+### 1. 证据面危险码 12 → 0（做完）
+
+12 条全是**真断链**，不是类型洁癖：那 8 支探针的导入与字段早被上游改过名，也就是说——
+**读数是有的，探针已经跑不起来了**。逐条修到能编译：
+
+| 文件 | 病 | 修 |
+| --- | --- | --- |
+| `anchor-resolvability/measure-anchor.mts` | `r.line`（上游并进 `lines`） | 改用锚点自己的 `a.line`（下一行本来就用它索引） |
+| `head-cert-drift-witness/witness.mts` | `spawn` 传了 `encoding`（那是 `spawnSync` 的选项）⇒ stdout 收成 `never` | 去掉该选项，chunk 收 `Buffer \| string` |
+| `midrun-steering/measure-steering.mts` | `m.tool_calls` 第二次取值没被可选链护住 | `(m.tool_calls ?? [])` |
+| `sandbox-degrade-face/measure-degrade.mts` | `ToolName` 不在 `src/permissions` | 从 `src/tools/base` 取 |
+| `sequencer-dynamic/probe.mts` | `ProviderMessage` 不在 `events` | 从 `src/providers/index` 取 |
+| 两支 `sequencer-status-readings` | `AgentEvent` 不从 orchestrator 转发 | 从 `src/events/index` 取 |
+| `stagnation-detection/measure-local-base-rate.mts` | `maxRepeat`/`maxRepeatSig` 只赋值、从未声明 | 删掉那半句死代码 |
+
+`DANGER_BASELINE` 从 8 个文件 12 条清成 `{}`：现在是**零容忍**（任何已跟踪文件出现一条危险码就红）。
+
+### 2. 删掉一份违规的源码副本（做完）
+
+`outputs/automation-face-verdict-2026-10-05/head/` 是 `git archive HEAD src` 的整棵副本
+（176 个 `.ts`／2.5M，HEAD=`05d3d0f3`）——正是 AGENTS.md 明令不许停在证据面的东西。
+报告里本来就写着生成命令与 commit，历史里逐字节可复原 ⇒ 删除，报告末尾留了复原命令。
+证据面全量报错 242 → **204**。
+
+### 3. 变异门禁 `--heal`（做完）
+
+`--heal` 只做一件事：按 HEAD／备份／当前三份内容把残留突变处置干净就退出（复用同一个
+`healLeftoverBackups()`，不抄第二份判据）；人工面（备份≠HEAD 或当前对不上任何锚点）照旧判红。
+判卷：`mutate-verify-gates` 里两条（模式优先级 + 分支不许自造判据），并把「同步出口」的计数
+从 4 改到 5——**这个数不是橡皮筋，加出口就得在判卷里点名**。
+
+### 4. 两处撤回（这才是「最优解」的部分）
+
+**① 撤回「242 条报错逐个降到 0」。** 剩下 204 条里，84 条是「声明未使用」、78 条是「隐式 any」、
+33 条是历史探针指向已搬家模块的旧导入——它们都是**一次性历史探针**的样式账，不是能变绿的欠账。
+把那 204 条追平要改 100+ 个只跑过一次的脚本，换来的只是汇总行好看一点；而门真正要拦的那件事
+（危险码 = 引用断了）已经归零并变成零容忍。**目标写错了就撤回目标，不要让指标反过来驱动工作。**
+
+**② 不加 `ImInboundMessage.attachments?`。** 我上一轮把它写成 P2，理由是「将来加附件成本高」。
+想清楚后这是错的：加一个**没有任何消费方**的字段，只是把「尚未兑现」从契约外挪进契约里——
+正是这个仓自己点名的那一类假进度（`plugins/types.ts:65` 那档「枚举留着是为了如实点名」是**装载即拒**，
+不是画个空位）。真到要收图片那天，改动本来就是「4 适配器 + 宿主 + UI」，多一个可选字段省不掉其中任何一步；
+而现在加，代价是每个读契约的人都要猜这个字段为什么没人填。**不预埋没有消费者的缝。**
+
+## 七、下一步（只剩这些）
+
+1. P2 真机目验（微信扫码全流程、玻璃观感）——要人眼，机器证据已经齐。
+2. 长期：把「同一语义两份实现」当红牌——`relativeTime` 与 `validateProjectName` 都是先有第二份、
    再靠人发现分叉。可加一条机检：跨文件同名导出必须在白名单里（本轮手工筛出 8 个，其中 3 个是真债）。

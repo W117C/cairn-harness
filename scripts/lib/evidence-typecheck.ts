@@ -49,18 +49,18 @@ import { join } from "node:path";
  *  纳进来时存量＝0（那两处已改对，干净树现读 `TS2353 = 0`）⇒ 不需要往 `DANGER_BASELINE` 里加任何名字。 */
 export const DANGER_CODES: readonly string[] = ["TS2339", "TS2551", "TS18048", "TS2304", "TS2305", "TS2459", "TS7053", "TS2353"];
 
-/** 存量登记（2026-10-01 现读，第 259 页；只登记**在 HEAD 里**的文件——见文件头那条幽灵登记的理由）。
- *  **只准调低**：清掉一条就把数字改小，涨一条门就红。 */
-export const DANGER_BASELINE: Readonly<Record<string, number>> = {
-  "outputs/anchor-resolvability-2026-09-23/measure-anchor.mts": 2,
-  "outputs/head-cert-drift-witness-2026-09-27/witness.mts": 3,
-  "outputs/midrun-steering-2026-09-23/measure-steering.mts": 1,
-  "outputs/sandbox-degrade-face-2026-09-24/measure-degrade.mts": 1,
-  "outputs/sequencer-dynamic-2026-10-01/probe.mts": 1,
-  "outputs/sequencer-status-readings-2026-10-01/probe-fail.mts": 1,
-  "outputs/sequencer-status-readings-2026-10-01/probe.mts": 1,
-  "outputs/stagnation-detection-2026-09-23/measure-local-base-rate.mts": 2,
-};
+/** 存量登记：**2026-11-18 已清零**（第 1325 页）。空的表就是零容忍：任何已跟踪文件里出现一条
+ *  危险码，`verdict` 把它算成 `grew`（cap 0）⇒ 当场红。
+ *
+ *  清账过程（十二档只降不升，最后一档见历次台账）：
+ *    · 12 条 / 8 个文件（2026-10-01 第 259 页登记）——那 8 支探针的导入与字段早被上游改过名，
+ *      它们其实**跑不起来**了；读数还在，探针却已经不是能复跑的证据。
+ *    · 2026-11-18 逐个修到能编译：`r.line`→`a.line`（上游把 `line` 并进 `lines`）、
+ *      `ToolName` 改从 `src/tools/base` 取、`ProviderMessage` 改从 `src/providers/index` 取、
+ *      `AgentEvent` 不再从 orchestrator 取（那里只是本地用）、`spawn` 的 `encoding` 不是它的选项
+ *      （带上会把 stdout 收成 `never`）、`tool_calls` 第二次取值补可选链、两支死变量删掉。
+ *  **只准调低**这条规矩没变；现在帽是 0，没有可调的地方了。 */
+export const DANGER_BASELINE: Readonly<Record<string, number>> = {};
 
 /** 一行的报错 → `{file, code}`；不是报错行回 null（tsc 会夹缩进的说明行与空行）。
  *  ⚠️ 分组号数错过一次：`(error)` 也占一个组，把 `code` 取成 `m[4]` 就得到常量 "error"——

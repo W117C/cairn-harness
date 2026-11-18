@@ -90,7 +90,6 @@ function readRun(file: string, events: Ev[]): RunReading {
     }
     // 两个阈值分开记：同一把尺上 4× 与 5× 的误报率之差，就是"能不能 escalade"的那条线
     note(k === 4 ? "D2-action-observation" : "D2-thresh5", first, first === null ? 0 : 1);
-    if (k === 4) { maxRepeat = worstN; maxRepeatSig = worstSig.slice(0, 90); }
   }
   // D3：A/B 交替 ≥6 拍（edit→revert 那族）
   {
