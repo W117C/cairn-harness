@@ -94,6 +94,10 @@ export function createImHost(deps: ImHostDeps) {
   const runners = new Map<string, Runner>();
   const statuses = new Map<string, ImStatus>();
   let syncing: Promise<void> = Promise.resolve();
+  /** 停靠的待发队列（2026-11-18 审计）：`retry()` 先把老 runner 的队列寄在这里，下一次 start 取走。
+   *  没有这张表，`retry` 走的是 stop→sync，而 stop 会连队列一起删 ⇒ 用户点「重试」等于把
+   *  还没发出去的回信扔掉（不报错、不提示，最坏表现为「机器人知道了但没回」）。 */
+  const parkedQueues = new Map<string, Map<string, { jobs: SendJob[]; retryTimer: ReturnType<typeof setTimeout> | null }>>();
   let stopped = false;
 
   const setStatus = (id: string, next: ImStatus): void => {
@@ -204,7 +208,10 @@ export function createImHost(deps: ImHostDeps) {
       return;
     }
     // 槽位先占：并发 sync 不会给同一连接起两个适配器。
-    runners.set(conn.id, { handle: null, queues: new Map() });
+    // 队列来源：上一次连接停靠下来的（retry 路径）优先，否则新建。
+    const queues = parkedQueues.get(conn.id) ?? new Map();
+    parkedQueues.delete(conn.id);
+    runners.set(conn.id, { handle: null, queues });
     setStatus(conn.id, { state: "connecting" });
     try {
       // 密钥值只在 connect 前从注入面读，拼进 fields；不进连接记录。
@@ -239,6 +246,12 @@ export function createImHost(deps: ImHostDeps) {
         onStatus: (status) => setStatus(conn.id, status),
       });
       runners.set(conn.id, { handle, queues: runners.get(conn.id)?.queues ?? new Map() });
+      // 建连完成补一拍 drain（2026-11-18 审计）：连接窗口期（`await secretValue` 那一段）里进来的回信
+      // 落在 handle === null 的队列上，drain 见 null 立刻返回；而「再 kick」原先只挂在 enqueue 的
+      // 「队列从空变非空」那一拍上 ⇒ 这些消息会一直躺着，不报错、不重试、不送达。
+      for (const [chatKey, queue] of runners.get(conn.id)?.queues ?? []) {
+        if (queue.jobs.length > 0) void drain(conn.id, chatKey);
+      }
     } catch (error) {
       runners.delete(conn.id);
       setStatus(conn.id, { state: "error", error: error instanceof Error ? error.message : String(error) });
@@ -374,6 +387,8 @@ export function createImHost(deps: ImHostDeps) {
     const conn = all.find((c) => c.id === id);
     if (conn === undefined) return { ok: false, error: "没有这条连接" };
     await stop(id);
+    // 真删连接：停靠的队列没有归宿了（`retry` 那条路才需要它）。
+    parkedQueues.delete(id);
     const secretKeys = { ...conn.secretKeys };
     all = all.filter((c) => c.id !== id);
     await deps.store.save(all);
@@ -407,6 +422,9 @@ export function createImHost(deps: ImHostDeps) {
   };
 
   const retry = async (id: string): Promise<void> => {
+    // 重连不是「删连接」：待发队列先停靠，start 会把它取回去并在建连后补发。
+    const pending = runners.get(id)?.queues;
+    if (pending !== undefined && pending.size > 0) parkedQueues.set(id, pending);
     if (runners.has(id)) await stop(id);
     await sync();
   };

@@ -143,6 +143,66 @@ describe("IM 宿主", () => {
     expect(routes).toEqual(["看看构建"]);
   });
 
+  // 2026-11-18 审计（架构面）：发送队列有两条会**静默丢消息**的路——
+  //   ① 连接窗口期（`await secretValue` 那一段）进队列的回信：drain 见 handle === null 立刻返回，
+  //      而「再 kick」只有 enqueue 的「空→非空」那一拍 ⇒ 消息一直躺着，不报错不重试不送达；
+  //   ② `retry`（用户点重试）走 stop→sync，stop 连队列一起删 ⇒ 重试等于把待发回信扔掉。
+  // 两条都不是「没做功能」，是「功能在，边界上丢」。
+  it("建连窗口期排队的回信，连上后自动补发", async () => {
+    const { captured, adapter } = captureAdapter();
+    const { store } = fakeStore([conn({ chats: { chat1: { kind: "direct", key: "chat1", title: "" } } })]);
+    // 用持有对象而不是裸 let：TS 的控制流会把「只在 Promise 执行器里赋值」的裸变量收成 null，
+    // 到调用点就成了 not callable（这次真踩了，记一笔）。
+    const gate: { release?: () => void } = {};
+    const host = createImHost({
+      store, platforms: { test: SPEC }, adapters: { test: adapter }, env: ENV,
+      // 密钥读取慢一拍 ⇒ 稳稳制造「槽位已占、handle 还是 null」的窗口
+      secretValue: () => new Promise<string | undefined>((resolve) => { gate.release = () => { resolve("sv"); }; }),
+      routeInbound: async () => ({ ok: true }),
+    });
+    const booting = host.boot();
+    // 等它真的进到「槽位已占、handle 还没给」那一刻（status=connecting 就是那一拍），再投回信
+    for (let i = 0; i < 200 && host.statusOf("im_t1")?.state !== "connecting"; i += 1) {
+      await new Promise((r) => setTimeout(r, 1));
+    }
+    expect(host.statusOf("im_t1")?.state).toBe("connecting");
+    host.sendTo("im_t1", "chat1", "窗口里发出的回信");
+    await new Promise((r) => setTimeout(r, 5));
+    expect(captured.sends).toEqual([]);
+    gate.release?.();
+    await booting;
+    await new Promise((r) => setTimeout(r, 20));
+    expect(captured.sends).toContain("chat1|窗口里发出的回信");
+  });
+
+  it("重试（retry）不丢待发队列：队列停靠后由下一次建连接手补发", async () => {
+    const captured = { handlers: null as ImConnectHandlers | null, sends: [] as string[] };
+    let failNext = true;
+    const adapter: ImPlatformAdapter = {
+      connect: (_f, _e, handlers) => {
+        captured.handlers = handlers;
+        return {
+          send: async (chat, text) => {
+            if (failNext) { failNext = false; throw Object.assign(new Error("临时失败"), { status: 503 }); }
+            captured.sends.push(chat.key + "|" + text);
+            return {};
+          },
+          stop: () => undefined,
+        };
+      },
+      check: async () => ({ account: { id: "bot-1", name: "测试机器人" } }),
+    };
+    const { store } = fakeStore([conn({ chats: { chat1: { kind: "direct", key: "chat1", title: "" } } })]);
+    const host = createImHost({ store, platforms: { test: SPEC }, adapters: { test: adapter }, env: ENV, secretValue: async () => "sv", routeInbound: async () => ({ ok: true }) });
+    await host.boot();
+    host.sendTo("im_t1", "chat1", "重试后仍要送达");
+    await new Promise((r) => setTimeout(r, 10));
+    expect(captured.sends).toEqual([]);          // 第一次发失败（503 ⇒ 可重试）
+    await host.retry("im_t1");                   // 用户点「重试」＝重连
+    await new Promise((r) => setTimeout(r, 30));
+    expect(captured.sends).toContain("chat1|重试后仍要送达");
+  });
+
   it("生命周期对账：禁用停适配器、移除即断", async () => {
     const { captured, adapter } = captureAdapter();
     let stoppedCount = 0;

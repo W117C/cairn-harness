@@ -38,6 +38,11 @@ electron-free、零新依赖，连接记录只有 safeStorage 键名。验证：
 （`6b927878` 给 `buildWorkerSystemMessages` 加了第 5 个实参）⇒ 变异空操作、表上却仍是 ✅。按现源改形状后
 单跑确证杀死判据；认证读数见第 1326 页与 `outputs/head-cert-*/provenance.md`，不在本页复写。
 
+第 1327 页（架构全量体检）：值依赖图 **1081 条边 / 0 环**，`as any` 与 `@ts-ignore` **0 处**，
+IPC 靠全键 Record 类型强制、工具面双向闭合。真缺陷仍只在**状态机边界**：IM 发送队列两条静默丢消息
+（连接窗口期无人补发、`retry` 连队列一起删）已修 + 两态判卷。量具与模块表见
+`outputs/audit-2026-11-18/architecture.md`。
+
 ## 当前工作
 
 ### bot ＋ 通道（v81 已提交）
