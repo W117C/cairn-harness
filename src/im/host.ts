@@ -39,6 +39,8 @@ export interface ImHostDeps {
   secretValue: (storeKey: string) => Promise<string | undefined>;
   routeInbound: ImRouteInbound;
   now?: () => number;
+  /** 可重试失败的重试间隔（毫秒）。缺省 5s；判卷注入小值，免得为一条重试用例等 5 秒。 */
+  retryMs?: number;
 }
 
 /** 存储最小面（判卷可给假实现）。 */
@@ -56,6 +58,8 @@ interface SendJob {
   chat: ImChat;
   text: string;
   attempts: number;
+  /** 稳定幂等键（入队时定死，重试复用）：平台据此去重。见 `ImAdapterHandle.send` 的注释。 */
+  key?: string;
   after?: (sent: { messageId?: string }) => void;
 }
 
@@ -134,7 +138,7 @@ export function createImHost(deps: ImHostDeps) {
       if (runner.handle === null) return; // 槽位保留但连接还没就绪；sync 重 kick
       const job = queue.jobs[0];
       try {
-        const sent = await runner.handle.send(job.chat, job.text);
+        const sent = await runner.handle.send(job.chat, job.text, job.key === undefined ? undefined : { idempotencyKey: job.key });
         queue.jobs.shift();
         job.after?.(sent);
       } catch (error) {
@@ -149,12 +153,14 @@ export function createImHost(deps: ImHostDeps) {
           }
         // retryable：整队停住等重试
         if (queue.retryTimer !== null) clearTimeout(queue.retryTimer);
-        queue.retryTimer = setTimeout(() => { void drain(connId, chatKey); }, SEND_RETRY_MS);
+        queue.retryTimer = setTimeout(() => { void drain(connId, chatKey); }, deps.retryMs ?? SEND_RETRY_MS);
         return;
       }
     }
   };
 
+  /** 队列条目的稳定键：连接 + 单调序号。重试复用同一键，平台据此去重。 */
+  let sendSeq = 0;
   const sendTo = (connId: string, chatKey: string, text: string, after?: (sent: { messageId?: string }) => void): void => {
     const conn = all.find((c) => c.id === connId);
     const runner = runners.get(connId);
@@ -163,7 +169,12 @@ export function createImHost(deps: ImHostDeps) {
     if (chat === undefined) return;
     const plain = toPlainText(text);
     const chunks = chunkText(plain, deps.platforms[conn.platform]?.textLimit ?? 4000).slice(0, SEND_MAX_CHUNKS);
-    for (const chunk of chunks) enqueue(conn, chatKey, { chat, text: chunk, attempts: 0, ...(after === undefined ? {} : { after }) });
+    for (const chunk of chunks) {
+      sendSeq += 1;
+      // 键在**入队时**定死：重试走的是同一条 job，键必须跟着 job 走，不能每次重发重新生成
+      // （微信适配器原先每条尝试都 new 一个 client_id ⇒ 平台去重失效，重试即重复投递）。
+      enqueue(conn, chatKey, { chat, text: chunk, attempts: 0, key: `cairn-${conn.id}-${String(sendSeq)}`, ...(after === undefined ? {} : { after }) });
+    }
   };
 
   // ── 入站管线 ──────────────────────────────────────────────────────────────────

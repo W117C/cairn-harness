@@ -62,7 +62,11 @@ export interface ImStatus {
 
 /** 适配器运行句柄：宿主只经它发消息与停止。 */
 export interface ImAdapterHandle {
-  send: (chat: ImChat, text: string) => Promise<{ messageId?: string }>;
+  /** 发一条消息。`idempotencyKey` 由宿主按**队列条目**给：重试同一条目必须复用它，
+   *  平台据此去重（微信 iLink 的 `client_id` 就是这一位）。不传＝平台自己生成。
+   *  为什么必须有这一位（2026-11-18 审计·第二遍）：宿主的重试单位是**分片条目**，
+   *  而「超时但平台其实已收下」是重试唯一无法自证的失败形态——不稳定的键＝重试即重复投递。 */
+  send: (chat: ImChat, text: string, opts?: { idempotencyKey?: string }) => Promise<{ messageId?: string }>;
   stop: () => Promise<void> | void;
 }
 

@@ -342,10 +342,16 @@ export function connectWeixin(
   void startSession();
 
   return {
-    send: async (chat: ImChat, text: string): Promise<{ messageId?: string }> => {
+    send: async (chat: ImChat, text: string, opts?: { idempotencyKey?: string }): Promise<{ messageId?: string }> => {
       let last: string | undefined;
+      let part = 0;
       for (const chunk of chunkText(text, WEIXIN_TEXT_LIMIT)) {
-        const clientId = `cairn-${randomBytes(8).toString("hex")}`;
+        // 幂等键：宿主给了就**按分片派生**（同一条 job 重试 → 同一个键 ⇒ 平台去重）；
+        // 没给才自己生成（单次调用语义，与旧行为一致）。
+        const clientId = opts?.idempotencyKey === undefined
+          ? `cairn-${randomBytes(8).toString("hex")}`
+          : `${opts.idempotencyKey}-${String(part)}`;
+        part += 1;
         const contextToken = contextTokenOf(chat.key);
         const answer = await request(env, base, token, "sendmessage", {
           msg: {

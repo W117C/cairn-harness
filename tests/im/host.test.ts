@@ -203,6 +203,38 @@ describe("IM 宿主", () => {
     expect(captured.sends).toContain("chat1|重试后仍要送达");
   });
 
+  // 2026-11-18 审计（第二遍·反方）：宿主的重试单位是**分片条目**，「超时但平台其实已收下」是它
+  // 唯一无法自证的失败形态。微信 iLink 的 `client_id` 就是去重位，可它原先**每条尝试都新生成一个**
+  // ⇒ 平台去重失效，重试即重复投递（我刚把 retry 改成真的会补发，反而放大了这条）。
+  // 判据：同一条 job 的两次尝试必须带同一个幂等键；不同 job 的键必须不同。
+  it("重试复用同一个幂等键（不同 job 不撞键）", async () => {
+    const seen: { text: string; key?: string }[] = [];
+    let failFirst = true;
+    const adapter: ImPlatformAdapter = {
+      connect: () => ({
+        send: async (_chat, text, opts) => {
+          seen.push({ text, key: opts?.idempotencyKey });
+          if (failFirst) { failFirst = false; throw Object.assign(new Error("超时但可能已送达"), { status: 503 }); }
+          return {};
+        },
+        stop: () => undefined,
+      }),
+      check: async () => ({ account: { id: "bot-1", name: "测试机器人" } }),
+    };
+    const { store } = fakeStore([conn({ chats: { chat1: { kind: "direct", key: "chat1", title: "" } } })]);
+    const host = createImHost({ store, platforms: { test: SPEC }, adapters: { test: adapter }, env: ENV, secretValue: async () => "sv", retryMs: 10, routeInbound: async () => ({ ok: true }) });
+    await host.boot();
+    host.sendTo("im_t1", "chat1", "第一段");
+    for (let i = 0; i < 400 && seen.length < 2; i += 1) await new Promise((r) => setTimeout(r, 5));
+    expect(seen).toHaveLength(2);
+    expect(seen[1]!.key, "重试必须复用同一个幂等键").toBe(seen[0]!.key);
+    expect(seen[0]!.key).toMatch(/^cairn-/);
+    // 反向锚点：另一条消息是另一条 job，键不许撞（撞了＝两条消息在平台侧被当成同一条）
+    host.sendTo("im_t1", "chat1", "第二段");
+    for (let i = 0; i < 400 && seen.length < 3; i += 1) await new Promise((r) => setTimeout(r, 5));
+    expect(seen[2]!.key).not.toBe(seen[0]!.key);
+  });
+
   it("生命周期对账：禁用停适配器、移除即断", async () => {
     const { captured, adapter } = captureAdapter();
     let stoppedCount = 0;
