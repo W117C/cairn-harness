@@ -159,7 +159,7 @@ export const MUTATIONS = [
   // 模型**手里**的口径：清单列得出名字，工具参数说明与报错只认 plugin: 形态 ⇒ 同一件事两处口径
   {
     id: "role-spec-desc-hides-user-form",
-    src: "src/agent/session-provider.ts",
+    src: "src/agent/tool-specs.ts",
     test: "tests/user-agent-roles.test.ts",
     desc: "spawn_agent 的 role 说明退回只写 plugin: 形态 ⇒ 模型被自己的工具说明书劝退，用户级角色永不被动用",
     apply: (s) => s.replace("plugin:agent-name / user:agent-name；未注册即拒绝", "plugin:agent-name；未注册即拒绝"),
@@ -192,7 +192,7 @@ export const MUTATIONS = [
   // ---- 模型自己撤 worker（cancel_agents）：规格面 / 回执分母 / 整批拒 / 文案点名真工具 ----
   {
     id: "cancel-agents-spec-visible-in-read-only",
-    src: "src/agent/session-provider.ts",
+    src: "src/agent/tool-specs.ts",
     test: "tests/cancel-agents-tool.test.ts",
     desc: "只读档不再摘掉 cancel_agents ⇒ 模型看得见、白名单挡着，白叫一次再吃一句不可用（两头断的规格半边）",
     apply: (s) => s.replace("      s.function.name !== \"cancel_agents\" &&\n", ""),
@@ -218,7 +218,7 @@ export const MUTATIONS = [
   // ---- supervise 契约面：规格由解析器那份生成（同源），不可申报的键必须出声拒 ----
   {
     id: "supervise-spec-loses-a-declarable-field",
-    src: "src/agent/session-provider.ts",
+    src: "src/agent/tool-specs.ts",
     test: "tests/supervise-contract.test.ts",
     desc: "规格少列一个解析器认得的字段 ⇒ 模型写不进这一支、只能猜（规格里没有 supervise 那一整段就是这么来的）",
     apply: (s) => s.replace("              properties: Object.fromEntries(SUPERVISE_MODEL_FIELDS.map((f) => [", "              properties: Object.fromEntries(SUPERVISE_MODEL_FIELDS.filter((f) => f.name !== \"maxStages\").map((f) => ["),
@@ -575,7 +575,7 @@ export const MUTATIONS = [
   },
   {
     id: "readonly-filter-keeps-wait-tool",
-    src: "src/agent/session-provider.ts",
+    src: "src/agent/tool-specs.ts",
     test: "tests/tool-surface-parity.test.ts",
     desc: "只读档不再显式摘除 wait_for_agents ⇒ 模型面看得见、执行面白名单挡着（本仓第 6 次的那类两头断）",
     apply: (s) => s.replace("      s.function.name !== \"wait_for_agents\" &&\n", ""),
@@ -1394,7 +1394,7 @@ export const MUTATIONS = [
   },
   {
     id: "chain-lease-promise-says-reject",
-    src: "src/agent/session-provider.ts",
+    src: "src/agent/tool-specs.ts",
     test: "tests/chain-lease-held.test.ts",
     desc: "规格退回承诺硬闸「相交即拒」⇒ 模型以为报了 resources 就有闸，从而不看真保护它的那一层（worktree）",
     apply: (s) => s.replace("与活跃写 worker 相交 ⇒ 审批卡点名，可强行批准", "与活跃写 worker 相交即拒"),
@@ -1403,7 +1403,7 @@ export const MUTATIONS = [
   // ---- 第 42 页 · 定时五件的模型面 / 注入面解析器的形状 / core 与低频族的分界 ----
   {
     id: "automation-face-dropped",
-    src: "src/agent/session-provider.ts",
+    src: "src/agent/tool-specs.ts",
     test: "tests/automation-tool-surface.test.ts",
     desc: "不拼那五份规格 ⇒ 模型面上又是零个（实现照装、能力照发不出去，且没人报错）",
     apply: (s) => s.replace("  specs.push(...automationToolSpecs());\n", ""),
@@ -1411,7 +1411,7 @@ export const MUTATIONS = [
   },
   {
     id: "automation-face-in-read-only",
-    src: "src/agent/session-provider.ts",
+    src: "src/agent/tool-specs.ts",
     test: "tests/automation-tool-surface.test.ts",
     desc: "只读档漏摘 ⇒ 只读会话能排下一次无人值守的写盘（与 wait/cancel 同族的漏摘形状）",
     apply: (s) => s.replace("!AUTOMATION_TOOL_NAMES.includes(s.function.name)", "true"),
@@ -1419,7 +1419,7 @@ export const MUTATIONS = [
   },
   {
     id: "automation-specs-become-core",
-    src: "src/agent/session-provider.ts",
+    src: "src/agent/tool-specs.ts",
     test: "tests/automation-tool-surface.test.ts",
     desc: "core 集合不减低频族 ⇒ 五件每次请求都进固定面、降配梯再也砍不掉它们",
     apply: (s) => s.replace(".filter((n) => !OPTIONAL_SURFACE_TOOL_NAMES.includes(n))", ".filter(() => true)"),
@@ -1450,7 +1450,7 @@ export const MUTATIONS = [
   },
   {
     id: "prompt-surface-readonly-description-not-applied",
-    src: "src/agent/session-provider.ts",
+    src: "src/agent/tool-specs.ts",
     test: "tests/prompt-surface-check.test.ts",
     desc: "按档换描述那一格摘掉 ⇒ 只读档的 `propose_plan` 继续写「批准前 write_file/run_shell 会被权限层拒绝」，" +
       "而那两把在这一档连面都不在——文本描述一个它拿不到的能力（第 176 页现读抓到的那一格，同类事故第四次）",
@@ -1474,7 +1474,7 @@ export const MUTATIONS = [
   },
   {
     id: "prompt-surface-edit-path-prose-removed",
-    src: "src/agent/session-provider.ts",
+    src: "src/agent/tool-specs.ts",
     test: "tests/prompt-surface-check.test.ts",
     desc: "把 `edit_file.path` 的说明摘掉 ⇒ 模型只能靠撞闸才知道「绝对路径会被拒」（`resolveInWorkspace` 硬拒两种形状：绝对路径、越界），" +
       "而每撞一次闸要付一整轮往返（现读一次模型往返 8.7–42s）。判卷两头都钉：说明里点名这两种拒绝 ＋ 闸真按这句话拒，" +
@@ -1487,7 +1487,7 @@ export const MUTATIONS = [
   },
   {
     id: "prompt-surface-write-path-prose-removed",
-    src: "src/agent/session-provider.ts",
+    src: "src/agent/tool-specs.ts",
     test: "tests/prompt-surface-check.test.ts",
     desc: "只给两把写向工具中的一把补说明 ⇒ 同一族里规矩看起来不同（模型会按「有说明那把」的规矩推另一把）。" +
       "这条与 `edit-path-prose-removed` 各用自己的 killer 用例：两条分支共用一条断言时，摘掉一支仍然全绿是本仓反复踩过的形状（规则 239）",
@@ -1737,7 +1737,7 @@ export const MUTATIONS = [
   },
   {
     id: "glm-spec-web-fetch-truncation-promise-dropped",
-    src: "src/agent/session-provider.ts",
+    src: "src/agent/tool-specs.ts",
     test: "tests/optional-tool-surface.test.ts",
     desc: "把规格里那句「正文太长会被截断并提示换更精确的地址」摘掉 ⇒ 模型只知道自己拿到的是截断后的正文，"
       + "不知道下一步该换地址（执行端那句提示仍会出来，但每轮重送的说明书不再预告它）；"
