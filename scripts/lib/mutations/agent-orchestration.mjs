@@ -149,7 +149,7 @@ export const MUTATIONS = [
   // ---- #97：用户自定义子代理的 CC 连字符字段名必须被那一份投影读到（此前 `allowed-tools` 落进未知键被丢）----
   {
     id: "role-alias-allow-not-read",
-    src: "src/agent/sequencer.ts",
+    src: "src/agent/stage-roles.ts",
     test: "tests/role-field-aliases.test.ts",
     desc: "别名退回只认驼峰 ⇒ CC 写法的白名单被当未知键丢弃，角色**按默认面**跑＝静默比声明更宽的工具面",
     apply: (s) => s.replace('  const tools = readToolListField(fm, "tools", "allowed-tools", "intersect", warnings);', '  const tools = parseToolList(fm.tools);'),
@@ -157,7 +157,7 @@ export const MUTATIONS = [
   },
   {
     id: "role-field-conflict-silent",
-    src: "src/agent/sequencer.ts",
+    src: "src/agent/stage-roles.ts",
     test: "tests/role-field-aliases.test.ts",
     desc: "两种写法值不同却不自称相等 ⇒ 静默择一（本仓唯一允许的收法是保守面交集＋点名，不然是「看着生效实际另一份在跑」）",
     apply: (s) => s.replace("  const same = primary.length === aliased.length && primary.every((x) => aliased.includes(x));", "  const same = true;"),
@@ -688,7 +688,7 @@ export const MUTATIONS = [
   // ---- 自定义子智能体的发现面与如实报错（sequencer + plugins，2026-09-22）----
   {
     id: "role-unimplemented-keys-silent",
-    src: "src/agent/sequencer.ts",
+    src: "src/agent/stage-roles.ts",
     test: "tests/plugin-role-discoverability.test.ts",
     desc: "§9.6 采纳未落地的字段（effort/skills/memory/background）不吭声 ⇒ 用户以为配上了，执行端从没读过",
     apply: (s) => s.replace('  for (const key of PLUGIN_UNIMPLEMENTED_KEYS) {\n    if (fm[key] !== undefined) {\n      warnings.push("插件 agent frontmatter." + key + " 执行端还没有读它的地方（§9.6 采纳未落地），已忽略");\n    }\n  }\n', ""),
@@ -696,7 +696,7 @@ export const MUTATIONS = [
   },
   {
     id: "role-unknown-key-silent",
-    src: "src/agent/sequencer.ts",
+    src: "src/agent/stage-roles.ts",
     test: "tests/plugin-role-discoverability.test.ts",
     desc: "笔误键静默吃掉 ⇒ disallowed_tools 写成下划线就等于「申报了剔除面、实际按默认面跑」，工具面静默变宽",
     apply: (s) => s.replace('    if (!known.has(key)) {\n      warnings.push("插件 agent frontmatter." + key + " 不认识，已忽略（合法键：" + PLUGIN_ROLE_CONSUMED_KEYS.join("/") + "）");\n    }', "    if (!known.has(key)) { /* 沉默 */ }"),
@@ -1111,7 +1111,7 @@ export const MUTATIONS = [
   },
   {
     id: "plugin-role-security-keys-warning-merged-into-unknown",
-    src: "src/agent/sequencer.ts",
+    src: "src/agent/stage-roles.ts",
     test: "tests/plugin-role-discoverability.test.ts",
     desc: "把安全约束那三件的警告并回普通未知键（丢掉「CC 安全约束照抄 §9.6」这一件）⇒ 用户看不出为什么 "
       + "hooks / permissionMode 被拒而 effort 只是「没落地」，本仓 §9.6 那条采纳口径就只剩注释在说",

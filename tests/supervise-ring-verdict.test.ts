@@ -6,7 +6,7 @@
 // ——三处计价 bug 都真改对了。紧接着 `wt-cleanup-worker-4 … 已清理（rejected）` 把 worktree 和分支删了，
 // 然后才回去问人。裁决发生在证据已被销毁之后。
 // 为什么必然发生（不是模型不听话）：`verdict:` 行只写进了 **review/test** 两个角色的任务书
-// （`sequencer.ts` 的内置角色面），而 supervise 的 `nextRole` 恒为 `"implement"`，implement 的任务书
+// （`stage-roles.ts` 的内置角色面），而 supervise 的 `nextRole` 恒为 `"implement"`，implement 的任务书
 // 只要求「改了什么 / 为什么 / 验证方式 / 风险」——**没有 verdict 行可解析**。所以 `parseVerdict` 在这一条路上
 // 恒返回 `unspecified`，`decideSupervisor` 的畸形分支 100% 触发。
 // 还有一条更贵的：同一个畸形分支的反面是 `verdict === "pass" → accept`，而 pass 今天**只来自散文**——

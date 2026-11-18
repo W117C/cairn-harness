@@ -29,7 +29,7 @@ import {
   parseStages,
   parseVerdict,
   resolvePluginRole,
-} from "../src/agent/sequencer";
+} from "../src/agent/stage-roles";
 import { DEFAULT_STUCK_CONFIG, detectStuck, stuckActionOf, stuckObservationOf, type StuckTurn } from "../src/agent/stuck";
 import { interruptedWorkers, respawnArgsFrom } from "../src/agent/recovery";
 import { applyCrashRecovery } from "../src/main/agent-runner";

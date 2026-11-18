@@ -126,6 +126,23 @@ git 只隔离**文本**冲突：两个 worker 各改各的文件、却动同一�
 - **fail-open 出声**：建图失败 / 图返回 null / diff 读不到 ⇒ `console.warn` 一句并放行——
   额外探测器不得把交付拦死，但静默降级等于藏故障。
 
+## ③c worker 生命周期词汇表（2026-11-19，第 1331 页）
+
+同一个 worker 一辈子有**四套状态词**——各自服务不同的读者，边界如下（别混用，混了就是把
+「UI 看见的」说成「运行时握着的」）：
+
+| 词 | 住处 | 回答的问题 | 值域 |
+|---|---|---|---|
+| `AgentStatus` | `src/events/types.ts`（`agent_status` 事件） | **外面看见的**：投影/面板从事件流读到的状态 | running / waiting_approval / waiting_input / done / failed / cancelled |
+| `AgentRuntimeStatus` | `src/agent/runtime-types.ts` | **运行时握着的**：spawn 时刻的运行态（starting/running/waiting/done/failed/cancelled） | 6 值 |
+| `JoinStatus` | `src/agent/orchestrator-join.ts` | **等的人看到的**：join 门面的等待面（含 `unknown` = 等待超时仍无终态） | 5 值 |
+| `TerminalStatus` | `src/agent/worker-finish.ts` | **收束漏斗认的**：终态收束的三值（done/failed/cancelled） | 3 值 |
+
+四套不能折成一个枚举：投影面（6 值）需要 waiting_approval/waiting_input 这两个**人等待态**，
+join 面需要 `unknown`（等待超时不是终态），收束面只有终态——语义不同，折并就是把一个读者
+的问题塞给另一个读者。**换算锚**：AgentStatus 的 waiting_* ≈ AgentRuntimeStatus 的 waiting；
+JoinStatus.unknown 不是 TerminalStatus 的任何值（等待超时 ≠ 终态），别拿它当终态路由。
+
 ## ④ 门禁纪律（改任何判据前先读这一节）
 
 - **清单即事实源**：门表在 `scripts/gate-manifest.ts` 的 `GATES`。

@@ -20,7 +20,7 @@ import { redactEventForLog } from "../events";
 import { DELIVERY_GUARD_CALL_ID, EMPTY_RUN_DELIVERY } from "./delivery-guard";
 import {
   dependsOnCycle,
-} from "./sequencer";
+} from "./stage-roles";
 import { DEFAULT_STUCK_CONFIG, detectStuck, stuckActionOf, stuckObservationOf, type StuckConfig } from "./stuck";
 import { unconsumedSpawnArgs } from "./spawn-surface";
 import { respawnSpawnArgs, type RespawnArgs } from "./recovery";

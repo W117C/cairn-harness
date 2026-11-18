@@ -2,6 +2,7 @@
 // 纪律：sequencer 零 LLM 调用——本模块与编排器的 runChain 展开路径只做解析/拼接/触发，
 // 不 import 任何 provider（静态断言面：agents-check 对本文件与 orchestrator.runChain 源码段扫 provider 引用 = 0）。
 // gate 环只落 verdict 标注，不重跑（V1；loopback 随 M3 压力测试后再定）。
+// 2026-11-19 更名 sequencer.ts → stage-roles.ts（N3 审计：名不副实——真链调度在 orchestrator-approvals.runChain；本文件是 stages/roles/verdict 解析工具箱）。
 import { MAX_PIPELINE_STAGES } from "./orchestrator-config";
 
 /** stages[] 的原始形态（spawn_agent args.stages 元素）。 */

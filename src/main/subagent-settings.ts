@@ -6,7 +6,7 @@ import { basename, dirname, join } from "node:path";
 import { fmString, parseFrontmatter } from "../agent/plugins/frontmatter";
 import { loadUserAgentRoles, USER_AGENT_SOURCES, userAgentInvoke } from "../agent/roles/user-agents";
 import { MAX_CONCURRENT_WORKERS } from "../agent/orchestrator-config";
-import { BUILTIN_ROLES } from "../agent/sequencer";
+import { BUILTIN_ROLES } from "../agent/stage-roles";
 import { writeFileAtomic } from "../atomic-write";
 
 const MAX_ROLE_BYTES = 32_768;

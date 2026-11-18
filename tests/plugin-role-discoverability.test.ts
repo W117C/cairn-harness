@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { PluginRuntime } from "../src/agent/plugins";
 import { buildSkillRoutingList, SKILL_ROUTING_CHAR_LIMIT } from "../src/agent/plugins/skills";
-import { resolvePluginRole, PLUGIN_ROLE_CONSUMED_KEYS } from "../src/agent/sequencer";
+import { resolvePluginRole, PLUGIN_ROLE_CONSUMED_KEYS } from "../src/agent/stage-roles";
 
 // F2 余项迁移（2026-11-13）：信任表不得落工作区（PluginRuntime 装载 fail loud 拒载）。
 // 共享一个工作区外的信任目录：本测试文件内复用，文件级 afterEach 清尾。

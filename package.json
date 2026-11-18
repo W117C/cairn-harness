@@ -29,6 +29,7 @@
     "mutate-needles-check": "node --import tsx scripts/mutate-verify.mjs --check-needles",
     "evidence-typecheck-check": "node --import tsx scripts/evidence-typecheck-check.ts",
     "facts": "node --import tsx scripts/facts.ts",
+    "smoke:list": "node --import tsx scripts/smoke-list.ts",
     "perf-summary": "node --import tsx scripts/perf-summarize.ts",
     "prompt-cost": "node --import tsx scripts/prompt-cost.ts",
     "tool-choice": "node --import tsx scripts/tool-choice.ts",

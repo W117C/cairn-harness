@@ -6,7 +6,7 @@
 // 审批面双轨（§5.1）：supervise 模式审批卡批准 { goal, budget, forbidden, maxStages }，
 // 与 pipeline 的 stages 全表审批语义**分开**——不动旧模式（agents-check N1c–N1d / N5 冻结语义不变红）。
 import type { WorkerEvidence } from "../events";
-import type { ProseVerdict } from "./sequencer";
+import type { ProseVerdict } from "./stage-roles";
 
 /** 封闭动作空间（唯一合法输出形态）。 */
 export type SupervisorAction =

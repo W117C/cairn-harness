@@ -15,7 +15,7 @@ import type { ToolResult } from "../tools/base";
 import { globIntersects } from "./lease-conflicts";
 import { shapeJoinRows, spentUsdFor, type JoinInput, type JoinPayloadBody } from "./orchestrator-join";
 import type { PipelineChain, SpawnArgs, StageRoleResolution, WorkerHandle } from "./orchestrator-types";
-import { BUILTIN_ROLES, concatStageTask, parseStages, parseVerdict, resolvePluginRole, type PluginAgentRoleDef } from "./sequencer";
+import { BUILTIN_ROLES, concatStageTask, parseStages, parseVerdict, resolvePluginRole, type PluginAgentRoleDef } from "./stage-roles";
 import { parseSuperviseContract } from "./supervise-contract";
 import { decideSupervisor, ringVerdict, superviseApprovalDigest, type SupervisorAction } from "./supervisor";
 import { chainTable, digestArgs, parseStringList } from "./worker-projection";

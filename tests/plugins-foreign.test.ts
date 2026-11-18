@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { discoverPlugins, PluginRuntime } from "../src/agent/plugins";
 import { pluginFingerprintSubsetEx } from "../src/agent/plugins/trust";
-import { resolvePluginRole } from "../src/agent/sequencer";
+import { resolvePluginRole } from "../src/agent/stage-roles";
 import type { ForeignSource } from "../src/agent/plugins/types";
 
 const dirs: string[] = [];

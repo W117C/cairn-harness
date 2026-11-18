@@ -11,7 +11,7 @@ import {
   buildWorkerSystemMessages,
 } from "../src/agent/worker-prompt";
 import { clampToTokenBudget, estimateTextTokens } from "../src/agent/text-budget";
-import { BUILTIN_ROLES } from "../src/agent/sequencer";
+import { BUILTIN_ROLES } from "../src/agent/stage-roles";
 
 describe("clampToTokenBudget（共用原语：marker 与 suffix 一律计入预算）", () => {
   it("未超限时逐字不变（内置角色走这条路）", () => {

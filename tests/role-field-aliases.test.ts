@@ -1,7 +1,7 @@
 // 判卷 · 用户自定义子代理要吃得住 Claude Code 那套**连字符**字段名（台账 #97）。
 //
 // 现读取证的形状：`~/.dsh/agents/x.md` / `~/.claude/agents/x.md` 里的角色 frontmatter 由
-// **一份**投影吃下（`resolvePluginRole`，src/agent/sequencer.ts；单发路径 orchestrator.ts:357 与
+// **一份**投影吃下（`resolvePluginRole`，src/agent/stage-roles.ts；单发路径 orchestrator.ts:357 与
 // 链路径 orchestrator.ts:1008 都经 `resolveStageRole`→`resolvePluginRole`，装载侧
 // plugins/discover.ts:128 与 roles/user-agents.ts:83 只透传 frontmatter 不读这些键），
 // 而那份投影只认本仓的驼峰名。CC 生态写的是 `allowed-tools` / `disallowed-tools`
@@ -20,8 +20,8 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createEventLog, type AgentEvent } from "../src/events";
 import { Orchestrator, type WorkerModel } from "../src/agent/orchestrator";
-import type { PluginAgentRoleDef } from "../src/agent/sequencer";
-import { resolvePluginRole } from "../src/agent/sequencer";
+import type { PluginAgentRoleDef } from "../src/agent/stage-roles";
+import { resolvePluginRole } from "../src/agent/stage-roles";
 import { PluginRuntime } from "../src/agent/plugins";
 import type { ModelOutput } from "../src/providers";
 import type { GlmMessage, GlmToolSpec } from "../src/providers/glm";

@@ -3,7 +3,7 @@ import type { AutonomySession, PermissionRule } from "../permissions";
 import type { ArmKey } from "../routing/bandit";
 import type { ModelSpec, ModelTier } from "../providers/registry";
 import type { CompactionConfig, Summarizer } from "./compaction";
-import type { FrozenStage, PluginAgentRoleDef } from "./sequencer";
+import type { FrozenStage, PluginAgentRoleDef } from "./stage-roles";
 import type { StuckConfig, StuckTurn } from "./stuck";
 import type { VerifyHook } from "./verify";
 import type { ImpactGraph } from "./impact/index";

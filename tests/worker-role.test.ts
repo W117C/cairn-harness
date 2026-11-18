@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createEventLog, type AgentEvent, type AgentSpawnedEvent } from "../src/events";
 import { Orchestrator, scriptedWorkerModel, type SpawnArgs } from "../src/agent/orchestrator";
 import { respawnArgsFrom } from "../src/agent/recovery";
-import type { PluginAgentRoleDef } from "../src/agent/sequencer";
+import type { PluginAgentRoleDef } from "../src/agent/stage-roles";
 
 let work = "";
 let logPath = "";
