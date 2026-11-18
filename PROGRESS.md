@@ -44915,3 +44915,34 @@ callback 需公网回调，列入 V2 候选）。
   删除需逐支核 tip 与独有提交，不在本次范围。
 
 凭证 @cf60aa94
+
+## 2026-11-18 · 第 1322 页：工作区清场（业主授权后执行）
+
+### 一、已删
+
+- `.tmp/`（33M / 1301 项）：脚本运行产物面（`agent-log.jsonl`、`e2e-log.jsonl`、`dsh-*-home`、
+  `verify-census-*`、合成链探针等），由 `scripts/agent.ts` / `scripts/e2e.ts` 自行重建；已被
+  `docs-check` 的 SKIP_DIRS 列为不扫描面。
+- `.scratch/`（空）、`工作区/`（空壳，仅含空的 `.agent/sessions`）。
+- 本会话自身的 `/tmp` 产物（二维码校验脚手架、两次跑批日志）已一并清掉。
+
+### 二、保留（各有凭据，未删）
+
+- `.worktrees/gate-head-cert`（detached `2bdac46a`）、`.worktrees/gate-mutate-verify`
+  （detached `6d6f5783`）——**共享门禁工作树**，被 `package.json` 与判卷复用，清理必须保留；
+  另保留 `~/alma/worktrees/cairn/pleased-slug/.worktrees/gate-head-cert`（同族内嵌检出）。
+- `oh-src/README-moved.md`——它**是**「外部参考语料已于 2026-09-19 迁至
+  `~/Downloads/dsh-refs/oh-src/`」这条新路径的唯一记录；PROGRESS / BLOCKED 里的旧路径按仓库纪律不追改正文，
+  故这个指针不能删。
+- `~/alma/worktrees/cairn/` 四支工作树——`continued-reindeer` / `cultural-fox` / `single-woodpecker` 三支
+  带未提交改动（各自 `.gitignore` 修改、未跟踪的 `outputs/`，`single-woodpecker` 另有一处未提交的
+  `layout-speaks.html` 删除），强制移除会把这些改动一起丢掉；`pleased-slug` 干净但分支未并入 HEAD。
+  分支本身未动，需要时可从分支重建检出。待业主裁决是否清除。
+
+### 三、清场复核
+
+- `git status` 干净；`git worktree list` 登记完整（8 条，含三处共享门禁检出）；
+- `docs-check` 复跑绿（页号 1322 唯一，下一个未占用 1323）；
+- 本次清场未改任何被跟踪文件，无提交。
+
+凭证 @6ff9f355
