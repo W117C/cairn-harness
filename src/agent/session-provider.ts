@@ -712,6 +712,9 @@ export function createSessionProvider(
     });
   };
   return {
+    // H1（第 1330 页）：会话型 provider 自持历史（stream 的 messages 对它是死投影）。声明后
+    // loop 不再为它每步算 projectContext(seen)——长会话每步省一次全量投影（判卷 loop-projection-skip）。
+    sessionOwnedHistory: true,
     stream(_messages, _tools, call): AsyncIterable<ModelOutput> {
       return turnGenerator(call);
     },

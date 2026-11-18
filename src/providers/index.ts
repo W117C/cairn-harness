@@ -67,6 +67,11 @@ export interface ProviderCall {
  *  适配器无状态：按传入对话与工具规格发起该轮请求，把协议原生增量解析成事件逐条产出。 */
 export interface Provider {
   stream(messages: ProviderMessage[], tools?: ProviderToolSpec[], call?: ProviderCall): AsyncIterable<ModelOutput>;
+  /** 会话型 provider 自持历史：事件日志是唯一事实源，provider 每次请求从日志重组（assemble），
+   *  `stream` 的 `messages` 参数对它是死投影（第 1330 页 H1：三个生产 provider 全不读它）。
+   *  声明 `true` 后 loop 不再为它计算 projectContext(seen)——每步省一次全量投影。
+   *  **缺省缺席 = 逐字旧行为**（scripted/legacy provider 照旧吃投影；判卷 tests/loop-projection-skip.test.ts）。 */
+  sessionOwnedHistory?: true;
 }
 
 /** 旧 next() 形态（M1a 定稿）；冻结脚本注入的 scripted provider 仍是它，loop 做兼容分支。 */

@@ -530,6 +530,10 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
 
   // 新旧形态统一收敛成流式事件源（legacy next() 源遇 tool_call 断轮，日志同序）
   const provider = opts.provider;
+  // H1（第 1330 页）：会话型 provider 自持历史（事件日志重组），`stream` 的 messages 对它是
+  // 死投影。声明 sessionOwnedHistory 的 provider，loop 不再每步算 projectContext(seen)——
+  // 长会话每步省一次全量投影（O(n)/步 → O(delta)/步）。缺省缺席 = 逐字旧行为。
+  const skipProjection = "stream" in provider && provider.sessionOwnedHistory === true;
   // C12（审查 P2）：取消信号随轮传入 provider——在途 fetch 随 abort 收束，不再只等静默窗。
   const rawStream: (messages: Parameters<Provider["stream"]>[0]) => AsyncIterable<ModelOutput> =
     "stream" in provider
@@ -626,7 +630,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
     }
     let sawToolCall = false;
     let onlyVerifyReplays = true;
-    for await (const output of streamFn(projectContext(seen))) {
+    for await (const output of streamFn(skipProjection ? [] : projectContext(seen))) {
       if (output.type !== "tool_call") {
         if (output.type === "assistant_delta") assistantTurnText += output.text;
         else if (output.type === "assistant_message") assistantTurnText += output.content;
