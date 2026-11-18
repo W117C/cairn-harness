@@ -45082,4 +45082,4 @@ append-only；`.mimosa` 470M / `.alma-snapshots` 495M（工具态，不是仓的
 - `verify-all` 七门 **pass**；typecheck 0；docs-check 绿；`mutate-verify-gates` 169/169。
 - 本轮未动 renderer 源 ⇒ 四份真机证据代次不变，无需重签（回收副本也只动 `outputs/`）。
 
-凭证 @21eb4085
+凭证 @d78e615c
