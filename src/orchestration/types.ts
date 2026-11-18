@@ -1,7 +1,11 @@
 /** Versioned orchestration data. Runtime authority is the existing session event log. */
 export const ORCHESTRATION_LEASE_MS = 300_000;
 export type Verdict = "pass" | "fail" | "unverifiable";
-export type EvidenceState = "verified" | "failed" | "stale" | "absent";
+// 证据四态与主栈同源（ADR 0017）：定义的唯一处是 src/events/evidence.ts（零依赖叶子），
+// 本栈按计划流词汇改名再导出；本地再抄一份联合定义就是第二事实源，判卷会当场红。
+// 「两条都写」（loop.ts 同款）：export…from 不进本地作用域，本文件 106/154 行自己要用这个名字。
+import type { WorkerEvidence as EvidenceState } from "../events/evidence";
+export type { EvidenceState };
 export type TaskPhase = "planned" | "queued" | "running" | "verifying" | "merging" | "done" | "failed" | "cancelled" | "paused" | "needs_you";
 export type PlanPhase = "proposed" | "approved" | "paused" | "cancelled" | "rejected";
 export interface Budget { usd: number; }

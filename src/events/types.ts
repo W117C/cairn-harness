@@ -546,8 +546,11 @@ export interface AgentMessageEvent {
   text: string;
 }
 
-/** W4b 四态：worker 回程那句「跑过了」到底有没有凭据（判据见 AgentResultEvent.artifacts.verified）。 */
-export type WorkerEvidence = "verified" | "failed" | "stale" | "absent";
+// W4b 四态的定义已上移到零依赖叶子 `./evidence.ts`（ADR 0017：跨栈词汇单源，双栈各自再导出）；
+// 这里再导出保持既有导入面（`import … from "../events"` 与 `from "../events/types"`）逐字不变。
+// 「两条都写」（loop.ts 同款）：export…from 不进本地作用域，本文件 762 行自己要用这个名字。
+export type { WorkerEvidence } from "./evidence";
+import type { WorkerEvidence } from "./evidence";
 
 /** 终态回传（§4.4.4）：父上下文唯一接收物。错误永不冒充结果——failed 走 status/reason 分型。 */
 export interface AgentResultEvent {
