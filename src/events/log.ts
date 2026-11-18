@@ -289,6 +289,12 @@ export async function replay(path: string, untilEventId?: string): Promise<Agent
 // 不是永久豁免——崩溃留下的半行会被下一次 append 粘成一条完整的坏行，此后再追加就成了中段坏行；
 // 那时 replay 会抛，增量若继续静默跳过，缓存下标就与 1-based 行号错位（正是 S1-4 要防的）。
 // 投影本身仍是每轮全量（O(n)），增量折叠需处理 compaction 失效语义——收口留位第三批。
+// （2026-11-19 对抗复核后**维持不接**，理由从此写死在这：主会话接增量折叠要同时过三道深语义坑——
+//  ① replayIncremental 刻意每次交副本（B8：并发消费方在 await 间隙各推一次 ⇒ 身份必须隔离），
+//    而增量折叠器的 invalidation 认**数组身份**，副本 ⇒ 每轮照样重建，白接；
+//  ② 分叉会话走 projectSessionContext 的 view 路，投影器不覆盖；
+//  ③ prune replacements 每请求重算，投影器的 replacements 是构造期冻结量。
+// 三坑合计 = 每请求省几十 ms 换并发隔离与叉路正确性两处风险，负期望。等真有长会话实测数据再立案。）
 const replayCache = new Map<string, ReplayCacheEntry>();
 /** line = 已消费的完整行数（下一批第 i 行的绝对行号 = line + i + 1）；
  *  tailBad = 已跳过、当批仍在尾部的坏行行号（其后一旦出现新事件即转为非尾部 → 抛）。 */
