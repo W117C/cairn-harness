@@ -13,35 +13,17 @@ electron-free、零新依赖，连接记录只有 safeStorage 键名。验证：
 
 > 设计收敛线 `simplify-desktop-design`（R2–R5）已摘取完毕（第 1315 页）；分支走向仍待业主裁决。
 
-## 全仓体检（第 1323 页，`fb9fe76d`）
+## 全仓体检（第 1323–1327 页）
 
-四项根因修复，同一个病：**同一语义存在第二份实现，一份动了另一份没跟**。
+- **四个根因修复**：原生视图让位接线（账本此前零消费者）／IM 入站空文本闸（空串会先建会话再空跑）／
+  项目名规矩单源（`src/main/project-name.ts`，渲染层此前只查 `\ /`）／相对时间分档单源（差异收成参数）。
+- **证据面危险码 12 → 0**，`DANGER_BASELINE = {}`（零容忍）；删掉一份违规的源码副本；变异门禁加 `--heal`。
+- **主线存量失效针脚**按现源改形状（`buildWorkerSystemMessages` 五参），两态各证一次。
+- **架构全量**：值依赖图 1081 边 / 0 环，`as any` 与 `@ts-ignore` 均 0，IPC 全键 Record、工具面双向闭合。
+- **IM 发送队列两条静默丢消息**已修：连接窗口期补发、`retry` 停靠队列。
+- **两处撤回**：「242 条报错降到 0」这个目标本身写坏；不加 `ImInboundMessage.attachments?`（无消费方的字段）。
 
-1. **原生视图让位**（第 1261 页那条「接线未完成」收口）：账本此前零消费者。现在 ModalSurface 恒持有 /
-   CommandPalette 按 `open` / WorkbenchOverlays 按 `dragOverApp`，BrowserPane 订阅并收成零矩形。
-2. **IM 入站空文本闸**：图片/文件 V1 不承载 ⇒ `text` 空串会先建会话再起一次空跑。闸设在唯一漏斗
-   `host.onMessage`，四平台共同受益。
-3. **项目名规矩单源**：`src/main/project-name.ts`（零依赖）同时供核心建目录与渲染层实时校验；
-   此前渲染层只查 `\ /` 与控制字符，`a:b` / 65 字符 / `.hidden` / 尾随点四档「对话框绿、创建才被拒」。
-4. **相对时间分档单源**：会话面 7 天 / 记忆页 30 天的差异收成 `absoluteAfterDays` 参数。
-
-报告（刻意 / 遗漏 / 隐患三分类 + 工作区清单）：`outputs/audit-2026-11-18/report.md`。
-
-第 1325 页按最优解收口：**证据面危险码 12 → 0**（`DANGER_BASELINE = {}`，零容忍）——那 12 条都是
-「读数是有的、探针已经跑不起来」的真断链，逐条修到能编译；删掉一份 176 文件的 `git archive` 源码副本
-（AGENTS.md 明令不许停在证据面，源 commit 与复原命令记在报告里）；变异门禁新增 `--heal`
-（二十秒收掉残留突变，此前只挂在整表开跑那一拍）。**两处撤回**：「242 条报错降到 0」这个目标本身写坏了
-（剩下 204 条是一次性历史探针的样式账），以及不加 `ImInboundMessage.attachments?`
-（没有消费方的字段只是把「尚未兑现」挪进契约）。
-
-第 1326 页：`head-cert` 抓到一道主线存量红——`subagent-start-context-not-threaded` 的针脚仍是四参形状
-（`6b927878` 给 `buildWorkerSystemMessages` 加了第 5 个实参）⇒ 变异空操作、表上却仍是 ✅。按现源改形状后
-单跑确证杀死判据；认证读数见第 1326 页与 `outputs/head-cert-*/provenance.md`，不在本页复写。
-
-第 1327 页（架构全量体检）：值依赖图 **1081 条边 / 0 环**，`as any` 与 `@ts-ignore` **0 处**，
-IPC 靠全键 Record 类型强制、工具面双向闭合。真缺陷仍只在**状态机边界**：IM 发送队列两条静默丢消息
-（连接窗口期无人补发、`retry` 连队列一起删）已修 + 两态判卷。量具与模块表见
-`outputs/audit-2026-11-18/architecture.md`。
+报告：`outputs/audit-2026-11-18/report.md`（缺陷分类）与 `architecture.md`（量具与模块表）；明细见台账 1323–1327。
 
 ## 当前工作
 
