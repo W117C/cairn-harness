@@ -448,7 +448,10 @@ export const MUTATIONS = [
     src: "src/agent/orchestrator.ts",
     test: "tests/worker-hooks.test.ts",
     desc: "发了 SubagentStart 却不把 additionalContext 传进 system ⇒ 钩子跑了、模型一个字也没看到——「收下即丢」的第三种写法（前两种：字段不读、回执不接）",
-    apply: (s) => s.replace('buildWorkerSystemMessages(w, this.opts.workspace, startContext, experienceNote)', 'buildWorkerSystemMessages(w, this.opts.workspace, experienceNote)'),
+    // 2026-11-18（head-cert 抓到的存量红）：`6b927878` 给这个调用加了第 5 个实参 `w.agentId`
+    // （记忆作用域按 agent 身份推允许集），针脚还写着四参形状 ⇒ 变体搜不到原文，这一条变异变成空操作，
+    // 表上却一直是 ✅。改法只认「把 startContext 摘掉」这件事，参数表变了就跟着改形状，别改判据。
+    apply: (s) => s.replace('buildWorkerSystemMessages(w, this.opts.workspace, startContext, experienceNote, w.agentId)', 'buildWorkerSystemMessages(w, this.opts.workspace, experienceNote, w.agentId)'),
     expectFail: "SubagentStart 的 additionalContext 真的进模型收到的 system 块（不是发完就丢）",
   },
   {
