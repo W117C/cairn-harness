@@ -34,10 +34,9 @@ electron-free、零新依赖，连接记录只有 safeStorage 键名。验证：
 （剩下 204 条是一次性历史探针的样式账），以及不加 `ImInboundMessage.attachments?`
 （没有消费方的字段只是把「尚未兑现」挪进契约）。
 
-第 1326 页：`head-cert` 在主线抓到一道存量红——`subagent-start-context-not-threaded` 的针脚还写着四参
-形状（`6b927878` 给 `buildWorkerSystemMessages` 加了第 5 个实参），变异成了空操作而表上仍是 ✅。
-按现源改形状后单跑证明确实杀死判据；`mutate-needles-check` 阻断 1 → 0。认证 @`ac08d8c`：
-**26 道跑到 26、绿 26**，六维全过（墙钟 292.11s）。
+第 1326 页：`head-cert` 抓到一道主线存量红——`subagent-start-context-not-threaded` 的针脚仍是四参形状
+（`6b927878` 给 `buildWorkerSystemMessages` 加了第 5 个实参）⇒ 变异空操作、表上却仍是 ✅。按现源改形状后
+单跑确证杀死判据；认证读数见第 1326 页与 `outputs/head-cert-*/provenance.md`，不在本页复写。
 
 ## 当前工作
 
@@ -51,13 +50,7 @@ electron-free、零新依赖，连接记录只有 safeStorage 键名。验证：
   byte 模式 / 纠错 M / v1–10），iLink 回的是待编码文本而不是图片。
 - 团队/派活/定时任务面不动（v59–v79 已收口，见第 1250/1315 页）。
 
-### 键盘契约 / 焦点 / 弹层（qoder 线，已提交 683a2953）
-
-- 第 1313 页授权宿主/菜单归还/快速打开落点；第 1310 页键盘契约并回一份（radio-nav 单源）。
-
-### 桌面打磨（批 1–6，已提交 a9262bbb）
-
-- 流面动效与弹层质感、布局/插件市场/bot 团队面、设置面五条、搜索直达行＋保存闪条退场。
+键盘契约（`683a2953`）与桌面打磨批 1–6（`a9262bbb`）已完成，结论迁档见 `docs/archive/state-2026-11-16-merge.md`。
 
 ## 代码入口
 
