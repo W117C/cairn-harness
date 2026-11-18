@@ -309,7 +309,9 @@ AgentApi，不跑真模型、不触发系统录屏权限）。
 
 真身：`src/im/types.ts`（适配器契约 `connect` / `check`，扫码平台另加 `loginStart` / `loginWait`；
 平台形状挂在 `ImPlatformSpec` 的 `ws` / `login` / `fields` / `textLimit` 上）、`src/im/host.ts`
-（生命周期对账、配对闸、群聊 @ 闸、按聊天发送队列、逐连接运行态）、`src/im/platforms/`
+（生命周期对账、配对闸、群聊 @ 闸、逐连接运行态）、`src/im/send-queue.ts`
+（按聊天的发送队列状态机：窗口期不丢 / 重试复用幂等键 / retry 停靠 / permanent 如实落账——
+「谁丢了我的消息」只有一个答案处）、`src/im/platforms/`
 （飞书长连接 / 邮件 IMAP-SMTP / 企业微信智能机器人 / 微信 iLink）、`src/im/format.ts`（分片与纯文本）。
 
 四条纪律（改这个子系统前先看）：

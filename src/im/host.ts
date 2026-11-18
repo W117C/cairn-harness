@@ -1,9 +1,10 @@
 // IM 通道宿主（2026-11-17 · 通道线）。
 //
 // 平台适配器拥有线协议，本模块拥有**其余的一切**：连接生命周期（sync 对账）、
-// 配对闸（未配对发件人落 requests 等人批）、路由闸（群聊必 @）、按聊天的发送队列
-// （重试/放弃分类如实上报）。路由与密钥是注入面：主进程把「消息→会话 run→回信」
-// 与 safeStorage 读写接进来，本模块不 import Electron、不碰凭据值。
+// 配对闸（未配对发件人落 requests 等人批）、路由闸（群聊必 @）、按聊天的发送队列挂载
+// （队列机器与状态机边界住在 send-queue.ts，本文件只提供 deliver/ready/onExhausted 三个回调）。
+// 路由与密钥是注入面：主进程把「消息→会话 run→回信」与 safeStorage 读写接进来，
+// 本模块不 import Electron、不碰凭据值。
 //
 // 对账纪律：端点、保存与周期 tick 都会触发 sync()；sync 串行化（一次在飞），
 // 槽位先占后连（并发 sync 不会给同一连接起两个适配器）。
@@ -18,9 +19,8 @@ import type {
   ImStatus,
 } from "./types";
 import { chunkText, toPlainText } from "./format";
+import { createSendQueues } from "./send-queue";
 
-const SEND_RETRY_MS = 5_000;
-const SEND_MAX_ATTEMPTS = 5;
 /** 回信长度上限（分片数）：一次回复最多发多少片，防失控成本。 */
 const SEND_MAX_CHUNKS = 6;
 
@@ -51,16 +51,6 @@ export interface ImStoreLike {
 
 interface Runner {
   handle: ImAdapterHandle | null;
-  queues: Map<string, { jobs: SendJob[]; retryTimer: ReturnType<typeof setTimeout> | null }>;
-}
-
-interface SendJob {
-  chat: ImChat;
-  text: string;
-  attempts: number;
-  /** 稳定幂等键（入队时定死，重试复用）：平台据此去重。见 `ImAdapterHandle.send` 的注释。 */
-  key?: string;
-  after?: (sent: { messageId?: string }) => void;
 }
 
 /** 平台视图（设置面按它渲染：字段表、扫码形态都在这里，renderer 不 import 核心实现）。 */
@@ -98,66 +88,30 @@ export function createImHost(deps: ImHostDeps) {
   const runners = new Map<string, Runner>();
   const statuses = new Map<string, ImStatus>();
   let syncing: Promise<void> = Promise.resolve();
-  /** 停靠的待发队列（2026-11-18 审计）：`retry()` 先把老 runner 的队列寄在这里，下一次 start 取走。
-   *  没有这张表，`retry` 走的是 stop→sync，而 stop 会连队列一起删 ⇒ 用户点「重试」等于把
-   *  还没发出去的回信扔掉（不报错、不提示，最坏表现为「机器人知道了但没回」）。 */
-  const parkedQueues = new Map<string, Map<string, { jobs: SendJob[]; retryTimer: ReturnType<typeof setTimeout> | null }>>();
   let stopped = false;
 
   const setStatus = (id: string, next: ImStatus): void => {
     statuses.set(id, { ...next, at: now() });
   };
 
-  // ── 发送队列（按聊天 FIFO；retryable 才重试，permanent 如实落状态）──────────
-  const failClass = (error: unknown): "permanent" | "retry" => {
-    const e = error as { permanent?: boolean; status?: number } | null;
-    if (e !== null && e !== undefined && typeof e === "object") {
-      if (e.permanent === true) return "permanent";
-      if (typeof e.status === "number" && e.status >= 400 && e.status < 500 && e.status !== 429) return "permanent";
-    }
-    return "retry";
-  };
-
-  const enqueue = (conn: ImConnection, chatKey: string, job: SendJob): void => {
-    const runner = runners.get(conn.id);
-    if (runner === undefined) return;
-    let queue = runner.queues.get(chatKey);
-    if (queue === undefined) {
-      queue = { jobs: [], retryTimer: null };
-      runner.queues.set(chatKey, queue);
-    }
-    queue.jobs.push(job);
-    if (queue.jobs.length === 1) void drain(conn.id, chatKey);
-  };
-
-  const drain = async (connId: string, chatKey: string): Promise<void> => {
-    const runner = runners.get(connId);
-    const queue = runner?.queues.get(chatKey);
-    if (runner === undefined || queue === undefined) return;
-    while (queue.jobs.length > 0) {
-      if (runner.handle === null) return; // 槽位保留但连接还没就绪；sync 重 kick
-      const job = queue.jobs[0];
-      try {
-        const sent = await runner.handle.send(job.chat, job.text, job.key === undefined ? undefined : { idempotencyKey: job.key });
-        queue.jobs.shift();
-        job.after?.(sent);
-      } catch (error) {
-        job.attempts += 1;
-        if (failClass(error) === "permanent" || job.attempts >= SEND_MAX_ATTEMPTS) {
-          queue.jobs.shift();
-          setStatus(connId, {
-            state: statuses.get(connId)?.state ?? "error",
-            error: `回信失败：${error instanceof Error ? error.message : String(error)}`,
-          });
-          continue;
-          }
-        // retryable：整队停住等重试
-        if (queue.retryTimer !== null) clearTimeout(queue.retryTimer);
-        queue.retryTimer = setTimeout(() => { void drain(connId, chatKey); }, deps.retryMs ?? SEND_RETRY_MS);
-        return;
-      }
-    }
-  };
+  // ── 发送队列（机器住在 send-queue.ts；宿主只提供三个回调与生命周期挂钩）──────────
+  // 「谁丢了我的消息」从今往后只有一个答案处：队列状态机（窗口期/重试/停靠）的边界全在
+  // send-queue.ts，判卷也是它的独立判卷面（tests/im/send-queue.test.ts）。
+  const sendQueue = createSendQueues({
+    // 把一条 job 交给当前适配器发送。ready 已挡住窗口期 ⇒ 走到这里 handle 一定在。
+    deliver: async (connId, job) => {
+      const handle = runners.get(connId)?.handle;
+      if (handle === null || handle === undefined) throw new Error("发送时连接未就绪（ready 已挡住窗口期，走不到这里）");
+      return handle.send(job.chat, job.text, job.key === undefined ? undefined : { idempotencyKey: job.key });
+    },
+    ready: (connId) => runners.get(connId)?.handle != null,
+    // 保留现有 state 只落 error：与拆分前 drain 里的 setStatus 同一条映射（判卷钉着）。
+    onExhausted: (connId, message) => {
+      setStatus(connId, { state: statuses.get(connId)?.state ?? "error", error: message });
+    },
+    // 重试间隔由宿主 deps 透传（拆分前内联 drain 用的就是 deps.retryMs ?? 缺省；不透传 ⇒ 判卷注入的小间隔失效）。
+    retryMs: deps.retryMs,
+  });
 
   /** 队列条目的稳定键：连接 + 单调序号。重试复用同一键，平台据此去重。 */
   let sendSeq = 0;
@@ -173,7 +127,7 @@ export function createImHost(deps: ImHostDeps) {
       sendSeq += 1;
       // 键在**入队时**定死：重试走的是同一条 job，键必须跟着 job 走，不能每次重发重新生成
       // （微信适配器原先每条尝试都 new 一个 client_id ⇒ 平台去重失效，重试即重复投递）。
-      enqueue(conn, chatKey, { chat, text: chunk, attempts: 0, key: `cairn-${conn.id}-${String(sendSeq)}`, ...(after === undefined ? {} : { after }) });
+      sendQueue.enqueue(conn.id, chatKey, { chat, text: chunk, attempts: 0, key: `cairn-${conn.id}-${String(sendSeq)}`, ...(after === undefined ? {} : { after }) });
     }
   };
 
@@ -219,10 +173,9 @@ export function createImHost(deps: ImHostDeps) {
       return;
     }
     // 槽位先占：并发 sync 不会给同一连接起两个适配器。
-    // 队列来源：上一次连接停靠下来的（retry 路径）优先，否则新建。
-    const queues = parkedQueues.get(conn.id) ?? new Map();
-    parkedQueues.delete(conn.id);
-    runners.set(conn.id, { handle: null, queues });
+    // 队列来源：上一次连接停靠下来的（retry 路径）由 adopt 接手，无则惰性新建（enqueue 会造）。
+    runners.set(conn.id, { handle: null });
+    sendQueue.adopt(conn.id);
     setStatus(conn.id, { state: "connecting" });
     try {
       // 密钥值只在 connect 前从注入面读，拼进 fields；不进连接记录。
@@ -256,13 +209,11 @@ export function createImHost(deps: ImHostDeps) {
         },
         onStatus: (status) => setStatus(conn.id, status),
       });
-      runners.set(conn.id, { handle, queues: runners.get(conn.id)?.queues ?? new Map() });
-      // 建连完成补一拍 drain（2026-11-18 审计）：连接窗口期（`await secretValue` 那一段）里进来的回信
-      // 落在 handle === null 的队列上，drain 见 null 立刻返回；而「再 kick」原先只挂在 enqueue 的
+      runners.set(conn.id, { handle });
+      // 建连完成补一拍 kick（2026-11-18 审计）：连接窗口期（`await secretValue` 那一段）里进来的回信
+      // 落在 ready=false 的队列上，drain 停住；而「再 kick」原先只挂在 enqueue 的
       // 「队列从空变非空」那一拍上 ⇒ 这些消息会一直躺着，不报错、不重试、不送达。
-      for (const [chatKey, queue] of runners.get(conn.id)?.queues ?? []) {
-        if (queue.jobs.length > 0) void drain(conn.id, chatKey);
-      }
+      sendQueue.kick(conn.id);
     } catch (error) {
       runners.delete(conn.id);
       setStatus(conn.id, { state: "error", error: error instanceof Error ? error.message : String(error) });
@@ -272,9 +223,8 @@ export function createImHost(deps: ImHostDeps) {
   const stop = async (id: string): Promise<void> => {
     const runner = runners.get(id);
     runners.delete(id);
-    for (const queue of runner?.queues.values() ?? []) {
-      if (queue.retryTimer !== null) clearTimeout(queue.retryTimer);
-    }
+    // 队列与定时器随连接一起收（send-queue.ts 的 drop；禁用路丢活跃队列是刻意的，见那边纪律 3）。
+    sendQueue.drop(id);
     await Promise.resolve(runner?.handle?.stop?.()).catch(() => undefined);
     if (statuses.get(id)?.state !== "error") setStatus(id, { state: "off" });
   };
@@ -399,7 +349,7 @@ export function createImHost(deps: ImHostDeps) {
     if (conn === undefined) return { ok: false, error: "没有这条连接" };
     await stop(id);
     // 真删连接：停靠的队列没有归宿了（`retry` 那条路才需要它）。
-    parkedQueues.delete(id);
+    sendQueue.dropParked(id);
     const secretKeys = { ...conn.secretKeys };
     all = all.filter((c) => c.id !== id);
     await deps.store.save(all);
@@ -433,9 +383,8 @@ export function createImHost(deps: ImHostDeps) {
   };
 
   const retry = async (id: string): Promise<void> => {
-    // 重连不是「删连接」：待发队列先停靠，start 会把它取回去并在建连后补发。
-    const pending = runners.get(id)?.queues;
-    if (pending !== undefined && pending.size > 0) parkedQueues.set(id, pending);
+    // 重连不是「删连接」：待发队列先停靠（send-queue.ts 的 park），start 会把它取回去并在建连后补发。
+    sendQueue.park(id);
     if (runners.has(id)) await stop(id);
     await sync();
   };
