@@ -79,7 +79,8 @@ describe("通道名表完整性", () => {
     // v62：＋teamMemberDispatch；v63：＋teamMemberStart；v64：＋teamGroupCreate；v65：＋teamGroupNext；
     // v67：＋teamSecretGrants / teamSecretGrant；v68：＋teamSecretRequest；v70：＋teamGroupStream。
     // v80：＋imList / imAdd / imUpdate / imRemove / imPair / imUnpair / imRetry（IM 通道七件）。
-    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(184);
+    // v81：＋imLoginStart / imLoginWait（微信扫码登录两段）⇒ 186。
+    expect(Object.keys(INVOKE_CHANNELS)).toHaveLength(186);
     const keys = Object.keys(INVOKE_CHANNELS) as (keyof typeof INVOKE_CHANNELS)[];
     expect(keys.length).toBeGreaterThan(0);
     for (const key of keys) expect(INVOKE_CHANNELS[key]).toBeTruthy();
@@ -351,6 +352,9 @@ describe("通道名表完整性", () => {
       "imPair",
       "imUnpair",
       "imRetry",
+      // v81：扫码登录两段（出码 / 查状态）。
+      "imLoginStart",
+      "imLoginWait",
       "wallpaperBrowse",
       "wallpaperApplyPath",
       "wallpaperDisplays",

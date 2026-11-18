@@ -205,6 +205,9 @@ export const INVOKE_CHANNELS: { [K in InvokeChannel]: string } = {
   imPair: "agent:im-pair",
   imUnpair: "agent:im-unpair",
   imRetry: "agent:im-retry",
+  // v81：扫码登录两段（微信 iLink）——出码与查状态；确认后由主进程建连。
+  imLoginStart: "agent:im-login-start",
+  imLoginWait: "agent:im-login-wait",
   teamSecretGrants: "agent:team-secret-grants",
   teamSecretGrant: "agent:team-secret-grant",
   teamSecretRequest: "agent:team-secret-request",
@@ -450,6 +453,8 @@ export const CHANNEL_DOMAINS: { [K in InvokeChannel]: ChannelDomain } = {
   imPair: "im",
   imUnpair: "im",
   imRetry: "im",
+  imLoginStart: "im",
+  imLoginWait: "im",
   teamSecretGrants: "team",
   teamSecretGrant: "team",
   teamSecretRequest: "team",

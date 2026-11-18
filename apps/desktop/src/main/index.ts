@@ -653,6 +653,18 @@ const teamInsightsOf = async (
   return { permissions, memory: memoryScopes(members as never), usage };
 };
 
+/** IM 密钥落盘（safeStorage）：返回值只报成败，值不进日志、不进连接记录。 */
+const imPutSecret = async (storeKey: string, value: string): Promise<{ ok: boolean; error?: string }> => {
+  const backend = providerKeyBackend();
+  if (backend === null) return { ok: false, error: "安全存储不可用（headless 或 safeStorage 不可用），密钥拒存" };
+  try {
+    await backend.set(storeKey, value);
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "密钥保存失败：请检查安全存储与权限" };
+  }
+};
+
 const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   // 当前调用窗口的可信工作区；不接受 renderer 自报的目录。
   searchSettingsGet: () => getSearchSettings(resolveWorkspace()),
@@ -981,16 +993,7 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
       fields,
       ...(typeof raw.sessionId === "string" && raw.sessionId !== "" ? { sessionId: raw.sessionId } : {}),
       ...(typeof raw.workspace === "string" && raw.workspace !== "" ? { workspace: raw.workspace } : {}),
-      putSecret: async (storeKey, value) => {
-        const backend = providerKeyBackend();
-        if (backend === null) return { ok: false, error: "安全存储不可用（headless 或 safeStorage 不可用），密钥拒存" };
-        try {
-          await backend.set(storeKey, value);
-          return { ok: true };
-        } catch {
-          return { ok: false, error: "密钥保存失败：请检查安全存储与权限" };
-        }
-      },
+      putSecret: imPutSecret,
     });
     return result;
   },
@@ -1002,16 +1005,7 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
       ...(typeof raw.sessionId === "string" ? { sessionId: raw.sessionId } : {}),
       ...(raw.enabled !== undefined ? { enabled: raw.enabled === true } : {}),
       ...(typeof raw.fields === "object" && raw.fields !== null ? { fields: raw.fields as Record<string, string> } : {}),
-      putSecret: async (storeKey, value) => {
-        const backend = providerKeyBackend();
-        if (backend === null) return { ok: false, error: "安全存储不可用，密钥拒存" };
-        try {
-          await backend.set(storeKey, value);
-          return { ok: true };
-        } catch {
-          return { ok: false, error: "密钥保存失败：请检查安全存储与权限" };
-        }
-      },
+      putSecret: imPutSecret,
     });
   },
   imRemove: async (id) => {
@@ -1036,6 +1030,20 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     if (imHost === null) return { ok: false, error: "IM 宿主未就绪" };
     await imHost.retry(String(id ?? ""));
     return { ok: true };
+  },
+  // v81 扫码登录：出码与查状态（确认后宿主建连；密钥走 imPutSecret 落 safeStorage）。
+  imLoginStart: async (platform) => {
+    if (imHost === null) return { ok: false, error: "IM 宿主未就绪" };
+    return await imHost.loginStart(String(platform ?? ""));
+  },
+  imLoginWait: async (input) => {
+    if (imHost === null) return { ok: false, error: "IM 宿主未就绪" };
+    const raw = (input ?? {}) as { platform?: unknown; loginId?: unknown };
+    return await imHost.loginWait({
+      platform: String(raw.platform ?? ""),
+      loginId: String(raw.loginId ?? ""),
+      putSecret: imPutSecret,
+    });
   },
   // v70 群聊共享流：读群会话自己的事件流（单一面），带轮与说话人，截断如实。
   teamGroupStream: async (sessionId, workspace, limit) => {

@@ -59,6 +59,16 @@ interface SendJob {
   after?: (sent: { messageId?: string }) => void;
 }
 
+/** 平台视图（设置面按它渲染：字段表、扫码形态都在这里，renderer 不 import 核心实现）。 */
+export interface ImPlatformView {
+  id: string;
+  name: string;
+  ws: boolean;
+  login?: "fields" | "qr";
+  fields: { key: string; label: string; secret?: boolean; hint?: string }[];
+  textLimit: number;
+}
+
 export interface ImHostView {
   connections: {
     id: string;
@@ -75,7 +85,7 @@ export interface ImHostView {
     createdAt: number;
     status: ImStatus;
   }[];
-  platforms: string[];
+  platforms: ImPlatformView[];
 }
 
 export function createImHost(deps: ImHostDeps) {
@@ -201,7 +211,19 @@ export function createImHost(deps: ImHostDeps) {
         }
         fields[key] = value;
       }
-      const handle = adapter.connect(fields, deps.env, {
+      // 逐连接运行态注入：游标/context_token 挂在连接记录上（随 connections.json 持久化，
+      // 重启不重放），由 host 单点落盘。
+      const connEnv: ImEnv = {
+        ...deps.env,
+        runtime: {
+          get: () => conn.runtime ?? {},
+          set: (patch) => {
+            conn.runtime = { ...(conn.runtime ?? {}), ...patch };
+            void deps.store.save(all);
+          },
+        },
+      };
+      const handle = adapter.connect(fields, connEnv, {
         onMessage: (msg) => {
           const current = all.find((c) => c.id === conn.id);
           if (current === undefined) return;
@@ -382,6 +404,63 @@ export function createImHost(deps: ImHostDeps) {
     await sync();
   };
 
+  // ── 扫码登录端点（微信 iLink；设置面二维码流驱动）───────────────────────────
+  const loginStart = async (platform: string): Promise<{ ok: boolean; error?: string; loginId?: string; qr?: string; expiresAt?: number }> => {
+    const adapter = deps.adapters[platform];
+    if (adapter?.loginStart === undefined) return { ok: false, error: "这个平台不走扫码登录" };
+    try {
+      const result = await adapter.loginStart(deps.env);
+      return { ok: true, ...result };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  };
+
+  const loginWait = async (input: {
+    platform: string;
+    loginId: string;
+    putSecret: (storeKey: string, value: string) => Promise<{ ok: boolean; error?: string }>;
+  }): Promise<{ ok: boolean; status?: "waiting" | "scanned" | "expired" | "done"; error?: string; id?: string }> => {
+    const adapter = deps.adapters[input.platform];
+    if (adapter?.loginWait === undefined) return { ok: false, error: "这个平台不走扫码登录" };
+    let result: Awaited<ReturnType<NonNullable<typeof adapter.loginWait>>>;
+    try {
+      result = await adapter.loginWait(input.loginId, deps.env);
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+    if (result.status !== "done") return { ok: true, status: result.status };
+    // confirmed：建连（密钥落 safeStorage；扫码人直接进配对名单——本人扫的码，无需再批）。
+    const spec = deps.platforms[input.platform];
+    if (spec === undefined) return { ok: false, error: "未知平台" };
+    const id = newId();
+    const secretKeys: Record<string, string> = {};
+    for (const [key, value] of Object.entries(result.connection?.secrets ?? {})) {
+      const storeKey = `im:${id}:${key}`;
+      const put = await input.putSecret(storeKey, value);
+      if (put.ok !== true) return { ok: false, error: put.error ?? "密钥保存失败" };
+      secretKeys[key] = storeKey;
+    }
+    const owner = result.owner;
+    all.push({
+      id,
+      platform: spec.id,
+      account: result.connection?.account ?? null,
+      sessionId: "",
+      settings: result.connection?.settings ?? {},
+      secretKeys,
+      enabled: true,
+      paired: owner === undefined ? [] : [{ id: owner.id, name: owner.name, at: now() }],
+      requests: [],
+      chats: owner === undefined ? {} : { [owner.id]: { kind: "direct", key: owner.id, title: owner.name } },
+      runtime: {},
+      createdAt: now(),
+    });
+    await deps.store.save(all);
+    void sync();
+    return { ok: true, status: "done", id };
+  };
+
   const view = (): ImHostView => ({
     connections: all.map((c) => ({
       id: c.id,
@@ -398,7 +477,14 @@ export function createImHost(deps: ImHostDeps) {
       createdAt: c.createdAt,
       status: statuses.get(c.id) ?? { state: "off" as const },
     })),
-    platforms: Object.keys(deps.platforms),
+    platforms: Object.values(deps.platforms).map((spec) => ({
+      id: spec.id,
+      name: spec.name,
+      ws: spec.ws,
+      ...(spec.login === undefined ? {} : { login: spec.login }),
+      fields: spec.fields.map((f) => ({ ...f })),
+      textLimit: spec.textLimit,
+    })),
   });
 
   /** 启动：读存储、首轮对账。 */
@@ -415,6 +501,7 @@ export function createImHost(deps: ImHostDeps) {
   return {
     boot, sync, stopAll,
     add, update, remove, pair, unpair, retry,
+    loginStart, loginWait,
     sendTo, view,
     /** 供主进程读原始连接（路由/回信寻址用）。 */
     connectionOf: (id: string): ImConnection | undefined => all.find((c) => c.id === id),

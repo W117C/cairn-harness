@@ -147,4 +147,73 @@ describe("IM 宿主", () => {
     expect(stoppedCount).toBe(1);
     expect(host.view().connections).toHaveLength(0);
   });
+
+  it("逐连接运行态：适配器读到的 runtime 挂在连接记录上，写回即落盘", async () => {
+    let seen: Record<string, string> | null = null;
+    const adapter: ImPlatformAdapter = {
+      connect: (_f, env) => {
+        seen = { ...(env.runtime?.get() ?? {}) };
+        env.runtime?.set({ cursor: "cur-1" });
+        return { send: async () => ({}), stop: () => undefined };
+      },
+      check: async () => ({ account: { id: "bot", name: "测试机器人" } }),
+    };
+    const { store, savedCount } = fakeStore([conn({ runtime: { cursor: "cur-0", contextTokensJson: "{}" } })]);
+    const host = createImHost({
+      store, platforms: { test: SPEC }, adapters: { test: adapter }, env: ENV,
+      secretValue: async () => "sv", routeInbound: async () => ({ ok: true }),
+    });
+    await host.boot();
+    // 读：适配器看到的是这条连接自己的运行态（不是宿主全局）。
+    expect(seen).toEqual({ cursor: "cur-0", contextTokensJson: "{}" });
+    // 写：patch 合并回连接记录并落盘（重启后从这条记录续跑，不重放）。
+    expect(host.connectionOf("im_t1")?.runtime).toEqual({ cursor: "cur-1", contextTokensJson: "{}" });
+    expect(savedCount()).toBeGreaterThan(0);
+  });
+
+  it("扫码登录端点：出码→确认建连（密钥落库、扫码人直接配对）；非扫码平台如实拒绝", async () => {
+    const puts: { key: string; value: string }[] = [];
+    const qrSpec: ImPlatformSpec = { ...SPEC, id: "qr", name: "扫码平台", login: "qr", fields: [] };
+    const qrAdapter: ImPlatformAdapter = {
+      connect: () => ({ send: async () => ({}), stop: () => undefined }),
+      check: async () => ({ account: { id: "bot", name: "扫码机器人" } }),
+      loginStart: async () => ({ loginId: "l1", qr: "data:image/png;base64,QQ==", expiresAt: 9_999 }),
+      loginWait: async (loginId) => loginId === "l1"
+        ? {
+            status: "done",
+            connection: {
+              settings: { baseUrl: "https://ilinkai.weixin.qq.com/" },
+              secrets: { token: "tk-1" },
+              account: { id: "bot-1", name: "微信" },
+            },
+            owner: { id: "u-owner", name: "u-owner" },
+          }
+        : { status: "expired" },
+    };
+    const plain = captureAdapter().adapter;
+    const { store } = fakeStore([]);
+    const host = createImHost({
+      store, platforms: { test: SPEC, qr: qrSpec }, adapters: { test: plain, qr: qrAdapter }, env: ENV,
+      secretValue: async () => "sv", routeInbound: async () => ({ ok: true }),
+    });
+    await host.boot();
+    await expect(host.loginStart("qr")).resolves.toMatchObject({ ok: true, loginId: "l1", qr: "data:image/png;base64,QQ==" });
+    await expect(host.loginStart("test")).resolves.toMatchObject({ ok: false });
+    const putSecret = async (key: string, value: string): Promise<{ ok: boolean }> => {
+      puts.push({ key, value });
+      return { ok: true };
+    };
+    await expect(host.loginWait({ platform: "qr", loginId: "l404", putSecret }))
+      .resolves.toMatchObject({ ok: true, status: "expired" });
+    const done = await host.loginWait({ platform: "qr", loginId: "l1", putSecret });
+    expect(done).toMatchObject({ ok: true, status: "done" });
+    const created = host.view().connections.find((c) => c.id === done.id);
+    expect(created?.account).toEqual({ id: "bot-1", name: "微信" });
+    // 本人扫的码：扫码人直接进配对名单 + 一条私聊，不再走审批。
+    expect(created?.paired.map((p) => p.id)).toEqual(["u-owner"]);
+    expect(created?.chats["u-owner"]).toEqual({ kind: "direct", key: "u-owner", title: "u-owner" });
+    // 密钥只传进 putSecret（落 safeStorage），记录里只有键名。
+    expect(puts).toEqual([{ key: `im:${String(done.id)}:token`, value: "tk-1" }]);
+    expect(JSON.stringify(created)).not.toContain("tk-1");
+  });
 });

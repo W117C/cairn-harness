@@ -1,6 +1,8 @@
 // 通道分区判卷（v80 IM 通道线的设置面）：连接清单、状态点名、待审请求、平台表单。
 // 手法同 team-section 判卷：SSR 注入读数（生产走 imList IPC）。
 import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { ChannelsSection } from "../src/renderer/components/settings/ChannelsSection";
 import type { ImConnectionViewPayload } from "../../../src/main/ipc-protocol";
@@ -38,6 +40,22 @@ const CONN = (over: Partial<ImConnectionViewPayload> = {}): ImConnectionViewPayl
   ...over,
 });
 
+/** 本仓无 jsdom（见 composer-steer 头注）：交互流走「SSR 结构 + 源码断言」两面。 */
+const sectionSrc = readFileSync(
+  fileURLToPath(new URL("../src/renderer/components/settings/ChannelsSection.tsx", import.meta.url)),
+  "utf8",
+);
+
+/** 扫码平台（微信 iLink）：表单字段不参与建连，入口是二维码。 */
+const QR_PLATFORMS = [{
+  id: "weixin",
+  name: "微信（iLink 机器人）",
+  ws: false,
+  login: "qr" as const,
+  textLimit: 1800,
+  fields: [{ key: "botToken", label: "Bot Token", secret: true, hint: "扫码确认后自动落（safeStorage）；此行留空走二维码流" }],
+}];
+
 describe("通道分区", () => {
   it("平台选择器 + 表单（密钥字段是密码框）", () => {
     const html = renderToStaticMarkup(<ChannelsSection initialConnections={[]} initialPlatforms={PLATFORMS} />);
@@ -69,6 +87,24 @@ describe("通道分区", () => {
     expect(html).toContain("路人甲");
     expect(html).toContain("允许");
     expect(html).toContain("拒绝");
+  });
+
+  it("扫码平台：入口是「生成二维码」而不是表单；出码/查状态两端都接在源码里", () => {
+    const html = renderToStaticMarkup(<ChannelsSection initialConnections={[]} initialPlatforms={QR_PLATFORMS} />);
+    expect(html).toContain("扫码登录");
+    expect(html).toContain("生成二维码");
+    // 扫码平台的表单字段不渲染（密钥由确认回包自动落，表单留空只是文档）。
+    expect(html).not.toContain('type="password"');
+    // 流程两端：出码带平台、查状态带 loginId（缺一个二维码就停在第一帧）。
+    expect(sectionSrc).toContain("window.agent.imLoginStart(spec.id)");
+    expect(sectionSrc).toContain("window.agent.imLoginWait({ platform: qr.platform, loginId: qr.loginId })");
+    // 轮询要能继续：拿到新状态要回写（新对象触发下一拍），2s 一拍。
+    expect(sectionSrc).toContain("setQr({ ...qr, status: result.status === \"scanned\" ? \"scanned\" : \"waiting\" })");
+    expect(sectionSrc).toContain("}, QR_POLL_MS);");
+    // 三态话术各说各的，不糊成「请稍候」。
+    expect(sectionSrc).toContain("STR.channels.qrWaiting");
+    expect(sectionSrc).toContain("STR.channels.qrScanned");
+    expect(sectionSrc).toContain("STR.channels.qrExpired");
   });
 
   it("出错状态如实点名（不糊成一句失败）", () => {

@@ -2,7 +2,7 @@
 // 这份判卷同时是 src-execution-path 的执行路径供给（platforms/feishu.ts、platforms.ts）。
 import { describe, expect, it } from "vitest";
 import { decodeFrame, encodeFrame, checkFeishu, feishuAdapter, FEISHU_TEXT_LIMIT } from "../../src/im/platforms/feishu";
-import { IM_PLATFORMS, IM_ADAPTERS, FEISHU_PLATFORM } from "../../src/im/platforms";
+import { IM_PLATFORMS, IM_ADAPTERS, FEISHU_PLATFORM, WEIXIN_PLATFORM } from "../../src/im/platforms";
 import type { ImEnv } from "../../src/im/types";
 
 /** pbbp2 帧编解码回环：SeqID/method/headers/payload 全字段。 */
@@ -46,13 +46,15 @@ describe("飞书凭据检查", () => {
       .rejects.toMatchObject({ permanent: false });
   });
 
-  it("注册表：飞书/邮件/企业微信三平台、适配器齐、字段含密钥位", () => {
-    expect(IM_PLATFORMS.map((p) => p.id)).toEqual(["feishu", "email", "wecom"]);
+  it("注册表：四平台、适配器齐、字段含密钥位；微信走扫码", () => {
+    expect(IM_PLATFORMS.map((p) => p.id)).toEqual(["feishu", "email", "wecom", "weixin"]);
     expect(IM_ADAPTERS.feishu).toBe(feishuAdapter);
     expect(IM_ADAPTERS.email).toBeDefined();
     expect(IM_ADAPTERS.wecom).toBeDefined();
+    expect(IM_ADAPTERS.weixin).toBeDefined();
     expect(FEISHU_PLATFORM.ws).toBe(true);
     expect(FEISHU_PLATFORM.fields.some((f) => f.key === "appSecret" && f.secret === true)).toBe(true);
+    expect(WEIXIN_PLATFORM.login).toBe("qr");
     expect(FEISHU_TEXT_LIMIT).toBeGreaterThan(0);
   });
 });

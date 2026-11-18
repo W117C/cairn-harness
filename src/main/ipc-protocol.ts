@@ -175,7 +175,7 @@ export type { SearchProvider } from "../tools/web-search";
  *        file 源读外部 JSON（读不到回落手动档并说明）。
  *  v79 = 联网天气源（默认关）：`wallpaperWeatherFetch` 按设置里的 URL 取一次并解析；
  *        `wallpaperWeatherSetKey` 把 key 交给钥匙串（不明文落盘）。 */
-export const IPC_PROTOCOL_VERSION = 80;
+export const IPC_PROTOCOL_VERSION = 81;
 
 /** 团队名单（v59）：成员档案是投影，`records` 是补丁条数（面板据此说「有几条历史」）。 */
 export interface TeamRosterPayload {
@@ -728,7 +728,7 @@ export interface AgentApi {
   }>;
   // ---- v80：IM 通道（飞书/邮件）────────────────────────────────────────────────
   /** v80：连接清单（含状态与待审申请；平台表单面由返回的 platforms 渲染）。 */
-  imList(): Promise<{ ok: boolean; error?: string; connections?: ImConnectionViewPayload[]; platforms?: { id: string; name: string; ws: boolean; fields: { key: string; label: string; secret?: boolean; hint?: string }[]; textLimit: number }[] }>;
+  imList(): Promise<{ ok: boolean; error?: string; connections?: ImConnectionViewPayload[]; platforms?: { id: string; name: string; ws: boolean; login?: "fields" | "qr"; fields: { key: string; label: string; secret?: boolean; hint?: string }[]; textLimit: number }[] }>;
   /** v80：加连接（check 失败=拒存；密钥值落 safeStorage，记录里只有键名）。 */
   imAdd(input: { platform: string; fields: Record<string, string>; sessionId?: string; workspace?: string }): Promise<{ ok: boolean; error?: string; id?: string }>;
   /** v80：改绑定会话/启用开关/改字段（含重存密钥）。 */
@@ -741,6 +741,10 @@ export interface AgentApi {
   imUnpair(id: string, senderId: string): Promise<{ ok: boolean; error?: string }>;
   /** v80：手动重连（停适配器再对账）。 */
   imRetry(id: string): Promise<{ ok: boolean; error?: string }>;
+  /** v81：扫码登录出码（微信 iLink）——loginId 由适配器持有，等待按它查。 */
+  imLoginStart(platform: string): Promise<{ ok: boolean; error?: string; loginId?: string; qr?: string; expiresAt?: number }>;
+  /** v81：查一次二维码状态；done 时建连（密钥落 safeStorage，扫码人直接进配对名单）。 */
+  imLoginWait(input: { platform: string; loginId: string }): Promise<{ ok: boolean; status?: "waiting" | "scanned" | "expired" | "done"; error?: string; id?: string }>;
   /** v60：给会话开新段（段的第一个写入点：追加一条 `session_meta_update`，序数由日志算）。 */
   sessionSegmentOpen(sessionId?: string, workspace?: string): Promise<{ ok: boolean; segment?: number; error?: string }>;
   getState(): Promise<StateResponse>;

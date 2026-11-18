@@ -17,14 +17,17 @@ export interface ImPlatformField {
   hint?: string;
 }
 
-/** 平台注册条目：设置页据此渲染表单，宿主据此找适配器。 */
+/** 平台注册条目：设置页据此渲染表单，宿主据此找适配器。
+ *  `login: "qr"` = 扫码登录（微信 iLink）：设置面走二维码流而不是表单。 */
 export interface ImPlatformSpec {
   id: string;
   name: string;
   /** 该平台是否需要 WebSocket（无全局 WebSocket 的环境如实报错）。 */
   ws: boolean;
+  /** 登录形态：缺省 = 表单（fields）；"qr" = 扫码（loginStart/loginWait）。 */
+  login?: "fields" | "qr";
   fields: ImPlatformField[];
-  /** 平台侧的文字长度上限（发送前截断/分片）。 */
+  /** 该平台侧的文字长度上限（发送前截断/分片）。 */
   textLimit: number;
 }
 
@@ -83,10 +86,13 @@ export interface ImEnv {
   WebSocket?: typeof WebSocket;
   /** TLS 行套接字工厂（邮件适配器用；缺省 = 邮件适配器如实报错）。 */
   tlsConnect?: (opts: { host: string; port: number }) => Promise<ImLineSocket>;
+  /** 逐连接运行态（游标/context_token 等；宿主按连接注入，值随连接记录持久化）。 */
+  runtime?: { get: () => Record<string, string>; set: (patch: Record<string, string>) => void };
   log?: { warn: (template: string, ...args: unknown[]) => void };
 }
 
-/** 平台适配器：拥有线协议。connect 返回运行句柄；check 验凭据并取机器人身份。 */
+/** 平台适配器：拥有线协议。connect 返回运行句柄；check 验凭据并取机器人身份。
+ *  扫码平台（login:"qr"）另给 loginStart/loginWait（设置面的二维码流驱动）。 */
 export interface ImPlatformAdapter {
   connect: (
     fields: Record<string, string>,
@@ -97,6 +103,17 @@ export interface ImPlatformAdapter {
     fields: Record<string, string>,
     env: ImEnv,
   ) => Promise<{ account: { id: string; name: string } }>;
+  /** 生成登录二维码（loginId 由适配器自管，loginWait 按它取状态）。 */
+  loginStart?: (env: ImEnv) => Promise<{ loginId: string; qr: string; expiresAt: number }>;
+  /** 查一次二维码状态：waiting/scanned/expired；confirmed → 连接材料+扫码人。 */
+  loginWait?: (
+    loginId: string,
+    env: ImEnv,
+  ) => Promise<{
+    status: "waiting" | "scanned" | "expired" | "done";
+    connection?: { settings: Record<string, string>; secrets: Record<string, string>; account: { id: string; name: string } };
+    owner?: { id: string; name: string };
+  }>;
 }
 
 /** 一条连接的持久化形状（connections.json 单条）。密钥只存 safeStorage 键名。 */
@@ -120,5 +137,7 @@ export interface ImConnection {
   requests: { id: string; name: string; chat: ImChat; at: number }[];
   /** 见过的聊天（chatKey → 归一化聊天），用于回信寻址。 */
   chats: Record<string, ImChat>;
+  /** 逐连接运行态（游标/context_token；路由状态不是凭据，随连接记录持久化）。 */
+  runtime?: Record<string, string>;
   createdAt: number;
 }

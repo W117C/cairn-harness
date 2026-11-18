@@ -2,6 +2,7 @@
 import { feishuAdapter, FEISHU_TEXT_LIMIT } from "./platforms/feishu";
 import { emailAdapter, EMAIL_PLATFORM } from "./platforms/email";
 import { wecomAdapter, WECOM_TEXT_LIMIT } from "./platforms/wecom";
+import { weixinAdapter, WEIXIN_TEXT_LIMIT } from "./platforms/weixin";
 import type { ImPlatformAdapter, ImPlatformSpec, ImPlatformField } from "./types";
 
 /** 飞书表单字段（appId/appSecret；domain 切国际版 Lark）。 */
@@ -33,12 +34,29 @@ export const WECOM_PLATFORM: ImPlatformSpec = {
   textLimit: WECOM_TEXT_LIMIT,
 };
 
-/** 平台清单（设置页按此渲染；v80.1 = 飞书 + 邮件 + 企业微信）。 */
-export const IM_PLATFORMS: ImPlatformSpec[] = [FEISHU_PLATFORM, EMAIL_PLATFORM, WECOM_PLATFORM];
+/** 微信 iLink 机器人表单说明（扫码登录：连接材料由确认回包落，不填表单）。 */
+const WEIXIN_FIELDS: ImPlatformField[] = [
+  // 键名与 connectWeixin/checkWeixin 读的 fields 同名：settings 里的 baseUrl + safeStorage 里的 token。
+  { key: "baseUrl", label: "接口地址", hint: "扫码确认后自动落（ilinkai.weixin.qq.com）；手工建连才需要填" },
+  { key: "token", label: "Bot Token", secret: true, hint: "扫码确认后自动落（safeStorage）；留空走二维码流" },
+];
+
+export const WEIXIN_PLATFORM: ImPlatformSpec = {
+  id: "weixin",
+  name: "微信（iLink 机器人）",
+  ws: false,
+  login: "qr",
+  fields: WEIXIN_FIELDS,
+  textLimit: WEIXIN_TEXT_LIMIT,
+};
+
+/** 平台清单（设置页按此渲染；v81 = 飞书 + 邮件 + 企业微信 + 微信）。 */
+export const IM_PLATFORMS: ImPlatformSpec[] = [FEISHU_PLATFORM, EMAIL_PLATFORM, WECOM_PLATFORM, WEIXIN_PLATFORM];
 
 /** 适配器查找表。 */
 export const IM_ADAPTERS: Record<string, ImPlatformAdapter> = {
   feishu: feishuAdapter,
   email: emailAdapter,
   wecom: wecomAdapter,
+  weixin: weixinAdapter,
 };

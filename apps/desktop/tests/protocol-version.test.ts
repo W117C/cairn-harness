@@ -86,6 +86,7 @@ describe("协议版本握手接线（§3.5/§12）", () => {
     // v56 → v57：listMessagePins 增可选 workspace，置顶读取按显式根做存在性检查。
     // v58 → v59：壁纸系统暂停推送 + 团队名单/写入两条 invoke 通道。
     // v79 → v80：IM 通道七件（imList/imAdd/imUpdate/imRemove/imPair/imUnpair/imRetry）。
-    expect(IPC_PROTOCOL_VERSION).toBe(80);
+    // v80 → v81：＋imLoginStart/imLoginWait（微信 iLink 扫码登录：出码/查状态）。
+    expect(IPC_PROTOCOL_VERSION).toBe(81);
   });
 });

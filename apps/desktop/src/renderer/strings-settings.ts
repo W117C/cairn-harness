@@ -264,6 +264,19 @@ export const settingsStrings = {
     writeFailed: "写入失败",
     issue: "状态",
     hostNotReady: "IM 宿主未就绪",
+    // v81：扫码登录（微信 iLink）——二维码流的话术；状态三句各说各的，不糊成「请稍候」。
+    qrLogin: "扫码登录",
+    qrGenerate: "生成二维码",
+    qrRegenerate: "刷新二维码",
+    qrHint: "用微信扫码并确认；确认后自动建连，无需填表。",
+    qrScan: "登录二维码",
+    qrAlt: "微信登录二维码",
+    qrWaiting: "等待扫码…",
+    qrScanned: "已扫码，请在手机上确认",
+    qrExpired: "二维码已过期，请刷新后重试",
+    qrStartFailed: "生成二维码失败",
+    qrWaitFailed: "查二维码状态失败",
+    qrUnsupported: "二维码载荷太长，本地画不出来（请把这条报给开发者）",
   },
   // 2026-11-12（第 1078 页）：关于与更新段收编——值一字不改；许可证/诊断/偏好三条消息族同口径。
   about: {

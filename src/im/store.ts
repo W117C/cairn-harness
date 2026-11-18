@@ -48,6 +48,7 @@ export function isConnection(value: unknown): value is ImConnection {
     typeof v.enabled === "boolean" &&
     Array.isArray(v.paired) && Array.isArray(v.requests) &&
     typeof v.chats === "object" && v.chats !== null &&
+    (v.runtime === undefined || (typeof v.runtime === "object" && v.runtime !== null)) &&
     typeof v.createdAt === "number"
   );
 }
