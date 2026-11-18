@@ -45273,10 +45273,10 @@ append-only；`.mimosa` 470M / `.alma-snapshots` 495M（工具态，不是仓的
 
 ### 一、审计面（只读，声明逐条经源码取证）
 
-- 内核深审（src/agent 175 文件）：真债集中三处——①**双编排栈**：src/agent/orchestrator* 与 src/orchestration/ 词汇重叠，EvidenceState 逐字双份（events/types.ts:550 ≡ orchestration/types.ts:4），双栈词汇已在漂；②**session-provider.ts 1651 行五职责**（gateToolSpecs 651 行规格表住在装配器里，A1/D3）；③**自学习四套并行**（memory/workflow 与 evolve/skills 是同一对标"AWM 最小版"的两份实现）。热路径：loop.ts:629 每步全量投影喂给三个不读 messages 的生产 provider（死投影）；主会话投影每轮全量 O(n)（log.ts 注释自认"收口留位第三批"）；记忆注入每请求 ~30 次文件读（inject.ts 无 mtime 缓存）。
+- 内核深审（src/agent 175 文件）：真债集中三处——①**双编排栈**：src/agent/orchestrator* 与 src/orchestration/ 词汇重叠，EvidenceState 逐字双份（src/events/types.ts#WorkerEvidence ≡ src/orchestration/types.ts#EvidenceState），双栈词汇已在漂；②**session-provider.ts 1651 行五职责**（gateToolSpecs 651 行规格表住在装配器里，A1/D3）；③**自学习四套并行**（memory/workflow 与 evolve/skills 是同一对标"AWM 最小版"的两份实现）。热路径：src/agent/loop.ts#runLoop 每步全量投影喂给三个不读 messages 的生产 provider（死投影）；主会话投影每轮全量 O(n)（src/events/log.ts 头注释自认"收口留位第三批"）；记忆注入每请求 ~30 次文件读（src/agent/memory/inject.ts 无 mtime 缓存）。
 - 认知成本审计：新人必读 6 份文档 1,145 行 + 代码主干 5 份 6,420 行 ≈ 2–3 个工作日；最大单点 src/main/agent-runner.ts 2,364 行；三个命名陷阱（双 main、双 tests、outputs/ 零容忍）。
 - 行业对标（对照 CC/LangGraph/AutoGen 公开设计）：事件存储/投影/压缩/插件面**顶尖**；权限/编排/provider 层**良好**；主循环/自学习/第二编排栈**及格偏良好**。
-- 本轮取证补充：F1 已知地雷（session-provider.ts:1487 注释自认与 final-budget 契约在唯一组合上互斥，靠用例不传工具面才不红）与 H4（loop.ts:272 + log.ts:191 对同一事件各跑一次 redactValue）均属实。
+- 本轮取证补充：F1 已知地雷（src/agent/session-provider.ts#recordSurfaceAccount 落点注释自认与 final-budget 契约在唯一组合上互斥，靠用例不传工具面才不红）与 H4（src/agent/loop.ts#runLoop 的 seen 副本与 src/events/log.ts#createEventLog 的落盘行对同一事件各跑一次 redactValue）均属实。
 
 ### 二、本批落地（第 1328 页排期项）
 
