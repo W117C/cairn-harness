@@ -44997,3 +44997,36 @@ append-only；`.mimosa` 470M / `.alma-snapshots` 495M（工具态，不是仓的
   传文件会 `EEXIST` 崩在 `mkdirSync` 上并**挂住不退出**（看起来像卡死）。
 
 凭证 @fb9fe76d
+
+## 2026-11-18 · 第 1324 页：四支工作树回收（业主令「清理整理工作区所有内容」）
+
+### 一、执行（只回收检出，分支不动）
+
+第 1322 页把 `~/alma/worktrees/cairn/` 四支列为「待业主裁决」；本页按业主令执行，回收前逐支核三件事：
+
+| 工作树 | 6h 内写入 | 进程占用 | 脏改动实情 | 体积 |
+| --- | --- | --- | --- | --- |
+| `continued-reindeer` | 无 | 无 | 一条 `.alma-snapshots` 忽略规则（主枝已有）+ 未跟踪 `apps/desktop/outputs/` | 613M |
+| `cultural-fox` | 无 | 无 | 同上 | 640M |
+| `single-woodpecker` | 无 | 无 | 同上 + 一个 11-16 就删掉的设计稿（该文件在该分支 HEAD 里仍在，随时可取回） | 612M |
+| `pleased-slug` | 无 | 无 | 干净（批 10 收口线） | 1.6G |
+
+`pleased-slug` 里还嵌着一棵 `gate-head-cert` 检出（1.2G），先移除内嵌再移外层。
+`/Users/ze/alma/worktrees` **4.6G → 20K**；`git worktree prune` 后登记表干净。
+
+### 二、保留
+
+- 四个分支（`simplify-desktop-design` / `enhance-task-capabilities-tools` / `single-woodpecker` /
+  `audit-optimize-desktop-design`）与各自 18–24 笔独有提交**原样在库**，需要时从分支重建检出即可。
+- `.worktrees/gate-head-cert`（主枝，1.1G，落后 139 笔）**未动**：head-cert 门复用它，删了要重建。
+- `.worktrees/gate-mutate-verify`（1.3G）：共享变异门禁树，本轮还把里面**未还原的变异**还原了
+  （见第 1323 页）。
+
+### 三、复核
+
+- 回收后 `verify-all` 七门重跑 **pass**（typecheck / docs-check / bot-report / standard-report /
+  parity / core-suite / desktop-suite）——门禁不依赖被回收的检出，实测而非推断。
+- 仓内 `git status` 干净；`git status --ignored` 无非跟踪残留。
+- 清理动作本身不改任何被跟踪源码；本页只记读数与裁决。
+
+凭证 @8e44bdb5

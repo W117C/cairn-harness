@@ -123,7 +123,13 @@
    这是真事故型残留：那棵树上一小时前还在被人当「干净树」读。
 2. 审计自己的日志归档到 `outputs/verify-all/run-2026-11-18-audit.log`。
 
-**可安全清理（保留分支，只回收工作树；每支的「脏」都核过是垃圾）**
+**已执行清理（保留分支，只回收工作树检出；每支的「脏」都核过是垃圾、6 小时内无任何写入、无进程占用）**
+
+回收前逐支核过三件事：① 脏改动内容（下表的「实情」列）；② 6 小时内是否有文件写入（均无）；
+③ 是否有进程占用（无）。执行后 `git worktree list` 只剩主树 + 两棵共享门禁树，四个分支
+（`simplify-desktop-design` / `enhance-task-capabilities-tools` / `single-woodpecker` /
+`audit-optimize-desktop-design`）与它们各自的 18–24 笔独有提交**原样保留**，需要时可从分支重建检出。
+`/Users/ze/alma/worktrees` 从 **4.6G → 20K**。
 
 | 工作树 | 脏改动实情 | 体积 |
 | --- | --- | --- |
@@ -131,9 +137,11 @@
 | `~/alma/worktrees/cairn/cultural-fox` | 同上 | 640M |
 | `~/alma/worktrees/cairn/single-woodpecker` | 同上 + 一个 11-16 就删掉的设计稿 | 612M |
 | `~/alma/worktrees/cairn/pleased-slug` | 干净（批 10 收口线，head-cert 已记录） | 1.6G |
-| `.worktrees/gate-head-cert`（主枝） | 干净，落后主线 139 笔 | 1.1G |
 
-合计约 **4.6G**。四支都**不删分支**，只 `git worktree remove`——提交与分支原样留着。
+合计 **4.6G**，已回收（`git worktree remove --force`，分支不动）。回收后七门重跑 **pass**——门禁不依赖这些检出。
+
+`.worktrees/gate-head-cert`（主枝，1.1G，落后 139 笔）**没动**：它是 head-cert 门复用的检出树，
+删了那道门就得重建；它干净、不占人多的地方，留着比删了便宜。
 
 **不可动**
 

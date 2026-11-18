@@ -1,17 +1,17 @@
 {
-  "at": "2026-11-18T12:27:10.887Z",
+  "at": "2026-11-18T12:47:20.724Z",
   "fast": false,
   "verdict": "pass",
   "gates": [
     {
       "gate": "typecheck",
       "verdict": "pass",
-      "detail": "node --import tsx scripts/typecheck.ts ⇒ exit 0（9s）"
+      "detail": "node --import tsx scripts/typecheck.ts ⇒ exit 0（10s）"
     },
     {
       "gate": "docs-check",
       "verdict": "pass",
-      "detail": "npx tsx scripts/docs-check.ts ⇒ exit 0（1s）"
+      "detail": "npx tsx scripts/docs-check.ts ⇒ exit 0（2s）"
     },
     {
       "gate": "bot-report",
@@ -26,12 +26,12 @@
     {
       "gate": "parity",
       "verdict": "pass",
-      "detail": "npx vitest run --config tests/vitest.config.ts tests/parity-standard.test.ts ⇒ exit 0（0s）"
+      "detail": "npx vitest run --config tests/vitest.config.ts tests/parity-standard.test.ts ⇒ exit 0（1s）"
     },
     {
       "gate": "core-suite",
       "verdict": "pass",
-      "detail": "pnpm test:capped ⇒ exit 0（206s）"
+      "detail": "pnpm test:capped ⇒ exit 0（205s）"
     },
     {
       "gate": "desktop-suite",
