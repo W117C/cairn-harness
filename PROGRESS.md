@@ -44817,3 +44817,64 @@ callback 需公网回调，列入 V2 候选）。
   收发）。
 - 个人微信 iLink 机器人（`ilinkai.weixin.qq.com`，扫码登录长轮询）是「微信」的另一条官方
   路：需要 QR 登录端点（im-login-start/wait）与设置面二维码展示，V2 候选排序待裁决。
+
+## 2026-11-18 · 第 1320 页：微信 iLink 机器人——扫码登录全链路（协议 v81）
+
+### 一、扫码登录链路（核心 `src/im/`）
+
+- **协议**（`src/im/platforms/weixin.ts`，零新依赖、fetch 全注入）：`get_bot_qrcode`（bot_type=3）出码 →
+  `get_qrcode_status` 轮询（wait / scaned / scaned_but_redirect / binded_redirect / confirmed / expired）；
+  确认回包带 `bot_token` / `baseurl` / `ilink_bot_id` / `ilink_user_id` ⇒ 建连。
+- **收**：`msg/notifystart` 开会话（未开时 getupdates 只答 errcode -14 ⇒「会话已过期，请重新扫码」如实点名）→
+  `getupdates` 长轮询（35s + 15s 余量）。游标 `get_updates_buf` 与每用户 `context_token` 写**连接运行态**
+  （`ImConnection.runtime`，随 connections.json 持久化，重启不重放）。文本与语音转写（type 1/3）收，
+  图片/文件 V1 不收（如实范围）。
+- **发**：`sendmessage` 带该用户的 context_token，1800 字分片；ret≠0 ⇒ permanent 并带平台原因。
+- **SSRF**：`assertIlinkEndpoint` 钉死 https + `*.weixin.qq.com`，拒 localhost/回环/私有/保留地址——
+  iLink 回的 baseurl 是**服务端可控 URL**，发 token 前必须过闸（Mimosa 安全约束）。
+- **类型/宿主**：`ImPlatformSpec.login?: "fields" | "qr"`、`ImEnv.runtime`、`ImConnection.runtime`、
+  `ImPlatformAdapter.loginStart/loginWait`；host 逐连接注入 runtime（get/set 单点落盘）、
+  `loginStart/loginWait` 端点（confirmed ⇒ 建连：密钥只经 putSecret 进 safeStorage，扫码人直接进配对名单
+  + 一条私聊，不再走审批）。
+
+### 二、IPC v81 + 设置面二维码流
+
+- 协议版本 80→81；两条新通道 `imLoginStart` / `imLoginWait`（channels 186 条 20 域，`im` 7→9；wired 全接真）。
+- 设置 › 通道：`login:"qr"` 的平台不渲染表单，给「生成二维码」；2s 轮询三态（等待扫码 / 已扫码请在手机确认 /
+  已过期刷新）；done 后清空并重读清单。
+- **码在本地画**：iLink 回的 `qrcode_img_content` 是**待编码文本**（参照口径 `weixin://qr/…`），不是图片 ⇒
+  `apps/desktop/src/renderer/derived/qr-matrix.ts`（零依赖 ISO/IEC 18004：byte 模式 / 纠错 M / 版本 1–10，
+  RS 纠错 + 8 掩码择优 + 格式/版本信息）输出矩阵 → SVG path；服务端若直接给 `data:`/`http` 图则直出 `<img>`。
+  矩阵经 jsQR 解码回读验证 5/5（v1/v2/v4/v5，含中文多字节载荷）。
+
+### 三、判卷同步（有意改动随判卷）
+
+- 新增：`tests/im/weixin.test.ts`（5 条：出站域校验、扫码三态、check 探活、开会话→轮询→游标→context_token→发送、
+  -14 点名）；`tests/im/host.test.ts` +2（逐连接 runtime 读写落盘、扫码建连：密钥只进 putSecret/扫码人直接配对）；
+  `apps/desktop/tests/qr-matrix.test.ts`（4 条：版本选择与超长抛错、金标矩阵逐格、结构位、path 方块数）；
+  `apps/desktop/tests/channels-settings.test.tsx` +1（扫码平台入口是二维码不是表单；出码/查状态两端 + 轮询回写 +
+  三态话术源码钉）。
+- 版本断言 80→81（core + desktop 共 8 份）；通道数 184→186、`im` 域 7→9、README 186。
+- 微信平台字段键名对齐 `connectWeixin` 读的 `baseUrl`/`token`（QR 建连写 settings.baseUrl + secretKeys.token）。
+- **修 v80 遗留**：宿主 `view().platforms` 从 `string[]` 改完整规格（id/name/ws/login/fields/textLimit）——
+  原来设置面拿到的是字符串，`spec` 恒 undefined，连接表单在任何平台都渲染不出来（设置面判卷靠注入缝恰好看不见）。
+- 四包真机证据重签（renderer 源变更 ⇒ 重建 + 四探针）：cds 0 错 / ime 6+6 / queue 6+6 / overlay 5+5，
+  rendererDigest `02764f0c…`、buildFresh=true，现源复算 MATCH。
+- 两处自伤即修：① `weixin.ts` 包导入排在最前，被执行路径尺（第 80 页）的切语句读法把下一条 `import type`
+  算成值边 ⇒ 纯契约面 types.ts 被误判成「已有执行路径」（zombie 豁免）；把类型边挪到最前即归位。
+  ② `{geometry.size}` 被字节刻度尺（第 940 页）误读成直接渲染字节数 ⇒ 字段改名 `side`。
+
+### 四、门禁读数（工作树，未提交）
+
+- 核心 `pnpm test:capped`：**714 文件 / 8386 条全绿**，exit 0（240.6s，maxWorkers=2）
+- 桌面 **428 文件 / 2788 条全绿**（含四支证据消费判卷的保质期面）
+- `typecheck` 0 报错（含桌面严格层）；`desktop-boundary-check` 绿；`evidence-typecheck` 12/12 帽内
+- `docs-check`：本页与 STATE 刷新后复跑（页号 1320 唯一）
+
+### 五、留待业主
+
+- 真机目验：微信扫码登录全流程（手机微信扫 → 确认 → 连接清单出现微信 → 外部消息进主 bot 会话 → 回信出通道）。
+- 图片/文件消息按需再做（weixin 图片走 CDN + AES 解密面，V1 只收文本与语音转写）。
+- 个人微信无官方 API 的口径不变：这条路走的是官方 iLink 机器人（`ilinkai.weixin.qq.com`）。
+
+凭证 @9b5ef007
