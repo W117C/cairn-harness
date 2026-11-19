@@ -3,7 +3,7 @@
 // 读写是纯 fs 语义：frontmatter 解析往返不丢字段、modified 写入落账、索引 upsert、索引硬上限写入端拒绝。
 // 本模块是唯一知道记忆文件布局的地方；remember 工具与注入器都经它读写（写入口收敛 §8.1.8 第 4 条）。
 import { constants } from "node:fs";
-import { mkdir, open, readFile, readdir, realpath, unlink } from "node:fs/promises";
+import { mkdir, open, readFile, readdir, realpath, stat, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { projectAgentPath } from "../../app-data";
@@ -270,10 +270,42 @@ async function ensureDir(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true });
 }
 
+// ---- 读缓存（2026-11-19 H3，第 1330 页热路径清单）：记忆注入每请求要读 ~30 个文件
+// （索引/正文/ARCH/DECISIONS/stats），而记忆文件在两次模型请求之间几乎不变。
+// 键 = (mtimeMs, size)；mtime 由 tmp+rename 写路径天然刷新 ⇒ 写后自动失效，无需手动清。
+// 竞态安全：stat 与 read 之间文件被原子换走 ⇒ 缓存里存的是新内容+旧 mtime，
+// 下一次 stat 对不上 ⇒ miss 重读（最坏多读一次，不会陈旧命中）。有界 LRU（Map 插入序）。
+interface ReadCacheEntry { mtimeMs: number; size: number; text: string }
+const READ_CACHE = new Map<string, ReadCacheEntry>();
+const READ_CACHE_MAX = 256;
+const readCacheStats = { hits: 0, misses: 0 };
+/** 判卷缝：命中/未命中计数（memory-read-cache 判卷据此钉语义：二读必命中、写后必失效）。 */
+export function memoryReadCacheStats(): { hits: number; misses: number } {
+  return { ...readCacheStats };
+}
+
 async function readOrNull(path: string): Promise<string | null> {
   try {
-    return await readFile(path, "utf8");
+    const st = await stat(path);
+    const hit = READ_CACHE.get(path);
+    if (hit !== undefined && hit.mtimeMs === st.mtimeMs && hit.size === st.size) {
+      readCacheStats.hits += 1;
+      // LRU 触碰：删了重插让 Map 插入序保持访问序
+      READ_CACHE.delete(path);
+      READ_CACHE.set(path, hit);
+      return hit.text;
+    }
+    const text = await readFile(path, "utf8");
+    readCacheStats.misses += 1;
+    if (READ_CACHE.size >= READ_CACHE_MAX) {
+      const oldest = READ_CACHE.keys().next().value;
+      if (oldest !== undefined) READ_CACHE.delete(oldest);
+    }
+    READ_CACHE.set(path, { mtimeMs: st.mtimeMs, size: st.size, text });
+    return text;
   } catch {
+    // 读失败（ENOENT 等）= 无文件：缓存里若还留着旧条目一并逐出（文件被删场景）。
+    READ_CACHE.delete(path);
     return null;
   }
 }
