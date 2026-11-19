@@ -121,8 +121,11 @@ async function main() {
   await shot('02b-usage-details');
   await js(`document.querySelector('.sp-body').scrollTop = 0`);
   await nav('进化');
-  await waitFor(() => js(`!!document.querySelector('.sp-nav-item[aria-current="page"]') && document.querySelector('.sp-nav-item[aria-current="page"]').innerText.includes('进化') && document.body.innerText.includes('Episode')`), 'evolve report');
-  check('进化分区只读报告可打开（真实 IPC）', await js(`document.querySelector('.sp-nav-item[aria-current="page"]').innerText.includes('进化') && document.body.innerText.includes('Episode') && document.body.innerText.includes('无 holdout 不晋升')`));
+  // 2026-11-02「界面说人话」批：Episode 原始计数串收进默认收起的「技术详情」details，
+  // body.innerText 读不到 ⇒ 等可见面（证据区「记录总数」）而不是折叠里的英文键。
+  await waitFor(() => js(`!!document.querySelector('.sp-nav-item[aria-current="page"]') && document.querySelector('.sp-nav-item[aria-current="page"]').innerText.includes('进化') && document.body.innerText.includes('记录总数')`), 'evolve report');
+  await js(`document.querySelector('.sp-tech').open = true`); await pause(120);
+  check('进化分区只读报告可打开（真实 IPC）', await js(`document.querySelector('.sp-nav-item[aria-current="page"]').innerText.includes('进化') && document.body.innerText.includes('记录总数') && document.body.innerText.includes('Episode') && document.body.innerText.includes('无 holdout 不晋升')`));
   await shot('02c-evolve');
   win.setSize(900, 820); await pause(300);
   check('窄窗口下设置整页无横向溢出', await js('document.documentElement.scrollWidth <= innerWidth + 1'));

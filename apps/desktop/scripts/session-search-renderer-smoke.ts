@@ -76,7 +76,10 @@ async function main(): Promise<void> {
     protocolVersion: () => IPC_PROTOCOL_VERSION,
     getSettings: () => settings,
     setSettings: () => settings,
-    getProviderInfo: () => ({ kind: 'demo', provider: 'demo', model: 'demo', modelId: '', models: [], keyConfigured: true }),
+    // 2026-11-19 夹具漂移订正 [A]：ProviderInfo.providers 已是必选字段（provider-runtime.ts——
+    // 设置下拉与 ModelPicker 据此渲染，ModelPicker 直接 for-of 迭代）。缺它 ⇒ App 挂载即
+    // render-boundary（「n.providers is not iterable」），.session 永不挂载。
+    getProviderInfo: () => ({ kind: 'demo', provider: 'demo', model: 'demo', modelId: '', providers: [], models: [], keyConfigured: true }),
     providerKeyStatus: () => ({ available: true, stored: [], envActive: false, envProviders: [] }),
     listSessions: () => sessions,
     listProjects: () => projects,
@@ -87,6 +90,9 @@ async function main(): Promise<void> {
     queueSet: () => ({ ok: true }),
     listFeedback: () => [],
     listMessagePins: () => [],
+    // 2026-11-19 夹具漂移订正 [A]：backgroundTaskList 返回裸数组（ipc-protocol.ts:1177），会话视图
+    // 挂载即拉取并 .filter；落进默认兜底 {} ⇒ render-boundary「n.filter is not a function」。
+    backgroundTaskList: () => [],
     capabilities: () => ({ search: { kind: 'unset' }, vision: { state: 'undeclared', modelId: null, declaredModalities: [] }, workspace }),
     getState: () => ({ plugins: { plugins: [], looseSkills: [], mcpServers: [], toolScopes: [], errors: [], warnings: [] } }),
     gitStatus: () => ({ ok: false }),

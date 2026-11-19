@@ -14,7 +14,10 @@ const {
 const { join, resolve } = require("node:path");
 const { tmpdir } = require("node:os");
 
-const out = resolve(__dirname, "..", "outputs", "plugin-marketplace-2026-10-29");
+// 输出目录（2026-11-19 约定修复 [C]）：此前**硬编码**仓库带日期证据目录且每次跑先 rmSync -rf
+// ——重跑即覆盖/删改证据面（台账引用面）。现缺省 mkdtemp /tmp（跑完不删，失败留现场）；
+// 显式传参仍可指到别处。历史读数在 outputs/plugin-marketplace-2026-10-29/（只读引用，不再重生成）。
+const out = process.argv[2] ? resolve(process.argv[2]) : mkdtempSync(join(tmpdir(), "cairn-plugin-marketplace-"));
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 const profile = mkdtempSync(join(tmpdir(), "cairn-plugin-marketplace-profile-"));
@@ -342,7 +345,10 @@ async function main() {
   await setTheme("dark");
   const detailOrigin = await js(`(() => {
     const row = document.querySelector('[data-plugin-row="discover"][data-plugin-id="featured-plugin"]');
-    const main = row?.querySelector('.plugin-discover-main');
+    // 2026-11-19 脚本漂移订正 [A]：discover 行 2026-11-05 业主裁重设计为 ZCode PluginStoreCard
+    // 语言，行主体由 .plugin-discover-main 改名 .plugin-store-main（判卷锚 data-plugin-row/
+    // data-plugin-id/data-plugin-state="detail" 未动，见 PluginDiscover.tsx 头注）。
+    const main = row?.querySelector('.plugin-store-main');
     if (!main) return false;
     main.focus();
     main.click();
@@ -354,21 +360,24 @@ async function main() {
   await press("Escape");
   const focusReturned = await js(`(() => {
     const active = document.activeElement;
-    return active?.classList.contains('plugin-discover-main')
+    return active?.classList.contains('plugin-store-main')
       && active.closest('[data-plugin-row="discover"]')?.getAttribute("data-plugin-id") === "featured-plugin";
   })()`);
   check("Esc returns focus to the originating plugin row", focusReturned);
 
   await setTheme("light");
   win.setContentSize(1440, 900);
-  await js(`document.querySelector('.plugin-favorite')?.click()`);
-  await waitFor(`document.querySelector('.plugin-favorite')?.getAttribute('aria-pressed') === 'true'`, "favorite set");
+  // 2026-11-19 脚本漂移订正 [A]：收藏钮随 2026-11-05 StoreCard 重设计并入行内图标钮
+  // （.plugin-icon-btn + aria-pressed，aria-label 收藏/取消收藏；.plugin-favorite 类只剩 CSS 残影）。
+  const FAV = `document.querySelector('[data-plugin-row="discover"] button[aria-pressed]')`;
+  await js(`${FAV}?.click()`);
+  await waitFor(`${FAV}?.getAttribute('aria-pressed') === 'true'`, "favorite set");
   const preReloadCalls = await fixture("getCalls");
   win.webContents.reload();
   await waitFor("!!document.querySelector('.app-rail')", "reload app");
   await openPlugins();
   check("favorite survives a renderer reload", await js(
-    `[...document.querySelectorAll('.plugin-favorite')].some((button) => button.getAttribute('aria-pressed') === 'true')`,
+    `[...document.querySelectorAll('[data-plugin-row="discover"] button[aria-pressed="true"]')].length > 0`,
   ));
 
   await clickText(".plugin-tabs button", "已安装");

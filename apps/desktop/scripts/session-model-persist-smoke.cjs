@@ -64,10 +64,20 @@ async function main() {
   await waitFor(() => (trigger()).then ? true : true);
   await pause(400);
   const hydrated = await trigger();
-  check("列表里的会话级模型/思考回读进选择器（不是全局 deepseek 缺省）", hydrated.includes("deepseek-chat") && hydrated.includes("思考 强"), hydrated);
+  // 2026-11-19 脚本漂移订正 [A]：思考档位词表改为英文档 id（strings.ts THINKING_LEVELS，
+  // f6dca12d「strings 棘轮」批）——chip 形如「deepseek-chat · 思考 high」，不再是中文单字「强」。
+  check("列表里的会话级模型/思考回读进选择器（不是全局 deepseek 缺省）", hydrated.includes("deepseek-chat") && hydrated.includes("思考 high"), hydrated);
 
-  await pointerOn(`document.querySelector('.mp-trigger')`);
-  await waitFor(() => js(`!!document.querySelector('.mp-pop')`), "model menu");
+  // 2026-11-19 脚本漂移订正 [A]：菜单已改为 DeepSeek 式两级面板（ModelMenu，2026-11-04 业主裁）——
+  // 打开先落 root pane（.mp-cell 两枚），点「模型」进模型列表，点「思考强度」进档位行；
+  // 旧形状（打开即模型 option 列表 / .th-row 档位行）已下架。
+  const openModelPane = async (label) => {
+    await pointerOn(`document.querySelector('.mp-trigger')`);
+    await waitFor(() => js(`!!document.querySelector('.mp-pop')`), label + " menu");
+    await pointerOn(`[...document.querySelectorAll('.mp-pop .mp-cell')].find((el) => el.querySelector('.mp-cell-label')?.textContent === '模型')`);
+    await pause(200);
+  };
+  await openModelPane("model");
   await pointerOn(`[...document.querySelectorAll('.mp-pop [role="option"]')].find((el) => el.textContent.includes('glm-5.3-flash'))`);
   await waitFor(() => js(`window.__cairnSessionPrefs().length >= 1`), "model prefs call");
   const modelCall = (await prefsCalls()).at(-1);
@@ -76,14 +86,15 @@ async function main() {
   const after = await trigger();
   check("选择器显示新会话模型", after.includes("glm-5.3-flash"), after);
 
-  // 思考档：选回 deepseek-chat（支持思考）→ 打开菜单点「中」
-  await pointerOn(`document.querySelector('.mp-trigger')`);
-  await waitFor(() => js(`!!document.querySelector('.mp-pop')`), "model menu 2");
+  // 思考档：选回 deepseek-chat（支持思考）→ 菜单里点「思考强度」cell → 档位行点「medium」
+  await openModelPane("model 2");
   await pointerOn(`[...document.querySelectorAll('.mp-pop [role="option"]')].find((el) => el.textContent.includes('deepseek-chat'))`);
   await pause(300);
   await pointerOn(`document.querySelector('.mp-trigger')`);
-  await waitFor(() => js(`!!document.querySelector('.th-row button[data-e="medium"]')`), "thinking rows");
-  await pointerOn(`document.querySelector('.th-row button[data-e="medium"]')`);
+  await waitFor(() => js(`!!document.querySelector('.mp-pop')`), "effort menu");
+  await pointerOn(`[...document.querySelectorAll('.mp-pop .mp-cell')].find((el) => el.querySelector('.mp-cell-label')?.textContent === '思考强度')`);
+  await waitFor(() => js(`!!document.querySelector('.mp-effort button[data-e="medium"]')`), "thinking rows");
+  await pointerOn(`document.querySelector('.mp-effort button[data-e="medium"]')`);
   await waitFor(() => js(`window.__cairnSessionPrefs().some((c) => c.prefs?.thinking !== undefined)`), "thinking prefs call");
   const thinkingCall = (await prefsCalls()).filter((c) => c.prefs?.thinking !== undefined).at(-1);
   check("思考档变化 ⇒ sessionPrefsSet({thinking:'medium'})", thinkingCall?.sessionId === "s1" && thinkingCall?.prefs?.thinking === "medium", thinkingCall);

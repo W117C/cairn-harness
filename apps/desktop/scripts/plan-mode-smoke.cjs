@@ -1,7 +1,8 @@
-// Plan 模式一等入口的真实 renderer 冒烟（2026-10-25）：
-//   默认（settings=false）→ 点「方案」→ 发送的 RunRequest 带 planRequired:true →
-//   再关掉 → 下一轮带 planRequired:false。核心方案门本身由 tests/plan-required.test.ts 覆盖；
-//   这里只验「UI 开关 → run 请求」这一跳，不跑真模型。
+// Plan 模式渲染层冒烟（2026-10-25 写；2026-11-19 按台账第 1016 页「方案自治」重估重写）：
+//   第 1016 页（2026-11-04 业主口径）：是否先出方案由 agent 自判——Composer「方案」开关、
+//   设置页 Switch 全撤，渲染层**不再发 RunRequest.planRequired**（字段与主进程方案门保留，CLI/判卷可用）。
+//   本探针现在验的就是这条撤除契约：武装面不回潮 + run 载荷不带 planRequired。核心方案门
+//   本身由 tests/plan-required.test.ts 覆盖；这里只验「UI 面 → run 请求」这一跳，不跑真模型。
 const { app, BrowserWindow, nativeTheme } = require("electron");
 const { scheduleProfileCleanup } = require("./lib/profile-cleanup.cjs");
 const { mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
@@ -42,6 +43,7 @@ async function main() {
   const wait = (ms = 400) => new Promise((r) => setTimeout(r, ms));
   const checks = [];
   const check = (name, ok, detail) => { checks.push({ name, ok, detail }); console.log(`${ok ? "PASS" : "FAIL"} ${name} ${JSON.stringify(detail)}`); };
+  const shot = async (name) => writeFileSync(join(out, name + ".png"), (await win.webContents.capturePage()).toPNG());
   const pointer = async (selector) => {
     const point = await js(`(() => { const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return { x: Math.round(r.left + r.width/2), y: Math.round(r.top+r.height/2) }; })()`);
     win.webContents.sendInputEvent({ type: "mouseDown", ...point, button: "left", clickCount: 1 });
@@ -49,35 +51,29 @@ async function main() {
   };
   const setText = (value) => js(`(() => {
     const el = document.querySelector(".row2 textarea");
-    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call(el, ${JSON.stringify(value)});
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(el, ${JSON.stringify(value)});
     el.dispatchEvent(new Event("input", { bubbles: true }));
   })()`);
 
-  let state = await read(`const b=document.querySelector(".plan-ctl"); return { exists:!!b, pressed:b?.getAttribute("aria-pressed"), on:b?.dataset.on, label:b?.textContent?.trim() ?? null };`);
-  check("默认关闭：方案开关可见且 aria-pressed=false", state.exists && state.pressed === "false" && state.on === "false" && state.label === "方案", state);
-  await pointer(".plan-ctl"); await wait(300);
-  state = await read(`const b=document.querySelector(".plan-ctl"); return { pressed:b?.getAttribute("aria-pressed"), on:b?.dataset.on, notice:document.querySelector(".notice-strip")?.textContent ?? null };`);
-  check("点开方案：aria-pressed=true、轻底态、回执在场", state.pressed === "true" && state.on === "true" && (state.notice ?? "").includes("方案模式已开启"), state);
-  const imgOn = await win.webContents.capturePage();
-  writeFileSync(join(out, "01-plan-on.png"), imgOn.toPNG());
+  const state = await read(`return { planCtl: !!document.querySelector(".plan-ctl"), composer: !!document.querySelector(".row2 textarea"), empty: document.querySelector(".main")?.dataset.empty ?? null, err: document.querySelector(".render-error")?.textContent ?? null };`);
+  check("方案武装面已撤：composer 无方案开关、无根错误", state.planCtl === false && state.composer === true && state.err === null, state);
+  await shot("01-no-plan-toggle");
 
   await setText("plan probe one"); await wait(100);
   await pointer('[aria-label="发送"]'); await wait(900);
   let runs = await read(`return window.__cairnRuns();`);
-  check("第一轮 RunRequest 带 planRequired:true", Array.isArray(runs) && runs.length >= 1 && runs[runs.length - 1].planRequired === true, runs.slice(-2));
+  check("渲染层不再发 planRequired（agent 自判面）", Array.isArray(runs) && runs.length >= 1 && runs[runs.length - 1].planRequired === undefined, runs.slice(-2));
 
   await wait(1200);
-  state = await read(`return { plan: !!document.querySelector('.plan-ctl'), disabled: document.querySelector('.plan-ctl')?.disabled ?? null, composer: !!document.querySelector('.row2 textarea'), empty: document.querySelector('.main')?.dataset.empty ?? null, err: document.querySelector('.render-error')?.textContent ?? null };`);
-  check("首轮结束后方案开关仍在、无根错误", state.plan && state.disabled === false && state.composer && state.err === null, state);
-  await pointer(".plan-ctl"); await wait(300);
+  const after = await read(`return { composer: !!document.querySelector(".row2 textarea"), err: document.querySelector(".render-error")?.textContent ?? null };`);
+  check("首轮结束后 composer 正常、无根错误", after.composer && after.err === null, after);
   await setText("plan probe two"); await wait(100);
   await pointer('[aria-label="发送"]'); await wait(900);
   runs = await read(`return window.__cairnRuns();`);
-  check("关掉后下一轮 RunRequest 带 planRequired:false", Array.isArray(runs) && runs.length >= 2 && runs[runs.length - 1].planRequired === false, runs.slice(-2));
+  check("第二轮同样不带 planRequired（撤除是常态不是首帧巧合）", Array.isArray(runs) && runs.length >= 2 && runs.every((r) => r.planRequired === undefined), runs.slice(-2));
   check("渲染过程无控制台错误", errors.length === 0, errors);
-  await pointer(".plan-ctl"); await wait(200);
-  const imgOff = await win.webContents.capturePage();
-  writeFileSync(join(out, "02-plan-off-again.png"), imgOff.toPNG());
+  const imgFinal = await win.webContents.capturePage();
+  writeFileSync(join(out, "02-run-without-planrequired.png"), imgFinal.toPNG());
 
   writeFileSync(join(out, "checks.json"), JSON.stringify(checks, null, 2));
   console.log(`截图与读数：${out}\n隔离测试配置：${profile}`);

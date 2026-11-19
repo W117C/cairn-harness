@@ -99,15 +99,21 @@ async function main() {
   await query(''); await key('Escape');
   check('空搜索Esc先离开搜索，设置保持打开', await js(`!!document.querySelector('.sp-page') && document.activeElement !== document.querySelector('.sp-nav-search-input')`));
   await key('Escape');
-  check('再次Esc关闭设置', await js(`!document.querySelector('.sp-page')`));
+  // 关闭走 ModalSurface 收场拍（data-closing 播 150ms 退场再卸载，2026-11-17）：单点采样会
+  // 抢在卸载前读到旧面 ⇒ 轮询等卸载完成，断言语义仍是「Esc 关闭设置」。
+  const waitGone = async selector => { for (let i = 0; i < 12; i++) { if (!await js(`!!document.querySelector(${JSON.stringify(selector)})`)) return true; await pause(60); } return false; };
+  check('再次Esc关闭设置', await waitGone('.sp-page'));
   await open(); await query('网络'); await click('.sp-back');
-  check('返回按钮直接关闭，不被搜索清空逻辑截走', await js(`!document.querySelector('.sp-page')`));
+  check('返回按钮直接关闭，不被搜索清空逻辑截走', await waitGone('.sp-page'));
   await open(); await select('个性化');
   await js(`(() => {const el=document.querySelector('#custom-instructions');el.focus();Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(el,'保留这份未保存草稿');el.dispatchEvent(new Event('input',{bubbles:true}));})()`);
   await key('Escape');
-  check('有未保存草稿时Esc先打开确认框', await js(`!!document.querySelector('.confirm-card') && !!document.querySelector('.sp-page')`));
+  // Esc 先过 ModalSurface 收场拍（150ms）才进 closeSettings 的草稿确认分支 ⇒ 确认框不是
+  // 即时出现，轮询等挂载；断言语义仍是「Esc 先开确认框」。
+  const waitShown = async selector => { for (let i = 0; i < 12; i++) { if (await js(`!!document.querySelector(${JSON.stringify(selector)})`)) return true; await pause(60); } return false; };
+  check('有未保存草稿时Esc先打开确认框', await waitShown('.confirm-card') && await js(`!!document.querySelector('.sp-page')`));
   await key('Escape');
-  check('嵌套确认框Esc仅返回编辑，草稿和焦点保留', await js(`!document.querySelector('.confirm-card') && document.querySelector('#custom-instructions')?.value === '保留这份未保存草稿' && document.activeElement === document.querySelector('#custom-instructions')`));
+  check('嵌套确认框Esc仅返回编辑，草稿和焦点保留', await waitGone('.confirm-card') && await js(`document.querySelector('#custom-instructions')?.value === '保留这份未保存草稿' && document.activeElement === document.querySelector('#custom-instructions')`));
   await click('.agent-settings-actions button[type="button"]');
   await click('.sp-back');
   await open(); await query(''); await select('通用');

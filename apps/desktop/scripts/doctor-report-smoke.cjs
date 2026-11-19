@@ -61,7 +61,10 @@ async function main() {
   check("真指针进「关于与更新」", await pointerOn(`[...document.querySelectorAll('.sp-nav-item')].find((el) => el.textContent.includes('关于与更新'))`), null);
   const pre = await js(`document.querySelector('.sp-body')?.innerText ?? ''`);
   check("诊断结果点击前不出现（不在打开面板时偷偷跑）", !pre.includes("总档："), null);
-  check("真指针点「运行诊断」", await pointerOn(`[...document.querySelectorAll('.sp-body button')].find((b) => b.textContent.trim() === '运行诊断')`), null);
+  // 2026-11-19 脚本漂移订正 [A]：第 1041–1181 批（be41e26b）把按钮文案收拢为「运行」——
+  // 行标签仍是「运行诊断」，分区标题改「诊断与细节」（AboutSection.tsx doctorRun）。
+  // 诊断进行中按钮文案是「诊断中…」，一并接住，避免慢机读到中间态红。
+  check("真指针点「运行」", await pointerOn(`[...document.querySelectorAll('.sp-body button')].find((b) => ["运行", "诊断中…"].includes(b.textContent.trim()))`), null);
   await waitFor(() => js(`!!document.querySelector('.ss-doctor')`), "doctor results");
 
   const report = await js(`(() => {

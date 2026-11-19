@@ -20,7 +20,9 @@ const { join, resolve } = require("node:path");
 
 const SCRIPTS = __dirname;
 const ROOT = resolve(SCRIPTS, "..");
-const OUT = process.argv[2] ? resolve(process.argv[2]) : resolve(ROOT, "outputs", "design-options-2026-11-08");
+// [C] 约定修复（2026-11-19）：缺省输出改 mkdtemp /tmp——证据面（outputs/ 带日期目录）只读引用，
+// 裸跑探针不得写进去（本次重估跑批实测三连覆盖事故，见台账第 1332 页）。显式传参仍可指任何地方。
+const OUT = process.argv[2] ? resolve(process.argv[2]) : mkdtempSync(join(tmpdir(), "cairn-design-options-"));
 mkdirSync(OUT, { recursive: true });
 const profile = mkdtempSync(join(tmpdir(), "cairn-design-options-"));
 app.setPath("userData", profile);

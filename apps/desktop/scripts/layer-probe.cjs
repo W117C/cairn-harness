@@ -7,10 +7,12 @@
 // 用法：ELECTRON_OVERRIDE_DIST_PATH=… npx electron scripts/layer-probe.cjs [输出目录]
 // 输出：<out>/layer-probe.json（含 capturable / error / windows）
 const { app, BrowserWindow, desktopCapturer, systemPreferences } = require("electron");
-const { mkdirSync, writeFileSync } = require("node:fs");
+const { mkdirSync, mkdtempSync, writeFileSync } = require("node:fs");
+const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
-const out = process.argv[2] || join(process.cwd(), "outputs", "layer-probe");
+// [C] 约定修复（2026-11-19）：缺省输出改 mkdtemp /tmp（证据面只读引用，裸跑不得写进去）。
+const out = process.argv[2] || mkdtempSync(join(tmpdir(), "cairn-layer-probe-"));
 
 app.whenReady().then(async () => {
   const record = { at: new Date().toISOString(), capturable: false, error: null, windows: [], screenPermission: null };

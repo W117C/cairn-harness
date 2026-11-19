@@ -23,7 +23,8 @@ const { join, resolve } = require("node:path");
 const SCRIPTS = __dirname;
 const ROOT = resolve(SCRIPTS, "..");
 const THEME = process.env.THEME === "light" ? "light" : "dark";
-const OUT = process.argv[2] ? resolve(process.argv[2]) : resolve(ROOT, "outputs", `keyboard-focus-${THEME}`);
+// [C] 约定修复（2026-11-19）：缺省输出改 mkdtemp /tmp（证据面只读引用，裸跑不得写进去）。
+const OUT = process.argv[2] ? resolve(process.argv[2]) : mkdtempSync(join(tmpdir(), "cairn-kbd-out-"));
 mkdirSync(OUT, { recursive: true });
 const profile = mkdtempSync(join(tmpdir(), "cairn-kbd-"));
 app.setPath("userData", profile);

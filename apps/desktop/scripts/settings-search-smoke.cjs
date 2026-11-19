@@ -63,9 +63,16 @@ async function main() {
   await waitFor(() => js(`!!document.querySelector('.sp-nav-search-input')`), "settings search");
   check("设置搜索框在屏上", true, null);
 
-  for (const [query, label] of [["备份", "备份"], ["迁移", "迁移"], ["许可证", "许可证"]]) {
+  // 2026-11-19 脚本漂移订正 [A]：设置面已新增专属「迁移导入」分区（settings-nav SECTIONS，
+  // v59/v80 线）——「迁移」现在合法命中 迁移导入 + 关于与更新 两个分区，不再唯一；
+  // 备份/许可证仍唯一命中关于与更新。判据从「只剩它」改为「该到的分区都打得到」。
+  for (const [query, label] of [["备份", "备份"], ["许可证", "许可证"]]) {
     const items = await typeQuery(query);
     check(`「${label}」命中关于与更新且只剩它`, items.length === 1 && items[0].includes("关于与更新"), items);
+  }
+  {
+    const items = await typeQuery("迁移");
+    check("「迁移」命中专属迁移导入分区与关于与更新", items.length === 2 && items.includes("迁移导入") && items.includes("关于与更新"), items);
   }
   check("真指针点关于与更新", await pointerOn(`[...document.querySelectorAll('.sp-nav-item')].find((el) => el.textContent.includes('关于与更新'))`), null);
   const bodyText = await js(`document.querySelector('.sp-body')?.innerText ?? ''`);

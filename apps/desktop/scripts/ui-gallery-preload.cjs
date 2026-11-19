@@ -82,6 +82,16 @@ const MODEL = (id, provider, name, tier, ctx, image, thinking) => ({
   },
 });
 
+// 追加模型目录（2026-11-19 重估批，design 冒烟专用）：ModelPicker 的搜索框只在
+// options.length > 4 时出现（ModelPicker.tsx showSearch），三模型夹具下搜索/IME 键盘面
+// 根本不渲染，对应断言无从验起。design-smoke 经 --cairn-provider-models 传
+// [id, provider, name, tier, ctx, image, thinking] 元组数组追加条目；不传该参的探针
+// 目录原样（三模型），零外溢。
+const extraModels = (() => {
+  const hit = process.argv.find((a) => typeof a === "string" && a.startsWith("--cairn-provider-models="));
+  try { return hit ? JSON.parse(hit.slice("--cairn-provider-models=".length)) : []; } catch { return []; }
+})();
+
 const PROVIDER_INFO = {
   kind: "openai",
   provider: "DeepSeek",
@@ -91,6 +101,7 @@ const PROVIDER_INFO = {
     MODEL("deepseek-chat", "deepseek", "deepseek-chat", "standard", 128000, false, true),
     MODEL("deepseek-reasoner", "deepseek", "deepseek-reasoner", "strong", 128000, false, true),
     MODEL("glm-5.3-flash", "glm", "glm-5.3-flash", "cheap", 1000000, true, false),
+    ...extraModels.map((m) => MODEL(...m)),
   ],
   keyConfigured: true,
   providers: [
@@ -110,9 +121,22 @@ const SETTINGS = {
   // 字号档 / 尺寸档同理缺不得：真主进程装载时会把非法值兜回 md/2（settings.ts:282·284），
   // 夹具缺这两个键会让设置·通用页的两排分段控件**一档都不亮**（分段控件自查当场红）。
   textSize: "md", uiSize: "2",
-  // 壁纸与真 DEFAULT_SETTINGS 对齐：通用页读取 wallpaper.kind/opacity/scrim/glassAlpha，
-  // 缺这一格时画廊打开设置会先渲染失败（壁纸探针只在专用夹具里补，不能替所有冒烟兜底）。
-  wallpaper: { kind: "none", path: null, opacity: 1, scrim: 0.35, glassAlpha: 0.25, revision: 0 },
+  // 壁纸与真 DEFAULT_SETTINGS 对齐（完整形状含 rotation 子树）：2026-11-19 重估跑批发现
+  // rotation 整格缺失 ⇒ 读 rotation.weather 的三个冒烟集体红（第 1329/1332 页）。
+  // **不能抽成共享 .cjs 再 require**：探针窗口是沙箱化 preload，相对 require 不可用
+  // （实测：抽出去当场「Script failed to execute」，整批探针更红）。形状对齐由
+  // 判卷 tests/gallery-fixture-parity.test.ts 桩化 electron 真加载本文件、断言暴露面实现——
+  // 新增键不跟 = 红，不靠自觉。
+  wallpaper: {
+    kind: "none", path: null, url: null, opacity: 1, scrim: 0.35, glassAlpha: 0.25, revision: 0,
+    rotation: {
+      enabled: false, mode: "interval", weather: { kind: "clear", paths: {}, source: "manual", filePath: null, httpUrl: null },
+      latitude: 39.9042, longitude: 116.4074,
+      dayPath: null, nightPath: null,
+      everyMinutes: 60, paths: [], lastAt: 0,
+    },
+    perDisplay: {},
+  },
   // 个性化（2026-11-05）：迁移/个性化两页都读这一格；缺键会让「已保存」回读成 undefined。
   customInstructions: "",
 };
@@ -1775,5 +1799,15 @@ stub.sessionSegmentOpen = () => {
   segmentCounter += 1;
   return Promise.resolve({ ok: true, segment: segmentCounter });
 };
+
+// 预览状态推送（AgentApi 必选成员，ipc-protocol.ts:1128）：App 挂载即订阅（chrome.ts:543），
+// 缺这条 ⇒ dist 应用启动即 render-boundary（「window.agent.onPreviewState is not a function」），
+// 2026-11-19 重估跑批的 design/plan-mode/settings-navigation/layout 四支红同根。
+// 夹具只给订阅/退订语义，不推快照（冒烟不点预览，零快照即真机空闲形状）。
+const previewStateListeners = new Set();
+stub.onPreviewState = (cb) => { previewStateListeners.add(cb); return () => previewStateListeners.delete(cb); };
+// 菜单事件推送（ipc-protocol.ts:655）：app-commands.ts:101 挂载即订阅，形状同 onPreviewState。
+const menuListeners = new Set();
+stub.onMenu = (cb) => { menuListeners.add(cb); return () => menuListeners.delete(cb); };
 
 contextBridge.exposeInMainWorld("agent", stub);
