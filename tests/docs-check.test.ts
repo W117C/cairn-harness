@@ -994,7 +994,22 @@ describe("D-11 证人点名面：文件与目录两半都要追得到，登记�
     expect(checkWitnessPaths(pages, new Set(["outputs/x-2026-09-30/a.log"]), []).findings).toEqual([]);
     const gone = checkWitnessPaths(pages, new Set(["outputs/z-2026-09-30/a.log"]), []).findings;
     expect(gone.length).toBe(1);
+    expect(gone[0]?.rule).toBe("D-11");
     expect(gone[0]?.detail).toContain("那个 dated 目录一件工件都没入库");
+  });
+
+  it("桌面侧证人（apps/desktop/outputs/）仓根命中不了时回退命中，两面同一把尺（第 1332 页盲区修复）", () => {
+    const pages = credentialPages(cred("第 1332 页", "取料：outputs/market-2026-11-19/shot.png 与 outputs/market-2026-11-19/"));
+    const desktopRooted = new Set([
+      "apps/desktop/outputs/market-2026-11-19/shot.png",
+      "apps/desktop/outputs/market-2026-11-19/other.png",
+    ]);
+    // 文件与目录两半都走回退：仓根没有、桌面根有 ⇒ 绿
+    expect(checkWitnessPaths(pages, desktopRooted, []).findings).toEqual([]);
+    // 反向锚点：两面都没有 ⇒ 仍红（回退不是放行通道）
+    const lost = checkWitnessPaths(pages, new Set(["outputs/elsewhere-2026-11-19/a.log"]), []).findings;
+    expect(lost.length).toBe(2);
+    expect(lost.every((f) => f.rule === "D-11")).toBe(true);
   });
 
   it("登记位两半：仍命中的登记安静，不再命中的登记报 stale；净零交换报两条", () => {

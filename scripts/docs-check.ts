@@ -359,18 +359,31 @@ export function checkWitnessPaths(
   const out: Finding[] = [];
   // 目录点名判「HEAD 里有没有这个 dated 目录的任何一件工件」——先把清单折成目录集合，别每条点名线性扫全表。
   const dirs = new Set<string>();
-  for (const p of tracked) {
-    const m = /^outputs\/([^/]+)\/.*/u.exec(p);
-    if (m) dirs.add(`outputs/${m[1]}/`);
+  // dated 目录收集覆盖两个证据根（第 1332 页盲区修复）：仓根 outputs/ 与桌面侧 apps/desktop/outputs/。
+  // 两个根共用同一段字符串切分（不用正则——形状就是「前缀 + 一段目录名 + / + 其余」）。
+  for (const root of ["outputs/", "apps/desktop/outputs/"] as const) {
+    for (const p of tracked) {
+      if (!p.startsWith(root)) continue;
+      const rest = p.slice(root.length);
+      const slash = rest.indexOf("/");
+      if (slash > 0) dirs.add(`${root}${rest.slice(0, slash)}/`);
+    }
   }
   const seenRefs = new Set<string>();
   let namingPages = 0;
+  // dated 证人不只住仓根 outputs/——桌面侧的真机证据住在 apps/desktop/outputs/（第 1332 页实测：
+  // 台账引 marketplace 截图目录被假红拦下一次）。解析在仓根命中不了时回退桌面根，两面同一把尺。
+  const DESKTOP_EVIDENCE_PREFIX = "apps/desktop/";
   for (const p of pages) {
     if (p.refs.length > 0) namingPages++;
     for (const ref of p.refs) {
       seenRefs.add(ref);
       if (legacy.includes(ref)) continue;
-      if (ref.endsWith("/") ? dirs.has(ref) : tracked.has(ref)) continue;
+      const inRoot = ref.endsWith("/") ? dirs.has(ref) : tracked.has(ref);
+      const inDesktop = ref.endsWith("/")
+        ? dirs.has(DESKTOP_EVIDENCE_PREFIX + ref)
+        : tracked.has(DESKTOP_EVIDENCE_PREFIX + ref);
+      if (inRoot || inDesktop) continue;
       out.push({
         rule: "D-11",
         file: LEDGER_FILE,
