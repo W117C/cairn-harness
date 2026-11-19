@@ -45339,3 +45339,39 @@ append-only；`.mimosa` 470M / `.alma-snapshots` 495M（工具态，不是仓的
 3. 71 支未登记探针的夹具重估线不变（第 1329 页排期）。
 
 凭证 @53763109 / @5a6d6a53 / @761107d9 / @e8c7790e / @80eef09d / @e2b7ff02 / @f5f33ec5 / @46ffeb8c
+
+## 2026-11-19 · 第 1332 页：探针 75 支全量重估（69 绿/6 红全带分类）+ 通道分区回归修复 + 收尾协议入档
+
+业主令（统一授权续）：登记的三项裁决项里能做的都做。本轮三项的处置：
+**worker 布尔汤→枚举按写入点全图撤回**（不是阶段机，是带逆向边的重入协议——枚举会非法化
+评审重启的合法回退与 spawn 回滚路径的"永不 resolved"；协议图与裁定写死在 orchestrator-types.ts
+注释块 + CODE-WIKI §③c 指针，提交 400a3030）；**晋升通道维持不接**（证据驱动的裁决不变）；
+**75 支探针全量重估**落地（本页主体）。
+
+### 一、重估跑批（runner：apps/desktop 下 `env CAIRN_RENDERER_DIST=$PWD/dist pnpm exec electron scripts/X.cjs <显式 /tmp 参数>`，3 并发两轮 + 单跑复验）
+
+- **首轮 42 绿/33 红**；二轮（约定修复后）+18；夹具家族 +3；漂移订正 +5；复验 +2；通道回归修复后 settings-sweep 转绿。**终账 69/75 绿（92%），6 支红全部带分类与证据**。
+- 第 1329 页"抽样 3 支 2 红"的猜想升级为全量实测：腐化面远大于抽样印象，且分六个家族。
+
+### 二、六个失败家族与处置
+
+1. **夹具过期（weather TypeError）**：preload 的 SETTINGS 夹具 wallpaper 子树缺 rotation 整格 ⇒ 3 支集体红。修复 + 形状对齐判卷（桩化 electron 真加载 preload，断言暴露面 wallpaper 叶子键集 == DEFAULT_SETTINGS.wallpaper，2/2 含反向锚点）。教训：**沙箱化 preload 不能相对 require**——"抽共享 .cjs"的 v1 方案被真机当场推翻（Script failed to execute），v2 判卷量的是暴露面实现。
+2. **约定缺口 [C]**：7 支探针缺省输出指向 repo 带日期证据目录（plugin-marketplace 甚至 rmSync -rf 重生成）——裸跑即覆盖引用面。缺省一律改 mkdtemp /tmp；历史读数（`apps/desktop/outputs/plugin-marketplace-2026-10-29/` 等）只读引用。**本轮事故三连**（探针默认写证据面 ×2 + 我自己跑批 ×1）证明这不是理论风险。
+3. **探针腐烂 [A]**：10 支钉了旧 UI 形状（doctor-report 按钮文案随 be41e26b 收拢、两级 ModelMenu、StoreCard 重设计、迁移导入分区、ProviderInfo 必选 providers 数组…）——全部按当前形状订正并带 commit 指针注释，复跑绿。
+4. **并发假红**：interaction 等复跑即绿——跑批并发是假红源之一，单跑复验是重估的必要环节。
+5. **真产品回归 [B]**：ChannelsSection 体内误用弹窗根覆盖层类 `.sp-page` ⇒ 点「通道」后其余分区鼠标不可达（bddf2f94 引入，IM v80）。两态：修前 3/6 卡死 → 修后 13/13 全绿（91032530）。
+6. **真产品信号 [B]**：performance-smoke 400 轮流式帧 p95 220.3ms > 帽 200ms（+10%）、DOM 58,470 节点——长会话流式渲染无虚拟化的规模化信号。**不许抬预算"修"**（弱化断言），登记为产品级 backlog。
+
+### 三、余 6 支红的分类与去向
+
+- performance-smoke：产品级 backlog（虚拟化/按轮折叠的规模化批次）。
+- session-jump / layout：需源映射级考古（render-boundary 捕获的 map/filter TypeError；rail 几何 939 vs 970 需对照 conversation-rail 判卷取证）。
+- wallpaper-csp / desktop-design / settings-process：探针钉旧 UI 形状，需按当前设计重写（独立批次）。
+
+### 四、验证读数
+
+- 桌面 **431 文件 / 2800 条全绿**（+1 判卷文件 gallery-fixture-parity；含四份真机证据重签后台账判卷）。
+- 核心 718 文件全绿（本批未触 src/ 值面；协议图注释提交后无再改）。
+- typecheck 0（含桌面 tsc）；四份真机证据重签（CDS 0 错/IME 6/6/队列键 6/6/浮层互斥 5/5）。
+
+凭证 @1b446df8 / @91032530 / @400a3030
