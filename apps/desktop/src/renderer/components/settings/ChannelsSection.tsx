@@ -171,8 +171,12 @@ export function ChannelsSection(
     );
   }
 
+  // 2026-11-19 修产品回归（75 支探针重估跑批 settings-sweep 取证）：这里此前误用 `.sp-page`
+  // （设置弹窗根覆盖层类，position:fixed inset 全屏 z-index:60，styles.css:2501）——点「通道」后
+  // 面板体内多出一层全屏 fixed 盖层，其余分区鼠标全部不可达（引入于 bddf2f94，IM v80）。
+  // 对齐兄弟分区（EvolvePanel/UsageSection）的页面类 `.ss-page`。
   return (
-    <div className="sp-page">
+    <div className="ss-page">
       <SettingsSection title={STR.channels.addTitle}>
         <SettingsRow label={STR.channels.platform}>
           {specs.map((p) => (
