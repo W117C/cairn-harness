@@ -174,8 +174,12 @@ describe("对话轨道（第 754 页）", () => {
     // ① 把左轨对齐了，右缘漏了：真机 1440 读数（第 862 页取证）
     //   正文 .md-body 519..1185、交付卡 519..1185，而思考带 / 工具簇 519..1241
     //   ⇒ 同一轮里两种右缘，56px 的锯齿。现在四段（助手行 / 思考带 / 工具簇 / 交付卡）
-    //   作为 .reading 的直接子元素共用 `.reading` 上声明的那一条变量。
-    expect(ruleOf(styles, ".reading {")).toContain("--cds-assistant-message-text-stop: clamp(0px, (100% - 384px) * 0.175, 56px)");
+    //   共用 `.reading` 上声明的那一条变量。
+    //   2026-11-19 机制升级（babb5275）：R5 把思考带/工具簇挪进折叠体后「直接子元素」假设被打破，
+    //   基准改 100cqw（container-type:inline-size，对任意嵌套免疫）；同批修掉折叠体内行的
+    //   **双重 stop**（wrapper 已吃一次，行内再吃一次 ⇒ 内缩 47.25px）——折叠体归零规则一并钉住。
+    expect(ruleOf(styles, ".reading {")).toContain("--cds-assistant-message-text-stop: clamp(0px, (100cqw - 384px) * 0.175, 56px)");
+    expect(ruleOf(styles, ".reading {")).toContain("container-type: inline-size");
     for (const [src, sel] of [
       [styles, ".row.assistant {"],
       [styles, ".row.think {"],
@@ -192,8 +196,10 @@ describe("对话轨道（第 754 页）", () => {
     // ② 单源：公式只许出现在 `.reading` 的声明里（抄第二份就会漂）。
     //    先去注释再查声明面——注释里复述官方公式是文档，不是第二处实现。
     const face = readCssFace().replace(/\/\*[\s\S]*?\*\//g, "");
-    const formulas = face.match(/clamp\(0px,\s*\(100% - 384px\)/g) ?? [];
+    const formulas = face.match(/clamp\(0px,\s*\(100cqw - 384px\)/g) ?? [];
     expect(formulas.length, `fluid stop 公式只许一处，实际 ${formulas.length} 处`).toBe(1);
+    // ②b 折叠体双重 stop 的归零规则钉住（babb5275 修法的另一半，删掉就回锯齿）。
+    expect(processCss).toContain(".process-fold-body .row.think,\n.process-fold-body .toolcluster { margin-right: 0; }");
     // ③ 反向自证：正文自己不再吃 padding-right（否则行 + 正文两份留白，列会再窄 56px）。
     expect(ruleOf(styles, ".row.assistant .t {")).not.toContain("padding-right");
   });
