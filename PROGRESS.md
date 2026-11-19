@@ -45383,3 +45383,29 @@ append-only；`.mimosa` 470M / `.alma-snapshots` 495M（工具态，不是仓的
 
 crash 家族五支终验（现 dist）：**desktop-design 26/0、plan-mode 5/0、settings-navigation 24/0、settings-process 16/0 全绿**——终账升级为 **72/75 绿（96%）**。layout-smoke 升格为**第二条真产品回归**：R5 部分摘取（5c7fa27b，第 1315 页）把思考带/工具簇挪进 `.process-fold-body > .fold-inner`，嵌套包含块把 `--cds-assistant-message-text-stop` 的 clamp 百分比重新定基 ⇒ 折叠体内行右缘比阅读列内缩 31px（862 页「一轮=一条列」不变量被打破，台账无批次接受此内缩）。证据：ProcessFold.tsx:34、stream-process.css:400、margin 实测 31.625px vs 47.25px、截图 /tmp/probe-out/layout-smoke。
 修复尝试一笔（诚实记录）：把 14px 缩进从容器 padding 换成行自身 px 左缘以避免重定基——迭代一拍右缘未收敛（970 vs 936），**还原**。这不是一行 CSS 的修复，需要带 visual 迭代的独立设计批。余 3 支红的最终去向：performance（规模化 backlog）、session-jump（源映射考古）、layout（设计批）。
+
+## 2026-11-19 · 第 1333 页：设计转向 ADR 0019（Claude Desktop 1:1）+ CDS 上游 6.6395.1 重取 + 三条收口修复
+
+### 一、设计裁决（业主令「所有的桌面端设计全部按照claude桌面端来，我需要一比一复刻全部」）
+
+- **ADR 0019**：`dsh-claude-style` 从可选皮肤翻转为唯一设计方向（main.tsx 本就默认挂——翻转实为扩 data-cds 覆盖）；组件移植账为进度事实源（ported 只增）；P1-P5 分面迁移（对话面补齐→编排器族→词汇族→数据族→退休自有样式）；复刻依据=官方渲染层 CSS 抽取件，像素级验收用离屏截面对照官方真机（benchmark 工具链 ADR 0009/0010/0014）。
+- **差距盘点**：官方 48→50 组件，已移植 10 件全在对话面；36 缺口里最大的是编排器族（ChatComposerDock/Chin/Editor/Notices、ModelSelector×2）与词汇族（Button/Card/Surface/Panel/Page/Banner）。
+- **进度判卷**：`cds-map-integrity.test.ts` 3 条（账与抽取件同名闭合/ported 必带选择器与依据/状态枚举封闭）——迁移期间账腐化当场红。
+
+### 二、CDS 上游 6.6395.1 重取（漂移门抓到，按 ADR 0011 playbook 收口）
+
+- 本机 Claude.app 自更新（chunk eovAjM2n、tokens 38927B、渲染层 CSS 243101B/-8KB）：**组件面重设计**（48→50：+SegmentedControl/Shortcut；Spinner 首次带规则体改判 no-cairn-counterpart；规则 114→127、声明 472→485），**令牌名面零变化**（cds-parity 未红），密度字尾变体轴平化（本仓零消费，grep 核过）。
+- 全套收口：component-map 补 2 条改判 1 条（10/39/1）、UPSTREAM 全账换新真值（asar `a20c7f9f…`）、判卷只换真值零删弱、四份真机证据重签。三判卷 64/64 绿、extractor --check PASS。
+- 本仓消费面零位移：重测后全部几何钉原值成立（气泡 12px/16px/85%、缩进 4px、骨架 2s、排队条 8px、blur(12px)）。
+
+### 三、三条收口修复（各自两态闭环）
+
+1. **对话流右缘锯齿（真产品回归②）**：fold-diag 实测定根因=stop margin **双重施加**（wrapper 已吃一次、折叠体内行组件又吃一次，内缩整一个 stop=47.25px）；修法两层（折叠体内 margin-right 归零 + `.reading` 升级 container-type:inline-size/100cqw 使基准对嵌套免疫）；两态 [970,970,923,923,970,970]→[970×6]；conversation-rail ⑧ 随机制升级换钉（cqw 公式+container-type+归零规则入钉）。第一次盲迭代（换行左缘承担缩进）未收敛已还原——诚实记录。
+2. **docs-check D-11 盲区**：dated 证人解析补桌面根回退（apps/desktop/outputs/ 不在视野，台账首稿被假红拦下）；目录集合收集覆盖两根；判卷补两态用例（116/116）；两条 witness 变异锚随实现改形重指。
+3. **session-jump 考古（红两周真因）**：vite --sourcemap + node:module SourceMap 定位 = 自有 preload 兜底工厂给数组型成员回 {ok:true} ⇒ BackgroundCommands .filter/.map 双炸。两层修：探针 preload 按数组型回 []；产品侧 BackgroundCommands 契约形状守卫（非数组 fail-visible 不炸面板）。
+
+### 四、验证读数
+
+桌面 **432 文件 / 2803 条全绿**（+map-integrity 与夹具判卷）；typecheck 0；docs-check 全绿；extractor --check PASS；mutate-needles 全部锚点可判定；四份真机证据重签（CDS 0 错/IME 6/6/队列键 6/6/浮层互斥 5/5）。
+
+凭证 @616ba053 / @babb5275 / @dff3d781 / @b3dcbdf1
