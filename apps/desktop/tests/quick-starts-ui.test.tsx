@@ -109,12 +109,13 @@ describe("空屏（App 源文哨兵 · P2-1）", () => {
     expect(appSrc).toContain('current < 0 && e.key !== "ArrowDown"');
   });
 
-  it("居中枢位：main 挂 data-empty；hero 底对齐 + .empty-tail 弹性空带（flex 2.5）", () => {
+  it("居中枢位（ADR 0019 1:1 换钉）：main 挂 data-empty；hero 栈含动作行与承接行；dock 横贯主区", () => {
     expect(appSrc).toContain('data-empty={showEmpty ? "true" : "false"}');
-    expect(appSrc).toContain("empty-tail");
+    expect(appSrc).toContain("empty-recent");
     expect(css).toContain('.main[data-empty="true"] .empty');
-    expect(css).toContain(".empty-tail");
-    expect(css).toMatch(/\.empty-tail\s*\{[^}]*flex:\s*2\.5/);
+    expect(css).toContain(".empty-recent");
+    // dock：zone-composer 不再受阅读列约束（列消费判卷同批换钉），左右 16px 边距。
+    expect(css).toMatch(/\.zone-composer\s*\{[^}]*max-width:\s*none/);
   });
 
   it("下沉动画：FLIP（animate + 200ms + reduced-motion 直落）", () => {
@@ -186,15 +187,14 @@ describe("项目 chip 命名一致性", () => {
 
 // 2026-10-17 设计复盘：空屏「小字标 + 大问候」的层级（旧字标 22px 比问候语还大）。
 describe("空屏字级层级", () => {
-  it("衬线大字 + 珊瑚星标（对照 Claude 桌面端 hero）", () => {
+  it("标志化 hero（ADR 0019 1:1 换钉，真机对照 2026-11-19：官方首屏 = 居中大标志、无文字问候）", () => {
     const css = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
-    expect(css).toMatch(/\.empty h1\.empty-greet\s*{[^}]*font-family:[^}]*Songti SC/s);
-    // 第 870 页（业主「让布局说话」）：问候不再用 vw 流体大字（真机 1440 实测 44.2px，
-    // 而输入框正文 14px ⇒ 屏幕上最大的一块字既不能点也不能输入）。现在走标题档上界 22px。
-    expect(css).toMatch(/\.empty h1\.empty-greet\s*{[^}]*font-size:\s*var\(--fs-title-lg\)/s);
-    expect(css).not.toMatch(/\.empty h1\.empty-greet\s*{[^}]*font-size:\s*clamp/s);
+    // 标志独占中央、72px（官方像素机器人实测 ~72px）；问候文本 sr-only 供读屏。
+    expect(css).toMatch(/\.empty h1\.empty-greet\s*{[^}]*justify-content:\s*center/s);
+    expect(css).toMatch(/\.empty-greet-mark\s*{[^}]*width:\s*72px/s);
     expect(css).toMatch(/\.empty-greet-mark\s*{[^}]*color:\s*hsl\(var\(--accent-brand\)\)/s);
     expect(appSrc).toContain('className="empty-greet-mark"');
+    expect(appSrc).toContain('className="sr-only"');
   });
 
   it("620px 以下星标对齐首行，中文问候均衡换行而不是留下短尾", () => {

@@ -1081,14 +1081,15 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
    字号不再用 clamp(2rem, 4vw, 2.5rem)：真机 1440 实测问候 44.2px、输入框正文 14px
    ⇒ 屏幕上最大的一块字既不能点也不能输入，视觉权重全给了装饰（3.2:1 的倒挂）。
    现在走标题令牌 22px（标题 22 → 正文 14），主角回到输入卡。星标按 em 跟着缩。 */
+/* 2026-11-19 ADR 0019 1:1：官方首屏 hero = 居中大标志、无文字问候（真机截图实测：
+   标志独占中央，宽约 72px）。问候文本 sr-only 供读屏（时段问候逻辑与源钉保留）。 */
 .empty h1.empty-greet {
-  display: flex; align-items: center; justify-content: flex-start; gap: 0.45em;
-  margin: 0; font-family: "Iowan Old Style", "Palatino", "Songti SC", "STSong", Georgia, serif;
-  font-size: var(--fs-title-lg); font-weight: var(--fw-medium);
-  letter-spacing: -0.01em; line-height: 1.3;
+  display: flex; align-items: center; justify-content: center; gap: 0.45em;
+  margin: 0;
   animation: rise-in var(--t-rise-in-long) both;
 }
-.empty-greet-mark { color: hsl(var(--accent-brand)); flex: none; width: 0.68em; height: 0.68em; }
+.empty-greet-mark { color: hsl(var(--accent-brand)); flex: none; width: 72px; height: 72px; }
+.empty-greet .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 /* 项目弹层向上开会压到问候线（2026-10-17 上开 vs 2026-10-18 hero 大字的布局相撞）：
    弹层开着时问候语淡出——焦点让给选择弹层，关闭即恢复；不动弹层定位（向下开会盖 composer）。
    淡出打在 h1 的子元素上：h1 自身被 rise-in(fill both) 锁住 opacity，动画级联会压过普通声明。 */
@@ -1138,7 +1139,7 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
   margin: 0 auto; padding: var(--space-md) 41px 0;
   display: flex; flex-direction: column; align-items: center; gap: var(--space-sm);
 }
-.empty-tail { flex: 2.5 1 0; min-height: var(--space-md); display: flex; flex-direction: column; align-items: center; }
+.empty-recent { flex: none; width: 100%; display: flex; flex-direction: column; align-items: flex-start; }
 /* 空屏下半区承接（2026-11-08 第 1048 页）：最近会话。
    issues.md #1 说「给下半屏一个轻量承接，保持 focus-first，不再堆卡片」——
    这里只给一行 caption + 最多 3 条文本按钮，坐在 .empty-tail 弹性空带的顶端；
@@ -1530,10 +1531,14 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 .vchip { display: inline-flex; padding: 1px 7px; border-radius: var(--radius-pill); background: hsl(var(--bg-300)); font-size: var(--fs-caption-xs); color: hsl(var(--text-200)); }
 
 /* ══ Composer ══════════════════════════════════════════════════════ */
-.zone-composer { max-width: var(--col-max); margin: 0 auto; width: 100%; flex: none; padding: 0 41px var(--space-md); }
+/* 2026-11-19 ADR 0019 1:1：官方编排器 = **底部 dock**（横贯主区、左右 16px 边距、上圆角
+   ~16px、底贴窗口下沿、下巴工具条在 dock 内）——不再是阅读列宽的浮动卡。
+   空态与会话态同形；阅读列约束只属于 .reading，不再约束输入 dock。 */
+.zone-composer { max-width: none; margin: 0 auto; width: 100%; flex: none; padding: 0 16px 0; }
 .composer-card {
   position: relative;
-  border: 1px solid var(--hairline-strong); border-radius: var(--radius-composer-card);
+  border: 1px solid var(--hairline-strong); border-bottom: none;
+  border-radius: var(--radius-composer-card) var(--radius-composer-card) 0 0;
   background: hsl(var(--surface-card, var(--bg-000))); box-shadow: var(--shadow-card);
   transition: border-color var(--t-instant), box-shadow var(--t-instant);
   /* 2026-11-05 业主裁「输入框和 DeepSeek harness 一模一样」：顶距 8px、文本行高 36 起步、

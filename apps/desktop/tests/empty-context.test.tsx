@@ -53,12 +53,11 @@ describe("接线：数据来自 sessions，点击回到那段对话", () => {
     expect(view).toContain('from "../derived/recent-sessions"');
   });
 
-  it("承接行坐在 .empty-tail 内，onOpen 走 openSession(id, ws)", () => {
-    expect(view).toMatch(/<div className="empty-tail">\s*<EmptyContext/s);
+  it("承接行坐在 hero 栈内（ADR 0019 1:1：官方序=标志→项目→动作行→dock，承接行不再排 dock 之后），onOpen 走 openSession(id, ws)", () => {
+    expect(view).toMatch(/<div className="empty-recent">\s*<EmptyContext/s);
     expect(view).toContain("onOpen={(id, ws) => { openSession(id, ws); }}");
-    // 弹性空带里现在有可交互内容，旧的 aria-hidden 必须撤掉——读整个应用面，
-    // 承接块哪天拆进 EmptyContext 子组件，只读 WorkbenchView 会空过。
-    expect(readAppSurface()).not.toContain('className="empty-tail" aria-hidden="true"');
+    // 读整个应用面：承接块哪天拆进 EmptyContext 子组件，只读 WorkbenchView 会空过。
+    expect(readAppSurface()).not.toContain('className="empty-recent" aria-hidden="true"');
   });
 });
 
@@ -89,8 +88,8 @@ describe("pickRecentSessions：只认真实会话（派生层纯函数）", () =
 });
 
 describe("CSS：不动既有裁决，只让出留白带顶端", () => {
-  it(".empty-tail 的 flex 2.5 仍在（居中枢位判卷不改钉）", () => {
-    expect(css).toMatch(/\.empty-tail\s*\{[^}]*flex:\s*2\.5/);
+  it(".empty-recent 随 1:1 重排改为随栈排版（flex 2.5 弹性空带随 dock 化退役，ADR 0019）", () => {
+    expect(css).toMatch(/\.empty-recent\s*\{[^}]*flex:\s*none/);
   });
 
   it("承接行沿用 --col-max / --reading-pad-x 单源与 rise-in 家族", () => {

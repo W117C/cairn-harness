@@ -490,12 +490,12 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
               </div>
               {/* 弹层开着时给 hero 打 data-picking：问候语淡出让焦点（弹层向上开会压到问候线，2026-10-24）。 */}
               <div className="empty" {...(chipOpen ? { "data-picking": "true" } : {})}>
-                {/* 2026-10-18 对照 Claude 桌面端：hero 不是「字标 + 问候」两行，而是珊瑚星标与
-                    问候同一行、衬线大字（Claude 的「✳ You're here!」）。品牌名仍在窗口顶栏，
-                    这里不再叠一个 CAIRN 字标。 */}
+                {/* 2026-11-19 ADR 0019 1:1：官方首屏 hero = 居中大标志、无文字问候
+                    （真机截图 2026-11-19：像素机器人标志独占中央）。问候文本保留（时段问候逻辑
+                    与判卷的源钉都在），改 sr-only 供读屏；视觉只剩标志。 */}
                 <h1 className="empty-greet" data-dsh-claude-part="hero-headline" data-dsh-claude-holds="hero-mark">
                   <CairnMark className="empty-greet-mark" />
-                  <span><span className="empty-greet-period">{greeting}，</span>{STR.empty.greetingAsk}</span>
+                  <span className="sr-only"><span className="empty-greet-period">{greeting}，</span>{STR.empty.greetingAsk}</span>
                 </h1>
                 {/* 项目 chip：📁 名 · 分支；点开 = 搜索 + 最近项目 + 复用 AddProjectMenu 四入口。 */}
                 <div className="empty-chip-row" ref={chipRef}>
@@ -601,6 +601,16 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                       <div className="menu-note">{STR.empty.dropHint}</div>
                     </div>
                   </Popover>
+                </div>
+                {/* 2026-11-19 1:1 重排（ADR 0019 P2）：官方首屏序 = 标志 → 项目区 → 动作行 → 底部 dock。
+                    起手行与最近会话从「composer 之后」移入 hero 栈（此前排在 dock 下方 = 与官方相反）。 */}
+                <QuickStarts
+                  items={emptyData?.quickStarts ?? []}
+                  firstRunSub={STR.empty.firstRunSub}
+                  onPick={(t) => { injectText(t); }}
+                />
+                <div className="empty-recent">
+                  <EmptyContext items={recentEmptySessions} label={STR.empty.recentSessions} onOpen={(id, ws) => { openSession(id, ws); }} />
                 </div>
               </div>
             </div>
@@ -875,19 +885,6 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
               injectedElement={injectedElement}
             />
           </div>
-          {showEmpty && (
-            /* 空屏下半区（P2-1）：建议行 + .empty-tail 留白带；第 1048 页留白带顶端给真实「最近会话」承接。 */
-            <>
-              <QuickStarts
-                items={emptyData?.quickStarts ?? []}
-                firstRunSub={STR.empty.firstRunSub}
-                onPick={(t) => { injectText(t); }}
-              />
-              <div className="empty-tail">
-                <EmptyContext items={recentEmptySessions} label={STR.empty.recentSessions} onOpen={(id, ws) => { openSession(id, ws); }} />
-              </div>
-            </>
-          )}
         </main>
           </Panel>
           {/* P3-2 右侧检查器（brief 七）：常驻 Panel、默认收起（collapsible + collapsedSize 0；

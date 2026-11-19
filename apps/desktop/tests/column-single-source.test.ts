@@ -31,7 +31,8 @@ const CONSUMERS = [
   '.main[data-empty="true"] .empty',
   ".empty-below",
   ".zone-gate",
-  ".zone-composer",
+  // 2026-11-19 ADR 0019 1:1：编排器升级为底部 dock（横贯主区），退出阅读列消费——
+  // 列宽单源管的是「读内容的列」，dock 不是列的形状（官方首屏真机对照 2026-11-19）。
   ".error-strip",
   ".notice-strip",
   ".diagnosis-card",
