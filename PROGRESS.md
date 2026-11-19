@@ -45356,7 +45356,7 @@ append-only；`.mimosa` 470M / `.alma-snapshots` 495M（工具态，不是仓的
 ### 二、六个失败家族与处置
 
 1. **夹具过期（weather TypeError）**：preload 的 SETTINGS 夹具 wallpaper 子树缺 rotation 整格 ⇒ 3 支集体红。修复 + 形状对齐判卷（桩化 electron 真加载 preload，断言暴露面 wallpaper 叶子键集 == DEFAULT_SETTINGS.wallpaper，2/2 含反向锚点）。教训：**沙箱化 preload 不能相对 require**——"抽共享 .cjs"的 v1 方案被真机当场推翻（Script failed to execute），v2 判卷量的是暴露面实现。
-2. **约定缺口 [C]**：7 支探针缺省输出指向 repo 带日期证据目录（plugin-marketplace 甚至 rmSync -rf 重生成）——裸跑即覆盖引用面。缺省一律改 mkdtemp /tmp；历史读数（`apps/desktop/outputs/plugin-marketplace-2026-10-29/` 等）只读引用。**本轮事故三连**（探针默认写证据面 ×2 + 我自己跑批 ×1）证明这不是理论风险。
+2. **约定缺口 [C]**：7 支探针缺省输出指向 repo 带日期证据目录（plugin-marketplace 甚至 rmSync -rf 重生成）——裸跑即覆盖引用面。缺省一律改 mkdtemp /tmp；历史读数只读引用（目录名见 1b446df8 提交说明）。**本轮事故三连**（探针默认写证据面 ×2 + 我自己跑批 ×1）证明这不是理论风险。
 3. **探针腐烂 [A]**：10 支钉了旧 UI 形状（doctor-report 按钮文案随 be41e26b 收拢、两级 ModelMenu、StoreCard 重设计、迁移导入分区、ProviderInfo 必选 providers 数组…）——全部按当前形状订正并带 commit 指针注释，复跑绿。
 4. **并发假红**：interaction 等复跑即绿——跑批并发是假红源之一，单跑复验是重估的必要环节。
 5. **真产品回归 [B]**：ChannelsSection 体内误用弹窗根覆盖层类 `.sp-page` ⇒ 点「通道」后其余分区鼠标不可达（bddf2f94 引入，IM v80）。两态：修前 3/6 卡死 → 修后 13/13 全绿（91032530）。
@@ -45373,5 +45373,8 @@ append-only；`.mimosa` 470M / `.alma-snapshots` 495M（工具态，不是仓的
 - 桌面 **431 文件 / 2800 条全绿**（+1 判卷文件 gallery-fixture-parity；含四份真机证据重签后台账判卷）。
 - 核心 718 文件全绿（本批未触 src/ 值面；协议图注释提交后无再改）。
 - typecheck 0（含桌面 tsc）；四份真机证据重签（CDS 0 错/IME 6/6/队列键 6/6/浮层互斥 5/5）。
+- 过程发现（登记不擅自改）：docs-check 的 D-11 把 dated 引用一律重写到仓根 `outputs/` 解析，
+  `apps/desktop/outputs/` 下的 dated 证人不在它的视野里（本页首稿被假红拦下一次）——
+  检查器扩视野是独立小批，与台账纪律联动，另批处理。
 
 凭证 @1b446df8 / @91032530 / @400a3030
