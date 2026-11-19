@@ -45378,3 +45378,8 @@ append-only；`.mimosa` 470M / `.alma-snapshots` 495M（工具态，不是仓的
   检查器扩视野是独立小批，与台账纪律联动，另批处理。
 
 凭证 @1b446df8 / @91032530 / @400a3030
+
+### 五、补记（crash 家族代理完整报告回收，@2a2c36de 后）
+
+crash 家族五支终验（现 dist）：**desktop-design 26/0、plan-mode 5/0、settings-navigation 24/0、settings-process 16/0 全绿**——终账升级为 **72/75 绿（96%）**。layout-smoke 升格为**第二条真产品回归**：R5 部分摘取（5c7fa27b，第 1315 页）把思考带/工具簇挪进 `.process-fold-body > .fold-inner`，嵌套包含块把 `--cds-assistant-message-text-stop` 的 clamp 百分比重新定基 ⇒ 折叠体内行右缘比阅读列内缩 31px（862 页「一轮=一条列」不变量被打破，台账无批次接受此内缩）。证据：ProcessFold.tsx:34、stream-process.css:400、margin 实测 31.625px vs 47.25px、截图 /tmp/probe-out/layout-smoke。
+修复尝试一笔（诚实记录）：把 14px 缩进从容器 padding 换成行自身 px 左缘以避免重定基——迭代一拍右缘未收敛（970 vs 936），**还原**。这不是一行 CSS 的修复，需要带 visual 迭代的独立设计批。余 3 支红的最终去向：performance（规模化 backlog）、session-jump（源映射考古）、layout（设计批）。
