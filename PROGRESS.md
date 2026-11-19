@@ -45475,3 +45475,34 @@ docs-check 绿；renderer-layer-check 绿（256 文件）；mutate-needles 全�
 四份真机证据重签。
 
 凭证 @7888ff58 / @f3f68c0f / @b545bed6 / @e358669e
+
+## 2026-11-20 · 第 1336 页：P1 收尾裁决（四件如实 no-counterpart）+ 证据面删除事故还原
+
+### 一、P1 四件裁决（随 7888ff58 入库，component-map reason 逐条带证据）
+
+官方选择器要求的祖先链与 Cairn DOM 逐条对照：TurnStatus/TurnStatusStep（官方要求行内轮状态元素，
+Cairn 的轮相位在输入区 .cc-phase、agent_status 不成行）、AskUserQuestion（官方要求 AssistantMessage
+后代，ClarifyCard 在 .zone-gate 是兄弟区）、MessageAttachmentsFile/Quote（官方要求自然尺寸瓦片容器，
+Cairn 是行内 chip 列表不同构）——四件**如实保持 no-cairn-counterpart**，reason 写明「官方要求 X /
+Cairn DOM 是 Y」。**不伪造结构**是 1:1 的底线：挂上对不上的属性只会误触发瓦片/重置规则。
+
+### 二、证据面删除事故（本批内发生 + 已还原）
+
+38 个 tracked 文件工作树被删（outputs/design-options-2026-11-08、desktop-design-2026-11-06、
+desktop-ux-2026-11-07、design-settings-fix 的截图 + 一度误报的 icns/字体）——**探针重估跑批的连带**
+（re-authored 探针的清理面仍指证据目录的残余）。`git checkout -- .` 全量还原（图标/字体 06:51
+新时间戳实证），0 条删除残留。教训已双写：探针缺省 /tmp（1329/1332 页纪律）+ 本页事故记录。
+
+### 三、性能实验登记（全行 content-visibility 两轮实测，均已还原）
+
+- 全行 c-v：流式帧 p95 218.6→**144.9ms（−34% 帽内）**，但打开会话 851→**2225ms 超帽**（LayoutCount 9→403
+  = 打开路径逐盒实例化抖动）；
+- 仅工具簇：打开 624 ✓ 但流式 225.7 无效果——成本在**屏外文字行的 RecalcStyle**（5.5s→2.4s 是全行版）。
+- 结论：正确形状 = 全行 c-v + 打开路径根因修复（sticky-scroll 实例化抖动排查）——独立性能批，帽不动。
+
+### 四、验证读数
+
+桌面 432 文件 / 2809 条全绿（P1 批无 renderer 变更 ⇒ 证据无需重签）；needles 全部可判定；
+docs-check 绿；typecheck 0。
+
+凭证 @7888ff58
