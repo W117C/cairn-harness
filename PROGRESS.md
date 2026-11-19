@@ -45409,3 +45409,41 @@ crash 家族五支终验（现 dist）：**desktop-design 26/0、plan-mode 5/0�
 桌面 **432 文件 / 2803 条全绿**（+map-integrity 与夹具判卷）；typecheck 0；docs-check 全绿；extractor --check PASS；mutate-needles 全部锚点可判定；四份真机证据重签（CDS 0 错/IME 6/6/队列键 6/6/浮层互斥 5/5）。
 
 凭证 @616ba053 / @babb5275 / @dff3d781 / @b3dcbdf1
+
+## 2026-11-20 · 第 1334 页：1:1 复刻 P2 首刀——编排器 dock 化 + 空态重排（官方真机对照落地）
+
+业主令（ADR 0019 续）：「一打开我们项目的桌面端和打开 claude 桌面端看着一模一样」。
+验收面锁定首屏；**地面真值升级为官方应用真机截图**（`open -a Claude` + screencapture，录屏权限在位），
+不再靠 CSS 间接推断。
+
+### 一、官方首屏实测（outputs/claude-desktop-1to1-2026-11-20/official-home.png）
+
+新版 Claude Code Desktop 首屏三签名：①**居中大像素标志、无文字问候**（~72px 独占中央）；
+②中央栈序 = 标志 → 项目卡 → Choose environment → 动作行；③**编排器 = 底部 dock**
+（横贯主区、左右 ~16px 边距、上圆角、底贴窗口下沿、下巴工具条在 dock 内输入行之下）。
+左栏 = 单栏无图标轨（New/Search/Routines/Customize + 项目分组会话列表）——结构性重构，独立批次。
+
+### 二、本刀落地（Cairn 侧）
+
+1. **hero 标志化**：问候文本 sr-only（时段问候逻辑与判卷源钉保留）、标志 72px 居中。
+2. **官方序重排**：起手行 + 最近会话从「dock 之后」移入 hero 栈（.empty-tail 弹性带退役 → .empty-recent 随栈）——
+   此前排序与官方相反。
+3. **编排器 dock 化**：`.zone-composer` 退出阅读列消费（max-width:none、左右 16px）、composer-card
+   上圆角消费 --radius-composer-card 令牌、底贴边、下巴在内；空态与会话态同形。
+4. 判卷随 1:1 换钉（零删弱、全带出处）：quick-starts-ui（居中枢位/衬线大字两格）、empty-context
+   （tail→recent 两格）、column-single-source（列消费者 8→7，dock 退出列形状）、composer-radius（令牌消费保持）。
+5. 两态截图入库：官方首屏 + Cairn 改后首屏（outputs/claude-desktop-1to1-2026-11-20/）。
+
+### 三、验证读数
+
+桌面 **432 文件 / 2803 条全绿**；四份真机证据重签（CDS 0 错/IME 6/6/队列键 6/6/浮层互斥 5/5）；
+typecheck 0。ui-gallery 01-empty.png 为改后真机形态证人。
+
+### 四、1:1 剩余差距（下一批排期）
+
+- 左栏结构（单栏化 + 项目分组会话列表）——结构性重构，牵 Sidebar/AppRail/pane 布局与多判卷；
+- dock 宽度细节（官方左右边距略大）与 chin 排布逐项对照；
+- 项目卡形制（官方为卡片行、Cairn 为 chip 下拉）；
+- P3 词汇族（Button/Surface/Card/Panel）按组件账逐个 port。
+
+凭证 @8b3cc608
