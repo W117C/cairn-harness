@@ -33,5 +33,12 @@ for (const name of names) {
 }
 console.log(
   `台账登记 ${String(sealed)} / ${String(names.length)}；` +
-  "未登记的探针没有重跑记录——按第 1329 页纪律，改设置/窗格面的批次应重跑受影响支并记录读数。",
+  "未登记的探针没有重跑记录——按第 1329 页纪律，改设置/窗格面的批次应重跑受影响的探针并记录读数。",
+);
+// 跑法（2026-11-19 重估跑批实测的三条约定，别再考古）：
+console.log(
+  "跑法：cd apps/desktop && env CAIRN_RENDERER_DIST=\"$PWD/dist\" pnpm exec electron scripts/<名>.cjs <显式 /tmp 输出参数>\n" +
+  "  · CAIRN_RENDERER_DIST 必须指到构建产物（5 支探针读它）；\n" +
+  "  · 参数目录/文件因探针而异（EISDIR 报错 = 它要的是文件路径）；无参裸跑的缺省一律 /tmp（证据面只读）；\n" +
+  "  · 3 并发跑批会产生假红——单跑复验是重估的必要环节。",
 );

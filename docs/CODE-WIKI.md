@@ -148,6 +148,12 @@ WorkerHandle 上那五格布尔（finished/terminalResolved/closed/stuckActive/p
 spawn 回滚路径 terminalResolved 合法地永不置位）——写入点全图与撤回枚举的裁定写死在
 `src/agent/orchestrator-types.ts` 的收尾协议注释块，动那五格前先读它。
 
+**会话单位四词汇**（N5，别混）：`session` = 一份 JSONL 事件日志（盘上单位）；
+`thread` = worker 的逻辑会话（orchestrator thread_id，事件里 `stage`/钩子契约叫 `agent_type`）；
+`sidechat` = 独立于主会话的旁路小会话（自己的日志文件）；`segment` = 会话内压缩开的段
+（`openSegmentAfterCompaction` 的「日志停在一次压缩上⇒下一轮开新段」）。混用两个词，
+路由/回放/检索就找错对象。
+
 ## ④ 门禁纪律（改任何判据前先读这一节）
 
 - **清单即事实源**：门表在 `scripts/gate-manifest.ts` 的 `GATES`。
