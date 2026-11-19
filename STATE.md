@@ -1,6 +1,6 @@
 # Cairn / DSH —— 现态
 
-rev: 8b3cc608
+rev: 7888ff58
 
 核对日期 2026-11-18（Asia/Shanghai）。IM 通道线第 1320 页收口于 `9b5ef007`：**协议 v81**
 （飞书长连接 + 邮件 IMAP/SMTP + 企业微信智能机器人 + 微信 iLink 扫码登录）。微信走官方 iLink

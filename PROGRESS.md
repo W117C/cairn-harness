@@ -45447,3 +45447,31 @@ typecheck 0。ui-gallery 01-empty.png 为改后真机形态证人。
 - P3 词汇族（Button/Surface/Card/Panel）按组件账逐个 port。
 
 凭证 @8b3cc608
+
+## 2026-11-20 · 第 1335 页：1:1 复刻 P3 首刀——左栏单栏化 + 核心面三收口（H3 缓存/claim 改名/跑法入档）
+
+### 一、左栏单栏化（7888ff58，ADR 0019 P3 首刀）
+
+官方首屏真机对照：单列、顶部行族、项目分组列表、底部账户。落地：AppRail → 顶部行族 6 行
+（新任务主行高亮 ⌘N/搜索接侧栏会话搜索开关/定时任务/技能/记忆/自定义——自有能力按官方行形制安置，
+ADR 0019 §4）；SidebarRail 删除；AccountMenu 钉底；品牌单源（chatSidebarVisible 退役）；
+栏宽 200/256/320→240/304/368；接缝修复（皮肤画布扩整列）。判卷换钉 12 文件（零删弱全带出处）；
+桌面 432 文件/2809 条全绿；layer-check 绿；needles 全部可判定。**单栏轮廓与官方对齐成立**
+（视觉证人 cairn-home-single-column.png）。
+
+### 二、核心面三收口
+
+1. **H3 记忆读缓存**（b545bed6）：readOrNull 咽喉点 (mtime,size) 键有界 LRU；注入每请求 ~30 读大幅下降；
+   竞态安全论证（原子换走 ⇒ 新内容存旧 mtime ⇒ 必 miss）；判卷三态递进 + 跨实例对账 2/2。
+2. **N4 submit→claim**（f3f68c0f）：幂等账改名列正三义；loop/判卷/check 全跟上；
+   测试标题不动（变异锚按标题选 killer）；顺带修缓存判卷的 MemoryType 字面量（tsc 抓）。
+3. **跑法入档**（e358669e）：smoke:list 补三条实测约定（CAIRN_RENDERER_DIST/参数形制/并发假红）；
+   CODE-WIKI 补会话单位四词汇（N5）。
+
+### 三、验证读数
+
+核心全量 719 文件全绿（maxWorkers=2，295s）；桌面 432 文件/2809 条全绿；typecheck 0；
+docs-check 绿；renderer-layer-check 绿（256 文件）；mutate-needles 全部可判定；
+四份真机证据重签。
+
+凭证 @7888ff58 / @f3f68c0f / @b545bed6 / @e358669e
