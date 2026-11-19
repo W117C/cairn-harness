@@ -837,7 +837,7 @@ export const MUTATIONS = [
     test: "tests/docs-check.test.ts",
     desc: "目录点名（以 `/` 结尾）那一半改成恒追得到 ⇒ 「整个 dated 目录没随页入库」读成绿：这正是第 281 页的形状，" +
       "而文件那一半照旧——只红目录这一支，说明判据的两半得各买一支",
-    apply: (s) => s.replace('if (ref.endsWith("/") ? dirs.has(ref) : tracked.has(ref)) continue;', 'if (ref.endsWith("/") ? true : tracked.has(ref)) continue;'),
+    apply: (s) => s.replace('const inRoot = ref.endsWith("/") ? dirs.has(ref) : tracked.has(ref);', 'const inRoot = ref.endsWith("/") ? true : tracked.has(ref);'),
     expectFail: "整个目录没入库才红",
   },
   {
@@ -846,7 +846,7 @@ export const MUTATIONS = [
     test: "tests/docs-check.test.ts",
     desc: "文件点名那一半改成恒追得到 ⇒ 页点名的证人不存在也不出声，D-11 退化成「只查目录」；" +
       "反向一侧（同一条从清单里去掉要红一条）当场抓住",
-    apply: (s) => s.replace('if (ref.endsWith("/") ? dirs.has(ref) : tracked.has(ref)) continue;', 'if (ref.endsWith("/") ? dirs.has(ref) : true) continue;'),
+    apply: (s) => s.replace('const inRoot = ref.endsWith("/") ? dirs.has(ref) : tracked.has(ref);', 'const inRoot = ref.endsWith("/") ? dirs.has(ref) : true;'),
     expectFail: "同一条从清单里去掉就红一条",
   },
   {
