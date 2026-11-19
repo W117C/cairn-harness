@@ -23,6 +23,13 @@ export function BackgroundCommands({ sessionId, workspace }: { sessionId: string
       reading = true;
       try {
         const next = await window.agent.backgroundTaskList(sessionId, workspace);
+        // 契约形状守卫（2026-11-19）：session-jump 考古实证非数组回包会把整块面板炸进
+        // render-boundary（.filter/.map 双炸）。回包违规时按空表处理并出声——不编值、不炸面。
+        if (!Array.isArray(next)) {
+          console.warn("[background-commands] backgroundTaskList 回包不是数组（契约违规），按空表处理");
+          if (alive) setTasks([]);
+          return;
+        }
         if (alive) setTasks(next);
       } catch (err) {
         if (alive && tasks.length > 0) setError(err instanceof Error ? err.message : String(err));

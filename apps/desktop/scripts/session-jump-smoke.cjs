@@ -43,7 +43,10 @@ async function main() {
   const start = protocol.indexOf("export interface AgentApi");
   const body = protocol.slice(start, protocol.indexOf("\n}", start));
   const starts = [...body.matchAll(/^\s{2}(\w+)\??\s*[(<]/gm)];
-  const members = starts.map((member) => ({ name: member[1] }));
+  // 2026-11-19 补 isArray（数组型成员兜底要给 []）：漏了它，backgroundTaskList 这类
+  // Promise<Xxx[]> 成员在自有 preload 的兜底工厂里拿到 {ok:true} ⇒ 渲染层 .filter 当场炸
+  // （session-jump 红了两周的根因，源映射考古定位）。
+  const members = starts.map((member, i) => ({ name: member[1], isArray: /Promise<[^>]*\[\]/.test(body.slice(member.index, starts[i + 1]?.index ?? body.length)) }));
 
   const win = new BrowserWindow({
     width: 1440, height: 900, show: false,

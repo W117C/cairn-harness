@@ -98,10 +98,12 @@ const argOf = (prefix, fallback) => {
 const members = JSON.parse(argOf("--cairn-sj-members=", "[]"));
 
 const api = {};
-for (const { name } of members) {
+// 数组型成员兜底给 []（与 ui-gallery-preload 同一条纪律：渲染层会 .map/.filter 数组型返回，
+// 给 {ok:true} 就是 "n.filter is not a function"——session-jump 红两周的根因，2026-11-19 修）。
+for (const { name, isArray } of members) {
   if (name in stub) { api[name] = stub[name]; continue; }
   if (name in fallback) { api[name] = fallback[name]; continue; }
-  api[name] = () => Promise.resolve({ ok: true });
+  api[name] = () => Promise.resolve(isArray === true ? [] : { ok: true });
 }
 // 推送型订阅（不走 Promise 形状）
 for (const name of ["onEvent", "onAsk", "onAskDone", "onNotificationOpen", "onMenu", "onTerminalData", "onTerminalExit", "onBrowserState", "onPreviewState"]) {
