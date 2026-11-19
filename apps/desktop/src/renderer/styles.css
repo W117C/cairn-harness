@@ -147,24 +147,25 @@ svg { display: block; }
   mask: url("./public/brand/cairn-mark.svg") center / contain no-repeat;
 }
 .cairn-mark-outline { mask-image: url("./public/brand/cairn-outline.svg"); }
-.side-brand-mark { color: hsl(var(--text-200)); }
 .tb-brand .cairn-mark { color: hsl(var(--accent-brand)); }
 
-/* ══ 侧栏（242px 起、可拖到 480；顶 48 / 工具行 / 列表 / 脚 48）═══════════ */
+/* ══ 侧栏（ADR 0019 1:1 单栏：顶行族 / 搜索 / 工具行 / 列表 / 底账户；240–368 可拖）═══ */
 /* flex column（不是固定轨数 grid）：可选行（搜索/添加/新建项目/notice）随开随合，
-   轨数会漂——曾因此让脚注落进 auto 轨悬在半空。flex 下脚注恒贴底、列表恒吃剩余。 */
+   轨数会漂——曾因此让脚注落进 auto 轨悬在半空。flex 下账户恒贴底、列表恒吃剩余。
+   2026-11-20 单栏化：列表面（底色 + 右缘 hairline）从 .side 上移到 .side-wrap——
+   行族（AppRail）与账户入口（AccountMenu）同住这一列，vibrancy 材质也直接打在列上。 */
 .side-wrap {
-  position: relative; display: flex; min-height: 0; min-width: 0; flex: none;
+  position: relative; display: flex; flex-direction: column; min-height: 0; min-width: 0; flex: none;
+  background: hsl(var(--bg-200));
+  border-right: 1px solid var(--hairline);
   /* 侧栏收/开做宽度过渡（2026-10-18）：此前 display:none 是瞬切，主区“跳”一下。
      visibility 延迟到过渡结束才隐藏——收起的控件立刻退出 Tab 序，又不在动画中途消失。 */
   overflow: hidden;
   transition: width var(--t-fast), opacity var(--t-fast), visibility 0s;
 }
 .side {
-  width: 100%; min-width: 0;
+  width: 100%; min-width: 0; flex: 1;
   display: flex; flex-direction: column;
-  background: hsl(var(--bg-200));
-  border-right: 1px solid var(--hairline);
 }
 /* 拖拽把手（§2.1「可拖拽，把手在 242px 处停住」）：贴右缘的热区；悬停显 1px 提示线。
    双击/键盘 ←→ 复位与微调（App 侧实现，宽持久在 localStorage）。 */
@@ -180,19 +181,10 @@ svg { display: block; }
    不收这一刀，把手的位移会被插值 140ms——肉眼可见地落后于光标，松手再补一段，
    读作「把手坏了/发飘」。收/开（⌘B）仍走上面的过渡，两者互不影响。 */
 body[data-resizing="sidebar"] .side-wrap { transition: none; }
-.side-head {
-  display: flex; flex-direction: column; align-items: stretch; gap: 7px; flex: none;
-  padding: 10px var(--space-sm) 9px;
-}
-.side-brandline { display: flex; align-items: center; gap: 7px; height: 22px; padding: 0 4px; }
-.side-brandline .side-brand-mark { width: 16px; height: 16px; }
-.side-brand { color: hsl(var(--text-100)); font-size: var(--fs-caption-md); font-weight: var(--fw-semibold); letter-spacing: -0.01em; }
-.side-actions { display: flex; align-items: center; gap: 4px; min-width: 0; }
-.side-tools {
+.side-list-tools {
   display: flex; align-items: center; gap: 2px; flex: none;
-  padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-md);
+  padding: 2px var(--space-sm) 2px var(--space-md);
 }
-.side-tools .sec-label { flex: 1; }
 .sec-label { font-size: var(--fs-caption-xs); color: hsl(var(--text-400)); font-weight: var(--fw-medium); }
 
 .iconbtn {
@@ -3699,22 +3691,12 @@ body[data-dsh-claude-style] .md-body .md-code pre { font-size: var(--fs-code); l
 .sc-note:focus, .sc-input input:focus { border-color: hsl(var(--text-400)); }
 .sc-foot-note { padding: 2px var(--space-xs) var(--space-xs); color: hsl(var(--text-400)); font-size: var(--fs-caption-xs); flex: none; }
 
-/* ══ P1 主界面重做（brief 2026-10-16）：侧栏 240–280 / 项目区 / 行状态 / 添加项目 / 弹窗 / 拖放 ══ */
+/* ══ P1 主界面重做（brief 2026-10-16）：项目区 / 行状态 / 添加项目 / 弹窗 / 拖放 ══ */
+/* （ADR 0019 1:1 单栏化 2026-11-20：旧顶栏「＋ 新任务」主按钮随头部行下架，
+    主行动作升为顶部行族的 New 高亮块——样式见 .app-rail-item[data-row="new"]。） */
 
-/* 顶栏「＋ 新任务」主按钮（brief 第二节） */
-.side-new {
-  display: inline-flex; align-items: center; gap: 7px; flex: 1; min-width: 0; height: 32px; padding: 0 12px;
-  border: 1px solid var(--hairline); border-radius: var(--radius-pill);
-  background: transparent; color: hsl(var(--text-100));
-  font-size: var(--fs-caption-md); font-weight: var(--fw-medium);
-  transition: background var(--t-instant), border-color var(--t-instant);
-}
-.side-new:hover { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover)); border-color: var(--hairline-strong); }
 /* 焦点环不改变控件轮廓：全局 :focus-visible 会把圆角收成 4px，pill/圆钮在键盘焦点下会「方一下」。 */
-.side-new:focus-visible, .empty-chip:focus-visible, .mp-trigger:focus-visible { border-radius: var(--radius-pill); }
-.side-new-label { flex: 1; min-width: 0; text-align: left; white-space: nowrap; }
-.side-new-keys { color: inherit; opacity: .55; font-family: inherit; font-size: var(--fs-caption-2xs); font-weight: var(--fw-regular); }
-.side-head .iconbtn { flex: none; width: 30px; height: 30px; }
+.empty-chip:focus-visible, .mp-trigger:focus-visible { border-radius: var(--radius-pill); }
 
 /* 会话行状态图标（只取本进程可见态）：转圈 = 运行中；蓝点 = 等门；对勾 = 完成；红点 = 失败。
    状态槽恒占 12px，标题左缘不随状态有无而跳动。 */
@@ -3930,52 +3912,55 @@ body[data-dsh-claude-style] .md-body .md-code pre { font-size: var(--fs-code); l
 /* 失败工具的**输出正文**同样降到正文色（失败标记是那一行的红三角 + 折叠摘要，不靠正文喊）。 */
 .tool-output[data-failed="true"] pre { color: hsl(var(--text-200)); }
 .tool-output-note { display: block; margin-top: 4px; color: hsl(var(--text-400)); font-size: var(--fs-caption-sm); }
-/* 2026-10-31：侧栏快捷入口不再是第二条 48px 栏，而是并进全局能力轨的一段（AppRail.actions）。
-   常量只剩排列本身；宽度/底色/分隔线由 .app-rail 提供。 */
-.sidebar-rail { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.rail-context { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-/* 宽窗且侧栏展开时，快捷入口已在侧栏顶部；轨里这一段收起，避免同屏两套「新建/搜索」。
-   窄窗（≤760px）侧栏被 CSS 隐藏，轨里这一段必须回来，否则新建/搜索完全没有入口。 */
-.app[data-sidebar="expanded"] .app-rail .rail-context { display: none; }
-@media (max-width: 760px) {
-  .app[data-sidebar="expanded"] .app-rail .rail-context { display: flex; }
-}
-
-/* Agent OS 全局能力轨：一级目的地常驻，收起 Chat 侧栏也不隐藏。 */
+/* ADR 0019 1:1（官方首屏真机对照 2026-11-19，official-home.png）：全局导航行族。
+   窄图标轨（48px 目的地列）下架；行族钉在会话列顶部，与官方 New/Search/Routines/Customize
+   同形制（图标+文字的行），账户入口钉列底（轮廓：顶部行族 → 项目分组列表 → 底部账户）。
+   旧 rail-context / sidebar-rail（收起态快捷入口）随轨消失——单栏下收起即整列隐藏。 */
 .app-rail {
-  width: 48px; flex: none; min-height: 0; padding: 8px 0;
-  display: flex; flex-direction: column; align-items: center;
-  background: hsl(var(--bg-200)); border-right: 1px solid var(--hairline);
+  width: 100%; flex: none; min-height: 0;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 10px 8px 6px;
 }
-.app-rail-main { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .app-rail-item {
-  position: relative; width: 34px; height: 34px; flex: none;
-  display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 6px; color: hsl(var(--text-400));
+  position: relative; width: 100%; height: 34px; flex: none;
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 10px; border-radius: var(--radius-sm);
+  color: hsl(var(--text-300)); font-size: var(--fs-body-sm);
   transition: background var(--t-instant), color var(--t-instant);
 }
 .app-rail-item:hover { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover)); color: hsl(var(--text-000)); }
-.app-rail-item[aria-current="page"] { background: hsl(var(--accent-brand) / 10%); color: hsl(var(--accent-brand-ink)); }
-/* 选中标记收进栏内：此前的 left:-7px 让 2px 竖条贴在窗口圆角边缘，截图里像一条被裁掉的残线。 */
-.app-rail-item[aria-current="page"]::before {
-  content: ""; position: absolute; left: 1px; top: 9px; bottom: 9px;
-  width: 3px; border-radius: 2px; background: hsl(var(--accent-brand));
+/* 焦点环不改变控件轮廓（全局 :focus-visible 会把圆角收成 4px）。 */
+.app-rail-item:focus-visible { border-radius: var(--radius-sm); }
+/* 目的地行的选中态与会话行同一刻度（淡底 + 字重），不再挂品牌色左条。 */
+.app-rail-item[aria-current="page"] {
+  background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-selected));
+  color: hsl(var(--text-000)); font-weight: var(--fw-medium);
 }
+/* New 主行/高亮块（官方 New 同形制）：常驻轻底的主行动作，不是选中态。 */
+.app-rail-item[data-row="new"] {
+  background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover));
+  color: hsl(var(--text-000)); font-weight: var(--fw-medium);
+}
+.app-rail-item[data-row="new"]:hover { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-selected)); }
+.app-rail-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.app-rail-keys { color: inherit; opacity: .55; font-family: inherit; font-size: var(--fs-caption-2xs); font-weight: var(--fw-regular); }
 .app-rail-badge {
-  position: absolute; top: 1px; right: 0; min-width: 14px; height: 14px; padding: 0 3px;
+  position: absolute; top: 50%; transform: translateY(-50%); right: 8px; min-width: 14px; height: 14px; padding: 0 3px;
   border-radius: 7px; background: hsl(var(--accent-control)); color: hsl(var(--bg-000));
   font-size: 8px; font-weight: var(--fw-bold); line-height: 14px; text-align: center;
 }
-/* 2026-11-03 业主：账户入口固定在全局轨底部，头像图标与目的地同尺寸同圆角。
-   `.avatar` 的页脚版宽高（整行 100%）在这里被轨宽覆盖，避免把 34px 的竖栏撑开。 */
-.app-rail-user { margin-top: auto; display: flex; align-items: center; justify-content: center; }
+/* 账户入口钉在单栏底部（官方一致）：头像行贴列底，左侧对齐行族。 */
+.app-rail-user {
+  margin-top: auto; flex: none;
+  display: flex; align-items: center;
+  padding: 6px 8px;
+}
 .app-rail-user .avatar {
   width: 34px; height: 34px; padding: 0; gap: 0;
-  justify-content: center; border-radius: 6px;
+  justify-content: center; border-radius: var(--radius-sm);
   color: hsl(var(--text-400));
 }
 .app-rail-user .avatar:hover { background: hsl(from hsl(var(--text-000)) h s l / var(--alpha-hover)); color: hsl(var(--text-000)); }
-.app-rail-divider { width: 20px; height: 1px; flex: none; margin: 3px 0; background: var(--hairline); }
 .workbench-sidebar { min-height: 0; height: 100%; display: flex; min-width: 0; flex: none; }
 .workspace-host { position: relative; min-width: 0; min-height: 0; height: 100%; overflow: hidden; }
 .chat-workspace { width: 100%; height: 100%; min-width: 0; min-height: 0; }
@@ -3988,11 +3973,11 @@ body[data-dsh-claude-style] .md-body .md-code pre { font-size: var(--fs-code); l
 }
 .destination-page[data-hidden="true"] { visibility: hidden; pointer-events: none; }
 
-/* Agent OS 目的地上下文：窄轨之外只保留当前目的地的一层筛选。 */
+/* Agent OS 目的地上下文：单栏化后住在行族之下、账户入口之上（不再是一根独立窄柱），
+   列表面由 .side-wrap 承担，这里只管排布。 */
 .page-context-sidebar {
-  width: 200px; flex: none; min-height: 0; padding: var(--space-md) var(--space-sm);
+  width: 100%; flex: 1; min-height: 0; padding: var(--space-md) var(--space-sm);
   display: flex; flex-direction: column; align-items: stretch; gap: 2px;
-  background: hsl(var(--bg-200)); border-right: 1px solid var(--hairline);
 }
 .page-context-item {
   width: 100%; min-height: 32px; padding: 0 var(--space-sm);
@@ -4069,8 +4054,6 @@ body[data-dsh-claude-style] .md-body .md-code pre { font-size: var(--fs-code); l
   .ap-error-host { padding: var(--space-md) var(--space-16) 0; }
 }
 body[data-dsh-claude-style] .app[data-sidebar="collapsed"] .side-wrap { border: 0; }
-.sidebar-rail .iconbtn { width: 34px; height: 34px; flex: none; }
-.rail-divider { width: 20px; height: 1px; background: var(--hairline); margin: 6px 0; }
 .pane-workbench { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 /* 2026-11-03 业主：「没有放大，我需要加一个放大交互，然后把对话框覆盖掉」。
    放大态把整个窗格工作台从右栏提升为工作区覆盖层：从标题栏下沿铺到窗口底，盖住对话；
@@ -4338,9 +4321,9 @@ body[data-dsh-claude-style] .md-body .md-code pre { color: hsl(var(--text-000));
 [data-theme="dark"] .at-hero-create,
 [data-theme="dark"] .btn.primary,
 [data-theme="dark"] .mini-btn.primary { background: var(--btn-primary-bg); border-color: var(--btn-primary-border); color: var(--btn-primary-fg); }
-[data-theme="dark"] .app-rail-item[aria-current="page"],
+/* （ADR 0019 1:1 单栏化：目的地行选中态改用中性淡底，随 .app-rail-item 基档在暗色下成立，
+    不再需要品牌色覆写。） */
 [data-theme="dark"] .memory-card.on { background: hsl(var(--accent-brand) / 8%); color: hsl(var(--accent-brand-ink)); }
-[data-theme="dark"] .app-rail-item[aria-current="page"]::before { background: hsl(var(--accent-brand-ink)); }
 [data-theme="dark"] .sw.on { background: hsl(var(--accent-brand-ink)); }
 [data-theme="dark"] .md-code,
 [data-theme="dark"] .md-table-wrap { background: hsl(var(--bg-200)); }

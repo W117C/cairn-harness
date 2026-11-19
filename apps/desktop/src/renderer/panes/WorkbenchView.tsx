@@ -410,10 +410,10 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
     : (projects.find((p) => p.path === activeWorkspace)?.name ?? activeWorkspace.slice(activeWorkspace.lastIndexOf("/") + 1)), [projects, activeWorkspace]);
   // 工作状态面板（2026-11-04 截图右上角）：todo_write 清单投影 + 运行读数（阶段/耗时/步数）。
   const workTodos = useMemo(() => todoProjection(events), [events]);
-  // 侧栏 brandline 与工具栏品牌补位共用这一条判据（2026-11-07 第 1041 页）：两处各写
-  // 一遍布尔式，任何一处漏改就会同屏两枚品牌标或一枚都没有。
-  const chatSidebarVisible = destination === "chat" && !sidebarCollapsed && !focusMode;
-  const { toolbarContext, toolbarCenter, toolbarAside, toolbarRight } = renderAppToolbar({ settingsOpen: settingsOpen || destination !== "chat", sidebarBrandVisible: chatSidebarVisible, activeId, activeWorkspace, activeProjectLabel, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, activeWorkspaceRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, onOpenPane: openToolbarPane, inspectorOpen: !inspectorCollapsed, onToggleInspector: toggleInspector, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode, demo: providerInfo?.kind === "demo", onOpenProviderSettings: () => { setSettingsSection("provider"); setSettingsOpen(true); }, running: runningActive, phaseLabel, elapsedSec, runSteps, todos: workTodos });
+  // ADR 0019 1:1 单栏化（官方首屏真机对照 2026-11-19）：侧栏 brandline 随头部行下架——
+  // 品牌标只在标题栏（工作区无会话时中栏补印），不再有「侧栏在场就不印」的第二判据。
+  // 第 1041 页的不变量仍成立：同屏恰好一枚品牌标（AppToolbar 单点渲染）。
+  const { toolbarContext, toolbarCenter, toolbarAside, toolbarRight } = renderAppToolbar({ settingsOpen: settingsOpen || destination !== "chat", activeId, activeWorkspace, activeProjectLabel, barRenaming, setBarRenaming, sessions, renameSessionById, sessionTitle, goalTrace, dismissedGoals, goalAct, activeIdRef, activeWorkspaceRef, setDismissedGoals, outlineTurns, outlineOpen, setOutlineOpen, paneTabs, onOpenPane: openToolbarPane, inspectorOpen: !inspectorCollapsed, onToggleInspector: toggleInspector, fileCount, pluginSidebarOpen, togglePluginSidebar, focusMode, toggleFocusMode, demo: providerInfo?.kind === "demo", onOpenProviderSettings: () => { setSettingsSection("provider"); setSettingsOpen(true); }, running: runningActive, phaseLabel, elapsedSec, runSteps, todos: workTodos });
 
     return (
     <div className="app" data-sidebar={sidebarCollapsed ? "collapsed" : "expanded"}>
@@ -429,7 +429,6 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
       <div className="shell">
         <WorkbenchSidebarHost
           deps={deps}
-          chatSidebarVisible={chatSidebarVisible}
           pageItems={pageItems}
           pluginUpdateCount={pluginUpdateCount}
           setNewProjectOpen={setNewProjectOpen}

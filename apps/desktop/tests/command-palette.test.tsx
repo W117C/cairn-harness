@@ -109,12 +109,15 @@ describe("② ShortcutsSection（设置页「快捷键」区）", () => {
 });
 
 describe("③ 同源哨兵（tooltip 与表同源，防漂移）", () => {
-  it("Sidebar 键位 tooltip 从 SHORTCUTS 取；会话搜索不冒充命令面板", () => {
+  it("Sidebar/行族键位 tooltip 从 SHORTCUTS 取；会话搜索不冒充命令面板", () => {
+    // 2026-11-20 ADR 0019 1:1 单栏化换钉（官方首屏真机对照 2026-11-19）：新任务/搜索
+    // 两动作的开关移到顶部行族（AppRail），键位 tooltip 同源判据跟着走。
+    const railSrc = readFileSync(fileURLToPath(new URL("../src/renderer/components/AppRail.tsx", import.meta.url)), "utf8");
     expect(sidebarSrc).toContain('from "../shortcuts"');
-    expect(sidebarSrc).toContain('withKeys(STR.sidebar.newTaskTip, "new-session")');
-    // 2026-11-03：账户菜单搬到全局轨底部（AccountMenu），键位同源判据跟着走。
+    expect(railSrc).toContain('withKeys(STR.sidebar.newTaskTip, "new-session")');
+    // 2026-11-03：账户菜单搬到单栏底部（AccountMenu），键位同源判据跟着走。
     expect(accountSrc).toContain('withKeys(STR.footer.settingsTip, "settings")');
-    expect(sidebarSrc).toContain('title={STR.sidebar.searchTip}');
+    expect(railSrc).toContain('title={STR.sidebar.searchTip}');
     expect(appSrc).not.toContain('withKeys(STR.sidebar.searchTip, "palette")');
     // withKeys 本身也搬进表模块（单一实现）：侧栏/头像/收起轨共用，不再各抄一份。
     // 2026-11-16（第 1303 页）：空列表提示也回表（fillKeys + {key} 占位），一并钉住。

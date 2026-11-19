@@ -53,6 +53,10 @@ describe("filterSessions 行为（侧栏搜索的地基）", () => {
 
 describe("Sidebar 搜索接线", () => {
   const filterMenuSrc = read("../src/renderer/components/SessionFilterMenu.tsx");
+  // ADR 0019 1:1 单栏化（官方首屏真机对照 2026-11-19）：搜索开关移到顶部行族的「搜索」行
+  // （AppRail），受控态归单栏宿主（WorkbenchSidebar）；输入行仍在本组件内。
+  const railSrc = read("../src/renderer/components/AppRail.tsx");
+  const hostSrc = read("../src/renderer/panes/WorkbenchSidebar.tsx");
   it("真的调用 filterSessions（不再只是 re-export）", () => {
     expect(sidebarSrc).toContain("filterSessions(activeSessions");
     expect(sidebarSrc).toContain("filterSessions(archivedSessions");
@@ -82,13 +86,18 @@ describe("Sidebar 搜索接线", () => {
     expect(sidebarSrc).toMatch(/!searchOpen && filter === "all"/);
   });
 
-  it("放大镜按需展开紧凑搜索行，不常驻占位", () => {
-    expect(sidebarSrc).toContain("const [searchExpanded, setSearchExpanded]");
-    expect(sidebarSrc).toContain("data-sidebar-search-toggle");
-    expect(sidebarSrc).toContain("aria-expanded={showSearch}");
+  it("搜索行按需展开输入行，不常驻占位（开关在行族，状态在列宿主）", () => {
+    // 开关：行族「搜索」行（aria-expanded 受控、tooltip 与 strings 同源）。
+    expect(railSrc).toContain("data-sidebar-search-toggle");
+    expect(railSrc).toContain("aria-expanded={props.searchOpen === true}");
+    expect(railSrc).toContain("title={STR.sidebar.searchTip}");
+    // 状态：单栏宿主持有展开/查询两份 useState，开关切换写在这里。
+    expect(hostSrc).toContain("const [searchExpanded, setSearchExpanded] = useState(false);");
+    expect(hostSrc).toContain('const [searchQuery, setSearchQuery] = useState("");');
+    expect(hostSrc).toContain("setSearchExpanded(true)");
+    // 输入行：按需展开（有查询也保持展开），仍由会话列渲染。
     expect(sidebarSrc).toContain("{showSearch && (");
-    expect(sidebarSrc).toContain("setSearchExpanded(true)");
-    expect(sidebarSrc).toContain("title={STR.sidebar.searchTip}");
+    expect(sidebarSrc).toContain('id="sidebar-session-search"');
     // 反向：搜索不冒充命令面板——否定断言读整个应用面（按钮哪天拆进子组件，读 Sidebar 会空过）
     expect(readAppSurface()).not.toContain('withKeys(STR.sidebar.searchTip, "palette")');
     expect(readAppSurface()).not.toContain("aria-label={STR.sidebar.search} title={withKeys(STR.sidebar.searchTip, \"palette\")} onClick={props.onOpenPalette}");
@@ -99,11 +108,11 @@ describe("Sidebar 搜索接线", () => {
     expect(sidebarSrc).toContain("searchOpen &&");
   });
 
-  it("Esc 两级语义：有字先清空，空着才收起", () => {
+  it("Esc 两级语义：有字先清空，空着才收起并把焦点还给行族的搜索行", () => {
     expect(sidebarSrc).toContain('if (e.key === "Escape")');
     expect(sidebarSrc).toContain('if (sessionQuery !== "") { setSessionQuery(""); return; }');
     expect(sidebarSrc).toContain("setSearchExpanded(false)");
-    expect(sidebarSrc).toContain("searchToggleRef.current?.focus()");
+    expect(sidebarSrc).toContain("document.querySelector<HTMLElement>('[data-sidebar-search-toggle=\"true\"]')?.focus()");
   });
 
   it("⏎ 打开第一个命中（搜索的终点就是打开它）", () => {

@@ -45,7 +45,8 @@ const MICRO = [
   ":focus-visible",
   ".iconbtn", ".mini-btn", ".btn", ".ctl", ".row-action", ".add-project-btn",
   ".menu-item", ".cp-item", ".ss-row", ".session:hover", ".ss-opt", ".theme-opt", ".opt",
-  ".tpl-card", ".start", ".err-retry", ".tool-head", ".avatar", ".side-new", ".sp-back",
+  ".tpl-card", ".start", ".err-retry", ".tool-head", ".avatar", ".app-rail-item", ".sp-back",
+  // （.side-new 已随 ADR 0019 1:1 单栏化下架——微反馈位由 .app-rail-item 接着钉，不是放松。）
   ".side-search", ".side-search-x", ".sp-nav-search", ".sp-nav-search-x",
   ".sw", ".composer-card",
   // 2026-11-03：.provider-dot 已不再是可点元素（业主：一枚长得像状态栏的暗门）。

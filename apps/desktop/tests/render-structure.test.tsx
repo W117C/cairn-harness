@@ -264,15 +264,19 @@ function sidebarHtml(over: Partial<Parameters<typeof Sidebar>[0]> = {}): string 
   return renderToStaticMarkup(<Sidebar {...props} />);
 }
 
-describe("⑤ 左栏顶栏：新任务 + 按需会话搜索", () => {
-  it("新任务保留快捷键，会话筛选不冒称全局命令面板", () => {
+describe("⑤ 会话列顶部：搜索输入行按需展开（入口在行族）＋ 筛选小工具行", () => {
+  it("搜索输入行受行族「搜索」行控制，不冒称全局命令面板（ADR 0019 1:1 换钉）", () => {
+    // 2026-11-20 ADR 0019 P3 首刀（官方首屏真机对照 2026-11-19）：搜索开关移到顶部行族
+    // （AppRail 的 data-sidebar-search-toggle 行），输入行留在会话列内；
+    // 开关/展开态的判卷在 sidebar-session-search 与 app-rail 判卷里。
     const html = sidebarHtml();
-    expect(html).toContain(">新任务<");
-    expect(html).toContain("新任务（⌘N）");
-    expect(html).toContain('aria-label="搜索会话"');
-    expect(html).toContain('title="搜索会话"');
-    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain('class="side-head"');
+    expect(html).not.toContain('class="side-actions"');
     expect(html).not.toContain('title="搜索会话（⌘K）"');
+    const expanded = sidebarHtml({ searchExpanded: true });
+    expect(expanded).toContain('id="sidebar-session-search"');
+    expect(expanded).toContain('aria-label="搜索会话"');
+    expect(expanded).toContain('placeholder="搜索会话…"');
   });
 
   it("旧入口下架：无行内「工作区路径」表单、无绝对路径 placeholder、无「新建工作区」钮", () => {
@@ -283,14 +287,16 @@ describe("⑤ 左栏顶栏：新任务 + 按需会话搜索", () => {
   });
 });
 
-describe("⑤ 左栏视觉层级：品牌、会话状态与服务入口", () => {
-  it("品牌与主要操作分成两行，新任务保留可见快捷键", () => {
+describe("⑤ 左栏视觉层级：会话状态与筛选小工具行（行族/品牌在列宿主与标题栏）", () => {
+  it("头部行下架（ADR 0019 1:1 换钉）：品牌归标题栏，会话列只留筛选小工具行", () => {
+    // 官方首屏真机对照 2026-11-19：左栏轮廓 = 顶部行族 → 项目分组列表 → 底部账户，
+    // 无品牌行、无头部动作行。筛选是自有能力，按自有小工具行安置（不入行族）。
     const html = sidebarHtml();
-    expect(html).toContain('class="side-brandline"');
-    expect(html).toContain('class="side-brand">Cairn</span>');
-    expect(html).toContain('class="side-actions"');
-    expect(html).toContain('class="side-new-label">新任务</span>');
-    expect(html).toContain('class="side-new-keys">⌘N</kbd>');
+    expect(html).not.toContain('class="side-brandline"');
+    expect(html).not.toContain('class="side-brand"');
+    expect(html).not.toContain('class="side-new"');
+    expect(html).toContain('class="side-list-tools"');
+    expect(html).toContain('aria-label="筛选会话：全部"');
   });
 
   it("每个会话都有固定状态槽，置顶标记收进次级信息行", () => {

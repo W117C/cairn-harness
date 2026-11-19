@@ -81,6 +81,14 @@ export const STR = {
     bucketEarlier: "更早",
     archivedGroup: "已归档",
     archivedTip: "已归档的会话：点开可查看，会话菜单里可取消归档",
+    // ADR 0019 1:1（官方首屏真机对照 2026-11-19/20）：左栏单栏化后，全局导航改为
+    // 会话列顶部的行族，与官方 New/Search/Routines/Customize 同形制。行名是左栏自己的
+    // 面目（官方 Routines/Customize 对位），与页面 vocabulary（插件/自动化）分开各表。
+    rowSearch: "搜索",
+    rowRoutines: "定时任务",
+    rowSkills: "技能",
+    rowMemory: "记忆",
+    rowCustomize: "自定义",
   },
   markdown: {
     imageGate: "加载外部图片",

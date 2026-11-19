@@ -133,11 +133,12 @@ html[data-theme][data-cairn-wallpaper] body[data-we-wallpaper] :is(
 .cw-glass-tiers { display: inline-flex; align-items: center; gap: 4px; }
 .cw-glass-tiers > .mini-btn { min-height: 26px; padding-inline: 10px; }
 
-/* ④ 左栏真正画底色的是 .side（.side-wrap 只是外壳）：玻璃面留在 .side-wrap，
-   .side 的实体底色让位——否则玻璃被它整个盖住，壁纸透不过来。
+/* ④ 左栏画底色的两层都要让位（ADR 0019 1:1 单栏化 2026-11-20）：基座 .side-wrap 与
+   皮肤列画布 .side 都在列上——玻璃面由上方 ③ 的玻璃规则接管（权重更高），
+   两层的实体底色让位，否则玻璃被整个盖住，壁纸透不过来。
    选择器权重与 vendored 主题的 body[data-dsh-claude-style] .side 相同、位置更靠后
    ⇒ 覆盖成立（改 vendored 主题是一字节都不许的）。 */
-body[data-we-wallpaper] :is(.side) {
+body[data-we-wallpaper] :is(.side, .side-wrap) {
   background: transparent;
 }
 /* ⑤ 设置行（外观分段）：.cw-settings 这一族是**这一行自己的**布局，

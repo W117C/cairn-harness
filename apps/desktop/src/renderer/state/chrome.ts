@@ -24,15 +24,17 @@ import { applyTheme, browserThemeEnv, type ThemePref } from "../theme";
 import { toast } from "../toast";
 import type { ViewMode } from "../view-mode";
 
-/** 侧栏宽度域（2026-10-20 真机还原更正）。
+/** 侧栏宽度域（2026-10-20 真机还原更正；2026-11-20 ADR 0019 1:1 单栏化再更正）。
  * 依据：Claude 桌面端 2.42304.2 真机实测——1100×700 原生窗、2× 截图（2200×1400，
  * 倍率严格 2.0，已用 CGWindowList 独立验证 bounds），侧栏/主区接缝在 y=200/400/900/1300
  * 四个高度**完全一致**落在 x=399–400 ⇒ 侧栏宽 **(399−2)/2 = 198.5pt**。
  * 规范 §3.11 写的 242px 与实测差 −19%，据此改域：缺省取 200（198.5 的整数近似）。
- * 上限保留 280（规范既有上限，不因本轮实测收窄）。 */
-export const SIDEBAR_MIN = 200;
-export const SIDEBAR_MAX = 320;
-export const SIDEBAR_DEFAULT = 256;
+ * 上限保留 280（规范既有上限，不因本轮实测收窄）。
+ * 2026-11-20：窄图标轨（48px 目的地列）下架、会话列吃满栏宽（官方首屏真机对照）——
+ * 三档各让出 48px（旧 200/256/320 + 轨 48 = 248/304/368），列容量与两栏时期持平。 */
+export const SIDEBAR_MIN = 240;
+export const SIDEBAR_MAX = 368;
+export const SIDEBAR_DEFAULT = 304;
 
 /** 主区最小 420 + 检查器最小 320 + 分隔条 3 + 余量 1：不足时先收起侧栏再展开检查器。 */
 export const INSPECTOR_SIDEBAR_COLLAPSE_BELOW = 744;

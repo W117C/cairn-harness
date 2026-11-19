@@ -54,8 +54,10 @@ describe("焦点环（裁 B：强调色域 · 2026-10-20 三层结构）", () =>
     expect(PLUGIN_CSS).not.toMatch(/\.plugins-workspace\s+:focus-visible\s*\{/);
   });
 
-  it("焦点不改变控件轮廓：pill 仍是 pill、发送键仍是圆（2026-10-28 第 741 页）", () => {
-    expect(CSS).toMatch(/\.side-new:focus-visible[^{]*{[^}]*border-radius:\s*var\(--radius-pill\)/s);
+  it("焦点不改变控件轮廓：行仍是行、pill 仍是 pill、发送键仍是圆（2026-10-28 第 741 页；2026-11-20 ADR 0019 换钉）", () => {
+    // 官方首屏真机对照 2026-11-19：侧栏头部行（side-new pill）随头部行下架，主行动作升为
+    // 行族 New 行（radius-sm 的行形）——焦点环同样不许把行收成 4px。
+    expect(CSS).toMatch(/\.app-rail-item:focus-visible[^{]*{[^}]*border-radius:\s*var\(--radius-sm\)/s);
     expect(CSS).toMatch(/\.empty-chip:focus-visible[^{]*{[^}]*border-radius:\s*var\(--radius-pill\)/s);
     expect(CSS).toMatch(/\.mp-trigger:focus-visible[^{]*{[^}]*border-radius:\s*var\(--radius-pill\)/s);
     expect(CSS).toMatch(/\.send-btn:focus-visible\s*{[^}]*border-radius:\s*50%/s);

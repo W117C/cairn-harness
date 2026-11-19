@@ -1,20 +1,23 @@
-// 侧栏（P1 主界面重做，对 brief 第二节）：
-//   顶栏「＋ 新任务」（⌘N）＋ 按需展开的会话搜索 + 筛选——旧四图标行与常驻行内表单整体下架；
+// 侧栏会话列（P1 主界面重做；ADR 0019 1:1 单栏化后本组件只承担「项目分组列表」一段）：
+//   顶部行族（新任务/搜索/定时任务/技能/记忆/自定义）与底部账户入口都在列宿主
+//     WorkbenchSidebar（components/AppRail.tsx + AccountMenu）——官方轮廓
+//     「顶部行族 → 项目分组列表 → 底部账户」；本组件是中段。
+//   会话筛选：自有能力的小工具行（side-list-tools），不入行族（行族构成判卷钉死）；
+//   搜索输入行：按需展开（入口 = 行族「搜索」行，受控态归列宿主）；
 //   项目区：按项目分组（显示名不是路径，完整路径只进 tooltip），可折叠，有任务在跑/等门显小圆点；
 //   项目右键菜单（也可 hover ⋯ 打开）：Finder 显示 / 重命名显示名 / 项目设置 / 移除（不删文件，说明清楚）；
 //   会话行：状态图标（运行中/等待/完成/失败——只取本进程可见态）+ 标题（省略号，hover 全称）+ 相对时间（常驻）；
 //     双击标题重命名（开态全选 + 视口回串首）；hover ⋯ 五项菜单（置顶/重命名/分叉/归档/删除，对齐原型序）；
 //   组内分段：置顶段恒前（不摆标签），其余按时间（今天/昨天/过去7天/更早）带桶标签；
 //   底部「添加项目」四入口（打开文件夹…/新建项目…/从 Git 仓库克隆…/最近打开）；
-//   2026-11-03：页脚用户菜单整体下架——设置/外观/用量/关于搬到全局左轨底部的头像入口
-//     （components/AccountMenu.tsx），侧栏只保留会话上下文。
+//   2026-11-03：页脚用户菜单整体下架——账户入口钉在单栏底部（AccountMenu），侧栏只保留会话上下文。
 // 文案一律走 STR（strings.ts——源文扫描判卷钉死）；图标 = lucide（ADR 0003）；会话行菜单 = Radix。
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as DropdownMenu from "./ui/dropdown-menu";
 import { Archive, Check, ChevronRight, Folder, GitBranch, Loader2, MoreHorizontal, Pencil, Pin, Plus, Search, X } from "lucide-react";
 import type { ProjectRecord } from "../../../../../src/main/ipc-protocol";
 import { relativeTime } from "../projections";
-import { fillKeys, keysOf, withKeys } from "../shortcuts";
+import { fillKeys, withKeys } from "../shortcuts";
 import { countSessionsByFilter, filterSessions, groupByWorkspace, projectMenuItems, projectSections, sessionFilterInfo, sessionStatus, sessionTime, splitArchived, workspaceLabel, OTHER_WORKSPACE, SESSION_FILTERS, type SessionFilterId, type TimeBucket, type WorkspaceSession } from "../sessions-view";
 import { draftKeyFor } from "../drafts";
 import { runKey, sessionKeyOf } from "../state/session-identity";
@@ -23,7 +26,6 @@ import { usePinnedOrder } from "../state/use-pinned-order";
 import type { PinnedDragProps, PinnedRowAttrs } from "../state/use-pinned-order";
 import { STR } from "../strings";
 import { isCompositionEnter } from "../ime";
-import { CairnMark } from "./CairnMark";
 import { useNow } from "../useNow";
 import { ProjectContextMenu, ProjectSettingsDialog } from "./SidebarProjects";
 export { ProjectSettingsDialog } from "./SidebarProjects";
@@ -388,6 +390,13 @@ export interface SidebarProps {
   onForkSession?: (s: WorkspaceSession) => void;
   /** 系统目录选择（「打开文件夹…」「选择克隆位置」「项目设置·更改」共用）。 */
   onPickDirectory: () => Promise<string | null>;
+  /** 侧栏会话搜索的受控态（ADR 0019 1:1 单栏化：展开开关移到全局行族的「搜索」行，
+   *  状态归单栏宿主 WorkbenchSidebar；输入行仍在本组件内）。缺省 = 组件自持状态
+   *  （直接渲染本组件的判卷/旧调用面不必构造整条链）。 */
+  searchExpanded?: boolean;
+  onSearchExpandedChange?: (next: boolean) => void;
+  searchQuery?: string;
+  onSearchQueryChange?: (value: string) => void;
 }
 
 export function Sidebar(props: SidebarProps): React.JSX.Element {
@@ -425,13 +434,18 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
   // 侧栏会话搜索（2026-10-18 接通）：筛选纯函数与词表（filterSessions / SESSION_FILTERS）
   // 从 P3-3 起就在 sessions-view.ts 里、也有判卷，但一直没有调用方——侧栏顶的放大镜实际打开
   // 的是 ⌘K 命令面板（整屏模态），用户点「搜索」想收窄列表，得到的却是盖住整个应用的弹窗。
-  // 现在：搜索图标控制一行按需展开的输入框，命中走 filterSessions，
+  // 现在：搜索行控制一行按需展开的输入框，命中走 filterSessions，
   // 空结果给一句明确的「没有匹配的会话」而不是闪回空列表。
   // ⌘K 仍是全局入口（搜命令/项目/设置），两者分工不冲突。
-  const [sessionQuery, setSessionQuery] = useState("");
-  const [searchExpanded, setSearchExpanded] = useState(false);
+  // ADR 0019 1:1 单栏化（官方首屏真机对照 2026-11-19）：展开开关移到顶部行族的「搜索」行，
+  // 受控态归单栏宿主（WorkbenchSidebar）；缺省回退组件自持（直接渲染面的判卷不受牵连）。
+  const [queryFallback, setQueryFallback] = useState("");
+  const [expandedFallback, setExpandedFallback] = useState(false);
+  const sessionQuery = props.searchQuery !== undefined ? props.searchQuery : queryFallback;
+  const setSessionQuery = props.onSearchQueryChange ?? setQueryFallback;
+  const searchExpanded = props.searchExpanded !== undefined ? props.searchExpanded : expandedFallback;
+  const setSearchExpanded = props.onSearchExpandedChange ?? setExpandedFallback;
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const searchToggleRef = useRef<HTMLButtonElement | null>(null);
   const searchOpen = sessionQuery.trim() !== "";
   const showSearch = searchExpanded || searchOpen;
   useEffect(() => {
@@ -587,40 +601,11 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
 
   return (
     <aside className="side" data-density={density} aria-label={STR.app.brand}>
-      {/* 顶栏 48px（brief：＋ 新任务 ⌘N + 搜索 ⌘K；旧四图标行与行内表单在此下架） */}
-      <div className="side-head">
-        <div className="side-brandline">
-          <CairnMark outline className="side-brand-mark" />
-          <span className="side-brand">{STR.app.brand}</span>
-        </div>
-        <div className="side-actions">
-          <button className="side-new" title={withKeys(STR.sidebar.newTaskTip, "new-session")} onClick={props.onNewTask}>
-            <Plus size={13} aria-hidden="true" />
-            <span className="side-new-label">{STR.sidebar.newTask}</span>
-            {keysOf("new-session") !== null && <kbd className="side-new-keys">{keysOf("new-session")}</kbd>}
-          </button>
-        {/* 2026-10-18：放大镜从「打开 ⌘K 命令面板」改为「聚焦侧栏搜索框」。
-            此前它打开的是整屏模态——用户点「搜索」想收窄左侧列表，得到的却是盖住整个应用的弹窗，
-            列表一屏没变。真正的列表筛选（filterSessions）自此有入口。
-            ⌘K 仍是全局入口（搜命令/项目/设置），不冲突：一个收窄本栏，一个跨面跳转。 */}
-        <button
-          ref={searchToggleRef}
-          className="iconbtn"
-          data-sidebar-search-toggle="true"
-          aria-label={STR.sidebar.search}
-          aria-expanded={showSearch}
-          aria-controls="sidebar-session-search"
-          title={STR.sidebar.searchTip}
-          onClick={() => {
-            if (showSearch && sessionQuery.trim() === "") {
-              setSearchExpanded(false);
-              return;
-            }
-            setSearchExpanded(true);
-          }}
-        >
-          <Search size={14} />
-        </button>
+      {/* ADR 0019 1:1 单栏化（官方首屏真机对照 2026-11-19）：头部行整体下架——品牌标归标题栏
+          （工作区无会话时中栏补印，同屏唯一），新任务/搜索两动作升为顶部行族（AppRail），
+          会话筛选是自有能力，按自有小工具行安置在列表上方（不入行族：官方 4 行 vs 我们 6 行
+          的多出行是技能/记忆，判卷钉死行族构成）。 */}
+      <div className="side-list-tools">
         <SessionFilterMenu
           filter={filter}
           filterCounts={filterCounts}
@@ -628,11 +613,10 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
           onChangeFilter={changeFilter}
           onChangeDensity={changeDensity}
         />
-        </div>
       </div>
 
-      {/* 侧栏会话搜索（2026-10-27 收口）：默认只保留顶栏图标，点击展开；有内容才显示清空钮。
-          Esc 两级语义：有字先清空，空着再收起并把焦点还给入口。
+      {/* 侧栏会话搜索（2026-10-27 收口）：入口在顶部行族的「搜索」行，点击展开；有内容才显示清空钮。
+          Esc 两级语义：有字先清空，空着再收起并把焦点还给入口（行族里的搜索行，按 data 属性找回）。
           ⏎ 直接打开第一个命中（搜索的终点就是打开它）。 */}
       {showSearch && (
         <div className="side-search" id="sidebar-session-search">
@@ -656,7 +640,10 @@ export function Sidebar(props: SidebarProps): React.JSX.Element {
                 e.stopPropagation();
                 if (sessionQuery !== "") { setSessionQuery(""); return; }
                 setSearchExpanded(false);
-                window.requestAnimationFrame(() => { searchToggleRef.current?.focus(); });
+                // 焦点还给入口：开关在本组件之外（顶部行族的「搜索」行），按 data 属性找回。
+                window.requestAnimationFrame(() => {
+                  document.querySelector<HTMLElement>('[data-sidebar-search-toggle="true"]')?.focus();
+                });
                 return;
               }
               if (e.key === "Enter" && !isCompositionEnter(e, null)) {

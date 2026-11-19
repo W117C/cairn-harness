@@ -136,9 +136,11 @@ describe("侧栏宽度把手（键盘 / 可读名 / 复位）", () => {
   it("范围与复位值取自常量——不再手写固定像素", () => {
     // 2026-10-21 设计重做：缺省 200 在 1440 宽下过窄（标题两行截断、画布失衡）⇒ 256；
     // 上限 320 让多项目/长标题有伸展空间。三个数仍只从常量来，把手文案跟着走。
-    expect(app).toContain("const SIDEBAR_MIN = 200;");
-    expect(app).toContain("const SIDEBAR_MAX = 320;");
-    expect(app).toContain("const SIDEBAR_DEFAULT = 256;");
+    // 2026-11-20 ADR 0019 1:1 单栏化（官方首屏真机对照 2026-11-19）：窄图标轨（48px）下架、
+    // 会话列吃满栏宽——三档各让出 48px（240/304/368），列容量与两栏时期持平。
+    expect(app).toContain("const SIDEBAR_MIN = 240;");
+    expect(app).toContain("const SIDEBAR_MAX = 368;");
+    expect(app).toContain("const SIDEBAR_DEFAULT = 304;");
     expect(workbenchSidebar).toContain("aria-label={`调整侧栏宽度（${SIDEBAR_MIN}–${SIDEBAR_MAX}px）`}");
     expect(workbenchSidebar).toContain("title={`拖动调整侧栏宽度；双击回到 ${SIDEBAR_DEFAULT}px`}");
     expect(app).not.toContain("240–280px");

@@ -45,6 +45,14 @@ body[data-dsh-claude-style] {
 }
 
 body[data-dsh-claude-style] .side { background: var(--dsh-claude-sidebar-canvas); }
+/* ADR 0019 1:1 单栏化（官方首屏真机对照 2026-11-19）：左栏是**一整列**——顶部行族、
+   会话列表、底部账户同住 .side-wrap；列画布从 .side 扩到整列。不扩会出现两截底色
+   （行族/账户坐在 .side-wrap 的 hsl(var(--bg-200)) 上，与 .side 的画布档差出一条接缝，
+   2026-11-20 真机截图实测）。vibrancy / 壁纸两种材质态自让位：玻璃分别由
+   styles.css 的 html[data-vibrancy] 与 wallpaper.css 的玻璃规则接管（:not 排除）。 */
+html:not([data-vibrancy="sidebar"]):not([data-cairn-wallpaper]) body[data-dsh-claude-style] .side-wrap {
+  background: var(--dsh-claude-sidebar-canvas);
+}
 body[data-dsh-claude-style] .row.user .t { background: var(--dsw-specific-bubble); }
 body[data-dsh-claude-style] .md-code { background: var(--dsw-alias-markdown-code-block); border-color: var(--dsw-alias-border-l1); }
 body[data-dsh-claude-style] .md-code-head { background: var(--dsw-alias-markdown-code-block-banner); }

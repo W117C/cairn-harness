@@ -1,10 +1,12 @@
 import { expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { PaneDock } from "../src/renderer/components/PaneDock";
 import { AppRail } from "../src/renderer/components/AppRail";
-import { SidebarRail } from "../src/renderer/components/SidebarRail";
+import { WorkbenchSidebar } from "../src/renderer/panes/WorkbenchSidebar";
+import { Sidebar } from "../src/renderer/components/Sidebar";
+import type { ComponentProps } from "react";
 import { keysOf } from "../src/renderer/shortcuts";
 import { readAppSurface } from "./helpers/app-surface";
 const noop = () => undefined;
@@ -28,37 +30,93 @@ it("单窗格占满：两块常驻、只显示激活窗格，标签切换、＋�
   expect(html).not.toContain("恢复多面板布局");
   expect(html).toContain('aria-label="添加面板"');
 });
-it("收起侧栏仍可新建、搜索、打开文件和设置，且同一入口只出现一次", () => {
-  // 2026-10-31 业主截图：收起态两栏各有一枚滑杆「设置」、标题栏与侧栏各有一枚「展开」。
-  // 2026-11-03 起设置入口固定在全局轨底部的头像菜单：不再有第二枚滑杆。
+it("单栏行族承担新建与搜索（ADR 0019 1:1 换钉）：六行、键位同源、收起态快捷入口随轨消失", () => {
+  // 2026-11-20 ADR 0019 P3 首刀（官方首屏真机对照 2026-11-19）：窄图标轨下架，
+  // 收起态快捷入口（SidebarRail）随轨消失——收起即整列隐藏（TitleBar ⌘B 承担展开），
+  // 新建/搜索由顶部行族承担，文件/终端窗格由工具栏「工具」菜单承担（WorkbenchTools）。
   const html = renderToStaticMarkup(
-    <>
-      <AppRail destination="chat" onOpen={noop} account={{ onOpenSettings: noop }} />
-      <SidebarRail onNewTask={noop} onSearch={noop} onFiles={noop} onTerminal={noop} />
-    </>,
+    <AppRail destination="chat" onOpen={noop} onNewTask={noop} onSettings={noop} />,
   );
-  for (const label of ["新任务", "命令面板", "打开文件窗格", "打开终端窗格", "设置、外观与用量"]) {
-    expect(html).toContain(`aria-label="${label}"`);
+  for (const label of ["新任务", "搜索", "定时任务", "技能", "记忆", "自定义"]) {
+    expect(html).toContain(`>${label}</span>`);
   }
-  // tooltip 键位与 SHORTCUTS 表同源：表里改键，收起轨跟着改。
-  // 2026-11-16 抓到漂移：这里曾手抄「（⌘N）」「（⌘K）」，表改了不会跟，判卷只读 strings.ts 也看不见。
+  // tooltip 键位与 SHORTCUTS 表同源：表里改键，行族跟着改。
+  // 2026-11-16 抓到漂移：这里曾手抄「（⌘N）」，表改了不会跟，判卷只读 strings.ts 也看不见。
   expect(html).toContain(`title="新任务（${keysOf("new-session")}）"`);
-  expect(html).toContain(`title="命令面板（${keysOf("palette")}）"`);
-  expect((html.match(/aria-label="设置、外观与用量"/g) ?? []).length).toBe(1);
-  expect(html).not.toContain('aria-label="展开侧栏"');
+  // 快捷入口不再有第二条路径：SidebarRail 文件已删、rail-context/sidebar-rail 的 DOM 与
+  // CSS 都不许回潮（历史注释里出现名字不算回潮，钉类名与样式规则）。
+  expect(existsSync(fileURLToPath(new URL("../src/renderer/components/SidebarRail.tsx", import.meta.url))), "SidebarRail 已删").toBe(false);
+  expect(readAppSurface()).not.toContain('className="rail-context"');
+  expect(readAppSurface()).not.toContain('className="sidebar-rail"');
+  const styles = readFileSync(fileURLToPath(new URL("../src/renderer/styles.css", import.meta.url)), "utf8");
+  expect(styles).not.toContain(".rail-context");
+  expect(styles).not.toContain(".sidebar-rail");
 });
 
-it("账户菜单固定在轨底部：任意目的地/收起/专注态都只有这一道门", () => {
+it("账户菜单固定在单栏底部：任意目的地/收起态都只有这一道门（ADR 0019 1:1 换钉）", () => {
   // 2026-11-03 业主：「设置和偏好挪到左边底下……底部图标是用户头像」。
-  // 旧规则（页脚在场就撤掉轨上的设置）已作废：全局轨始终给唯一入口，侧栏不再有页脚。
-  for (const destination of ["chat", "plugins", "memory", "automation"] as const) {
-    const html = renderToStaticMarkup(<AppRail destination={destination} onOpen={noop} account={{ onOpenSettings: noop }} />);
+  // 2026-11-20 ADR 0019 P3 首刀（官方首屏真机对照 2026-11-19）：窄轨下架后账户入口
+  // 钉在**单栏底部**（官方轮廓：顶部行族 → 项目分组列表 → 底部账户）。收起 = 整列
+  // CSS 隐藏（列保持挂载），入口随列退场、仍在文档里；专注模式整列卸载（官方一致：
+  // 专注没有左栏），TitleBar ⌘B/专注切换承担回来。
+  const CHAT_SIDEBAR = {
+    projects: [],
+    sessions: [],
+    activeId: null,
+    activeWorkspace: null,
+    running: new Set<string>(),
+    waitingIds: new Set<string>(),
+    outcomes: new Map(),
+  } as unknown as ComponentProps<typeof Sidebar>;
+  const renderColumn = (destination: "chat" | "plugins", focus = false): string =>
+    renderToStaticMarkup(
+      <WorkbenchSidebar
+        destination={destination}
+        sidebarCollapsed={false}
+        focusMode={focus}
+        sidebarWidth={304}
+        chatSidebar={CHAT_SIDEBAR}
+        pageItems={[{ id: "all", label: "全部" }]}
+        activeFilter="all"
+        onFilter={noop}
+        onOpenDestination={noop}
+        onSettings={noop}
+        onNewTask={noop}
+        onStartResize={noop}
+        onPersistWidth={noop}
+        onKeyResize={noop}
+      />,
+    );
+  for (const destination of ["chat", "plugins"] as const) {
+    const html = renderColumn(destination);
     expect((html.match(/aria-label="设置、外观与用量"/g) ?? []).length, destination).toBe(1);
-    expect(html).not.toContain('aria-label="设置"');
+    expect(html, destination).toContain('class="app-rail-user"');
   }
+  // 收起态列保持挂载（收/开有宽度过渡）：入口仍在文档里，只是不可见。
+  const collapsed = renderToStaticMarkup(
+    <WorkbenchSidebar
+      destination="chat"
+      sidebarCollapsed
+      focusMode={false}
+      sidebarWidth={304}
+      chatSidebar={CHAT_SIDEBAR}
+      pageItems={[]}
+      activeFilter="all"
+      onFilter={noop}
+      onOpenDestination={noop}
+      onSettings={noop}
+      onNewTask={noop}
+      onStartResize={noop}
+      onPersistWidth={noop}
+      onKeyResize={noop}
+    />,
+  );
+  expect((collapsed.match(/aria-label="设置、外观与用量"/g) ?? []).length).toBe(1);
+  // 专注模式整列卸载：入口不在场（列回来了入口就在，语义位不漂）。
+  expect(renderColumn("chat", true)).not.toContain('aria-label="设置、外观与用量"');
   expect(readAppSurface()).not.toContain("footerMenuVisible");
   const sidebarHost = readFileSync(fileURLToPath(new URL("../src/renderer/panes/WorkbenchSidebar.tsx", import.meta.url)), "utf8");
-  expect(sidebarHost).toContain("account={props.account ?? { onOpenSettings: props.onSettings }}");
+  expect(sidebarHost).toContain("<AccountMenu {...(props.account ?? { onOpenSettings: props.onSettings })} />");
 });
 
 it("关掉最后一个窗格：焦点回到工具栏入口，不掉到 document.body", () => {

@@ -1,5 +1,8 @@
 // 第 1114 页：WorkbenchView 的侧栏宿主拆出（WorkbenchSidebar + chatSidebar 对象 + account 映射）。
 // WorkbenchView 只留三栏编排；deps 单入口，本地 show/pageItems/pluginCount/setSessionPreview 显式传入。
+// ADR 0019 1:1 单栏化：chatSidebarVisible / onSearch / onFiles / onTerminal 参数随窄图标轨下架——
+// 列的收起/专注可见性由 WorkbenchSidebar 自己判（CSS 收起 + 专注卸载），文件/终端窗格
+// 走工具栏「工具」菜单。
 import type { Dispatch, SetStateAction } from "react";
 import type { PageFilterItem } from "../navigation";
 import type { WorkbenchViewDeps } from "./WorkbenchView";
@@ -8,9 +11,8 @@ import { toast } from "../toast";
 
 type SessionPreview = { id: string; workspace?: string; title: string; seq: number };
 
-export function WorkbenchSidebarHost({ deps, chatSidebarVisible, pageItems, pluginUpdateCount, setNewProjectOpen, setSessionPreview }: {
+export function WorkbenchSidebarHost({ deps, pageItems, pluginUpdateCount, setNewProjectOpen, setSessionPreview }: {
   deps: WorkbenchViewDeps;
-  chatSidebarVisible: boolean;
   pageItems: readonly PageFilterItem[];
   pluginUpdateCount: number;
   setNewProjectOpen: (open: boolean) => void;
@@ -32,7 +34,6 @@ export function WorkbenchSidebarHost({ deps, chatSidebarVisible, pageItems, plug
       destination={destination}
       sidebarCollapsed={sidebarCollapsed}
       focusMode={focusMode}
-      showChatSidebar={chatSidebarVisible}
       sidebarWidth={sidebarWidth}
       chatSidebar={{
         projects,
@@ -112,9 +113,6 @@ export function WorkbenchSidebarHost({ deps, chatSidebarVisible, pageItems, plug
         onThemeChange: changeTheme,
       }}
       onNewTask={newSession}
-      onSearch={handleOpenPalette}
-      onFiles={() => openPane("file")}
-      onTerminal={() => openPane("terminal")}
       onStartResize={startSidebarDrag}
       onPersistWidth={persistSidebarWidth}
       onKeyResize={(e) => {

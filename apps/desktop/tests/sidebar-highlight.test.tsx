@@ -36,13 +36,16 @@ describe("#71 侧栏选中态（唯一 + 强调条 + hover 瞬时清除）", () 
     expect(block(".session.active")).toContain("var(--alpha-selected)");
   });
 
-  it("新任务使用轻量描边，保留 pill 轮廓与 hover 反馈", () => {
-    const rule = block(".side-new");
-    expect(rule).toContain("background: transparent");
-    expect(rule).toContain("hsl(var(--text-100))");
-    expect(rule).toContain("1px solid var(--hairline)");
-    expect(rule).toContain("var(--radius-pill)");
-    expect(block(".side-new:hover")).toContain("var(--alpha-hover)");
+  it("New 主行是常驻高亮块（ADR 0019 1:1 换钉，官方首屏真机对照 2026-11-19）：不是描边 pill", () => {
+    // 官方 New 行形制 = 常驻轻底的行（高亮块），不再是旧头部行的描边胶囊；
+    // hover 加深一档（alpha-selected），同族行的 hover 仍是 alpha-hover。
+    const rule = block('.app-rail-item[data-row="new"]');
+    expect(rule).not.toContain("1px solid var(--hairline)");
+    expect(rule).not.toContain("background: transparent");
+    expect(rule).toContain("var(--alpha-hover)");
+    expect(rule).toContain("hsl(var(--text-000))");
+    expect(block('.app-rail-item[data-row="new"]:hover')).toContain("var(--alpha-selected)");
+    expect(block(".app-rail-item:hover")).toContain("var(--alpha-hover)");
   });
 
   it("选中行保持既有淡底刻度，标题字重与项目间距承担层级", () => {
