@@ -12,7 +12,7 @@ describe("记忆读缓存（mtime+size 键，写后失效）", () => {
   it("二读命中、写后失效、删后不假命中（三态递进）", async () => {
     const dir = await mkdtemp(join(tmpdir(), "cairn-mem-cache-"));
     try {
-      await writeTopic(dir, "lesson-a", "lesson", "先读测试再改实现", "2026-11-19T00:00:00Z");
+      await writeTopic(dir, "lesson-a", "project", "先读测试再改实现", "2026-11-19T00:00:00Z");
       const before = memoryReadCacheStats();
       await listTopics(dir);
       await readTopicBody(dir, "lesson-a");
@@ -23,7 +23,7 @@ describe("记忆读缓存（mtime+size 键，写后失效）", () => {
       const afterSecond = memoryReadCacheStats();
       expect(afterSecond.hits).toBeGreaterThan(afterFirst.hits); // 二读：命中
       // 写后失效：writeTopic 走 tmp+rename，mtime 刷新 ⇒ 再读必须 miss（内容取新的）
-      await writeTopic(dir, "lesson-a", "lesson", "改过的教训正文", "2026-11-19T00:00:01Z");
+      await writeTopic(dir, "lesson-a", "project", "改过的教训正文", "2026-11-19T00:00:01Z");
       const s2 = memoryReadCacheStats();
       const body = await readTopicBody(dir, "lesson-a");
       const afterWrite = memoryReadCacheStats();

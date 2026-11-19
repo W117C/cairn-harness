@@ -10,7 +10,7 @@
 //   ④ 游标的位置是**含**的（重放范围含指针那条）；
 //   ⑤ 指针分叉：子会话自己的文件只有一行、父会话 sha256 不变、解析器给出「父前缀 + 自己的事件」；
 //   ⑥ 在飞状态不继承；解析器 fail-closed（父缺失 / 边界越界 / 父链成环 ⇒ 抛）；
-//   ⑦ 提交幂等：同一 requestId 提交两次只跑一次；submit 失败粘滞、submitOnce 不粘滞。
+//   ⑦ 提交幂等：同一 requestId 提交两次只跑一次；claim 失败粘滞、claimOnce 不粘滞（N4 改名 2026-11-19）。
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -202,34 +202,34 @@ try {
   let calls = 0;
   let release!: (value: number) => void;
   const pending = new Promise<number>((resolve) => { release = resolve; });
-  const first = ledger.submit(requestId, () => { calls++; return pending; });
-  assert(ledger.submit(requestId, () => ++calls) === first, "submit：重复的在飞提交返回同一 promise");
+  const first = ledger.claim(requestId, () => { calls++; return pending; });
+  assert(ledger.claim(requestId, () => ++calls) === first, "submit：重复的在飞提交返回同一 promise");
   await Promise.resolve();
   assert(calls === 1, "submit：并发重放只执行一次工作");
   release(7);
-  assert(await first === 7 && await ledger.submit(requestId, () => ++calls) === 7 && calls === 1,
+  assert(await first === 7 && await ledger.claim(requestId, () => ++calls) === 7 && calls === 1,
     "submit：完成后重放返回既有结果，不重做副作用");
   const failed = new Error("side effect failed");
   const failId = submissionRequestId("s1", "failed");
-  const failedFirst = ledger.submit(failId, () => { calls++; throw failed; });
+  const failedFirst = ledger.claim(failId, () => { calls++; throw failed; });
   assert(await failedFirst.catch((error: unknown) => error) === failed, "submit：同步错误原样返回");
-  assert(await ledger.submit(failId, () => ++calls).catch((error: unknown) => error) === failed && calls === 2,
+  assert(await ledger.claim(failId, () => ++calls).catch((error: unknown) => error) === failed && calls === 2,
     "submit：失败也粘滞，重放重抛同一错误且不重跑");
   const asyncId = submissionRequestId("s1", "async-failed");
-  await ledger.submit(asyncId, async () => { calls++; throw failed; }).catch(() => undefined);
-  assert(await ledger.submit(asyncId, () => ++calls).catch((error: unknown) => error) === failed && calls === 3,
+  await ledger.claim(asyncId, async () => { calls++; throw failed; }).catch(() => undefined);
+  assert(await ledger.claim(asyncId, () => ++calls).catch((error: unknown) => error) === failed && calls === 3,
     "submit：异步拒绝也保留终态，不重跑");
   const onceId = submissionRequestId("s1", "once");
-  const once = ledger.submitOnce(onceId, () => ++calls);
-  assert(ledger.submitOnce(onceId, () => ++calls) === once, "submitOnce：在飞提交共享同一 promise");
+  const once = ledger.claimOnce(onceId, () => ++calls);
+  assert(ledger.claimOnce(onceId, () => ++calls) === once, "claimOnce：在飞提交共享同一 promise");
   await once;
-  assert(await ledger.submitOnce(onceId, () => ++calls) === 5, "submitOnce：成功完成后允许下一次执行");
-  const rejected = ledger.submitOnce(onceId, () => { calls++; throw failed; });
-  assert(ledger.submitOnce(onceId, () => ++calls) === rejected, "submitOnce：失败前的并发重放也共享同一 promise");
+  assert(await ledger.claimOnce(onceId, () => ++calls) === 5, "claimOnce：成功完成后允许下一次执行");
+  const rejected = ledger.claimOnce(onceId, () => { calls++; throw failed; });
+  assert(ledger.claimOnce(onceId, () => ++calls) === rejected, "claimOnce：失败前的并发重放也共享同一 promise");
   await rejected.catch(() => undefined);
-  assert(await ledger.submitOnce(onceId, () => ++calls) === 7, "submitOnce：失败不粘滞，之后可以重试");
+  assert(await ledger.claimOnce(onceId, () => ++calls) === 7, "claimOnce：失败不粘滞，之后可以重试");
   const otherSession = submissionRequestId("s2", "call-1");
-  assert(requestId !== otherSession && await ledger.submit(otherSession, () => ++calls) === 8,
+  assert(requestId !== otherSession && await ledger.claim(otherSession, () => ++calls) === 8,
     "requestId 按会话分域，同名工具调用不串会话");
   assert(submissionRequestId("a:b", "c") !== submissionRequestId("a", "b:c"), "requestId 元组编码无分隔符碰撞");
 } finally {

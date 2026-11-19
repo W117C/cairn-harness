@@ -659,7 +659,7 @@ export async function runLoop(opts: LoopOptions): Promise<void> {
       // 不能只再 append 一条 tool_call 而不配结果，下一轮模型照常读取第一次的完整回执。
       const requestId = submissionRequestId(opts.agentId ?? "main", output.id);
       let isNewSubmission = false;
-      const control = await submissions.submit(requestId, async () => {
+      const control = await submissions.claim(requestId, async () => {
         isNewSubmission = true;
         // 落盘的那一份与执行用的那一份必须分开：args 只在落盘面脱敏，执行面照原样拿
         // （模型自己写的凭据原样执行，不要在这里把它改成一个掩码路径）。

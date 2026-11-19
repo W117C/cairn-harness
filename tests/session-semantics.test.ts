@@ -5,7 +5,8 @@
 //   ② 指针分叉：子会话自己的文件只有一行（父会话字节不变），解析器给出「父前缀 + 自己的事件」；
 //   ③ 在飞状态**不继承**（父会话里已发起未收尾的那几笔不跟着走）；
 //   ④ 解析器 fail-closed：父缺失 / 边界越界 / 父链成环 ⇒ 抛；
-//   ⑤ 提交幂等：同一个 requestId 提交两次 ⇒ 工作**只跑一次**；`submit` 失败粘滞、`submitOnce` 不粘滞。
+//   ⑤ 提交幂等：同一个 requestId 提交两次 ⇒ 工作**只跑一次**；`claim` 失败粘滞、`claimOnce` 不粘滞
+//   （2026-11-19 N4 改名：submit 三义 → 幂等账这支叫 claim，见 submission-ledger.ts 头注释）。
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -315,11 +316,11 @@ describe("提交幂等：实例内的会话分域账本", () => {
     const { SubmissionLedger } = await ledgerApi();
     const ledger = new SubmissionLedger<number>();
     let calls = 0;
-    const first = ledger.submit("id", () => ++calls);
-    const second = ledger.submit("id", () => ++calls);
+    const first = ledger.claim("id",() => ++calls);
+    const second = ledger.claim("id",() => ++calls);
     expect(second).toBe(first);
     expect(await first).toBe(1);
-    expect(await ledger.submit("id", () => ++calls)).toBe(1);
+    expect(await ledger.claim("id",() => ++calls)).toBe(1);
     expect(calls).toBe(1);
   });
 
@@ -328,8 +329,8 @@ describe("提交幂等：实例内的会话分域账本", () => {
     const ledger = new SubmissionLedger<number>();
     const failed = new Error("side effect failed");
     let calls = 0;
-    await expect(ledger.submit("id", () => { calls++; throw failed; })).rejects.toBe(failed);
-    await expect(ledger.submit("id", () => ++calls)).rejects.toBe(failed);
+    await expect(ledger.claim("id",() => { calls++; throw failed; })).rejects.toBe(failed);
+    await expect(ledger.claim("id",() => ++calls)).rejects.toBe(failed);
     expect(calls).toBe(1);
   });
 
@@ -339,14 +340,14 @@ describe("提交幂等：实例内的会话分域账本", () => {
     const failed = new Error("async failed");
     let calls = 0;
     let nested: Promise<number> | undefined;
-    const first = ledger.submit("id", () => {
+    const first = ledger.claim("id",() => {
       calls++;
-      nested = ledger.submit("id", () => ++calls);
+      nested = ledger.claim("id",() => ++calls);
       return Promise.reject(failed);
     });
     await expect(first).rejects.toBe(failed);
     expect(nested).toBe(first);
-    await expect(ledger.submit("id", () => ++calls)).rejects.toBe(failed);
+    await expect(ledger.claim("id",() => ++calls)).rejects.toBe(failed);
     expect(calls).toBe(1);
   });
 
@@ -354,15 +355,15 @@ describe("提交幂等：实例内的会话分域账本", () => {
     const { SubmissionLedger } = await ledgerApi();
     const ledger = new SubmissionLedger<number>();
     let calls = 0;
-    const first = ledger.submitOnce("id", () => ++calls);
-    expect(ledger.submitOnce("id", () => ++calls)).toBe(first);
+    const first = ledger.claimOnce("id", () => ++calls);
+    expect(ledger.claimOnce("id", () => ++calls)).toBe(first);
     expect(await first).toBe(1);
-    expect(await ledger.submitOnce("id", () => ++calls)).toBe(2);
+    expect(await ledger.claimOnce("id", () => ++calls)).toBe(2);
     const failed = new Error("retryable");
-    const rejecting = ledger.submitOnce("id", () => { calls++; throw failed; });
-    expect(ledger.submitOnce("id", () => ++calls)).toBe(rejecting);
+    const rejecting = ledger.claimOnce("id", () => { calls++; throw failed; });
+    expect(ledger.claimOnce("id", () => ++calls)).toBe(rejecting);
     await expect(rejecting).rejects.toBe(failed);
-    expect(await ledger.submitOnce("id", () => ++calls)).toBe(4);
+    expect(await ledger.claimOnce("id", () => ++calls)).toBe(4);
   });
 
   it("requestId按会话分域且分隔符不碰撞；新账本不声称跨重启去重", async () => {
@@ -373,9 +374,9 @@ describe("提交幂等：实例内的会话分域账本", () => {
     expect(submissionRequestId("a:b", "c")).not.toBe(submissionRequestId("a", "b:c"));
     const ledger = new SubmissionLedger<number>();
     let calls = 0;
-    expect(await ledger.submit(a, () => ++calls)).toBe(1);
-    expect(await ledger.submit(b, () => ++calls)).toBe(2);
-    expect(await new SubmissionLedger<number>().submit(a, () => ++calls)).toBe(3);
+    expect(await ledger.claim(a, () => ++calls)).toBe(1);
+    expect(await ledger.claim(b, () => ++calls)).toBe(2);
+    expect(await new SubmissionLedger<number>().claim(a, () => ++calls)).toBe(3);
   });
 });
 
