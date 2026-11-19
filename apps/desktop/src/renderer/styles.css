@@ -615,10 +615,14 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
   display: flex; flex-direction: column;
   position: relative; /* 对话轨道的轴线落在这里（见 components/conversation-rail.css） */
   /* 一轮 = 一条列（右缘，2026-11-01 第 862 页）：官方 stop 公式在此声明一次，
-     轮内四段（助手行 / 思考带 / 工具簇 / 交付卡）作为 .reading 的直接子元素共用它——
-     `100%` 因此恒按同一条基准（.reading 内容宽）求值，不会再各段差几像素。
+     轮内四段（助手行 / 思考带 / 工具簇 / 交付卡）共用它。基准机制 2026-11-19 升级：
+     原先靠「四段都是直接子元素 ⇒ % 同基准」的假设，R5 把思考带/工具簇挪进折叠体后
+     嵌套包含块重定基（右缘锯齿 31px，layout-smoke 实测 47.25 vs 31.625）——
+     现改 **容器查询单位**：`100cqw` 对最近 size container（.reading 自身）解析，
+     对任意深度嵌套免疫，机制假设从「直接子元素」降级为「在 .reading 里」。
      皮肤开启时官方 `[data-cds=AssistantMessage]` 上的同名声明覆盖助手行，公式一致。 */
-  --cds-assistant-message-text-stop: clamp(0px, (100% - 384px) * 0.175, 56px);
+  container-type: inline-size;
+  --cds-assistant-message-text-stop: clamp(0px, (100cqw - 384px) * 0.175, 56px);
 }
 
 /* ── 消息行 ── */

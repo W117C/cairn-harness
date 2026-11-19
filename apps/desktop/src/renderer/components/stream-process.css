@@ -398,3 +398,10 @@
 .process-fold-body { display: grid; grid-template-rows: 0fr; visibility: hidden; transition: grid-template-rows var(--t-med) var(--ease-out), visibility 0s var(--t-med); }
 .process-fold[data-open="true"] .process-fold-body { grid-template-rows: 1fr; visibility: visible; transition: grid-template-rows var(--t-med) var(--ease-out), visibility 0s; }
 .process-fold-body > .fold-inner { overflow: hidden; min-height: 0; display: flex; flex-direction: column; gap: 4px; padding: 4px 0 6px 14px; }
+/* 2026-11-19 修右缘锯齿（75 支探针重估 layout-smoke 取证，fold-diag 实测定根因）：
+   stop margin 被**双重施加**——`.process-fold` 包裹层自己已吃一次 stop（右缘 1150 与助手行对齐），
+   折叠体内的行组件（.row.think / .toolcluster，与外层共用同一套类规则）又各自再吃一次
+   ⇒ 内层右缘比阅读列内缩整整一个 stop（diag 实测 47.25px）。行组件在折叠体内 margin-right
+   归零（wrapper 已代表它们吃）；外层行不受影响。862 页「一轮=一条列」不变量恢复。 */
+.process-fold-body .row.think,
+.process-fold-body .toolcluster { margin-right: 0; }
