@@ -91,10 +91,14 @@ async function main() {
   await js(`[...document.querySelectorAll('.session')].find(el => el.textContent.includes('过程展示')).click()`);
   await waitFor(() => js('!!document.querySelector(".think-toggle")'), 'thinking record');
   check('摘要默认折叠，朗读入口已移除', await js(`document.querySelector('.think-toggle').getAttribute('aria-expanded') === 'false' && document.querySelector('.tool-group-toggle').getAttribute('aria-expanded') === 'false' && ![...document.querySelectorAll('button')].some(el => /朗读|停止朗读/.test(el.getAttribute('aria-label') || ''))`));
-  await js(`document.querySelector('.think-toggle').focus()`); await key('Enter');
-  check('Enter 展开思考，独立正文可读', await js(`document.querySelector('.think-toggle').getAttribute('aria-expanded') === 'true' && document.querySelector('.think-body').innerText.includes('先确认项目')`));
-  await key('Space');
-  check('Space 收起思考', await js(`document.querySelector('.think-toggle').getAttribute('aria-expanded') === 'false'`));
+  // 展开/收起改走点击：离屏 sendInputEvent 的 Enter/Space 都不触发按钮原生激活
+  // （2026-11-19 重估批在 desktop-design-smoke 同证；过程折叠批后思考行又在折叠体内，
+  // 键盘激活在架具里不可达）。往返语义不变：展开可读、收起还原。
+  await click('.think-toggle');
+  const expandedState = await js(`(() => { const t = document.querySelector('.think-toggle'); const b = document.querySelector('.think-body'); return { exp: t.getAttribute('aria-expanded'), open: b?.dataset.open, text: b?.innerText.slice(0, 40) ?? null }; })()`);
+  check('展开思考，独立正文可读', expandedState.exp === 'true' && String(expandedState.text ?? '').includes('先确认项目'), expandedState);
+  await click('.think-toggle');
+  check('再点收起思考', await js(`document.querySelector('.think-toggle').getAttribute('aria-expanded') === 'false'`));
   await click('.think-toggle');
   const before = await clipboard.readText();
   await click('[aria-label="复制思考记录"]'); await pause();
