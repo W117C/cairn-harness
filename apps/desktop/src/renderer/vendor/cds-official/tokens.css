@@ -41,7 +41,7 @@
   --oncolor-200: hsl(60 6.7% 97.1% / 0.75);
   --oncolor-300: hsl(60 6.7% 97.1% / 0.5);
   --clay: #d97757;
-  --clay-emphasized: #c6613f;
+  --clay-emphasized: #ba5b3c;
   --heather: #cbcadb;
   --plum: #827dbd;
   --cactus: #bcd1ca;
@@ -430,6 +430,7 @@
   --fill-pro-hover: var(--role-pro-fill-hover);
   --fill-brand: var(--clay-emphasized);
   --fill-brand-hover: var(--clay);
+  --fill-brand-icon-only: #c6613f;
   --bg-accent-muted: color-mix(in srgb, var(--fill-accent) 10%, transparent);
   --bg-highlight: color-mix(in srgb, var(--fill-warning) 33%, transparent);
   --bg-editor-claude-pending: color-mix(in srgb, var(--clay) 22%, transparent);
@@ -480,7 +481,6 @@
   --opacity-disabled: 0.4;
   --opacity-icon-secondary: 0.3;
   --z-modal: 40;
-  --z-coachmark: 35;
   --z-popover: 50;
   --z-tooltip: 50;
   --z-toast: 60;
@@ -797,7 +797,7 @@
     --chart-categorical-3: var(--aqua-400);
     --chart-categorical-4: var(--yellow-350);
     --chart-categorical-5: var(--magenta-400);
-    --chart-categorical-6: var(--green-500);
+    --chart-categorical-6: var(--green-400);
     --chart-categorical-7: var(--violet-350);
     --chart-categorical-8: var(--red-350);
     --chart-sequential-1: var(--blue-700);
@@ -944,7 +944,7 @@
     --chart-categorical-3: var(--aqua-400);
     --chart-categorical-4: var(--yellow-350);
     --chart-categorical-5: var(--magenta-400);
-    --chart-categorical-6: var(--green-500);
+    --chart-categorical-6: var(--green-400);
     --chart-categorical-7: var(--violet-350);
     --chart-categorical-8: var(--red-350);
     --chart-sequential-1: var(--blue-700);

@@ -1,4 +1,5 @@
-// CDS 组件层判卷（2026-10-28 · 第 734 页；2026-11-14 随上游 5.11492.5 重抽）。
+// CDS 组件层判卷（2026-10-28 · 第 734 页；2026-11-14 随上游 5.11492.5 重抽；
+// 2026-11-19 上游重取 6.6395.1：组件面 48→50、规则 114→127、声明 472→485，Spinner 首次拿到组件规则体）。
 //
 // 这批判的不是「颜色对不对」（那是 cds-parity.test.ts），而是：
 //   ① 官方 `data-cds=*` 组件是否**逐条有账**（抽取结果 + Cairn 侧状态表，一条不落）；
@@ -39,22 +40,22 @@ const entry = readRenderer("main.tsx");
 
 const statuses = new Set(["ported", "no-cairn-counterpart", "no-component-css"]);
 
-describe("官方组件规则抽取：48 个组件逐条有账", () => {
+describe("官方组件规则抽取：50 个组件逐条有账", () => {
   it("components.css 头部记的源摘要 = components.json 的源摘要 = UPSTREAM 引用的渲染层 CSS", () => {
-    expect(manifest.source.sha256).toBe("d28063ca960037bb1f25e652085f450bba0e5fb9bf11418827926c3aa9a1aaf3");
-    expect(manifest.source.bytes).toBe(251161);
+    expect(manifest.source.sha256).toBe("81bac4da9222f8e85f23bfb20c059718fb9b783faca17230c2c9c84e85003ef2");
+    expect(manifest.source.bytes).toBe(243101);
     expect(componentsCss).toContain(`sha256: ${manifest.source.sha256}`);
   });
 
-  it("组件数 48、规则 114、声明 472（与抽取脚本现跑一致，改动须重跑脚本）", () => {
-    expect(manifest.totals).toEqual({ components: 48, rules: 114, declarations: 472 });
-    expect(manifest.components).toHaveLength(48);
-    expect(new Set(manifest.components.map((c) => c.name)).size).toBe(48);
+  it("组件数 50、规则 127、声明 485（与抽取脚本现跑一致，改动须重跑脚本）", () => {
+    expect(manifest.totals).toEqual({ components: 50, rules: 127, declarations: 485 });
+    expect(manifest.components).toHaveLength(50);
+    expect(new Set(manifest.components.map((c) => c.name)).size).toBe(50);
   });
 
-  it("规则条数非零的组件都真有规则体（Pulse 与 Spinner 只有工具类引用，0 条是事实不是漏抽）", () => {
+  it("规则条数非零的组件都真有规则体（Pulse 是唯一没有组件规则体的：只在工具类引用里出现，0 条是事实不是漏抽；Spinner 本版起有 5 条 forced-colors 规则）", () => {
     const zero = manifest.components.filter((c) => c.rules === 0).map((c) => c.name);
-    expect(zero).toEqual(["Pulse", "Spinner"]);
+    expect(zero).toEqual(["Pulse"]);
     for (const component of manifest.components.filter((c) => c.rules > 0)) {
       expect(component.declarations, component.name).toBeGreaterThan(0);
     }
@@ -90,15 +91,15 @@ describe("UPSTREAM 记录的三件产物摘要与文件一致（改了生成物�
   });
 });
 
-describe("Cairn 侧组件状态表：45 条一条不落，ported 必须给选择器与原因", () => {
+describe("Cairn 侧组件状态表：50 条一条不落，ported 必须给选择器与原因", () => {
   it("状态表覆盖的组件集合与抽取结果完全一致", () => {
     expect(map.components.map((c) => c.name).sort()).toEqual(manifest.components.map((c) => c.name).sort());
     expect(map.sourceSha256).toBe(manifest.source.sha256);
   });
 
-  it("三档状态都在，且总数 48（ported 10 / 无对应 36 / 无组件 CSS 2）", () => {
+  it("三档状态都在，且总数 50（ported 10 / 无对应 39 / 无组件 CSS 1）", () => {
     for (const component of map.components) expect(statuses.has(component.status)).toBe(true);
-    expect(map.totals).toEqual({ ported: 10, "no-cairn-counterpart": 36, "no-component-css": 2 });
+    expect(map.totals).toEqual({ ported: 10, "no-cairn-counterpart": 39, "no-component-css": 1 });
   });
 
   it("每条都写了原因（不是空话：至少 20 字）", () => {
