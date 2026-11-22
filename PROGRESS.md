@@ -45556,4 +45556,13 @@ docs-check 绿；typecheck 0。
   projection-bench / native-host-smoke）：第 1336 页「探针缺省 /tmp」纪律没覆盖到它们，修法=默认 mkdtemp，
   本批只登记不动。
 
+### 七、补记（同日）：证据二代（一代在干净树里复算不出）
+
+- 散件收口把 `vendor/cds-official/MainWindowPage-40ELxWNf.css` 移出后才发现：`rendererDigest` 递归取
+  `src/renderer` 下全部 `.css/.ts/.tsx`——那份抽取工作副本也在摘要输入里，于是第 1336 页签出的一代
+  （`ec6f01ab…`）只在「带着这份未跟踪副本」的树里成立，干净检出复算不出。
+- 二代：四份证据重签，`rendererDigest 564236f3…`、`buildFresh=true`；主树与认证树
+  （`.worktrees/gate-head-cert`）两棵树的复算值相等；五支判卷 86 条绿；桌面 432 文件 / 2809 条绿。
+  随本笔入库。
+
 凭证 @d6637c9e
