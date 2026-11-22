@@ -45564,5 +45564,7 @@ docs-check 绿；typecheck 0。
 - 二代：四份证据重签，`rendererDigest 564236f3…`、`buildFresh=true`；主树与认证树
   （`.worktrees/gate-head-cert`）两棵树的复算值相等；五支判卷 86 条绿；桌面 432 文件 / 2809 条绿。
   随本笔入库。
+- HEAD 认证：`1238c4a` 26 道门全绿（核心 719 文件 / 8405 条，maxWorkers=2；认证树墙钟 287.44s），
+  取料 `outputs/head-cert-1238c4a-2026-11-22-0243/provenance.md`。
 
-凭证 @d6637c9e
+凭证 @1238c4a0
