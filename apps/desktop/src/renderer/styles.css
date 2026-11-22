@@ -618,6 +618,12 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 }
 
 /* ── 消息行 ── */
+/* 2026-11-19 性能（ADR 0019 配套，实验两轮实测见台账 1336）：长会话行级 content-visibility
+   **延迟武装**——打开路径无 c-v 快速一次布局（实验一：打开 851→2225ms 超帽的根因 =
+   1200 个 c-v 盒在打开滚动期间逐盒解析），settle 800ms 且行数 > 120 后由
+   `.stream[data-cv="on"]` 武装；流式期早已生效（实验一实测：流式帧 p95 218→145ms −34%、
+   RecalcStyle 5.5s→2.4s）。两个预算（stream p95 200 / open 1500）由 performance-smoke 钉住。 */
+.stream[data-cv="on"] .row { content-visibility: auto; contain-intrinsic-size: auto 42px; }
 .row { position: relative; }
 /* 对话左右分（业主 18.41.11 裁，照搬原型 v3-lite .u / .u-wrap）：user = 右侧气泡
    （surface-2 底 + hairline 边 + 右下小圆角尾），模型 = 左侧 ✦ 正文（见下方 .row.assistant）——

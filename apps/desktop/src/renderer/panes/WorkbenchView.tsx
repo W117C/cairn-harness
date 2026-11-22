@@ -317,6 +317,22 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
   // 空屏问候语（2026-10-24）：按时段分组、组内轮换，每次挂载取定一句——
   // 重渲染不再重抽（文字闪变），换会话/重开才有机会换词。
   const [greeting] = useState(() => greetingFor(new Date().getHours()));
+  // 长会话行级 content-visibility 的**延迟武装**（2026-11-19 性能实验：全行 c-v 让流式帧
+  // p95 218→145ms（−34%），但打开 400 轮会话 851→2225ms 超帽——1200 个 c-v 盒在打开滚动
+  // 期间逐盒解析可见性（LayoutCount 9→403）。修法：打开路径先无 c-v 快速一次布局，
+  // 挂载 800ms 后武装（行数在**开火时**查 ref——流式期间 rows.length 每帧变化，
+  // 把它放进依赖会让计时器永远被清掉，第一版实测 p95 只到 210）。
+  const [cvOn, setCvOn] = useState(false);
+  const streamRowsRef = useRef(deps.streamRows);
+  streamRowsRef.current = deps.streamRows;
+  useEffect(() => { setCvOn(false); }, [deps.activeId]);
+  useEffect(() => {
+    if (cvOn || deps.activeId === null) return;
+    const t = window.setTimeout(() => {
+      if (streamRowsRef.current.length > 120) setCvOn(true);
+    }, 800);
+    return () => { window.clearTimeout(t); };
+  }, [cvOn, deps.activeId]);
   const [pluginUpdateCount, setPluginUpdateCount] = useState(0);
   // 命令面板快速打开的文件目标（本地信号；递增 seq 允许连续打开同一文件）。
   const [fileTarget, setFileTarget] = useState<{ path: string; seq: number; workspace: string | null } | null>(null);
@@ -627,7 +643,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                   onDismiss={() => { setImportDiagnosis(null); }}
                 />
               )}
-              <div className="stream" id="stream" ref={setStreamEl}>
+              <div className="stream" id="stream" ref={setStreamEl} data-cv={cvOn ? "on" : undefined}>
                 <div className="reading" id="reading">
                   <div className="stream-fade-top" data-on={!stick.atTop} aria-hidden="true" />
                   <Suspense fallback={null}>
