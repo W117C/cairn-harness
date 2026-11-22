@@ -45506,3 +45506,54 @@ desktop-ux-2026-11-07、design-settings-fix 的截图 + 一度误报的 icns/字
 docs-check 绿；typecheck 0。
 
 凭证 @7888ff58
+
+## 2026-11-22 · 第 1337 页：接 zcode 断档一笔——c-v 延迟武装入库 + ADR 0019/两支判卷补录 + 仓根散件收口
+
+### 一、断点在哪（取证）
+
+- zcode 会话 sess_1d84ba63（「全面审计项目架构与多智能体系统优化」）在 2026-11-21 22:00 被权限询问打断：
+  `tool.permission.resolved` 记 `decision: "deny"` / `reason: "Permission request cancelled"`，随后
+  `turn.failed` = `TURN_CANCELLED`（`ZCode Protocol owner disconnected`）。被拦的正是「重建 + 重签四份真机证据 + 提交」
+  那一条 Bash。
+- 工作树现场：`WorkbenchView.tsx` / `styles.css` 的 c-v 改动在，四份证据仍是旧代；11-20 07:00 的全量套件
+  5 红（427 过 / 432 文件），红因统一是「证据与当前 renderer 源、当前构建同一代」——不是行为回归。
+- 结论：断点在**收尾**，不在实现。
+
+### 二、本批实测（两跑；performance-smoke 400 轮 / 40 样本）
+
+- 打开 862.4 / 926.4ms（帽 1500）、流式帧 p95 140.6 / 134.9ms（帽 200）、max 141.2 / 145.8ms（帽 500）、
+  启动 356.3 / 210.2ms、DOM 58452、控制台错误 0。
+- 基线 p95 218.6ms 取自第 1336 页同一把尺；按同一把尺本批 −36%～−38%。本轮没有重跑基线：
+  重跑要把 c-v 撤掉再建一次，属另一次改动，不冒充。
+- 取料：`outputs/perf-cv-delayed-arm-2026-11-22/`（run1.json / run2.json 原样 + 命令与机器注记）。
+
+### 三、实现复核
+
+- `apps/desktop/src/renderer/panes/WorkbenchView.tsx`：`cvOn` 状态 + `streamRowsRef`（开火时查行数；
+  依赖只有 `cvOn / activeId`——把 `rows.length` 放进依赖会让计时器被每帧清掉，第一版实测 p95 只到 210）；
+  `data-cv` 落在 `.stream` 上，换会话即复位。
+- `apps/desktop/src/renderer/styles.css`：一条 `.stream[data-cv="on"] .row { content-visibility: auto;
+  contain-intrinsic-size: auto 42px; }`，无第二处。
+- typecheck 0；renderer-layer-check 绿（256 个渲染层源文件）；桌面 432 文件 / 2809 条全绿；desktop-boundary 绿。
+
+### 四、证据重签与入库
+
+- cds-values（errors 0）、ime-guard 6/6、queue-key 6/6、overlay-mutex 5/5；四支判卷 54 条全绿。
+- `d6637c9e`：源码 2 文件 + 四份证据。
+
+### 五、散件收口
+
+- ADR 0019 正本与两支判卷此前只在工作树：三个 commit（616ba053 / 8b3cc608 / 7888ff58）引用了 ADR，
+  git 里却没有这份文件 ⇒ `cc4d47b1` 入库（ADR + cds-map-integrity 3 条 + gallery-fixture-parity）。
+- `vendor/cds-official/MainWindowPage-40ELxWNf.css` 是抽取用工作副本，不入库：UPSTREAM.json 已记
+  sha256 `81bac4da…` 与 243101 B，且 licensing 明说只转录 `data-cds` 子集、整份编译产物不搬 ⇒ 外移到 /tmp。
+- 仓根三份冒烟默认落盘残留（native-host-smoke.json / session-reference-checks.json /
+  workspace-owner-checks.json）与 session-search-renderer/ 已删。
+
+### 六、登记未做
+
+- 五支冒烟脚本缺省输出仍落 cwd（diff-render-latency / radix-open-latency / bundle-audit /
+  projection-bench / native-host-smoke）：第 1336 页「探针缺省 /tmp」纪律没覆盖到它们，修法=默认 mkdtemp，
+  本批只登记不动。
+
+凭证 @d6637c9e

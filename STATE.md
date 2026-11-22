@@ -1,15 +1,14 @@
 # Cairn / DSH —— 现态
 
-rev: 7888ff58
+rev: d6637c9e
 
-核对日期 2026-11-18（Asia/Shanghai）。IM 通道线第 1320 页收口于 `9b5ef007`：**协议 v81**
+核对日期 2026-11-22（Asia/Shanghai）。IM 通道线第 1320 页收口于 `9b5ef007`：**协议 v81**
 （飞书长连接 + 邮件 IMAP/SMTP + 企业微信智能机器人 + 微信 iLink 扫码登录）。微信走官方 iLink
 机器人：`get_bot_qrcode` 出码 → `get_qrcode_status` 轮询确认 → 建连；游标 `get_updates_buf` 与
 每用户 `context_token` 存**连接运行态**（随 connections.json 持久化，重启不重放）；发送带
 context_token、1800 字分片；出站 baseurl 钉死 https + `*.weixin.qq.com`。核心 `src/im/`
-electron-free、零新依赖，连接记录只有 safeStorage 键名。验证：核心 **714 文件 / 8386 条全绿**
-（maxWorkers=2）；桌面 **428 文件 / 2788 条全绿**；typecheck 0；boundary/docs-check 绿；
-四包证据重签 MATCH（rendererDigest `02764f0c…`、buildFresh=true）。
+electron-free、零新依赖，连接记录只有 safeStorage 键名。验证：核心（maxWorkers=2）与桌面套件、typecheck、boundary/docs-check 全绿；
+四包证据按本线现源重签（读数见 `pnpm facts` 与第 1337 页）。
 
 > 设计收敛线 `simplify-desktop-design`（R2–R5）已摘取完毕（第 1315 页）；分支走向仍待业主裁决。
 
@@ -28,6 +27,13 @@ electron-free、零新依赖，连接记录只有 safeStorage 键名。验证：
 报告：`outputs/audit-2026-11-18/report.md`（缺陷分类）与 `architecture.md`（量具与模块表）；明细见台账 1323–1327。
 
 ## 当前工作
+
+### 桌面 1:1 复刻（ADR 0019，第 1334–1337 页）
+
+- 设计方向已翻转：CDS 官方令牌薄＋组件规则＋适配层是唯一视觉事实源；P1 四件如实
+  `no-cairn-counterpart`，P2 编排器 dock、P3 左栏单栏化各落首刀。
+- 性能：长会话行级 content-visibility **延迟武装**已入 `d6637c9e`（打开路径先无 c-v），
+  打开与流式两预算由 `performance-smoke` 钉住；读数与阈值见第 1337 页。
 
 ### bot ＋ 通道（v81 已提交）
 
@@ -59,8 +65,7 @@ electron-free、零新依赖，连接记录只有 safeStorage 键名。验证：
 
 ## 下一步
 
-- 证据面 242 条 tsc 报错逐个降到 0（危险码帽 12，ratchet down only）。
-- 变异门禁加独立自愈入口（现只有整表跑开跑时才自愈；`restore` 不是子命令）。
-- 微信图片/文件消息按需开（CDN 下载 + AES 解密）——开之前先给 `ImInboundMessage` 留 `attachments?`。
+- 1:1 复刻按 [ADR 0019](docs/adr/0019-claude-desktop-1to1-design.md) 分面推进（P2/P3 已落首刀，余面见第 1334–1337 页）。
+- 五支冒烟脚本缺省输出落 cwd 的收口（第 1337 页登记；修法=默认 mkdtemp）。
 - 重复 id metadata 归属按 [ADR 0016](docs/adr/0016-legacy-session-metadata-ownership.md) 裁决（第 1241 页）。
 - 真机证据：四支判卷消费的读数已按本线现源重签；后续 renderer 改动仍需重建重签。
