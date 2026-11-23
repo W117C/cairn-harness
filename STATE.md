@@ -66,6 +66,6 @@ electron-free、零新依赖，连接记录只有 safeStorage 键名。验证：
 ## 下一步
 
 - 1:1 复刻按 [ADR 0019](docs/adr/0019-claude-desktop-1to1-design.md) 分面推进（P2/P3 已落首刀，余面见第 1334–1337 页）。
-- 五支冒烟脚本缺省输出落 cwd 的收口（第 1337 页登记；修法=默认 mkdtemp）。
+- 五支冒烟脚本缺省输出已收口为默认 mkdtemp（第 1338 页）；apps/desktop 下两份历史落盘 JSON 已退役。
 - 重复 id metadata 归属按 [ADR 0016](docs/adr/0016-legacy-session-metadata-ownership.md) 裁决（第 1241 页）。
 - 真机证据：四支判卷消费的读数已按本线现源重签；后续 renderer 改动仍需重建重签。

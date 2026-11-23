@@ -45568,3 +45568,35 @@ docs-check 绿；typecheck 0。
   取料 `outputs/head-cert-1238c4a-2026-11-22-0243/provenance.md`。
 
 凭证 @1238c4a0
+
+## 2026-11-23 · 第 1338 页：五支冒烟脚本缺省输出收口（默认 mkdtemp）+ 两份 cwd 残留 JSON 退役
+
+### 一、修了什么（第 1337 页 §六登记的欠账）
+
+五支探针的缺省输出从 `resolve(argv[2] ?? "<name>.json")`（落 cwd）改为：给了 argv[2] 照旧
+`resolve`，没给就落 `/tmp` 的 mkdtemp 目录（`cairn-<name>-` 前缀 + `<name>.json`）：
+
+- `scripts/diff-render-latency.cjs` / `radix-open-latency.cjs`（各自已有 mkdtemp/tmpdir/join 导入）
+- `scripts/bundle-audit.mjs`（补 `mkdtempSync`/`tmpdir`/`join` 导入）
+- `scripts/projection-bench.mjs`（补 `mkdtempSync`/`tmpdir`/`join` 导入）
+- `scripts/native-host-smoke.ts`（导入已齐；`.cjs` 是 tsx 薄壳，无字形）
+
+报告 JSON 里本就带 `output` 字段，落点自报，判卷不需改。
+
+### 二、连带：两份 tracked 的 cwd 残留退役
+
+`apps/desktop/bundle-audit.json`（c0ad6546 入库，1555 行）与 `apps/desktop/diff-render-latency.json`
+（9d0a3b7d 入库）是历史跑批的默认落盘残留——全仓无测试/判卷/文档引用文件路径，`git rm`。
+至此第 1337 页「仓根三份 + 本批两份」的 cwd 残留全部清零。
+
+### 三、验证
+
+- `node --check` 两支 .cjs 过；typecheck 0；desktop-boundary 绿。
+- 实跑两支可独立跑的：`node --import tsx scripts/projection-bench.mjs`（无参）输出落
+  `/var/folders/.../cairn-projection-bench-…/`，exit 0；`bundle-audit.mjs`（无参）输出落
+  `cairn-bundle-audit-…/`——cwd 零新增文件。两支 Electron 探针（diff/radix）与 native-host-smoke
+  未实跑（需重建 dist + 真机），只做了语法与导入面核对。
+- desktop 套件 432 文件 / 2809 条全绿（含 desktop-review-batch 的 bundle-audit/native-host 源文断言）。
+- 未跑核心套件与全量 gates：本批只动 desktop/scripts 五文件 + 删两份 JSON，无核心面。
+
+凭证 @（本页提交）

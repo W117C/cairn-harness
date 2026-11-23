@@ -9,7 +9,10 @@ const { dirname, join, resolve } = require("node:path");
 const { tmpdir } = require("node:os");
 
 const profile = mkdtempSync(join(tmpdir(), "cairn-diff-latency-"));
-const output = resolve(process.argv[2] ?? "diff-render-latency.json");
+// 缺省输出落 /tmp 的 mkdtemp（不许污染 cwd——证据面纪律，第 1329/1332/1337 页）
+const output = process.argv[2]
+  ? resolve(process.argv[2])
+  : join(mkdtempSync(join(tmpdir(), "cairn-diff-latency-out-")), "diff-render-latency.json");
 app.setPath("userData", profile);
 nativeTheme.themeSource = "light";
 app.on("quit", () => scheduleProfileCleanup(profile));

@@ -13,7 +13,10 @@ const { dirname, join, resolve } = require("node:path");
 const { tmpdir } = require("node:os");
 
 const profile = mkdtempSync(join(tmpdir(), "cairn-radix-latency-"));
-const output = resolve(process.argv[2] ?? "radix-open-latency.json");
+// 缺省输出落 /tmp 的 mkdtemp（不许污染 cwd——证据面纪律，第 1329/1332/1337 页）
+const output = process.argv[2]
+  ? resolve(process.argv[2])
+  : join(mkdtempSync(join(tmpdir(), "cairn-radix-latency-")), "radix-open-latency.json");
 const requestedSamples = Number(process.argv[3] ?? 20);
 app.setPath("userData", profile);
 nativeTheme.themeSource = "light";

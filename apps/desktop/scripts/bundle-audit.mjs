@@ -1,9 +1,13 @@
 // 按 Vite 实际入口依赖闭包统计首屏 JS；write:false，不覆盖产品构建。
 // 从仓库根：pnpm --filter cairn-desktop exec node scripts/bundle-audit.mjs <输出 JSON>
 import { build } from "vite";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, relative, resolve } from "node:path";
-const output = resolve(process.argv[2] ?? "bundle-audit.json");
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
+import { tmpdir } from "node:os";
+// 缺省输出落 /tmp 的 mkdtemp（不许污染 cwd——证据面纪律，第 1329/1332/1337 页）
+const output = process.argv[2]
+  ? resolve(process.argv[2])
+  : join(mkdtempSync(join(tmpdir(), "cairn-bundle-audit-")), "bundle-audit.json");
 await build({
   logLevel: "warn", build: { write: false },
   plugins: [{

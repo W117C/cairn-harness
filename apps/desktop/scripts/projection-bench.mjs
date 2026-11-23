@@ -5,15 +5,19 @@
 //
 // 用法：node scripts/projection-bench.mjs [输出 JSON 路径] [轮数]
 // 退出码看预算：超了退 1（量过了 ≠ 没变）。
-import { writeFileSync, mkdirSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { writeFileSync, mkdirSync, mkdtempSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { tmpdir } from "node:os";
 
 const { projectStream } = await import("../src/renderer/projections.ts");
 const { usageSummary } = await import("../src/renderer/projections.ts");
 const { changedFileCount } = await import("../src/renderer/components/panes.ts");
 const { traceGoal } = await import("../../../src/agent/goal-trace.ts");
 
-const output = resolve(process.argv[2] ?? "projection-bench.json");
+// 缺省输出落 /tmp 的 mkdtemp（不许污染 cwd——证据面纪律，第 1329/1332/1337 页）
+const output = process.argv[2]
+  ? resolve(process.argv[2])
+  : join(mkdtempSync(join(tmpdir(), "cairn-projection-bench-")), "projection-bench.json");
 const turns = Number(process.argv[3] ?? 400);
 
 // 事件形状照性能冒烟的夹具（apps/desktop/scripts/ui-gallery-preload.cjs 的历史段）。

@@ -9,7 +9,10 @@ import { TerminalHost, type TerminalPush } from "../src/main/terminal-host";
 const profile = mkdtempSync(join(tmpdir(), "cairn-native-host-"));
 app.setPath("userData", profile);
 app.on("quit", () => rmSync(profile, { recursive: true, force: true }));
-const output = resolve(process.argv[2] ?? "native-host-smoke.json");
+// 缺省输出落 /tmp 的 mkdtemp（不许污染 cwd——证据面纪律，第 1329/1332/1337 页）
+const output = process.argv[2]
+  ? resolve(process.argv[2])
+  : join(mkdtempSync(join(tmpdir(), "cairn-native-host-out-")), "native-host-smoke.json");
 const waitFor = async (condition: () => boolean | Promise<boolean>, title: string): Promise<void> => {
   const start = Date.now();
   while (Date.now() - start < 10000) { if (await condition()) return; await new Promise(r=>setTimeout(r,20)); }
