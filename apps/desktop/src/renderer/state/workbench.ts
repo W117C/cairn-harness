@@ -420,7 +420,6 @@ export function useWorkbenchModel() {
   }, []);
 
 
-
   /** 「最近打开」（P1-4）：归属为已注册项目才上报；纯副作用，失败吞掉只留 console.warn，
    *  绝不因它挡住打开/新建的主路径。 */
   const touchWorkspace = useCallback((path: string | null): void => {
@@ -431,23 +430,24 @@ export function useWorkbenchModel() {
       console.warn("最近打开上报失败（不影响主路径）", err);
     });
   }, []);
-
   // P2-1 空屏项目 chip：开弹层时拉「最近打开」清单（含已移除）；失败 = 空表不摆假数据。
-  const openChipPopover = useCallback((): void => {
-    setChipOpen((v) => {
-      const next = !v;
-      if (next) {
-        setChipQuery("");
-        setChipRecent(null);
-        void window.agent.listProjects({ includeRemoved: true, recentFirst: true }).then(
-          (all) => { setChipRecent(all.slice(0, 8)); },
-          () => { setChipRecent([]); },
-        );
-      }
-      return next;
-    });
+  const chipRecentSeq = useRef(0);
+  const refreshChipRecent = useCallback((): void => {
+    setChipRecent(null);
+    const seq = ++chipRecentSeq.current;
+    void window.agent.listProjects({ includeRemoved: true, recentFirst: true }).then(
+      (all) => { if (seq === chipRecentSeq.current) setChipRecent(all.slice(0, 8)); },
+      () => { if (seq === chipRecentSeq.current) setChipRecent([]); },
+    );
   }, []);
-
+  useEffect(() => { if (showEmpty) refreshChipRecent(); }, [showEmpty, activeWorkspace, projects, refreshChipRecent]);
+  const openChipPopover = useCallback((): void => {
+    if (chipOpen) { setChipOpen(false); return; }
+    setChipOpen(true);
+    setChipQuery("");
+    setChipRecent(null);
+    refreshChipRecent();
+  }, [chipOpen, refreshChipRecent]);
   // P2-2「引用最近文件」：本会话已引用文件历史（内存级——重启即忘；目录不算；最近在前、去重、上限 8）。
   const recentRefsBySession = useRef(new Map<string, string[]>());
   const noteRecentRef = useCallback((path: string): void => {
@@ -647,7 +647,7 @@ export function useWorkbenchModel() {
 
 
   // ---- P1 项目管理接线（brief 第二节；失败面 throw 给调用组件 fail-visible，成功面带 Toast）----
-  const { handleAddProject, handleCloneProject, handleUpdateProject, doRemoveProject, handleRemoveProject, handleRevealProject, handleRelocateProject, handleCreateFromDialog } = useProjectActions({ setProjects, setRegistryNotice, setImportDiagnosis, setLastError, refreshSessions, setActiveWorkspace, activeWorkspaceRef, setProjectRemoveConfirm, newSessionRef });
+  const { handleAddProject, handleCloneProject, handleUpdateProject, doRemoveProject, handleRemoveProject, handleRevealProject, handleRelocateProject, handleCreateFromDialog } = useProjectActions({ setProjects, projectsRef, setRegistryNotice, setImportDiagnosis, setLastError, refreshSessions, setActiveWorkspace, activeWorkspaceRef, setProjectRemoveConfirm, newSessionRef });
 
     /** ⌘K 命令面板（P3-3）：真开（旧位只给 comingSoon 提示——面板已落地，替换掉）。 */
   const handleOpenPalette = useCallback((): void => {

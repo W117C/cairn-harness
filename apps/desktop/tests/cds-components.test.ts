@@ -97,9 +97,9 @@ describe("Cairn 侧组件状态表：50 条一条不落，ported 必须给选择
     expect(map.sourceSha256).toBe(manifest.source.sha256);
   });
 
-  it("三档状态都在，且总数 50（ported 10 / 无对应 39 / 无组件 CSS 1）", () => {
+  it("三档状态都在，且总数 50（ported 12 / 无对应 37 / 无组件 CSS 1）", () => {
     for (const component of map.components) expect(statuses.has(component.status)).toBe(true);
-    expect(map.totals).toEqual({ ported: 10, "no-cairn-counterpart": 39, "no-component-css": 1 });
+    expect(map.totals).toEqual({ ported: 12, "no-cairn-counterpart": 37, "no-component-css": 1 });
   });
 
   it("每条都写了原因（不是空话：至少 20 字）", () => {
@@ -110,7 +110,7 @@ describe("Cairn 侧组件状态表：50 条一条不落，ported 必须给选择
 
   it("ported 的 cairn 选择器必须真的出现在 cds-components.css 里（防止账上移植、代码没落）", () => {
     const ported = map.components.filter((c) => c.status === "ported");
-    expect(ported).toHaveLength(10);
+    expect(ported).toHaveLength(12);
     for (const component of ported) {
       expect(component.cairn, component.name).toBeTruthy();
       expect(layer, `${component.name} → ${component.cairn}`).toContain(component.cairn as string);
@@ -150,6 +150,8 @@ describe("接线：官方层真的进产物，DOM 标记真的在源码里", () 
       'data-cds="SkeletonGroup"',
       'data-cds="Toolbar"',
       'data-cds="ChatComposerQueuedMessages"',
+      'data-cds="Card"',
+      'data-cds="CardLink"',
     ]) {
       expect(surface, marker).toContain(marker);
     }

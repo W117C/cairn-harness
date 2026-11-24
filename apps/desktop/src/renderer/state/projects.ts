@@ -7,6 +7,7 @@ import { toast } from "../toast";
 
 interface ProjectActionsDeps {
   setProjects: Dispatch<SetStateAction<ProjectRecord[]>>;
+  projectsRef: MutableRefObject<ProjectRecord[]>;
   setRegistryNotice: Dispatch<SetStateAction<string | null>>;
   setImportDiagnosis: Dispatch<SetStateAction<{ name: string; diagnosis: ProjectDiagnosis; } | null>>;
   setLastError: (message: string, sessionId?: string | undefined, workspace?: string | null) => void;
@@ -25,9 +26,10 @@ export function createProjectKind(templateId: string): "blank" | "template" {
 }
 
 export function useProjectActions(deps: ProjectActionsDeps) {
-  const { setProjects, setRegistryNotice, setImportDiagnosis, setLastError, refreshSessions, setActiveWorkspace, activeWorkspaceRef, setProjectRemoveConfirm, newSessionRef } = deps;
+  const { setProjects, projectsRef, setRegistryNotice, setImportDiagnosis, setLastError, refreshSessions, setActiveWorkspace, activeWorkspaceRef, setProjectRemoveConfirm, newSessionRef } = deps;
   const refreshProjects = useCallback(async (): Promise<void> => {
     const registered = await window.agent.listProjects();
+    projectsRef.current = registered;
     setProjects(registered);
     setRegistryNotice(null);
   }, []);

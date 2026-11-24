@@ -5,11 +5,11 @@
   "components": [
     {
       "name": "Card",
-      "status": "no-cairn-counterpart",
+      "status": "ported",
       "rules": 21,
       "declarations": 28,
-      "cairn": null,
-      "reason": "官方 Card 是带 CardLink 的可按卡片（.cds-card-fill/.cds-card-body 两层的 scale .99 / clip 2px）；Cairn 的 .card 是纯静态容器，没有可按后代，规则无处落"
+      "cairn": ".project-launcher [data-cds=\"Card\"]",
+      "reason": "空屏项目卡组与两条启动动作使用官方 Card 的 fill/body 两层结构，命中 surface 与按压几何；不再把静态 .card 容器冒充官方组件"
     },
     {
       "name": "MessageActions",
@@ -21,11 +21,11 @@
     },
     {
       "name": "CardLink",
-      "status": "no-cairn-counterpart",
+      "status": "ported",
       "rules": 16,
       "declarations": 22,
-      "cairn": null,
-      "reason": "Cairn 没有“整卡可点”的组件；点击目标都是卡片内部的具体按钮，不能冒充 CardLink"
+      "cairn": ".project-launcher [data-cds=\"CardLink\"]",
+      "reason": "项目行、环境行、添加项目与自动模式动作都是真实可点击的整卡链接，命中官方 hover/focus/press 契约"
     },
     {
       "name": "MessageAttachmentsVideo",
@@ -405,8 +405,8 @@
     }
   ],
   "totals": {
-    "ported": 10,
-    "no-cairn-counterpart": 39,
+    "ported": 12,
+    "no-cairn-counterpart": 37,
     "no-component-css": 1
   }
 }

@@ -57,14 +57,14 @@ describe("QuickStarts（空屏建议行 SSR）", () => {
 });
 
 describe("空屏（App 源文哨兵 · P2-1）", () => {
-  it("hero：珊瑚星标 + 按时段问候同一行 + 项目 chip（含分支位）", () => {
+  it("hero：珊瑚星标 + 按时段问候同一行 + 官方项目卡组（含分支位）", () => {
     expect(appSrc).toContain('className="empty-greet"');
     expect(appSrc).toContain('className="empty-greet-mark"');
     expect(appSrc).not.toContain("empty-brand");
     expect(appSrc).toContain("greetingFor(new Date().getHours())");
     expect(appSrc).toContain("STR.empty.greetingAsk");
-    expect(appSrc).toContain("empty-chip");
-    expect(appSrc).toContain("GitBranch");
+    expect(appSrc).toContain("<ProjectLauncher");
+    expect(appSrc).toContain("branch={emptyData?.branch ?? null}");
   });
 
   it("工作区上下文只出现一处（会话内住工具栏左翼；输入区不再有 ctx-chip）", () => {
@@ -73,7 +73,7 @@ describe("空屏（App 源文哨兵 · P2-1）", () => {
     expect(appSrc).not.toContain("workspaceLabel={");
     expect(appSrc).not.toContain('className="ctx-chip"');
     expect(appSrc).toContain('className="tb-workspace"');
-    expect(appSrc).toContain('className="empty-chip"');
+    expect(appSrc).toContain("<ProjectLauncher");
   });
 
   it("会话名只出现在工具栏中栏一处（会话条已并入顶栏，不重复两处）", () => {
@@ -95,10 +95,13 @@ describe("空屏（App 源文哨兵 · P2-1）", () => {
     expect(appSrc).toContain("chip-search");
     expect(appSrc).toContain("STR.empty.searchProjects");
     expect(appSrc).toContain("listProjects({ includeRemoved: true, recentFirst: true })");
+    expect(appSrc).toMatch(/\[showEmpty, activeWorkspace, projects, refreshChipRecent\]/);
+    expect(appSrc).toMatch(/const refreshChipRecent[\s\S]{0,220}?setChipRecent\(null\)/);
     expect(appSrc).toContain("<AddProjectMenu");
     expect(appSrc).toContain("STR.empty.dropHint");
-    // 未注册的最近项点击 = 重加；注册项 = 切过去。
-    expect(appSrc).toContain("handleAddProject(p.path)");
+    // 项目卡与弹层共用同一选择函数：注册项切过去，最近移除项重加。
+    expect(appSrc).toContain("onClick={() => { selectProject(p); }}");
+    expect(appSrc).toContain("handleAddProject(project.path)");
     // 最近项目的 name 可能是空串/undefined：不能渲染成一行空白，回落路径 basename。
     expect(appSrc).toContain('p.name || p.path.slice(p.path.lastIndexOf("/") + 1)');
     expect(appSrc).toContain('className="mi-check"');
@@ -154,11 +157,14 @@ describe("项目选择弹层方向", () => {
     expect(appSrc).toMatch(/<Popover\s+open=\{chipOpen\}\s+up\s+className="chip-pop"/);
   });
 
-  it("chip 弹层自称对话框：焦点进搜索框、关闭后归还触发按钮", () => {
-    const chipAt = appSrc.indexOf('className="empty-chip"');
-    expect(chipAt).toBeGreaterThan(-1);
-    expect(appSrc.slice(chipAt, chipAt + 160)).toContain('aria-haspopup="dialog"');
-    expect(appSrc).toMatch(/<Popover\s+open=\{chipOpen\}\s+up\s+className="chip-pop"\s+role="dialog"/);
+  it("chip 弹层自称对话框：焦点进搜索框、关闭后归还项目卡触发按钮", () => {
+    expect(appSrc).toContain("pickerTriggerRef={chipTriggerRef}");
+    expect(appSrc).toContain("onOpenProjectPicker={openChipPopover}");
+    expect(appSrc).toMatch(/<Popover\s+open=\{chipOpen\}\s+up\s+className="chip-pop"\s+id="project-picker"\s+role="dialog"/);
+    expect(appSrc).toContain('pickerOpen={chipOpen}');
+    expect(appSrc).toContain('pickerDialogId="project-picker"');
+    expect(appSrc).toContain("onPickerTrigger={rememberChipTrigger}");
+    expect(appSrc).toContain("chipTriggerRef.current = trigger");
     expect(appSrc).toContain('row?.querySelector<HTMLInputElement>(".chip-search")?.focus()');
     expect(appSrc).toContain("if (lost) chipTriggerRef.current?.focus();");
   });

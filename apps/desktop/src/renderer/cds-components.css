@@ -155,6 +155,16 @@ body[data-dsh-claude-style] .queue-strip[data-cds="ChatComposerQueuedMessages"] 
   margin-bottom: var(--gap-xs);
 }
 
+/* ── Card / CardLink：首页项目卡组与启动动作 ───────────────────────────
+ * 官方 Card 规则只下发 fill/body 的 surface 与按压几何；Cairn 在启动区提供
+ * 同构 DOM，让项目行、环境行和两条动作真实命中整卡链接契约。 */
+body[data-dsh-claude-style] .project-launcher [data-cds="Card"] > .cds-card-fill {
+  background-color: var(--surface-1);
+}
+body[data-dsh-claude-style] .project-launcher [data-cds="CardLink"] {
+  -webkit-tap-highlight-color: transparent;
+}
+
 /* ── MessageAttachmentsImage / Video：正文图片的尺寸档 ────────────────
  * 官方 natural 档：单图 max-width 480px、加载后 max-height 320px；带缩略图档（两图并排）
  * max-width 288px / max-height 120px。Cairn 只有正文单图（`.md-figure img`），按单图档对齐：

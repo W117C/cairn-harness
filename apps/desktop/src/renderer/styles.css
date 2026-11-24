@@ -1083,7 +1083,7 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
    标志独占中央，宽约 72px）。问候文本 sr-only 供读屏（时段问候逻辑与源钉保留）。 */
 .empty h1.empty-greet {
   display: flex; align-items: center; justify-content: center; gap: 0.45em;
-  margin: 0;
+  width: 100%; margin: 0;
   animation: rise-in var(--t-rise-in-long) both;
 }
 .empty-greet-mark { color: hsl(var(--accent-brand)); flex: none; width: 72px; height: 72px; }
@@ -1095,7 +1095,7 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
    问候语上面没有东西，还淡着就像坏了。 */
 .empty[data-picking]:has(.chip-pop.up.show:not(.down)) .empty-greet > * { opacity: .15; }
 .empty .empty-greet > * { transition: opacity var(--t-med); }
-.empty-chip-row { position: relative; margin-top: var(--space-xs); animation: rise-in var(--t-rise-in-long) var(--t-stagger-chip) both; }
+.empty-chip-row { position: relative; width: 100%; display: flex; justify-content: center; margin-top: var(--space-xs); animation: rise-in var(--t-rise-in-long) var(--t-stagger-chip) both; }
 /* 弹层开着时把 chip 行抬成独立层（2026-10-24）：rise-in 的 fill both 让这一行成了
    层叠上下文（z-index 只在内部生效），向下开的弹层会被后面的 composer 卡盖住 —— 文字互相
    透出来像半透明。抬到 60 后弹层正常盖在 composer 之上。 */
@@ -1110,13 +1110,13 @@ html [data-sonner-toaster][data-sonner-theme="dark"] {
 .empty-chip:hover { border-color: var(--hairline-strong); color: hsl(var(--text-000)); }
 .empty-chip .chip-sep { color: hsl(var(--text-400)); }
 .empty-chip .chip-caret { color: hsl(var(--text-400)); }
-.chip-pop { min-width: 300px; max-width: 380px; }
+.chip-pop { min-width: 300px; max-width: 380px; width: 300px; left: calc(50% - 150px); }
 /* 2026-10-24：弹层整体按 chip 上方实测空间封顶后，改纵向 flex——列表吃剩余高度并内滚，
    搜索框与页脚（添加项目 / 拖入提示）始终可见；此前三项固定高相加可顶出窗口上沿。 */
 .pop.chip-pop.show { display: flex; flex-direction: column; }
 /* 上方空间不足时向下开（2026-10-24）：首页 chip 贴着问候语，向上只剩 ~140px，
    列表只露一行；改为贴上/下较大的一侧，动画方向同时翻。 */
-.pop.chip-pop.down { top: calc(100% + 6px); bottom: auto; left: 0; }
+.pop.chip-pop.down { top: calc(100% + 6px); bottom: auto; left: calc(50% - 150px); }
 .pop.chip-pop.down.show { animation-name: pop-in; }
 .chip-pop .chip-search, .chip-pop .chip-foot { flex: none; }
 .chip-search {

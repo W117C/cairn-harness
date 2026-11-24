@@ -34,8 +34,8 @@
     },
     {
       "file": "component-map.json",
-      "sha256": "987e21bd294cd1e69da0eeaee6ad585df9cab07add33f0d53c8ee5b910993e79",
-      "bytes": 16628,
+      "sha256": "61e2b41fa9bfce6e9d4cf8e3320bde7122677f8552e6ae45771fac7e9cae61cf",
+      "bytes": 16676,
       "adapted": true,
       "note": "Cairn-specific ledger：每个 data-cds 组件逐条标 ported / no-cairn-counterpart / no-component-css 并写明原因；tests/cds-components.test.ts 校验集合与数量。"
     }

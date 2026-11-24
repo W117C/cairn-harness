@@ -73,7 +73,8 @@ describe("会话作用域调用的工作区路由", () => {
     // 命令面板早就这么做（2026-11-05 审计），侧栏行与顶栏项目 chip 此前漏了：
     // 旧 activeId 留在原项目，而 send 带的是 activeWorkspace ⇒ 下一条消息落到新工作区的空日志上。
     expect(app).toContain("const switched = p !== activeWorkspace;");
-    expect(app).toContain("const switched = p.path !== activeWorkspace;");
+    expect(app).toContain("const switched = project.path !== activeWorkspace;");
+    expect(app).toContain("onClick={() => { selectProject(p); }}");
     expect(app).toContain("if (switched && activeId !== null) newSession();");
   });
 

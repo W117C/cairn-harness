@@ -1810,4 +1810,63 @@ stub.onPreviewState = (cb) => { previewStateListeners.add(cb); return () => prev
 const menuListeners = new Set();
 stub.onMenu = (cb) => { menuListeners.add(cb); return () => menuListeners.delete(cb); };
 
+// 首页项目卡组专用夹具：已移除项目重加、长分支与跨工作区会话都走真实 renderer 状态链。
+if (process.argv.includes("--cairn-project-launcher-fixture")) {
+  const records = [
+    { id: "p1", name: "demo-ws", path: "/tmp/demo-ws", defaultLocation: "/tmp/demo-ws", createdAt: now, updatedAt: now },
+    { id: "p2", name: "design-system", path: "/tmp/demo-ws-design", defaultLocation: "/tmp/demo-ws-design", createdAt: now, updatedAt: now },
+    { id: "p3", name: "mobile-app", path: "/tmp/demo-ws-mobile", defaultLocation: "/tmp/demo-ws-mobile", createdAt: now, updatedAt: now, removedAt: new Date(now - 60_000).toISOString() },
+  ];
+  const calls = { workspace: [], add: [], touch: [] };
+  const recentPaths = ["/tmp/demo-ws-mobile", "/tmp/demo-ws-design", "/tmp/demo-ws"];
+  const copy = (record) => ({ ...record });
+  stub.listProjects = (options) => new Promise((resolve) => setTimeout(() => {
+    const visible = options?.includeRemoved === true ? records : records.filter((record) => record.removedAt === undefined);
+    const ordered = options?.recentFirst === true
+      ? recentPaths.map((path) => records.find((record) => record.path === path)).filter((record) => record !== undefined)
+      : visible;
+    resolve(ordered.map(copy));
+  }, 30));
+  stub.addProject = (input) => new Promise((resolve) => setTimeout(() => {
+    let record = records.find((item) => item.path === input.path);
+    calls.add.push({ path: input.path, name: input.name ?? null });
+    if (record === undefined) {
+      const name = input.name ?? input.path.slice(input.path.lastIndexOf("/") + 1);
+      record = { id: `p${records.length + 1}`, name, path: input.path, defaultLocation: input.path, createdAt: now, updatedAt: now };
+      records.push(record);
+    }
+    delete record.removedAt;
+    if (typeof input.name === "string" && input.name !== "") record.name = input.name;
+    recentPaths.splice(0, recentPaths.length, record.path, ...recentPaths.filter((path) => path !== record.path));
+    resolve(copy(record));
+  }, 30));
+  stub.projectDiagnose = reply({ verdict: "supported", runKind: "static-html", form: "static-html", summary: "", reasons: [] });
+  stub.pickDirectory = reply("/tmp/demo-ws-new");
+  stub.touchProject = (id) => new Promise((resolve) => setTimeout(() => {
+    calls.touch.push(id);
+    const record = records.find((item) => item.id === id);
+    if (record !== undefined) recentPaths.splice(0, recentPaths.length, record.path, ...recentPaths.filter((path) => path !== record.path));
+    resolve({ ok: true });
+  }, 10));
+  stub.setWorkspaceContext = (workspace) => new Promise((resolve) => setTimeout(() => {
+    calls.workspace.push(workspace);
+    resolve({ ok: true });
+  }, 10));
+  stub.gitStatus = (workspace) => new Promise((resolve) => setTimeout(() => resolve({
+    ok: true,
+    branch: workspace === "/tmp/demo-ws-mobile"
+      ? "feature/empty-state-with-a-very-long-branch-name"
+      : workspace === "/tmp/demo-ws-design" ? "design/project-launcher" : "bot、UI、chat",
+    dirtyFiles: 0,
+  }), 30));
+  contextBridge.exposeInMainWorld("__cairnProjectLauncher", {
+    calls: () => ({
+      workspace: [...calls.workspace],
+      add: calls.add.map((call) => ({ ...call })),
+      touch: [...calls.touch],
+    }),
+    registeredPaths: () => records.filter((record) => record.removedAt === undefined).map((record) => record.path),
+  });
+}
+
 contextBridge.exposeInMainWorld("agent", stub);

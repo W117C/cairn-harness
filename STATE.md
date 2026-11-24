@@ -34,6 +34,10 @@ electron-free、零新依赖，连接记录只有 safeStorage 键名。验证：
   `no-cairn-counterpart`，P2 编排器 dock、P3 左栏单栏化各落首刀。
 - 性能：长会话行级 content-visibility **延迟武装**已入 `d6637c9e`（打开路径先无 c-v），
   打开与流式两预算由 `performance-smoke` 钉住；读数与阈值见第 1337 页。
+- 当前提交：第 1339 页把首屏中央区改为官方项目卡组 / 本地环境 / 启动动作，Card/CardLink
+  移植账 10→12；最近项目回落与刷新、当前项补位、长分支几何、dialog ARIA / 实际 opener 回焦、
+  Card `0.99` 缩放 / `2px` 内缩、危险档确认与权限落盘均已收口。
+  桌面 434/2823、layout-smoke 36/36、四份证据已按现源重签。**未做 HEAD 认证。**
 
 ### bot ＋ 通道（v81 已提交）
 

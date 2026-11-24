@@ -13,7 +13,7 @@ import type { ComposerLockReason,SendDisposition } from "../send-queue";
 import type { StickyScroll } from "../useStickyScroll";
 import { renderAppToolbar } from "./AppToolbar";
 // WorkbenchView: extracted without changing event or callback behavior.
-import { ArrowDown,Check,ChevronDown,Folder,GitBranch } from "lucide-react";
+import { ArrowDown,Check,Folder } from "lucide-react";
 import { CairnMark } from "../components/CairnMark";
 import { menuNavIndex } from "../components/popover-keys";
 import { lazy,Suspense,useEffect,useRef,useState } from "react";
@@ -45,7 +45,9 @@ import { PluginSidebar } from "../components/PluginSidebar";
 import { Popover } from "../components/Popover";
 import { ProviderBanner } from "../components/ProviderBanner";
 import { pickRecentSessions } from "../derived/recent-sessions";
+import { launcherProjects } from "../derived/project-launcher";
 import { EmptyContext } from "../components/EmptyContext";
+import { ProjectLauncher } from "../components/ProjectLauncher";
 import { QuickStarts } from "../components/QuickStarts";
 import { QueueDock } from "./QueueDock";
 import { todoProjection } from "../derived/todo";
@@ -409,6 +411,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
   // （键盘用户不必从触发按钮逐格 Tab）；关闭后焦点若仍在弹层里或掉回 body，
   // 还给触发按钮。外点关闭不抢焦点（用户点哪儿焦点就在哪儿）。
   const chipTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const rememberChipTrigger = (trigger: HTMLButtonElement): void => { chipTriggerRef.current = trigger; };
   useEffect(() => {
     if (!chipOpen) return;
     const row = chipRef.current;
@@ -424,6 +427,35 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
   // 第 1163 页：工作区显示名按 projects/activeWorkspace 记忆；事件渲染不重复 find。
   const activeProjectLabel = useMemo(() => activeWorkspace === null ? null
     : (projects.find((p) => p.path === activeWorkspace)?.name ?? activeWorkspace.slice(activeWorkspace.lastIndexOf("/") + 1)), [projects, activeWorkspace]);
+  const visibleLauncherProjects = useMemo(
+    () => launcherProjects(projects, chipRecent, activeWorkspace),
+    [projects, chipRecent, activeWorkspace],
+  );
+  const selectProject = (project: ProjectRecord): void => {
+    closeChip();
+    if (projects.some((item) => item.path === project.path)) {
+      const switched = project.path !== activeWorkspace;
+      setActiveWorkspace(project.path);
+      activeWorkspaceRef.current = project.path;
+      touchWorkspace(project.path);
+      if (switched && activeId !== null) newSession();
+      return;
+    }
+    const switched = project.path !== activeWorkspace;
+    void handleAddProject(project.path).then(() => {
+      setActiveWorkspace(project.path);
+      activeWorkspaceRef.current = project.path;
+      touchWorkspace(project.path);
+      if (switched && activeId !== null) newSession();
+    }).catch((err: unknown) => { setLastError(`添加项目失败：${err instanceof Error ? err.message : String(err)}`); });
+  };
+  const addProjectFromPicker = (): void => {
+    closeChip();
+    void window.agent.pickDirectory().then((path) => {
+      if (path !== null) return handleAddProject(path);
+      return undefined;
+    }).catch((err: unknown) => { setLastError(`添加项目失败：${err instanceof Error ? err.message : String(err)}`); });
+  };
   // 工作状态面板（2026-11-04 截图右上角）：todo_write 清单投影 + 运行读数（阶段/耗时/步数）。
   const workTodos = useMemo(() => todoProjection(events), [events]);
   // ADR 0019 1:1 单栏化（官方首屏真机对照 2026-11-19）：侧栏 brandline 随头部行下架——
@@ -514,32 +546,27 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                 </h1>
                 {/* 项目 chip：📁 名 · 分支；点开 = 搜索 + 最近项目 + 复用 AddProjectMenu 四入口。 */}
                 <div className="empty-chip-row" ref={chipRef}>
-                  <button
-                    className="empty-chip"
-                    ref={chipTriggerRef}
-                    aria-haspopup="dialog"
-                    aria-expanded={chipOpen}
-                    title={STR.empty.pickProject}
-                    onClick={openChipPopover}
-                  >
-                    <Folder size={13} aria-hidden="true" />
-                    {/* 2026-10-17：已登记项目显示「显示名」（与侧栏一致）；未登记才回落文件夹名。 */}
-                    <span>{activeProjectLabel ?? STR.empty.pickProject}</span>
-                    {emptyData !== null && emptyData.branch !== null && emptyData.branch !== "" && (
-                      <>
-                        <span className="chip-sep" aria-hidden="true">·</span>
-                        <GitBranch size={11} aria-hidden="true" />
-                        <span>{emptyData.branch}</span>
-                      </>
-                    )}
-                    <ChevronDown size={11} aria-hidden="true" className="chip-caret" />
-                  </button>
+                  <ProjectLauncher
+                    projects={visibleLauncherProjects}
+                    activeWorkspace={activeWorkspace}
+                    branch={emptyData?.branch ?? null}
+                    autoMode={mode === "auto"}
+                    onPickProject={selectProject}
+                    onAddProject={addProjectFromPicker}
+                    onToggleAuto={() => { permissionGuard.cycle(mode === "auto" ? "default" : "auto"); }}
+                    onOpenProjectPicker={openChipPopover}
+                    onPickerTrigger={rememberChipTrigger}
+                    pickerTriggerRef={chipTriggerRef}
+                    pickerOpen={chipOpen}
+                    pickerDialogId="project-picker"
+                  />
                   {/* 项目选择弹层向上开（2026-10-17 真机目验：向下开会盖住 composer 本身，
                       你一边选项目一边看不见自己要发的输入）。 */}
                   <Popover
                     open={chipOpen}
                     up
                     className="chip-pop"
+                    id="project-picker"
                     role="dialog"
                     aria-label={STR.empty.projectsLabel}
                     onKeyDown={(e) => {
@@ -567,33 +594,13 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                         <div className="menu-note">{projects.length === 0 ? STR.empty.pickProject : STR.empty.noProjectMatch}</div>
                       )}
                       {chipList.map((p) => {
-                        const registered = projects.some((x) => x.path === p.path);
                         return (
                           <button
                             key={p.id}
                             className={"menu-item" + (p.path === activeWorkspace ? " on" : "")}
                             title={p.path}
-                            onClick={() => {
-                              closeChip();
-                              if (registered) {
-                                const switched = p.path !== activeWorkspace;
-                                setActiveWorkspace(p.path);
-                                activeWorkspaceRef.current = p.path;
-                                touchWorkspace(p.path);
-                                // 切项目 = 回该项目的空聊天面：旧会话留在原项目，继续发送会把同一
-                                // sessionId 写进新工作区（2026-11-05 审计确认的数据串写）。
-                                if (switched && activeId !== null) newSession();
-                              } else {
-                                // 最近但已移除：点 = 重新添加 + 切过去（空屏点项目就是要用它）。
-                                const switched = p.path !== activeWorkspace;
-                                void handleAddProject(p.path).then(() => {
-                                  setActiveWorkspace(p.path);
-                                  activeWorkspaceRef.current = p.path;
-                                  touchWorkspace(p.path);
-                                  if (switched && activeId !== null) newSession();
-                                }).catch((err: unknown) => { setLastError(`添加项目失败：${err instanceof Error ? err.message : String(err)}`); });
-                              }
-                            }}
+                            aria-current={p.path === activeWorkspace ? true : undefined}
+                            onClick={() => { selectProject(p); }}
                           >
                             <span className="mi-ico" aria-hidden="true"><Folder size={12} /></span>
                             {/* 最近项目的 name 可能为空（只剩 path）；空名在弹层里会显示成一行空白，
@@ -858,24 +865,7 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
               onPickDirectory={() => window.agent.pickDirectory()}
               onPickFiles={() => window.agent.pickFiles()}
               configuredProviders={configuredProviders}
-              onModeChange={(m) => {
-                // 换档必须留下**可见后果**：芯片标签换字 + 一条 notice 说清新档从哪一刻起算。
-                // 业主实测 2026-10-16「点了切换感觉没用」——芯片确实换了字，但没有任何一句告诉用户
-                // 这一刻发生了什么、下一轮会怎样。runAgent 装配时 mode 进 sessionObj（整场 run 的
-                // 常量，agent-runner.ts:1140）⇒ 运行中的那一轮改不了，这是真实语义不是缺陷，
-                // 缺的只是把它说出来。
-                void window.agent.setSettings({ mode: m }).then(() => {
-                  setMode(m);
-                  const info = MODE_LABEL[m];
-                  setLastNotice(
-                    runningActive
-                      ? `权限档已切到「${info.label}」（${info.desc}）——本轮仍在原档下跑，下一条消息起生效`
-                      : `权限档已切到「${info.label}」——${info.desc}`,
-                  );
-                }).catch((err: unknown) => {
-                  setLastError(`权限档保存失败：${err instanceof Error ? err.message : String(err)}`);
-                });
-              }}
+              onModeChange={permissionGuard.apply}
               thinking={composerThinking(activeId, pendingThinking, thinkingBySession.current, activeWorkspace)}
               onThinkingChange={(level) => {
                 const change = thinkingChangeTarget(activeId, level);

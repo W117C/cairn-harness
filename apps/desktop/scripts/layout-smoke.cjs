@@ -28,7 +28,11 @@ async function main() {
     width: 1440, height: 900, show: false,
     webPreferences: {
       preload: join(__dirname, "ui-gallery-preload.cjs"),
-      additionalArguments: ["--cairn-api-members=" + JSON.stringify(members), "--cairn-protocol-version=" + version],
+      additionalArguments: [
+        "--cairn-api-members=" + JSON.stringify(members),
+        "--cairn-protocol-version=" + version,
+        "--cairn-project-launcher-fixture",
+      ],
     },
   });
   const errors = [];
@@ -71,7 +75,167 @@ async function main() {
     numbers: document.querySelectorAll('.start-n').length,
   }))()`);
   check("空态建议保持无编号行", quickStarts.rows > 0 && quickStarts.numbers === 0, quickStarts);
+  const launcherInitial = await js(`(() => ({
+    labels: [...document.querySelectorAll('.project-row .launch-label')].map((el) => el.textContent.trim()),
+    active: document.querySelectorAll('.project-row[aria-current="true"]').length,
+    hasPopup: document.querySelector('.environment-row')?.getAttribute('aria-haspopup') ?? null,
+    expanded: document.querySelector('.environment-row')?.getAttribute('aria-expanded') ?? null,
+    controls: document.querySelector('.environment-row')?.getAttribute('aria-controls') ?? null,
+    dialog: !!document.querySelector('#project-picker[role="dialog"]'),
+  }))()`);
+  check(
+    "首页先按最近顺序展示真实项目，不点击补造当前项",
+    launcherInitial.labels.join("|") === "mobile-app|design-system|demo-ws"
+      && launcherInitial.active === 0 && launcherInitial.hasPopup === "dialog"
+      && launcherInitial.expanded === "false" && launcherInitial.controls === "project-picker" && launcherInitial.dialog,
+    launcherInitial,
+  );
+  await js(`(() => {
+    const group = [...document.querySelectorAll('.group')].find((el) => el.querySelector('.g-name')?.textContent?.trim() === 'design-system');
+    group?.querySelector('.g-more')?.click();
+  })()`);
+  await pause();
+  await js(`[...document.querySelectorAll('.ctx-menu [role="menuitem"]')].find((el) => el.textContent.includes('重命名显示名'))?.click()`);
+  await pause();
+  await js(`(() => {
+    const input = document.querySelector('.s-rename');
+    if (input === null) return;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    setter.call(input, '设计系统');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+  })()`);
+  await pause();
+  const renamed = await js(`(() => ({
+    labels: [...document.querySelectorAll('.project-row .launch-label')].map((el) => el.textContent.trim()),
+    calls: window.__cairnProjectLauncher?.calls().add ?? [],
+  }))()`);
+  check("项目改名后卡组立即采用注册表新名，不保留旧最近行标签", renamed.labels.includes("设计系统") && !renamed.labels.includes("design-system") && renamed.calls.some((call) => call.name === "设计系统"), renamed);
+  await js(`document.querySelectorAll('.action-row')[0]?.click()`);
+  await pause();
+  const addedProject = await js(`(() => ({
+    labels: [...document.querySelectorAll('.project-row .launch-label')].map((el) => el.textContent.trim()),
+    registered: window.__cairnProjectLauncher?.registeredPaths() ?? [],
+    calls: window.__cairnProjectLauncher?.calls().add ?? [],
+  }))()`);
+  check("空屏添加项目后最近卡组刷新，新项目不再被旧快照遮住", addedProject.labels.includes("demo-ws-new") && addedProject.registered.includes("/tmp/demo-ws-new") && addedProject.calls.some((call) => call.path === "/tmp/demo-ws-new"), addedProject);
+  await js(`document.querySelector('.diagnosis-card .x')?.click()`);
+  await js(`[...document.querySelectorAll('.project-row')].find((el) => el.textContent.includes('mobile-app'))?.click()`);
+  await pause();
+  const readded = await js(`(() => {
+    const row = document.querySelector('.environment-row');
+    const branch = row?.querySelector('.launch-branch');
+    const rect = (el) => { const r = el.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width }; };
+    return {
+      active: document.querySelector('.project-row[aria-current="true"] .launch-label')?.textContent?.trim() ?? null,
+      branch: branch?.textContent?.trim() ?? null,
+      branchTruncated: branch !== null && branch !== undefined && branch.scrollWidth > branch.clientWidth,
+      sameRow: row !== null && [...row.children].every((el) => {
+        const a = el.getBoundingClientRect();
+        const b = row.getBoundingClientRect();
+        return Math.abs((a.top + a.bottom) / 2 - (b.top + b.bottom) / 2) <= 1;
+      }),
+      chevronInside: row !== null && rect(row.lastElementChild).right <= rect(row).right - 8,
+      calls: window.__cairnProjectLauncher?.calls(),
+      registered: window.__cairnProjectLauncher?.registeredPaths(),
+    };
+  })()`);
+  check(
+    "已移除项目从卡组真实重加、切根并显示长分支，四个格子不换行",
+    readded.active === "mobile-app" && readded.branch === "feature/empty-state-with-a-very-long-branch-name"
+      && readded.branchTruncated && readded.sameRow && readded.chevronInside
+      && readded.calls?.add?.some((call) => call.path === "/tmp/demo-ws-mobile")
+      && readded.calls?.workspace?.includes("/tmp/demo-ws-mobile")
+      && readded.calls?.touch?.includes("p3")
+      && readded.registered?.includes("/tmp/demo-ws-mobile"),
+    readded,
+  );
+  await js(`document.querySelector('.diagnosis-card .x')?.click()`);
   await shot("01-home");
+  const launcher = await js(`(() => {
+    const root = document.querySelector('.project-launcher');
+    const rect = (el) => { const r = el.getBoundingClientRect(); return { left: r.left, right: r.right, center: (r.left + r.right) / 2 }; };
+    return {
+      cards: root?.querySelectorAll('[data-cds="Card"]').length ?? 0,
+      links: root?.querySelectorAll('[data-cds="CardLink"]').length ?? 0,
+      projectRows: root?.querySelectorAll('.project-row').length ?? 0,
+      active: root?.querySelectorAll('.project-row[aria-current="true"]').length ?? 0,
+      environment: root?.querySelector('.environment-row')?.textContent?.trim() ?? '',
+      autoPressed: root?.querySelector('.action-row[aria-pressed]')?.getAttribute('aria-pressed') ?? null,
+      launcher: root ? rect(root) : null,
+      hero: rect(document.querySelector('.empty-greet')),
+      composer: rect(document.querySelector('.composer-card')),
+    };
+  })()`);
+  check("首页项目卡组使用官方 Card/CardLink，当前项目与环境可读", launcher.cards === 3 && launcher.links === launcher.projectRows + 3 && launcher.projectRows > 0 && launcher.active === 1 && launcher.environment.includes('本地工作区'), launcher);
+  check("首页 hero、项目卡组与输入区共用中轴", Math.abs(launcher.hero.center - launcher.launcher.center) <= 1 && Math.abs(launcher.launcher.center - launcher.composer.center) <= 1, launcher);
+  await js(`document.querySelector('.environment-row')?.click()`);
+  await pause();
+  const picker = await js(`(() => ({
+    open: !!document.querySelector('.chip-pop.show'),
+    focused: document.activeElement?.classList.contains('chip-search') ?? false,
+    rows: document.querySelectorAll('.chip-list .menu-item').length,
+    expanded: document.querySelector('.environment-row')?.getAttribute('aria-expanded') ?? null,
+    current: document.querySelector('.chip-list .menu-item[aria-current="true"]')?.textContent?.includes('mobile-app') ?? false,
+  }))()`);
+  check("环境行打开真实项目选择弹层、同步 ARIA 并聚焦搜索", picker.open && picker.focused && picker.rows > 0 && picker.expanded === "true" && picker.current, picker);
+  await shot("01b-project-picker");
+  await js(`document.querySelector('.chip-search')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+  await pause();
+  const pickerDismissed = await js(`(() => ({
+    open: !!document.querySelector('.chip-pop.show'),
+    expanded: document.querySelector('.environment-row')?.getAttribute('aria-expanded') ?? null,
+    focused: document.activeElement?.classList.contains('environment-row') ?? false,
+  }))()`);
+  check("项目弹层 Esc 关闭后归还环境行焦点", !pickerDismissed.open && pickerDismissed.expanded === "false" && pickerDismissed.focused, pickerDismissed);
+  const autoPoint = await js(`(() => {
+    const r = document.querySelector('.action-row[aria-pressed]').getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  })()`);
+  await win.webContents.sendInputEvent({ type: "mouseMove", ...autoPoint });
+  await win.webContents.sendInputEvent({ type: "mouseDown", ...autoPoint, button: "left", clickCount: 1 });
+  await pause();
+  const cardPress = await js(`(() => {
+    const row = document.querySelector('.action-row[aria-pressed]');
+    const card = row.closest('[data-cds="Card"]');
+    const fill = card.querySelector('.cds-card-fill');
+    const body = card.querySelector('.cds-card-body');
+    const style = getComputedStyle(card);
+    return {
+      active: row.matches(':active'),
+      cardActive: card.matches(':has([data-cds="CardLink"]:active)'),
+      sx: style.getPropertyValue('--cds-card-press-sx').trim(),
+      sy: style.getPropertyValue('--cds-card-press-sy').trim(),
+      d: style.getPropertyValue('--cds-card-press-d').trim(),
+      transform: getComputedStyle(fill).transform,
+      clipPath: getComputedStyle(body).clipPath,
+    };
+  })()`);
+  await win.webContents.sendInputEvent({ type: "mouseUp", ...autoPoint, button: "left", clickCount: 1 });
+  await pause();
+  check(
+    "官方 Card 按压几何有真实缩放与裁切，不是只写 data-cds",
+    Number(cardPress.sx) === 0.99 && Number(cardPress.sy) === 0.99 && cardPress.d === "2px"
+      && cardPress.active && cardPress.cardActive
+      && cardPress.transform.startsWith("matrix(0.99, 0, 0, 0.99") && cardPress.clipPath.startsWith("inset(2px"),
+    cardPress,
+  );
+  const autoConfirm = await js(`(() => ({
+    dialog: !!document.querySelector('.confirm-card'),
+    pressed: document.querySelector('.action-row[aria-pressed]')?.getAttribute('aria-pressed') ?? null,
+    settings: window.__cairnSettingsCalls?.().filter((patch) => patch.mode === 'auto') ?? [],
+  }))()`);
+  check("自动模式危险档先确认，确认前不落盘", autoConfirm.dialog && autoConfirm.pressed === 'false' && autoConfirm.settings.length === 0, autoConfirm);
+  await js("document.querySelector('.confirm-card .mini-btn.danger')?.click()");
+  await pause();
+  const autoOn = await js(`document.querySelector('.action-row[aria-pressed]')?.getAttribute('aria-pressed')`);
+  const autoSettings = await js(`window.__cairnSettingsCalls?.().filter((patch) => patch.mode === 'auto') ?? []`);
+  check("自动模式动作切换现有权限档、落盘并回显状态", autoOn === 'true' && autoSettings.length === 1, { autoOn, autoSettings });
+  await js(`document.querySelector('.action-row[aria-pressed]')?.click()`);
+  await pause();
+  const autoOff = await js(`document.querySelector('.action-row[aria-pressed]')?.getAttribute('aria-pressed')`);
+  const autoOffSettings = await js(`window.__cairnSettingsCalls?.().filter((patch) => patch.mode === 'default') ?? []`);
+  check("自动模式可逆切回默认档并落盘", autoOff === 'false' && autoOffSettings.length === 1, { autoOff, autoOffSettings });
   const home = await js(`(() => {
     const h = document.querySelector('.empty-greet').getBoundingClientRect();
     const c = document.querySelector('.composer-card').getBoundingClientRect();
@@ -87,8 +251,8 @@ async function main() {
       const px = fs(el);
       if (px > loudest.px) loudest = { t: (el.className || el.tagName).toString().slice(0, 24), px };
     }
-    return { greetPx: fs(greet), taPx: fs(ta), loudest, headingLeft: h.left, composerLeft: c.left, footer: document.querySelector('.avatar').textContent,
-      railAccount: document.querySelector('.app-rail .avatar')?.getAttribute('aria-label') ?? null,
+    return { greetPx: fs(greet), taPx: fs(ta), loudest, headingLeft: h.left, composerLeft: c.left,
+      railAccount: document.querySelector('.app-rail-user .avatar')?.getAttribute('aria-label') ?? null,
       sideSettings: [...document.querySelectorAll('.side-wrap button')].filter((el) => (el.getAttribute('aria-label') ?? '') === '设置' || (el.textContent ?? '').trim() === '设置').length,
       emptyLeft: document.querySelector('.empty').getBoundingClientRect().left,
       emptyRight: document.querySelector('.empty').getBoundingClientRect().right,
@@ -101,15 +265,17 @@ async function main() {
       radius: getComputedStyle(document.querySelector('.composer-card')).borderRadius,
       upstream: document.body.hasAttribute('data-dsh-claude-style') };
   })()`);
-  // 2026-11-07 第 1041 页：列宽收进 --col-max 单源后八处同宽，容差从 24 收紧到 1。
-  // 改前（第 1037 页容器断点只收三处）真机 1440：问候左 495.5 / 输入卡左 543.5 ⇒ 48px 锯齿，旧容差抓不住。
-  check("首页标题、项目与输入区共用阅读起点", Math.abs(home.headingLeft - home.composerLeft) <= 1, home);
-  check("首页 hero / 起手行 / 输入区同列宽（左右缘都齐）", Math.abs(home.emptyLeft - home.zoneLeft) <= 1 && Math.abs(home.emptyRight - home.zoneRight) <= 1 && Math.abs(home.belowLeft - home.zoneLeft) <= 1, home);
-  check("品牌标同屏一处：侧栏展开时顶栏中栏留空", home.brandInBar === 0 && home.brandInSide === 1, home);
+  // ADR 0019 P2/P3：项目卡组是居中独立卡面，不再与输入卡共用左缘；真实契约是同轴。
+  check("首页 dock 横贯主区，项目卡组保持独立最大宽度", home.zoneRight > home.emptyRight && launcher.launcher.right - launcher.launcher.left <= 440, { home, launcher });
+  check("品牌标同屏一处：恒在顶栏，侧栏不重复", home.brandInBar === 1 && home.brandInSide === 0, home);
   await js(`document.querySelector('.titlebar button[aria-label="折叠侧栏"]')?.click()`);
   await pause();
-  const collapsedBrand = await js(`(() => ({ bar: document.querySelectorAll('.tb-brand').length, side: document.querySelectorAll('.side-wrap').length }))()`);
-  check("侧栏收起后品牌标补位到顶栏中栏（仍只一处）", collapsedBrand.bar === 1 && collapsedBrand.side === 0, collapsedBrand);
+  const collapsedBrand = await js(`(() => ({
+    bar: document.querySelectorAll('.tb-brand').length,
+    side: document.querySelectorAll('.side-brand').length,
+    sidebar: document.querySelector('.app')?.getAttribute('data-sidebar') ?? null,
+  }))()`);
+  check("侧栏收起后品牌标仍在顶栏，且侧栏状态真实切换", collapsedBrand.bar === 1 && collapsedBrand.side === 0 && collapsedBrand.sidebar === 'collapsed', collapsedBrand);
   await js(`document.querySelector('.titlebar button[aria-label="展开侧栏"]')?.click()`);
   await pause();
   // 第 1041 页：一屏一条列宽不能只在 1440 成立。气沟（--reading-pad-x）此前只落在
@@ -118,28 +284,62 @@ async function main() {
   await win.setContentSize(880, 700);
   await pause();
   const narrowHome = await js(`(() => {
-    const rect = (sel) => { const el = document.querySelector(sel); if (!el) return null; const r = el.getBoundingClientRect(); return { left: +r.left.toFixed(1), right: +r.right.toFixed(1) }; };
+    const rect = (sel) => { const el = document.querySelector(sel); if (!el) return null; const r = el.getBoundingClientRect(); return { left: +r.left.toFixed(1), right: +r.right.toFixed(1), center: +(r.left + r.right).toFixed(1) / 2 }; };
     const pad = (sel) => { const el = document.querySelector(sel); return el ? getComputedStyle(el).paddingLeft : null; };
-    return { empty: rect('.empty'), below: rect('.empty-below'), zone: rect('.zone-composer'), greet: rect('.empty-greet'), card: rect('.composer-card'), pads: { empty: pad('.empty'), below: pad('.empty-below'), zone: pad('.zone-composer') } };
+    return { empty: rect('.empty'), below: rect('.empty-below'), zone: rect('.zone-composer'), greet: rect('.empty-greet'), card: rect('.composer-card'), launcher: rect('.project-launcher'), overflow: document.documentElement.scrollWidth > innerWidth, pads: { empty: pad('.empty'), below: pad('.empty-below'), zone: pad('.zone-composer') } };
   })()`);
   check(
-    "窄窗 880：首页 hero / 起手行 / 输入区同一条列与同一条内容左缘",
-    narrowHome.empty !== null && narrowHome.zone !== null && narrowHome.greet !== null && narrowHome.card !== null
-      && Math.abs(narrowHome.empty.left - narrowHome.zone.left) <= 1
-      && Math.abs(narrowHome.empty.right - narrowHome.zone.right) <= 1
-      && Math.abs(narrowHome.below.left - narrowHome.zone.left) <= 1
-      && Math.abs(narrowHome.greet.left - narrowHome.card.left) <= 1,
+    "窄窗 880：hero / 项目卡组 / 输入区同轴，页面无横向溢出",
+    narrowHome.empty !== null && narrowHome.zone !== null && narrowHome.greet !== null && narrowHome.card !== null && narrowHome.launcher !== null
+      && Math.abs(narrowHome.greet.center - narrowHome.launcher.center) <= 1
+      && Math.abs(narrowHome.launcher.center - narrowHome.card.center) <= 1
+      && !narrowHome.overflow,
     narrowHome,
   );
   await win.setContentSize(1440, 900);
   await pause();
-  check("设置入口只在能力轨账户菜单，侧栏不再复制一枚", home.railAccount === "设置、外观与用量" && home.sideSettings === 0 && home.footer.trim() === "", home);
+  check("设置入口只在能力轨账户菜单，侧栏不再复制一枚", home.railAccount === "设置、外观与用量" && home.sideSettings === 0, home);
   // 第 870 页（业主「让布局说话」）：屏幕上最大的一档字不能再归给一句不能点、不能输入的
   // 装饰性问候。改前真机 1440 实测：问候 44.2px vs 输入正文 14px（3.2:1 倒挂）。
   check("首页问候不再以装饰大字压过输入区（≤ 24px 且 ≤ 输入正文 1.8 倍）", home.greetPx <= 24 && home.taPx > 0 && home.greetPx / home.taPx <= 1.8, home);
   // 2026-10-25：输入卡圆角按设计规范 §4.5 回到 12px（上游 18px 被 adapter 覆盖层压回 v3 档）；
   // 这条读数原先钉 18px，是改版后没跟上，不是产品回归。
   check("已加载上游 Claude 主题与输入卡样式", home.upstream && home.canvas === "rgb(252, 252, 251)" && home.radius === "12px", home);
+  await js("document.querySelector('.session').click()");
+  await pause();
+  const crossWorkspaceOpen = await js(`(() => ({
+    empty: document.querySelector('.main')?.getAttribute('data-empty'),
+    workspace: document.querySelector('.tb-workspace')?.textContent?.trim() ?? '',
+    calls: window.__cairnProjectLauncher?.calls().workspace ?? [],
+  }))()`);
+  check(
+    "从移动项目打开旧会话时会话归属覆盖窗口根，不沿用卡组刚选的路径",
+    crossWorkspaceOpen.empty === "false" && crossWorkspaceOpen.workspace.includes("demo-ws")
+      && crossWorkspaceOpen.calls.includes("/tmp/demo-ws"),
+    crossWorkspaceOpen,
+  );
+  await js("document.querySelector('.app-rail-item[data-row=\"new\"]')?.click()");
+  await pause();
+  const returnedHome = await js(`(() => ({
+    empty: document.querySelector('.main')?.getAttribute('data-empty'),
+    active: document.querySelector('.project-row[aria-current="true"] .launch-label')?.textContent?.trim() ?? null,
+    stream: !!document.querySelector('.stream'),
+  }))()`);
+  check("跨工作区会话回新任务后清掉旧转录并保留真实项目根", returnedHome.empty === "true" && returnedHome.active === "demo-ws" && !returnedHome.stream, returnedHome);
+  await js(`[...document.querySelectorAll('.project-row')].find((el) => el.textContent.includes('mobile-app'))?.click()`);
+  await pause();
+  const switchedProject = await js(`(() => ({
+    empty: document.querySelector('.main')?.getAttribute('data-empty'),
+    active: document.querySelector('.project-row[aria-current="true"] .launch-label')?.textContent?.trim() ?? null,
+    calls: window.__cairnProjectLauncher?.calls().workspace ?? [],
+    stream: !!document.querySelector('.stream'),
+  }))()`);
+  check(
+    "空屏切到第二项目只换根、不把上一项目的会话带过来",
+    switchedProject.empty === "true" && switchedProject.active === "mobile-app"
+      && switchedProject.calls.includes("/tmp/demo-ws-mobile") && !switchedProject.stream,
+    switchedProject,
+  );
   await js("document.querySelector('.session').click()");
   await shot("02-session");
   const defaultShell = await js(`(() => {
