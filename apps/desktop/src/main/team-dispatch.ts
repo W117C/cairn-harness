@@ -5,10 +5,14 @@
 //  · 会话 id 与工作区过既有校验（`sessionIdProblem` / 显式根），不自己拼路径；
 //  · **不自动开跑**：派活只负责把活放到那个成员的线程里，按不按发送由人决定——
 //    「点一下就跑」要接 run 与审批链，属另一批（这条写在台账里，不装成已完成）。
+import { isAbsolute } from "node:path";
 import { createEventLog, type AgentEvent } from "../../../../src/events";
 import { withMemberSecretEnv, type SecretGrantView } from "../../../../src/agent/team/secrets";
 import { memberRunLock, type RunLock } from "./member-run-lock";
-import { createSession, pathOf, readSessionEvents } from "../../../../src/main/sessions";
+import { createSession, pathOf, readSessionEvents, workspaceOfSessionsRoot } from "../../../../src/main/sessions";
+import { isPermissionMode, permissionModeRank, type PermissionMode } from "../../../../src/permissions/modes";
+import { THINKING_EFFORTS, type ThinkingEffort } from "../../../../src/providers/capabilities";
+import { assertRealContainment } from "../../../../src/tools/base";
 
 /** 会话元数据里记成员归属的键（与 `session_meta_update.patch` 的自由键通道同形）。 */
 export const MEMBER_SESSION_KEY = "member";
@@ -26,7 +30,66 @@ export const defaultDispatchDeps: DispatchDeps = {
 };
 
 /** 开跑注入面：生产是 main 的 `run` 通道；判卷给假的。 */
-export type StartRun = (req: { message: string; mode: string; sessionId: string; workspace?: string }) => Promise<{ ok?: boolean; error?: string }>;
+export type StartRun = (req: {
+  message: string;
+  mode: PermissionMode;
+  sessionId: string;
+  workspace?: string;
+  model?: string;
+  thinking?: ThinkingEffort;
+}) => Promise<{ ok?: boolean; error?: string }>;
+
+export interface MemberRunInput {
+  sessionsRoot: string;
+  memberId: string;
+  task: string;
+  mode: PermissionMode;
+  maxMode?: PermissionMode;
+  model?: string;
+  thinking?: string;
+  workdir?: string;
+  workspace?: string;
+}
+
+export type PreparedMemberRun =
+  | { ok: true; mode: PermissionMode; workspace?: string; model?: string; thinking?: ThinkingEffort }
+  | { ok: false; error: string };
+
+export async function prepareMemberRun(input: MemberRunInput): Promise<PreparedMemberRun> {
+  if (!isPermissionMode(input.mode)) return { ok: false, error: "成员权限档位非法" };
+  if (input.maxMode !== undefined && !isPermissionMode(input.maxMode)) {
+    return { ok: false, error: "全局权限上限非法" };
+  }
+  if (input.model !== undefined && input.model.trim() === "") {
+    return { ok: false, error: "成员 model 不能为空" };
+  }
+  if (input.thinking !== undefined && !(THINKING_EFFORTS as readonly string[]).includes(input.thinking)) {
+    return { ok: false, error: `成员 thinking 非法: ${input.thinking}` };
+  }
+  const mode = input.maxMode !== undefined && permissionModeRank(input.mode) > permissionModeRank(input.maxMode)
+    ? input.maxMode
+    : input.mode;
+  let workspace = input.workspace;
+  if (input.workdir !== undefined) {
+    if (!isAbsolute(input.workdir)) return { ok: false, error: "成员工作目录必须是绝对路径" };
+    const boundary = input.workspace ?? workspaceOfSessionsRoot(input.sessionsRoot);
+    if (boundary === null || boundary === undefined) {
+      return { ok: false, error: "成员工作目录缺少可校验的 workspace 边界" };
+    }
+    try {
+      workspace = await assertRealContainment(boundary, input.workdir, "成员工作目录");
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+  return {
+    ok: true,
+    mode,
+    ...(workspace === undefined ? {} : { workspace }),
+    ...(input.model === undefined ? {} : { model: input.model }),
+    ...(input.thinking === undefined ? {} : { thinking: input.thinking as ThinkingEffort }),
+  };
+}
 
 /** 生产用的依赖包（把「建会话/追加/路径/开跑」四件真东西一次给齐，调用点不再各自 import）。 */
 export function defaultStartDeps(run: StartRun): {
@@ -83,12 +146,12 @@ export async function dispatchToMember(
  * 一模一样的 user_message（一条是派活写的、一条是 run 写的）。
  */
 export async function startToMember(
-  input: { sessionsRoot: string; memberId: string; task: string; mode: string; workspace?: string },
+  input: MemberRunInput,
   deps: {
     createSession: (root: string) => Promise<string>;
     append: (path: string, event: AgentEvent) => Promise<void>;
     pathOf: (root: string, id: string) => string;
-    run: (req: { message: string; mode: string; sessionId: string; workspace?: string }) => Promise<{ ok?: boolean; error?: string }>;
+    run: StartRun;
   },
 ): Promise<DispatchResult> {
   const task = input.task.trim();
@@ -96,6 +159,8 @@ export async function startToMember(
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(input.memberId)) {
     return { ok: false, error: `成员 id 只收字母/数字/下划线/连字符（1-64 位），收到 ${JSON.stringify(input.memberId)}` };
   }
+  const prepared = await prepareMemberRun(input);
+  if (!prepared.ok) return prepared;
   let sessionId: string;
   try {
     sessionId = await deps.createSession(input.sessionsRoot);
@@ -105,8 +170,12 @@ export async function startToMember(
   const path = deps.pathOf(input.sessionsRoot, sessionId);
   await deps.append(path, { type: "session_meta_update", patch: { [MEMBER_SESSION_KEY]: input.memberId } } as AgentEvent);
   const started = await deps.run({
-    message: task, mode: input.mode, sessionId,
-    ...(input.workspace === undefined ? {} : { workspace: input.workspace }),
+    message: task,
+    mode: prepared.mode,
+    sessionId,
+    ...(prepared.workspace === undefined ? {} : { workspace: prepared.workspace }),
+    ...(prepared.model === undefined ? {} : { model: prepared.model }),
+    ...(prepared.thinking === undefined ? {} : { thinking: prepared.thinking }),
   });
   if (started.ok === false) return { ok: false, error: started.error ?? "开跑失败" };
   return { ok: true, sessionId };
@@ -128,7 +197,7 @@ export interface StartDepsWithSecrets {
   createSession: (root: string) => Promise<string>;
   append: (path: string, event: AgentEvent) => Promise<void>;
   pathOf: (root: string, id: string) => string;
-  run: (req: { message: string; mode: string; sessionId: string; workspace?: string }) => Promise<{ ok?: boolean; error?: string }>;
+  run: StartRun;
   /** 团队密钥授权的投影（默认拒：没 allow 就一个键都不注入）。 */
   grants: SecretGrantView;
   /** 注入目标 / 取值源（判卷时可替换；生产就是 process.env）。 */
@@ -152,7 +221,7 @@ export interface StartWithSecretsResult extends DispatchResult {
  * 「密钥卡片」的第四跳就接在这里——`teamMemberStart` 只调它，不自己拼 env。
  */
 export async function startMemberWithSecrets(
-  input: { sessionsRoot: string; memberId: string; task: string; mode: string; workspace?: string },
+  input: MemberRunInput,
   deps: StartDepsWithSecrets,
 ): Promise<StartWithSecretsResult> {
   const target = deps.envTarget ?? process.env;

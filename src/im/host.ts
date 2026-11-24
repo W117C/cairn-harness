@@ -80,19 +80,31 @@ export interface ImHostView {
     status: ImStatus;
   }[];
   platforms: ImPlatformView[];
+  /** 已投递但尚未开始处理的入站消息总数；正在路由的不计入。 */
+  pendingInbound: number;
 }
 
 export function createImHost(deps: ImHostDeps) {
   const now = deps.now ?? (() => Date.now());
   let all: ImConnection[] = [];
   const runners = new Map<string, Runner>();
+  /** 适配器 onStatus 拥有的传输状态；路由错误另存覆盖层，不被迟到/周期 ready 抹掉。 */
   const statuses = new Map<string, ImStatus>();
+  const routeErrors = new Map<string, ImStatus>();
+  const inboundTails = new Map<string, Promise<void>>();
+  const inboundPending = new Map<string, number>();
   let syncing: Promise<void> = Promise.resolve();
   let stopped = false;
 
   const setStatus = (id: string, next: ImStatus): void => {
     statuses.set(id, { ...next, at: now() });
   };
+
+  const setRouteError = (id: string, error: string): void => {
+    routeErrors.set(id, { state: "error", error, at: now() });
+  };
+
+  const statusOf = (id: string): ImStatus | undefined => routeErrors.get(id) ?? statuses.get(id);
 
   // ── 发送队列（机器住在 send-queue.ts；宿主只提供三个回调与生命周期挂钩）──────────
   // 「谁丢了我的消息」从今往后只有一个答案处：队列状态机（窗口期/重试/停靠）的边界全在
@@ -132,6 +144,26 @@ export function createImHost(deps: ImHostDeps) {
   };
 
   // ── 入站管线 ──────────────────────────────────────────────────────────────────
+  // 同一连接 FIFO；不同连接各有一条尾链，不互相阻塞。pending 只在任务真正开始时递减，
+  // 因而“正在跑第一条、第二条已投递”的窗口里计数为 1，不含活跃 run 本身。
+  const enqueueInbound = (conn: ImConnection, msg: ImInboundMessage): Promise<void> => {
+    const previous = inboundTails.get(conn.id) ?? Promise.resolve();
+    inboundPending.set(conn.id, (inboundPending.get(conn.id) ?? 0) + 1);
+    const run = previous.catch(() => undefined).then(async () => {
+      inboundPending.set(conn.id, Math.max(0, (inboundPending.get(conn.id) ?? 1) - 1));
+      await onMessage(conn)(msg);
+    });
+    const settled = run.catch(() => undefined);
+    inboundTails.set(conn.id, settled);
+    void settled.then(() => {
+      if (inboundTails.get(conn.id) === settled) {
+        inboundTails.delete(conn.id);
+        inboundPending.delete(conn.id);
+      }
+    });
+    return run;
+  };
+
   const onMessage = (conn: ImConnection) => async (msg: ImInboundMessage): Promise<void> => {
     // 登记聊天（回信寻址用；幂等）——先登记再过闸，通知也得有处可送。
     if (conn.chats[msg.chat.key] === undefined) {
@@ -157,9 +189,19 @@ export function createImHost(deps: ImHostDeps) {
       sendTo(conn.id, msg.chat.key, "这条消息里没有文字。当前只收文本与语音转写，图片/文件还不支持。");
       return;
     }
-    const result = await deps.routeInbound(conn, msg);
-    if (result.ok === true && typeof result.reply === "string" && result.reply.trim() !== "") {
-      sendTo(conn.id, msg.chat.key, result.reply);
+    try {
+      const result = await deps.routeInbound(conn, msg);
+      if (result.ok !== true) {
+        setRouteError(conn.id, result.error ?? "路由失败");
+        return;
+      }
+      // 成功路由只撤掉错误覆盖层；传输状态仍由适配器 onStatus 独占。
+      routeErrors.delete(conn.id);
+      if (typeof result.reply === "string" && result.reply.trim() !== "") {
+        sendTo(conn.id, msg.chat.key, result.reply);
+      }
+    } catch (error) {
+      setRouteError(conn.id, error instanceof Error ? error.message : String(error));
     }
   };
 
@@ -205,7 +247,7 @@ export function createImHost(deps: ImHostDeps) {
         onMessage: (msg) => {
           const current = all.find((c) => c.id === conn.id);
           if (current === undefined) return;
-          return onMessage(current)(msg);
+          return enqueueInbound(current, msg);
         },
         onStatus: (status) => setStatus(conn.id, status),
       });
@@ -460,7 +502,7 @@ export function createImHost(deps: ImHostDeps) {
       requests: c.requests.map((r) => ({ ...r })),
       chats: { ...c.chats },
       createdAt: c.createdAt,
-      status: statuses.get(c.id) ?? { state: "off" as const },
+      status: statusOf(c.id) ?? { state: "off" as const },
     })),
     platforms: Object.values(deps.platforms).map((spec) => ({
       id: spec.id,
@@ -470,6 +512,7 @@ export function createImHost(deps: ImHostDeps) {
       fields: spec.fields.map((f) => ({ ...f })),
       textLimit: spec.textLimit,
     })),
+    pendingInbound: [...inboundPending.values()].reduce((sum, n) => sum + n, 0),
   });
 
   /** 启动：读存储、首轮对账。 */
@@ -493,7 +536,7 @@ export function createImHost(deps: ImHostDeps) {
     /** 显式持久化（路由侧改了连接绑定后调用；路由是注入面，host 不知道它改了状态）。 */
     save: async (): Promise<void> => { await deps.store.save(all); },
     /** 测试缝：直读状态。 */
-    statusOf: (id: string): ImStatus | undefined => statuses.get(id),
+    statusOf,
   };
 }
 

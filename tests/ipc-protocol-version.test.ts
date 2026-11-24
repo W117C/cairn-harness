@@ -1,13 +1,31 @@
 // SEMA Phase 3 判卷（docs/sema-proposal.md §12）：IPC 协议版本化。
 // 本文件同时是 src/main/ipc-protocol.ts 运行时出口的**执行路径**（值边 import）——
 // src-execution-path 棘轮随版本化撤掉它的纯类型面豁免，执行路径由这一格供给。
-import { describe, expect, it } from "vitest";
-import { IPC_PROTOCOL_VERSION } from "../src/main/ipc-protocol";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import { IPC_PROTOCOL_VERSION, type AgentApi, type ImConnectionViewPayload } from "../src/main/ipc-protocol";
 
 describe("IPC 协议版本（§3.5/§12）", () => {
   it("版本常量是 ≥1 的整数（兼容面事实源的形状契约）", () => {
     expect(Number.isInteger(IPC_PROTOCOL_VERSION)).toBe(true);
     expect(IPC_PROTOCOL_VERSION).toBeGreaterThanOrEqual(1);
+  });
+
+  it("imList 成功响应在类型上必须带 connections/platforms/pendingInbound，失败只带 error", () => {
+    type Result = Awaited<ReturnType<AgentApi["imList"]>>;
+    type Success = Extract<Result, { ok: true }>;
+    type Failure = Extract<Result, { ok: false }>;
+
+    expectTypeOf<Success["connections"]>().toEqualTypeOf<ImConnectionViewPayload[]>();
+    expectTypeOf<Success["platforms"]>().toEqualTypeOf<{
+      id: string;
+      name: string;
+      ws: boolean;
+      login?: "fields" | "qr";
+      fields: { key: string; label: string; secret?: boolean; hint?: string }[];
+      textLimit: number;
+    }[]>();
+    expectTypeOf<Success["pendingInbound"]>().toEqualTypeOf<number>();
+    expectTypeOf<Failure["error"]>().toEqualTypeOf<string>();
   });
 
   it("bump 版本必须有意为之：现钉 80——改协议形状（AgentApi 增删/字段语义变）= bump 常量 + 同步本格，desktop-panel 提案走同一流水线", () => {
@@ -64,6 +82,7 @@ describe("IPC 协议版本（§3.5/§12）", () => {
     // v58 → v59：壁纸系统暂停推送（onWallpaperSuspend）+ 团队名单/写入两条 invoke 通道。
     // v79 → v80：IM 通道七件（imList/imAdd/imUpdate/imRemove/imPair/imUnpair/imRetry）。
     // v80 → v81：＋imLoginStart / imLoginWait（微信 iLink 扫码登录两段）。
-    expect(IPC_PROTOCOL_VERSION).toBe(81);
+    // v81 → v82：imList 成功响应增 pendingInbound（同连接入站 FIFO 的待处理计数）。
+    expect(IPC_PROTOCOL_VERSION).toBe(82);
   });
 });

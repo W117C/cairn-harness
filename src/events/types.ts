@@ -61,7 +61,7 @@ export type UserMessageOrigin = PromoteOrigin | GoalTurnOrigin | SteeringOrigin;
 export interface UserMessageAttachment { path: string; kind: "file" | "directory" }
 
 export interface UserMessageEvent { type: "user_message"; content: string; origin?: UserMessageOrigin; skill?: SkillInvocationMeta; attachments?: readonly UserMessageAttachment[] }
-export interface AssistantMessageEvent { type: "assistant_message"; content: string }
+export interface AssistantMessageEvent { type: "assistant_message"; content: string; agent_id?: string }
 /** 流式增量片段：callId 标识同一轮回复，text 为逐字追加的一小段。 */
 export interface AssistantDeltaEvent { type: "assistant_delta"; callId: string; text: string }
 /** Native continuation state is scoped to one endpoint/model, never general answer text. */

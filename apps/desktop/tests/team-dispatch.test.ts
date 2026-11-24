@@ -5,7 +5,7 @@
 //   ② 空任务书 / 非法 id 一律拒（不建会话，别留空壳）；
 //   ③ 归属可反查（`memberOfSession`）；
 //   ④ 建会话失败 ⇒ 交回错误，不吞。
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {afterEach, describe, expect, it, vi} from "vitest";
@@ -105,6 +105,184 @@ describe("派活并开跑（v63）", () => {
       },
     );
     expect(result).toEqual({ ok: false, error: "模型没配" });
+  });
+
+  it("成员 run 配置透传给 run：model/thinking 不丢，workdir 成为执行 workspace", async () => {
+    root = await mkdtemp(join(tmpdir(), "cairn-member-config-"));
+    const workspace = join(root, "ws");
+    const workdir = join(workspace, "packages", "core");
+    const sessionsRoot = join(workspace, ".agent", "sessions");
+    await mkdir(workdir, { recursive: true });
+    const workdirReal = await realpath(workdir);
+    const runs: Array<Record<string, unknown>> = [];
+    const deps = {
+      createSession: async () => "s-member-config",
+      append: async () => undefined,
+      pathOf: () => "/dev/null",
+      run: async (req: Record<string, unknown>) => {
+        runs.push(req);
+        return { ok: true };
+      },
+    };
+    const input = {
+      sessionsRoot,
+      memberId: "m1",
+      task: "按成员配置跑",
+      mode: "default",
+      model: "glm-strong",
+      thinking: "high",
+      workdir,
+    } as unknown as Parameters<typeof startToMember>[0];
+
+    await startToMember(input, deps as unknown as Parameters<typeof startToMember>[1]);
+
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({
+      message: "按成员配置跑",
+      sessionId: "s-member-config",
+      mode: "default",
+      model: "glm-strong",
+      thinking: "high",
+      workspace: workdirReal,
+    });
+  });
+
+  it("成员档位不宽于全局上限：auto 成员在 default 宿主下按 default 起跑", async () => {
+    const runs: Array<Record<string, unknown>> = [];
+    const deps = {
+      createSession: async () => "s-member-mode",
+      append: async () => undefined,
+      pathOf: () => "/dev/null",
+      run: async (req: Record<string, unknown>) => {
+        runs.push(req);
+        return { ok: true };
+      },
+    };
+    const input = {
+      sessionsRoot: "/ws/.agent/sessions",
+      memberId: "m1",
+      task: "收紧权限跑",
+      mode: "auto",
+      maxMode: "default",
+    } as unknown as Parameters<typeof startToMember>[0];
+
+    await startToMember(input, deps as unknown as Parameters<typeof startToMember>[1]);
+
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.mode).toBe("default");
+  });
+
+  it("权限上限反向收紧：read-only 成员在 auto 宿主下仍只跑一次 read-only", async () => {
+    const runs: Array<Record<string, unknown>> = [];
+    const deps = {
+      createSession: async () => "s-member-read-only",
+      append: async () => undefined,
+      pathOf: () => "/dev/null",
+      run: async (req: Record<string, unknown>) => {
+        runs.push(req);
+        return { ok: true };
+      },
+    };
+    const input = {
+      sessionsRoot: "/ws/.agent/sessions",
+      memberId: "m1",
+      task: "保持只读跑",
+      mode: "read-only",
+      maxMode: "auto",
+    } as unknown as Parameters<typeof startToMember>[0];
+
+    const result = await startToMember(input, deps as unknown as Parameters<typeof startToMember>[1]);
+
+    expect(result.ok).toBe(true);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.mode).toBe("read-only");
+  });
+
+  it("非法 thinking fail-closed：建会话和 run 都不调用", async () => {
+    const createSession = vi.fn(async () => "s-invalid-thinking");
+    const run = vi.fn(async () => ({ ok: true }));
+    const deps = {
+      createSession,
+      append: async () => undefined,
+      pathOf: () => "/dev/null",
+      run,
+    };
+    const input = {
+      sessionsRoot: "/ws/.agent/sessions",
+      memberId: "m1",
+      task: "非法思考档位不许跑",
+      mode: "read-only",
+      thinking: "ultra",
+    } as unknown as Parameters<typeof startToMember>[0];
+
+    const result = await startToMember(input, deps as unknown as Parameters<typeof startToMember>[1]);
+
+    expect(result.ok).toBe(false);
+    expect(String(result.error)).toMatch(/thinking|思考/u);
+    expect(createSession).not.toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("workdir 越出显式 workspace 时 fail-closed：建会话和 run 都不调用", async () => {
+    root = await mkdtemp(join(tmpdir(), "cairn-member-outside-"));
+    const workspace = join(root, "ws");
+    const workdir = join(root, "outside");
+    await Promise.all([mkdir(workspace, { recursive: true }), mkdir(workdir, { recursive: true })]);
+    const createSession = vi.fn(async () => "s-outside-workdir");
+    const run = vi.fn(async () => ({ ok: true }));
+    const deps = {
+      createSession,
+      append: async () => undefined,
+      pathOf: () => "/dev/null",
+      run,
+    };
+    const input = {
+      sessionsRoot: join(workspace, ".agent", "sessions"),
+      memberId: "m1",
+      task: "越界工作目录不许跑",
+      mode: "read-only",
+      workspace,
+      workdir,
+    } as unknown as Parameters<typeof startToMember>[0];
+
+    const result = await startToMember(input, deps as unknown as Parameters<typeof startToMember>[1]);
+
+    expect(result.ok).toBe(false);
+    expect(String(result.error)).toMatch(/workspace|工作目录/u);
+    expect(createSession).not.toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("workdir 软链越出 workspace 时 fail-closed：建会话和 run 都不调用", async () => {
+    root = await mkdtemp(join(tmpdir(), "cairn-member-symlink-"));
+    const workspace = join(root, "ws");
+    const outside = join(root, "outside");
+    const workdir = join(workspace, "linked-outside");
+    await Promise.all([mkdir(workspace, { recursive: true }), mkdir(outside, { recursive: true })]);
+    await symlink(outside, workdir, "dir");
+    const createSession = vi.fn(async () => "s-symlink-workdir");
+    const run = vi.fn(async () => ({ ok: true }));
+    const deps = {
+      createSession,
+      append: async () => undefined,
+      pathOf: () => "/dev/null",
+      run,
+    };
+    const input = {
+      sessionsRoot: join(workspace, ".agent", "sessions"),
+      memberId: "m1",
+      task: "软链越界工作目录不许跑",
+      mode: "read-only",
+      workspace,
+      workdir,
+    } as unknown as Parameters<typeof startToMember>[0];
+
+    const result = await startToMember(input, deps as unknown as Parameters<typeof startToMember>[1]);
+
+    expect(result.ok).toBe(false);
+    expect(String(result.error)).toMatch(/workspace|工作目录/u);
+    expect(createSession).not.toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
   });
 });
 

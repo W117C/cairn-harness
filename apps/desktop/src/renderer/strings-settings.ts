@@ -240,6 +240,7 @@ export const settingsStrings = {
     add: "连接",
     addFailed: "连接失败",
     listTitle: "连接清单",
+    pendingInbound: "待处理入站消息：{n} 条",
     empty: "还没有通道。先连接一个，外部消息就会进你的主 bot 会话。",
     boundSession: "绑定会话",
     sessionEmpty: "未绑定（首条消息自动新建）",

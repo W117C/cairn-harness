@@ -15,14 +15,15 @@ import { pickWallpaper } from "./wallpaper-pick";
 import { browseDirectory } from "./wallpaper-browse";
 import { resolveDisplays } from "./displays-view";
 import { appendTeamPatch, readTeamRecords, readTeamRoster, teamLogPath } from "./team-store";
-import { listSessions, readSessionEvents } from "../../../../src/main/sessions";
+import { listSessions, readSessionEvents, workspaceOfSessionsRoot } from "../../../../src/main/sessions";
 import { openSegmentForSession } from "./session-segments";
-import { defaultStartDeps, dispatchToMember, startMemberWithSecrets, startToMember } from "./team-dispatch";
+import { defaultStartDeps, dispatchToMember } from "./team-dispatch";
+import { startRosterMember } from "./team-member-run";
 import { createTeamGroup } from "./team-group";
 import { advanceGroupRound, groupTaskOf } from "./team-round";
 import { grantPatch, projectSecretGrants, requestPatch } from "../../../../src/agent/team/secrets";
 import { projectGroupStream } from "../../../../src/agent/team/stream";
-import { runWave } from "./team-wave";
+import { runTeamGroupWave } from "./team-wave-runtime";
 import { memoryPanelFor } from "./memory-panel";
 import { globalMemoryDir, projectMemoryDir } from "../../../../src/agent/memory/store";
 import { memberMemoryDir } from "../../../../src/agent/memory/scope";
@@ -106,7 +107,7 @@ import {
   handleSessionSetPinned,
   resolveSessionRoot,
 } from "../../../../src/main/session-handlers";
-import { sessionExists,workspaceOfSessionsRoot } from "../../../../src/main/sessions";
+import { sessionExists } from "../../../../src/main/sessions";
 import { getLastWorkspace } from "../../../../src/main/runner-workspace";
 import { TerminalHost } from "./terminal-host";
 import { BrowserHost } from "./browser-host";
@@ -114,7 +115,7 @@ import { makeBrowserAgentTools } from "./browser-agent-tools";
 import { registerBrowserAgentTools } from "../../../../src/agent/browser-agent";
 import type { ClarifyAnswerMap } from "../../../../src/events";
 import { installProviderKeyBackend, providerKeyBackend } from "../../../../src/main/provider-keys";
-import { createDesktopImHost, type DesktopImHostInput } from "./im-host";
+import { createDesktopImHost, defaultSessionsRoot, type DesktopImHostInput } from "./im-host";
 import type { ImHost } from "../../../../src/im/host";
 import { installSafeStorageBackend } from "../../../../src/agent/plugins/secrets";
 import { pluginDataRootOf } from "../../../../src/agent/plugins";
@@ -454,8 +455,9 @@ const host = createKernelHost({
 const imDeps: DesktopImHostInput = {
   dir: join(userData, "im"),
   run: async (req) => await (host.run as (x: unknown) => Promise<{ ok?: boolean; error?: string }>)(req),
-  sessionsRoot: async () => await explicitSessionsRoot(undefined) ?? undefined,
+  sessionsRoot: async () => defaultSessionsRoot(workspace),
   mode: async () => (await getSettings()).mode,
+  hasWorkspace: host.hasWorkspace,
   backend: null,
 };
 let imHost: ImHost | null = null;
@@ -907,19 +909,30 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   // v63 派活并开跑：建归属会话（只写归属）→ 交给 run 通道写任务书并开跑。
   // 任务书**不由这里写**：同一条任务只能有一条写入路径，否则会话里会出现两条一样的 user_message。
   teamMemberStart: async (memberId, task, workspace) => {
-    const root = await explicitSessionsRoot(typeof workspace === "string" ? workspace : undefined);
-    if (root === undefined) return { ok: false, error: "没有可用的会话根" };
+    const gate = resolveProvidedWorkspace(workspace, await knownProjectRoots(), workspaceContext());
+    if (!gate.ok) return { ok: false, error: gate.error };
+    if (gate.workspace === null) return { ok: false, error: "没有可用的工作区" };
     const id = typeof memberId === "string" ? memberId : "";
     if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) return { ok: false, error: "成员 id 不合法" };
     const settings = await getSettings();
     const roster = await readTeamRoster(teamLogPath(app.getPath("userData")), settings.mode);
-    if (!roster.members.some((m) => m.id === id)) return { ok: false, error: "成员不在名单里（先建档案再派活）" };
+    const member = roster.members.find((m) => m.id === id);
+    if (member === undefined) return { ok: false, error: "成员不在名单里（先建档案再派活）" };
     // v69：起跑前按授权注入密钥（只 allow 的、只注入本机有值的），run 收束后一定撤。
     const grants = projectSecretGrants(await readTeamRecords(teamLogPath(app.getPath("userData"))));
-    return await startMemberWithSecrets(
-      { sessionsRoot: root, memberId: id, task: typeof task === "string" ? task : "", mode: settings.mode,
-        ...(typeof workspace === "string" ? { workspace } : {}) },
-      { ...defaultStartDeps(async (req) => await (wired.run as (x: unknown) => Promise<{ ok?: boolean; error?: string }>)(req)), grants },
+    return await startRosterMember(
+      {
+        sessionsRootFor: explicitSessionsRoot,
+        member,
+        task: typeof task === "string" ? task : "",
+        maxMode: settings.mode,
+        workspace: gate.workspace,
+      },
+      {
+        ...defaultStartDeps(async (req) => await (wired.run as (x: unknown) => Promise<{ ok?: boolean; error?: string }>)(req)),
+        grants,
+        hasWorkspace: host.hasWorkspace,
+      },
     );
   },
   // v64 建团队会话：一条带 `group=1` 标记的会话（共享流＝它自己的事件流）。
@@ -946,18 +959,25 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
     const task = groupTaskOf(events);
     if (task === null) return { ...advanced, error: "群里还没有一句话，没得派" };
     // v76：一轮里被 @ 到的人按**波次**顺序跑，每人开跑前重读共享流（后面的人看得见前面刚说的）。
-    const wave = await runWave({
-      speakers: advanced.speakers ?? [advanced.speaker],
-      task,
-      read: async () => await readSessionEvents(root, id).catch(() => []),
-      start: async (memberId, composed) => {
-        const started = await startToMember(
-          { sessionsRoot: root, memberId, task: composed, mode: settings.mode },
-          defaultStartDeps(async (req) => await (wired.run as (x: unknown) => Promise<{ ok?: boolean; error?: string }>)(req)),
-        );
-        return { ok: started.ok === true, ...(started.sessionId === undefined ? {} : { sessionId: started.sessionId }), ...(started.error === undefined ? {} : { error: started.error }) };
+    const groupWorkspace = workspaceOfSessionsRoot(root);
+    if (groupWorkspace === null) return { ...advanced, error: "群会话根缺少工作区" };
+    const wave = await runTeamGroupWave(
+      {
+        sessionsRoot: root,
+        sessionId: id,
+        workspace: groupWorkspace,
+        members: roster.members,
+        maxMode: settings.mode,
+        speakers: advanced.speakers ?? [advanced.speaker],
+        task,
       },
-    });
+      {
+        ...defaultStartDeps(async (req) => await (wired.run as (x: unknown) => Promise<{ ok?: boolean; error?: string }>)(req)),
+        grants: projectSecretGrants(await readTeamRecords(teamLogPath(app.getPath("userData")))),
+        sessionsRootFor: explicitSessionsRoot,
+        hasWorkspace: host.hasWorkspace,
+      },
+    );
     if (wave.failed !== undefined) return { ...advanced, error: wave.failed.error, wave: wave.ran };
     return { ...advanced, sessionId: wave.ran[0]?.sessionId, wave: wave.ran };
   },
@@ -987,6 +1007,9 @@ const wired: Record<InvokeChannel, (...args: unknown[]) => unknown> = {
   imAdd: async (input) => {
     if (imHost === null) return { ok: false, error: "IM 宿主未就绪" };
     const raw = (input ?? {}) as { platform?: unknown; fields?: unknown; sessionId?: unknown; workspace?: unknown };
+    if (typeof raw.workspace === "string" && raw.workspace !== "" && !host.hasWorkspace(raw.workspace)) {
+      return { ok: false, error: "工作区未注册" };
+    }
     const fields = typeof raw.fields === "object" && raw.fields !== null ? (raw.fields as Record<string, string>) : {};
     const result = await imHost.add({
       platform: String(raw.platform ?? ""),
