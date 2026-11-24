@@ -174,8 +174,11 @@ export type { SearchProvider } from "../tools/web-search";
  *  v78 = 天气来源可插拔：`wallpaperWeatherNow` 返回当前解析出的天气（manual / file），
  *        file 源读外部 JSON（读不到回落手动档并说明）。
  *  v79 = 联网天气源（默认关）：`wallpaperWeatherFetch` 按设置里的 URL 取一次并解析；
- *        `wallpaperWeatherSetKey` 把 key 交给钥匙串（不明文落盘）。 */
-export const IPC_PROTOCOL_VERSION = 81;
+ *        `wallpaperWeatherSetKey` 把 key 交给钥匙串（不明文落盘）。
+ *  v80 = IM 通道七件（imList/imAdd/imUpdate/imRemove/imPair/imUnpair/imRetry）。
+ *  v81 = ＋imLoginStart / imLoginWait（微信 iLink 扫码登录两段）。
+ *  v82 = imList 成功响应增 pendingInbound（同连接入站 FIFO 的待处理计数）。 */
+export const IPC_PROTOCOL_VERSION = 82;
 
 /** 团队名单（v59）：成员档案是投影，`records` 是补丁条数（面板据此说「有几条历史」）。 */
 export interface TeamRosterPayload {
@@ -251,6 +254,23 @@ export interface ImConnectionViewPayload {
   createdAt: number;
   status: { state: "off" | "connecting" | "ready" | "retrying" | "error"; error?: string; at?: number };
 }
+
+/** v82：imList 判别响应；成功必带待处理入站计数，失败只带原因。 */
+export type ImListResponse =
+  | {
+      ok: true;
+      connections: ImConnectionViewPayload[];
+      pendingInbound: number;
+      platforms: {
+        id: string;
+        name: string;
+        ws: boolean;
+        login?: "fields" | "qr";
+        fields: { key: string; label: string; secret?: boolean; hint?: string }[];
+        textLimit: number;
+      }[];
+    }
+  | { ok: false; error: string };
 
 /** 壁纸媒体的系统级暂停信号（v59）。`reason` 只描述「为什么停」，不描述渲染层怎么做。 */
 export interface WallpaperActivePayload {
@@ -726,9 +746,9 @@ export interface AgentApi {
     wave?: { memberId: string; sessionId?: string; sawPrior: boolean }[];
     error?: string;
   }>;
-  // ---- v80：IM 通道（飞书/邮件）────────────────────────────────────────────────
-  /** v80：连接清单（含状态与待审申请；平台表单面由返回的 platforms 渲染）。 */
-  imList(): Promise<{ ok: boolean; error?: string; connections?: ImConnectionViewPayload[]; platforms?: { id: string; name: string; ws: boolean; login?: "fields" | "qr"; fields: { key: string; label: string; secret?: boolean; hint?: string }[]; textLimit: number }[] }>;
+  // ---- v80：IM 通道（飞书/邮件）；v82：清单带待处理入站计数────────────────────────
+  /** v80：连接清单（含状态与待审申请；平台表单面由返回的 platforms 渲染）；v82：pendingInbound 不含活跃 run。 */
+  imList(): Promise<ImListResponse>;
   /** v80：加连接（check 失败=拒存；密钥值落 safeStorage，记录里只有键名）。 */
   imAdd(input: { platform: string; fields: Record<string, string>; sessionId?: string; workspace?: string }): Promise<{ ok: boolean; error?: string; id?: string }>;
   /** v80：改绑定会话/启用开关/改字段（含重存密钥）。 */

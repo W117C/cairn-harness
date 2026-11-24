@@ -23,6 +23,11 @@ describe("协议版本握手接线（§3.5/§12）", () => {
     expect(indexTs).toMatch(/import\s*\{[^}]*IPC_PROTOCOL_VERSION[^}]*\}\s*from\s*"[^"]*src\/main\/ipc-protocol"/);
   });
 
+  it("imList 主进程薄映射把宿主视图（含 pendingInbound）原样放进成功响应", () => {
+    const indexTs = repo("../src/main/index.ts");
+    expect(indexTs).toMatch(/imList:\s*async\s*\(\)\s*=>\s*\{\s*if \(imHost === null\)[\s\S]*?return \{ ok: true, \.\.\.imHost\.view\(\) \};/);
+  });
+
   it("vite define 在：__IPC_PROTOCOL_VERSION__ 构建期注入（renderer 产物零运行时 import src，类型红线不破）", () => {
     const viteCfg = repo("../vite.config.ts");
     expect(viteCfg).toMatch(/import\s*\{\s*IPC_PROTOCOL_VERSION\s*\}\s*from\s*"[^"]*src\/main\/ipc-protocol"/);
@@ -87,6 +92,7 @@ describe("协议版本握手接线（§3.5/§12）", () => {
     // v58 → v59：壁纸系统暂停推送 + 团队名单/写入两条 invoke 通道。
     // v79 → v80：IM 通道七件（imList/imAdd/imUpdate/imRemove/imPair/imUnpair/imRetry）。
     // v80 → v81：＋imLoginStart/imLoginWait（微信 iLink 扫码登录：出码/查状态）。
-    expect(IPC_PROTOCOL_VERSION).toBe(81);
+    // v81 → v82：imList 成功响应增 pendingInbound（同连接入站 FIFO 的待处理计数）。
+    expect(IPC_PROTOCOL_VERSION).toBe(82);
   });
 });

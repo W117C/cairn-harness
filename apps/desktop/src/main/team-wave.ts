@@ -8,12 +8,20 @@ import type { AgentEvent } from "../../../../src/events";
 import { projectGroupStream } from "../../../../src/agent/team/stream";
 import { composeRoundTask } from "../../../../src/agent/team/round-context";
 
+export interface WaveStartResult {
+  ok: boolean;
+  sessionId?: string;
+  error?: string;
+  reply?: string;
+}
+
 export interface WaveInput {
   speakers: readonly string[];
   /** 群里这一轮的任务书（最后一条 user_message）。 */
   task: string;
   read: () => Promise<readonly AgentEvent[]>;
-  start: (memberId: string, task: string) => Promise<{ ok: boolean; sessionId?: string; error?: string }>;
+  start: (memberId: string, task: string) => Promise<WaveStartResult>;
+  writeBack: (memberId: string, reply: string) => Promise<void>;
   onSkip?: (memberId: string, reason: string) => void;
 }
 
@@ -36,6 +44,18 @@ export async function runWave(input: WaveInput): Promise<WaveResult> {
       return { ok: false, ran, failed: { memberId, error: started.error ?? "开跑失败" } };
     }
     ran.push({ memberId, ...(started.sessionId === undefined ? {} : { sessionId: started.sessionId }), sawPrior });
+    if (started.reply === undefined || started.reply.trim() === "") {
+      return { ok: false, ran, failed: { memberId, error: "成员收束后没有最终回复" } };
+    }
+    try {
+      await input.writeBack(memberId, started.reply);
+    } catch (error) {
+      return {
+        ok: false,
+        ran,
+        failed: { memberId, error: error instanceof Error ? error.message : String(error) },
+      };
+    }
   }
   return { ok: true, ran };
 }

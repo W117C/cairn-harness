@@ -330,4 +330,256 @@ describe("IM 宿主", () => {
     expect(puts).toEqual([{ key: `im:${String(done.id)}:token`, value: "tk-1" }]);
     expect(JSON.stringify(created)).not.toContain("tk-1");
   });
+
+  it("同一连接的两条入站串行路由，阻塞时可见一条 pending，释放后按 FIFO 收束", async () => {
+    const { captured, adapter } = captureAdapter();
+    const { store } = fakeStore([conn()]);
+    let active = 0;
+    let maxActive = 0;
+    const completed: string[] = [];
+    const gate: { release?: () => void; entered?: () => void } = {};
+    const firstBlocked = new Promise<void>((resolve) => { gate.release = resolve; });
+    const firstEntered = new Promise<void>((resolve) => { gate.entered = resolve; });
+    const host = createImHost({
+      store,
+      platforms: { test: SPEC },
+      adapters: { test: adapter },
+      env: ENV,
+      secretValue: async () => "sv",
+      routeInbound: async (_c, msg) => {
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        if (msg.text === "第一条") {
+          gate.entered?.();
+          await firstBlocked;
+        }
+        active -= 1;
+        completed.push(msg.text);
+        return { ok: true };
+      },
+    });
+    await host.boot();
+    const handlers = captured.handlers;
+    if (handlers === null) throw new Error("适配器没有交出 handlers");
+    // B2 的 host.view() 契约：pendingInbound 是尚未开始路由的入站条数。
+    const pendingInbound = (): number => host.view().pendingInbound;
+
+    const first = Promise.resolve(handlers.onMessage(msgOf("第一条")));
+    const second = Promise.resolve(handlers.onMessage(msgOf("第二条")));
+    await firstEntered;
+    // 第一条确实卡在 routeInbound 里、第二条已投递时才读；不能用完成后的计数代替这个窗口。
+    const pendingWhileBlocked = pendingInbound();
+    gate.release?.();
+    await Promise.all([first, second]);
+
+    expect(pendingWhileBlocked).toBe(1);
+    expect(maxActive).toBe(1);
+    expect(completed).toEqual(["第一条", "第二条"]);
+    expect(pendingInbound()).toBe(0);
+  });
+
+  it("路由失败在连接状态可见，不静默吞掉", async () => {
+    const { captured, adapter } = captureAdapter();
+    const { store } = fakeStore([conn()]);
+    const host = createImHost({
+      store,
+      platforms: { test: SPEC },
+      adapters: { test: adapter },
+      env: ENV,
+      secretValue: async () => "sv",
+      routeInbound: async () => ({ ok: false, error: "会话根不可用" }),
+    });
+    await host.boot();
+    const handlers = captured.handlers;
+    if (handlers === null) throw new Error("适配器没有交出 handlers");
+
+    await handlers.onMessage(msgOf("你好"));
+
+    expect(host.statusOf("im_t1")).toMatchObject({
+      state: "error",
+      error: "会话根不可用",
+    });
+  });
+
+  it("routeInbound 抛错把连接置为 error，不向适配器拒绝，尾链仍可继续", async () => {
+    const { captured, adapter } = captureAdapter();
+    const { store } = fakeStore([conn()]);
+    let first = true;
+    const host = createImHost({
+      store,
+      platforms: { test: SPEC },
+      adapters: { test: adapter },
+      env: ENV,
+      secretValue: async () => "sv",
+      routeInbound: async () => {
+        if (first) {
+          first = false;
+          throw new Error("路由内部炸了");
+        }
+        return { ok: true };
+      },
+    });
+    await host.boot();
+    const handlers = captured.handlers;
+    if (handlers === null) throw new Error("适配器没有交出 handlers");
+
+    handlers.onStatus({ state: "ready" });
+    await expect(handlers.onMessage(msgOf("你好"))).resolves.toBeUndefined();
+    expect(host.statusOf("im_t1")).toMatchObject({
+      state: "error",
+      error: "路由内部炸了",
+    });
+    await handlers.onMessage(msgOf("下一条"));
+    expect(host.statusOf("im_t1")?.state).toBe("ready");
+  });
+
+  it("同连接返回路由失败后，下一次成功删除覆盖层并显露适配器 ready", async () => {
+    const { captured, adapter } = captureAdapter();
+    const { store } = fakeStore([conn()]);
+    let first = true;
+    const host = createImHost({
+      store,
+      platforms: { test: SPEC },
+      adapters: { test: adapter },
+      env: ENV,
+      secretValue: async () => "sv",
+      routeInbound: async () => {
+        if (first) {
+          first = false;
+          return { ok: false, error: "会话根不可用" };
+        }
+        return { ok: true };
+      },
+    });
+    await host.boot();
+    const handlers = captured.handlers;
+    if (handlers === null) throw new Error("适配器没有交出 handlers");
+
+    handlers.onStatus({ state: "ready" });
+    await handlers.onMessage(msgOf("第一条"));
+    expect(host.statusOf("im_t1")).toMatchObject({ state: "error", error: "会话根不可用" });
+    await handlers.onMessage(msgOf("第二条"));
+    expect(host.statusOf("im_t1")?.state).toBe("ready");
+  });
+
+  it("成功路由不覆盖适配器新上报的 transport error", async () => {
+    const { captured, adapter } = captureAdapter();
+    const { store } = fakeStore([conn()]);
+    let first = true;
+    const gate: { release?: () => void; entered?: () => void } = {};
+    const secondEntered = new Promise<void>((resolve) => { gate.entered = resolve; });
+    const secondBlocked = new Promise<void>((resolve) => { gate.release = resolve; });
+    const host = createImHost({
+      store,
+      platforms: { test: SPEC },
+      adapters: { test: adapter },
+      env: ENV,
+      secretValue: async () => "sv",
+      routeInbound: async () => {
+        if (first) {
+          first = false;
+          return { ok: false, error: "会话根不可用" };
+        }
+        gate.entered?.();
+        await secondBlocked;
+        return { ok: true };
+      },
+    });
+    await host.boot();
+    const handlers = captured.handlers;
+    if (handlers === null) throw new Error("适配器没有交出 handlers");
+
+    await handlers.onMessage(msgOf("第一条"));
+    expect(host.statusOf("im_t1")).toMatchObject({ state: "error", error: "会话根不可用" });
+
+    const queued = handlers.onMessage(msgOf("第二条"));
+    await secondEntered;
+    handlers.onStatus({ state: "error", error: "transport disconnected" });
+    gate.release?.();
+    await queued;
+
+    expect(host.statusOf("im_t1")).toMatchObject({ state: "error", error: "transport disconnected" });
+    expect(host.view().connections[0]?.status).toMatchObject({ state: "error", error: "transport disconnected" });
+  });
+
+  it.each([
+    { failure: "returned" as const, error: "会话根不可用" },
+    { failure: "thrown" as const, error: "路由内部炸了" },
+  ])("邮件式适配器 await 入站后发的 ready 不抹掉 $failure 路由错误，成功入站才恢复", async ({ failure, error }) => {
+    const { captured, adapter } = captureAdapter();
+    const { store } = fakeStore([conn()]);
+    let first = true;
+    const host = createImHost({
+      store,
+      platforms: { test: SPEC },
+      adapters: { test: adapter },
+      env: ENV,
+      secretValue: async () => "sv",
+      routeInbound: async () => {
+        if (first) {
+          first = false;
+          if (failure === "thrown") throw new Error(error);
+          return { ok: false, error };
+        }
+        return { ok: true };
+      },
+    });
+    await host.boot();
+    const handlers = captured.handlers;
+    if (handlers === null) throw new Error("适配器没有交出 handlers");
+    handlers.onStatus({ state: "ready" });
+    const emailLikeInbound = async (text: string): Promise<void> => {
+      await handlers.onMessage(msgOf(text));
+      handlers.onStatus({ state: "ready" });
+    };
+
+    await emailLikeInbound("第一条");
+
+    expect(host.statusOf("im_t1")).toMatchObject({ state: "error", error });
+    expect(host.view().connections[0]?.status).toMatchObject({ state: "error", error });
+
+    await emailLikeInbound("第二条");
+
+    expect(host.statusOf("im_t1")?.state).toBe("ready");
+    expect(host.view().connections[0]?.status.state).toBe("ready");
+  });
+
+  it("不同连接的入站可同时路由，不共用全局尾链", async () => {
+    const handlers: ImConnectHandlers[] = [];
+    const adapter: ImPlatformAdapter = {
+      connect: (_fields, _env, callbacks) => {
+        handlers.push(callbacks);
+        return { send: async () => ({}), stop: () => undefined };
+      },
+      check: async () => ({ account: { id: "bot-1", name: "测试机器人" } }),
+    };
+    const { store } = fakeStore([conn({ id: "im_t1" }), conn({ id: "im_t2" })]);
+    const gate: { release?: () => void; entered?: () => void } = {};
+    const firstBlocked = new Promise<void>((resolve) => { gate.release = resolve; });
+    const secondEntered = new Promise<void>((resolve) => { gate.entered = resolve; });
+    const host = createImHost({
+      store,
+      platforms: { test: SPEC },
+      adapters: { test: adapter },
+      env: ENV,
+      secretValue: async () => "sv",
+      routeInbound: async (current) => {
+        if (current.id === "im_t1") await firstBlocked;
+        if (current.id === "im_t2") gate.entered?.();
+        return { ok: true };
+      },
+    });
+    await host.boot();
+    if (handlers.length !== 2) throw new Error("两条连接没有各自交出 handlers");
+
+    const first = handlers[0]!.onMessage(msgOf("连接一"));
+    const second = handlers[1]!.onMessage(msgOf("连接二"));
+    try {
+      await secondEntered;
+      expect(host.view().pendingInbound).toBe(0);
+    } finally {
+      gate.release?.();
+      await Promise.all([first, second]);
+    }
+  });
 });

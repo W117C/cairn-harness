@@ -87,6 +87,21 @@ describe("通道分区", () => {
     expect(html).toContain("拒绝");
   });
 
+  it("pending 入站计数大于零时可见，为零时不显示", () => {
+    const pending = renderToStaticMarkup(
+      <ChannelsSection initialConnections={[CONN()]} initialPlatforms={PLATFORMS} initialPendingInbound={2} />,
+    );
+    expect(pending).toContain("待处理入站消息：2 条");
+    const idle = renderToStaticMarkup(
+      <ChannelsSection initialConnections={[CONN()]} initialPlatforms={PLATFORMS} initialPendingInbound={0} />,
+    );
+    expect(idle).not.toContain("待处理入站消息");
+  });
+
+  it("生产 imList 读取路径把 pendingInbound 带进清单状态", () => {
+    expect(sectionSrc).toContain("pendingInbound: result.pendingInbound");
+  });
+
   it("扫码平台：入口是「生成二维码」而不是表单；出码/查状态两端都接在源码里", () => {
     const html = renderToStaticMarkup(<ChannelsSection initialConnections={[]} initialPlatforms={QR_PLATFORMS} />);
     expect(html).toContain("扫码登录");

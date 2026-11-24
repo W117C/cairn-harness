@@ -4,13 +4,13 @@
 // （状态/绑定会话/启停/重连/移除）、审批外部发件人的连接请求。所有数据现读（imList），窗格不留状态；密钥值只在 safeStorage，
 // 表单里密钥字段是密码框（不回显、不落盘）。
 import { useCallback, useEffect, useState } from "react";
-import type { ImConnectionViewPayload } from "../../../../../../src/main/ipc-protocol";
+import type { ImConnectionViewPayload, ImListResponse } from "../../../../../../src/main/ipc-protocol";
 import { SettingsSection, SettingsRow } from "../settings-ui";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { qrMatrix, qrPath } from "../../derived/qr-matrix";
 import { STR } from "../../strings";
 
-type ImPlatforms = NonNullable<Awaited<ReturnType<typeof window.agent.imList>>["platforms"]>;
+type ImPlatforms = Extract<ImListResponse, { ok: true }>["platforms"];
 
 /** 二维码载荷：data: 图片直接当图画；其余（iLink 回的是 weixin:// 文本）在本地编码成码。 */
 function qrLooksLikeImage(value: string): boolean {
@@ -53,11 +53,11 @@ function statusLabelOf(status: ImConnectionViewPayload["status"]): string {
 
 /** 判卷缝：直接注入清单（生产走 imList）。 */
 export function ChannelsSection(
-  props: { initialConnections?: ImConnectionViewPayload[]; initialPlatforms?: ImPlatforms } = {},
+  props: { initialConnections?: ImConnectionViewPayload[]; initialPlatforms?: ImPlatforms; initialPendingInbound?: number } = {},
 ): React.JSX.Element {
-  const [list, setList] = useState<{ connections: ImConnectionViewPayload[]; platforms: ImPlatforms } | null>(
+  const [list, setList] = useState<{ connections: ImConnectionViewPayload[]; platforms: ImPlatforms; pendingInbound: number } | null>(
     props.initialConnections !== undefined && props.initialPlatforms !== undefined
-      ? { connections: props.initialConnections, platforms: props.initialPlatforms }
+      ? { connections: props.initialConnections, platforms: props.initialPlatforms, pendingInbound: props.initialPendingInbound ?? 0 }
       : null,
   );
   const [issue, setIssue] = useState<string | null>(null);
@@ -76,7 +76,7 @@ export function ChannelsSection(
         setIssue(result.error ?? STR.channels.readFailed);
         return;
       }
-      setList({ connections: result.connections ?? [], platforms: result.platforms ?? [] });
+      setList({ connections: result.connections, platforms: result.platforms, pendingInbound: result.pendingInbound });
       setIssue(null);
     } catch (error) {
       setIssue(error instanceof Error ? error.message : String(error));
@@ -256,6 +256,11 @@ export function ChannelsSection(
       </SettingsSection>
 
       <SettingsSection title={STR.channels.listTitle}>
+        {(list?.pendingInbound ?? 0) > 0 && (
+          <p className="sp-note" role="status">
+            {STR.channels.pendingInbound.replace("{n}", String(list?.pendingInbound ?? 0))}
+          </p>
+        )}
         {(list?.connections ?? []).length === 0
           ? <p className="sp-note">{STR.channels.empty}</p>
           : (list?.connections ?? []).map((c) => (

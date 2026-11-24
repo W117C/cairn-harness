@@ -6,12 +6,12 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { Scheduler, type SchedulerDeps, type TriggerExecutor } from "../src/main/scheduler";
 
 const CREATED = "2026-09-11T00:00:00.000Z"; // 早于所有 fake now 的 dueAt
 let dir: string;
-beforeAllFixture();
+beforeAll(beforeAllFixture);
 async function beforeAllFixture(): Promise<void> {
   dir = await mkdtemp(join(tmpdir(), "sched-overlap-"));
 }
