@@ -10,7 +10,8 @@ describe("产品文档对齐", () => {
   it("README 不再声称只交付 CLI，并指向桌面端 0.2.0", () => {
     const readme = read("README.md");
     expect(readme).not.toContain("交付面只做 CLI");
-    expect(readme).toContain("桌面应用在 `apps/desktop/`");
+    expect(readme).toContain("产品主交付面是 macOS 桌面应用");
+    expect(readme).toContain("`apps/desktop/`");
   });
 
   it("PRODUCT.md 的 Platform 是 macOS desktop，不是 web", () => {
