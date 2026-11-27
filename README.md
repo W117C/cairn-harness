@@ -10,7 +10,7 @@
 Cairn 是一个面向本地项目的 AI 编码助手：CLI 和 macOS 桌面应用共用同一套事件溯源内核。
 它在你的工作区里读代码、改代码、跑测试，并把每一次工具调用、权限判定和验证结果写进可重放的 JSONL。
 
-> **当前阶段：开发者预览（Developer Preview）。** 交付面是 CLI；桌面应用在 `apps/desktop/`，需要从源码构建或使用本机 ad-hoc 预览包。首次启动向导、签名安装包与英文界面仍在路线中。许可证见 [`LICENSING.md`](LICENSING.md)。
+> **当前阶段：开发者预览（Developer Preview）。** 产品主交付面是 macOS 桌面应用（`apps/desktop/`）；CLI 保留为技术底座与高级入口。桌面当前需要从源码构建或使用本机 ad-hoc 预览包，首次启动向导、签名安装包与英文界面仍在路线中。许可证见 [`LICENSING.md`](LICENSING.md)。
 
 ## 快速开始
 
