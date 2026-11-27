@@ -44,6 +44,7 @@ import { PlanCard } from "../components/PlanCard";
 import { PluginSidebar } from "../components/PluginSidebar";
 import { Popover } from "../components/Popover";
 import { ProviderBanner } from "../components/ProviderBanner";
+import { FirstRunGuide } from "../components/FirstRunGuide";
 import { pickRecentSessions } from "../derived/recent-sessions";
 import { launcherProjects } from "../derived/project-launcher";
 import { EmptyContext } from "../components/EmptyContext";
@@ -128,6 +129,8 @@ export interface WorkbenchViewDeps {
   sessionsLoadErrorDetail: string | null;
   retrySessions: () => void;
   providerOk: boolean | null;
+  onboarded: boolean | null;
+  completeOnboarding: () => Promise<void>;
   openSession: (id: string, workspace?: string | undefined) => void;
   /** 收口在 workbench 的切换入口：它同时把状态与窗口工作区上报发出去（只收值，不收 updater）。 */
   setActiveWorkspace: (workspace: string | null) => void;
@@ -535,6 +538,16 @@ export function WorkbenchView(deps: WorkbenchViewDeps) {
                   />
                 )}
               </div>
+              <FirstRunGuide
+                active={deps.onboarded === false && deps.sessionsLoaded && providerOk !== null}
+                providerReady={providerOk === true}
+                projectReady={activeWorkspace !== null && projects.length > 0}
+                taskReady={sessions.length > 0}
+                onConnect={() => { setSettingsSection("provider"); setSettingsOpen(true); }}
+                onChooseProject={openChipPopover}
+                onStart={focusComposer}
+                onComplete={deps.completeOnboarding}
+              />
               {/* 弹层开着时给 hero 打 data-picking：问候语淡出让焦点（弹层向上开会压到问候线，2026-10-24）。 */}
               <div className="empty" {...(chipOpen ? { "data-picking": "true" } : {})}>
                 {/* 2026-11-19 ADR 0019 1:1：官方首屏 hero = 居中大标志、无文字问候

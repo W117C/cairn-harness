@@ -1,6 +1,6 @@
 // 第 1112 页：workbench 启动面（设置首读 + 项目模板目录）拆出。
 // 失败口径不变：设置读失败进会话错误条；模板拉不到落空表，入口禁用而不是点不动的按钮。
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { PermissionMode } from "../../../../../src/main/ipc-protocol";
 import type { ThemePref } from "../theme";
 import type { TextSizeSetting, UiSizeSetting } from "../../../../../src/main/settings";
@@ -21,14 +21,20 @@ export function useWorkbenchBootstrap(sinks: {
   setTextSize: (value: TextSizeSetting) => void;
   setUiSize: (value: UiSizeSetting) => void;
   setLastError: (message: string) => void;
-}): { templates: WorkbenchTemplate[] } {
+}): {
+  templates: WorkbenchTemplate[];
+  onboarded: boolean | null;
+  completeOnboarding: () => Promise<void>;
+} {
   const { setMode, setThemePref, setCtrlTabCycle, setTextSize, setUiSize, setLastError } = sinks;
   const [templates, setTemplates] = useState<WorkbenchTemplate[]>([]);
+  const [onboarded, setOnboarded] = useState<boolean | null>(null);
   // 载入设置：打开即进主界面（不拿向导拦在门口）。
   useEffect(() => {
     void readOrError(() => window.agent.getSettings()).then((r) => {
       if (!r.ok) { setLastError(STR.errors.settingsLoadFailedPrefix + r.error); return; }
       const s = r.value;
+      setOnboarded(s.onboarded);
       setMode(s.mode);
       setThemePref(s.theme);
       setCtrlTabCycle(s.ctrlTabCycle);
@@ -43,5 +49,14 @@ export function useWorkbenchBootstrap(sinks: {
       () => { setTemplates([]); },
     );
   }, []);
-  return { templates };
+  // 首次使用条完成或跳过后只写一个布尔；失败留在当前界面，下一次进入仍能看到引导。
+  const completeOnboarding = useCallback(async (): Promise<void> => {
+    try {
+      await window.agent.setSettings({ onboarded: true });
+      setOnboarded(true);
+    } catch (err) {
+      setLastError(STR.errors.settingsSaveFailedPrefix + (err instanceof Error ? err.message : String(err)));
+    }
+  }, [setLastError]);
+  return { templates, onboarded, completeOnboarding };
 }

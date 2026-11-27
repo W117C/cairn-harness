@@ -1057,6 +1057,12 @@ if (process.argv.includes("--cairn-first-run-fixture")) {
   stub.getOnboarding = reply(JSON.parse(argOf("--cairn-onboarding-groups=", "[]")));
   stub.getSettings = reply({ ...settingsState, onboarded: false });
 }
+// 真空首启：onboarded=false 且没有 provider、项目、会话，首次使用条应从第一步开始。
+if (process.argv.includes("--cairn-first-run-empty-fixture")) {
+  stub.listProjects = reply([]);
+  stub.listSessions = reply([]);
+  stub.getProviderInfo = reply({ ...PROVIDER_INFO, keyConfigured: false });
+}
 
 // 可选交互夹具：只在独立 smoke 窗口显式传参时启用，不进入产品桥。
 if (process.argv.includes("--cairn-interaction-fixture")) {

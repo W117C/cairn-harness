@@ -3455,6 +3455,45 @@ body[data-dsh-claude-style] .md-body .md-code pre { font-size: var(--fs-code); l
 .home-banner-text strong { font-size: var(--fs-body-sm); color: hsl(var(--text-000)); font-weight: var(--fw-bold); }
 .home-banner-text span { font-size: var(--fs-caption-xs); color: hsl(var(--text-300, var(--text-200))); }
 .home-banner .mini-btn { flex: none; }
+/* 首次使用条：三格进度只指下一步，点击仍走设置/项目选择器/输入框；不阻断主界面。 */
+.first-run-guide {
+  display: flex; align-items: center; gap: var(--space-sm);
+  margin: 8px auto 0; width: calc(100% - var(--space-xl) * 2); max-width: 760px;
+  padding: 3px 2px 8px;
+  border-bottom: 1px solid var(--hairline);
+  color: hsl(var(--text-400));
+  font-size: var(--fs-caption-sm);
+}
+.first-run-steps { display: flex; align-items: center; gap: 2px; flex: 1 1 auto; min-width: 0; }
+.first-run-step {
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0;
+  padding: 3px 5px; border: 0; border-radius: var(--radius-sm);
+  background: transparent; color: inherit; font: inherit; white-space: nowrap;
+  cursor: pointer;
+}
+.first-run-step:hover { color: hsl(var(--text-000)); background: hsl(from hsl(var(--text-000)) h s l / 0.035); }
+.first-run-step[aria-current="step"] { color: hsl(var(--text-000)); }
+.first-run-step.is-done { color: hsl(var(--text-400)); }
+.first-run-index {
+  display: inline-grid; place-items: center; flex: none;
+  width: 18px; height: 18px; border: 1px solid var(--hairline-strong); border-radius: 50%;
+  font-size: var(--fs-caption-2xs); line-height: 1;
+}
+.first-run-step.is-done .first-run-index { color: hsl(var(--text-400)); border-color: var(--hairline-strong); }
+.first-run-step:focus-visible, .first-run-skip:focus-visible {
+  outline: 2px solid hsl(var(--accent-control)); outline-offset: 2px;
+}
+.first-run-skip {
+  display: inline-grid; place-items: center; flex: none;
+  width: 24px; height: 24px; padding: 0; border: 0; border-radius: var(--radius-sm);
+  background: transparent; color: hsl(var(--text-400)); cursor: pointer;
+}
+.first-run-skip:hover { color: hsl(var(--text-000)); background: hsl(from hsl(var(--text-000)) h s l / 0.035); }
+@media (max-width: 720px) {
+  .first-run-guide { align-items: flex-start; }
+  .first-run-steps { flex-wrap: wrap; }
+  .first-run-step { white-space: normal; text-align: left; }
+}
 /* 演示模式：标题栏常驻胶囊（不占空屏弹性高度）。零凭据缺省走 demo 通道时，这是唯一常驻的
    「回复来自预录剧本」告知面——模型芯片上的「演示」只在芯片上，点开菜单才有那句完整说明。 */
 .tb-demo {

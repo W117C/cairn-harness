@@ -267,6 +267,7 @@ export const STR = {
   },
   errors: {
     settingsLoadFailedPrefix: "设置读取失败：",
+    settingsSaveFailedPrefix: "设置保存失败：",
     diagnoseFailed: "没能检查这个文件夹：{message}",
   },
   drop: {
@@ -303,6 +304,13 @@ export const STR = {
     enableAuto: "开启自动模式",
     autoEnabled: "自动模式已开启",
     firstRunSub: "描述任务，agent 在工作区里读代码、改代码、跑测试、交付结果。",
+    firstRun: {
+      label: "首次使用引导",
+      connect: "连接模型",
+      project: "选择项目",
+      task: "开始任务",
+      skip: "跳过首次使用引导",
+    },
     recentSessions: "最近会话",
   },
   demoBanner: {
