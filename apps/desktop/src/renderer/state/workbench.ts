@@ -287,9 +287,8 @@ export function useWorkbenchModel() {
   const findRef = useRef<FindBarHandle | null>(null);
   const stick = useStickyScroll(streamEl);
   // 第 1112 页：设置首读 + 模板目录从 workbench 拆到 useWorkbenchBootstrap（启动面）。
-  const { templates } = useWorkbenchBootstrap({ setMode, setThemePref, setCtrlTabCycle, setTextSize, setUiSize, setLastError });
+  const { templates, onboarded, completeOnboarding } = useWorkbenchBootstrap({ setMode, setThemePref, setCtrlTabCycle, setTextSize, setUiSize, setLastError });
   // 快捷键统一收口在下方 hotkeysRef 段（蓝本 §3.6 全表；此处不再各自挂监听）。
-
   // SEMA §3.5/§12：协议版本握手（失配/查询失败 fail-closed）。
   const [protocolMismatch, setProtocolMismatch] = useState<string | null>(null);
   useEffect(() => {
@@ -1194,6 +1193,7 @@ export function useWorkbenchModel() {
     dragOverApp,
     newProjectOpen,
     templates,
+    onboarded, completeOnboarding,
     handleCreateFromDialog,
   };
 }

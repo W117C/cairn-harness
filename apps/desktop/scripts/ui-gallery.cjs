@@ -22,7 +22,9 @@ const { createHash } = require("node:crypto");
 
 // 首启夹具单独留证，验证旧的 onboarded=false 配置也直接进入正常工作界面。
 const FIRST_RUN = process.env.GALLERY_FIRST_RUN === "1";
-const OUT = process.env.CAIRN_UI_OUTPUT ?? (FIRST_RUN ? "/tmp/cairn-gallery-first-run" : "/tmp/cairn-gallery");
+const FIRST_RUN_EMPTY = process.env.GALLERY_FIRST_RUN_EMPTY === "1";
+const OUT = process.env.CAIRN_UI_OUTPUT
+  ?? (FIRST_RUN_EMPTY ? "/tmp/cairn-gallery-first-run-empty" : FIRST_RUN ? "/tmp/cairn-gallery-first-run" : "/tmp/cairn-gallery");
 const rendererEntry = process.env.CAIRN_RENDERER_ENTRY ?? join(__dirname, "..", "dist", "index.html");
 mkdirSync(OUT, { recursive: true });
 
@@ -85,7 +87,8 @@ async function main() {
     // 七组覆盖面交给桩：首启那一趟要显示真清单（手抄一份会漂）。
     "--cairn-onboarding-groups=" + JSON.stringify(onboardingGroupsSurface()),
   ];
-  if (FIRST_RUN) apiArgs.push("--cairn-first-run-fixture");
+  if (FIRST_RUN || FIRST_RUN_EMPTY) apiArgs.push("--cairn-first-run-fixture");
+  if (FIRST_RUN_EMPTY) apiArgs.push("--cairn-first-run-empty-fixture");
   // 主题也交给桩：弹窗窗口是**新文档**，它按 settings.theme 上主题（PopoutApp 自己读设置），
   // 不吃主窗口那套 DOM 注入。不桩这一笔，亮色趟里的弹窗会拍成暗色——
   // 读图的人会当成「弹出面板不跟随主题」的产品缺陷去追（第 884 页那类假警报的另一个入口）。
@@ -228,6 +231,41 @@ async function main() {
     const narrow = await js(`({ composer: !!document.querySelector('.composer-card textarea:not(:disabled)'), checklist: !!document.querySelector('.onboard'), overflow: document.documentElement.scrollWidth > innerWidth + 1 })`);
     if (!narrow.composer || narrow.checklist || narrow.overflow) throw new Error("窄窗首启工作界面异常：" + JSON.stringify(narrow));
     await win.setContentSize(1440, 900);
+  }
+  if (FIRST_RUN_EMPTY) {
+    const state = await js(`(() => {
+      const guide = document.querySelector('.first-run-guide');
+      const rect = guide?.getBoundingClientRect();
+      return {
+        composer: !!document.querySelector('.composer-card textarea:not(:disabled)'),
+        guide: !!guide,
+        guideHeight: rect?.height ?? 0,
+        guideInside: !!rect && rect.left >= 0 && rect.right <= innerWidth,
+        overflow: document.documentElement.scrollWidth > innerWidth + 1,
+      };
+    })()`);
+    console.log("[gallery] 真空首启:", state);
+    if (!state.composer || !state.guide || state.guideHeight < 20 || !state.guideInside || state.overflow) {
+      throw new Error("真空首启引导条异常：" + JSON.stringify(state));
+    }
+    await win.setContentSize(1120, 900);
+    await shot("01-empty-1120.png", 400);
+    const mid = await js(`(() => {
+      const rect = document.querySelector('.first-run-guide')?.getBoundingClientRect();
+      return { height: rect?.height ?? 0, inside: !!rect && rect.left >= 0 && rect.right <= innerWidth, overflow: document.documentElement.scrollWidth > innerWidth + 1 };
+    })()`);
+    if (mid.height < 20 || !mid.inside || mid.overflow) throw new Error("1120 首启引导条异常：" + JSON.stringify(mid));
+    await win.setContentSize(880, 900);
+    await shot("01-empty-880.png", 400);
+    const narrow = await js(`(() => {
+      const rect = document.querySelector('.first-run-guide')?.getBoundingClientRect();
+      return { height: rect?.height ?? 0, inside: !!rect && rect.left >= 0 && rect.right <= innerWidth, overflow: document.documentElement.scrollWidth > innerWidth + 1 };
+    })()`);
+    if (narrow.height < 20 || !narrow.inside || narrow.overflow) throw new Error("880 首启引导条异常：" + JSON.stringify(narrow));
+    await win.setContentSize(1440, 900);
+    console.log("[gallery] 真空首启截图完成");
+    app.exit(0);
+    return;
   }
 
   // 模型菜单（根卡片 → 模型列表 / 思考强度 / 管理入口）。
