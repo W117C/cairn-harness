@@ -2,6 +2,7 @@
 // status / diff / log 三个动词。固定 argv 不足以约束 Git，仓库配置也能注册执行入口。
 // 为什么值得一枚专用工具：现在模型看仓库状态只能走 run_shell（白名单闸+审批摩擦），
 // 而「现在改了什么」是工单/worktree/合并控制塔场景的高频地面化需求。
+import { execFileSync } from "node:child_process";
 import { devNull } from "node:os";
 import { resolveInWorkspace, ToolError, type Tool, type ToolResult } from "./base.js";
 import { killGroup, sanitizedEnv, spawnTracked } from "./process.js";
@@ -29,6 +30,24 @@ const GIT_READ_PROFILE = `(version 1)
 (deny network*)
 (deny file-write*)
 (allow file-write* (literal "/dev/null"))`;
+
+/** macOS 的 /usr/bin/git 可能是 xcode-select 的 shim（GitHub ARM runner 就是这样），
+ *  它会 sh -c xcodebuild；在 Seatbelt 的 process-fork 下必失败。先解析成真 git。 */
+function resolveGitBinary(): string {
+  if (process.platform !== "darwin") return "git";
+  try {
+    const resolved = execFileSync("/usr/bin/xcrun", ["--find", "git"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    if (resolved !== "") return resolved;
+  } catch {
+    // 没有 xcrun 时退回系统路径；沙箱外仍可执行。
+  }
+  return "/usr/bin/git";
+}
+
+const GIT_BIN = resolveGitBinary();
 
 type GitReadOp = "status" | "diff" | "log";
 
@@ -58,7 +77,7 @@ function runGit(args: readonly string[], cwd: string): Promise<{ code: number; s
     const sandboxed = process.platform === "darwin";
     const { child, dispose } = spawnTracked(
       sandboxed ? "/usr/bin/sandbox-exec" : "git",
-      sandboxed ? ["-p", GIT_READ_PROFILE, "/usr/bin/git", ...gitArgs] : gitArgs,
+      sandboxed ? ["-p", GIT_READ_PROFILE, GIT_BIN, ...gitArgs] : gitArgs,
       {
         cwd,
         env: {
