@@ -29,6 +29,16 @@ import type { PermissionMode } from "../src/permissions";
 const ROOT = process.cwd();
 const FX = join(ROOT, "fixtures", "plugins");
 
+/** 信任表必须落在工作区之外（与 PluginRuntime 的 F2 守卫同一口径）。
+ *  检查脚本自己也得遵守：把 trust.json 塞进临时 workspace 会让 A 段在装载前就拒载。 */
+let trustRoot = "";
+let trustSeq = 0;
+function trustFileFor(tag: string): string {
+  if (trustRoot === "") throw new Error("trustRoot 未初始化");
+  trustSeq++;
+  return join(trustRoot, tag + "-" + String(trustSeq) + ".json");
+}
+
 let pass = 0;
 let fail = 0;
 /** 未证项（联网/凭据限制导致断言没跑到）——显式列出，绝不等于通过。 */
@@ -99,6 +109,7 @@ function resultOf(events: AgentEvent[], callId: string): { ok: boolean; output: 
 async function main(): Promise<void> {
   console.log("== M2e plugins-check ==");
   const scratch = await mkdtemp(join(tmpdir(), "m2e-check-scratch-"));
+  trustRoot = await mkdtemp(join(tmpdir(), "m2e-check-trust-"));
 
   // ---- A 容器与发现 ----
   console.log("-- A 容器与发现（三级作用域 / 超集 / 隔离 / 拒载）--");
@@ -109,7 +120,7 @@ async function main(): Promise<void> {
       looseRoots: [fx("loose")],
       workspace: scratch,
       pluginDataRoot: join(scratch, "data-a"),
-      trustFile: join(scratch, "trust-a.json"),
+      trustFile: trustFileFor("a"),
     });
     assert(rt.manifest.plugins.some((p) => p.name === "hello-plugin" && p.scope === "user"), "A1 用户级作用域发现（user/plugins）");
     assert(rt.manifest.plugins.some((p) => p.name === "echo-suite" && p.scope === "project"), "A2 项目级作用域发现（.agent/plugins）");
@@ -137,7 +148,7 @@ async function main(): Promise<void> {
     assert(r.truncated && r.text.length <= SKILL_ROUTING_CHAR_LIMIT, "B1 清单超 1536 字符被截断（len=" + String(r.text.length) + "）");
     // 触发全文：runAgent 事件流实证（信任预置 → skill 工具在统一注册表）
     const wsB = await makeWorkspace("skill");
-    const trustB = join(wsB.ws, "trust.json");
+    const trustB = trustFileFor("b");
     await new TrustStore(trustB).decide(wsB.pluginRoot, true, await pluginFingerprint(wsB.pluginRoot));
     const evB = await run(wsB.ws, "skill-flow.jsonl", trustB, "skill");
     const res = resultOf(evB, "c-skill");
@@ -187,7 +198,7 @@ async function main(): Promise<void> {
   console.log("-- C hook（exit2 阻断 / JSON 放行 / 超时强杀）--");
   {
     const wsC = await makeWorkspace("hook");
-    const trustC = join(wsC.ws, "trust.json");
+    const trustC = trustFileFor("c");
     await new TrustStore(trustC).decide(wsC.pluginRoot, true, await pluginFingerprint(wsC.pluginRoot));
     const t0 = Date.now();
     const evC = await run(wsC.ws, "hook-flow.jsonl", trustC, "hook");
@@ -244,7 +255,7 @@ async function main(): Promise<void> {
     // 宿主总开关：开着，但表里没有自带服务器 ⇒ 出现的服务器只可能来自插件那条路。
     await mkdir(join(wsLsp.ws, ".agent"), { recursive: true });
     await writeFile(join(wsLsp.ws, ".agent", "lsp.json"), JSON.stringify({ lsp: {} }), "utf8");
-    const trustLsp = join(wsLsp.ws, "trust.json");
+    const trustLsp = trustFileFor("lsp");
     await new TrustStore(trustLsp).decide(wsLsp.pluginRoot, true, await pluginFingerprint(wsLsp.pluginRoot));
     const rtLsp = await PluginRuntime.load({
       projectPluginsDir: join(wsLsp.ws, ".agent", "plugins"),
@@ -268,7 +279,7 @@ async function main(): Promise<void> {
   console.log("-- D 信任门（未信任只列出 / 信任后生效）--");
   {
     const wsD = await makeWorkspace("trust");
-    const trustD = join(wsD.ws, "trust.json");
+    const trustD = trustFileFor("d");
     // 未信任：hook 不执行（read_file 真执行了，未被 [hook blocked]）、MCP 不连接
     const evD1 = await run(wsD.ws, "hook-flow.jsonl", trustD, "untrusted");
     const unblocked = resultOf(evD1, "c-read");
@@ -303,7 +314,7 @@ async function main(): Promise<void> {
   console.log("-- E MCP（scoped 名 / call 回传 / 权限门）--");
   {
     const wsE = await makeWorkspace("mcp");
-    const trustE = join(wsE.ws, "trust.json");
+    const trustE = trustFileFor("e");
     await new TrustStore(trustE).decide(wsE.pluginRoot, true, await pluginFingerprint(wsE.pluginRoot));
     const rtE = await PluginRuntime.load({
       projectPluginsDir: join(wsE.ws, ".agent", "plugins"),
@@ -366,6 +377,7 @@ async function main(): Promise<void> {
 
   // 收尾
   await rm(scratch, { recursive: true, force: true });
+  await rm(trustRoot, { recursive: true, force: true });
   console.log("");
   if (unverified.length > 0) {
     console.log("未证项（连网/凭据限制，未跑到的断言——不等于通过）：");
@@ -543,7 +555,7 @@ async function darkBox(): Promise<void> {
       projectPluginsDir: join(target, "community-plugins"),
       workspace: target,
       pluginDataRoot: join(target, ".plugin-data"),
-      trustFile: join(target, "trust.json"),
+      trustFile: trustFileFor("testdino"),
     });
     const td = rt.manifest.plugins.find((p) => p.name === "testdino");
     assert(td !== undefined && td.skills.length === 7, "F3 testdino 7 个 skill 免改加载", "实际 " + String(td?.skills.length ?? 0));
@@ -657,7 +669,7 @@ async function darkBox(): Promise<void> {
       looseRoots: [skillsRoot],
       workspace: target,
       pluginDataRoot: join(target, ".plugin-data-2"),
-      trustFile: join(target, "trust-2.json"),
+      trustFile: trustFileFor("skills"),
     });
   } catch {
     rt2 = null;
@@ -702,7 +714,8 @@ async function darkBox(): Promise<void> {
   }
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   console.error("plugins-check 异常:", err);
+  if (trustRoot !== "") await rm(trustRoot, { recursive: true, force: true }).catch(() => {});
   process.exit(1);
 });

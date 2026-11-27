@@ -8,7 +8,7 @@ macOS desktop（Electron + React；开发态 Vite + Chromium）
 
 ## Users
 
-Cairn Desktop is for developers and technical operators who run long-lived coding agents on local projects. They switch repeatedly between conversation, plugins, memory, automation, and settings while retaining project context and work in progress.
+Cairn Desktop is for non-technical creators who want to build web pages, lightweight tools, and modify existing projects through natural language. Developers and technical operators remain a secondary audience for the advanced plugin, permission, and automation surfaces. Both groups switch repeatedly between conversation, plugins, memory, automation, and settings while retaining project context and work in progress.
 
 ## Product Purpose
 
