@@ -41,7 +41,9 @@ jobs:
       # 旧开发链的祖先与部分树对象已损坏，无法作为分支推送。这里只恢复台账引用的
       # 原始 commit 对象（原 SHA 不变），供 D-5 查身份；不宣称恢复了整条历史或代码快照。
       - name: restore archived citation objects
-        run: git unpack-objects < archive/git-citation-records-2026-11-01.pack
+        run: |
+          git unpack-objects < archive/git-citation-records-2026-11-01.pack
+          git unpack-objects < archive/git-citation-records-2026-11-27.pack
       - uses: pnpm/action-setup@v6
         # 第 475 页：**这一格刻意不写 `with: version:`**——版本只住在 package.json 的 `packageManager`
         # 里（现读 `pnpm@11.21.0`），action 自己会去读它。两处同时写会被 action 直接判红
